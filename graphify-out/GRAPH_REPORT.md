@@ -1,129 +1,93 @@
-# Graph Report - scoped --update (qmConsumptionSkip + questionMarkTier2 + crawler CLAUDE.md)  (2026-06-29)
+# Graph Report - scoped --update (drainGuard + queueRepair + crawler core)  (2026-06-30)
 
 ## Corpus Check
 - 0 files · ~0 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 7384 nodes · 16222 edges · 170 communities detected
-- Extraction: 65% EXTRACTED · 35% INFERRED · 0% AMBIGUOUS · INFERRED: 5749 edges (avg confidence: 0.59)
+- 7410 nodes · 16287 edges · 171 communities detected
+- Extraction: 65% EXTRACTED · 35% INFERRED · 0% AMBIGUOUS · INFERRED: 5751 edges (avg confidence: 0.59)
 - Token cost: 0 input · 0 output
 
 ## Community Hubs (Navigation)
-- [[_COMMUNITY_Milvus CRUD Layer|Milvus CRUD Layer]]
-- [[_COMMUNITY_Node.js Crawler Core|Node.js Crawler Core]]
-- [[_COMMUNITY_CrawlerManager Python + DLQ|CrawlerManager Python + DLQ]]
-- [[_COMMUNITY_Rust Service Clients|Rust Service Clients]]
-- [[_COMMUNITY_Milvus Concurrency Guard|Milvus Concurrency Guard]]
-- [[_COMMUNITY_Redis Cache Rationale|Redis Cache Rationale]]
-- [[_COMMUNITY_Pydantic Request Schemas|Pydantic Request Schemas]]
-- [[_COMMUNITY_GCS Archive Classifier|GCS Archive Classifier]]
-- [[_COMMUNITY_LLM Provider Clients|LLM Provider Clients]]
-- [[_COMMUNITY_LLM gRPC Client|LLM gRPC Client]]
-- [[_COMMUNITY_GCS Audit CLI|GCS Audit CLI]]
-- [[_COMMUNITY_Document Text Extractor|Document Text Extractor]]
-- [[_COMMUNITY_Enums and Collection Types|Enums and Collection Types]]
-- [[_COMMUNITY_Update-Mode Queue Builder|Update-Mode Queue Builder]]
-- [[_COMMUNITY_Rust Service Request Models|Rust Service Request Models]]
-- [[_COMMUNITY_Trafilatura HTML Cleaning|Trafilatura HTML Cleaning]]
-- [[_COMMUNITY_GCS Quarantine Restore|GCS Quarantine Restore]]
 - [[_COMMUNITY_Regional Path Exclusion Rationale|Regional Path Exclusion Rationale]]
-- [[_COMMUNITY_Qdrant CRUD Layer|Qdrant CRUD Layer]]
-- [[_COMMUNITY_Graph Milvus gRPC Client|Graph Milvus gRPC Client]]
-- [[_COMMUNITY_Embedding gRPC Client|Embedding gRPC Client]]
-- [[_COMMUNITY_DeepSeek OCR Extractor|DeepSeek OCR Extractor]]
-- [[_COMMUNITY_Header Footer Extractor|Header Footer Extractor]]
-- [[_COMMUNITY_Graph Database gRPC Client|Graph Database gRPC Client]]
-- [[_COMMUNITY_Claude Config Audit|Claude Config Audit]]
-- [[_COMMUNITY_Archive Disk Preflight Rationale|Archive Disk Preflight Rationale]]
-- [[_COMMUNITY_Dead Services Cleanup|Dead Services Cleanup]]
-- [[_COMMUNITY_GCS Archive Audit Tool Rationale|GCS Archive Audit Tool Rationale]]
-- [[_COMMUNITY_CleanHTML Module|CleanHTML Module]]
-- [[_COMMUNITY_Crawler Monitor Rationale|Crawler Monitor Rationale]]
-- [[_COMMUNITY_Community 30|Community 30]]
-- [[_COMMUNITY_Community 31|Community 31]]
-- [[_COMMUNITY_Community 32|Community 32]]
-- [[_COMMUNITY_Community 33|Community 33]]
-- [[_COMMUNITY_Community 34|Community 34]]
-- [[_COMMUNITY_Community 35|Community 35]]
-- [[_COMMUNITY_Community 36|Community 36]]
-- [[_COMMUNITY_Community 37|Community 37]]
-- [[_COMMUNITY_Community 38|Community 38]]
-- [[_COMMUNITY_Community 39|Community 39]]
-- [[_COMMUNITY_Community 40|Community 40]]
-- [[_COMMUNITY_Community 41|Community 41]]
-- [[_COMMUNITY_Community 42|Community 42]]
-- [[_COMMUNITY_Community 43|Community 43]]
-- [[_COMMUNITY_Community 44|Community 44]]
-- [[_COMMUNITY_Community 45|Community 45]]
-- [[_COMMUNITY_Community 46|Community 46]]
-- [[_COMMUNITY_Community 47|Community 47]]
-- [[_COMMUNITY_Community 48|Community 48]]
-- [[_COMMUNITY_Community 49|Community 49]]
-- [[_COMMUNITY_Community 50|Community 50]]
-- [[_COMMUNITY_Community 51|Community 51]]
-- [[_COMMUNITY_Community 52|Community 52]]
-- [[_COMMUNITY_Community 53|Community 53]]
-- [[_COMMUNITY_Community 54|Community 54]]
-- [[_COMMUNITY_Community 55|Community 55]]
-- [[_COMMUNITY_Community 56|Community 56]]
-- [[_COMMUNITY_Community 57|Community 57]]
-- [[_COMMUNITY_Community 58|Community 58]]
-- [[_COMMUNITY_Community 59|Community 59]]
-- [[_COMMUNITY_Community 60|Community 60]]
-- [[_COMMUNITY_Community 61|Community 61]]
-- [[_COMMUNITY_Community 62|Community 62]]
-- [[_COMMUNITY_Community 63|Community 63]]
-- [[_COMMUNITY_Community 64|Community 64]]
-- [[_COMMUNITY_Community 65|Community 65]]
-- [[_COMMUNITY_Community 66|Community 66]]
-- [[_COMMUNITY_Community 67|Community 67]]
-- [[_COMMUNITY_Community 68|Community 68]]
-- [[_COMMUNITY_Community 69|Community 69]]
-- [[_COMMUNITY_Community 70|Community 70]]
-- [[_COMMUNITY_Community 71|Community 71]]
-- [[_COMMUNITY_Community 72|Community 72]]
-- [[_COMMUNITY_Community 73|Community 73]]
-- [[_COMMUNITY_Community 74|Community 74]]
-- [[_COMMUNITY_Community 75|Community 75]]
+- [[_COMMUNITY_Milvus Concurrency Guard|Milvus Concurrency Guard]]
 - [[_COMMUNITY_Community 76|Community 76]]
-- [[_COMMUNITY_Community 77|Community 77]]
-- [[_COMMUNITY_Community 78|Community 78]]
-- [[_COMMUNITY_Community 79|Community 79]]
-- [[_COMMUNITY_Community 81|Community 81]]
-- [[_COMMUNITY_Community 82|Community 82]]
-- [[_COMMUNITY_Community 83|Community 83]]
-- [[_COMMUNITY_Community 84|Community 84]]
-- [[_COMMUNITY_Community 85|Community 85]]
-- [[_COMMUNITY_Community 86|Community 86]]
-- [[_COMMUNITY_Community 87|Community 87]]
-- [[_COMMUNITY_Community 88|Community 88]]
-- [[_COMMUNITY_Community 89|Community 89]]
-- [[_COMMUNITY_Community 90|Community 90]]
-- [[_COMMUNITY_Community 91|Community 91]]
-- [[_COMMUNITY_Community 92|Community 92]]
-- [[_COMMUNITY_Community 93|Community 93]]
-- [[_COMMUNITY_Community 94|Community 94]]
-- [[_COMMUNITY_Community 95|Community 95]]
-- [[_COMMUNITY_Community 96|Community 96]]
-- [[_COMMUNITY_Community 97|Community 97]]
-- [[_COMMUNITY_Community 98|Community 98]]
-- [[_COMMUNITY_Community 100|Community 100]]
-- [[_COMMUNITY_Community 101|Community 101]]
-- [[_COMMUNITY_Community 102|Community 102]]
-- [[_COMMUNITY_Community 103|Community 103]]
-- [[_COMMUNITY_Community 104|Community 104]]
-- [[_COMMUNITY_Community 107|Community 107]]
 - [[_COMMUNITY_Community 108|Community 108]]
 - [[_COMMUNITY_Community 109|Community 109]]
 - [[_COMMUNITY_Community 110|Community 110]]
 - [[_COMMUNITY_Community 111|Community 111]]
-- [[_COMMUNITY_Community 115|Community 115]]
-- [[_COMMUNITY_Community 126|Community 126]]
-- [[_COMMUNITY_Community 137|Community 137]]
+- [[_COMMUNITY_Community 66|Community 66]]
+- [[_COMMUNITY_Community 48|Community 48]]
+- [[_COMMUNITY_Community 112|Community 112]]
+- [[_COMMUNITY_Archive Disk Preflight Rationale|Archive Disk Preflight Rationale]]
+- [[_COMMUNITY_Community 57|Community 57]]
+- [[_COMMUNITY_LLM Provider Clients|LLM Provider Clients]]
+- [[_COMMUNITY_Graph Milvus gRPC Client|Graph Milvus gRPC Client]]
+- [[_COMMUNITY_Graph Database gRPC Client|Graph Database gRPC Client]]
+- [[_COMMUNITY_Community 94|Community 94]]
+- [[_COMMUNITY_GCS Archive Classifier|GCS Archive Classifier]]
+- [[_COMMUNITY_Community 95|Community 95]]
+- [[_COMMUNITY_Enums and Collection Types|Enums and Collection Types]]
+- [[_COMMUNITY_Community 116|Community 116]]
+- [[_COMMUNITY_Community 62|Community 62]]
+- [[_COMMUNITY_Community 55|Community 55]]
+- [[_COMMUNITY_Community 38|Community 38]]
+- [[_COMMUNITY_Community 35|Community 35]]
+- [[_COMMUNITY_Community 51|Community 51]]
+- [[_COMMUNITY_Community 72|Community 72]]
+- [[_COMMUNITY_Community 52|Community 52]]
+- [[_COMMUNITY_Community 82|Community 82]]
+- [[_COMMUNITY_Community 63|Community 63]]
+- [[_COMMUNITY_CleanHTML Module|CleanHTML Module]]
+- [[_COMMUNITY_Community 73|Community 73]]
+- [[_COMMUNITY_Pydantic Request Schemas|Pydantic Request Schemas]]
+- [[_COMMUNITY_Milvus CRUD Layer|Milvus CRUD Layer]]
+- [[_COMMUNITY_Community 53|Community 53]]
+- [[_COMMUNITY_Community 30|Community 30]]
+- [[_COMMUNITY_LLM gRPC Client|LLM gRPC Client]]
+- [[_COMMUNITY_Community 83|Community 83]]
+- [[_COMMUNITY_Community 84|Community 84]]
+- [[_COMMUNITY_Community 85|Community 85]]
+- [[_COMMUNITY_Community 64|Community 64]]
+- [[_COMMUNITY_Community 41|Community 41]]
+- [[_COMMUNITY_Trafilatura HTML Cleaning|Trafilatura HTML Cleaning]]
+- [[_COMMUNITY_Community 44|Community 44]]
+- [[_COMMUNITY_Community 56|Community 56]]
+- [[_COMMUNITY_Community 86|Community 86]]
+- [[_COMMUNITY_Community 50|Community 50]]
+- [[_COMMUNITY_Community 87|Community 87]]
+- [[_COMMUNITY_Community 96|Community 96]]
+- [[_COMMUNITY_Community 54|Community 54]]
+- [[_COMMUNITY_Community 127|Community 127]]
+- [[_COMMUNITY_Community 74|Community 74]]
+- [[_COMMUNITY_Community 45|Community 45]]
+- [[_COMMUNITY_Community 77|Community 77]]
+- [[_COMMUNITY_Community 33|Community 33]]
+- [[_COMMUNITY_Community 78|Community 78]]
+- [[_COMMUNITY_Community 97|Community 97]]
+- [[_COMMUNITY_Community 98|Community 98]]
+- [[_COMMUNITY_Community 99|Community 99]]
+- [[_COMMUNITY_Community 88|Community 88]]
+- [[_COMMUNITY_Community 42|Community 42]]
+- [[_COMMUNITY_Node.js Crawler Core|Node.js Crawler Core]]
+- [[_COMMUNITY_CrawlerManager Python + DLQ|CrawlerManager Python + DLQ]]
+- [[_COMMUNITY_Header Footer Extractor|Header Footer Extractor]]
+- [[_COMMUNITY_Redis Cache Rationale|Redis Cache Rationale]]
+- [[_COMMUNITY_Community 67|Community 67]]
+- [[_COMMUNITY_Document Text Extractor|Document Text Extractor]]
+- [[_COMMUNITY_Community 40|Community 40]]
+- [[_COMMUNITY_Community 69|Community 69]]
+- [[_COMMUNITY_Community 58|Community 58]]
+- [[_COMMUNITY_Crawler Monitor Rationale|Crawler Monitor Rationale]]
+- [[_COMMUNITY_Community 89|Community 89]]
+- [[_COMMUNITY_Embedding gRPC Client|Embedding gRPC Client]]
+- [[_COMMUNITY_Rust Service Clients|Rust Service Clients]]
+- [[_COMMUNITY_Qdrant CRUD Layer|Qdrant CRUD Layer]]
 - [[_COMMUNITY_Community 138|Community 138]]
-- [[_COMMUNITY_Community 142|Community 142]]
-- [[_COMMUNITY_Community 144|Community 144]]
+- [[_COMMUNITY_Community 139|Community 139]]
+- [[_COMMUNITY_Community 143|Community 143]]
+- [[_COMMUNITY_Rust Service Request Models|Rust Service Request Models]]
 - [[_COMMUNITY_Community 145|Community 145]]
 - [[_COMMUNITY_Community 146|Community 146]]
 - [[_COMMUNITY_Community 147|Community 147]]
@@ -135,6 +99,7 @@
 - [[_COMMUNITY_Community 153|Community 153]]
 - [[_COMMUNITY_Community 154|Community 154]]
 - [[_COMMUNITY_Maps internal error codes to hum|Maps internal error codes to hum]]
+- [[_COMMUNITY_Community 46|Community 46]]
 - [[_COMMUNITY_Exit code 3 OOM_RELAUNCH contrac|Exit code 3 OOM_RELAUNCH contrac]]
 - [[_COMMUNITY_.error marker|.error marker]]
 - [[_COMMUNITY_Maps internal error codes to human-r|Maps internal error codes to human-r]]
@@ -143,6 +108,7 @@
 - [[_COMMUNITY_Maps internal error codes to human-r|Maps internal error codes to human-r]]
 - [[_COMMUNITY_Returns (error_message, failure_caus|Returns (error_message, failure_caus]]
 - [[_COMMUNITY_Exit code 3 OOM_RELAUNCH contract (u|Exit code 3 OOM_RELAUNCH contract (u]]
+- [[_COMMUNITY_GCS Quarantine Restore|GCS Quarantine Restore]]
 - [[_COMMUNITY_Maps internal error codes to human-r|Maps internal error codes to human-r]]
 - [[_COMMUNITY_Returns (error_message, failure_caus|Returns (error_message, failure_caus]]
 - [[_COMMUNITY_Maps internal error codes to human-r|Maps internal error codes to human-r]]
@@ -154,32 +120,67 @@
 - [[_COMMUNITY_Returns (error_message, failure_caus|Returns (error_message, failure_caus]]
 - [[_COMMUNITY_PushedSet Retry-Dup Guard|PushedSet Retry-Dup Guard]]
 - [[_COMMUNITY_Stash Crawls Batch Driver|Stash Crawls Batch Driver]]
+- [[_COMMUNITY_Community 59|Community 59]]
+- [[_COMMUNITY_GCS Audit CLI|GCS Audit CLI]]
+- [[_COMMUNITY_Stash Poll Fall-Through|Stash Poll Fall-Through]]
+- [[_COMMUNITY_Dead Services Cleanup|Dead Services Cleanup]]
 - [[_COMMUNITY_Stash Poll Fall-Through|Stash Poll Fall-Through]]
 - [[_COMMUNITY_Stash Poll Fall-Through|Stash Poll Fall-Through]]
-- [[_COMMUNITY_Stash Poll Fall-Through|Stash Poll Fall-Through]]
+- [[_COMMUNITY_Community 80|Community 80]]
+- [[_COMMUNITY_Community 32|Community 32]]
 - [[_COMMUNITY_Crawler Exit Code Test|Crawler Exit Code Test]]
 - [[_COMMUNITY_French Error Message Mapping|French Error Message Mapping]]
 - [[_COMMUNITY_Subprocess Exit Code Cause|Subprocess Exit Code Cause]]
+- [[_COMMUNITY_Community 31|Community 31]]
+- [[_COMMUNITY_Community 101|Community 101]]
+- [[_COMMUNITY_Community 75|Community 75]]
+- [[_COMMUNITY_Community 90|Community 90]]
+- [[_COMMUNITY_Community 34|Community 34]]
 - [[_COMMUNITY_PushedSet Test|PushedSet Test]]
-- [[_COMMUNITY_Stash POST Blocking Rationale|Stash POST Blocking Rationale]]
+- [[_COMMUNITY_Stash POST Endpoint Flow|Stash POST Endpoint Flow]]
+- [[_COMMUNITY_Community 60|Community 60]]
 - [[_COMMUNITY_Stash Lock Heartbeat|Stash Lock Heartbeat]]
 - [[_COMMUNITY_Deferred Stash BackgroundTasks|Deferred Stash BackgroundTasks]]
 - [[_COMMUNITY_DedupManager Test|DedupManager Test]]
-- [[_COMMUNITY_Auto-Stash Tunables|Auto-Stash Tunables]]
+- [[_COMMUNITY_BO Results Timeout Bump|BO Results Timeout Bump]]
+- [[_COMMUNITY_Community 61|Community 61]]
+- [[_COMMUNITY_Community 49|Community 49]]
+- [[_COMMUNITY_Community 91|Community 91]]
+- [[_COMMUNITY_Community 65|Community 65]]
+- [[_COMMUNITY_Update-Mode Queue Builder|Update-Mode Queue Builder]]
+- [[_COMMUNITY_Community 92|Community 92]]
+- [[_COMMUNITY_Community 93|Community 93]]
+- [[_COMMUNITY_Community 102|Community 102]]
+- [[_COMMUNITY_Community 47|Community 47]]
 - [[_COMMUNITY_Auto-Stash Tunables|Auto-Stash Tunables]]
 - [[_COMMUNITY_Crawler Tech Stack|Crawler Tech Stack]]
+- [[_COMMUNITY_Community 68|Community 68]]
+- [[_COMMUNITY_Community 104|Community 104]]
 - [[_COMMUNITY_Crawler Manual Recovery|Crawler Manual Recovery]]
+- [[_COMMUNITY_DeepSeek OCR Extractor|DeepSeek OCR Extractor]]
+- [[_COMMUNITY_GCS Archive Audit Tool Rationale|GCS Archive Audit Tool Rationale]]
+- [[_COMMUNITY_Community 79|Community 79]]
+- [[_COMMUNITY_Community 103|Community 103]]
 - [[_COMMUNITY_UrlConsolidator Test Strategy|UrlConsolidator Test Strategy]]
+- [[_COMMUNITY_Community 39|Community 39]]
+- [[_COMMUNITY_Community 70|Community 70]]
 - [[_COMMUNITY_No-Stash Doc Task|No-Stash Doc Task]]
 - [[_COMMUNITY_Crawler Recovery Blast Radius|Crawler Recovery Blast Radius]]
 - [[_COMMUNITY_Crawler Manual Recovery|Crawler Manual Recovery]]
+- [[_COMMUNITY_Community 36|Community 36]]
+- [[_COMMUNITY_Community 43|Community 43]]
+- [[_COMMUNITY_Community 37|Community 37]]
+- [[_COMMUNITY_Claude Config Audit|Claude Config Audit]]
 - [[_COMMUNITY_UrlConsolidator Test Strategy|UrlConsolidator Test Strategy]]
+- [[_COMMUNITY_Community 105|Community 105]]
 - [[_COMMUNITY_Camoufox Default Browser|Camoufox Default Browser]]
 - [[_COMMUNITY_Auto-Stash Eligibility|Auto-Stash Eligibility]]
 - [[_COMMUNITY_Auto-Stash Job Fields|Auto-Stash Job Fields]]
 - [[_COMMUNITY_Reconciliation Leader Election|Reconciliation Leader Election]]
 - [[_COMMUNITY_Content-Extractor Co-Deploy Rule|Content-Extractor Co-Deploy Rule]]
 - [[_COMMUNITY_QM Raw-Similarity Threshold|QM Raw-Similarity Threshold]]
+- [[_COMMUNITY_QM Raw-Similarity Threshold|QM Raw-Similarity Threshold]]
+- [[_COMMUNITY_Community 71|Community 71]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `CrawlerManager` - 393 edges
@@ -246,585 +247,461 @@
 
 ## Communities
 
-### Community 0 - "Milvus CRUD Layer"
-Cohesion: 0.0
-Nodes (958): Fix B: status visibility (4 optional fields on CrawlStatus / get_status), test_status_autostash_fields.py (Fix B tests), delete_key(), get_json(), Deletes a key from Redis., Gets a dictionary for a key, deserializing it from JSON., Deletes a key from Redis., Gets a dictionary for a key, deserializing it from JSON. (+950 more)
-
-### Community 1 - "Node.js Crawler Core"
-Cohesion: 0.01
-Nodes (485): Verifies the API key if API_KEY is configured in settings.     If API_KEY is not, verify_api_key(), WHY: AutoscaledPool scales on local CPU/mem, idle during detect await -> over-subscribes 5-wide detect p-limit, Backpressure gate predicate (shouldAcceptNewPage: pending <= threshold), killBrowserProcesses(), Budget inversion: handler timeout 120s < single detect timeout 180s, kills slow detect mid-flight, Per-replica Docker PID-namespace isolation guarantee, BROWSER_KILL_PATTERN constant (+477 more)
-
-### Community 2 - "CrawlerManager Python + DLQ"
-Cohesion: 0.01
-Nodes (461): Sets a dictionary for a key, serializing it to JSON., Atomically decrements a key's value by 1, with a floor of 0 (never goes negative, Sets a dictionary for a key, serializing it to JSON., safe_decrement_key(), set_json(), Exit codes Node->Python: 0/2 finished, 3 OOM relaunch, 4 update no-data, 5 redis lost, 6 progress stall, 7 domain changed, other=failed, failure_cause vocabulary (Python<->BO PHP contract): oom_max_restarts, oom_relaunch, update_mode_no_data, redis_lost, progress_stalled, domain_changed, killed_oom_system, etc., Success/Stop Webhook Idempotency (PW-A): shared terminal_webhook_request_id reused by success+stop senders (+453 more)
-
-### Community 3 - "Rust Service Clients"
-Cohesion: 0.01
-Nodes (435): Any, lifespan(), metrics_endpoint(), Prometheus metrics exposition endpoint., bool, Gets all keys matching a given prefix using SCAN., Gets all keys matching a given prefix using SCAN., scan_keys_by_prefix() (+427 more)
-
-### Community 4 - "Milvus Concurrency Guard"
-Cohesion: 0.02
-Nodes (390): async-job-API work exonerated; html_content bypass intact, complete-mode + html_content still opens browser for alternatives, Option A (crawler mode=simple) REJECTED: breaks Regional Path Exclusion, Option C (BROWSER_SEMAPHORE_SIZE 6->4 / mem_limit) deferred lever, socket hang up = OOM SIGKILL (6 browsers x 600MB + heap vs mem_limit 4500m), Investigation: detection opens browser on html_content alt-URL fetch -> socket hang up, _JobCapacityExceeded, _JobsDisabled (+382 more)
-
-### Community 5 - "Redis Cache Rationale"
-Cohesion: 0.01
-Nodes (301): 'admission_rejected' DetectionResponse method, AlternativeUrl schema (url, method, reliability, validated, region_priority?), api-gateway per-service downstream timeout map (detection=180s), API hreflang/data-lang same-host validation gate, DomainFR._is_valid_language_alternative static helper (Python), Apify proxy (APIFY_PROXY), Go vs Express benchmark — crawler-monitor-backend (2026-04), queue.Analyze CPU + JSON parsing benchmark (Go) (+293 more)
-
-### Community 6 - "Pydantic Request Schemas"
-Cohesion: 0.02
-Nodes (89): get_elasticsearch_client(), get_rabbitmq_connection(), Shared connection factories for RabbitMQ and Elasticsearch., Fail fast if required environment variables are missing., Connects to RabbitMQ with exponential backoff retries., Connects to Elasticsearch with exponential backoff retries., _validate_env(), DLQArchiver (+81 more)
-
-### Community 7 - "GCS Archive Classifier"
-Cohesion: 0.01
-Nodes (208): Lock heartbeat (stash + archive): _acquire/_release_ownership_lock (replica-tagged + Lua CAS DEL) + _LockHeartbeat asyncio EXPIRE renewal; TTL/interval/max-duration tunables, Lock heartbeat tunables (STASH/ARCHIVE/UNSTASH_LOCK_TTL, LOCK_HEARTBEAT_INTERVAL/MAX_DURATION), nginx proxy_next_upstream off on /crawler/(stash|unstash|archive)/ to prevent POST retry fan-out across replicas; PHP is sole 503 retry layer, nginx proxy_next_upstream off on /crawler/(stash|unstash|archive)/ — prevents POST retry fan-out across replicas, Ownership-safe lock pair (_acquire/_release_ownership_lock: replica-id-tagged value + Lua CAS DEL), Stash conflict matrix (409 CRAWL_IS_ACTIVE/ALREADY_ARCHIVED/ALREADY_STASHED/OPERATION_IN_PROGRESS; 503 INSUFFICIENT_DISK_SPACE), Stash daemons (separate upload/download_daemon.sh instances via UPLOAD_GCS_PREFIX=stash, DELETE_AFTER_DOWNLOAD=true), Stash — free-disk investigation workflow (stashed_at field, gs://bucket/stash/, orthogonal to status) (+200 more)
-
-### Community 8 - "LLM Provider Clients"
-Cohesion: 0.04
-Nodes (164): bool, int, str, _AdmissionRejected, _build_challenge_error_msg(), check_url_only(), detect_french(), detect_french_batch() (+156 more)
-
-### Community 9 - "LLM gRPC Client"
-Cohesion: 0.02
-Nodes (104): check_gcloud_auth(), classify_by_name(), _confirm_or_exit(), _count_dataset_files(), detect_duplicates(), extract_crawl_id(), gcloud_delete(), gcloud_download() (+96 more)
-
-### Community 10 - "GCS Audit CLI"
-Cohesion: 0.02
-Nodes (56): execute_cypher(), get_categories_count(), ServiceClients, CypherBuilderService, get_couverture_by_fournisseur(), get_couverture_by_produit(), FournisseurService, GeminiClient (+48 more)
-
-### Community 11 - "Document Text Extractor"
-Cohesion: 0.02
-Nodes (149): POST /archive/{crawl_id}, Conventions & dependencies: nginx path stripping (routers no prefix), crawler spawned as child by crawler_manager; deps Redis, GCS, common-utils, api-detection-langue-fr, Tmp file isolation via .staging/ (atomic move after integrity checks), Stash to archive move: POST /archive on stashed finished crawl writes .move-request, move-flow daemon gcloud storage mv stash/->crawls/, _mark_as_archived + clear stashed_at, archive_status=pending_upload, Unstash two-phase commit: .done / extract / .unstash-confirmed / gcloud rm / .unstash-cleanup-done; grace window then cleaned|deferred, UNSTASH_GCS_ORPHAN log, cleanup_archives background task, crawler_archives/ -> /app/archives, POST /archive (GCS fallback) (+141 more)
-
-### Community 12 - "Enums and Collection Types"
-Cohesion: 0.02
-Nodes (97): ABC, main(), common_utils.grpc_clients (client wrappers), _clean_text(), chunk_text(), detokenize(), get_embedding(), get_embeddings() (+89 more)
-
-### Community 13 - "Update-Mode Queue Builder"
-Cohesion: 0.03
-Nodes (92): _detect_soft_404(), _is_redirect_to_home(), Pure page validator for api-detection-langue-fr.  Classifies a ScrapeResult agai, Lightweight visible-text length for the thin-content threshold., Classify a ScrapeResult against the requested URL.      Order of checks:       1, validate(), ValidationVerdict, _visible_text_length() (+84 more)
-
-### Community 14 - "Rust Service Request Models"
-Cohesion: 0.02
-Nodes (119): Auto-stash follow-up 2026-06-02: resume-on-start unstash (own id), status visibility, failed/never-downloaded stash via 48h timeout, Resume-on-start unstash (follow-up): start_crawl unstashes the started crawl's own id when stashed_at set; stashed_at preserved into fresh job_data to avoid TOCTOU 409; is_restart skips, Auto-stash sweep (_reconcile_locked collects terminal non-stashed crawls, stashes via create_task; _is_stash_eligible), Auto-stash tunables (AUTO_STASH_ENABLED, STASH_GRACE/SAFETY_TIMEOUT/DISK_HIGH_WATER/MAX_PER_SWEEP, MOVE_* prefixes), Auto-stash workflow: folds stash/unstash into crawl lifecycle, AUTO_STASH_ENABLED=false default; sweep (_reconcile_locked) stashes eligible terminal crawls, Auto-stash job_data fields: finished_at, downloaded_at, size_bytes, stashed_at (orthogonal, cached on write, read from Redis), Capacity counter invariants: crawl_jobs:running_count authoritative; slot-holding (running/restarting_oom/stopping) vs terminal; transition rules + re-read guards prevent drift/double-decrement, Reconciliation leader election (reconcile_leader_lock SET NX, TTL=interval*2, ownership-safe release, _reconcile_locked) (+111 more)
-
-### Community 15 - "Trafilatura HTML Cleaning"
-Cohesion: 0.03
-Nodes (73): _detect_soft_404(), _is_redirect_to_home(), Pure page validator for api-detection-langue-fr.  Classifies a ScrapeResult ag, Lightweight visible-text length for the thin-content threshold., Classify a ScrapeResult against the requested URL.      Order of checks:, validate(), ValidationVerdict, _visible_text_length() (+65 more)
-
-### Community 16 - "GCS Quarantine Restore"
-Cohesion: 0.05
-Nodes (102): ChatBaseURL, ChatProvider, ChatRequest, CollectionName, CollectionNameGraph, Enum for the possible collection names.     The values correspond to the string, Enum for the possible collection names.     The values correspond to the string, # TODO: (+94 more)
-
 ### Community 17 - "Regional Path Exclusion Rationale"
 Cohesion: 0.05
-Nodes (63): GuardConfig, GuardMetrics, Prometheus metrics for MilvusConcurrencyGuard.      Uses module-level singleto, Record a successful slot acquisition., Record a slot release., Record an acquire timeout., Set the configuration gauges (typically called once at startup)., Set fallback mode indicator (1 = Redis unavailable, 0 = normal). (+55 more)
+Nodes (102): CollectionName, Enum, CollectionNameGraph, Enum for the possible collection names.     The values correspond to the string, Enum for the possible collection names.     The values correspond to the string, # TODO:, get_llm_chat_response(), get_llm_chat_batch_response() (+94 more)
 
-### Community 18 - "Qdrant CRUD Layer"
-Cohesion: 0.03
-Nodes (72): AdmissionController, AdmissionMiddleware, FastAPI admission-control middleware.  Scope after the crawler carve-out refac, Atomic in-flight counter with a hard max.      Not a semaphore: acquire() does, Try to acquire a slot. Returns True on success, False if saturated., Release a slot. Defensive: does not go below zero., BaseHTTPMiddleware, Clear all in-flight state. Test-isolation helper only — do NOT         call fro (+64 more)
+### Community 4 - "Milvus Concurrency Guard"
+Cohesion: 0.01
+Nodes (375): str, DLQPropertiesAsync, create_dlq_headers(), create_dlq_message(), DeepseekOCRDocExtractor, Client asynchrone pour l'API OCR externe utilisant Deepseek, Initialise le client OCR                  Args:             base_url: URL de, Vérifie si le fichier est un format supporté (PDF ou image)                  A (+367 more)
 
-### Community 19 - "Graph Milvus gRPC Client"
-Cohesion: 0.04
-Nodes (93): Settings, BaseSettings, Config, env_or(), env_or_opt(), Configuration de l'application, Settings, Config (+85 more)
+### Community 76 - "Community 76"
+Cohesion: 0.67
+Nodes (3): DLQProperties, create_dlq_headers(), create_dlq_properties()
 
-### Community 20 - "Embedding gRPC Client"
-Cohesion: 0.03
-Nodes (97): Auto-Stash/Unstash Follow-Up Design (2 code fixes + 2 doc notes), Existing-data drain: one-time tools/stash_crawls_batch.py run (no backfill code), Fix A: unstash-on-start (resume-on-start the retrieve bug), Root cause: start_crawl checked stashed_at only on previous_crawl_id, never on own crawl_id, is_restart (OOM relaunch) guard: never resume-on-start unstash (crawl was running, not terminal), Auto-Stash Follow-Up Implementation Plan, Capture prior Redis record before fresh job_data write (prior_job_info), Unstash failure -> _rollback_claim(decrement_counter=True) + propagate (HTTPException as-is, generic->503) (+89 more)
+### Community 108 - "Community 108"
+Cohesion: 1.0
+Nodes (1): Creates a dictionary of headers for a DLQ message, compatible with both pika and
 
-### Community 21 - "DeepSeek OCR Extractor"
-Cohesion: 0.04
-Nodes (86): Audit logs (login, token_issue, token_reuse_attack, webhook_fired, etc.), account-service-backend, Per-client branding endpoint /authorize/branding/{client_id}.json (logo, name, brand_color), claim_mapper applies client.claim_mappings to JWT (e.g. is_admin -> role_admin), Account-service client integration guide (Go + FastAPI examples for OAuth2 PKCE downstream wiring), MySQL schema: users, oauth2_clients, oauth2_authorization_codes, oauth2_refresh_tokens, logout_events, audit_logs, account-service-frontend, AuthenticateHellopro proxy (lifted from mcp-gateway) - delegates password check to hellopro.fr (+78 more)
+### Community 109 - "Community 109"
+Cohesion: 1.0
+Nodes (1): Creates pika.BasicProperties for a DLQ message. For backward compatibility with
 
-### Community 22 - "Header Footer Extractor"
-Cohesion: 0.03
-Nodes (82): Build-new-then-atomic-swap concurrency rule, Auto-proposal flow (Phase 3, manual-DLQ collector), B-index explosion (token+aliases -> flat 200-key dict), Shared catalog_db target (D9), Dynamic Unit Normalization Design Spec, disambiguation_rules table (Layer E3 nm/t-min), Five dynamic layers A-E, G1 pint-parse forced eval (+74 more)
+### Community 110 - "Community 110"
+Cohesion: 1.0
+Nodes (1): Creates a dictionary of headers for a DLQ message based on an aio_pika message.
 
-### Community 23 - "Graph Database gRPC Client"
-Cohesion: 0.06
-Nodes (49): JobManager, JobStore, Problem: synchronous /detect-batch 180s timeout wall on large batches, Shared prod admission pool; crawler-service immune via html_content bypass, BatchCounts dataclass (authoritative success/failed/error tallies), BatchOpts dataclass (per-call batch options), client_job_id idempotency (SET NX claim → existing job returns 200), _heartbeat wall-clock ticker (refreshes last_activity + active TTL) (+41 more)
+### Community 111 - "Community 111"
+Cohesion: 1.0
+Nodes (1): Creates a persistent aio_pika.Message ready for the Dead Letter Queue.
 
-### Community 24 - "Claude Config Audit"
-Cohesion: 0.04
-Nodes (60): Final review 6 blockers (commits 21bf809f..7ebbb0c8), UNSTASH_GCS_ORPHAN log line (cleanup grace expired, operator grep, no Prometheus counter), archive_crawl._cleanup_local_data, mock_bind_mounts_present autouse fixture, _cleanup_data_keep_logs (stash cleanup mirroring archive), DELETE_AFTER_DOWNLOAD=true daemon flag, Fail-open disk pre-flight check, files_to_keep set (logs + markers) (+52 more)
-
-### Community 25 - "Archive Disk Preflight Rationale"
-Cohesion: 0.04
-Nodes (57): SyncAdmission guard: SYNC_MAX_INFLIGHT (0=disabled), 503 + Retry-After on overload, BO fix: decision==='SKIP'->similar, similarity_ratio (fonctions_maj_crawling.php:1116-1117), Effect: title/description changes never detected -> stale products + missed Milvus re-ingest, Bug: BO reads is_similar/similarity (absent) instead of decision/similarity_ratio, api-comparaison-texte Contract Fix + Lean Hardening Design, api-comparaison-texte Contract Fix + Lean Hardening Plan, comparison_decision_total{decision} would have surfaced the bug (high SKIP, zero updates), Fail-safe: missing/error decision defaults to UPDATE (assume changed) vs old unsafe assume-similar (+49 more)
-
-### Community 26 - "Dead Services Cleanup"
-Cohesion: 0.07
-Nodes (27): BaseTrafilatura, BaseTrafilaturaReponse, TrafilaturaReponseHtml, HeaderFooterExtractor, Analyzes a BeautifulSoup object to robustly find and extract the text content of, Original signature strategy: Tag + Sorted Class Names., ZONE A Improvement: Structural signature based on DOM path.         Example: bo, Helper to get 'tag:nth-of-type(i)' string. (+19 more)
-
-### Community 27 - "GCS Archive Audit Tool Rationale"
-Cohesion: 0.04
-Nodes (47): buildCamoufoxLaunchInput(), crawler CLAUDE.md: api-detection-langue-fr Caller Contract + alt-validation opt-out, Auto-stash sweep (reconcile loop stashes eligible terminal crawls), Auto-Stash Workflow (folds stash/unstash into crawl lifecycle, AUTO_STASH_ENABLED-gated), Auto-stash job_data fields: finished_at, downloaded_at, size_bytes, stashed_at, Camoufox default browser (stealth Firefox, headless required), Follow-up 2026-06-02: resume-on-start unstash + status visibility, crawler-service (FastAPI orchestrator + Node.js/Crawlee engine) (+39 more)
-
-### Community 28 - "CleanHTML Module"
-Cohesion: 0.06
-Nodes (48): BDD doc-enrichment runbook, Application Voie 1: drag-drop import (default), Application Voie 2: operator-run curl POST, columns map (name -> {type, desc}), Correction loop (re-emit on dropped column, re-import), Curated registry (bdd_used_tables / bdd_used_fields / bdd_meta), Vue dashboard BDDTablesView.vue (import-doc UI), database_id mapping (1=edgb2b/BO, 5=hpdata, 10=hellopro_ia) (+40 more)
-
-### Community 29 - "Crawler Monitor Rationale"
-Cohesion: 0.08
-Nodes (23): DocumentTextExtractor, Télécharge un fichier depuis une URL                  Args:             url: URL, Résout un chemin ou URL vers un chemin local                  Args:, Convertit une image vers un format supporté par l'OCR                  Args:, Ajoute un fichier à la liste de nettoyage                  Args:             fil, Supprime tous les fichiers marqués pour le nettoyage, Extrait le texte d'une image ou d'un PDF avec OCRExtractor.         - Si un PDF, Vérifie si un document contient des images non extractibles                  Arg (+15 more)
-
-### Community 30 - "Community 30"
-Cohesion: 0.09
-Nodes (39): api-gateway-go nginx.conf, api-gateway nginx.conf, Camoufox OOM Restart Loop Plan, Camoufox OOM Restart Loop Design Spec, archive_lock:{id} Redis lock, BROWSER_KILL_PATTERN constant, Crawl 6250 incident (2026-05-20), Crawl 6334 (shop.monlabofermier.fr) (+31 more)
-
-### Community 31 - "Community 31"
-Cohesion: 0.12
-Nodes (25): addPage(), addPoolSample(), buildSummary(), createAggregator(), median(), percentile(), phaseStats(), round1() (+17 more)
-
-### Community 32 - "Community 32"
-Cohesion: 0.08
-Nodes (23): build_queue(), classify_entry(), _has_tmp_sibling(), load_exclude_ids(), load_report(), main(), parse_args(), Build the update-mode re-ingestion queue from a gcs_archive_audit report.  Reads (+15 more)
-
-### Community 33 - "Community 33"
-Cohesion: 0.07
-Nodes (30): alternative_urls Exclusion List, robots.txt Blanket Block, running_count Drift Bug, Cross-Service Milvus Coordination, Inflight Request Deduplication, Multi-Path robots Probe, Multilingual Regional Path Duplicates, Playwright TargetClosedError flood (+22 more)
-
-### Community 34 - "Community 34"
-Cohesion: 0.08
-Nodes (26): CLAUDE.md: failure_cause vocabulary domain_changed row, CLAUDE.md: exit code 7 -> failed / domain_changed, _classify_exit_code shared helper (maps exit code → failure_cause), Redis Loss / Progress Stall Detection doc section, Manual smoke-test playbook for redis_lost / progress_stalled, Spec 2026-05-21 redis-loss-progress-stall-detection-design, _classify_exit_code(7) -> domain_changed contract, External-Redirect Breaker (design) (+18 more)
-
-### Community 35 - "Community 35"
-Cohesion: 0.08
-Nodes (26): check_entities_exist(), check_labels_exist(), Check which entity IDs already exist in Milvus.          Args:         ids: L, Search result from Milvus., Upsert a single canonical label.          Args:         label: The canonical, Upsert multiple labels in a batch.          Args:         labels: List of dic, Search for similar labels.          Args:         embedding: Query vector emb, Check which labels already exist in Milvus.          Args:         labels: Li (+18 more)
-
-### Community 36 - "Community 36"
-Cohesion: 0.08
-Nodes (24): 503 discriminator: capacity -> Retry-After (retry); disabled/Redis-down -> no Retry-After (fail fast), content-extractor Hardening + Async + Result Cache (design spec), content-extractor Async + Cache + Sync Hardening (implementation plan), async_jobs.py: JobStore + JobManager + poll_status (Redis job store, in-process asyncio worker), Axis 1: asyncio.to_thread offload + UVICORN_WORKERS (processes, not threads, give CPU parallelism), Axis 2: hybrid request shape (hardened sync + batched async submit/poll), Load-bearing: guard on cache_service.redis_client truthy before bare helpers (they raise ConnectionError when None), Capacity model: throughput ~= cores/(p*(1-h)); serves 7 crawler replicas via async + cache + workers (+16 more)
-
-### Community 37 - "Community 37"
-Cohesion: 0.13
-Nodes (20): BatchResult, _dict_to_struct(), execute_batch_cypher(), execute_cypher(), get_graph_schema(), GraphSchema, NodeLabel, PropertyInfo (+12 more)
-
-### Community 38 - "Community 38"
-Cohesion: 0.12
-Nodes (21): 28 deleted workflow files (9 ci + 9 cd + 9 pipeline + 1 orphan), Bilingual EN+FR conventional commit via temp file + git commit --file=, Risk: deleted CI workflow listed as required status check hangs future PRs, Dead Workflows Cleanup Design Spec, Goal: delete 28 dead-service GitHub Actions workflows from .github/workflows/, Dead Workflows Cleanup Implementation Plan, Scope: workflow files only; service directories in apps-microservices/ untouched, Dead criterion: workflow references a retired service no longer active (+13 more)
-
-### Community 39 - "Community 39"
-Cohesion: 0.15
-Nodes (13): DetectionClient, Shared HTTP client enforcing the api-detection-langue-fr call contract.  Contr, HTTP client wrapper for api-detection-langue-fr enforcing the caller contract., _isolate_env(), Tests for common_utils.detection_client.DetectionClient., Reset contract env vars to known defaults so tests are hermetic., With DETECTION_MAX_CONCURRENCY=2, at most 2 requests are in flight at once., test_concurrency_semaphore_caps_inflight() (+5 more)
-
-### Community 40 - "Community 40"
-Cohesion: 0.11
-Nodes (18): GCS server-side move stash/{id} → crawls/{id} (gcloud storage mv), Move-flow daemon (download_daemon.sh ENABLE_MOVE=true, third loop), .move-request / .move-done / .move-error markers, Move-flow settings (MOVE_REQUESTS/RESULTS_PATH, MOVE_SOURCE/TARGET_PREFIX, MOVE_TIMEOUT_SECONDS), _move_stash_to_archive (.move-request + poll .move-done), archive_status='pending_upload' (reused known string, zero BO change), Phase 1 — Transparency Layer, Phase 2 — Auto-Stash Sweep (+10 more)
-
-### Community 41 - "Community 41"
-Cohesion: 0.16
-Nodes (17): rabbitmq-reviewer agent (proposed), security-auditor agent (proposed), test-writer agent (proposed), /pre-push command (proposed), prix-traitement port discrepancy (8595 vs 8591), 47.5/100 maturity score rationale, Claude Code Audit Report 2026-03-25, security.md rule (proposed) (+9 more)
-
-### Community 42 - "Community 42"
-Cohesion: 0.15
-Nodes (16): Audit Classifications (OK/WRONG_NAME/CORRUPTED/...), Missing 'domain' field in callback_payload, --restore-from-quarantine command, ./ Prefix Tar Member Bug, tmp.tar.gz Glob Race with Upload Daemon, Update-Mode Re-ingestion, Rationale: Diagnostic-first defense over silent producer/consumer fix, Rationale: Use gcloud CLI to avoid new PyPI dependency (+8 more)
-
-### Community 43 - "Community 43"
-Cohesion: 0.17
-Nodes (15): redis-client-frontend account-service SSO login (OAuth 2.1 + PKCE), account-service OAuth contract: split PUBLIC/BASE URLs, HS256 JWT access token, ~60s TTL, exact redirect_uri, D1: native Next.js BFF OAuth client (hand-rolled PKCE + jose), not Auth.js, Register OAuth client via POST /api/v1/admin/services (client_id/secret shown once), D3: email allow-list (ADMIN_EMAILS) — authenticated != authorized, protects FLUSHDB, lib/auth/flow.ts: framework-free startLogin / completeCallback orchestration, D5: local session clear + optional RP-initiated central logout (SSO_CENTRAL_LOGOUT), middleware.ts rewrite: verify rcf_session, POST->401, GET->302 /auth/login (+7 more)
-
-### Community 44 - "Community 44"
-Cohesion: 0.17
-Nodes (12): api-classification-v2 (test variant), api-rest-milvus-bkp (superseded), Archive Branch Strategy, Dead Services Cleanup Plan, database-service (superseded), categories-processor-service (dormant), Dormant Services Cleanup Phase 2, fournisseurs-processor-service (dormant) (+4 more)
-
-### Community 45 - "Community 45"
-Cohesion: 0.17
-Nodes (12): GCS Archive Audit Tool Plan, Archive Classifications (OK/CORRUPTED/WRONG_NAME/...), GCS Audit Multi-Source Domain Resolution, gcloud Storage CLI Shell Wrappers (no Python GCS lib), _normalize_member_name (handles ./ prefix), GCS Audit Prefix Fix + Quarantine Restore, _resolve_domain_name Multi-Source Helper, --restore-from-quarantine Flag (+4 more)
-
-### Community 46 - "Community 46"
-Cohesion: 0.24
-Nodes (10): Register GET /api-info on the given FastAPI app with the catalog convention., register_api_info(), Register GET /api-info on the given FastAPI app with the catalog convention., register_api_info(), test_custom_openapi_url(), test_full_payload(), test_minimal_payload(), test_custom_openapi_url() (+2 more)
-
-### Community 47 - "Community 47"
-Cohesion: 0.18
-Nodes (12): _auto_stash_one (background stash dispatch, swallows 409), _disk_used_pct (storage filesystem used %, fail-open 0.0), downloaded_at job_data field (/results stream-start), Disk-pressure eligibility (STASH_DISK_HIGH_WATER_PCT, top-N by size), Grace eligibility (downloaded_at + STASH_GRACE_SECONDS), Safety-timeout eligibility (finished_at + STASH_SAFETY_TIMEOUT_SECONDS), finished_at job_data field (terminal transition stamp), _is_stash_eligible predicate (grace/timeout, pure, fail-open) (+4 more)
+### Community 66 - "Community 66"
+Cohesion: 0.47
+Nodes (2): gen_email_uuid(), AnonymizeText
 
 ### Community 48 - "Community 48"
 Cohesion: 0.22
 Nodes (5): CleanHTML, Class base to clean data., Convert HTML content to BeautifulSoup object., Steps:         1. Convert HTML to BeautifulSoup object.         2. Keep only tag, Strip HTML tags and return cleaned text.         Remove all tags except tags rel
 
-### Community 49 - "Community 49"
-Cohesion: 0.33
-Nodes (10): buildChecker(), makeMockConsolidator(), makeMockJsonlWriter(), makeMockRedisClient(), makeMockStatsManager(), buildChecker(), makeMockConsolidator(), makeMockJsonlWriter() (+2 more)
+### Community 112 - "Community 112"
+Cohesion: 1.0
+Nodes (1): Cleans up whitespace and removes control characters.
 
-### Community 50 - "Community 50"
-Cohesion: 0.2
-Nodes (10): Crawler Monitor Alignment Plan, Monitor/Crawler Data Contract Mismatch, Crawler Monitor Dataset Browser & Queue Insights, Fail-Fast Security Defaults (admin/JWT), supertest Backend Test Harness, 3-Category URL Browser (succès/erreurs/non-FR), Container-Level cgroup Metrics, React Rules of Hooks Violation Fix (+2 more)
-
-### Community 51 - "Community 51"
-Cohesion: 0.28
-Nodes (8): Entity, extract_entities(), lemmatize(), Token with lemmatization information., Named entity extracted from text., Call the gRPC service to lemmatize text.          Args:         text: The tex, Call the gRPC service to extract named entities from text.          Args:, Token
-
-### Community 52 - "Community 52"
-Cohesion: 0.22
-Nodes (2): Tests for Lua script string definitions. Validates that the scripts are well-fo, TestLuaScripts
-
-### Community 53 - "Community 53"
-Cohesion: 0.22
-Nodes (9): Crawler Capacity Counter & OOM Fixes, Ghost OOM Relaunch Prevention (Fix 4), Redis Capacity Counter Drift (5 Fixes), Fresh last_heartbeat in start_crawl, Reconciliation Leader Election + Heartbeat Guard, Redis SET NX EX reconcile_leader_lock, Webhook Idempotency Client-Side Plan, Stable request_id UUID (Persisted in job_data) (+1 more)
-
-### Community 54 - "Community 54"
-Cohesion: 0.28
-Nodes (8): normalize_quantity(), normalize_range(), NormalizedQuantity, NormalizedRange, Result of quantity normalization., Result of range normalization., Normalize a single quantity (value + unit).          Args:         label: The, Normalize a numeric range (min/max + unit).          Args:         label: The
-
-### Community 55 - "Community 55"
-Cohesion: 0.31
-Nodes (7): robots.txt blanket-block bypass (isBlanketBlock multi-path probe; robots=undefined; robots_txt_bypassed observability), robots.txt blanket-block bypass: isBlanketBlock multi-path probe (Disallow:* / Disallow:/), startup-only, robots=undefined disables filtering, robots_txt_bypassed observability, robots.txt Blanket Block Bypass (multi-path probe at startup; disable robots filtering; robots_txt_bypassed observability), WHY only blanket blocks bypassed: selective blocks (Disallow: /products/) are respected, not bypassed, isBlanketBlock(), createMockRobotsFile(), testBlanketBlockDetection()
-
-### Community 56 - "Community 56"
-Cohesion: 0.25
-Nodes (6): classic_search_vector(), get_collection_schema(), hybrid_search_vector(), Appelle le service gRPC pour effectuer une recherche hybride     combinant rech, Appelle le service gRPC pour obtenir le schéma d'une collection avec un cache d', Appelle le service gRPC pour effectuer une recherche classique par filtre.
+### Community 25 - "Archive Disk Preflight Rationale"
+Cohesion: 0.07
+Nodes (27): TrafilaturaHp, _normalize_sentence(), _normalize_whitespace(), Normalizes a sentence for accurate comparison., Cleans up whitespace and removes control characters., Pre-processes the HTML content:         1. Removes script/style/noscript tags., Post-processes the extracted content:         1. Extracts article content (produ, Extrait le texte avec BeautifulSoup en ciblant les balises pertinentes. (+19 more)
 
 ### Community 57 - "Community 57"
-Cohesion: 0.25
-Nodes (8): api-detection-langue-fr Concurrency Defense, TargetClosedError Flood Fix (unroute_all + try/finally), Three-Layer Defense (admission + container + contract), Milvus Global Concurrency Guard Plan, Prevent RAM Overload on Milvus VM, Redis Lua ACQUIRE/RELEASE/CORRECT Scripts, Three-Tier Slot Pool (Search > High-write > Low-write), TTL-Based Crash-Safe Leases
-
-### Community 58 - "Community 58"
 Cohesion: 0.32
-Nodes (6): InputJSON, OutputJSON, ApiDoc, extractContent(), main(), outputError()
+Nodes (6): InputJSON, OutputJSON, main(), extractContent(), outputError(), ApiDoc
 
-### Community 59 - "Community 59"
-Cohesion: 0.25
-Nodes (7): Regression tests for GCS download path alignment.  These three tests pin the c, settings.DOWNLOAD_REQUESTS_PATH must equal the compose bind target.      Compo, settings.DOWNLOAD_RESULTS_PATH must equal the compose bind target.      Compos, tools/download_daemon.sh must read the same env var names as Python.      Hist, test_download_daemon_uses_canonical_env_var_names(), test_download_requests_path_matches_compose_bind_target(), test_download_results_path_matches_compose_bind_target()
+### Community 8 - "LLM Provider Clients"
+Cohesion: 0.03
+Nodes (174): BaseModel, InsertDevisRequest, InsertEchangeRequest, InsertProduitRequest, InsertWebsiteRequest, Scans storage for orphaned jobs and re-indexes them in Redis., _normalize_url_for_dedup(), _homepage_of() (+166 more)
 
-### Community 60 - "Community 60"
-Cohesion: 0.25
-Nodes (6): Triggering incident: crawl 6649 bp-tech.fr — silent 0-URL exit code 2, Out of scope: full-isolation stats / questionmark idempotency / detection-quota mitigation / Crawlee upstream / seed_no_extraction failure signal, Crawler Dataset Retry-Dup Fix Implementation Plan, Crawler Dataset Retry-Dup Fix Design Spec (2026-05-24), Crawler Dataset Retry-Dup Fix tasks.json sidecar (4 tasks, all completed), Test strategy: injected no-op, delegation, error-path reject→0, legacy construct
+### Community 19 - "Graph Milvus gRPC Client"
+Cohesion: 0.05
+Nodes (63): GuardConfig, GuardMetrics, Prometheus metrics for MilvusConcurrencyGuard.      Uses module-level singleto, Record a successful slot acquisition., Record a slot release., Record an acquire timeout., Set the configuration gauges (typically called once at startup)., Set fallback mode indicator (1 = Redis unavailable, 0 = normal). (+55 more)
 
-### Community 61 - "Community 61"
-Cohesion: 0.36
-Nodes (7): _count_by(), _pool_stats(), _project_sample(), Admin/operator endpoints. Authenticated. Not user-facing., Whitelist sampled client fields so future redis-py additions cannot     silently, Operator-only snapshot of this replica's Redis pool + global CLIENT LIST.     Se, redis_debug()
+### Community 23 - "Graph Database gRPC Client"
+Cohesion: 0.05
+Nodes (55): Configuration de l'application, Settings, BaseSettings, env_or(), env_or_opt(), Config, Settings, Config (+47 more)
+
+### Community 94 - "Community 94"
+Cohesion: 1.0
+Nodes (1): Atomic Lua scripts for Redis-based concurrency guard. All slot operations (acqu
+
+### Community 7 - "GCS Archive Classifier"
+Cohesion: 0.02
+Nodes (89): MilvusProduitsMigration, main(), Script de migration de la collection produits_3 vers produits_4 Objectif: Augmen, Classe pour gérer la migration de produits_3 vers produits_4, Vérifier que la collection source existe, Créer une copie de sauvegarde (optionnel mais recommandé pour petites collection, Créer la nouvelle collection produits_4 avec le schéma corrigé, Filtre les chunks qui existent déjà dans la collection cible         Vérifie: id (+81 more)
+
+### Community 95 - "Community 95"
+Cohesion: 1.0
+Nodes (1): Shared threading lock for pymilvus connection management.  All Milvus CRUD and I
+
+### Community 12 - "Enums and Collection Types"
+Cohesion: 0.02
+Nodes (97): Config, Embedding, _clean_text(), Ajoute une ligne avec le temps d’exécution dans temps_embedding.log, Délègue le chunking au microservice d'embedding., get_embeddings(), get_embedding(), tokenize() (+89 more)
+
+### Community 116 - "Community 116"
+Cohesion: 1.0
+Nodes (1): Nettoie une chaîne de texte en normalisant les espaces et en corrigeant
 
 ### Community 62 - "Community 62"
 Cohesion: 0.29
 Nodes (4): PDFProcessor, A class to extract text from a PDF file's binary content., Initializes the PDFProcessor with the binary content of the file.         :param, Executes the full workflow: opens the file from memory and extracts text.
 
-### Community 63 - "Community 63"
-Cohesion: 0.29
-Nodes (6): get_metrics_app(), measure_processing_time(), Starts a Prometheus metrics HTTP server in a separate thread.     This is essent, Returns a WSGI app for serving Prometheus metrics.     Useful for embedding into, A decorator that measures the execution time of a function (sync or async)     a, start_metrics_server_in_thread()
+### Community 55 - "Community 55"
+Cohesion: 0.25
+Nodes (6): get_collection_schema(), classic_search_vector(), hybrid_search_vector(), Appelle le service gRPC pour obtenir le schéma d'une collection avec un cache d', Appelle le service gRPC pour effectuer une recherche classique par filtre., Appelle le service gRPC pour effectuer une recherche hybride     combinant rech
 
-### Community 64 - "Community 64"
-Cohesion: 0.29
-Nodes (7): BAAI/bge-reranker-v2-m3, dangvantuan/sentence-camembert-large, export_embedding_to_onnx.py, model-optimizer (ONNX export), model-optimizer/requirements.txt, export_reranker_to_onnx.py, NVIDIA Triton Inference Server
+### Community 38 - "Community 38"
+Cohesion: 0.13
+Nodes (20): PropertyInfo, NodeLabel, RelationshipType, GraphSchema, BatchResult, _dict_to_struct(), execute_cypher(), execute_batch_cypher() (+12 more)
 
-### Community 65 - "Community 65"
-Cohesion: 0.29
-Nodes (3): app_with_admin_router(), Tests for /admin/redis-debug endpoint., Build a minimal FastAPI app with only the admin router mounted.
+### Community 35 - "Community 35"
+Cohesion: 0.08
+Nodes (26): SearchResult, upsert_entity(), upsert_entity_batch(), search_similar_entities(), check_entities_exist(), upsert_label(), upsert_label_batch(), search_similar_labels() (+18 more)
 
-### Community 66 - "Community 66"
-Cohesion: 0.47
-Nodes (2): AnonymizeText, gen_email_uuid()
-
-### Community 67 - "Community 67"
-Cohesion: 0.33
-Nodes (2): Verifies that the bash script:         1. Finds the file.         2. Calls 'gclo, TestArchiveMockE2E
-
-### Community 68 - "Community 68"
-Cohesion: 0.33
-Nodes (6): BO async constants (DETECTION_ASYNC_SUBMIT/POLL_TIMEOUT_S, MAX_WAIT_S, BATCH_SIZE), BO detectBatchUrlsAsync() helper (submit + poll loop, computes incomplete_urls), BO hot-path migrations (script_identifier_site_fr_v2 + script_retry_identifier_site_fr), Correlation contract (dual $results_by_url + $results_by_domain index, alt-URL/redirect), incomplete_urls (submitted URLs absent from results → re-enqueue domaine_fr_retry), WHY MAX_WAIT_S < JOB_RESULT_TTL_S ≤ JOB_TTL_ACTIVE_S (poll within budget can't 404 a completed job)
-
-### Community 69 - "Community 69"
-Cohesion: 0.4
-Nodes (4): graphify CI workflows (auto-rebuild + coverage-check), graphify team guide (scoped hook, slash commands, edge honesty tags), Scoped post-commit hook vs upstream unscoped hook, graphify services-policy.yml (graphed/not_graphed registry)
-
-### Community 70 - "Community 70"
-Cohesion: 0.33
-Nodes (6): 7 kept workflows for active services, WHY: keep ci_services_api_catalog.yml — original omission was an oversight, both CI+CD for active api-catalog must stay, account-service backend+frontend CI workflows kept, api-catalog CI+CD workflows kept (ci_services_api_catalog.yml, cd_build_push_api_catalog.yml), ci_services_crawler.yml (kept — crawler-service active), graphify infra workflows kept (graphify-auto-rebuild.yml, graphify-coverage-check.yml)
-
-### Community 71 - "Community 71"
-Cohesion: 0.4
-Nodes (4): Appelle le service gRPC de reranking pour réorganiser une liste de documents., Appelle le service gRPC de reranking pour réorganiser une liste de documents et, rerank_documents(), rerank_documents_with_scores()
+### Community 51 - "Community 51"
+Cohesion: 0.28
+Nodes (8): NormalizedQuantity, NormalizedRange, normalize_quantity(), normalize_range(), Result of quantity normalization., Result of range normalization., Normalize a single quantity (value + unit).          Args:         label: The, Normalize a numeric range (min/max + unit).          Args:         label: The
 
 ### Community 72 - "Community 72"
 Cohesion: 0.4
-Nodes (2): RabbitMQConnection, Crée une connexion RabbitMQ avec un nombre limité de tentatives.          :param
+Nodes (4): rerank_documents(), rerank_documents_with_scores(), Appelle le service gRPC de reranking pour réorganiser une liste de documents., Appelle le service gRPC de reranking pour réorganiser une liste de documents et
+
+### Community 52 - "Community 52"
+Cohesion: 0.28
+Nodes (8): Token, Entity, lemmatize(), extract_entities(), Token with lemmatization information., Named entity extracted from text., Call the gRPC service to lemmatize text.          Args:         text: The tex, Call the gRPC service to extract named entities from text.          Args:
+
+### Community 82 - "Community 82"
+Cohesion: 0.67
+Nodes (2): setup_logging(), Configure root logger with a stdout handler.      Safe to call multiple times
+
+### Community 63 - "Community 63"
+Cohesion: 0.29
+Nodes (6): start_metrics_server_in_thread(), get_metrics_app(), measure_processing_time(), Starts a Prometheus metrics HTTP server in a separate thread.     This is essent, Returns a WSGI app for serving Prometheus metrics.     Useful for embedding into, A decorator that measures the execution time of a function (sync or async)     a
+
+### Community 28 - "CleanHTML Module"
+Cohesion: 0.08
+Nodes (23): DocumentTextExtractor, Classe pour extraire le texte de différents types de documents, Initialise l'extracteur                  Args:             download_dir: Réperto, Vérifie si une chaîne est une URL                  Args:             path_or_url, Extrait le nom de fichier depuis une URL                  Args:             url:, Télécharge un fichier depuis une URL                  Args:             url: URL, Résout un chemin ou URL vers un chemin local                  Args:, Convertit une image vers un format supporté par l'OCR                  Args: (+15 more)
 
 ### Community 73 - "Community 73"
 Cohesion: 0.4
-Nodes (5): 503 Rejection + Fail-Open Diagnostics, Archive Disk Space Pre-flight Check, Atomic os.rename from .staging/ to archives/, Archive Staging Subdirectory Plan, Eliminate Upload Daemon FileNotFoundError Race
+Nodes (2): RabbitMQConnection, Crée une connexion RabbitMQ avec un nombre limité de tentatives.          :param
+
+### Community 6 - "Pydantic Request Schemas"
+Cohesion: 0.01
+Nodes (295): Initializes the Redis connection pool.     Connects to Redis using the URL from, Closes the Redis connection pool., Atomically sets a key only if it does not already exist (SET NX).     Returns T, Sets a raw value for a key., Gets the raw string value of a key., Atomically increments a key's value by 1., Atomically decrements a key's value by 1.      WARNING: This function can driv, Gets the raw string value of a key. (+287 more)
+
+### Community 0 - "Milvus CRUD Layer"
+Cohesion: 0.01
+Nodes (855): Sets a dictionary for a key, serializing it to JSON., Gets a dictionary for a key, deserializing it from JSON., Deletes a key from Redis., Gets all keys matching a given prefix using SCAN., Safely counts files in a directory, excluding Crawlee metadata., Read isError from _callback_payload.json in the crawl storage dir.     Returns, Flatten a dict/list payload into a list of (key, value) tuples using     PHP-st, Kill a process and all its children via the process group. (+847 more)
+
+### Community 53 - "Community 53"
+Cohesion: 0.22
+Nodes (2): TestLuaScripts, Tests for Lua script string definitions. Validates that the scripts are well-fo
+
+### Community 30 - "Community 30"
+Cohesion: 0.08
+Nodes (23): load_report(), load_exclude_ids(), _has_tmp_sibling(), classify_entry(), build_queue(), upload_to_gcs(), parse_args(), main() (+15 more)
+
+### Community 9 - "LLM gRPC Client"
+Cohesion: 0.02
+Nodes (104): _run_gcloud(), check_gcloud_auth(), gcloud_ls(), gcloud_download(), gcloud_delete(), gcloud_move(), extract_crawl_id(), classify_by_name() (+96 more)
+
+### Community 83 - "Community 83"
+Cohesion: 0.67
+Nodes (1): Pytest conftest for tools/ tests.  Adds the tools/ directory to sys.path so te
+
+### Community 84 - "Community 84"
+Cohesion: 0.67
+Nodes (2): export_embedding_model(), Charge le modèle d'embedding, exporte le module Transformer sous-jacent en ONNX,
+
+### Community 85 - "Community 85"
+Cohesion: 0.67
+Nodes (2): export_reranker_model(), Charge le modèle de reranking, l'exporte au format ONNX,     et génère le fichie
+
+### Community 64 - "Community 64"
+Cohesion: 0.29
+Nodes (7): model-optimizer (ONNX export), export_embedding_to_onnx.py, export_reranker_to_onnx.py, dangvantuan/sentence-camembert-large, BAAI/bge-reranker-v2-m3, NVIDIA Triton Inference Server, model-optimizer/requirements.txt
+
+### Community 41 - "Community 41"
+Cohesion: 0.16
+Nodes (17): Claude Code Audit Report 2026-03-25, security.md rule (proposed), test-writer agent (proposed), security-auditor agent (proposed), rabbitmq-reviewer agent (proposed), /pre-push command (proposed), 47.5/100 maturity score rationale, prix-traitement port discrepancy (8595 vs 8591) (+9 more)
+
+### Community 15 - "Trafilatura HTML Cleaning"
+Cohesion: 0.03
+Nodes (114): Crawler Daemon Guide, Crawler Service CLAUDE.md, Two-phase commit unstash protocol, .unstash-cleanup-done marker, UNSTASH_GCS_ORPHAN log prefix, UNSTASH_CLEANUP_GRACE_SECONDS (30s), DELETE_AFTER_DOWNLOAD=true daemon flag, Rationale: two-phase commit avoids data loss on extract failure (+106 more)
+
+### Community 44 - "Community 44"
+Cohesion: 0.17
+Nodes (12): Dead Services Cleanup Plan, Archive Branch Strategy, api-rest-milvus-bkp (superseded), database-service (superseded), api-classification-v2 (test variant), Dormant Services Cleanup Phase 2, categories-processor-service (dormant), fournisseurs-processor-service (dormant) (+4 more)
+
+### Community 56 - "Community 56"
+Cohesion: 0.25
+Nodes (8): Milvus Global Concurrency Guard Plan, Redis Lua ACQUIRE/RELEASE/CORRECT Scripts, Three-Tier Slot Pool (Search > High-write > Low-write), TTL-Based Crash-Safe Leases, Prevent RAM Overload on Milvus VM, api-detection-langue-fr Concurrency Defense, Three-Layer Defense (admission + container + contract), TargetClosedError Flood Fix (unroute_all + try/finally)
+
+### Community 86 - "Community 86"
+Cohesion: 0.67
+Nodes (3): robots.txt Total Block Detection & Bypass, Multi-Path Probe Guard (isBlanketBlock), robots_txt_bypassed Callback Flag
+
+### Community 50 - "Community 50"
+Cohesion: 0.2
+Nodes (10): Crawler Monitor Alignment Plan, Monitor/Crawler Data Contract Mismatch, Fail-Fast Security Defaults (admin/JWT), Monitor Bugfixes & Reviewer Improvement Plan, React Rules of Hooks Violation Fix, Container-Level cgroup Metrics, Three New Reviewer Review Dimensions, Crawler Monitor Dataset Browser & Queue Insights (+2 more)
+
+### Community 87 - "Community 87"
+Cohesion: 0.67
+Nodes (3): DLQ Manager UX Improvements Plan, match_phrase Routing for Quoted Field:Value, Rule Match Viewer + Dynamic Service List
+
+### Community 96 - "Community 96"
+Cohesion: 1.0
+Nodes (2): Claude Config Optimization Plan, 20-25% Token Consumption Reduction
+
+### Community 54 - "Community 54"
+Cohesion: 0.22
+Nodes (9): Crawler Capacity Counter & OOM Fixes, Redis Capacity Counter Drift (5 Fixes), Ghost OOM Relaunch Prevention (Fix 4), Reconciliation Leader Election + Heartbeat Guard, Redis SET NX EX reconcile_leader_lock, Fresh last_heartbeat in start_crawl, Webhook Idempotency Client-Side Plan, Stable request_id UUID (Persisted in job_data) (+1 more)
+
+### Community 127 - "Community 127"
+Cohesion: 1.0
+Nodes (1): ignoreHTTPSErrors in Camoufox/Chromium
 
 ### Community 74 - "Community 74"
 Cohesion: 0.4
-Nodes (2): Prometheus metrics for api-detection-langue-fr.  Exposed at /metrics. Used to, Prometheus metrics for api-detection-langue-fr.  Exposed at /metrics. Used to
+Nodes (5): Archive Disk Space Pre-flight Check, 503 Rejection + Fail-Open Diagnostics, Archive Staging Subdirectory Plan, Atomic os.rename from .staging/ to archives/, Eliminate Upload Daemon FileNotFoundError Race
 
-### Community 75 - "Community 75"
-Cohesion: 0.4
-Nodes (5): api-gateway-go/nginx.conf, api-gateway/nginx.conf, nginx regex location ~ ^/crawler/(stash|unstash|archive)/ proxy_next_upstream off, Rationale: nginx proxy_next_upstream + non_idempotent retries POST → cross-replica race, T4: Disable nginx upstream POST retry on /stash + /unstash + /archive
-
-### Community 76 - "Community 76"
-Cohesion: 0.67
-Nodes (3): create_dlq_headers(), create_dlq_properties(), DLQProperties
+### Community 45 - "Community 45"
+Cohesion: 0.17
+Nodes (12): GCS Archive Audit Tool Plan, Archive Classifications (OK/CORRUPTED/WRONG_NAME/...), gcloud Storage CLI Shell Wrappers (no Python GCS lib), GCS Audit Multi-Source Domain Resolution, _resolve_domain_name Multi-Source Helper, GCS Audit Prefix Fix + Quarantine Restore, _normalize_member_name (handles ./ prefix), --restore-from-quarantine Flag (+4 more)
 
 ### Community 77 - "Community 77"
 Cohesion: 0.5
 Nodes (4): content-extractor-api-service Design Spec, boilerpy3 /clean Endpoint, HeaderFooterExtractor /extract Endpoint, Thin Wrapper Over libs/common-utils
 
+### Community 33 - "Community 33"
+Cohesion: 0.07
+Nodes (30): Regional Path Exclusion Design (2026-04-06), Multilingual Regional Path Duplicates, alternative_urls Exclusion List, Rationale: Apply exclusion at discovery and update-mode seeding, crawler-service, api-detection-langue-fr, robots.txt Total Block Detection & Bypass (2026-04-08), robots.txt Blanket Block (+22 more)
+
 ### Community 78 - "Community 78"
 Cohesion: 0.67
-Nodes (4): Timestamped Archive Branch Approach, Dead Services Cleanup Phase 1 (2026-04-09), Dormant Services Cleanup Phase 2 (2026-04-09), Remaining Services Cleanup Phase 3 (2026-04-10)
-
-### Community 79 - "Community 79"
-Cohesion: 0.5
-Nodes (4): Plan: Stash Bind-Mount Pre-Flight + Cleanup Keep-Logs Implementation, Rationale: scoped-out same check on archive_crawl (surgical), Spec: Stash/Unstash to GCS — Free Disk Investigation, Spec: Stash Bind-Mount Pre-Flight + Cleanup Scope Alignment
-
-### Community 81 - "Community 81"
-Cohesion: 0.67
-Nodes (2): Configure root logger with a stdout handler.      Safe to call multiple times, setup_logging()
-
-### Community 82 - "Community 82"
-Cohesion: 0.67
-Nodes (1): Pytest conftest for tools/ tests.  Adds the tools/ directory to sys.path so te
-
-### Community 83 - "Community 83"
-Cohesion: 0.67
-Nodes (2): export_embedding_model(), Charge le modèle d'embedding, exporte le module Transformer sous-jacent en ONNX,
-
-### Community 84 - "Community 84"
-Cohesion: 0.67
-Nodes (2): export_reranker_model(), Charge le modèle de reranking, l'exporte au format ONNX,     et génère le fichie
-
-### Community 85 - "Community 85"
-Cohesion: 0.67
-Nodes (3): robots_txt_bypassed Callback Flag, robots.txt Total Block Detection & Bypass, Multi-Path Probe Guard (isBlanketBlock)
-
-### Community 86 - "Community 86"
-Cohesion: 0.67
-Nodes (3): match_phrase Routing for Quoted Field:Value, Rule Match Viewer + Dynamic Service List, DLQ Manager UX Improvements Plan
-
-### Community 87 - "Community 87"
-Cohesion: 0.67
-Nodes (3): Google Sheets Import for MCP Gateway (2026-04-16), mcp-gateway-service + frontend, Google OAuth2 + Sheets API
-
-### Community 88 - "Community 88"
-Cohesion: 0.67
-Nodes (3): Crawler Monitor design system: oklch tokens + Tailwind theme + primitives (Pill, StatTile, Sparkline, Timeline, CapacityRing, AreaChart, LogLine, KV, ProjCard), Refondue pages: Overview, Job Details, Domains, Capacity Planning, Health, Audit, Albums, Dark Mode, Mobile responsive, Crawler Monitor UI Redesign (oklch tokens, Linear/Vercel/Stripe aesthetic)
-
-### Community 89 - "Community 89"
-Cohesion: 0.67
-Nodes (3): crawler-service/nginx.conf (DELETED in T5), Rationale: crawler-service/nginx.conf is dead code (no -lb container in compose), T5: Delete dead crawler-service/nginx.conf + README cleanup
-
-### Community 90 - "Community 90"
-Cohesion: 1.0
-Nodes (2): makeFakeClient(), resetMock()
-
-### Community 91 - "Community 91"
-Cohesion: 0.67
-Nodes (1): Auto-stash settings defaults (P2, Task 6).
-
-### Community 92 - "Community 92"
-Cohesion: 0.67
-Nodes (1): Move-flow settings defaults (P3, Task 10).
-
-### Community 93 - "Community 93"
-Cohesion: 1.0
-Nodes (1): Atomic Lua scripts for Redis-based concurrency guard. All slot operations (acqu
-
-### Community 94 - "Community 94"
-Cohesion: 1.0
-Nodes (1): Shared threading lock for pymilvus connection management.  All Milvus CRUD and I
-
-### Community 95 - "Community 95"
-Cohesion: 1.0
-Nodes (2): Claude Config Optimization Plan, 20-25% Token Consumption Reduction
-
-### Community 96 - "Community 96"
-Cohesion: 1.0
-Nodes (2): DLQ Manager UX Improvements (2026-04-11), dlq-manager-service
+Nodes (4): Dead Services Cleanup Phase 1 (2026-04-09), Timestamped Archive Branch Approach, Dormant Services Cleanup Phase 2 (2026-04-09), Remaining Services Cleanup Phase 3 (2026-04-10)
 
 ### Community 97 - "Community 97"
 Cohesion: 1.0
-Nodes (2): Crawler Monitor Dataset & Queue Insights (2026-04-12), crawler-monitor-backend / frontend
+Nodes (2): DLQ Manager UX Improvements (2026-04-11), dlq-manager-service
 
 ### Community 98 - "Community 98"
 Cohesion: 1.0
-Nodes (2): Rationale: Reduce token consumption by 20-25% per conversation, Claude Config Optimization (2026-04-16)
+Nodes (2): Crawler Monitor Dataset & Queue Insights (2026-04-12), crawler-monitor-backend / frontend
 
-### Community 100 - "Community 100"
+### Community 99 - "Community 99"
 Cohesion: 1.0
-Nodes (2): Rationale: TTL/interval=6 gives 5 missed-renewal slack vs Redis latency, Settings: STASH_LOCK_TTL=1800, ARCHIVE_LOCK_TTL=1800, HEARTBEAT_INTERVAL=300, HEARTBEAT_MAX_DURATION=14400
+Nodes (2): Claude Config Optimization (2026-04-16), Rationale: Reduce token consumption by 20-25% per conversation
 
-### Community 101 - "Community 101"
-Cohesion: 1.0
-Nodes (2): WHY stashed_at orthogonal field: preserves 409 matrix + BO status parsing, stashed_at orthogonal Redis field (not a status enum)
+### Community 88 - "Community 88"
+Cohesion: 0.67
+Nodes (3): Google Sheets Import for MCP Gateway (2026-04-16), mcp-gateway-service + frontend, Google OAuth2 + Sheets API
 
-### Community 102 - "Community 102"
-Cohesion: 1.0
-Nodes (2): Download-driven self-heal: guard bites only on legacy archived crawl access, Non-goals: no bulk migration of est_archiver=1 crawls, no deep integrity validation
+### Community 42 - "Community 42"
+Cohesion: 0.15
+Nodes (16): Archive Pre-flight Disk Space Check (2026-04-18), Rationale: Diagnostic-first defense over silent producer/consumer fix, Archive Staging Subdirectory (2026-04-18), tmp.tar.gz Glob Race with Upload Daemon, GCS Archive Audit Tool (2026-04-18), tools/gcs_archive_audit.py, Audit Classifications (OK/WRONG_NAME/CORRUPTED/...), Rationale: Use gcloud CLI to avoid new PyPI dependency (+8 more)
 
-### Community 103 - "Community 103"
-Cohesion: 1.0
-Nodes (2): Camoufox default browser: stealth Firefox C++ anti-detection (camoufox: true default), headless required in Docker, binary baked at build, camoufox_used observability, Tech stack: Python FastAPI orchestrator, Node 22 + TypeScript + Crawlee 3 + Playwright, Camoufox stealth, Redis, common-utils
+### Community 1 - "Node.js Crawler Core"
+Cohesion: 0.0
+Nodes (510): verify_api_key(), Verifies the API key if API_KEY is configured in settings.     If API_KEY is not, resetContextState(), makeTmpStorage(), classifyFragment(), recordClassification(), maybeCommitDecision(), writeDecisionFile() (+502 more)
 
-### Community 104 - "Community 104"
-Cohesion: 1.0
-Nodes (2): Pre-flight disk space check: measure source x1.5 vs free space; 503 INSUFFICIENT_DISK_SPACE with disk_state body, WHY fail-open disk check: broken measurement (permissions/FS error) must never block archiving; staging finally still cleans partial files
+### Community 2 - "CrawlerManager Python + DLQ"
+Cohesion: 0.01
+Nodes (452): _count_files_in_dir(), CrawlerManager, _map_error_to_message(), mock_cache_service(), TestStaleHandlerCounter, test_stale_handler_decrements_counter(), test_stale_handler_skips_decrement_for_terminal_status(), TestStaleHandlerKillProcess (+444 more)
 
-### Community 107 - "Community 107"
-Cohesion: 1.0
-Nodes (1): Creates a dictionary of headers for a DLQ message, compatible with both pika and
+### Community 22 - "Header Footer Extractor"
+Cohesion: 0.06
+Nodes (46): lifespan(), Prometheus metrics exposition endpoint., JobStore, JobManager, _settings(), _req(), test_submit_completes_with_authoritative_counts(), test_idempotent_concurrent_submit_spawns_once() (+38 more)
 
-### Community 108 - "Community 108"
-Cohesion: 1.0
-Nodes (1): Creates pika.BasicProperties for a DLQ message. For backward compatibility with
+### Community 5 - "Redis Cache Rationale"
+Cohesion: 0.01
+Nodes (401): Cleans up temporary GCS download files after serving to the client., Cleans up temporary GCS download files after serving to the client., Clears all failed webhook callbacks from Redis. Returns number of keys deleted., Wipes any persistent state from a prior run of this crawl_id that         would, Cleans up temporary GCS download files after serving to the client., Public wrapper: leader election + delegate to _reconcile_locked.          Only, Wipes any persistent state from a prior run of this crawl_id that         would, mock_cache_service() (+393 more)
 
-### Community 109 - "Community 109"
-Cohesion: 1.0
-Nodes (1): Creates a dictionary of headers for a DLQ message based on an aio_pika message.
+### Community 67 - "Community 67"
+Cohesion: 0.33
+Nodes (2): TestArchiveMockE2E, Verifies that the bash script:         1. Finds the file.         2. Calls 'gclo
 
-### Community 110 - "Community 110"
-Cohesion: 1.0
-Nodes (1): Creates a persistent aio_pika.Message ready for the Dead Letter Queue.
+### Community 11 - "Document Text Extractor"
+Cohesion: 0.02
+Nodes (56): QueryRequest, QueryResponse, CypherQueryRequest, CypherQueryResponse, CategorieCountResponse, ScoringOptions, MatchingOptionsScore, MatchingOptions (+48 more)
 
-### Community 111 - "Community 111"
-Cohesion: 1.0
-Nodes (1): Cleans up whitespace and removes control characters.
+### Community 40 - "Community 40"
+Cohesion: 0.15
+Nodes (13): DetectionClient, Shared HTTP client enforcing the api-detection-langue-fr call contract.  Contr, HTTP client wrapper for api-detection-langue-fr enforcing the caller contract., _isolate_env(), TestDetectionClientBasic, test_detect_success(), test_retries_on_503_honoring_retry_after(), test_exhausts_retries_and_raises() (+5 more)
 
-### Community 115 - "Community 115"
-Cohesion: 1.0
-Nodes (1): Nettoie une chaîne de texte en normalisant les espaces et en corrigeant
+### Community 69 - "Community 69"
+Cohesion: 0.4
+Nodes (4): Scoped post-commit hook vs upstream unscoped hook, graphify services-policy.yml (graphed/not_graphed registry), graphify CI workflows (auto-rebuild + coverage-check), graphify team guide (scoped hook, slash commands, edge honesty tags)
 
-### Community 126 - "Community 126"
-Cohesion: 1.0
-Nodes (1): ignoreHTTPSErrors in Camoufox/Chromium
+### Community 58 - "Community 58"
+Cohesion: 0.25
+Nodes (7): Returns all failed webhook callbacks stored in Redis., Returns all failed webhook callbacks stored in Redis., Returns all failed webhook callbacks stored in Redis., Returns all failed webhook callbacks stored in Redis., Returns all failed webhook callbacks stored in Redis., Returns all failed webhook callbacks stored in Redis., Returns all failed webhook callbacks stored in Redis.
 
-### Community 137 - "Community 137"
-Cohesion: 1.0
-Nodes (1): Current admitted in-flight count (unsynchronized read for observability).
+### Community 29 - "Crawler Monitor Rationale"
+Cohesion: 0.12
+Nodes (25): TimingRecorder, assert(), tmpDir(), mkEntry(), mkSample(), test1(), test2(), test3() (+17 more)
+
+### Community 89 - "Community 89"
+Cohesion: 0.67
+Nodes (3): Crawler Monitor UI Redesign (oklch tokens, Linear/Vercel/Stripe aesthetic), Crawler Monitor design system: oklch tokens + Tailwind theme + primitives (Pill, StatTile, Sparkline, Timeline, CapacityRing, AreaChart, LogLine, KV, ProjCard), Refondue pages: Overview, Job Details, Domains, Capacity Planning, Health, Audit, Albums, Dark Mode, Mobile responsive
+
+### Community 20 - "Embedding gRPC Client"
+Cohesion: 0.04
+Nodes (86): account-service SSO, account-service-backend, account-service-frontend, OAuth 2.1 Authorization Server module (lifted from mcp-gateway authserver, consent stripped), PKCE S256 mandatory (code_verifier + code_challenge SHA-256), Refresh token rotation + reuse detection (chain revocation by sid + Slack alert), Logout broadcaster (HMAC-SHA256 webhook + 4 worker goroutines + retries 1s/2s/4s + logout_events table), MySQL schema: users, oauth2_clients, oauth2_authorization_codes, oauth2_refresh_tokens, logout_events, audit_logs (+78 more)
+
+### Community 3 - "Rust Service Clients"
+Cohesion: 0.02
+Nodes (393): _normalize_url_for_dedup(), _homepage_of(), _is_homepage(), _ttl_from_verdict(), _build_challenge_error_msg(), _with_group(), _detect_single_url(), detect_french() (+385 more)
+
+### Community 18 - "Qdrant CRUD Layer"
+Cohesion: 0.03
+Nodes (73): AdmissionController, FastAPI admission-control middleware.  Scope after the crawler carve-out refac, Atomic in-flight counter with a hard max.      Not a semaphore: acquire() does, Try to acquire a slot. Returns True on success, False if saturated., Release a slot. Defensive: does not go below zero., AdmissionMiddleware, BaseHTTPMiddleware, TestAdmissionController (+65 more)
 
 ### Community 138 - "Community 138"
 Cohesion: 1.0
+Nodes (1): Current admitted in-flight count (unsynchronized read for observability).
+
+### Community 139 - "Community 139"
+Cohesion: 1.0
 Nodes (1): Number of coalesced calls served from a shared future.
 
-### Community 142 - "Community 142"
+### Community 143 - "Community 143"
 Cohesion: 1.0
 Nodes (1): Normalise l'encodage du contenu HTML en UTF-8.          Reproduit le comportem
 
-### Community 144 - "Community 144"
-Cohesion: 1.0
-Nodes (1): Test endpoint /health
+### Community 14 - "Rust Service Request Models"
+Cohesion: 0.03
+Nodes (91): ValidationVerdict, validate(), _is_redirect_to_home(), _detect_soft_404(), _visible_text_length(), Pure page validator for api-detection-langue-fr.  Classifies a ScrapeResult agai, Classify a ScrapeResult against the requested URL.      Order of checks:       1, Lightweight visible-text length for the thin-content threshold. (+83 more)
 
 ### Community 145 - "Community 145"
 Cohesion: 1.0
-Nodes (1): Test endpoint /check-url avec TLD .fr
+Nodes (1): Test endpoint /health
 
 ### Community 146 - "Community 146"
 Cohesion: 1.0
-Nodes (1): Test endpoint /check-url sans indicateur FR
+Nodes (1): Test endpoint /check-url avec TLD .fr
 
 ### Community 147 - "Community 147"
 Cohesion: 1.0
-Nodes (1): Test endpoint /detect avec contenu HTML fourni
+Nodes (1): Test endpoint /check-url sans indicateur FR
 
 ### Community 148 - "Community 148"
 Cohesion: 1.0
-Nodes (1): Test validation endpoint /detect-batch avec liste vide
+Nodes (1): Test endpoint /detect avec contenu HTML fourni
 
 ### Community 149 - "Community 149"
 Cohesion: 1.0
-Nodes (1): Test endpoint racine /
+Nodes (1): Test validation endpoint /detect-batch avec liste vide
 
 ### Community 150 - "Community 150"
 Cohesion: 1.0
-Nodes (1): Mode simple ne doit pas détecter les liens hreflang
+Nodes (1): Test endpoint racine /
 
 ### Community 151 - "Community 151"
 Cohesion: 1.0
-Nodes (1): Mode complete doit détecter les liens hreflang
+Nodes (1): Mode simple ne doit pas détecter les liens hreflang
 
 ### Community 152 - "Community 152"
 Cohesion: 1.0
-Nodes (1): Verify CAMOUFOX_ENABLED setting is respected.
+Nodes (1): Mode complete doit détecter les liens hreflang
 
 ### Community 153 - "Community 153"
 Cohesion: 1.0
-Nodes (1): On happy path, page.unroute_all is called before context.close.
+Nodes (1): Verify CAMOUFOX_ENABLED setting is respected.
 
 ### Community 154 - "Community 154"
 Cohesion: 1.0
+Nodes (1): On happy path, page.unroute_all is called before context.close.
+
+### Community 155 - "Maps internal error codes to hum"
+Cohesion: 1.0
 Nodes (1): A mid-fetch exception still triggers context.close and browser.close (try/finall
 
-### Community 156 - "Maps internal error codes to hum"
-Cohesion: 1.0
-Nodes (1): Extrait le nom de domaine principal d'une URL.
+### Community 46 - "Community 46"
+Cohesion: 0.24
+Nodes (10): register_api_info(), Register GET /api-info on the given FastAPI app with the catalog convention., test_minimal_payload(), test_full_payload(), test_custom_openapi_url(), register_api_info(), Register GET /api-info on the given FastAPI app with the catalog convention., test_minimal_payload() (+2 more)
 
 ### Community 157 - "Exit code 3 OOM_RELAUNCH contrac"
 Cohesion: 1.0
-Nodes (1): Résout une URL relative en URL absolue.
+Nodes (1): Extrait le nom de domaine principal d'une URL.
 
 ### Community 158 - ".error marker"
 Cohesion: 1.0
-Nodes (1): Détermine si l'URL a un signal très fort de site français.                  Le
+Nodes (1): Résout une URL relative en URL absolue.
 
 ### Community 159 - "Maps internal error codes to human-r"
 Cohesion: 1.0
-Nodes (1): Vérifie si une URL indique explicitement une version française.
+Nodes (1): Détermine si l'URL a un signal très fort de site français.                  Le
 
 ### Community 160 - "Maps internal error codes to human-r"
 Cohesion: 1.0
-Nodes (1): Return True only if candidate_url is plausibly a language variant of homepage.
+Nodes (1): Vérifie si une URL indique explicitement une version française.
 
 ### Community 161 - "Exit code 3 OOM_RELAUNCH contract (u"
 Cohesion: 1.0
-Nodes (1): Compare two URLs ignoring scheme (http vs https) and trailing slashes.
+Nodes (1): Return True only if candidate_url is plausibly a language variant of homepage.
 
 ### Community 162 - "Maps internal error codes to human-r"
 Cohesion: 1.0
-Nodes (1): Determine la priorite regionale d'une URL francaise.          Retourne:
+Nodes (1): Compare two URLs ignoring scheme (http vs https) and trailing slashes.
 
 ### Community 163 - "Returns (error_message, failure_caus"
 Cohesion: 1.0
-Nodes (1): Identifie le cas de decision applique pour le debug.
+Nodes (1): Determine la priorite regionale d'une URL francaise.          Retourne:
 
 ### Community 164 - "Exit code 3 OOM_RELAUNCH contract (u"
 Cohesion: 1.0
-Nodes (1): Fallback via API Pemavor pour la résolution de redirections.         À implémen
+Nodes (1): Identifie le cas de decision applique pour le debug.
+
+### Community 16 - "GCS Quarantine Restore"
+Cohesion: 0.03
+Nodes (73): ValidationVerdict, validate(), _is_redirect_to_home(), _detect_soft_404(), _visible_text_length(), Pure page validator for api-detection-langue-fr.  Classifies a ScrapeResult ag, Classify a ScrapeResult against the requested URL.      Order of checks:, Lightweight visible-text length for the thin-content threshold. (+65 more)
 
 ### Community 165 - "Maps internal error codes to human-r"
 Cohesion: 1.0
-Nodes (1): Forward compat: an old entry lacking 'requested_url' should still be readable.
+Nodes (1): Fallback via API Pemavor pour la résolution de redirections.         À implémen
 
 ### Community 166 - "Returns (error_message, failure_caus"
 Cohesion: 1.0
-Nodes (1): When Phase 1 hits a variant-eligible error, Phase 2 retries variants.
+Nodes (1): Forward compat: an old entry lacking 'requested_url' should still be readable.
 
 ### Community 167 - "Maps internal error codes to human-r"
 Cohesion: 1.0
-Nodes (1): Pass 2 retries fetch_failed + challenge_page only — not http_error/soft_404.
+Nodes (1): When Phase 1 hits a variant-eligible error, Phase 2 retries variants.
 
 ### Community 168 - "Returns (error_message, failure_caus"
 Cohesion: 1.0
-Nodes (1): When the homepage fallback hits a Cloudflare/DataDome challenge page,         r
+Nodes (1): Pass 2 retries fetch_failed + challenge_page only — not http_error/soft_404.
 
 ### Community 169 - "exit_code=-1 → classifier says 'oom_"
 Cohesion: 1.0
-Nodes (1): Verify CAMOUFOX_ENABLED setting is respected.
+Nodes (1): When the homepage fallback hits a Cloudflare/DataDome challenge page,         r
 
 ### Community 170 - "Without an explicit kwarg, classifie"
 Cohesion: 1.0
-Nodes (1): On happy path, page.unroute_all is called before context.close.
+Nodes (1): Verify CAMOUFOX_ENABLED setting is respected.
 
 ### Community 171 - "Every exit_code=-1 caller passes its"
 Cohesion: 1.0
-Nodes (1): A mid-fetch exception still triggers context.close and browser.close (try/finall
+Nodes (1): On happy path, page.unroute_all is called before context.close.
 
 ### Community 172 - "Maps internal error codes to human-r"
 Cohesion: 1.0
-Nodes (1): scrape_html captures response.status and returns ScrapeResult.
+Nodes (1): A mid-fetch exception still triggers context.close and browser.close (try/finall
 
 ### Community 173 - "Returns (error_message, failure_caus"
 Cohesion: 1.0
-Nodes (1): When Playwright returns no Response, status_code defaults to 0.
+Nodes (1): scrape_html captures response.status and returns ScrapeResult.
 
 ### Community 174 - "PushedSet Retry-Dup Guard"
 Cohesion: 1.0
-Nodes (1): Number of coalesced calls served from a shared future.
+Nodes (1): When Playwright returns no Response, status_code defaults to 0.
 
 ### Community 175 - "Stash Crawls Batch Driver"
 Cohesion: 1.0
-Nodes (1): .error marker
+Nodes (1): Number of coalesced calls served from a shared future.
+
+### Community 59 - "Community 59"
+Cohesion: 0.25
+Nodes (7): test_download_requests_path_matches_compose_bind_target(), test_download_results_path_matches_compose_bind_target(), test_download_daemon_uses_canonical_env_var_names(), Regression tests for GCS download path alignment.  These three tests pin the c, settings.DOWNLOAD_REQUESTS_PATH must equal the compose bind target.      Compo, settings.DOWNLOAD_RESULTS_PATH must equal the compose bind target.      Compos, tools/download_daemon.sh must read the same env var names as Python.      Hist
+
+### Community 10 - "GCS Audit CLI"
+Cohesion: 0.02
+Nodes (154): crawler-service CLAUDE.md, Crawler Daemon Guide, tools CLAUDE.md, upload_daemon.sh, download_daemon.sh, gcs_archive_audit.py, dlq_archiver.py, dlq_requeuer.py (+146 more)
 
 ### Community 176 - "Stash Poll Fall-Through"
 Cohesion: 1.0
-Nodes (1): Maps internal error codes to human-readable French messages for DB storage.
+Nodes (1): .error marker
+
+### Community 26 - "Dead Services Cleanup"
+Cohesion: 0.05
+Nodes (49): Async context manager that renews a Redis lock TTL while a long-running     ope, _LockHeartbeat, Heartbeat loop: renew lock TTL via Lua CAS until stopped or cancelled., cm_stub(), test_heartbeat_renews_ttl_via_lua_cas(), test_heartbeat_stops_on_value_mismatch(), test_heartbeat_stops_at_max_duration(), test_heartbeat_tolerates_transient_redis_error() (+41 more)
 
 ### Community 177 - "Stash Poll Fall-Through"
 Cohesion: 1.0
@@ -832,292 +709,420 @@ Nodes (1): Maps internal error codes to human-readable French messages for DB st
 
 ### Community 178 - "Stash Poll Fall-Through"
 Cohesion: 1.0
-Nodes (1): Exit code 3 OOM_RELAUNCH contract (unchanged)
+Nodes (1): Maps internal error codes to human-readable French messages for DB storage.
+
+### Community 80 - "Community 80"
+Cohesion: 0.5
+Nodes (4): Spec: Stash Bind-Mount Pre-Flight + Cleanup Scope Alignment, Spec: Stash/Unstash to GCS — Free Disk Investigation, Plan: Stash Bind-Mount Pre-Flight + Cleanup Keep-Logs Implementation, Rationale: scoped-out same check on archive_crawl (surgical)
+
+### Community 32 - "Community 32"
+Cohesion: 0.07
+Nodes (32): Crawler Service README, _verify_bind_mount helper, 503 BIND_MOUNT_MISSING error code, os.path.ismount detection primitive, Post-lock TOCTOU re-validation pattern, Fail-open disk pre-flight check, tarfile filter='data' (PEP 706), _cleanup_data_keep_logs (stash cleanup mirroring archive) (+24 more)
 
 ### Community 179 - "Crawler Exit Code Test"
 Cohesion: 1.0
-Nodes (1): Maps internal error codes to human-readable French messages for DB storage.
+Nodes (1): Exit code 3 OOM_RELAUNCH contract (unchanged)
 
 ### Community 180 - "French Error Message Mapping"
 Cohesion: 1.0
-Nodes (1): Returns (error_message, failure_cause) for a subprocess exit code.          Re
+Nodes (1): Maps internal error codes to human-readable French messages for DB storage.
 
 ### Community 181 - "Subprocess Exit Code Cause"
 Cohesion: 1.0
-Nodes (1): Maps internal error codes to human-readable French messages for DB storage.
+Nodes (1): Returns (error_message, failure_cause) for a subprocess exit code.          Re
+
+### Community 31 - "Community 31"
+Cohesion: 0.1
+Nodes (31): Return one URL's HTML from a crawl (hot local / stashed / archived).         No, Canonical URL key — MUST match PHP normalize_sfpi_url() and crawler TS, Resolve the local dataset directory for a crawl, mirroring the path         con, _make_manager(), _write_dataset(), test_index_hit_returns_content_http_https_collapse(), test_missing_url_returns_none(), test_scan_fallback_without_index() (+23 more)
+
+### Community 101 - "Community 101"
+Cohesion: 1.0
+Nodes (2): Rationale: TTL/interval=6 gives 5 missed-renewal slack vs Redis latency, Settings: STASH_LOCK_TTL=1800, ARCHIVE_LOCK_TTL=1800, HEARTBEAT_INTERVAL=300, HEARTBEAT_MAX_DURATION=14400
+
+### Community 75 - "Community 75"
+Cohesion: 0.4
+Nodes (5): Rationale: nginx proxy_next_upstream + non_idempotent retries POST → cross-replica race, nginx regex location ~ ^/crawler/(stash|unstash|archive)/ proxy_next_upstream off, api-gateway-go/nginx.conf, api-gateway/nginx.conf, T4: Disable nginx upstream POST retry on /stash + /unstash + /archive
+
+### Community 90 - "Community 90"
+Cohesion: 0.67
+Nodes (3): Rationale: crawler-service/nginx.conf is dead code (no -lb container in compose), crawler-service/nginx.conf (DELETED in T5), T5: Delete dead crawler-service/nginx.conf + README cleanup
+
+### Community 34 - "Community 34"
+Cohesion: 0.08
+Nodes (26): Redis Loss / Progress Stall Detection doc section, _classify_exit_code shared helper (maps exit code → failure_cause), Manual smoke-test playbook for redis_lost / progress_stalled, Spec 2026-05-21 redis-loss-progress-stall-detection-design, shouldTripExternalRedirectBreaker(), External-Redirect Breaker (design), Problem: relocated domain reported as misleading success, Off-domain (external-redirect) guard in routes.ts (+18 more)
 
 ### Community 182 - "PushedSet Test"
 Cohesion: 1.0
+Nodes (1): Maps internal error codes to human-readable French messages for DB storage.
+
+### Community 183 - "Stash POST Endpoint Flow"
+Cohesion: 1.0
 Nodes (1): Returns (error_message, failure_cause) for a subprocess exit code.          Re
 
-### Community 184 - "Stash POST Blocking Rationale"
-Cohesion: 1.0
-Nodes (1): Concept: POST /crawler/stash/{id} → 202 (validate, lock, tar, set stashed_at, delete source)
+### Community 60 - "Community 60"
+Cohesion: 0.25
+Nodes (6): Crawler Dataset Retry-Dup Fix Design Spec (2026-05-24), Crawler Dataset Retry-Dup Fix Implementation Plan, Crawler Dataset Retry-Dup Fix tasks.json sidecar (4 tasks, all completed), Triggering incident: crawl 6649 bp-tech.fr — silent 0-URL exit code 2, Out of scope: full-isolation stats / questionmark idempotency / detection-quota mitigation / Crawlee upstream / seed_no_extraction failure signal, Test strategy: injected no-op, delegation, error-path reject→0, legacy construct
 
 ### Community 185 - "Stash Lock Heartbeat"
 Cohesion: 1.0
-Nodes (1): Rationale: POST blocks because make_archive + integrity + cleanup run synchronously before 202
+Nodes (1): Concept: POST /crawler/stash/{id} → 202 (validate, lock, tar, set stashed_at, delete source)
 
 ### Community 186 - "Deferred Stash BackgroundTasks"
 Cohesion: 1.0
-Nodes (1): _LockHeartbeat (server-side renews stash lock up to 4h LOCK_HEARTBEAT_MAX_DURATION_SECONDS=14400)
+Nodes (1): Rationale: POST blocks because make_archive + integrity + cleanup run synchronously before 202
 
 ### Community 187 - "DedupManager Test"
 Cohesion: 1.0
+Nodes (1): _LockHeartbeat (server-side renews stash lock up to 4h LOCK_HEARTBEAT_MAX_DURATION_SECONDS=14400)
+
+### Community 188 - "BO Results Timeout Bump"
+Cohesion: 1.0
 Nodes (1): Deferred: server-side BackgroundTasks migration of stash_crawl
 
-### Community 189 - "Auto-Stash Tunables"
+### Community 61 - "Community 61"
+Cohesion: 0.36
+Nodes (7): _count_by(), _project_sample(), _pool_stats(), redis_debug(), Admin/operator endpoints. Authenticated. Not user-facing., Whitelist sampled client fields so future redis-py additions cannot     silently, Operator-only snapshot of this replica's Redis pool + global CLIENT LIST.     Se
+
+### Community 49 - "Community 49"
+Cohesion: 0.33
+Nodes (10): makeMockRedisClient(), makeMockConsolidator(), makeMockStatsManager(), makeMockJsonlWriter(), buildChecker(), makeMockRedisClient(), makeMockConsolidator(), makeMockStatsManager() (+2 more)
+
+### Community 91 - "Community 91"
 Cohesion: 1.0
-Nodes (1): BO /results timeout bump to 900s (sendRequest $timeout)
+Nodes (2): makeFakeClient(), resetMock()
+
+### Community 65 - "Community 65"
+Cohesion: 0.29
+Nodes (3): app_with_admin_router(), Tests for /admin/redis-debug endpoint., Build a minimal FastAPI app with only the admin router mounted.
+
+### Community 13 - "Update-Mode Queue Builder"
+Cohesion: 0.02
+Nodes (124): _reconcile_locked sweep, _is_stash_eligible, Reconciliation Leader Election, Capacity Counter (crawl_jobs:running_count), Rationale: Sweep tars via create_task (no lock hold), Used-% of the crawl storage filesystem. Fail-open -> 0.0 (no pressure)., From terminal non-stashed non-archived jobs, pick (job, reason) to stash, Stash one crawl on behalf of the sweep. Swallows 409 (already         stashed / (+116 more)
+
+### Community 92 - "Community 92"
+Cohesion: 0.67
+Nodes (1): Auto-stash settings defaults (P2, Task 6).
+
+### Community 93 - "Community 93"
+Cohesion: 0.67
+Nodes (1): Move-flow settings defaults (P3, Task 10).
+
+### Community 102 - "Community 102"
+Cohesion: 1.0
+Nodes (2): stashed_at orthogonal Redis field (not a status enum), WHY stashed_at orthogonal field: preserves 409 matrix + BO status parsing
+
+### Community 47 - "Community 47"
+Cohesion: 0.18
+Nodes (12): finished_at job_data field (terminal transition stamp), downloaded_at job_data field (/results stream-start), size_bytes job_data field (disk-pressure ordering), _stamp_terminal_fields helper (finished_at + size_bytes), _is_stash_eligible predicate (grace/timeout, pure, fail-open), _select_stash_candidates (eligible + disk-pressure top-N, capped), _auto_stash_one (background stash dispatch, swallows 409), _disk_used_pct (storage filesystem used %, fail-open 0.0) (+4 more)
 
 ### Community 190 - "Auto-Stash Tunables"
 Cohesion: 1.0
-Nodes (1): Auto-stash tunables (AUTO_STASH_ENABLED, STASH_GRACE/SAFETY/HIGH_WATER/MAX_PER_SWEEP)
+Nodes (1): BO /results timeout bump to 900s (sendRequest $timeout)
 
 ### Community 191 - "Crawler Tech Stack"
 Cohesion: 1.0
-Nodes (1): BROWSER_SEMAPHORE_SIZE=6 global cap; alt-fetches sequential within a call
+Nodes (1): Auto-stash tunables (AUTO_STASH_ENABLED, STASH_GRACE/SAFETY/HIGH_WATER/MAX_PER_SWEEP)
+
+### Community 68 - "Community 68"
+Cohesion: 0.33
+Nodes (6): BO detectBatchUrlsAsync() helper (submit + poll loop, computes incomplete_urls), Correlation contract (dual $results_by_url + $results_by_domain index, alt-URL/redirect), incomplete_urls (submitted URLs absent from results → re-enqueue domaine_fr_retry), BO async constants (DETECTION_ASYNC_SUBMIT/POLL_TIMEOUT_S, MAX_WAIT_S, BATCH_SIZE), BO hot-path migrations (script_identifier_site_fr_v2 + script_retry_identifier_site_fr), WHY MAX_WAIT_S < JOB_RESULT_TTL_S ≤ JOB_TTL_ACTIVE_S (poll within budget can't 404 a completed job)
+
+### Community 104 - "Community 104"
+Cohesion: 1.0
+Nodes (2): Tech stack: Python FastAPI orchestrator, Node 22 + TypeScript + Crawlee 3 + Playwright, Camoufox stealth, Redis, common-utils, Camoufox default browser: stealth Firefox C++ anti-detection (camoufox: true default), headless required in Docker, binary baked at build, camoufox_used observability
 
 ### Community 192 - "Crawler Manual Recovery"
 Cohesion: 1.0
-Nodes (1): Task 6: documentation (tools + crawler-service CLAUDE.md)
+Nodes (1): BROWSER_SEMAPHORE_SIZE=6 global cap; alt-fetches sequential within a call
+
+### Community 21 - "DeepSeek OCR Extractor"
+Cohesion: 0.03
+Nodes (82): Dynamic Unit Normalization Design Spec, graph-rag-normalize-unite-service (target service), Redeploy-per-unit pain (FIX 1-16 churn), Five dynamic layers A-E, Layer A pint defines (56 statements), Layer B UNIT_TO_DIMENSION (200 keys), Layer C LABEL_TO_DIMENSION (99 ordered keys), Layer D CANONICAL_UNITS (36 entries) (+74 more)
+
+### Community 27 - "GCS Archive Audit Tool Rationale"
+Cohesion: 0.06
+Nodes (48): BDD doc-enrichment workflow (design spec), BDD doc-enrichment workflow (implementation plan), BDD doc-enrichment runbook, Objective: reusable code-free table doc-enrichment process, MCP 'Table BDD' system (read-only MySQL exposure to LLM), Six bdd_* MCP tools (read-only), bdd_list_tables tool, bdd_describe_table tool (+40 more)
+
+### Community 79 - "Community 79"
+Cohesion: 0.5
+Nodes (4): Sweep decision table (§6): heal only when exists & size>=floor & not-stale, Freshness guard (created_at>=local_mtime) for reused crawl_id==id_domaine, No byte-level local==GCS compare (would require full tar download), Task 3: _is_confidently_archived + _local_data_mtime + _free_local_crawl_data
+
+### Community 103 - "Community 103"
+Cohesion: 1.0
+Nodes (2): Non-goals: no bulk migration of est_archiver=1 crawls, no deep integrity validation, Download-driven self-heal: guard bites only on legacy archived crawl access
 
 ### Community 193 - "UrlConsolidator Test Strategy"
 Cohesion: 1.0
-Nodes (1): Blast radius: crawler-service Node engine only, no shared libs/protos/exit-code change
+Nodes (1): Task 6: documentation (tools + crawler-service CLAUDE.md)
+
+### Community 39 - "Community 39"
+Cohesion: 0.12
+Nodes (21): Dead Workflows Cleanup Implementation Plan, Dead Workflows Cleanup Design Spec, Goal: delete 28 dead-service GitHub Actions workflows from .github/workflows/, Scope: workflow files only; service directories in apps-microservices/ untouched, Nine retired services (api-ingestion, devis-processor, di/echange/website database-qdrant+processor, embedding, webhook), Three workflow generations per dead service (ci_services_*, cd_build_push_services_*, service-*-pipeline), Dead criterion: workflow references a retired service no longer active, Orphan workflow test-embedding-service.yaml (.yaml not .yml) (+13 more)
+
+### Community 70 - "Community 70"
+Cohesion: 0.33
+Nodes (6): 7 kept workflows for active services, ci_services_crawler.yml (kept — crawler-service active), api-catalog CI+CD workflows kept (ci_services_api_catalog.yml, cd_build_push_api_catalog.yml), account-service backend+frontend CI workflows kept, graphify infra workflows kept (graphify-auto-rebuild.yml, graphify-coverage-check.yml), WHY: keep ci_services_api_catalog.yml — original omission was an oversight, both CI+CD for active api-catalog must stay
 
 ### Community 194 - "No-Stash Doc Task"
 Cohesion: 1.0
-Nodes (1): Manual headpowerac recovery: reclaim then same-id restart, never dropData=true first
+Nodes (1): Blast radius: crawler-service Node engine only, no shared libs/protos/exit-code change
 
 ### Community 195 - "Crawler Recovery Blast Radius"
 Cohesion: 1.0
-Nodes (1): Test strategy: injected no-op, cleanup keeps dataset, fullCleanup all-three, isInDataset delegation, error-path reject→false, legacy
+Nodes (1): Manual headpowerac recovery: reclaim then same-id restart, never dropData=true first
 
 ### Community 196 - "Crawler Manual Recovery"
 Cohesion: 1.0
-Nodes (1): Archive .staging/ tmp isolation: write to .staging then move after integrity check; upload daemon find -maxdepth 1 ignores subdirs
+Nodes (1): Test strategy: injected no-op, cleanup keeps dataset, fullCleanup all-three, isInDataset delegation, error-path reject→false, legacy
+
+### Community 36 - "Community 36"
+Cohesion: 0.09
+Nodes (27): image-comparison cache_service migration (S2), Migration plan: image-comparison -> common_utils cache_service, Replace inline redis.from_url with shared cache_service, common_utils.redis.cache_service (bounded pool, socket timeouts, client_name), init_redis_pool / close_redis_pool wiring in main.py, safe_decrement_key floor-0 for comparator:running_count, Load-bearing gotcha: access cache_service.redis_client as module attribute at call time, SERVICE_NAME env -> Redis client_name image-comparison-service-<host> (+19 more)
+
+### Community 43 - "Community 43"
+Cohesion: 0.17
+Nodes (15): redis-client-frontend account-service SSO login (OAuth 2.1 + PKCE), Plan: redis-client-frontend SSO login implementation, D1: native Next.js BFF OAuth client (hand-rolled PKCE + jose), not Auth.js, lib/auth/oauth.ts: PKCE (S256), authorize URL, token exchange (Basic auth), verifyAndExtract, D2: own 8h rcf_session cookie signed with separate SESSION_SECRET (edge-safe jose), lib/auth/flow.ts: framework-free startLogin / completeCallback orchestration, D3: email allow-list (ADMIN_EMAILS) — authenticated != authorized, protects FLUSHDB, D4: remove paste-ADMIN_TOKEN login; delete app/login/page.tsx (+7 more)
+
+### Community 37 - "Community 37"
+Cohesion: 0.08
+Nodes (24): content-extractor Async + Cache + Sync Hardening (implementation plan), content-extractor Hardening + Async + Result Cache (design spec), Problem: sync CPU-bound boilerpy3/HeaderFooterExtractor blocks the single event loop -> 0 bytes / 30s timeout, Axis 1: asyncio.to_thread offload + UVICORN_WORKERS (processes, not threads, give CPU parallelism), WHY: GIL means one extraction per process; parallelism = workers x replicas, not threads/ProcessPoolExecutor, Axis 2: hybrid request shape (hardened sync + batched async submit/poll), extractor_core.py: pure sync clean_core + header_footer_core, extractor_service.py: async orchestration (cache-aside + thread offload + run_batch) (+16 more)
+
+### Community 24 - "Claude Config Audit"
+Cohesion: 0.04
+Nodes (57): Image-Comparison Feature Cache (Design C) Plan, Design C: per-URL feature/pHash cache spec, Goal: cache feature {pHash,HSV hist} per URL to skip download+decode+extract, Cache-aside on shared Redis via common_utils.redis.cache_service, feature_cache.py module (serialize<->Redis, guarded, degrade-to-miss), feature_key: imgfeat:<version>:uuid5(NAMESPACE_URL,url), serialize_feature: JSON {phash hex(16), hist float list(512)}, deserialize_feature: rebuild {phash ImageHash, hist np.float32}; None on any error (+49 more)
 
 ### Community 197 - "UrlConsolidator Test Strategy"
 Cohesion: 1.0
-Nodes (1): Stash free-disk investigation workflow: park data in gs://.../stash/, orthogonal stashed_at field (no new status enum), conflict matrix (409/503)
+Nodes (1): Archive .staging/ tmp isolation: write to .staging then move after integrity check; upload daemon find -maxdepth 1 ignores subdirs
+
+### Community 105 - "Community 105"
+Cohesion: 1.0
+Nodes (2): Pre-flight disk space check: measure source x1.5 vs free space; 503 INSUFFICIENT_DISK_SPACE with disk_state body, WHY fail-open disk check: broken measurement (permissions/FS error) must never block archiving; staging finally still cleans partial files
 
 ### Community 198 - "Camoufox Default Browser"
 Cohesion: 1.0
-Nodes (1): Stash daemons: separate upload_daemon.sh + download_daemon.sh instances via env (UPLOAD_GCS_PREFIX=stash, DOWNLOAD_GCS_PREFIX=stash, DELETE_AFTER_DOWNLOAD=true)
+Nodes (1): Stash free-disk investigation workflow: park data in gs://.../stash/, orthogonal stashed_at field (no new status enum), conflict matrix (409/503)
 
 ### Community 199 - "Auto-Stash Eligibility"
 Cohesion: 1.0
-Nodes (1): Auto-stash eligibility (_is_stash_eligible, fail-open): grace (downloaded_at + STASH_GRACE_SECONDS), timeout (STASH_SAFETY_TIMEOUT_SECONDS), disk pressure (STASH_DISK_HIGH_WATER_PCT); capped STASH_MAX_PER_SWEEP
+Nodes (1): Stash daemons: separate upload_daemon.sh + download_daemon.sh instances via env (UPLOAD_GCS_PREFIX=stash, DOWNLOAD_GCS_PREFIX=stash, DELETE_AFTER_DOWNLOAD=true)
 
 ### Community 200 - "Auto-Stash Job Fields"
 Cohesion: 1.0
-Nodes (1): Auto-stash job_data fields (orthogonal, cached on write): finished_at (_stamp_terminal_fields), downloaded_at (GET /results), size_bytes — sweep reads from Redis, no disk I/O in critical section
+Nodes (1): Auto-stash eligibility (_is_stash_eligible, fail-open): grace (downloaded_at + STASH_GRACE_SECONDS), timeout (STASH_SAFETY_TIMEOUT_SECONDS), disk pressure (STASH_DISK_HIGH_WATER_PCT); capped STASH_MAX_PER_SWEEP
 
 ### Community 201 - "Reconciliation Leader Election"
 Cohesion: 1.0
-Nodes (1): Reconciliation leader election: reconcile_leader_lock (SET NX, TTL=interval*2), ownership-safe release, _reconcile_locked holds scanning logic, last_heartbeat init in start_crawl
+Nodes (1): Auto-stash job_data fields (orthogonal, cached on write): finished_at (_stamp_terminal_fields), downloaded_at (GET /results), size_bytes — sweep reads from Redis, no disk I/O in critical section
 
 ### Community 202 - "Content-Extractor Co-Deploy Rule"
 Cohesion: 1.0
-Nodes (1): Content-extractor co-deploy rule: when DIEZ_TIER2_ENABLED or QM_TIER2_ENABLED true, content-extractor-api-service must be reachable; shares crawling compose profile + services-net network
+Nodes (1): Reconciliation leader election: reconcile_leader_lock (SET NX, TTL=interval*2), ownership-safe release, _reconcile_locked holds scanning logic, last_heartbeat init in start_crawl
 
 ### Community 203 - "QM Raw-Similarity Threshold"
 Cohesion: 1.0
+Nodes (1): Content-extractor co-deploy rule: when DIEZ_TIER2_ENABLED or QM_TIER2_ENABLED true, content-extractor-api-service must be reachable; shares crawling compose profile + services-net network
+
+### Community 204 - "QM Raw-Similarity Threshold"
+Cohesion: 1.0
 Nodes (1): QM_RAW_SAME_SIM (default 0.97, read at call time): tier-2 pair counts same only if /clean text matches AND raw HTML jaccard >= threshold; guards /clean search-grid blind spot, errs toward KEEP (no route loss)
 
+### Community 71 - "Community 71"
+Cohesion: 0.4
+Nodes (2): recountQueueFromDisk(), repairQueueMetadata()
+
 ## Knowledge Gaps
-- **2440 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+2435 more)
+- **2447 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+2442 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **Thin community `Community 52`** (9 nodes): `test_lua_scripts.py`, `Tests for Lua script string definitions. Validates that the scripts are well-fo`, `TestLuaScripts`, `.test_acquire_script_contains_expected_commands()`, `.test_acquire_script_is_non_empty_string()`, `.test_correct_counters_script_contains_expected_commands()`, `.test_correct_counters_script_is_non_empty_string()`, `.test_release_script_contains_expected_commands()`, `.test_release_script_is_non_empty_string()`
+- **Thin community `Community 108`** (1 nodes): `Creates a dictionary of headers for a DLQ message, compatible with both pika and`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 66`** (6 nodes): `AnonymizeText`, `.anonymize_text()`, `.normalize_text()`, `.presidio_anonymizer()`, `gen_email_uuid()`, `AnonymizeText.py`
+- **Thin community `Community 109`** (1 nodes): `Creates pika.BasicProperties for a DLQ message. For backward compatibility with`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 67`** (6 nodes): `Verifies that the bash script:         1. Finds the file.         2. Calls 'gclo`, `TestArchiveMockE2E`, `.setUp()`, `.tearDown()`, `.test_daemon_logic()`, `test_archive_mock_e2e.py`
+- **Thin community `Community 110`** (1 nodes): `Creates a dictionary of headers for a DLQ message based on an aio_pika message.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 72`** (5 nodes): `rabbitmq_connection.py`, `RabbitMQConnection`, `.create_connection()`, `.__init__()`, `Crée une connexion RabbitMQ avec un nombre limité de tentatives.          :param`
+- **Thin community `Community 111`** (1 nodes): `Creates a persistent aio_pika.Message ready for the Dead Letter Queue.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 74`** (5 nodes): `metrics.py`, `metrics.py`, `metrics.py`, `Prometheus metrics for api-detection-langue-fr.  Exposed at /metrics. Used to`, `Prometheus metrics for api-detection-langue-fr.  Exposed at /metrics. Used to`
+- **Thin community `Community 66`** (6 nodes): `AnonymizeText.py`, `gen_email_uuid()`, `AnonymizeText`, `.anonymize_text()`, `.presidio_anonymizer()`, `.normalize_text()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 81`** (3 nodes): `logging_config.py`, `Configure root logger with a stdout handler.      Safe to call multiple times`, `setup_logging()`
+- **Thin community `Community 112`** (1 nodes): `Cleans up whitespace and removes control characters.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 82`** (3 nodes): `conftest.py`, `Pytest conftest for tools/ tests.  Adds the tools/ directory to sys.path so te`, `conftest.py`
+- **Thin community `Community 94`** (2 nodes): `lua_scripts.py`, `Atomic Lua scripts for Redis-based concurrency guard. All slot operations (acqu`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 83`** (3 nodes): `export_embedding_model()`, `Charge le modèle d'embedding, exporte le module Transformer sous-jacent en ONNX,`, `export_embedding_to_onnx.py`
+- **Thin community `Community 95`** (2 nodes): `milvus_lock.py`, `Shared threading lock for pymilvus connection management.  All Milvus CRUD and I`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 84`** (3 nodes): `export_reranker_model()`, `Charge le modèle de reranking, l'exporte au format ONNX,     et génère le fichie`, `export_reranker_to_onnx.py`
+- **Thin community `Community 116`** (1 nodes): `Nettoie une chaîne de texte en normalisant les espaces et en corrigeant`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 90`** (3 nodes): `redisClient.test.ts`, `makeFakeClient()`, `resetMock()`
+- **Thin community `Community 82`** (3 nodes): `logging_config.py`, `setup_logging()`, `Configure root logger with a stdout handler.      Safe to call multiple times`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 91`** (3 nodes): `test_auto_stash_config.py`, `Auto-stash settings defaults (P2, Task 6).`, `test_auto_stash_defaults()`
+- **Thin community `Community 73`** (5 nodes): `rabbitmq_connection.py`, `RabbitMQConnection`, `.__init__()`, `.create_connection()`, `Crée une connexion RabbitMQ avec un nombre limité de tentatives.          :param`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 92`** (3 nodes): `test_auto_stash_move_config.py`, `Move-flow settings defaults (P3, Task 10).`, `test_move_defaults()`
+- **Thin community `Community 53`** (9 nodes): `test_lua_scripts.py`, `TestLuaScripts`, `.test_acquire_script_is_non_empty_string()`, `.test_acquire_script_contains_expected_commands()`, `.test_release_script_is_non_empty_string()`, `.test_release_script_contains_expected_commands()`, `.test_correct_counters_script_is_non_empty_string()`, `.test_correct_counters_script_contains_expected_commands()`, `Tests for Lua script string definitions. Validates that the scripts are well-fo`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 93`** (2 nodes): `lua_scripts.py`, `Atomic Lua scripts for Redis-based concurrency guard. All slot operations (acqu`
+- **Thin community `Community 83`** (3 nodes): `conftest.py`, `Pytest conftest for tools/ tests.  Adds the tools/ directory to sys.path so te`, `conftest.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 94`** (2 nodes): `milvus_lock.py`, `Shared threading lock for pymilvus connection management.  All Milvus CRUD and I`
+- **Thin community `Community 84`** (3 nodes): `export_embedding_to_onnx.py`, `export_embedding_model()`, `Charge le modèle d'embedding, exporte le module Transformer sous-jacent en ONNX,`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 95`** (2 nodes): `Claude Config Optimization Plan`, `20-25% Token Consumption Reduction`
+- **Thin community `Community 85`** (3 nodes): `export_reranker_to_onnx.py`, `export_reranker_model()`, `Charge le modèle de reranking, l'exporte au format ONNX,     et génère le fichie`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 96`** (2 nodes): `DLQ Manager UX Improvements (2026-04-11)`, `dlq-manager-service`
+- **Thin community `Community 96`** (2 nodes): `Claude Config Optimization Plan`, `20-25% Token Consumption Reduction`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 97`** (2 nodes): `Crawler Monitor Dataset & Queue Insights (2026-04-12)`, `crawler-monitor-backend / frontend`
+- **Thin community `Community 127`** (1 nodes): `ignoreHTTPSErrors in Camoufox/Chromium`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 98`** (2 nodes): `Rationale: Reduce token consumption by 20-25% per conversation`, `Claude Config Optimization (2026-04-16)`
+- **Thin community `Community 97`** (2 nodes): `DLQ Manager UX Improvements (2026-04-11)`, `dlq-manager-service`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 100`** (2 nodes): `Rationale: TTL/interval=6 gives 5 missed-renewal slack vs Redis latency`, `Settings: STASH_LOCK_TTL=1800, ARCHIVE_LOCK_TTL=1800, HEARTBEAT_INTERVAL=300, HEARTBEAT_MAX_DURATION=14400`
+- **Thin community `Community 98`** (2 nodes): `Crawler Monitor Dataset & Queue Insights (2026-04-12)`, `crawler-monitor-backend / frontend`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 101`** (2 nodes): `WHY stashed_at orthogonal field: preserves 409 matrix + BO status parsing`, `stashed_at orthogonal Redis field (not a status enum)`
+- **Thin community `Community 99`** (2 nodes): `Claude Config Optimization (2026-04-16)`, `Rationale: Reduce token consumption by 20-25% per conversation`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 102`** (2 nodes): `Download-driven self-heal: guard bites only on legacy archived crawl access`, `Non-goals: no bulk migration of est_archiver=1 crawls, no deep integrity validation`
+- **Thin community `Community 67`** (6 nodes): `test_archive_mock_e2e.py`, `TestArchiveMockE2E`, `.setUp()`, `.tearDown()`, `.test_daemon_logic()`, `Verifies that the bash script:         1. Finds the file.         2. Calls 'gclo`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 103`** (2 nodes): `Camoufox default browser: stealth Firefox C++ anti-detection (camoufox: true default), headless required in Docker, binary baked at build, camoufox_used observability`, `Tech stack: Python FastAPI orchestrator, Node 22 + TypeScript + Crawlee 3 + Playwright, Camoufox stealth, Redis, common-utils`
+- **Thin community `Community 138`** (1 nodes): `Current admitted in-flight count (unsynchronized read for observability).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 104`** (2 nodes): `Pre-flight disk space check: measure source x1.5 vs free space; 503 INSUFFICIENT_DISK_SPACE with disk_state body`, `WHY fail-open disk check: broken measurement (permissions/FS error) must never block archiving; staging finally still cleans partial files`
+- **Thin community `Community 139`** (1 nodes): `Number of coalesced calls served from a shared future.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 107`** (1 nodes): `Creates a dictionary of headers for a DLQ message, compatible with both pika and`
+- **Thin community `Community 143`** (1 nodes): `Normalise l'encodage du contenu HTML en UTF-8.          Reproduit le comportem`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 108`** (1 nodes): `Creates pika.BasicProperties for a DLQ message. For backward compatibility with`
+- **Thin community `Community 145`** (1 nodes): `Test endpoint /health`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 109`** (1 nodes): `Creates a dictionary of headers for a DLQ message based on an aio_pika message.`
+- **Thin community `Community 146`** (1 nodes): `Test endpoint /check-url avec TLD .fr`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 110`** (1 nodes): `Creates a persistent aio_pika.Message ready for the Dead Letter Queue.`
+- **Thin community `Community 147`** (1 nodes): `Test endpoint /check-url sans indicateur FR`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 111`** (1 nodes): `Cleans up whitespace and removes control characters.`
+- **Thin community `Community 148`** (1 nodes): `Test endpoint /detect avec contenu HTML fourni`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 115`** (1 nodes): `Nettoie une chaîne de texte en normalisant les espaces et en corrigeant`
+- **Thin community `Community 149`** (1 nodes): `Test validation endpoint /detect-batch avec liste vide`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 126`** (1 nodes): `ignoreHTTPSErrors in Camoufox/Chromium`
+- **Thin community `Community 150`** (1 nodes): `Test endpoint racine /`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 137`** (1 nodes): `Current admitted in-flight count (unsynchronized read for observability).`
+- **Thin community `Community 151`** (1 nodes): `Mode simple ne doit pas détecter les liens hreflang`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 138`** (1 nodes): `Number of coalesced calls served from a shared future.`
+- **Thin community `Community 152`** (1 nodes): `Mode complete doit détecter les liens hreflang`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 142`** (1 nodes): `Normalise l'encodage du contenu HTML en UTF-8.          Reproduit le comportem`
+- **Thin community `Community 153`** (1 nodes): `Verify CAMOUFOX_ENABLED setting is respected.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 144`** (1 nodes): `Test endpoint /health`
+- **Thin community `Community 154`** (1 nodes): `On happy path, page.unroute_all is called before context.close.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 145`** (1 nodes): `Test endpoint /check-url avec TLD .fr`
+- **Thin community `Maps internal error codes to hum`** (1 nodes): `A mid-fetch exception still triggers context.close and browser.close (try/finall`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 146`** (1 nodes): `Test endpoint /check-url sans indicateur FR`
+- **Thin community `Exit code 3 OOM_RELAUNCH contrac`** (1 nodes): `Extrait le nom de domaine principal d'une URL.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 147`** (1 nodes): `Test endpoint /detect avec contenu HTML fourni`
+- **Thin community `.error marker`** (1 nodes): `Résout une URL relative en URL absolue.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 148`** (1 nodes): `Test validation endpoint /detect-batch avec liste vide`
-  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 149`** (1 nodes): `Test endpoint racine /`
-  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 150`** (1 nodes): `Mode simple ne doit pas détecter les liens hreflang`
-  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 151`** (1 nodes): `Mode complete doit détecter les liens hreflang`
-  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 152`** (1 nodes): `Verify CAMOUFOX_ENABLED setting is respected.`
-  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 153`** (1 nodes): `On happy path, page.unroute_all is called before context.close.`
-  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 154`** (1 nodes): `A mid-fetch exception still triggers context.close and browser.close (try/finall`
-  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Maps internal error codes to hum`** (1 nodes): `Extrait le nom de domaine principal d'une URL.`
-  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Exit code 3 OOM_RELAUNCH contrac`** (1 nodes): `Résout une URL relative en URL absolue.`
-  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `.error marker`** (1 nodes): `Détermine si l'URL a un signal très fort de site français.                  Le`
+- **Thin community `Maps internal error codes to human-r`** (1 nodes): `Détermine si l'URL a un signal très fort de site français.                  Le`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Maps internal error codes to human-r`** (1 nodes): `Vérifie si une URL indique explicitement une version française.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Maps internal error codes to human-r`** (1 nodes): `Return True only if candidate_url is plausibly a language variant of homepage.`
+- **Thin community `Exit code 3 OOM_RELAUNCH contract (u`** (1 nodes): `Return True only if candidate_url is plausibly a language variant of homepage.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Exit code 3 OOM_RELAUNCH contract (u`** (1 nodes): `Compare two URLs ignoring scheme (http vs https) and trailing slashes.`
+- **Thin community `Maps internal error codes to human-r`** (1 nodes): `Compare two URLs ignoring scheme (http vs https) and trailing slashes.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Maps internal error codes to human-r`** (1 nodes): `Determine la priorite regionale d'une URL francaise.          Retourne:`
+- **Thin community `Returns (error_message, failure_caus`** (1 nodes): `Determine la priorite regionale d'une URL francaise.          Retourne:`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Returns (error_message, failure_caus`** (1 nodes): `Identifie le cas de decision applique pour le debug.`
+- **Thin community `Exit code 3 OOM_RELAUNCH contract (u`** (1 nodes): `Identifie le cas de decision applique pour le debug.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Exit code 3 OOM_RELAUNCH contract (u`** (1 nodes): `Fallback via API Pemavor pour la résolution de redirections.         À implémen`
+- **Thin community `Maps internal error codes to human-r`** (1 nodes): `Fallback via API Pemavor pour la résolution de redirections.         À implémen`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Maps internal error codes to human-r`** (1 nodes): `Forward compat: an old entry lacking 'requested_url' should still be readable.`
+- **Thin community `Returns (error_message, failure_caus`** (1 nodes): `Forward compat: an old entry lacking 'requested_url' should still be readable.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Returns (error_message, failure_caus`** (1 nodes): `When Phase 1 hits a variant-eligible error, Phase 2 retries variants.`
+- **Thin community `Maps internal error codes to human-r`** (1 nodes): `When Phase 1 hits a variant-eligible error, Phase 2 retries variants.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Maps internal error codes to human-r`** (1 nodes): `Pass 2 retries fetch_failed + challenge_page only — not http_error/soft_404.`
+- **Thin community `Returns (error_message, failure_caus`** (1 nodes): `Pass 2 retries fetch_failed + challenge_page only — not http_error/soft_404.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Returns (error_message, failure_caus`** (1 nodes): `When the homepage fallback hits a Cloudflare/DataDome challenge page,         r`
+- **Thin community `exit_code=-1 → classifier says 'oom_`** (1 nodes): `When the homepage fallback hits a Cloudflare/DataDome challenge page,         r`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `exit_code=-1 → classifier says 'oom_`** (1 nodes): `Verify CAMOUFOX_ENABLED setting is respected.`
+- **Thin community `Without an explicit kwarg, classifie`** (1 nodes): `Verify CAMOUFOX_ENABLED setting is respected.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Without an explicit kwarg, classifie`** (1 nodes): `On happy path, page.unroute_all is called before context.close.`
+- **Thin community `Every exit_code=-1 caller passes its`** (1 nodes): `On happy path, page.unroute_all is called before context.close.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Every exit_code=-1 caller passes its`** (1 nodes): `A mid-fetch exception still triggers context.close and browser.close (try/finall`
+- **Thin community `Maps internal error codes to human-r`** (1 nodes): `A mid-fetch exception still triggers context.close and browser.close (try/finall`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Maps internal error codes to human-r`** (1 nodes): `scrape_html captures response.status and returns ScrapeResult.`
+- **Thin community `Returns (error_message, failure_caus`** (1 nodes): `scrape_html captures response.status and returns ScrapeResult.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Returns (error_message, failure_caus`** (1 nodes): `When Playwright returns no Response, status_code defaults to 0.`
+- **Thin community `PushedSet Retry-Dup Guard`** (1 nodes): `When Playwright returns no Response, status_code defaults to 0.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `PushedSet Retry-Dup Guard`** (1 nodes): `Number of coalesced calls served from a shared future.`
+- **Thin community `Stash Crawls Batch Driver`** (1 nodes): `Number of coalesced calls served from a shared future.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Stash Crawls Batch Driver`** (1 nodes): `.error marker`
-  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Stash Poll Fall-Through`** (1 nodes): `Maps internal error codes to human-readable French messages for DB storage.`
+- **Thin community `Stash Poll Fall-Through`** (1 nodes): `.error marker`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Stash Poll Fall-Through`** (1 nodes): `Maps internal error codes to human-readable French messages for DB storage.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Stash Poll Fall-Through`** (1 nodes): `Exit code 3 OOM_RELAUNCH contract (unchanged)`
+- **Thin community `Stash Poll Fall-Through`** (1 nodes): `Maps internal error codes to human-readable French messages for DB storage.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Crawler Exit Code Test`** (1 nodes): `Maps internal error codes to human-readable French messages for DB storage.`
+- **Thin community `Crawler Exit Code Test`** (1 nodes): `Exit code 3 OOM_RELAUNCH contract (unchanged)`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `French Error Message Mapping`** (1 nodes): `Returns (error_message, failure_cause) for a subprocess exit code.          Re`
+- **Thin community `French Error Message Mapping`** (1 nodes): `Maps internal error codes to human-readable French messages for DB storage.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Subprocess Exit Code Cause`** (1 nodes): `Maps internal error codes to human-readable French messages for DB storage.`
+- **Thin community `Subprocess Exit Code Cause`** (1 nodes): `Returns (error_message, failure_cause) for a subprocess exit code.          Re`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `PushedSet Test`** (1 nodes): `Returns (error_message, failure_cause) for a subprocess exit code.          Re`
+- **Thin community `Community 101`** (2 nodes): `Rationale: TTL/interval=6 gives 5 missed-renewal slack vs Redis latency`, `Settings: STASH_LOCK_TTL=1800, ARCHIVE_LOCK_TTL=1800, HEARTBEAT_INTERVAL=300, HEARTBEAT_MAX_DURATION=14400`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Stash POST Blocking Rationale`** (1 nodes): `Concept: POST /crawler/stash/{id} → 202 (validate, lock, tar, set stashed_at, delete source)`
+- **Thin community `PushedSet Test`** (1 nodes): `Maps internal error codes to human-readable French messages for DB storage.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Stash Lock Heartbeat`** (1 nodes): `Rationale: POST blocks because make_archive + integrity + cleanup run synchronously before 202`
+- **Thin community `Stash POST Endpoint Flow`** (1 nodes): `Returns (error_message, failure_cause) for a subprocess exit code.          Re`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Deferred Stash BackgroundTasks`** (1 nodes): `_LockHeartbeat (server-side renews stash lock up to 4h LOCK_HEARTBEAT_MAX_DURATION_SECONDS=14400)`
+- **Thin community `Stash Lock Heartbeat`** (1 nodes): `Concept: POST /crawler/stash/{id} → 202 (validate, lock, tar, set stashed_at, delete source)`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `DedupManager Test`** (1 nodes): `Deferred: server-side BackgroundTasks migration of stash_crawl`
+- **Thin community `Deferred Stash BackgroundTasks`** (1 nodes): `Rationale: POST blocks because make_archive + integrity + cleanup run synchronously before 202`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `DedupManager Test`** (1 nodes): `_LockHeartbeat (server-side renews stash lock up to 4h LOCK_HEARTBEAT_MAX_DURATION_SECONDS=14400)`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `BO Results Timeout Bump`** (1 nodes): `Deferred: server-side BackgroundTasks migration of stash_crawl`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 91`** (3 nodes): `redisClient.test.ts`, `makeFakeClient()`, `resetMock()`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 92`** (3 nodes): `test_auto_stash_config.py`, `test_auto_stash_defaults()`, `Auto-stash settings defaults (P2, Task 6).`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 93`** (3 nodes): `test_auto_stash_move_config.py`, `test_move_defaults()`, `Move-flow settings defaults (P3, Task 10).`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 102`** (2 nodes): `stashed_at orthogonal Redis field (not a status enum)`, `WHY stashed_at orthogonal field: preserves 409 matrix + BO status parsing`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Auto-Stash Tunables`** (1 nodes): `BO /results timeout bump to 900s (sendRequest $timeout)`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Auto-Stash Tunables`** (1 nodes): `Auto-stash tunables (AUTO_STASH_ENABLED, STASH_GRACE/SAFETY/HIGH_WATER/MAX_PER_SWEEP)`
+- **Thin community `Crawler Tech Stack`** (1 nodes): `Auto-stash tunables (AUTO_STASH_ENABLED, STASH_GRACE/SAFETY/HIGH_WATER/MAX_PER_SWEEP)`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Crawler Tech Stack`** (1 nodes): `BROWSER_SEMAPHORE_SIZE=6 global cap; alt-fetches sequential within a call`
+- **Thin community `Community 104`** (2 nodes): `Tech stack: Python FastAPI orchestrator, Node 22 + TypeScript + Crawlee 3 + Playwright, Camoufox stealth, Redis, common-utils`, `Camoufox default browser: stealth Firefox C++ anti-detection (camoufox: true default), headless required in Docker, binary baked at build, camoufox_used observability`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Crawler Manual Recovery`** (1 nodes): `Task 6: documentation (tools + crawler-service CLAUDE.md)`
+- **Thin community `Crawler Manual Recovery`** (1 nodes): `BROWSER_SEMAPHORE_SIZE=6 global cap; alt-fetches sequential within a call`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `UrlConsolidator Test Strategy`** (1 nodes): `Blast radius: crawler-service Node engine only, no shared libs/protos/exit-code change`
+- **Thin community `Community 103`** (2 nodes): `Non-goals: no bulk migration of est_archiver=1 crawls, no deep integrity validation`, `Download-driven self-heal: guard bites only on legacy archived crawl access`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `No-Stash Doc Task`** (1 nodes): `Manual headpowerac recovery: reclaim then same-id restart, never dropData=true first`
+- **Thin community `UrlConsolidator Test Strategy`** (1 nodes): `Task 6: documentation (tools + crawler-service CLAUDE.md)`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Crawler Recovery Blast Radius`** (1 nodes): `Test strategy: injected no-op, cleanup keeps dataset, fullCleanup all-three, isInDataset delegation, error-path reject→false, legacy`
+- **Thin community `No-Stash Doc Task`** (1 nodes): `Blast radius: crawler-service Node engine only, no shared libs/protos/exit-code change`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Crawler Manual Recovery`** (1 nodes): `Archive .staging/ tmp isolation: write to .staging then move after integrity check; upload daemon find -maxdepth 1 ignores subdirs`
+- **Thin community `Crawler Recovery Blast Radius`** (1 nodes): `Manual headpowerac recovery: reclaim then same-id restart, never dropData=true first`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `UrlConsolidator Test Strategy`** (1 nodes): `Stash free-disk investigation workflow: park data in gs://.../stash/, orthogonal stashed_at field (no new status enum), conflict matrix (409/503)`
+- **Thin community `Crawler Manual Recovery`** (1 nodes): `Test strategy: injected no-op, cleanup keeps dataset, fullCleanup all-three, isInDataset delegation, error-path reject→false, legacy`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Camoufox Default Browser`** (1 nodes): `Stash daemons: separate upload_daemon.sh + download_daemon.sh instances via env (UPLOAD_GCS_PREFIX=stash, DOWNLOAD_GCS_PREFIX=stash, DELETE_AFTER_DOWNLOAD=true)`
+- **Thin community `UrlConsolidator Test Strategy`** (1 nodes): `Archive .staging/ tmp isolation: write to .staging then move after integrity check; upload daemon find -maxdepth 1 ignores subdirs`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Auto-Stash Eligibility`** (1 nodes): `Auto-stash eligibility (_is_stash_eligible, fail-open): grace (downloaded_at + STASH_GRACE_SECONDS), timeout (STASH_SAFETY_TIMEOUT_SECONDS), disk pressure (STASH_DISK_HIGH_WATER_PCT); capped STASH_MAX_PER_SWEEP`
+- **Thin community `Community 105`** (2 nodes): `Pre-flight disk space check: measure source x1.5 vs free space; 503 INSUFFICIENT_DISK_SPACE with disk_state body`, `WHY fail-open disk check: broken measurement (permissions/FS error) must never block archiving; staging finally still cleans partial files`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Auto-Stash Job Fields`** (1 nodes): `Auto-stash job_data fields (orthogonal, cached on write): finished_at (_stamp_terminal_fields), downloaded_at (GET /results), size_bytes — sweep reads from Redis, no disk I/O in critical section`
+- **Thin community `Camoufox Default Browser`** (1 nodes): `Stash free-disk investigation workflow: park data in gs://.../stash/, orthogonal stashed_at field (no new status enum), conflict matrix (409/503)`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Reconciliation Leader Election`** (1 nodes): `Reconciliation leader election: reconcile_leader_lock (SET NX, TTL=interval*2), ownership-safe release, _reconcile_locked holds scanning logic, last_heartbeat init in start_crawl`
+- **Thin community `Auto-Stash Eligibility`** (1 nodes): `Stash daemons: separate upload_daemon.sh + download_daemon.sh instances via env (UPLOAD_GCS_PREFIX=stash, DOWNLOAD_GCS_PREFIX=stash, DELETE_AFTER_DOWNLOAD=true)`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Content-Extractor Co-Deploy Rule`** (1 nodes): `Content-extractor co-deploy rule: when DIEZ_TIER2_ENABLED or QM_TIER2_ENABLED true, content-extractor-api-service must be reachable; shares crawling compose profile + services-net network`
+- **Thin community `Auto-Stash Job Fields`** (1 nodes): `Auto-stash eligibility (_is_stash_eligible, fail-open): grace (downloaded_at + STASH_GRACE_SECONDS), timeout (STASH_SAFETY_TIMEOUT_SECONDS), disk pressure (STASH_DISK_HIGH_WATER_PCT); capped STASH_MAX_PER_SWEEP`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Reconciliation Leader Election`** (1 nodes): `Auto-stash job_data fields (orthogonal, cached on write): finished_at (_stamp_terminal_fields), downloaded_at (GET /results), size_bytes — sweep reads from Redis, no disk I/O in critical section`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Content-Extractor Co-Deploy Rule`** (1 nodes): `Reconciliation leader election: reconcile_leader_lock (SET NX, TTL=interval*2), ownership-safe release, _reconcile_locked holds scanning logic, last_heartbeat init in start_crawl`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `QM Raw-Similarity Threshold`** (1 nodes): `Content-extractor co-deploy rule: when DIEZ_TIER2_ENABLED or QM_TIER2_ENABLED true, content-extractor-api-service must be reachable; shares crawling compose profile + services-net network`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `QM Raw-Similarity Threshold`** (1 nodes): `QM_RAW_SAME_SIM (default 0.97, read at call time): tier-2 pair counts same only if /clean text matches AND raw HTML jaccard >= threshold; guards /clean search-grid blind spot, errs toward KEEP (no route loss)`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 71`** (6 nodes): `queueRepair.test.ts`, `mkQueue()`, `rm()`, `queueRepair.ts`, `recountQueueFromDisk()`, `repairQueueMetadata()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `CrawlerManager` connect `CrawlerManager Python + DLQ` to `Milvus CRUD Layer`, `Rust Service Clients`, `GCS Archive Classifier`, `Rust Service Request Models`, `Graph Milvus gRPC Client`, `Embedding gRPC Client`, `Graph Database gRPC Client`, `GCS Archive Audit Tool Rationale`, `Community 30`?**
+- **Why does `CrawlerManager` connect `CrawlerManager Python + DLQ` to `Milvus CRUD Layer`, `Milvus Concurrency Guard`, `Redis Cache Rationale`, `GCS Audit CLI`, `Update-Mode Queue Builder`, `Header Footer Extractor`, `Graph Database gRPC Client`, `Dead Services Cleanup`, `Community 31`?**
   _High betweenness centrality (0.100) - this node is a cross-community bridge._
-- **Why does `Update mode: pre-flight validation, auto-restore from GCS (_restore_archived_crawl, restore_lock), Node exit-4 no-data safety net, post-crawl cleanup` connect `Node.js Crawler Core` to `Milvus CRUD Layer`, `CrawlerManager Python + DLQ`, `Embedding gRPC Client`?**
-  _High betweenness centrality (0.074) - this node is a cross-community bridge._
-- **Why does `cache_service.py (Redis lock helper)` connect `Redis Cache Rationale` to `Milvus CRUD Layer`, `CrawlerManager Python + DLQ`, `Rust Service Clients`?**
+- **Why does `Update mode: pre-flight validation, auto-restore from GCS (_restore_archived_crawl, restore_lock), Node exit-4 no-data safety net, post-crawl cleanup` connect `Node.js Crawler Core` to `Milvus CRUD Layer`, `CrawlerManager Python + DLQ`, `Redis Cache Rationale`?**
+  _High betweenness centrality (0.075) - this node is a cross-community bridge._
+- **Why does `cache_service.py (Redis lock helper)` connect `Pydantic Request Schemas` to `Milvus CRUD Layer`, `CrawlerManager Python + DLQ`?**
   _High betweenness centrality (0.073) - this node is a cross-community bridge._
 - **Are the 323 inferred relationships involving `CrawlerManager` (e.g. with `CrawlStatus` and `IncludeInArchive`) actually correct?**
   _`CrawlerManager` has 323 INFERRED edges - model-reasoned connections that need verification._
