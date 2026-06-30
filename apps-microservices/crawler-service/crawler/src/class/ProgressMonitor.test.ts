@@ -68,4 +68,20 @@ describe('ProgressMonitor', () => {
         // 100 ticks * 30s = 3000s, threshold+slack = 660s → ~22 samples retained
         assert.ok(internal.length <= 25, `expected <=25, got ${internal.length}`);
     });
+
+    it('does not fire when resolved-count keeps rising (failures climbing, successes flat)', () => {
+        // Simulates STALL_COUNT_RESOLVED=true: the readFinished callback sums
+        // requestsFinished (flat) + requestsFailed (rising). The monitor only sees
+        // the rising sum → must NOT fire despite requestsFinished being static.
+        let resolvedCount = 0;
+        const readResolved = () => resolvedCount;
+        const m = new ProgressMonitor(readResolved, 600_000, onStalled, 30_000, clock);
+        for (let i = 0; i < 21; i++) {
+            now += 30_000;
+            resolvedCount += 1; // one more failure per tick (simulates rising requestsFailed)
+            m['tick']();
+        }
+        // 21 ticks × 30s = 630s > threshold 600s, but count rose every tick → no stall
+        assert.equal(onStalledCalls.length, 0);
+    });
 });

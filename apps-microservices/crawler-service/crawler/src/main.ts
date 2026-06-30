@@ -4,7 +4,7 @@ import fs from "fs";
 import fsPromises from "fs/promises";
 import os from 'os';
 import { router } from "./routes.js";
-import { RECOVER_FAILED_ON_RESTART, shouldRunRecovery } from "./httpStatusPolicy.js";
+import { RECOVER_FAILED_ON_RESTART, shouldRunRecovery, resolveStallCountResolved } from "./httpStatusPolicy.js";
 import {
     getPathAfterDomain,
     getScrapingData,
@@ -44,7 +44,7 @@ import { context } from "./context.js";
 import { readPersistedDecision, applyCliFlagGuard, getDiezDecisionMode } from "./diezDecision.js";
 import { applyCliFlagGuard as applyQuestionMarkGuard, getQuestionMarkDecisionMode, persistObservations as persistQuestionMarkObservations, readQmPersistedDecision } from "./questionMarkDecision.js";
 import { isBlanketBlock } from "./robotsTxtGuard.js";
-import { perClassEnabled } from "./diezClassify.js";
+import { perClassEnabled, stripActionAnchor, actionAnchorStripEnabled } from "./diezClassify.js";
 import { killBrowserProcesses } from "./browserKill.js";
 import { readUsableMemory } from "./cgroupMemory.js";
 import { createSharedRedisClient } from "./redisClient.js";
@@ -779,9 +779,17 @@ if (crawlMode === 'update') {
     context.homepageReady = { resolve: resolveHomepage!, promise: homepagePromise };
 
     // Phase 1: Seed only the homepage
+    let phase1SeedUrl = site;
+    if (actionAnchorStripEnabled()) {
+        const strippedAa = stripActionAnchor(phase1SeedUrl);
+        if (strippedAa !== phase1SeedUrl) {
+            phase1SeedUrl = strippedAa;
+            context.actionAnchorsStripped++;
+        }
+    }
     await requestQueue.addRequest({
-        url: site,
-        uniqueKey: site,
+        url: phase1SeedUrl,
+        uniqueKey: phase1SeedUrl,
         userData: { source: 'seed' }
     });
     // Do NOT pre-add the homepage to Redis dedup here (same rule as the standard
@@ -852,9 +860,17 @@ if (crawlMode === 'update') {
     // The handler will add it when processing the page.
     // Pre-adding it causes the homepage to be treated as "Doublon" and skipped entirely.
 
+    let standardSeedUrl = cleanSite;
+    if (actionAnchorStripEnabled()) {
+        const strippedAa = stripActionAnchor(standardSeedUrl);
+        if (strippedAa !== standardSeedUrl) {
+            standardSeedUrl = strippedAa;
+            context.actionAnchorsStripped++;
+        }
+    }
     await requestQueue.addRequest({
-        url: cleanSite,
-        uniqueKey: cleanSite,
+        url: standardSeedUrl,
+        uniqueKey: standardSeedUrl,
         userData: { is_existing: false }
     });
 } else {
@@ -1257,6 +1273,9 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         console.error('Shared Redis disconnect error:', e);
     }
 
+    if (context.actionAnchorsStripped > 0) {
+        console.log(`[diez] stripped ${context.actionAnchorsStripped} action-anchor fragment(s)`);
+    }
     console.log(`✅ Graceful shutdown complete. Exiting with code ${exitCode}.`);
     process.exit(exitCode);
 };
@@ -1311,8 +1330,16 @@ if (typeCrawling == "sitemap") {
                 // claims each URL on first processing (routes.ts). Pre-adding here
                 // made every non-dataset seed (request_queue / request_url) self-mark
                 // as "Doublon" and get skipped before reaching UpdateChecker.
+                let seedUrl = url;
+                if (actionAnchorStripEnabled()) {
+                    const strippedAa = stripActionAnchor(seedUrl);
+                    if (strippedAa !== seedUrl) {
+                        seedUrl = strippedAa;
+                        context.actionAnchorsStripped++;
+                    }
+                }
                 await requestQueue.addRequest({
-                    url: url,
+                    url: seedUrl,
                     userData: { source: source }
                 });
                 seedCount++;
@@ -1453,7 +1480,12 @@ if (typeCrawling == "sitemap") {
         ? parsedProgressStallMs
         : 600_000;
     progressMonitor = new ProgressMonitor(
-        () => (context.crawlerInstance as any)?.stats?.state?.requestsFinished ?? 0,
+        () => {
+            const st = (context.crawlerInstance as any)?.stats?.state;
+            const finished = st?.requestsFinished ?? 0;
+            if (!resolveStallCountResolved(process.env.STALL_COUNT_RESOLVED)) return finished;
+            return finished + (st?.requestsFailed ?? 0);
+        },
         progressStallThresholdMs,
         (reason) => {
             console.error(`[fatal] progress_stalled: ${reason}`);

@@ -22,7 +22,7 @@ import { DetectionLangueClient } from "./class/DetectionLangueClient.js";
 import { context } from "./context.js";
 import { recordClassification, maybeCommitDecision, commitSkipDiez, commitBypassDiez } from "./diezDecision.js";
 import { fragmentAwareUniqueKey, stripEmptyFragment } from "./diezKeepFragment.js";
-import { applyPerClassStrip, perClassEnabled } from "./diezClassify.js";
+import { applyPerClassStrip, perClassEnabled, stripActionAnchor, actionAnchorStripEnabled } from "./diezClassify.js";
 import { qmConsumptionStrip, shouldSkipDequeued, recordQmCollapsed } from "./qmConsumptionSkip.js";
 import { recordTier2Sample, maybeCommitTier2, tier2Evidence, maybeDefaultAtCeiling as maybeDefaultDiezAtCeiling } from "./diezTier2.js";
 import { routeDiezOutcome } from "./diezHookGate.js";
@@ -922,6 +922,17 @@ router.addDefaultHandler(
                         if (robots && !robots.isAllowed(request.url, "Googlebot")) {
                             logBlocked('robots.txt', request.url);
                             return false;
+                        }
+
+                        // Action-anchor strip (root fix for the #elementor-action
+                        // duplicate-fetch overload). Runs before skip/remove so the
+                        // '#' is gone and fragmentAwareUniqueKey collapses variants.
+                        if (actionAnchorStripEnabled()) {
+                            const strippedAa = stripActionAnchor(request.url);
+                            if (strippedAa !== request.url) {
+                                request.url = strippedAa;
+                                context.actionAnchorsStripped++;
+                            }
                         }
 
                         // 2. Initial CLEANING of the URL (Moved to TOP)
