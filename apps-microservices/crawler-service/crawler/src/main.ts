@@ -49,6 +49,7 @@ import { killBrowserProcesses } from "./browserKill.js";
 import { readUsableMemory } from "./cgroupMemory.js";
 import { createSharedRedisClient } from "./redisClient.js";
 import { buildHtmlIndex } from "./htmlIndex.js";
+import { repairQueueMetadata } from "./queueRepair.js";
 
 const now = new Date().toISOString().replace(/:/g, "-");
 
@@ -707,6 +708,22 @@ if (skipquestionmark || skipdiez) {
     }
 }
 
+// Repair stale request-queue metadata left by an interrupted / lost-flush prior run.
+// memory-storage loads counts from the debounced __metadata__.json but total from the
+// request files; a mismatch deadlocks Crawlee's isFinished() -> 1200s progress stall.
+// Recompute from the request files and rewrite the metadata BEFORE opening the queue.
+// No-op on healthy queues (counts already match) -> byte-identical. Best-effort.
+try {
+    const rqDir = `storage/request_queues/${domain}`;
+    const rep = repairQueueMetadata(rqDir);
+    if (rep.repaired) {
+        const b = rep.before;
+        console.warn(`[queue-repair] ${domain}: stale counts pending/handled ${b ? `${b.pending}/${b.handled}` : "(no metadata)"} -> ${rep.after.pending}/${rep.after.handled} (total ${rep.after.total})`);
+    }
+} catch (e) {
+    console.warn(`[queue-repair] skipped for ${domain}: ${(e as Error).message}`);
+}
+
 // Open requestQueue FIRST (before any operations)
 export const requestQueue = await RequestQueue.open(domain);
 
@@ -900,11 +917,15 @@ if (queueInfo && queueInfo.totalRequestCount > 0 && queueInfo.handledRequestCoun
     process.exit(0); // Success exit
 }
 
-// Case 2: Crash Recovery / In-Progress (Updated Logic)
+// Case 2: Crash Recovery / In-Progress — belt-and-braces.
+// The pre-open metadata repair (above) should have resolved this. If we STILL see the
+// 0/0/total>0 deadlock signature, the queue has no dispatchable work and would idle
+// until the 1200s progress-stall watchdog (then relaunch into the same state). Exit
+// cleanly (treat as complete) instead of proceeding into a guaranteed stall.
 if (queueInfo && queueInfo.handledRequestCount === 0 && queueInfo.pendingRequestCount === 0 && queueInfo.totalRequestCount > 0) {
     console.warn(`⚠️  WARNING: Detected ${queueInfo.totalRequestCount} in-progress items from a previous interrupted run.`);
-    console.warn(`ℹ️  Crawler will resume these requests (they will be reclaimed if timed out).`);
-    // We proceed instead of exiting
+    console.warn(`ℹ️  No dispatchable requests after repair — exiting 0 (treating as complete) to avoid a progress stall + relaunch loop.`);
+    process.exit(0);
 }
 
 // Case 3: Normal operation
