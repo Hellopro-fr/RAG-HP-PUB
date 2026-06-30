@@ -4,7 +4,7 @@ import fs from "fs";
 import fsPromises from "fs/promises";
 import os from 'os';
 import { router } from "./routes.js";
-import { RECOVER_FAILED_ON_RESTART, shouldRunRecovery } from "./httpStatusPolicy.js";
+import { RECOVER_FAILED_ON_RESTART, shouldRunRecovery, resolveStallCountResolved } from "./httpStatusPolicy.js";
 import {
     getPathAfterDomain,
     getScrapingData,
@@ -1480,7 +1480,12 @@ if (typeCrawling == "sitemap") {
         ? parsedProgressStallMs
         : 600_000;
     progressMonitor = new ProgressMonitor(
-        () => (context.crawlerInstance as any)?.stats?.state?.requestsFinished ?? 0,
+        () => {
+            const st = (context.crawlerInstance as any)?.stats?.state;
+            const finished = st?.requestsFinished ?? 0;
+            if (!resolveStallCountResolved(process.env.STALL_COUNT_RESOLVED)) return finished;
+            return finished + (st?.requestsFailed ?? 0);
+        },
         progressStallThresholdMs,
         (reason) => {
             console.error(`[fatal] progress_stalled: ${reason}`);
