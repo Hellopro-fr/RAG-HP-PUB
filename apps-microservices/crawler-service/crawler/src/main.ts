@@ -50,6 +50,7 @@ import { readUsableMemory } from "./cgroupMemory.js";
 import { createSharedRedisClient } from "./redisClient.js";
 import { buildHtmlIndex } from "./htmlIndex.js";
 import { repairQueueMetadata } from "./queueRepair.js";
+import { isDrainedSample, DRAIN_CONFIRM_SAMPLES } from "./drainGuard.js";
 
 const now = new Date().toISOString().replace(/:/g, "-");
 
@@ -732,6 +733,10 @@ export const requestQueue = await RequestQueue.open(domain);
 // request-queue depth to {storagePath}/_queue_stats.json so the Python /status
 // handler can surface total/remaining URL counts to the BO live panel.
 const QUEUE_STATS_INTERVAL_MS = 30 * 1000;
+// Drain-completion guard state (see drainGuard.ts): consecutive idle+drained samples,
+// and a one-shot latch so we abort the pool at most once.
+let drainConfirmCount = 0;
+let drainAbortInitiated = false;
 const queueStatsInterval = setInterval(async () => {
     try {
         const info = await requestQueue.getInfo();
@@ -742,6 +747,29 @@ const queueStatsInterval = setInterval(async () => {
             updated_at: new Date().toISOString(),
         });
         await fs.promises.writeFile(path.join(storagePath, '_queue_stats.json'), payload);
+        // Drain-completion guard: a genuinely-drained crawl whose Crawlee finish gate
+        // (isEmpty()/queueHeadIds) is wedged would otherwise idle until the progress-stall
+        // watchdog (exit 6). Detect it via the reliable in-memory getInfo() counters and
+        // abort the pool so crawler.run() resolves through the normal completion path (exit 0).
+        const drainPool = (context.crawlerInstance as any)?.autoscaledPool;
+        if (drainPool && !drainAbortInitiated) {
+            const drained = isDrainedSample({
+                currentConcurrency: drainPool.currentConcurrency ?? 0,
+                pendingRequestCount: info.pendingRequestCount ?? 0,
+                handledRequestCount: info.handledRequestCount ?? 0,
+                totalRequestCount: info.totalRequestCount ?? 0,
+            });
+            drainConfirmCount = drained ? drainConfirmCount + 1 : 0;
+            if (drainConfirmCount >= DRAIN_CONFIRM_SAMPLES) {
+                drainAbortInitiated = true;
+                console.warn(`[drain-guard] queue drained but crawler not finished (idle ${drainConfirmCount}x, handled ${info.handledRequestCount}/${info.totalRequestCount}, pending ${info.pendingRequestCount}) — aborting pool to complete cleanly.`);
+                try {
+                    await drainPool.abort();
+                } catch (e) {
+                    console.warn(`[drain-guard] abort failed: ${(e as Error).message}`);
+                }
+            }
+        }
     } catch (e) {
         console.error("Queue-stats publisher failed:", e);
     }
