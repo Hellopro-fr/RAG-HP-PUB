@@ -26,3 +26,23 @@ export const isDrainedSample = (s: DrainSample): boolean =>
     s.totalRequestCount > 0 &&
     s.pendingRequestCount === 0 &&
     s.handledRequestCount === s.totalRequestCount;
+
+/**
+ * Idle but the resolution counters don't reconcile → wedge suspect. Only meaningful
+ * at concurrency 0: while the pool runs, in-progress requests make handled+pending < total
+ * legitimately; at idle (nothing dispatched) handled+pending MUST equal total on a healthy
+ * queue. When it doesn't, getInfo()'s counters are themselves wedged (the 0/0/N deadlock) —
+ * which isDrainedSample cannot see. Callers confirm via a disk recount before acting.
+ */
+export const isUnreconciledIdle = (s: DrainSample): boolean =>
+    s.currentConcurrency === 0 &&
+    s.totalRequestCount > 0 &&
+    s.handledRequestCount + s.pendingRequestCount !== s.totalRequestCount;
+
+/** Resolves the disk-recount drain backstop kill-switch. Default true; only "false" disables. */
+export const resolveDrainDiskRecount = (raw: string | undefined): boolean =>
+    (raw ?? "true").trim().toLowerCase() !== "false";
+
+/** Derived once at module load. Node-only, inherited by the crawler subprocess. */
+export const DRAIN_DISK_RECOUNT_ENABLED: boolean =
+    resolveDrainDiskRecount(process.env.DRAIN_DISK_RECOUNT_ENABLED);

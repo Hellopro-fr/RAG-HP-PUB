@@ -22,3 +22,25 @@ test("isDrainedSample: not drained on count drift (handled !== total)", () => {
 test("DRAIN_CONFIRM_SAMPLES is a positive integer", () => {
     assert.ok(Number.isInteger(DRAIN_CONFIRM_SAMPLES) && DRAIN_CONFIRM_SAMPLES > 0);
 });
+
+import { isUnreconciledIdle, resolveDrainDiskRecount } from "./drainGuard.js";
+
+test("isUnreconciledIdle: true for the 0/0/1 counter wedge (crawl 6599)", () => {
+    assert.equal(isUnreconciledIdle({ currentConcurrency: 0, pendingRequestCount: 0, handledRequestCount: 0, totalRequestCount: 1 }), true);
+});
+test("isUnreconciledIdle: false when counts reconcile at idle", () => {
+    assert.equal(isUnreconciledIdle({ currentConcurrency: 0, pendingRequestCount: 0, handledRequestCount: 174, totalRequestCount: 174 }), false);
+});
+test("isUnreconciledIdle: false while a task is running (concurrency > 0)", () => {
+    assert.equal(isUnreconciledIdle({ currentConcurrency: 1, pendingRequestCount: 0, handledRequestCount: 0, totalRequestCount: 1 }), false);
+});
+test("isUnreconciledIdle: false at pre-dispatch start (total 0)", () => {
+    assert.equal(isUnreconciledIdle({ currentConcurrency: 0, pendingRequestCount: 0, handledRequestCount: 0, totalRequestCount: 0 }), false);
+});
+test("resolveDrainDiskRecount: default-on; only 'false' disables", () => {
+    assert.equal(resolveDrainDiskRecount(undefined), true);
+    assert.equal(resolveDrainDiskRecount(""), true);
+    assert.equal(resolveDrainDiskRecount("true"), true);
+    assert.equal(resolveDrainDiskRecount("FALSE"), false);
+    assert.equal(resolveDrainDiskRecount(" false "), false);
+});
