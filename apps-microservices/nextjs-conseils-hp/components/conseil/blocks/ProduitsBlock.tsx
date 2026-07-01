@@ -5,6 +5,7 @@ import { useRef, useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { ProduitsBlockData, ProductItem } from '@/types/blocks/produits';
 import { IframeProduitModal } from '@/components/conseil/IframeProduitModal';
+import { pushEecAddDevis } from '@/lib/analytics/gtm';
 
 const PAGE_SIZE = 6;
 
@@ -132,7 +133,17 @@ function ProductCard({ product, onContact }: ProductCardProps) {
       {/* Bouton contact — ouvre le formulaire produit via iframe, jamais de href */}
       <button
         type="button"
-        onClick={onContact}
+        onClick={() => {
+          // Conversion e-commerce « ajout devis » (équivalent legacy eec.add au clic sur produit)
+          pushEecAddDevis({
+            id: product.id,
+            category: product.category,
+            variant: product.variant,
+            brand: product.brand,
+            name: product.name,
+          });
+          onContact();
+        }}
         className="mt-3 cursor-pointer rounded border border-primary px-3 py-1.5 text-center text-base font-medium text-primary transition-colors hover:bg-primary hover:text-primary-foreground"
       >
         Envoyer un message
