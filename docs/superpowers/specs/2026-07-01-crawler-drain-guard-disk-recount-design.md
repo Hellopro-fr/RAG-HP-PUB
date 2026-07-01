@@ -81,8 +81,14 @@ Default-**on**. Kill-switch env `DRAIN_DISK_RECOUNT_ENABLED` (`=false` disables 
 
 - crawler-service `features/poc`: `git push origin features/poc` + **VM docker rebuild** (Node).
 - Env `DRAIN_DISK_RECOUNT_ENABLED` default-on (unset = enabled); set `false` to disable.
-- Smoke: crawl a site whose homepage yields 0 crawlable links → expect a `[drain-guard] disk-confirmed drain …` log and a clean exit 0 at ~90s, no 1200s stall, no manual relaunch.
+- Smoke: crawl a site whose homepage yields 0 crawlable links → expect a `[drain-guard] disk-confirmed drain …` log and clean completion at ~90s (exit code 2, the normal-success code — NOT exit 6/stall), no manual relaunch.
 
 ## Follow-up (separate)
 
 Time-boxed static investigation of the memory-storage counter/flush desync (why `handled` did not increment for the 1-request crawl). Decide afterward whether a root fix is worth it; the backstop stands regardless.
+
+## Post-review corrections (2026-07-01)
+
+Two wording fixes from the final adversarial review (the code is correct; only this doc was imprecise):
+- **Exit code:** mid-run clean completion goes through `gracefulShutdown('COMPLETED', … ?? 2)` → **exit code 2**, the normal-success code every naturally-draining crawl uses (the orchestrator treats it as success). Wherever this doc says "exit 0", read "clean success terminal (exit 2), not the exit-6 stall". Literal `exit 0` is only the *startup* early-exit path (`main.ts:945`), not the mid-run abort.
+- **Stall threshold:** `ProgressMonitor` default is **600s** (10 min); the incident VM overrode `PROGRESS_STALL_THRESHOLD_MS` to `1200000` (hence the log's 1200s). The drain guard fires at ~90s — well under either — so pre-emption holds regardless.
