@@ -1900,7 +1900,8 @@ async def _process_single_category(
     id_categorie: str,
     id_prompt: Optional[str],
     index: int,
-    total: int
+    total: int,
+    source: Optional[str] = "ia"
 ) -> Dict[str, Any]:
     """
     Traite une seule catégorie sous le contrôle du sémaphore.
@@ -1920,7 +1921,8 @@ async def _process_single_category(
         try:
             result = await run_identification(
                 id_categorie=id_categorie,
-                id_prompt=id_prompt
+                id_prompt=id_prompt,
+                source=source
             )
             result["id_categorie"] = id_categorie
             logger.info(f"[LOT {index + 1}/{total}] Fin catégorie {id_categorie}: success={result.get('success')}")
@@ -1978,7 +1980,8 @@ async def run_identification_lot(
             id_categorie=str(cat.get("id_categorie", "")),
             id_prompt=cat.get("id_prompt"),
             index=i,
-            total=total
+            total=total,
+            source=cat.get("source", "ia")
         )
         for i, cat in enumerate(categories)
     ]
