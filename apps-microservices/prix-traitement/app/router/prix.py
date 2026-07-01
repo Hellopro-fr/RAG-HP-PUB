@@ -27,7 +27,8 @@ async def extract_caracteristiques(request: CaracteristiqueRequest = Body(...)):
         
         result = await run_identification(
             id_categorie=request.id_categorie,
-            id_prompt=request.id_prompt
+            id_prompt=request.id_prompt,
+            source=request.source
         )
         
         # Construire la liste de ReponseResult si des données existent
