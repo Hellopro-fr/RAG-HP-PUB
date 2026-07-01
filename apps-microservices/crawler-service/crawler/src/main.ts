@@ -49,8 +49,8 @@ import { killBrowserProcesses } from "./browserKill.js";
 import { readUsableMemory } from "./cgroupMemory.js";
 import { createSharedRedisClient } from "./redisClient.js";
 import { buildHtmlIndex } from "./htmlIndex.js";
-import { repairQueueMetadata } from "./queueRepair.js";
-import { isDrainedSample, DRAIN_CONFIRM_SAMPLES } from "./drainGuard.js";
+import { repairQueueMetadata, recountQueueFromDisk } from "./queueRepair.js";
+import { isDrainedSample, isUnreconciledIdle, DRAIN_CONFIRM_SAMPLES, DRAIN_DISK_RECOUNT_ENABLED } from "./drainGuard.js";
 
 const now = new Date().toISOString().replace(/:/g, "-");
 
@@ -736,6 +736,7 @@ const QUEUE_STATS_INTERVAL_MS = 30 * 1000;
 // Drain-completion guard state (see drainGuard.ts): consecutive idle+drained samples,
 // and a one-shot latch so we abort the pool at most once.
 let drainConfirmCount = 0;
+let wedgeSuspectCount = 0;
 let drainAbortInitiated = false;
 const queueStatsInterval = setInterval(async () => {
     try {
@@ -753,13 +754,14 @@ const queueStatsInterval = setInterval(async () => {
         // abort the pool so crawler.run() resolves through the normal completion path (exit 0).
         const drainPool = (context.crawlerInstance as any)?.autoscaledPool;
         if (drainPool && !drainAbortInitiated) {
-            const drained = isDrainedSample({
+            const sample = {
                 currentConcurrency: drainPool.currentConcurrency ?? 0,
                 pendingRequestCount: info.pendingRequestCount ?? 0,
                 handledRequestCount: info.handledRequestCount ?? 0,
                 totalRequestCount: info.totalRequestCount ?? 0,
-            });
-            drainConfirmCount = drained ? drainConfirmCount + 1 : 0;
+            };
+            // Fast-path: getInfo counters honest but isEmpty()/queueHeadIds wedged.
+            drainConfirmCount = isDrainedSample(sample) ? drainConfirmCount + 1 : 0;
             if (drainConfirmCount >= DRAIN_CONFIRM_SAMPLES) {
                 drainAbortInitiated = true;
                 console.warn(`[drain-guard] queue drained but crawler not finished (idle ${drainConfirmCount}x, handled ${info.handledRequestCount}/${info.totalRequestCount}, pending ${info.pendingRequestCount}) — aborting pool to complete cleanly.`);
@@ -767,6 +769,34 @@ const queueStatsInterval = setInterval(async () => {
                     await drainPool.abort();
                 } catch (e) {
                     console.warn(`[drain-guard] abort failed: ${(e as Error).message}`);
+                }
+            }
+            // Disk-confirm path: getInfo counters THEMSELVES wedged (handled+pending !== total
+            // while idle — the 0/0/N deadlock isDrainedSample can't see). Recount from the
+            // request files' orderNo (ground truth, same source as the startup repair) and abort
+            // only if genuinely drained; a real backlog shows pending>0 → leave to progress-stall.
+            if (!drainAbortInitiated && DRAIN_DISK_RECOUNT_ENABLED) {
+                wedgeSuspectCount = isUnreconciledIdle(sample) ? wedgeSuspectCount + 1 : 0;
+                if (wedgeSuspectCount >= DRAIN_CONFIRM_SAMPLES) {
+                    const rc = recountQueueFromDisk(`storage/request_queues/${domain}`);
+                    const diskDrained = isDrainedSample({
+                        currentConcurrency: 0,
+                        pendingRequestCount: rc.pending,
+                        handledRequestCount: rc.handled,
+                        totalRequestCount: rc.total,
+                    });
+                    if (diskDrained) {
+                        drainAbortInitiated = true;
+                        console.warn(`[drain-guard] disk-confirmed drain despite wedged counters (getInfo handled=${info.handledRequestCount}/${info.totalRequestCount}, disk handled=${rc.handled}/${rc.total}) — aborting pool to exit 0.`);
+                        try {
+                            await drainPool.abort();
+                        } catch (e) {
+                            console.warn(`[drain-guard] abort failed: ${(e as Error).message}`);
+                        }
+                    } else {
+                        console.warn(`[drain-guard] idle+unreconciled ${wedgeSuspectCount}x but disk shows pending=${rc.pending}/${rc.total} — genuine work, not aborting.`);
+                        wedgeSuspectCount = 0;
+                    }
                 }
             }
         }
