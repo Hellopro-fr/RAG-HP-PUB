@@ -169,7 +169,7 @@ async def extract_caracteristiques_lot(request: CaracteristiqueLotRequest = Body
         
         # Convertir la liste de CaracteristiqueRequest en liste de dicts
         categories_dicts = [
-            {"id_categorie": str(cat.id_categorie), "id_prompt": cat.id_prompt}
+            {"id_categorie": str(cat.id_categorie), "id_prompt": cat.id_prompt, "source": cat.source}
             for cat in request.categories
         ]
         
