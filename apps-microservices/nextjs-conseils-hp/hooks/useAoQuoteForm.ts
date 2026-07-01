@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import type { AoFormQuestion, AoChoix } from '@/types/conseils';
+import { pushPopupAppelOffre } from '@/lib/analytics/gtm';
 
 /**
  * Hook partagé entre HeroQuoteForm et QuoteFormBlock.
@@ -60,6 +61,7 @@ export function useAoQuoteForm(
       // Si le choix a un champ libre (typeInput=1), ne pas ouvrir le modal immédiatement :
       // l'utilisateur doit d'abord remplir l'input, puis cliquer sur le CTA.
       if (String(c.typeInput) !== '1') {
+        pushPopupAppelOffre('Popup_AO_Q1_Answered'); // Q1 répondue (choix) → ouverture modale
         setModalOpen(true);
       }
     } else {
@@ -92,6 +94,7 @@ export function useAoQuoteForm(
         return;
       }
     }
+    pushPopupAppelOffre('Popup_AO_Q1_Answered'); // Q1 répondue (sélection) → ouverture modale
     setStartStep1(false);
     setModalOpen(true);
   }
