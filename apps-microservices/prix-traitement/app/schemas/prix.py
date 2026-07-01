@@ -5,7 +5,8 @@ class CaracteristiqueRequest(BaseModel):
     """Requête pour l'extraction des caractéristiques influençant le prix"""
     id_categorie: Union[str, int] = Field(..., description="ID de la catégorie à analyser")
     id_prompt: Optional[str] = Field(None, description="ID du prompt à utiliser (optionnel, utilise la config par défaut)")
-    
+    source: Optional[str] = Field("ia", description='Origine du questionnaire : "ia" (Q1 _eqci / caracteristique_prix_ia) ou "bo" (questionnaire BO _eqcb / caracteristique_prix_bo)')
+
     @field_validator('id_categorie')
     @classmethod
     def convert_to_str(cls, v):
