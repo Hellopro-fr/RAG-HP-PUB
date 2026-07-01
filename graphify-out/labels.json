@@ -202,5 +202,8 @@
   "200": "Auto-Stash Job Fields",
   "201": "Reconciliation Leader Election",
   "202": "Content-Extractor Co-Deploy Rule",
-  "203": "QM Raw-Similarity Threshold"
+  "203": "QM Raw-Similarity Threshold",
+  "204": "QM Raw-Similarity Threshold",
+  "205": "QM Raw-Similarity Threshold",
+  "206": "Local tsc Unavailable Note"
 }

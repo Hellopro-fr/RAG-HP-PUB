@@ -4,7 +4,7 @@ import fs from "fs";
 import fsPromises from "fs/promises";
 import os from 'os';
 import { router } from "./routes.js";
-import { RECOVER_FAILED_ON_RESTART, shouldRunRecovery } from "./httpStatusPolicy.js";
+import { RECOVER_FAILED_ON_RESTART, shouldRunRecovery, resolveStallCountResolved } from "./httpStatusPolicy.js";
 import {
     getPathAfterDomain,
     getScrapingData,
@@ -44,11 +44,13 @@ import { context } from "./context.js";
 import { readPersistedDecision, applyCliFlagGuard, getDiezDecisionMode } from "./diezDecision.js";
 import { applyCliFlagGuard as applyQuestionMarkGuard, getQuestionMarkDecisionMode, persistObservations as persistQuestionMarkObservations, readQmPersistedDecision } from "./questionMarkDecision.js";
 import { isBlanketBlock } from "./robotsTxtGuard.js";
-import { perClassEnabled } from "./diezClassify.js";
+import { perClassEnabled, stripActionAnchor, actionAnchorStripEnabled } from "./diezClassify.js";
 import { killBrowserProcesses } from "./browserKill.js";
 import { readUsableMemory } from "./cgroupMemory.js";
 import { createSharedRedisClient } from "./redisClient.js";
 import { buildHtmlIndex } from "./htmlIndex.js";
+import { repairQueueMetadata, recountQueueFromDisk } from "./queueRepair.js";
+import { isDrainedSample, isUnreconciledIdle, DRAIN_CONFIRM_SAMPLES, DRAIN_DISK_RECOUNT_ENABLED } from "./drainGuard.js";
 
 const now = new Date().toISOString().replace(/:/g, "-");
 
@@ -707,6 +709,22 @@ if (skipquestionmark || skipdiez) {
     }
 }
 
+// Repair stale request-queue metadata left by an interrupted / lost-flush prior run.
+// memory-storage loads counts from the debounced __metadata__.json but total from the
+// request files; a mismatch deadlocks Crawlee's isFinished() -> 1200s progress stall.
+// Recompute from the request files and rewrite the metadata BEFORE opening the queue.
+// No-op on healthy queues (counts already match) -> byte-identical. Best-effort.
+try {
+    const rqDir = `storage/request_queues/${domain}`;
+    const rep = repairQueueMetadata(rqDir);
+    if (rep.repaired) {
+        const b = rep.before;
+        console.warn(`[queue-repair] ${domain}: stale counts pending/handled ${b ? `${b.pending}/${b.handled}` : "(no metadata)"} -> ${rep.after.pending}/${rep.after.handled} (total ${rep.after.total})`);
+    }
+} catch (e) {
+    console.warn(`[queue-repair] skipped for ${domain}: ${(e as Error).message}`);
+}
+
 // Open requestQueue FIRST (before any operations)
 export const requestQueue = await RequestQueue.open(domain);
 
@@ -715,6 +733,11 @@ export const requestQueue = await RequestQueue.open(domain);
 // request-queue depth to {storagePath}/_queue_stats.json so the Python /status
 // handler can surface total/remaining URL counts to the BO live panel.
 const QUEUE_STATS_INTERVAL_MS = 30 * 1000;
+// Drain-completion guard state (see drainGuard.ts): consecutive idle+drained samples,
+// and a one-shot latch so we abort the pool at most once.
+let drainConfirmCount = 0;
+let wedgeSuspectCount = 0;
+let drainAbortInitiated = false;
 const queueStatsInterval = setInterval(async () => {
     try {
         const info = await requestQueue.getInfo();
@@ -725,6 +748,58 @@ const queueStatsInterval = setInterval(async () => {
             updated_at: new Date().toISOString(),
         });
         await fs.promises.writeFile(path.join(storagePath, '_queue_stats.json'), payload);
+        // Drain-completion guard: a genuinely-drained crawl whose Crawlee finish gate
+        // (isEmpty()/queueHeadIds) is wedged would otherwise idle until the progress-stall
+        // watchdog (exit 6). Detect it via the reliable in-memory getInfo() counters and
+        // abort the pool so crawler.run() resolves through the normal completion path (exit 0).
+        const drainPool = (context.crawlerInstance as any)?.autoscaledPool;
+        if (drainPool && !drainAbortInitiated) {
+            const sample = {
+                currentConcurrency: drainPool.currentConcurrency ?? 0,
+                pendingRequestCount: info.pendingRequestCount ?? 0,
+                handledRequestCount: info.handledRequestCount ?? 0,
+                totalRequestCount: info.totalRequestCount ?? 0,
+            };
+            // Fast-path: getInfo counters honest but isEmpty()/queueHeadIds wedged.
+            drainConfirmCount = isDrainedSample(sample) ? drainConfirmCount + 1 : 0;
+            if (drainConfirmCount >= DRAIN_CONFIRM_SAMPLES) {
+                drainAbortInitiated = true;
+                console.warn(`[drain-guard] queue drained but crawler not finished (idle ${drainConfirmCount}x, handled ${info.handledRequestCount}/${info.totalRequestCount}, pending ${info.pendingRequestCount}) — aborting pool to complete cleanly.`);
+                try {
+                    await drainPool.abort();
+                } catch (e) {
+                    console.warn(`[drain-guard] abort failed: ${(e as Error).message}`);
+                }
+            }
+            // Disk-confirm path: getInfo counters THEMSELVES wedged (handled+pending !== total
+            // while idle — the 0/0/N deadlock isDrainedSample can't see). Recount from the
+            // request files' orderNo (ground truth, same source as the startup repair) and abort
+            // only if genuinely drained; a real backlog shows pending>0 → leave to progress-stall.
+            if (!drainAbortInitiated && DRAIN_DISK_RECOUNT_ENABLED) {
+                wedgeSuspectCount = isUnreconciledIdle(sample) ? wedgeSuspectCount + 1 : 0;
+                if (wedgeSuspectCount >= DRAIN_CONFIRM_SAMPLES) {
+                    const rc = recountQueueFromDisk(`storage/request_queues/${domain}`);
+                    const diskDrained = isDrainedSample({
+                        currentConcurrency: 0,
+                        pendingRequestCount: rc.pending,
+                        handledRequestCount: rc.handled,
+                        totalRequestCount: rc.total,
+                    });
+                    if (diskDrained) {
+                        drainAbortInitiated = true;
+                        console.warn(`[drain-guard] disk-confirmed drain despite wedged counters (getInfo handled=${info.handledRequestCount}/${info.totalRequestCount}, disk handled=${rc.handled}/${rc.total}) — aborting pool to exit 0.`);
+                        try {
+                            await drainPool.abort();
+                        } catch (e) {
+                            console.warn(`[drain-guard] abort failed: ${(e as Error).message}`);
+                        }
+                    } else {
+                        console.warn(`[drain-guard] idle+unreconciled ${wedgeSuspectCount}x but disk shows pending=${rc.pending}/${rc.total} — genuine work, not aborting.`);
+                        wedgeSuspectCount = 0;
+                    }
+                }
+            }
+        }
     } catch (e) {
         console.error("Queue-stats publisher failed:", e);
     }
@@ -779,9 +854,17 @@ if (crawlMode === 'update') {
     context.homepageReady = { resolve: resolveHomepage!, promise: homepagePromise };
 
     // Phase 1: Seed only the homepage
+    let phase1SeedUrl = site;
+    if (actionAnchorStripEnabled()) {
+        const strippedAa = stripActionAnchor(phase1SeedUrl);
+        if (strippedAa !== phase1SeedUrl) {
+            phase1SeedUrl = strippedAa;
+            context.actionAnchorsStripped++;
+        }
+    }
     await requestQueue.addRequest({
-        url: site,
-        uniqueKey: site,
+        url: phase1SeedUrl,
+        uniqueKey: phase1SeedUrl,
         userData: { source: 'seed' }
     });
     // Do NOT pre-add the homepage to Redis dedup here (same rule as the standard
@@ -852,9 +935,17 @@ if (crawlMode === 'update') {
     // The handler will add it when processing the page.
     // Pre-adding it causes the homepage to be treated as "Doublon" and skipped entirely.
 
+    let standardSeedUrl = cleanSite;
+    if (actionAnchorStripEnabled()) {
+        const strippedAa = stripActionAnchor(standardSeedUrl);
+        if (strippedAa !== standardSeedUrl) {
+            standardSeedUrl = strippedAa;
+            context.actionAnchorsStripped++;
+        }
+    }
     await requestQueue.addRequest({
-        url: cleanSite,
-        uniqueKey: cleanSite,
+        url: standardSeedUrl,
+        uniqueKey: standardSeedUrl,
         userData: { is_existing: false }
     });
 } else {
@@ -884,11 +975,15 @@ if (queueInfo && queueInfo.totalRequestCount > 0 && queueInfo.handledRequestCoun
     process.exit(0); // Success exit
 }
 
-// Case 2: Crash Recovery / In-Progress (Updated Logic)
+// Case 2: Crash Recovery / In-Progress — belt-and-braces.
+// The pre-open metadata repair (above) should have resolved this. If we STILL see the
+// 0/0/total>0 deadlock signature, the queue has no dispatchable work and would idle
+// until the 1200s progress-stall watchdog (then relaunch into the same state). Exit
+// cleanly (treat as complete) instead of proceeding into a guaranteed stall.
 if (queueInfo && queueInfo.handledRequestCount === 0 && queueInfo.pendingRequestCount === 0 && queueInfo.totalRequestCount > 0) {
     console.warn(`⚠️  WARNING: Detected ${queueInfo.totalRequestCount} in-progress items from a previous interrupted run.`);
-    console.warn(`ℹ️  Crawler will resume these requests (they will be reclaimed if timed out).`);
-    // We proceed instead of exiting
+    console.warn(`ℹ️  No dispatchable requests after repair — exiting 0 (treating as complete) to avoid a progress stall + relaunch loop.`);
+    process.exit(0);
 }
 
 // Case 3: Normal operation
@@ -1257,6 +1352,9 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         console.error('Shared Redis disconnect error:', e);
     }
 
+    if (context.actionAnchorsStripped > 0) {
+        console.log(`[diez] stripped ${context.actionAnchorsStripped} action-anchor fragment(s)`);
+    }
     console.log(`✅ Graceful shutdown complete. Exiting with code ${exitCode}.`);
     process.exit(exitCode);
 };
@@ -1311,8 +1409,16 @@ if (typeCrawling == "sitemap") {
                 // claims each URL on first processing (routes.ts). Pre-adding here
                 // made every non-dataset seed (request_queue / request_url) self-mark
                 // as "Doublon" and get skipped before reaching UpdateChecker.
+                let seedUrl = url;
+                if (actionAnchorStripEnabled()) {
+                    const strippedAa = stripActionAnchor(seedUrl);
+                    if (strippedAa !== seedUrl) {
+                        seedUrl = strippedAa;
+                        context.actionAnchorsStripped++;
+                    }
+                }
                 await requestQueue.addRequest({
-                    url: url,
+                    url: seedUrl,
                     userData: { source: source }
                 });
                 seedCount++;
@@ -1453,7 +1559,12 @@ if (typeCrawling == "sitemap") {
         ? parsedProgressStallMs
         : 600_000;
     progressMonitor = new ProgressMonitor(
-        () => (context.crawlerInstance as any)?.stats?.state?.requestsFinished ?? 0,
+        () => {
+            const st = (context.crawlerInstance as any)?.stats?.state;
+            const finished = st?.requestsFinished ?? 0;
+            if (!resolveStallCountResolved(process.env.STALL_COUNT_RESOLVED)) return finished;
+            return finished + (st?.requestsFailed ?? 0);
+        },
         progressStallThresholdMs,
         (reason) => {
             console.error(`[fatal] progress_stalled: ${reason}`);

@@ -187,7 +187,7 @@ def format_numeric_constraint(constraint: Any, unite: str = "") -> str:
     return f"{constraint}{u}"
 
 
-async def run_identification(id_categorie: str, id_prompt: Optional[str] = None) -> Dict[str, Any]:
+async def run_identification(id_categorie: str, id_prompt: Optional[str] = None, source: Optional[str] = "ia") -> Dict[str, Any]:
     """
     Logique principale d'identification des caractéristiques influençant le prix.
     Conversion de la logique PHP run_identification en Python.
@@ -212,7 +212,12 @@ async def run_identification(id_categorie: str, id_prompt: Optional[str] = None)
     api_client = HelloProAPIClient()
 
     ID_PROCESS = "37"
-    
+
+    # Source du questionnaire : "ia" (Q1 canonical) ou "bo" (questionnaire BO).
+    # Route la lecture/sauvegarde des caracs prix vers la variante BO côté backend.
+    is_bo = (source or "ia").lower() == "bo"
+    carac_field = "caracteristique_bo" if is_bo else "caracteristique"
+
     try:
         # =====================================================================
         # ÉTAPE 0 : Récupérer les données de la catégorie : nom catégorie
@@ -245,10 +250,11 @@ async def run_identification(id_categorie: str, id_prompt: Optional[str] = None)
         # =====================================================================
         logger.info(f"[{id_categorie}] Récupération des données de la catégorie...")
 
-        # Charger les réponses de Question 1 + caractéristiques prix existant 
+        # Charger les réponses de Question 1 + caractéristiques prix existant.
+        # source=bo → get_caracteristique_prix_bo (info du questionnaire BO).
         reponses_q1_carac_prix = await api_client.post(
             "prix",
-            "caracteristique",
+            carac_field,
             "get",
             {"id_categorie": id_categorie}
         )
@@ -408,10 +414,10 @@ async def run_identification(id_categorie: str, id_prompt: Optional[str] = None)
             # --- Dédupliquer ---
             caracteristiques_prix = list(dict.fromkeys(caracteristiques_prix))
             
-            # --- Sauvegarde via API ---                
+            # --- Sauvegarde via API (source=bo → save_caracteristique_prix_bo) ---
             save_result = await api_client.post(
                 "prix",
-                "caracteristique",
+                carac_field,
                 "save",
                 {
                     "id_categorie": id_categorie,
@@ -1894,7 +1900,8 @@ async def _process_single_category(
     id_categorie: str,
     id_prompt: Optional[str],
     index: int,
-    total: int
+    total: int,
+    source: Optional[str] = "ia"
 ) -> Dict[str, Any]:
     """
     Traite une seule catégorie sous le contrôle du sémaphore.
@@ -1914,7 +1921,8 @@ async def _process_single_category(
         try:
             result = await run_identification(
                 id_categorie=id_categorie,
-                id_prompt=id_prompt
+                id_prompt=id_prompt,
+                source=source
             )
             result["id_categorie"] = id_categorie
             logger.info(f"[LOT {index + 1}/{total}] Fin catégorie {id_categorie}: success={result.get('success')}")
@@ -1972,7 +1980,8 @@ async def run_identification_lot(
             id_categorie=str(cat.get("id_categorie", "")),
             id_prompt=cat.get("id_prompt"),
             index=i,
-            total=total
+            total=total,
+            source=cat.get("source", "ia")
         )
         for i, cat in enumerate(categories)
     ]

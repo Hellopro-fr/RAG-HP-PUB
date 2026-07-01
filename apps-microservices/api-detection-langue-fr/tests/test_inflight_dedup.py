@@ -90,6 +90,42 @@ class TestInflightDedup:
         assert attempts["n"] == 2
 
     @pytest.mark.asyncio
+    async def test_owner_exception_without_follower_is_retrieved(self):
+        """Owner factory raises with NO coalescing follower → asyncio must NOT
+        log 'Future exception was never retrieved'.
+
+        The owner stores the exception on the shared future for followers, then
+        re-raises. When no follower ever awaits that future, its stored copy is
+        never read, so on GC asyncio reports the exception as unretrieved (a
+        spurious ERROR that floods logs during admission-rejection storms).
+        """
+        import gc
+        from app.core.inflight_dedup import InflightDedup
+
+        loop = asyncio.get_running_loop()
+        contexts: list = []
+        loop.set_exception_handler(lambda _loop, ctx: contexts.append(ctx))
+        dedup = InflightDedup()
+
+        async def failing_factory():
+            raise ValueError("boom")
+
+        raised = False
+        try:
+            await dedup.coalesce("url-solo", failing_factory)
+        except ValueError:
+            raised = True  # except-block exit clears the traceback → future GC-able
+
+        assert raised, "exception must still propagate to the owner"
+
+        gc.collect()
+        await asyncio.sleep(0)  # let any exception-handler callback run
+
+        assert not any(
+            "never retrieved" in str(c.get("message", "")) for c in contexts
+        ), f"asyncio reported an unretrieved future exception: {contexts}"
+
+    @pytest.mark.asyncio
     async def test_entry_cleaned_up_after_success(self):
         """After success, entry is removed so a later unrelated call is not served stale."""
         from app.core.inflight_dedup import InflightDedup

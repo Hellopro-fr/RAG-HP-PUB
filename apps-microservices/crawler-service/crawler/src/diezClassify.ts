@@ -59,6 +59,35 @@ export const perClassEnabled = (): boolean =>
     (process.env.DIEZ_PERCLASS_ENABLED ?? "false").toLowerCase() === "true";
 
 /**
+ * Action-anchor shape: a leading token, ':', then a 'key=' payload — e.g.
+ * "elementor-action:action=off_canvas:toggle&settings=…". These are cosmetic
+ * client-side UI triggers (Elementor/WP builders), never content routes, yet
+ * crawled as distinct requests → duplicate origin fetches. Distinct from real
+ * SPA hash-routes ("#/path", start with '/') and bare anchors ("#section", no ':'/'=').
+ */
+const ACTION_ANCHOR_RE = /^[\w-]+:[^=]*=/;
+
+/**
+ * Strip "#…" iff the (decoded) fragment is an action-anchor. Pure; the call site
+ * gates on actionAnchorStripEnabled(). Mirrors applyPerClassStrip's purity.
+ */
+export const stripActionAnchor = (url: string): string => {
+    const i = url.indexOf("#");
+    if (i === -1) return url;
+    let frag = url.slice(i + 1);
+    try {
+        frag = decodeURIComponent(frag);
+    } catch {
+        // Malformed encoding — match against the raw fragment.
+    }
+    return ACTION_ANCHOR_RE.test(frag) ? url.slice(0, i) : url;
+};
+
+/** Kill-switch, read at call time (testable). Default OFF. */
+export const actionAnchorStripEnabled = (): boolean =>
+    (process.env.STRIP_ACTION_ANCHORS ?? "false").toLowerCase() === "true";
+
+/**
  * Cheap, stable content fingerprint for collision detection — FNV-1a over the
  * whitespace-normalized text, plus a length suffix to cut accidental collisions.
  * Used by the end-of-crawl content-collision pass to decide "same page?".

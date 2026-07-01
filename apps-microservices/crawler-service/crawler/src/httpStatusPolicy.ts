@@ -208,6 +208,17 @@ export function selectReclaimableIds(
     return { reclaim, skippedPermanent };
 }
 
+/**
+ * Resolves the resolved-count stall guard. Default false; only "true" enables.
+ * When on, the ProgressMonitor tracks requestsFinished + requestsFailed so a
+ * degrading origin (rising failures, flat successes) does not false-stall a
+ * near-complete crawl. Safe: maxRequestRetries caps every request → the count
+ * always converges.
+ */
+export function resolveStallCountResolved(raw: string | undefined): boolean {
+    return (raw ?? "false").trim().toLowerCase() === "true";
+}
+
 /** Resolves the auto-recovery kill-switch. Default true; only "false" disables. */
 export function resolveRecoverFailedOnRestart(raw: string | undefined): boolean {
     return (raw ?? "true").trim().toLowerCase() !== "false";
