@@ -209,10 +209,19 @@ async def start_new_crawl(payload: CrawlRequest):
             "bypassquestionmark": payload.bypass_question_mark,
             "bypassdiez": payload.bypass_diez,
             "breaklimit": payload.break_limit,
+            "queuelimit": payload.queue_limit,
+            "bypassqueue": payload.bypass_queue,
             "percrawl": payload.per_crawl,
             "perminute": payload.per_minute,
             "camoufox": payload.camoufox, # Pass Camoufox flag
         }
+
+        # limitQueue gate désactivé en mode update (TEMPORAIRE — en attendant le fix du
+        # lien "Continuer" du mail limitQueue en mode update, qui cible le mauvais id).
+        # queuelimit=0 => la garde Node ne s'arme pas (condition queueLimit > 0 fausse)
+        # pour les crawls update. Retirer ce bloc pour réactiver la garde sur les MAJ.
+        if payload.crawl_mode.value == "update":
+            params["queuelimit"] = 0
 
         # Add update specific params
         if payload.previous_crawl_id:

@@ -95,3 +95,66 @@ export function pushQuoteFormFunnel(params: QuoteFormFunnelParams): void {
     session_id: getHpSessionId(),
   });
 }
+
+/**
+ * Événement legacy `Popup_Appel_Offre` — déclencheur des tags GTM `demarrages_de_devis_*`.
+ * Poussé côté page conseils (le flux iframe legacy a ces pushs désactivés, et ils partiraient
+ * sinon dans la GA4 www.hellopro.fr au lieu de la GA4 conseils).
+ *   - 'Popup_AO_Affichage' (action_type "Affichage") : à l'ouverture de la modale devis.
+ *   - 'Popup_AO_Q1_Answered' (action_type "click")     : au clic répondant à la 1re question inline (Hero / bloc QuoteForm).
+ * Les `product_category_*` / `page_template` sont lus par le tag GTM depuis les variables de page.
+ */
+export function pushPopupAppelOffre(
+  actionName: 'Popup_AO_Affichage' | 'Popup_AO_Q1_Answered',
+): void {
+  if (typeof window === 'undefined') return;
+  const w = window as DataLayerWindow;
+  w.dataLayer = w.dataLayer || [];
+  w.dataLayer.push({
+    event: 'Popup_Appel_Offre',
+    action_type: actionName === 'Popup_AO_Affichage' ? 'Affichage' : 'click',
+    action_name: actionName,
+  });
+}
+
+export interface EecAddDevisProduct {
+  id: string | number;
+  category?: string;
+  variant?: string;
+  brand?: string;
+  name?: string;
+}
+
+/**
+ * Enhanced Ecommerce « ajout devis » sur un produit (conversion) — équivalent du push legacy
+ * `eec.add` au clic « Envoyer un message » d'une carte produit. Champs alignés sur le legacy.
+ */
+export function pushEecAddDevis(
+  product: EecAddDevisProduct,
+  ctaLabel = 'Envoyer un message',
+  list = 'lien interne',
+): void {
+  if (typeof window === 'undefined') return;
+  const w = window as DataLayerWindow;
+  w.dataLayer = w.dataLayer || [];
+  w.dataLayer.push({
+    AddToCartType: 'devis',
+    ecommerce: {
+      add: {
+        actionField: { list },
+        products: [
+          {
+            brand: product.brand ?? '',
+            category: product.category ?? '',
+            dimension10: ctaLabel,
+            id: String(product.id),
+            name: product.name ?? '',
+            variant: product.variant ?? '',
+          },
+        ],
+      },
+      currencyCode: 'EUR',
+    },
+    event: 'eec.add',
+  });
+}

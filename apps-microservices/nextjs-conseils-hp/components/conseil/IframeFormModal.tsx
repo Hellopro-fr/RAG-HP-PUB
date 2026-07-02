@@ -3,7 +3,8 @@
 import { useEffect, useRef } from 'react';
 import { Loader2 } from 'lucide-react';
 import { useIframeAutoRetry } from '@/hooks/useIframeAutoRetry';
-import { handleFormStepMessage } from '@/lib/analytics/formFunnelBridge';
+import { handleFormStepMessage, resetFormStepUri } from '@/lib/analytics/formFunnelBridge';
+import { pushPopupAppelOffre } from '@/lib/analytics/gtm';
 import { sendPageView, resolveTrackingSessionId } from '@/lib/analytics/sessionTracking';
 
 /**
@@ -116,6 +117,9 @@ export function IframeFormModal({
     // → tracer_lead_conversion_php ne trouve rien. Ce page_view garantit qu'il en existe un.
     sendPageView();
 
+    // Démarrage de devis (event legacy `Popup_Appel_Offre`/Affichage) → tags GTM `demarrages_de_devis_*`.
+    pushPopupAppelOffre('Popup_AO_Affichage');
+
     // reset dédup funnel à chaque ouverture ; si le bloc possède déjà l'étape 1, on la pré-marque
     pushedStepsRef.current = new Set(ownsStep1 ? ['1ere-question'] : []);
 
@@ -176,6 +180,11 @@ export function IframeFormModal({
   useEffect(() => {
     document.body.style.overflow = open ? 'hidden' : '';
     return () => { document.body.style.overflow = ''; };
+  }, [open]);
+
+  /* À la fermeture : nettoyer le segment d'étape (/2eme-question…) ajouté à l'URL conseils. */
+  useEffect(() => {
+    if (!open) resetFormStepUri();
   }, [open]);
 
   if (!open) return null;

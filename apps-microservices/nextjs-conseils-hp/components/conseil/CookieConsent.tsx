@@ -101,7 +101,6 @@ export function CookieConsent() {
 
   if (!show) return null;
 
-  const hostname = typeof window !== 'undefined' ? window.location.hostname : 'conseils.hellopro.fr';
   const saveEnabled = stat !== 'none' && perso !== 'none';
 
   function close() {
@@ -207,7 +206,7 @@ export function CookieConsent() {
               </p>
               <p>
                 Pour en savoir plus sur l&apos;utilisation des cookies{' '}
-                <a href={`https://${hostname}/gestion-cookie`} target="_blank" rel="nofollow noreferrer">
+                <a href="https://www.hellopro.fr/gestion-cookie" target="_blank" rel="nofollow noreferrer">
                   cliquez ici
                 </a>.
               </p>

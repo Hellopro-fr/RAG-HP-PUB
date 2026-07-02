@@ -1071,7 +1071,16 @@ class EquivalenceGenerator:
         # Charger le prompt (même prompt d'équivalence que le step 6)
         await self._load_prompts(id_categorie)
 
-        # Reset si demandé : vider la table BO pour cette catégorie
+        # Récupérer ou initialiser le processus BO (tracking dédié à l'étape BO,
+        # indépendant du step 6 qui utilise self.ETAPE)
+        process_data = await self.api_client.post(
+            "equivalence",
+            "process",
+            "get",
+            {"id_categorie": id_categorie, "etape": self.ETAPE_BO}
+        ) or {}
+
+        # Reset si demandé : vider la table BO ET le processus pour cette catégorie
         if request.is_reset:
             self._log("RESET DES ÉQUIVALENCES BO")
             await self.api_client.post(
@@ -1080,6 +1089,21 @@ class EquivalenceGenerator:
                 "reset",
                 {"id_categorie": id_categorie}
             )
+            await self.api_client.post(
+                "equivalence",
+                "process",
+                "reset",
+                {"id_categorie": id_categorie, "etape": self.ETAPE_BO}
+            )
+            process_data = {}
+
+        # Initialiser done (questions traitées) et data (caracs trouvées par question)
+        if "done" not in process_data:
+            process_data["done"] = []
+        if "data" not in process_data:
+            process_data["data"] = {}
+
+        self._log(f"Process data BO: {process_data}")
 
         # Récupérer le questionnaire BO : liste plate de questions (q1..n)
         questionnaire = await self.api_client.post(
@@ -1116,7 +1140,17 @@ class EquivalenceGenerator:
             if utils.check_stopper(id_categorie):
                 raise Exception("Processus arrêté manuellement")
 
-            self._log(f"Question BO {question.get('id')}: exclusion de {len(cumulative_exclude_ids)} caractéristiques")
+            question_id = f"BO_{question.get('id')}"
+
+            # Reprise après coupure : question déjà traitée → réinjecter ses
+            # caractéristiques dans le cumul pour les questions suivantes, puis sauter.
+            if question_id in process_data["done"]:
+                previously_found = process_data["data"].get(question_id, [])
+                cumulative_exclude_ids.extend(previously_found)
+                self._log(f"Question {question_id} déjà traitée → {previously_found}, cumul exclu: {cumulative_exclude_ids}")
+                continue
+
+            self._log(f"Question BO {question_id}: exclusion de {len(cumulative_exclude_ids)} caractéristiques")
 
             result = await self._generate_equivalence_bo(
                 id_categorie=id_categorie,
@@ -1129,8 +1163,26 @@ class EquivalenceGenerator:
             if result:
                 processed_count += 1
                 carac_ids_found = self._extract_carac_ids_from_equivalences(result.get("equivalences", {}))
+                # Stocker dans process_data['data'] + cumuler pour les questions suivantes
+                process_data["data"][question_id] = carac_ids_found
                 cumulative_exclude_ids.extend(carac_ids_found)
-                self._log(f"Question {question.get('id')} → {carac_ids_found} nouvelles caractéristiques, cumul: {cumulative_exclude_ids}")
+                self._log(f"Question {question_id} → {carac_ids_found} nouvelles caractéristiques, cumul: {cumulative_exclude_ids}")
+
+            # Marquer la question comme traitée
+            if question_id not in process_data["done"]:
+                process_data["done"].append(question_id)
+
+            # Mettre à jour le processus (étape BO dédiée)
+            await self.api_client.post(
+                "equivalence",
+                "process",
+                "update",
+                {
+                    "id_categorie": id_categorie,
+                    "etape": self.ETAPE_BO,
+                    "process_data": process_data
+                }
+            )
 
         self._log("\n" + "=" * 50)
         self._log("GÉNÉRATION ÉQUIVALENCES BO TERMINÉE")

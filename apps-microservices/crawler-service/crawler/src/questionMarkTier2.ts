@@ -70,7 +70,20 @@ const adjudicate = async (a: string, b: string, client: ContentExtractorClient):
     try {
         const [ca, cb] = await Promise.all([client.clean(a), client.clean(b)]);
         if (!ca || !cb) return "unusable";
-        return classifyPair(jaccard(shingleSet(normalizeForCompare(ca)), shingleSet(normalizeForCompare(cb))));
+        const verdict = classifyPair(jaccard(shingleSet(normalizeForCompare(ca)), shingleSet(normalizeForCompare(cb))));
+        // B1 veto: only trust a /clean "match" when the RAW HTML is also highly similar.
+        // a/b are the buffered full page.content() HTML. If raw differs materially, the
+        // discriminator lives in the region /clean dropped (e.g. a search results grid)
+        // -> do NOT count as same (errs toward keep = no loss). /clean strips boilerplate
+        // AND result grids, so two different search/listing pages can clean to identical
+        // chrome text (false match). High default errs toward KEEP; tune from prod.
+        // Env read at CALL time (like diezClassify.perClassEnabled) so it stays tunable.
+        if (verdict === "match") {
+            const rawSameSim = parseFloat(process.env.QM_RAW_SAME_SIM ?? "0.97");
+            const rawSim = jaccard(shingleSet(normalizeForCompare(a)), shingleSet(normalizeForCompare(b)));
+            if (rawSim < rawSameSim) return "unusable";
+        }
+        return verdict;
     } catch (e) {
         // Transient infra failure (503 admission / timeout / network): cannot measure now.
         // Terminal failures (413/422/500) and unknown throws are a genuine "unusable".

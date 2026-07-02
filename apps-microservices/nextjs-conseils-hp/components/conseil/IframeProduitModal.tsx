@@ -3,7 +3,8 @@
 import { useEffect, useRef } from 'react';
 import { Loader2 } from 'lucide-react';
 import { useIframeAutoRetry } from '@/hooks/useIframeAutoRetry';
-import { handleFormStepMessage } from '@/lib/analytics/formFunnelBridge';
+import { handleFormStepMessage, resetFormStepUri } from '@/lib/analytics/formFunnelBridge';
+import { pushPopupAppelOffre } from '@/lib/analytics/gtm';
 import { sendPageView, resolveTrackingSessionId } from '@/lib/analytics/sessionTracking';
 
 /**
@@ -68,6 +69,7 @@ export function IframeProduitModal({
   useEffect(() => {
     if (!open) return;
     sendPageView(); // synchronise la session avant soumission (même logique que IframeFormModal)
+    pushPopupAppelOffre('Popup_AO_Affichage'); // démarrage devis → tags GTM demarrages_de_devis_*
     pushedStepsRef.current = new Set(); // reset dédup funnel à chaque ouverture
 
     function onMessage(e: MessageEvent) {
@@ -109,6 +111,11 @@ export function IframeProduitModal({
   useEffect(() => {
     document.body.style.overflow = open ? 'hidden' : '';
     return () => { document.body.style.overflow = ''; };
+  }, [open]);
+
+  /* À la fermeture : nettoyer le segment d'étape (/2eme-question…) ajouté à l'URL conseils. */
+  useEffect(() => {
+    if (!open) resetFormStepUri();
   }, [open]);
 
   if (!open) return null;

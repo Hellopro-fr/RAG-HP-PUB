@@ -63,3 +63,16 @@ export function handleFormStepMessage(raw: unknown, pushedSteps: Set<string>): b
   w.dataLayer.push({ ...data.funnel, page_location_uri: newPath });
   return true;
 }
+
+/**
+ * Réinitialise l'URL conseils à sa base (`.../{slug}.html`), en retirant le segment d'étape
+ * (`/2eme-question`, `/email`…) ajouté pendant le parcours du formulaire. À appeler à la
+ * fermeture de la modale pour que l'URL ne conserve pas l'étape du formulaire.
+ */
+export function resetFormStepUri(): void {
+  if (typeof window === 'undefined') return;
+  const base = (window.location.pathname.match(/.*\.html/) ?? [window.location.pathname])[0];
+  if (window.location.pathname !== base) {
+    window.history.pushState(null, '', base + window.location.search + window.location.hash);
+  }
+}
