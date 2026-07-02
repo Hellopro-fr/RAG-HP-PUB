@@ -51,6 +51,8 @@ import { createSharedRedisClient } from "./redisClient.js";
 import { buildHtmlIndex } from "./htmlIndex.js";
 import { repairQueueMetadata, recountQueueFromDisk } from "./queueRepair.js";
 import { isDrainedSample, isUnreconciledIdle, DRAIN_CONFIRM_SAMPLES, DRAIN_DISK_RECOUNT_ENABLED } from "./drainGuard.js";
+import { QUEUE_PURGE_ENABLED } from "./staleVariantSkip.js";
+import { flagStaleVariantsOnDisk } from "./queuePurge.js";
 
 const now = new Date().toISOString().replace(/:/g, "-");
 
@@ -706,6 +708,31 @@ if (skipquestionmark || skipdiez) {
         if (toKeep.length > 0) parameters.toKeep = toKeep;
         if (toRemove.length > 0) parameters.toRemove = toRemove;
         parseJsonFiles(requestQueueList, Boolean(skipquestionmark), Boolean(skipdiez), parameters);
+    }
+}
+
+// Queue-purge (D1): flag already-queued stale variants (already superseded by a
+// committed skip decision) with skipNavigation, so Crawlee drops them without a
+// fetch at dispatch (handler early-guard, routes.ts). Disk-only + loss-proof: the
+// canonical set is the already-handled files on disk. Never touches orderNo, so
+// pending/handled/total stay consistent for repairQueueMetadata below. Uses the
+// LIVE context.config (persisted-decision-aware) rather than the raw CLI locals.
+if (QUEUE_PURGE_ENABLED) {
+    try {
+        const purged = flagStaleVariantsOnDisk(
+            `storage/request_queues/${domain}`,
+            (u: string) => processUrl(
+                u,
+                context.config.skipQuestionMark,
+                context.config.skipDiez,
+                { toKeep: context.config.toKeep, toRemove: context.config.toRemove },
+            ),
+        );
+        if (purged.flagged > 0) {
+            console.warn(`[queue-purge] ${domain}: flagged ${purged.flagged} stale queued variants skipNavigation (kept ${purged.kept}).`);
+        }
+    } catch (e) {
+        console.warn(`[queue-purge] skipped for ${domain}: ${(e as Error).message}`);
     }
 }
 
