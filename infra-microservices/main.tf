@@ -287,7 +287,8 @@ module "secret_manager" {
     "platform-gateway-mysql-pass"      = { service = "platform" }
     "platform-gateway-mysql-root-pass" = { service = "platform" }
     "platform-redis-secret"            = { service = "platform" }
-    "platform-rabbitmq-url"            = { service = "platform" }
+    "platform-rabbitmq-url"            = { service = "platform" } # PROD (10.0.1.216)
+    "platform-rabbitmq-url-dev"        = { service = "platform" } # DEV/TEST (10.0.1.217) — tests shadow, bascule prod au cutover
     "platform-neo4j-password"          = { service = "platform" }
     # Zilliz/Milvus : auth user+password (ZILLIZ_API_KEY=none dans .env, non utilise).
     "platform-zilliz-user"     = { service = "platform" }

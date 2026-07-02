@@ -1,0 +1,64 @@
+name: 'Deploy — api-ingestion'
+
+# Wrapper qui appelle deploy-cloud-run.yml pour api-ingestion
+# (Python FastAPI, publisher RabbitMQ topic exchanges, port 8509).
+#
+# Deploiement PARALLELE (shadow) : service sur Cloud Run, aucun trafic prod rerouté.
+#
+# *** PUBLISHER RabbitMQ — pointe sur l'instance DEV/TEST (10.0.1.217) ***
+# Convention : les services shadow qui ECRIVENT (publish/insert) utilisent les
+# instances DEV/TEST (Milvus dev, RabbitMQ dev) pour des tests E2E sans toucher la
+# PROD. Bascule vers l'instance PROD (platform-rabbitmq-url = 10.0.1.216) au CUTOVER.
+#
+# Dependance : RabbitMQ dev interne 10.0.1.217:5672 -> VPC Connector + private-ranges-only.
+# Startup gracieux (retry 10x puis démarre sans connexion) -> /health 200 ne prouve PAS
+# la connexion RabbitMQ ; validation par les LOGS Cloud Run ("Connecté à RabbitMQ").
+
+on:
+  push:
+    branches:
+      - 'feat/migration-**'
+    paths:
+      - 'apps-microservices/api-ingestion/**'
+      - '.github/workflows/deploy-api-ingestion.yml'
+      - '.github/workflows/deploy-cloud-run.yml'
+  workflow_dispatch:
+    inputs:
+      cloud_run_region:
+        description: 'Région Cloud Run (override)'
+        required: false
+        type: string
+        default: 'europe-west1'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    name: 'Deploy api-ingestion'
+    uses: ./.github/workflows/deploy-cloud-run.yml
+    with:
+      service_name: api-ingestion
+      dockerfile_path: apps-microservices/api-ingestion/Dockerfile
+      build_context: .
+      cloud_run_region: ${{ github.event.inputs.cloud_run_region || 'europe-west1' }}
+      ingress: all
+      allow_unauthenticated: true
+      cpu: '1'
+      memory: '512Mi'
+      min_instances: 0
+      max_instances: 3
+      # CMD uvicorn --port 8509 (hardcode). Health = "/" (root).
+      container_port: 8509
+      health_check_path: /
+      # RabbitMQ dev interne -> VPC connector requis.
+      vpc_connector: vpc-access-connector
+      vpc_egress: private-ranges-only
+      env_vars_json: '{}'
+      # RABBITMQ_URL -> DEV (test shadow). Bascule prod (platform-rabbitmq-url) au cutover.
+      secret_env_vars_json: '{"RABBITMQ_URL":"platform-rabbitmq-url-dev:latest"}'
+      # Base python:3.10-slim -> gate off (dette CVE tracée).
+      trivy_disable_gate: true
+    secrets:
+      slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
