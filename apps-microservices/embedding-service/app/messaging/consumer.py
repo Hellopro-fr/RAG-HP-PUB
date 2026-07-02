@@ -2,12 +2,21 @@ import aio_pika
 import json
 import asyncio
 import logging
+import os
 from embedding_service.messaging.publisher import Publisher
 from embedding_service.core.processor import embed_input_data
 from common_utils.autres.DLQProperties import DLQProperties
 
 MAX_RETRIES = 3
 RETRY_TTL_MS = 30000
+# Tunables (spec 2026-07-02 livelock) : backpressure + budget par message.
+# PREFETCH_COUNT : messages simultanés par replica (défaut 2 — aligné sur le
+#   Semaphore(3) non-HIGH du model-service ; 4 replicas x 2 = 8 en vol).
+# PROCESS_TIMEOUT : plafond global par message ; doit rester > 2x GRPC_TIMEOUT
+#   (pire cas ChunkText + GetEmbeddings au deadline) pour que le DEADLINE gRPC
+#   (retryable proprement) parte AVANT ce plafond.
+PREFETCH_COUNT = int(os.getenv("PREFETCH_COUNT", "2"))
+PROCESS_TIMEOUT = float(os.getenv("PROCESS_TIMEOUT", "240"))
 
 class Consumer:
     def __init__(self, connection: aio_pika.Connection, publisher: Publisher, **kwargs):
@@ -106,7 +115,7 @@ class Consumer:
                 # Exécute l'embedding et le publishing avec un timeout global
                 await asyncio.wait_for(
                     process_and_publish(),
-                    timeout=120.0
+                    timeout=PROCESS_TIMEOUT
                 )
                 # Succès: on sort du try, le bloc `with` envoie l'ACK.
 
@@ -121,12 +130,12 @@ class Consumer:
                 # Timeout spécifique pour éviter le gel du loop
                 retry_count = self._get_retry_count(message)
                 if retry_count < MAX_RETRIES:
-                    print(f"⏱️ Timeout après 120s (essai {retry_count + 1}/{MAX_RETRIES + 1}). Redirection vers Retry Queue.")
+                    print(f"⏱️ Timeout après {PROCESS_TIMEOUT:g}s (essai {retry_count + 1}/{MAX_RETRIES + 1}). Redirection vers Retry Queue.")
                     # Levée d'exception pour déclencher le NACK(requeue=False) automatique vers la Retry Queue
-                    raise Exception("Timeout de traitement (>120s)")
+                    raise Exception(f"Timeout de traitement (>{PROCESS_TIMEOUT:g}s)")
                 else:
                     print(f"⏱️ Échec (Timeout) après {MAX_RETRIES + 1} tentatives. Message envoyé à la DLQ finale.")
-                    await self._send_to_dlq(message, Exception("Timeout de traitement (>120s)"), MAX_RETRIES)
+                    await self._send_to_dlq(message, Exception(f"Timeout de traitement (>{PROCESS_TIMEOUT:g}s)"), MAX_RETRIES)
                     # Pas de levée d'exception -> le message est ACK et supprimé
 
             except Exception as e:
@@ -162,7 +171,7 @@ class Consumer:
         Aio-pika gère la reconnexion de manière transparente grâce à connect_robust.
         """
         channel = await self.connection.channel()
-        await channel.set_qos(prefetch_count=10)
+        await channel.set_qos(prefetch_count=PREFETCH_COUNT)
         
         queue = await self._setup_queues(channel)
         
