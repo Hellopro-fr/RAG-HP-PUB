@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import { Loader2 } from 'lucide-react';
 import { useIframeAutoRetry } from '@/hooks/useIframeAutoRetry';
 import { handleFormStepMessage, resetFormStepUri } from '@/lib/analytics/formFunnelBridge';
+import { pushPopupAppelOffre } from '@/lib/analytics/gtm';
 import { sendPageView, resolveTrackingSessionId } from '@/lib/analytics/sessionTracking';
 
 /**
@@ -115,6 +116,9 @@ export function IframeFormModal({
     // navigué (SPA) entre-temps, il n'y a pas encore de page_vue sous la nouvelle session
     // → tracer_lead_conversion_php ne trouve rien. Ce page_view garantit qu'il en existe un.
     sendPageView();
+
+    // Démarrage de devis (event legacy `Popup_Appel_Offre`/Affichage) → tags GTM `demarrages_de_devis_*`.
+    pushPopupAppelOffre('Popup_AO_Affichage');
 
     // reset dédup funnel à chaque ouverture ; si le bloc possède déjà l'étape 1, on la pré-marque
     pushedStepsRef.current = new Set(ownsStep1 ? ['1ere-question'] : []);
