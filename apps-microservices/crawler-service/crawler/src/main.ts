@@ -1444,6 +1444,19 @@ if (typeCrawling == "sitemap") {
                         context.actionAnchorsStripped++;
                     }
                 }
+
+                // Queue-purge (D2): seedPhase2 seeds URLs cleaned with the config
+                // AS OF consolidation (crawl start). Re-clean from LIVE context.config
+                // so a mid-crawl tier-2 commit is honored at seed time, not left for
+                // the consumption/pre-nav skip to catch after enqueue.
+                if (QUEUE_PURGE_ENABLED) {
+                    seedUrl = processUrl(
+                        seedUrl,
+                        context.config.skipQuestionMark,
+                        context.config.skipDiez,
+                        { toKeep: context.config.toKeep, toRemove: context.config.toRemove },
+                    );
+                }
                 await requestQueue.addRequest({
                     url: seedUrl,
                     userData: { source: source }
