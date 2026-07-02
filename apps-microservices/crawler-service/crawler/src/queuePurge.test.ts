@@ -40,3 +40,23 @@ test("keeps one copy when no handled canonical exists (loss-proof)", () => {
     assert.equal(res.flagged, 1, "one kept, one flagged");
     assert.equal(res.kept, 1);
 });
+
+test("skips unparseable files without throwing", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "qp-"));
+    fs.writeFileSync(path.join(dir, "broken.json"), "{ not valid json");
+    writeReq(dir, "handled_base", "https://x.fr/p", null);
+    writeReq(dir, "pending_variant", "https://x.fr/p?ref=1", 2);
+    const res = flagStaleVariantsOnDisk(dir, stripFn);
+    assert.equal(res.flagged, 1, "unparseable ignored, real variant still flagged");
+});
+
+test("no-op when nothing strips (no committed decision collapses anything)", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "qp-"));
+    writeReq(dir, "a", "https://x.fr/p", null);
+    writeReq(dir, "b", "https://x.fr/q", 1);
+    writeReq(dir, "c", "https://x.fr/r", 2);
+    const res = flagStaleVariantsOnDisk(dir, stripFn); // stripFn leaves these unchanged
+    assert.equal(res.flagged, 0);
+    const b = JSON.parse(fs.readFileSync(path.join(dir, "b.json"), "utf-8"));
+    assert.equal(b.userData?.__crawlee?.skipNavigation, undefined);
+});

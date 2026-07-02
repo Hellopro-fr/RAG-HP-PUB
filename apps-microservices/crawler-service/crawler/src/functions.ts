@@ -44,7 +44,7 @@ import {
 import { shouldStopForDiez } from "./diezLimitStop.js";
 import { shouldStopForQuestionMark } from "./qmLimitStop.js";
 import { applyPerClassStrip, perClassEnabled, fingerprint } from "./diezClassify.js";
-import { StaleVariantSkip, QUEUE_PURGE_ENABLED } from "./staleVariantSkip.js";
+import { StaleVariantSkip, QUEUE_PURGE_ENABLED, STALE_VARIANT_SKIP_MARKER } from "./staleVariantSkip.js";
 import { qmConsumptionStrip, shouldSkipDequeued, recordQmCollapsed } from "./qmConsumptionSkip.js";
 
 /**
@@ -583,7 +583,7 @@ export const startCrawler = async (
             // Queue-purge (A): a stale variant dropped pre-navigation. Marked
             // NonRetryable so this is terminal on the first attempt. Count it and
             // return BEFORE the CB errors feed / error-dataset write / captcha probe.
-            if (String(request.errorMessages).includes("StaleVariantSkip")) {
+            if (String(request.errorMessages).includes(STALE_VARIANT_SKIP_MARKER)) {
                 if (context.statsManager) await context.statsManager.increment("purged_prenav");
                 return;
             }

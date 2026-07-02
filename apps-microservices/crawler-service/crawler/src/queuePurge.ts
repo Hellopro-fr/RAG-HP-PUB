@@ -5,6 +5,14 @@
  * already-handled files on disk. Never touches orderNo/uniqueKey/id, so pending/
  * handled/total counts stay consistent (repairQueueMetadata runs after). Strip is
  * injected so this module stays crawlee-free (loadable under tsx --test).
+ *
+ * ANCHOR NOTE: "handled" on disk means Crawlee finished the request — success OR
+ * retries-exhausted. So a variant whose collapsed base FAILED terminally last run
+ * is still flagged skipNavigation here (skipped this run), unlike the mid-run A /
+ * C2 paths which anchor on the Redis success-set. Deliberate: the committed
+ * decision declared these variants the same page, a failed base implies the
+ * variant fails too, and the next scheduled crawl retries. Kept disk-only for
+ * self-containment (no Redis dependency at startup).
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
