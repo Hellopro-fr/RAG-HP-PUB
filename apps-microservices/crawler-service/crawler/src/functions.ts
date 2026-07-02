@@ -578,6 +578,14 @@ export const startCrawler = async (
 
         // V3 Logic: Rich error reporting
         failedRequestHandler: async ({ request, log, page, proxyInfo, response }) => {
+            // Queue-purge (A): a stale variant dropped pre-navigation. Marked
+            // NonRetryable so this is terminal on the first attempt. Count it and
+            // return BEFORE the CB errors feed / error-dataset write / captcha probe.
+            if (String(request.errorMessages).includes("StaleVariantSkip")) {
+                if (context.statsManager) await context.statsManager.increment("purged_prenav");
+                return;
+            }
+
             log.error(`Request ${request.url} failed: ${String(request.errorMessages)}`);
 
             // Détection des erreurs permanentes — inutile de réessayer.
