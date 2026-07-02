@@ -108,13 +108,13 @@ jobs:
             exit 0
           fi
 
-          # Restrict to the three tracked artifacts. Cache, manifest and
-          # cost.json are gitignored, never committed.
+          # Restrict to the two tracked artifacts. Cache, manifest and
+          # cost.json are gitignored, never committed. graph.html is retired
+          # (graph permanently exceeds the 5000-node HTML viz cap).
           git config user.email "graphify-bot@users.noreply.github.com"
           git config user.name "graphify-bot"
 
           git add graphify-out/graph.json \
-                  graphify-out/graph.html \
                   graphify-out/GRAPH_REPORT.md
 
           trigger_sha="${{ github.sha }}"
