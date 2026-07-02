@@ -18,21 +18,28 @@ interface GtmFooterScriptsProps {
 }
 
 function toGtmSlug(label: string): string {
-  return label.replace(/\s+/g, '-');
+  // Espaces ET tirets consécutifs → un seul tiret (évite "Logistique---Entrepôt" quand le
+  // libellé contient déjà " - "). Retire aussi les tirets en début/fin.
+  return label.trim().replace(/[\s-]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
 function buildUserCategoryScript(breadcrumb: BreadcrumbItem[]): string {
-  const items = breadcrumb.slice(1); // exclure "Accueil"
-  const last = items[items.length - 1];
-  const middle = items.slice(0, items.length - 1).slice(0, 4);
-  const cat = {
+  // Page conseil : le DERNIER item du breadcrumb est le titre de la page conseil (PAS une
+  // catégorie) → on l'exclut. Restent les catégories : la plus profonde va en category5,
+  // les précédentes en category1..4.
+  const cats = breadcrumb.slice(1, -1); // exclure "Accueil" ET la page conseil (dernier)
+  const last = cats[cats.length - 1];
+  const middle = cats.slice(0, -1).slice(0, 4);
+  const catValues: Record<string, string> = {
     category1: toGtmSlug(middle[0]?.label ?? ''),
     category2: toGtmSlug(middle[1]?.label ?? ''),
     category3: toGtmSlug(middle[2]?.label ?? ''),
     category4: toGtmSlug(middle[3]?.label ?? ''),
     category5: toGtmSlug(last?.label ?? ''),
   };
-  return `(function(){function getCookie(n){var c=document.cookie.split(';');for(var i=0;i<c.length;i++){var p=c[i].trim().split('=');if(p[0]===n)return decodeURIComponent(p.slice(1).join('='));}return '';}var email=getCookie('email_preremplissage_di');var logged=(email!==''&&email!=='${MD5_EMPTY}')||getCookie('id_societe')!=='';window.dataLayer=window.dataLayer||[];dataLayer.push({"user":{"visitorId":"","visitorLoginState":logged?"logged":"unlogged","visitorType":"","visitorCountry":"","visitorDepartment":"/","visitorJob":"/","visitorNewsletterSub":"","visitorCompanyStatus":"/"},"product":{"category1":${JSON.stringify(cat.category1)},"category2":${JSON.stringify(cat.category2)},"category3":${JSON.stringify(cat.category3)},"category4":${JSON.stringify(cat.category4)},"category5":${JSON.stringify(cat.category5)}}});})();`;
+  // On omet les clés vides (aligné sur le tracking legacy des autres pages).
+  const product = Object.fromEntries(Object.entries(catValues).filter(([, v]) => v !== ''));
+  return `(function(){function getCookie(n){var c=document.cookie.split(';');for(var i=0;i<c.length;i++){var p=c[i].trim().split('=');if(p[0]===n)return decodeURIComponent(p.slice(1).join('='));}return '';}var email=getCookie('email_preremplissage_di');var logged=(email!==''&&email!=='${MD5_EMPTY}')||getCookie('id_societe')!=='';window.dataLayer=window.dataLayer||[];dataLayer.push({"user":{"visitorId":"","visitorLoginState":logged?"logged":"unlogged","visitorType":"","visitorCountry":"","visitorDepartment":"/","visitorJob":"/","visitorNewsletterSub":"","visitorCompanyStatus":"/"},"product":${JSON.stringify(product)}});})();`;
 }
 
 export function GtmFooterScripts({ breadcrumb }: GtmFooterScriptsProps) {
