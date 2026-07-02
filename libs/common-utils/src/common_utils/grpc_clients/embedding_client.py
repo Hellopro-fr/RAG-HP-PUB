@@ -108,4 +108,6 @@ async def chunk_text(text: str, chunk_size: int, chunk_overlap: int) -> List[str
             return list(response.chunks)
     except grpc.aio.AioRpcError as e:
         logging.error(f"Erreur gRPC en appelant le service de Chunking: {e.details()}")
-        return []
+        # Propagée (comme get_embeddings) : une erreur gRPC transitoire ne doit pas
+        # devenir "aucun chunk" — le caller la classifierait en erreur permanente (DLQ).
+        raise e
