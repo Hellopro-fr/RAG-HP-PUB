@@ -4,15 +4,15 @@
     {
       "id": 5,
       "subject": "Task 1: Consumer env tunables (PREFETCH_COUNT, PROCESS_TIMEOUT) with tests",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** consumer.py reads PREFETCH_COUNT (default 2) and PROCESS_TIMEOUT (default 240) from env; used in set_qos / asyncio.wait_for; timeout strings report configured value.\n\n**Files:** modify apps-microservices/embedding-service/app/messaging/consumer.py; create apps-microservices/embedding-service/tests/test_consumer_tunables.py; modify apps-microservices/embedding-service/CLAUDE.md\n\n```json:metadata\n{\"files\": [\"apps-microservices/embedding-service/app/messaging/consumer.py\", \"apps-microservices/embedding-service/tests/test_consumer_tunables.py\", \"apps-microservices/embedding-service/CLAUDE.md\"], \"verifyCommand\": \"python -m pytest apps-microservices/embedding-service/tests/test_consumer_tunables.py -v\", \"acceptanceCriteria\": [\"PREFETCH_COUNT default 2 env-overridable in set_qos\", \"PROCESS_TIMEOUT default 240 env-overridable in wait_for\", \"timeout strings dynamic\", \"routing unchanged\"]}\n```"
     },
     {
       "id": 6,
       "subject": "Task 2: Compose env — GRPC_TIMEOUT 110 + explicit tunables",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** embedding-service compose env retuned: GRPC_TIMEOUT 45->110 (updated comment), PREFETCH_COUNT=2, PROCESS_TIMEOUT=240 explicit.\n\n**Files:** modify docker-compose.yml (embedding-service env block ~L1006-1017)\n\n```json:metadata\n{\"files\": [\"docker-compose.yml\"], \"verifyCommand\": \"python -c \\\"import yaml; yaml.safe_load(open('docker-compose.yml', encoding='utf-8')); print('OK')\\\"\", \"acceptanceCriteria\": [\"GRPC_TIMEOUT=110\", \"PREFETCH_COUNT=2 and PROCESS_TIMEOUT=240 explicit\", \"YAML parses\"]}\n```"
     }
   ],
-  "lastUpdated": "2026-07-02"
+  "lastUpdated": "2026-07-02T16:00:00+03:00"
 }

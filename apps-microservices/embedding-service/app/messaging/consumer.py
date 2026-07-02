@@ -17,7 +17,7 @@ RETRY_TTL_MS = 30000
 #   (retryable proprement) parte AVANT ce plafond.
 # Valeur <1 clampée à 1 — 0 signifierait 'illimité' côté AMQP (anti-backpressure).
 PREFETCH_COUNT = max(1, int(os.getenv("PREFETCH_COUNT") or 2))
-PROCESS_TIMEOUT = float(os.getenv("PROCESS_TIMEOUT") or 240)
+PROCESS_TIMEOUT = max(1.0, float(os.getenv("PROCESS_TIMEOUT") or 240))
 
 class Consumer:
     def __init__(self, connection: aio_pika.Connection, publisher: Publisher, **kwargs):
