@@ -20,7 +20,9 @@ CONSUMER_PATH = (
 
 def _install_fakes():
     """Fake aio_pika + the service/service-lib modules consumer.py imports."""
-    if "aio_pika" not in sys.modules:
+    try:
+        import aio_pika  # noqa: F401
+    except ImportError:
         aio = types.ModuleType("aio_pika")
         aio.Connection = type("Connection", (), {})
         aio.Message = lambda **kw: types.SimpleNamespace(**kw)
@@ -33,12 +35,16 @@ def _install_fakes():
         sys.modules["aio_pika"] = aio
         sys.modules["aio_pika.abc"] = abc_mod
 
-    if "embedding_service.messaging.publisher" not in sys.modules:
+    try:
+        from embedding_service.messaging.publisher import Publisher  # noqa: F401
+    except ImportError:
         pub_mod = types.ModuleType("embedding_service.messaging.publisher")
         pub_mod.Publisher = type("Publisher", (), {})
         sys.modules["embedding_service.messaging.publisher"] = pub_mod
 
-    if "embedding_service.core.processor" not in sys.modules:
+    try:
+        from embedding_service.core.processor import embed_input_data  # noqa: F401
+    except ImportError:
         proc_mod = types.ModuleType("embedding_service.core.processor")
 
         async def embed_input_data(input_data, **kwargs):
@@ -47,7 +53,9 @@ def _install_fakes():
         proc_mod.embed_input_data = embed_input_data
         sys.modules["embedding_service.core.processor"] = proc_mod
 
-    if "common_utils.autres.DLQProperties" not in sys.modules:
+    try:
+        from common_utils.autres.DLQProperties import DLQProperties  # noqa: F401
+    except ImportError:
         dlq_mod = types.ModuleType("common_utils.autres.DLQProperties")
 
         class DLQProperties:
@@ -117,7 +125,7 @@ class _FakeConnection:
 
 @pytest.mark.asyncio
 async def test_start_consuming_applies_prefetch_env(monkeypatch):
-    monkeypatch.setenv("PREFETCH_COUNT", "2")
+    monkeypatch.setenv("PREFETCH_COUNT", "5")
     mod = _load_consumer()
     channel = _FakeChannel()
     consumer = mod.Consumer(_FakeConnection(channel), publisher=None)
@@ -130,7 +138,7 @@ async def test_start_consuming_applies_prefetch_env(monkeypatch):
     except asyncio.CancelledError:
         pass
 
-    assert channel.qos_kwargs == {"prefetch_count": 2}
+    assert channel.qos_kwargs == {"prefetch_count": 5}
     assert channel.queue.consume_cb is not None
 
 

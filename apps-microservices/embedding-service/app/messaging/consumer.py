@@ -15,8 +15,9 @@ RETRY_TTL_MS = 30000
 # PROCESS_TIMEOUT : plafond global par message ; doit rester > 2x GRPC_TIMEOUT
 #   (pire cas ChunkText + GetEmbeddings au deadline) pour que le DEADLINE gRPC
 #   (retryable proprement) parte AVANT ce plafond.
-PREFETCH_COUNT = int(os.getenv("PREFETCH_COUNT", "2"))
-PROCESS_TIMEOUT = float(os.getenv("PROCESS_TIMEOUT", "240"))
+# Valeur <1 clampée à 1 — 0 signifierait 'illimité' côté AMQP (anti-backpressure).
+PREFETCH_COUNT = max(1, int(os.getenv("PREFETCH_COUNT") or 2))
+PROCESS_TIMEOUT = float(os.getenv("PROCESS_TIMEOUT") or 240)
 
 class Consumer:
     def __init__(self, connection: aio_pika.Connection, publisher: Publisher, **kwargs):
