@@ -1186,12 +1186,15 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
     const external_redirects = await readStat("external_redirects");
     const timeout_individual = await readStat("timeout_individual");
     const success_extracted = await readStat("success");
+    const purged_prenav = await readStat("purged_prenav");
+    const purged_skipnav = await readStat("purged_skipnav");
+    const filtered_stale_variant = purged_prenav + purged_skipnav;
 
     // 3. Write Payloads
     const payload = {
         id_domaine: id,
-        success: finalStats?.requestsFinished || 0,
-        failed: finalStats?.requestsFailed || 0,
+        success: Math.max(0, (finalStats?.requestsFinished || 0) - purged_skipnav),
+        failed: Math.max(0, (finalStats?.requestsFailed || 0) - purged_prenav),
         isFinished: isFinished,
         method: method,
         isError: isError,
@@ -1212,6 +1215,7 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         external_redirects,
         timeout_individual,
         success_extracted,
+        filtered_stale_variant,
         // Observability — timestamps début/fin pour calculer duration_seconds côté PHP
         date_start: crawlStartTime,
         date_end: crawlEndTime,
