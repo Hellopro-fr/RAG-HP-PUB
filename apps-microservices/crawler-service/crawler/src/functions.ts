@@ -44,6 +44,8 @@ import {
 import { shouldStopForDiez } from "./diezLimitStop.js";
 import { shouldStopForQuestionMark } from "./qmLimitStop.js";
 import { applyPerClassStrip, perClassEnabled, fingerprint } from "./diezClassify.js";
+import { StaleVariantSkip, QUEUE_PURGE_ENABLED, STALE_VARIANT_SKIP_MARKER } from "./staleVariantSkip.js";
+import { qmConsumptionStrip, shouldSkipDequeued, recordQmCollapsed } from "./qmConsumptionSkip.js";
 
 /**
  * Constructs the Apify proxy URL based on the provided password.
@@ -578,6 +580,14 @@ export const startCrawler = async (
 
         // V3 Logic: Rich error reporting
         failedRequestHandler: async ({ request, log, page, proxyInfo, response }) => {
+            // Queue-purge (A): a stale variant dropped pre-navigation. Marked
+            // NonRetryable so this is terminal on the first attempt. Count it and
+            // return BEFORE the CB errors feed / error-dataset write / captcha probe.
+            if (String(request.errorMessages).includes(STALE_VARIANT_SKIP_MARKER)) {
+                if (context.statsManager) await context.statsManager.increment("purged_prenav");
+                return;
+            }
+
             log.error(`Request ${request.url} failed: ${String(request.errorMessages)}`);
 
             // Détection des erreurs permanentes — inutile de réessayer.
@@ -799,6 +809,22 @@ export const startCrawler = async (
             async (crawlingContext: PlaywrightCrawlingContext) => {
                 if (context.timingRecorder) {
                     crawlingContext.request.userData._timing = { dequeueAt: Date.now() };
+                }
+            },
+            // Queue-purge (A): mid-run zero-fetch skip. If a committed skip/toRemove
+            // decision now collapses this queued variant onto an already-seen base,
+            // drop it BEFORE page.goto. Reads request.url (loadedUrl does not exist
+            // pre-navigation). Cheap: short-circuits before Redis for any url that
+            // does not strip. Fail-open: Redis error -> empty set -> not known -> navigate.
+            async ({ request }) => {
+                if (!QUEUE_PURGE_ENABLED) return;
+                const stripped = qmConsumptionStrip(request.url);
+                if (stripped === request.url) return;
+                if (!context.dedupManager) return;
+                const known = (await context.dedupManager.isKnownBatch([stripped])).has(stripped);
+                if (shouldSkipDequeued(request.url, stripped, known)) {
+                    recordQmCollapsed(request.url, stripped);
+                    throw new StaleVariantSkip(request.url, stripped);
                 }
             },
         ],
