@@ -20,30 +20,44 @@ SERVER_PATH = (
 
 
 def _install_fakes():
-    if "grpc" not in sys.modules:
+    # AUGMENT, don't skip: another test file (test_embedding_grpc_client.py)
+    # installs its OWN grpc/grpc_stubs fakes into sys.modules at import time.
+    # A wholesale "if not in sys.modules: build" guard would let that
+    # incompatible fake win when the suite runs together (missing StatusCode /
+    # ChunkResponse). So ensure each attribute this test needs exists, whatever
+    # fake is already present.
+    grpc_mod = sys.modules.get("grpc")
+    if grpc_mod is None:
         grpc_mod = types.ModuleType("grpc")
-        grpc_mod.StatusCode = types.SimpleNamespace(INTERNAL="INTERNAL")
-        grpc_mod.aio = types.SimpleNamespace(server=lambda *a, **k: None)
         sys.modules["grpc"] = grpc_mod
+    if not hasattr(grpc_mod, "StatusCode"):
+        grpc_mod.StatusCode = types.SimpleNamespace(INTERNAL="INTERNAL")
+    if not hasattr(grpc_mod, "aio"):
+        grpc_mod.aio = types.SimpleNamespace()
+    if not hasattr(grpc_mod.aio, "server"):
+        grpc_mod.aio.server = lambda *a, **k: None
 
-    if "grpc_stubs" not in sys.modules:
+    pkg = sys.modules.get("grpc_stubs")
+    if pkg is None:
         pkg = types.ModuleType("grpc_stubs")
         pkg.__path__ = []
-        pb2 = types.ModuleType("grpc_stubs.embedding_pb2")
-        pb2.ChunkResponse = lambda chunks=(): types.SimpleNamespace(chunks=list(chunks))
-        pb2.EmbeddingsResponse = lambda embeddings=(): types.SimpleNamespace(embeddings=list(embeddings))
-        pb2.EmbeddingVector = lambda vector=(): types.SimpleNamespace(vector=list(vector))
-        pb2.TokenizeResponse = lambda tokenized_texts=(): types.SimpleNamespace(tokenized_texts=list(tokenized_texts))
-        pb2.TokenizedOutput = lambda tokens=(): types.SimpleNamespace(tokens=list(tokens))
-        pb2.DetokenizeResponse = lambda texts=(): types.SimpleNamespace(texts=list(texts))
-        pb2_grpc = types.ModuleType("grpc_stubs.embedding_pb2_grpc")
-        pb2_grpc.EmbeddingServiceServicer = object
-        pb2_grpc.add_EmbeddingServiceServicer_to_server = lambda *a, **k: None
-        pkg.embedding_pb2 = pb2
-        pkg.embedding_pb2_grpc = pb2_grpc
         sys.modules["grpc_stubs"] = pkg
+    pb2 = sys.modules.get("grpc_stubs.embedding_pb2")
+    if pb2 is None:
+        pb2 = types.ModuleType("grpc_stubs.embedding_pb2")
         sys.modules["grpc_stubs.embedding_pb2"] = pb2
+        pkg.embedding_pb2 = pb2
+    if not hasattr(pb2, "ChunkResponse"):
+        pb2.ChunkResponse = lambda chunks=(): types.SimpleNamespace(chunks=list(chunks))
+    pb2_grpc = sys.modules.get("grpc_stubs.embedding_pb2_grpc")
+    if pb2_grpc is None:
+        pb2_grpc = types.ModuleType("grpc_stubs.embedding_pb2_grpc")
         sys.modules["grpc_stubs.embedding_pb2_grpc"] = pb2_grpc
+        pkg.embedding_pb2_grpc = pb2_grpc
+    if not hasattr(pb2_grpc, "EmbeddingServiceServicer"):
+        pb2_grpc.EmbeddingServiceServicer = object
+    if not hasattr(pb2_grpc, "add_EmbeddingServiceServicer_to_server"):
+        pb2_grpc.add_EmbeddingServiceServicer_to_server = lambda *a, **k: None
 
     app_pkg = sys.modules.setdefault("application", types.ModuleType("application"))
     if not hasattr(app_pkg, "__path__"):
