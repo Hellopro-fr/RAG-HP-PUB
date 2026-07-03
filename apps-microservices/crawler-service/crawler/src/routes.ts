@@ -229,6 +229,16 @@ router.addDefaultHandler(
         let _detectOk: boolean | undefined;
 
         const proxyUrl = proxyInfo?.url || null;
+
+        // Queue-purge (D1): a request flagged skipNavigation on disk had its
+        // page.goto skipped by Crawlee; loadedUrl is undefined. Count it and return
+        // before the loadedUrl use below. Clean handled path (no error machinery).
+        if (request.skipNavigation) {
+            if (context.statsManager) await context.statsManager.increment("purged_skipnav");
+            recordQmCollapsed(request.url, request.url);
+            return;
+        }
+
         // loadedUrl is the stored + counted identity; drop a cosmetic empty '#'
         // (JS/browser may keep a bare hash) so it can't inflate diez or pollute the dataset.
         let url = request.loadedUrl;

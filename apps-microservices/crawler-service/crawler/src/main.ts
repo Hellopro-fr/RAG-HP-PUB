@@ -51,6 +51,8 @@ import { createSharedRedisClient } from "./redisClient.js";
 import { buildHtmlIndex } from "./htmlIndex.js";
 import { repairQueueMetadata, recountQueueFromDisk } from "./queueRepair.js";
 import { isDrainedSample, isUnreconciledIdle, DRAIN_CONFIRM_SAMPLES, DRAIN_DISK_RECOUNT_ENABLED } from "./drainGuard.js";
+import { QUEUE_PURGE_ENABLED } from "./staleVariantSkip.js";
+import { flagStaleVariantsOnDisk } from "./queuePurge.js";
 
 const now = new Date().toISOString().replace(/:/g, "-");
 
@@ -709,6 +711,31 @@ if (skipquestionmark || skipdiez) {
     }
 }
 
+// Queue-purge (D1): flag already-queued stale variants (already superseded by a
+// committed skip decision) with skipNavigation, so Crawlee drops them without a
+// fetch at dispatch (handler early-guard, routes.ts). Disk-only + loss-proof: the
+// canonical set is the already-handled files on disk. Never touches orderNo, so
+// pending/handled/total stay consistent for repairQueueMetadata below. Uses the
+// LIVE context.config (persisted-decision-aware) rather than the raw CLI locals.
+if (QUEUE_PURGE_ENABLED) {
+    try {
+        const purged = flagStaleVariantsOnDisk(
+            `storage/request_queues/${domain}`,
+            (u: string) => processUrl(
+                u,
+                context.config.skipQuestionMark,
+                context.config.skipDiez,
+                { toKeep: context.config.toKeep, toRemove: context.config.toRemove },
+            ),
+        );
+        if (purged.flagged > 0) {
+            console.warn(`[queue-purge] ${domain}: flagged ${purged.flagged} stale queued variants skipNavigation (kept ${purged.kept}).`);
+        }
+    } catch (e) {
+        console.warn(`[queue-purge] skipped for ${domain}: ${(e as Error).message}`);
+    }
+}
+
 // Repair stale request-queue metadata left by an interrupted / lost-flush prior run.
 // memory-storage loads counts from the debounced __metadata__.json but total from the
 // request files; a mismatch deadlocks Crawlee's isFinished() -> 1200s progress stall.
@@ -1159,12 +1186,15 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
     const external_redirects = await readStat("external_redirects");
     const timeout_individual = await readStat("timeout_individual");
     const success_extracted = await readStat("success");
+    const purged_prenav = await readStat("purged_prenav");
+    const purged_skipnav = await readStat("purged_skipnav");
+    const filtered_stale_variant = purged_prenav + purged_skipnav;
 
     // 3. Write Payloads
     const payload = {
         id_domaine: id,
-        success: finalStats?.requestsFinished || 0,
-        failed: finalStats?.requestsFailed || 0,
+        success: Math.max(0, (finalStats?.requestsFinished || 0) - purged_skipnav),
+        failed: Math.max(0, (finalStats?.requestsFailed || 0) - purged_prenav),
         isFinished: isFinished,
         method: method,
         isError: isError,
@@ -1185,6 +1215,7 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         external_redirects,
         timeout_individual,
         success_extracted,
+        filtered_stale_variant,
         // Observability — timestamps début/fin pour calculer duration_seconds côté PHP
         date_start: crawlStartTime,
         date_end: crawlEndTime,
@@ -1416,6 +1447,19 @@ if (typeCrawling == "sitemap") {
                         seedUrl = strippedAa;
                         context.actionAnchorsStripped++;
                     }
+                }
+
+                // Queue-purge (D2): seedPhase2 seeds URLs cleaned with the config
+                // AS OF consolidation (crawl start). Re-clean from LIVE context.config
+                // so a mid-crawl tier-2 commit is honored at seed time, not left for
+                // the consumption/pre-nav skip to catch after enqueue.
+                if (QUEUE_PURGE_ENABLED) {
+                    seedUrl = processUrl(
+                        seedUrl,
+                        context.config.skipQuestionMark,
+                        context.config.skipDiez,
+                        { toKeep: context.config.toKeep, toRemove: context.config.toRemove },
+                    );
                 }
                 await requestQueue.addRequest({
                     url: seedUrl,
