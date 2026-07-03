@@ -1009,13 +1009,13 @@ services:
       - RERANKING_SERVICE_URL=reranking-model-service:50053
       - DATABASE_SERVICE_URL=database-recherche-service:50054
       - SERVICE_NAME=embedding-service
-      # Budgets (spec 2026-07-02 livelock) : le deadline gRPC (retryable) part
-      # AVANT le plafond global PROCESS_TIMEOUT (> 2x GRPC_TIMEOUT, pire cas
-      # ChunkText + GetEmbeddings). 45s coupait dans la bande de complétion des
-      # gros payloads (diagnostic files H/M/L quasi vides => temps passé dans le
-      # traitement, pas en file). Requiert le re-raise chunk_text (1cc8c203).
-      - GRPC_TIMEOUT=110
-      - PROCESS_TIMEOUT=240
+      # Liveness (spec 2026-07-03) : temps_embedding.log p99=36.6s, max=109s
+      # CENSURÉ au deadline 110 => la vraie traîne dépasse 110s. Deadlines
+      # dimensionnés en bornes de liveness (au-dessus du travail réel, en
+      # dessous d'un hang). PROCESS_TIMEOUT > GRPC_TIMEOUT tient car S1 rend
+      # ChunkText non bloquant (chunk rapide + embed<=300 + publish < 360).
+      - GRPC_TIMEOUT=300
+      - PROCESS_TIMEOUT=360
       # Backpressure : 4 replicas x 2 = 8 en vol contre Semaphore(3) non-HIGH.
       - PREFETCH_COUNT=2
     depends_on:
