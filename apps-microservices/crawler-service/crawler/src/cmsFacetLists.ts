@@ -6,7 +6,7 @@
  * non-Woo blog (params never present).
  */
 const LISTS: Record<string, string[]> = {
-    wordpress: ["min_price", "max_price", "stock_status", "sale_status", "orderby", "paged"],
+    wordpress: ["min_price", "max_price", "stock_status", "sale_status", "orderby"],
     prestashop: ["q", "order", "resultsperpage", "layout"],
     magento: ["price", "product_list_order", "product_list_dir", "product_list_limit"],
     shopify: ["sort_by", "filter.v.price.gte", "filter.v.price.lte", "filter.v.availability"],

@@ -18,3 +18,8 @@ test("R1 allowlist params never trigger", () => {
 test("no seen base -> not a filter", () => {
     assert.equal(isFilterParam("https://x.fr/c/?filtrage=1", new Set()), false);
 });
+test("pagination params never trigger (page 2 must not collapse onto seen page 1)", () => {
+    const s = new Set<string>([ baseKeyAbsent("https://x.fr/c/") ]);
+    assert.equal(isFilterParam("https://x.fr/c/?page=2", s), false);
+    assert.equal(isFilterParam("https://x.fr/c/?paged=3", s), false);
+});
