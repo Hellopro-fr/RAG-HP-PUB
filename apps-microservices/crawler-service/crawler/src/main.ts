@@ -53,6 +53,9 @@ import { repairQueueMetadata, recountQueueFromDisk } from "./queueRepair.js";
 import { isDrainedSample, isUnreconciledIdle, DRAIN_CONFIRM_SAMPLES, DRAIN_DISK_RECOUNT_ENABLED } from "./drainGuard.js";
 import { QUEUE_PURGE_ENABLED } from "./staleVariantSkip.js";
 import { flagStaleVariantsOnDisk } from "./queuePurge.js";
+import { baseKeyAbsent } from "./urlBase.js";
+import { QM_FACET_ENABLED } from "./facetCap.js";
+import { isFilterParam } from "./filterOnSeen.js";
 
 const now = new Date().toISOString().replace(/:/g, "-");
 
@@ -701,6 +704,29 @@ const queuePauseInterval: ReturnType<typeof setInterval> | undefined =
         : undefined;
 
 
+// Queue-purge #2: build the seen-base oracle BEFORE the D1 disk-flag pass below,
+// so a filtered-view variant already queued from a prior run can be retracted on
+// this resume/update. Dataset + live-added only (NEVER Redis — Redis is
+// update-mode-blind, see spec). Each call below opens a FRESH generator instance;
+// none of these are reused (the ~L864 consolidator call creates its own separate
+// instance for a different purpose).
+if (QM_FACET_ENABLED) {
+    const addSeen = async (gen: AsyncGenerator<string>) => {
+        try {
+            for await (const u of gen) context.seenBases.add(baseKeyAbsent(u));
+        } catch (e) {
+            console.warn(`[qm-facet] seenBases pass skipped: ${(e as Error).message}`);
+        }
+    };
+    // Update mode: the previous crawl's dataset is the "already crawled" oracle.
+    if (previousCrawlId) await addSeen(loadDatasetUrlsGenerator(previousCrawlId, domain));
+    // Initial/resume: the current crawl's own dataset-on-disk.
+    if (context.config.crawleeStorageName) await addSeen(rehydrateDedupFromDataset(context.config.crawleeStorageName));
+    if (context.seenBases.size > 0) {
+        console.log(`[qm-facet] seenBases: ${context.seenBases.size} bases loaded from dataset.`);
+    }
+}
+
 if (skipquestionmark || skipdiez) {
     const requestQueueList = getAllRequestQueues(domain);
     if (requestQueueList.length > 0) {
@@ -727,6 +753,9 @@ if (QUEUE_PURGE_ENABLED) {
                 context.config.skipDiez,
                 { toKeep: context.config.toKeep, toRemove: context.config.toRemove },
             ),
+            // Queue-purge #2 decider: the #1 facet counter is empty at startup (in-memory,
+            // built only as live pages are handled), so D1 only needs the seen-base check.
+            (u: string) => QM_FACET_ENABLED && isFilterParam(u, context.seenBases),
         );
         if (purged.flagged > 0) {
             console.warn(`[queue-purge] ${domain}: flagged ${purged.flagged} stale queued variants skipNavigation (kept ${purged.kept}).`);

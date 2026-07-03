@@ -23,6 +23,7 @@ const isPending = (orderNo: unknown): boolean =>
 export const flagStaleVariantsOnDisk = (
     queueDir: string,
     stripFn: (url: string) => string,
+    extraSkip?: (url: string) => boolean,
 ): { flagged: number; kept: number } => {
     let flagged = 0;
     let kept = 0;
@@ -56,7 +57,11 @@ export const flagStaleVariantsOnDisk = (
     for (const { file, obj } of pending) {
         let stripped: string;
         try { stripped = stripFn(obj.url); } catch { kept++; continue; }
-        if (stripped !== obj.url && canonical.has(stripped)) {
+        // Queue-purge #2 hook: extraSkip is a second, independent stale-variant
+        // decider (e.g. filter-on-seen-base). Omitted -> condition below is
+        // byte-identical to the original stripFn-only check.
+        const staleByExtra = Boolean(extraSkip && extraSkip(obj.url));
+        if ((stripped !== obj.url && canonical.has(stripped)) || staleByExtra) {
             obj.userData = obj.userData ?? {};
             obj.userData.__crawlee = obj.userData.__crawlee ?? {};
             obj.userData.__crawlee.skipNavigation = true;

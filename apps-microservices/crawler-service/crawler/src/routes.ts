@@ -25,6 +25,8 @@ import { fragmentAwareUniqueKey, stripEmptyFragment } from "./diezKeepFragment.j
 import { applyPerClassStrip, perClassEnabled, stripActionAnchor, actionAnchorStripEnabled } from "./diezClassify.js";
 import { qmConsumptionStrip, shouldSkipDequeued, recordQmCollapsed } from "./qmConsumptionSkip.js";
 import { recordVariant, isOverCap, QM_FACET_ENABLED, QM_FACET_CAP_K } from "./facetCap.js";
+import { isFilterParam } from "./filterOnSeen.js";
+import { baseKeyAbsent } from "./urlBase.js";
 import { recordTier2Sample, maybeCommitTier2, tier2Evidence, maybeDefaultAtCeiling as maybeDefaultDiezAtCeiling } from "./diezTier2.js";
 import { routeDiezOutcome } from "./diezHookGate.js";
 import { shouldTripExternalRedirectBreaker } from "./externalRedirectBreaker.js";
@@ -896,6 +898,12 @@ router.addDefaultHandler(
                     title
                 );
 
+                // Queue-purge #2: live-add this page's normalized base to the seen oracle —
+                // `url` is the final stored+counted identity for every page pushed to the
+                // dataset (just above), so the very next discovered link naming the same
+                // base with an extra param is caught even within the same crawl.
+                if (QM_FACET_ENABLED) context.seenBases.add(baseKeyAbsent(url));
+
                 // --- PRE-BATCH DEDUP: Extract links, batch-check Redis, build local Set ---
                 // CRITICAL: transformRequestFunction MUST be synchronous (Crawlee API contract).
                 // An async version causes minimatch to receive a Promise instead of a Request,
@@ -1058,6 +1066,14 @@ router.addDefaultHandler(
                         // Queue-purge #1: facet cap — drop discovered variants once the base is saturated.
                         if (QM_FACET_ENABLED && isOverCap(context.facetVariantCount, request.url, QM_FACET_CAP_K)) {
                             logBlocked('facet-cap', request.url);
+                            return false;
+                        }
+
+                        // Queue-purge #2: filter-on-seen-base — drop a discovered variant whose
+                        // param removal yields a base already crawled (structural, no content
+                        // comparison; R1 allowlist protects lang/currency/etc.).
+                        if (QM_FACET_ENABLED && isFilterParam(request.url, context.seenBases)) {
+                            logBlocked('filter-on-seen', request.url);
                             return false;
                         }
 

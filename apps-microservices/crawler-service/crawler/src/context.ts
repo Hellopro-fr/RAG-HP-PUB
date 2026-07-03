@@ -144,6 +144,8 @@ export const context = {
     qmCollapsed: [] as Array<{ collapsed: string; base: string; param: string }>,
     // Queue-purge #1: per-base distinct query-signature counter (facet cap). In-memory.
     facetVariantCount: new Map<string, Set<string>>(),
+    // Queue-purge #2: normalized bases (baseKeyAbsent) already crawled — the seen oracle.
+    seenBases: new Set<string>(),
     // Stored language query param for session-based i18n sites (e.g., ?lang=fr)
     // Populated when homepage detection method is pattern_match_query
     languageQueryParam: null as { key: string; value: string } | null,
