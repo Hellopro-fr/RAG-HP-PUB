@@ -47,6 +47,9 @@ import { applyPerClassStrip, perClassEnabled, fingerprint } from "./diezClassify
 import { provenDiezStripActive } from "./diezDecision.js";
 import { StaleVariantSkip, QUEUE_PURGE_ENABLED, STALE_VARIANT_SKIP_MARKER } from "./staleVariantSkip.js";
 import { qmConsumptionStrip, shouldSkipDequeued, recordQmCollapsed } from "./qmConsumptionSkip.js";
+import { isOverCap, QM_FACET_ENABLED, QM_FACET_CAP_K } from "./facetCap.js";
+import { pathBaseKey, baseKeyAbsent } from "./urlBase.js";
+import { isFilterParam } from "./filterOnSeen.js";
 
 /**
  * Constructs the Apify proxy URL based on the provided password.
@@ -826,6 +829,21 @@ export const startCrawler = async (
                 if (shouldSkipDequeued(request.url, stripped, known)) {
                     recordQmCollapsed(request.url, stripped);
                     throw new StaleVariantSkip(request.url, stripped);
+                }
+            },
+            // Queue-purge #1: facet cap. Content-agnostic backstop — once a base path
+            // has accumulated K distinct query-signatures, drop further variants
+            // BEFORE page.goto (mirrors the Component A zero-fetch skip above).
+            async ({ request }) => {
+                if (QM_FACET_ENABLED && isOverCap(context.facetVariantCount, request.url, QM_FACET_CAP_K)) {
+                    recordQmCollapsed(request.url, pathBaseKey(request.url));
+                    throw new StaleVariantSkip(request.url, pathBaseKey(request.url));
+                }
+                // Queue-purge #2: filter-on-seen-base. A committed-live seenBases entry
+                // means the base was already crawled — drop this filtered view zero-fetch.
+                if (QM_FACET_ENABLED && isFilterParam(request.url, context.seenBases)) {
+                    recordQmCollapsed(request.url, baseKeyAbsent(request.url));
+                    throw new StaleVariantSkip(request.url, baseKeyAbsent(request.url));
                 }
             },
         ],
