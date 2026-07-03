@@ -1,5 +1,7 @@
 import grpc
 import logging
+import asyncio
+import functools
 from concurrent import futures
 
 from grpc_stubs import embedding_pb2
@@ -78,10 +80,18 @@ class EmbeddingServiceImpl(embedding_pb2_grpc.EmbeddingServiceServicer):
         """
         logging.info(f"Requête ChunkText reçue.")
         try:
-            chunks = self.use_case.chunk_text(
-                text=request.text,
-                chunk_size=request.chunk_size,
-                chunk_overlap=request.chunk_overlap
+            # Offload : chunk_text est CPU-lourd (tokenizer par split) et bloquerait
+            # l'event loop du serveur, gelant toutes les RPC concurrentes. On l'exécute
+            # dans le thread pool par défaut (spec 2026-07-03).
+            loop = asyncio.get_running_loop()
+            chunks = await loop.run_in_executor(
+                None,
+                functools.partial(
+                    self.use_case.chunk_text,
+                    request.text,
+                    request.chunk_size,
+                    request.chunk_overlap,
+                ),
             )
             return embedding_pb2.ChunkResponse(chunks=chunks)
         except Exception as e:
