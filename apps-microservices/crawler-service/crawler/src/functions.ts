@@ -44,6 +44,7 @@ import {
 import { shouldStopForDiez } from "./diezLimitStop.js";
 import { shouldStopForQuestionMark } from "./qmLimitStop.js";
 import { applyPerClassStrip, perClassEnabled, fingerprint } from "./diezClassify.js";
+import { provenDiezStripActive } from "./diezDecision.js";
 import { StaleVariantSkip, QUEUE_PURGE_ENABLED, STALE_VARIANT_SKIP_MARKER } from "./staleVariantSkip.js";
 import { qmConsumptionStrip, shouldSkipDequeued, recordQmCollapsed } from "./qmConsumptionSkip.js";
 
@@ -1955,10 +1956,9 @@ export const processUrl = (
         // Fix: Use native URL API for robust parsing
         const urlObj = new URL(url);
         
-        // 1. Hash: legacy wholesale strip only when per-class is OFF.
-        //    Per-class strip (anchor -> strip, spa/ambiguous -> keep) is applied to
-        //    the final string below, independent of the global skipDiez flag.
-        if (!perClassEnabled() && skipDiez) {
+        // 1. Hash: legacy wholesale strip when per-class is OFF, OR when a content-proven
+        //    (tier-2) skipDiez is in force — proof overrides the per-class spa-keep heuristic.
+        if ((!perClassEnabled() || provenDiezStripActive()) && skipDiez) {
             urlObj.hash = '';
         }
 
