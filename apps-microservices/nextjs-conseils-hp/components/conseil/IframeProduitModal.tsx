@@ -73,7 +73,6 @@ export function IframeProduitModal({
     pushedStepsRef.current = new Set(); // reset dédup funnel à chaque ouverture
 
     function onMessage(e: MessageEvent) {
-      console.log('[produit msg reçu]', e.origin, e.data);
       if (e.origin !== 'https://www.hellopro.fr') return;
       const data = e.data as Record<string, unknown>;
 
