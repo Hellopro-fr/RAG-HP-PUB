@@ -87,6 +87,22 @@ export const stripActionAnchor = (url: string): string => {
 export const actionAnchorStripEnabled = (): boolean =>
     (process.env.STRIP_ACTION_ANCHORS ?? "false").toLowerCase() === "true";
 
+/** Kill-switch, read at call time (testable). Default OFF. */
+export const provenDiezOverrideEnabled = (): boolean =>
+    (process.env.DIEZ_PROVEN_OVERRIDE_ENABLED ?? "false").toLowerCase() === "true";
+
+/**
+ * Pure predicate: should a committed skipDiez override the per-class spa-keep and
+ * force the wholesale '#' strip? Only when the decision is CONTENT-PROVEN (tier-2).
+ * tier1 (URL-shape confidence) and default (ceiling fallback) never override.
+ */
+export const isProvenDiezStrip = (
+    enabled: boolean,
+    committed: boolean,
+    skipDiez: boolean,
+    source: "tier1" | "tier2" | "default",
+): boolean => enabled && committed && skipDiez && source === "tier2";
+
 /**
  * Cheap, stable content fingerprint for collision detection — FNV-1a over the
  * whitespace-normalized text, plus a length suffix to cut accidental collisions.

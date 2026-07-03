@@ -7,7 +7,7 @@
  * See docs/superpowers/specs/2026-04-17-limitdiez-auto-decision-design.md.
  */
 
-import { classifyFragment } from "./diezClassify.js";
+import { classifyFragment, isProvenDiezStrip, provenDiezOverrideEnabled } from "./diezClassify.js";
 export { classifyFragment } from "./diezClassify.js";
 export type { Classification } from "./diezClassify.js";
 
@@ -89,6 +89,22 @@ interface DecisionMeta {
 
 // Last committed source, for getDiezDecisionMode. In-memory; the durable record is _diez_decision.json.
 let _committedSource: "tier1" | "tier2" | "default" = "tier1";
+
+/** The last committed decision source (restored on resume by readPersistedDecision). */
+export const getCommittedSource = (): "tier1" | "tier2" | "default" => _committedSource;
+
+/**
+ * Live gate: is a content-proven (tier-2) skipDiez in force? Read by processUrl to
+ * override the per-class spa-keep. Correct on resume — readPersistedDecision restores
+ * both context.config.skipDiez and _committedSource.
+ */
+export const provenDiezStripActive = (): boolean =>
+    isProvenDiezStrip(
+        provenDiezOverrideEnabled(),
+        context.diezDecisionCommitted,
+        context.config.skipDiez,
+        _committedSource,
+    );
 
 /**
  * Write the decision marker atomically (tmp → rename) with fsync before rename.
