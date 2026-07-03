@@ -13,6 +13,36 @@ SERVICE_NAME = os.getenv("SERVICE_NAME", "unknown-service")
 # MODIFIÉ: Augmentation du timeout par défaut de 60s à 300s pour tolérer le batch queueing
 GRPC_TIMEOUT = float(os.getenv("GRPC_TIMEOUT", "300.0"))
 
+# Canal gRPC persistant partagé (anti-pattern éliminé : un canal par appel
+# provoquait des CANCELLED à la fermeture + surcoût de handshake). Créé
+# paresseusement DANS la boucle courante — les canaux grpc.aio sont liés à
+# leur event loop, donc pas de création à l'import. Spec 2026-07-03.
+_CHANNEL_OPTIONS = [
+    ("grpc.keepalive_time_ms", 30000),
+    ("grpc.keepalive_timeout_ms", 10000),
+    ("grpc.keepalive_permit_without_calls", 1),
+]
+
+_channel = None
+
+
+def _get_channel():
+    global _channel
+    if _channel is None:
+        _channel = grpc.aio.insecure_channel(EMBEDDING_SERVICE_URL, options=_CHANNEL_OPTIONS)
+    return _channel
+
+
+async def _reset_channel_for_tests():
+    """Ferme et oublie le canal partagé (hermétisme des tests / boucles distinctes)."""
+    global _channel
+    if _channel is not None:
+        try:
+            await _channel.close()
+        except Exception:
+            pass
+        _channel = None
+
 
 # MODIFIÉ: La fonction est renommée et prend une liste de textes.
 async def get_embeddings(texts: List[str]) -> List[List[float]]:
@@ -22,15 +52,15 @@ async def get_embeddings(texts: List[str]) -> List[List[float]]:
     if not texts:
         return []
     try:
-        async with grpc.aio.insecure_channel(EMBEDDING_SERVICE_URL) as channel:
-            stub = embedding_pb2_grpc.EmbeddingServiceStub(channel)
-            # Utilise la nouvelle méthode RPC et le nouveau message de requête
-            request = embedding_pb2.EmbeddingsRequest(
-                texts=texts, source_service=SERVICE_NAME
-            )
-            response = await stub.GetEmbeddings(request, timeout=GRPC_TIMEOUT)
-            # Déballe la liste de messages EmbeddingVector en une liste de listes de floats
-            return [list(e.vector) for e in response.embeddings]
+        channel = _get_channel()
+        stub = embedding_pb2_grpc.EmbeddingServiceStub(channel)
+        # Utilise la nouvelle méthode RPC et le nouveau message de requête
+        request = embedding_pb2.EmbeddingsRequest(
+            texts=texts, source_service=SERVICE_NAME
+        )
+        response = await stub.GetEmbeddings(request, timeout=GRPC_TIMEOUT)
+        # Déballe la liste de messages EmbeddingVector en une liste de listes de floats
+        return [list(e.vector) for e in response.embeddings]
     except grpc.aio.AioRpcError as e:
         logging.error(f"Erreur gRPC en appelant le service Embedding: {e.details()}")
         # MODIFIÉ: L'exception est propagée pour permettre au service appelant de gérer les reintentions.
@@ -56,11 +86,11 @@ async def tokenize(texts: List[str]) -> List[List[int]]:
     if not texts:
         return []
     try:
-        async with grpc.aio.insecure_channel(EMBEDDING_SERVICE_URL) as channel:
-            stub = embedding_pb2_grpc.EmbeddingServiceStub(channel)
-            request = embedding_pb2.TokenizeRequest(texts=texts)
-            response = await stub.Tokenize(request, timeout=GRPC_TIMEOUT)
-            return [list(t.tokens) for t in response.tokenized_texts]
+        channel = _get_channel()
+        stub = embedding_pb2_grpc.EmbeddingServiceStub(channel)
+        request = embedding_pb2.TokenizeRequest(texts=texts)
+        response = await stub.Tokenize(request, timeout=GRPC_TIMEOUT)
+        return [list(t.tokens) for t in response.tokenized_texts]
     except grpc.aio.AioRpcError as e:
         logging.error(
             f"Erreur gRPC en appelant le service de Tokenization: {e.details()}"
@@ -75,16 +105,16 @@ async def detokenize(token_lists: List[List[int]]) -> List[str]:
     if not token_lists:
         return []
     try:
-        async with grpc.aio.insecure_channel(EMBEDDING_SERVICE_URL) as channel:
-            stub = embedding_pb2_grpc.EmbeddingServiceStub(channel)
-            # On reconstruit le message de requête
-            tokenized_outputs = [
-                embedding_pb2.TokenizedOutput(tokens=tokens) for tokens in token_lists
-            ]
-            request = embedding_pb2.DetokenizeRequest(tokenized_texts=tokenized_outputs)
+        channel = _get_channel()
+        stub = embedding_pb2_grpc.EmbeddingServiceStub(channel)
+        # On reconstruit le message de requête
+        tokenized_outputs = [
+            embedding_pb2.TokenizedOutput(tokens=tokens) for tokens in token_lists
+        ]
+        request = embedding_pb2.DetokenizeRequest(tokenized_texts=tokenized_outputs)
 
-            response = await stub.Detokenize(request, timeout=GRPC_TIMEOUT)
-            return list(response.texts)
+        response = await stub.Detokenize(request, timeout=GRPC_TIMEOUT)
+        return list(response.texts)
     except grpc.aio.AioRpcError as e:
         logging.error(
             f"Erreur gRPC en appelant le service de Detokenization: {e.details()}"
@@ -99,13 +129,13 @@ async def chunk_text(text: str, chunk_size: int, chunk_overlap: int) -> List[str
     if not text:
         return []
     try:
-        async with grpc.aio.insecure_channel(EMBEDDING_SERVICE_URL) as channel:
-            stub = embedding_pb2_grpc.EmbeddingServiceStub(channel)
-            request = embedding_pb2.ChunkRequest(
-                text=text, chunk_size=chunk_size, chunk_overlap=chunk_overlap
-            )
-            response = await stub.ChunkText(request, timeout=GRPC_TIMEOUT)
-            return list(response.chunks)
+        channel = _get_channel()
+        stub = embedding_pb2_grpc.EmbeddingServiceStub(channel)
+        request = embedding_pb2.ChunkRequest(
+            text=text, chunk_size=chunk_size, chunk_overlap=chunk_overlap
+        )
+        response = await stub.ChunkText(request, timeout=GRPC_TIMEOUT)
+        return list(response.chunks)
     except grpc.aio.AioRpcError as e:
         logging.error(f"Erreur gRPC en appelant le service de Chunking: {e.details()}")
         # Propagée (comme get_embeddings) : une erreur gRPC transitoire ne doit pas

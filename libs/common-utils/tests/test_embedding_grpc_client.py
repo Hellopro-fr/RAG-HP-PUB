@@ -35,7 +35,7 @@ def _ensure_fake_grpc():
 
         grpc_mod.aio = types.SimpleNamespace(
             AioRpcError=_AioRpcError,
-            insecure_channel=lambda url: _ChannelCM(),
+            insecure_channel=lambda url, options=None: _ChannelCM(),
         )
         sys.modules["grpc"] = grpc_mod
 
@@ -124,3 +124,37 @@ async def test_get_embeddings_reraises_grpc_error(monkeypatch):
     )
     with pytest.raises(embedding_client.grpc.aio.AioRpcError):
         await embedding_client.get_embeddings(["some text"])
+
+
+@pytest.mark.asyncio
+async def test_shared_channel_created_once_across_calls(monkeypatch):
+    channel_calls = []
+
+    class _FakeChannel:
+        def __init__(self, url, options=None):
+            channel_calls.append({"url": url, "options": options})
+
+    def _fake_insecure_channel(url, options=None):
+        return _FakeChannel(url, options)
+
+    class _StubOK:
+        def __init__(self, channel):
+            pass
+
+        async def ChunkText(self, request, timeout=None):
+            return type("R", (), {"chunks": ["a", "b"]})()
+
+        async def GetEmbeddings(self, request, timeout=None):
+            return type("R", (), {"embeddings": [type("V", (), {"vector": [0.1]})()]})()
+
+    monkeypatch.setattr(embedding_client.grpc.aio, "insecure_channel", _fake_insecure_channel)
+    monkeypatch.setattr(embedding_client.embedding_pb2_grpc, "EmbeddingServiceStub", _StubOK)
+    if hasattr(embedding_client, "_reset_channel_for_tests"):
+        await embedding_client._reset_channel_for_tests()
+
+    await embedding_client.chunk_text("t", 500, 100)
+    await embedding_client.get_embeddings(["x"])
+    await embedding_client.get_embeddings(["y"])
+
+    assert len(channel_calls) == 1
+    assert channel_calls[0]["options"] is not None
