@@ -1,0 +1,27 @@
+{
+  "enqueue_extraction_images_ia": {
+    "database_id": 10,
+    "description": "File d'attente à claim (« EII ») du pipeline d'extraction d'images NON-fiche-produit (Chantier D, alimente image_scrapping_ia). 1 ligne = 1 domaine à traiter (clé UNIQUE sur le domaine). Couche de throttling OPT-IN (activée par CHD_SOURCE=queue) : elle sélectionne QUELS domaines éligibles un run traite (batch), sans remplacer le critère d'éligibilité fichier de la Phase 1. Motif producteur → claim → réconciliation. Stockée dans HELLOPRO_IA. Suffixe colonnes _eii.",
+    "primary_key": "id_eii",
+    "default_order_by": "id_eii DESC",
+    "rows": null,
+    "columns": {
+      "id_eii": { "type": "int unsigned", "desc": "Identifiant unique de la ligne de file (PK, auto-increment)." },
+      "id_domaine_scrapping_produit_ia": { "type": "int unsigned", "desc": "FK logique (sans contrainte) → domaine_scrapping_produit_ia.id_domaine_scrapping_produit_ia. Domaine à traiter. Clé UNIQUE uq_domaine_eii = une seule ligne par domaine (anti double-enqueue). NB : ne porte PAS le suffixe _eii." },
+      "statut_eii": { "type": "tinyint", "desc": "État dans la file (défaut 0) : 0 = pending (en file) · 1 = processing (claimé, en cours) · 2 = done (terminé) · 3 = error. 1 et 3 sont des états transitoires (in-flight / retry) → un snapshot au repos ne montre que 0 et 2. Indexé (idx_statut_eii avec date_enqueue_eii)." },
+      "nb_retry_eii": { "type": "tinyint unsigned", "desc": "Compteur de tentatives (défaut 0). Incrémenté +1 uniquement à la réconciliation-erreur (statut→3). Une ligne en erreur reste re-claimable tant que nb_retry_eii est inférieur à CHD_QUEUE_MAX_RETRY (défaut 3), puis devient dead-letter. Remis à 0 quand un producteur ré-arme une ligne terminale (2/3 → 0)." },
+      "claim_batch_eii": { "type": "varchar(40)", "desc": "Jeton du run (worker) qui a claimé la ligne, format YYYYMMDD_HHMMSS_PID (ex. '20260630_163419_346'). NULL tant que la ligne est pending. Sert à regrouper/réconcilier les lignes d'un même run." },
+      "crawl_id_eii": { "type": "varchar(255)", "desc": "Snapshot informatif prévu à l'enqueue (crawl_id / storage_folder_name du dataset). PROVISIONNÉ MAIS JAMAIS ÉCRIT → toujours NULL ; le consumer re-dérive la vérité en Phase 1 (storage_folder_name pour une MAJ, sinon l'id DSPI pour l'initial)." },
+      "mode_eii": { "type": "enum", "desc": "Snapshot informatif prévu à l'enqueue : enum('initial','maj') = dataset crawl initial vs MAJ. PROVISIONNÉ MAIS JAMAIS ÉCRIT → toujours NULL ; le consumer re-dérive le mode live en Phase 1 (maj si un update_crawling_history FINISHED existe, sinon initial)." },
+      "message_erreur_eii": { "type": "text", "desc": "Message d'erreur. Écrit UNIQUEMENT quand une ligne claimée est sortie du JOIN d'éligibilité au moment du traitement ('non eligible au claim (sorti du JOIN eligibilite)', alors résolue en statut=2). La réconciliation-erreur (statut=3) ne le renseigne PAS → NULL sur les lignes en erreur. NULLable." },
+      "date_enqueue_eii": { "type": "datetime", "desc": "Date de mise en file (ou de ré-armement d'une ligne terminale). Le claim traite les lignes par date_enqueue_eii croissante (FIFO). Fuseau Europe/Paris." },
+      "date_claim_eii": { "type": "datetime", "desc": "Date du claim par un worker. NULL tant que pending. Récupération des claims bloqués : une ligne statut=1 dont le claim date de plus de CHD_QUEUE_STALE_HOURS (défaut 2 h) redevient re-claimable." },
+      "date_fin_eii": { "type": "datetime", "desc": "Date de passage à un état terminal (renseignée sur statut 2 ET 3). NULL tant que pending ou processing." }
+    },
+    "relations": [
+      { "column": "id_domaine_scrapping_produit_ia", "references": "domaine_scrapping_produit_ia.id_domaine_scrapping_produit_ia", "cardinality": "1:1 (UNIQUE)", "note": "FK logique sans contrainte. La réconciliation-done compare DSPI.date_dernier_traitement_image_dspi >= date_claim_eii." },
+      { "column": "id_domaine_scrapping_produit_ia", "references": "image_scrapping_ia.id_domaine_isi", "cardinality": "indirect", "note": "La file pilote la Phase 1 qui alimente image_scrapping_ia (INSERT IGNORE en Phase 2) ; aucune référence directe entre les deux tables." }
+    ],
+    "notes": "DDL migration_enqueue_extraction_images_ia.sql (HELLOPRO_IA, LINK_MYSQLI_HELLOPRO_IA), spec 2026-06-25. Producteurs (statut=0, ON DUPLICATE ré-arme 2/3 → 0) : (1) à l'archivage 3_archive_eligible_domains.php dès est_archiver=1 ; (2) batch enqueue_eii_producer.php (INSERT…SELECT sur l'éligibilité Phase 1 = est_archiver=1 + MAJ-dirty via update_crawling_history FINISHED ; backfill date NULL DÉSACTIVÉ). Claim atomique (fonctions_queue_eii.php) : UPDATE statut=1, date_claim, claim_batch WHERE statut=0 OR (1 ET claim périmé) OR (3 ET nb_retry inférieur au max) ORDER BY date_enqueue ASC LIMIT CHD_QUEUE_BATCH_SIZE (défaut 20) ; consumer = 1_identify_eligible_domains.php --source=queue --run-token. Réconciliation en fin de run (--reconcile=token) : done (statut=2, date_fin) si Phase 5 a horodaté date_dernier_traitement_image_dspi après le claim, sinon error (statut=3, nb_retry+1, date_fin). Cadence via cron_guerison_archivage_et_sync_images.sh (producteur puis consumer) — réactivée 2026-06-30, invocation crontab live NON confirmée depuis le repo (prod-désactivée depuis 2026-05-18). Verrou fichier = 1 worker à la fois. Pas de contrainte FK ; index uq_domaine_eii (unique) + idx_statut_eii(statut_eii, date_enqueue_eii)."
+  }
+}
