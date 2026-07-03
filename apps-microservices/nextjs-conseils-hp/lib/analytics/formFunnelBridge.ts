@@ -34,11 +34,22 @@ interface DataLayerWindow extends Window {
 }
 
 /**
+ * Dédup GLOBALE (niveau module), partagée entre TOUTES les modales et écouteurs `message` de la
+ * page. Indispensable : plusieurs IframeFormModal / IframeProduitModal peuvent être montés et
+ * OUVERTS simultanément (Hero mobile + desktop, blocs CTA/QuoteForm/TexteImage…). Le même relais
+ * `hellopro_form_step` est alors reçu par chaque écouteur → sans dédup partagée, chaque étape
+ * (dont page-remerciement = validation) serait poussée autant de fois qu'il y a d'écouteurs.
+ * Réinitialisée à la fermeture de la modale (resetFormStepUri).
+ */
+const globalPushedSteps = new Set<string>();
+
+/**
  * Traite un message `hellopro_form_step`. Retourne true si le message a été reconnu
  * (et traité), false sinon — l'appelant peut alors continuer son aiguillage.
  *
  * @param raw         données du MessageEvent
- * @param pushedSteps set de dédup (par step_name), à conserver le temps d'une ouverture de modale
+ * @param pushedSteps set de dédup par instance (conservé pour compat ; la dédup effective est
+ *                    GLOBALE via globalPushedSteps pour couvrir le cas multi-écouteurs)
  */
 export function handleFormStepMessage(raw: unknown, pushedSteps: Set<string>): boolean {
   const data = raw as FormStepMessage;
@@ -55,8 +66,15 @@ export function handleFormStepMessage(raw: unknown, pushedSteps: Set<string>): b
 
   const stepName = typeof data.funnel.step_name === 'string' ? data.funnel.step_name : '';
   // Dédup : évite de recompter une étape déjà poussée (ex. étape 1 émise par le Hero).
-  if (stepName && pushedSteps.has(stepName)) return true;
-  if (stepName) pushedSteps.add(stepName);
+  // Cas particulier page-remerciement (= validation de la soumission) : une seule fois par
+  // soumission, quelle que soit la variante (page-remerciement, -0, -1…) et le nombre de relais
+  // reçus. On normalise donc toutes ces variantes sur une clé de dédup unique.
+  const dedupKey = stepName.indexOf('page-remerciement') === 0 ? 'page-remerciement' : stepName;
+  // Dédup sur le set GLOBAL (partagé entre tous les écouteurs) → chaque étape poussée UNE fois,
+  // quel que soit le nombre de modales/écouteurs montés simultanément. (pushedSteps reste
+  // alimenté pour compat/inspection, mais n'est plus la source de vérité de la dédup.)
+  if (dedupKey && globalPushedSteps.has(dedupKey)) return true;
+  if (dedupKey) { globalPushedSteps.add(dedupKey); pushedSteps.add(dedupKey); }
 
   const w = window as DataLayerWindow;
   w.dataLayer = w.dataLayer || [];
@@ -71,6 +89,7 @@ export function handleFormStepMessage(raw: unknown, pushedSteps: Set<string>): b
  */
 export function resetFormStepUri(): void {
   if (typeof window === 'undefined') return;
+  globalPushedSteps.clear(); // ré-arme la dédup funnel pour une éventuelle réouverture du formulaire
   const base = (window.location.pathname.match(/.*\.html/) ?? [window.location.pathname])[0];
   if (window.location.pathname !== base) {
     window.history.pushState(null, '', base + window.location.search + window.location.hash);
