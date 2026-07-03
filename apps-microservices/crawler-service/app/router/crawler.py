@@ -214,6 +214,7 @@ async def start_new_crawl(payload: CrawlRequest):
             "percrawl": payload.per_crawl,
             "perminute": payload.per_minute,
             "camoufox": payload.camoufox, # Pass Camoufox flag
+            "cms": payload.cms,
         }
 
         # limitQueue gate désactivé en mode update (TEMPORAIRE — en attendant le fix du

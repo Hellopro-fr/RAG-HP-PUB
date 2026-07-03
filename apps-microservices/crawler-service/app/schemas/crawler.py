@@ -87,6 +87,9 @@ class CrawlRequest(BaseModel):
     # Camoufox Integration
     camoufox: Optional[bool] = Field(True, description="Use Camoufox stealth browser (default). Set to false to fall back to Playwright multi-browser rotation.")
 
+    # CMS Facet Denylist (QMF-T4)
+    cms: str = Field("", description="CMS label detected for the domain (e.g. 'wordpress', 'prestashop', 'shopify'). Best-effort: empty/unknown means the crawler applies no CMS facet-param denylist.")
+
 class CrawlResponse(BaseModel):
     message: str
     crawl_id: str
