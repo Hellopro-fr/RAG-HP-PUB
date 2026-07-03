@@ -13,6 +13,7 @@ import { context } from "./context.js";
 import { ContentExtractorClient, ContentExtractorError } from "./class/ContentExtractorClient.js";
 import { normalizeForCompare, shingleSet, jaccard, classifyPair } from "./contentSimilarity.js";
 import type { PairVerdict } from "./contentSimilarity.js";
+import { baseKeyWithout, baseKeyAbsent, hasParam } from "./urlBase.js";
 
 const _require = createRequire(import.meta.url);
 
@@ -23,31 +24,11 @@ const CONTENT_CAP = 150;                 // max buffered page contents
 const CANDIDATE_TOP_K = 8;               // most-frequent candidate params tracked
 const DEFAULT_AT = 95;                   // countQuestionMark margin before the 100 stop
 
-/** URL with param p removed, params sorted, normalized. */
-export const baseKeyWithout = (url: string, p: string): string => {
-    try {
-        const u = new URL(url);
-        u.searchParams.delete(p);
-        u.searchParams.sort();
-        return u.toString();
-    } catch {
-        return url;
-    }
-};
+// baseKeyWithout / baseKeyAbsent / hasParam now live in urlBase.ts (shared with
+// facetCap / filterOnSeen). Re-exported below so existing importers (routes.ts,
+// questionMarkTier2.test.ts) keep working unchanged.
+export { baseKeyWithout };
 
-const baseKeyAbsent = (url: string): string => {
-    try {
-        const u = new URL(url);
-        u.searchParams.sort();
-        return u.toString();
-    } catch {
-        return url;
-    }
-};
-
-const hasParam = (url: string, p: string): boolean => {
-    try { return new URL(url).searchParams.has(p); } catch { return false; }
-};
 const paramValue = (url: string, p: string): string | null => {
     try { return new URL(url).searchParams.get(p); } catch { return null; }
 };

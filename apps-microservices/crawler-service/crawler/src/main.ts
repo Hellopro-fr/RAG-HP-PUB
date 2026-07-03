@@ -53,6 +53,10 @@ import { repairQueueMetadata, recountQueueFromDisk } from "./queueRepair.js";
 import { isDrainedSample, isUnreconciledIdle, DRAIN_CONFIRM_SAMPLES, DRAIN_DISK_RECOUNT_ENABLED } from "./drainGuard.js";
 import { QUEUE_PURGE_ENABLED } from "./staleVariantSkip.js";
 import { flagStaleVariantsOnDisk } from "./queuePurge.js";
+import { baseKeyAbsent } from "./urlBase.js";
+import { QM_FACET_ENABLED } from "./facetCap.js";
+import { isFilterParam } from "./filterOnSeen.js";
+import { facetParamsForCms } from "./cmsFacetLists.js";
 
 const now = new Date().toISOString().replace(/:/g, "-");
 
@@ -108,6 +112,8 @@ const toRemove = (getArg('toremove', 'npm_config_toremove') || '').split(";").fi
 const crawlMode = getArg('crawlMode', 'npm_config_crawlmode') || 'standard';
 const camoufoxEnabled = (getArg('camoufox', 'npm_config_camoufox') || 'true').toLowerCase() !== 'false';
 const previousCrawlId = getArg('previousCrawlId', 'npm_config_previouscrawlid');
+// Queue-purge CMS denylist: coarse CMS label from BO (e.g. "WordPress"), '' if unset/unknown.
+const cms = getArg('cms', 'npm_config_cms') || '';
 const maxErrors = parseNumericArg('maxErrors', 'npm_config_maxerrors', 0);
 const maxRedirects = parseNumericArg('maxRedirects', 'npm_config_maxredirects', 0);
 const maxNewUrls = parseNumericArg('maxNewUrls', 'npm_config_maxnewurls', 0);
@@ -142,6 +148,7 @@ context.config = {
     bypassDiez: bypassDiez,
     toKeep: toKeep,
     toRemove: toRemove,
+    cms: cms,
     breakLimit: breakLimit,
     circuitBreaker: {
         enabled: false,
@@ -701,6 +708,39 @@ const queuePauseInterval: ReturnType<typeof setInterval> | undefined =
         : undefined;
 
 
+// Queue-purge #2: build the seen-base oracle BEFORE the D1 disk-flag pass below,
+// so a filtered-view variant already queued from a prior run can be retracted on
+// this resume/update. Dataset + live-added only (NEVER Redis — Redis is
+// update-mode-blind, see spec). Each call below opens a FRESH generator instance;
+// none of these are reused (the ~L864 consolidator call creates its own separate
+// instance for a different purpose).
+if (QM_FACET_ENABLED) {
+    const addSeen = async (gen: AsyncGenerator<string>) => {
+        try {
+            for await (const u of gen) context.seenBases.add(baseKeyAbsent(u));
+        } catch (e) {
+            console.warn(`[qm-facet] seenBases pass skipped: ${(e as Error).message}`);
+        }
+    };
+    // Update mode: the previous crawl's dataset is the "already crawled" oracle.
+    if (previousCrawlId) await addSeen(loadDatasetUrlsGenerator(previousCrawlId, domain));
+    // Initial/resume: the current crawl's own dataset-on-disk.
+    if (context.config.crawleeStorageName) await addSeen(rehydrateDedupFromDataset(context.config.crawleeStorageName));
+    if (context.seenBases.size > 0) {
+        console.log(`[qm-facet] seenBases: ${context.seenBases.size} bases loaded from dataset.`);
+    }
+
+    // Queue-purge CMS denylist (Layer A): merge the CMS's curated cosmetic facet params
+    // into toRemove so the existing toRemove machinery (processUrl) strips them at
+    // enqueue time. Empty/unknown cms -> facetParamsForCms returns [] -> no-op.
+    const cmsFacets = facetParamsForCms(context.config.cms);
+    if (cmsFacets.length > 0) {
+        const have = new Set(context.config.toRemove.map((s) => s.toLowerCase()));
+        for (const p of cmsFacets) if (!have.has(p.toLowerCase())) context.config.toRemove.push(p);
+        console.log(`[qm-facet] CMS '${context.config.cms}': merged ${cmsFacets.length} facet param(s) into toRemove.`);
+    }
+}
+
 if (skipquestionmark || skipdiez) {
     const requestQueueList = getAllRequestQueues(domain);
     if (requestQueueList.length > 0) {
@@ -727,6 +767,9 @@ if (QUEUE_PURGE_ENABLED) {
                 context.config.skipDiez,
                 { toKeep: context.config.toKeep, toRemove: context.config.toRemove },
             ),
+            // Queue-purge #2 decider: the #1 facet counter is empty at startup (in-memory,
+            // built only as live pages are handled), so D1 only needs the seen-base check.
+            (u: string) => QM_FACET_ENABLED && isFilterParam(u, context.seenBases),
         );
         if (purged.flagged > 0) {
             console.warn(`[queue-purge] ${domain}: flagged ${purged.flagged} stale queued variants skipNavigation (kept ${purged.kept}).`);
