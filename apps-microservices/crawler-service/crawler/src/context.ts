@@ -44,6 +44,9 @@ export const context = {
         bypassDiez: false,
         toKeep: [] as string[],
         toRemove: [] as string[],
+        // Queue-purge CMS denylist: coarse CMS label from BO (e.g. "WordPress"), used
+        // at startup to merge curated cosmetic facet params into toRemove (cmsFacetLists.ts).
+        cms: "",
         breakLimit: true,
         
         // V1 Update Logic: Dual-Mode Circuit Breaker
