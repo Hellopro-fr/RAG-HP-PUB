@@ -2,6 +2,7 @@ import os
 import logging
 import re
 import json
+import socket
 from datetime import datetime
 from typing import Dict, Optional, List
 
@@ -18,6 +19,9 @@ from app.schemas.crawler import CrawlRequest, CrawlResponse, CrawlStatus, StopRe
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+# Deploy identity for GET /version. Stamped once at import (= process start).
+APP_STARTED_AT = datetime.utcnow().isoformat() + "Z"
 
 
 async def _record_downloaded_at(job_info: dict) -> None:
@@ -187,6 +191,19 @@ async def get_capacity():
     except Exception as e:
         logger.error(f"Failed to get crawler capacity from Redis: {e}", exc_info=True)
         raise HTTPException(status_code=503, detail="Could not determine crawler service capacity.")
+
+
+@router.get("/version")
+async def version():
+    """Deploy identity: which commit/build is running, on which replica, since
+    when. GIT_COMMIT/BUILD_DATE are baked at image build (Dockerfile ARG->ENV);
+    'unknown' means the image was built without build args."""
+    return {
+        "git_commit": os.environ.get("GIT_COMMIT", "unknown"),
+        "build_date": os.environ.get("BUILD_DATE", "unknown"),
+        "replica": socket.gethostname(),
+        "started_at": APP_STARTED_AT,
+    }
 
 
 @router.post("/start", response_model=CrawlResponse, status_code=status.HTTP_202_ACCEPTED)
