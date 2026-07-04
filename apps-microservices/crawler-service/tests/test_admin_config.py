@@ -38,9 +38,11 @@ def test_api_key_masked_when_set(monkeypatch):
 
 def test_env_whitelist_only(client, monkeypatch):
     monkeypatch.setenv("DIEZ_TIER2_ENABLED", "true")
+    monkeypatch.setenv("QUEUE_PURGE_ENABLED", "true")
     monkeypatch.setenv("REDIS_URL", "redis://:secret@host:6379")
     monkeypatch.setenv("APIFY_PROXY", "http://user:pass@proxy")
     body = client.get("/admin/config").json()
     assert body["env"]["DIEZ_TIER2_ENABLED"] == "true"
+    assert body["env"]["QUEUE_PURGE_ENABLED"] == "true"
     assert "REDIS_URL" not in body["env"]
     assert "APIFY_PROXY" not in body["env"]
