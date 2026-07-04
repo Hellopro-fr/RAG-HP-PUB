@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import re
+import time
 from collections import Counter
 from datetime import datetime
 from typing import Any, Dict, Optional
@@ -302,3 +303,69 @@ async def sidecar_file(
         return {"name": name, "content": json.loads(text)}
     except json.JSONDecodeError:
         return {"name": name, "raw": text[:100_000]}
+
+
+_ERROR_MARKER_SUFFIXES = (".error", ".move-error")
+_DAEMON_STATE_MAX_FILES = 200
+
+
+def _daemon_dirs() -> Dict[str, str]:
+    """Shared flow dirs (already bind-mounted, config.py:22-53). Read at call
+    time so tests can monkeypatch settings paths."""
+    return {
+        "archives": settings.ARCHIVES_SHARED_PATH,
+        "archives_dead_letter": os.path.join(settings.ARCHIVES_SHARED_PATH, "dead_letter"),
+        "stash": settings.STASH_SHARED_PATH,
+        "stash_dead_letter": os.path.join(settings.STASH_SHARED_PATH, "dead_letter"),
+        "download_requests": settings.DOWNLOAD_REQUESTS_PATH,
+        "download_results": settings.DOWNLOAD_RESULTS_PATH,
+        "stash_download_requests": settings.STASH_DOWNLOAD_REQUESTS_PATH,
+        "stash_download_results": settings.STASH_DOWNLOAD_RESULTS_PATH,
+        "move_requests": settings.MOVE_REQUESTS_PATH,
+        "move_results": settings.MOVE_RESULTS_PATH,
+    }
+
+
+def _describe_dir(path: str) -> Dict[str, Any]:
+    if not os.path.isdir(path):
+        return {"exists": False}
+    now = time.time()
+    files, error_markers = [], {}
+    heartbeat_age = None
+    try:
+        names = os.listdir(path)
+    except OSError as e:
+        return {"exists": True, "error": str(e)}
+    for name in names:
+        full = os.path.join(path, name)
+        if not os.path.isfile(full):
+            continue
+        try:
+            st = os.stat(full)
+        except OSError:
+            continue
+        if name == ".daemon-heartbeat":
+            heartbeat_age = int(now - st.st_mtime)
+            continue
+        files.append({"name": name, "size_bytes": st.st_size,
+                      "age_seconds": int(now - st.st_mtime)})
+        if name.endswith(_ERROR_MARKER_SUFFIXES):
+            try:
+                with open(full, "r", encoding="utf-8", errors="replace") as f:
+                    error_markers[name] = f.read(2000)
+            except OSError:
+                pass
+    files.sort(key=lambda f: f["age_seconds"])
+    return {"exists": True, "file_count": len(files),
+            "heartbeat_age_seconds": heartbeat_age,
+            "files": files[:_DAEMON_STATE_MAX_FILES],
+            "error_markers": error_markers}
+
+
+@router.get("/daemon-state", dependencies=[Depends(verify_api_key)])
+async def daemon_state():
+    """Liveness/backlog view of the GCS daemons' shared marker directories.
+    Heartbeat age (each daemon loop touches .daemon-heartbeat in its watch
+    dir) + pending markers + dead-letter contents + *.error texts —
+    distinguishes 'daemon dead' vs 'GCS slow' vs 'dead-lettered' in one call."""
+    return {name: _describe_dir(path) for name, path in _daemon_dirs().items()}
