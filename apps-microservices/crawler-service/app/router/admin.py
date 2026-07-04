@@ -129,3 +129,37 @@ async def crawl_log_tail(
             raise HTTPException(status_code=400, detail=f"Invalid grep regex: {e}")
         data = "\n".join(line for line in data.splitlines() if rx.search(line))
     return PlainTextResponse(data, headers={"X-Log-Size-Bytes": str(size)})
+
+
+_JOB_REDACT_FIELDS = ("callback_url", "failure_callback_url")
+_JOB_LOCK_PATTERNS = ("crawl_lock:{id}", "stash_lock:{id}", "unstash_lock:{id}",
+                      "archive_lock:{id}", "restore_lock:{id}")
+
+
+@router.get("/job/{crawl_id}", dependencies=[Depends(verify_api_key)])
+async def job_dump(job_info: dict = Depends(get_job_or_recover)):
+    """Raw crawl_job blob (secrets redacted) + held ownership locks with TTLs +
+    the Node crawler's live stats:{id} hash (7d TTL) + reconcile leader.
+    The un-lossy companion to GET /status — answers failure_cause / OOM count /
+    'who holds the lock behind my 409 OPERATION_IN_PROGRESS'."""
+    client = cache_service.redis_client
+    if client is None:
+        raise HTTPException(status_code=503, detail="Redis not connected")
+    blob = dict(job_info)
+    for field in _JOB_REDACT_FIELDS:
+        if blob.get(field):
+            blob[field] = "<redacted>"
+    params = blob.get("params")
+    if isinstance(params, dict) and params.get("proxyapify"):
+        blob["params"] = {**params, "proxyapify": "<redacted>"}
+    crawl_id = blob["crawl_id"]
+    locks: Dict[str, Any] = {}
+    for pattern in _JOB_LOCK_PATTERNS:
+        key = pattern.format(id=crawl_id)
+        value = await client.get(key)
+        if value is not None:
+            locks[key] = {"value": value, "ttl_seconds": await client.ttl(key)}
+    node_stats = await client.hgetall(f"stats:{crawl_id}") or {}
+    reconcile_leader = await client.get("reconcile_leader_lock")
+    return {"job": blob, "locks": locks, "node_stats": node_stats,
+            "reconcile_leader": reconcile_leader}
