@@ -43,6 +43,7 @@ CRAWL_UPDATES_CHANNEL = "crawl_updates"
 # Webhook retry configuration
 WEBHOOK_RETRY_DELAYS = [5, 30, 120]  # seconds between attempts (exponential backoff)
 FAILED_CALLBACKS_KEY = "crawl_jobs:failed_callbacks"
+WEBHOOK_DEADLETTER_DRAIN_PER_TICK = 5  # bounded replay batch per reconcile tick
 
 # Capacity short-circuit + Redis retry (Spec 2026-05-22).
 # See docs/superpowers/specs/2026-05-22-start-crawl-capacity-short-circuit-design.md
@@ -870,9 +871,11 @@ class CrawlerManager:
                                   webhook_type: str, timeout: float = 5.0) -> bool:
         """Single-attempt webhook send with a custom timeout.
 
-        Used by the shutdown path to bound worst-case time. Does NOT retry and does
-        NOT store in FAILED_CALLBACKS_KEY on failure — reconciliation will replay
-        using the same request_id from job_info, and PHP dedupes.
+        Used by the shutdown path to bound worst-case time. Does NOT retry; on
+        failure it enqueues the callback into FAILED_CALLBACKS_KEY (same
+        dead-letter as the retry path's exhaustion) so the reconcile leader's
+        bounded auto-drain (_drain_failed_callbacks) replays it — PHP dedupes
+        replays via the request_id embedded in params.
         """
         # Flatten nested dicts/lists into PHP bracket notation so $_GET parses them as arrays.
         flat_params = _flatten_params_for_php(params)
@@ -883,9 +886,11 @@ class CrawlerManager:
                     logger.info(f"Webhook '{webhook_type}' for '{crawl_id}' sent (shutdown). Status: {response.status_code}")
                     return True
                 logger.warning(f"Webhook '{webhook_type}' for '{crawl_id}' got {response.status_code} during shutdown")
+                await self._store_failed_callback(url, params, crawl_id, webhook_type, f"HTTP {response.status_code}")
                 return False
         except httpx.RequestError as e:
             logger.warning(f"Webhook '{webhook_type}' for '{crawl_id}' failed during shutdown: {e}")
+            await self._store_failed_callback(url, params, crawl_id, webhook_type, str(e))
             return False
 
     async def _send_webhook_with_retry(self, url: str, params: dict, crawl_id: str, webhook_type: str):
@@ -3812,6 +3817,46 @@ class CrawlerManager:
             await cache_service.set_key(CRAWL_RUNNING_COUNT_KEY, true_running_count)
         else:
             logger.info(f"Reconciliation complete. Running: {true_running_count}, Stale/Fixed: {stale_jobs_count}")
+
+        # --- Webhook dead-letter drain (leader only, bounded per tick) ---
+        # Shutdown-path webhooks are single-attempt; failures land in
+        # FAILED_CALLBACKS_KEY (Fix A). Replay a bounded batch each tick —
+        # request_id in the stored params lets PHP dedupe replays.
+        try:
+            await self._drain_failed_callbacks()
+        except Exception as e:
+            logger.warning(f"Dead-letter drain failed this tick: {e}")
+
+    async def _drain_failed_callbacks(self) -> int:
+        """Replays a bounded batch of the webhook dead-letter queue (FAILED_CALLBACKS_KEY).
+
+        Called once per reconcile tick, leader-only (inside _reconcile_locked's
+        lock), so no multi-replica double-send — request_id dedupe on the PHP
+        side is the backstop anyway. Replays fire-and-forget via
+        _send_webhook_with_retry, which re-enqueues on exhaustion, so a failed
+        replay cycles back instead of being lost.
+
+        Returns the number of entries replayed (scheduled, not necessarily
+        delivered) this tick.
+
+        ponytail: LPOP+resend N per tick; dedicated worker only if backlog grows.
+        """
+        replayed = 0
+        for _ in range(WEBHOOK_DEADLETTER_DRAIN_PER_TICK):
+            raw = await cache_service.redis_client.lpop(FAILED_CALLBACKS_KEY)
+            if raw is None:
+                break
+            try:
+                entry = json.loads(raw)
+            except (json.JSONDecodeError, TypeError):
+                logger.warning(f"Dead-letter drain: dropping unparseable entry: {raw[:200]}")
+                continue
+            logger.info(f"Dead-letter drain: replaying {entry.get('webhook_type')} webhook "
+                        f"for crawl '{entry.get('crawl_id')}'.")
+            asyncio.create_task(self._send_webhook_with_retry(
+                entry["url"], entry["params"], entry["crawl_id"], entry["webhook_type"]))
+            replayed += 1
+        return replayed
 
     async def cleanup_archives(self, max_age_hours: int, delete_all: bool = False) -> Tuple[int, int, int]:
         """
