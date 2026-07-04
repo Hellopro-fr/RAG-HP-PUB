@@ -264,3 +264,41 @@ async def dataset_sample(
         records.append(record)
     return {"kind": kind, "total_records": len(entries), "offset": offset,
             "returned": len(records), "records": records}
+
+
+# Exact filenames kept on disk for investigations (files_to_keep sets in
+# crawler_manager.py:2534/:2954 + the diez/QM decision sidecars). crawler.log
+# has its own /admin/logs endpoint; timing.jsonl excluded (unbounded size).
+_SIDECAR_WHITELIST = frozenset({
+    "_callback_payload.json", "_completion_marker.json", "_status_snapshot.json",
+    "_exit_reason.json", "_update_report.json", "update_stats.json",
+    "timing-summary.json", "_queue_stats.json",
+    "_diez_decision.json", "_diez_audit.json",
+    "_questionmark_decision.json", "_questionmark_observations.json",
+    "_questionmark_audit.json",
+})
+
+
+@router.get("/sidecar/{crawl_id}", dependencies=[Depends(verify_api_key)])
+async def sidecar_file(
+    name: str = Query(..., description="One of the known per-crawl sidecar filenames."),
+    job_info: dict = Depends(get_job_or_recover),
+):
+    """One per-crawl diagnostic sidecar, parsed as JSON when possible.
+    `name` is matched against a fixed whitelist — it is a lookup key, never a
+    filesystem path (no traversal surface)."""
+    if name not in _SIDECAR_WHITELIST:
+        raise HTTPException(
+            status_code=400,
+            detail=f"name must be one of: {', '.join(sorted(_SIDECAR_WHITELIST))}")
+    storage_path = job_info.get("storage_path") or os.path.join(
+        settings.CRAWLER_STORAGE_PATH, job_info["crawl_id"])
+    path = os.path.join(storage_path, name)
+    if not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail=f"{name} not present for this crawl.")
+    with open(path, "r", encoding="utf-8", errors="replace") as f:
+        text = f.read()
+    try:
+        return {"name": name, "content": json.loads(text)}
+    except json.JSONDecodeError:
+        return {"name": name, "raw": text[:100_000]}
