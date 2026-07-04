@@ -57,6 +57,7 @@ import { baseKeyAbsent } from "./urlBase.js";
 import { QM_FACET_ENABLED } from "./facetCap.js";
 import { isFilterParam } from "./filterOnSeen.js";
 import { facetParamsForCms } from "./cmsFacetLists.js";
+import { hasIgnoredExtensionForSeed } from "./seedExtensionFilter.js";
 
 const now = new Date().toISOString().replace(/:/g, "-");
 
@@ -1473,9 +1474,24 @@ if (typeCrawling == "sitemap") {
 
             let seedCount = 0;
             let skippedCount = 0;
+            let skippedExtCount = 0;
             for (const { url, source } of remainingUrls) {
                 if (excluded.length > 0 && DetectionLangueClient.isExcludedRegionalPath(url, excluded)) {
                     skippedCount++;
+                    continue;
+                }
+
+                // Baseline URLs are inherited from the PREVIOUS crawl (dataset / request_queue
+                // / request_url) via direct addRequest below, which bypasses the ignoredExtensions
+                // filtering that enqueueLinks applies to freshly discovered links (routes.ts).
+                // Without this guard, an inherited image/pdf/doc URL gets re-seeded every UPDATE
+                // crawl forever (it's re-written into this crawl's request_queue, which the NEXT
+                // update's consolidation reads again) — the inherited-image infinite re-crawl loop.
+                if (hasIgnoredExtensionForSeed(url)) {
+                    skippedExtCount++;
+                    if (context.statsManager) {
+                        await context.statsManager.increment("filtered_ext");
+                    }
                     continue;
                 }
 
@@ -1514,6 +1530,9 @@ if (typeCrawling == "sitemap") {
                 }
             }
             console.log(`[PHASE 2] Finished seeding ${seedCount} URLs (${skippedCount} excluded as regional variants).`);
+            if (skippedExtCount > 0) {
+                console.log(`[seed-filter] skipped ${skippedExtCount} ignored-extension baseline URL(s) (filtered_ext)`);
+            }
             context.phase2SeedingComplete = true;
         };
 
