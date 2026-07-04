@@ -1,5 +1,6 @@
 """Unit tests for the in-memory log ring buffer."""
 import logging
+import threading
 import pytest
 
 from app.core import log_buffer
@@ -43,6 +44,31 @@ def test_limit_keeps_newest():
         _emit(h, logging.INFO, f"line-{i}")
     lines = log_buffer.get_recent(limit=3)
     assert lines == ["line-7", "line-8", "line-9"]
+
+
+def test_get_recent_snapshots_while_appending():
+    """get_recent iterates a snapshot — concurrent emits must not raise
+    'deque mutated during iteration'."""
+    h = log_buffer.RingBufferHandler()
+    h.setFormatter(logging.Formatter("%(message)s"))
+    _emit(h, logging.INFO, "seed")
+    stop = threading.Event()
+
+    def writer():
+        i = 0
+        while not stop.is_set():
+            _emit(h, logging.INFO, f"w-{i}")
+            i += 1
+
+    t = threading.Thread(target=writer)
+    t.start()
+    try:
+        for _ in range(200):
+            lines = log_buffer.get_recent()
+            assert all(isinstance(l, str) for l in lines)
+    finally:
+        stop.set()
+        t.join()
 
 
 def test_emit_never_raises():

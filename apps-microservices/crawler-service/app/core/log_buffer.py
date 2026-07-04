@@ -30,7 +30,9 @@ def get_recent(grep: Optional[str] = None, min_levelno: int = logging.INFO,
     Raises re.error on an invalid grep pattern (caller maps to 400)."""
     rx = re.compile(grep) if grep else None
     out: List[str] = []
-    for levelno, line in reversed(_buffer):
+    # Snapshot: executor threads append concurrently; iterating the live
+    # deque would raise "deque mutated during iteration".
+    for levelno, line in reversed(list(_buffer)):
         if levelno < min_levelno:
             continue
         if rx is not None and not rx.search(line):

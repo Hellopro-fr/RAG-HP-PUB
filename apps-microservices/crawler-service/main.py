@@ -46,7 +46,8 @@ logging.config.dictConfig({
     },
     "loggers": {
         "uvicorn": {"handlers": ["console", "ring"], "level": "INFO", "propagate": False},
-        "uvicorn.access": {"handlers": ["console", "ring"], "level": "INFO", "propagate": False},
+        # No "ring": access lines (BO polls /status) would evict the diagnostic markers.
+        "uvicorn.access": {"handlers": ["console"], "level": "INFO", "propagate": False},
         "uvicorn.error": {"handlers": ["console", "ring"], "level": "INFO", "propagate": False},
     },
 })
