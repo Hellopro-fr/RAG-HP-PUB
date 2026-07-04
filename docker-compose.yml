@@ -600,7 +600,9 @@ services:
       context: .
       dockerfile: ./apps-microservices/content-extractor-api-service/Dockerfile
     container_name: content-extractor-api-service
-    profiles: [ "app", "crawling" ]
+    # "crawling" removed on purpose: scaling crawler-service with the crawling
+    # profile must not recreate/restart this service (it serves other consumers).
+    profiles: [ "app" ]
     restart: unless-stopped
     ports:
       - "${CONTENT_EXTRACTOR_API_PORT:-8600}:8600"
@@ -1371,6 +1373,10 @@ services:
       - REDIS_SOCKET_CONNECT_TIMEOUT_S=${REDIS_SOCKET_CONNECT_TIMEOUT_S:-5}
       - REDIS_HEALTH_CHECK_INTERVAL_S=${REDIS_HEALTH_CHECK_INTERVAL_S:-30}
       - SERVICE_NAME=crawler-service
+      # Admin-endpoints auth: the code reads API_KEY; the .env var is namespaced
+      # API_KEY_ADMIN_SERVICE so a bare API_KEY in the shared .env can never be
+      # picked up by another service's config. Empty/unset = auth disabled.
+      - API_KEY=${API_KEY_ADMIN_SERVICE:-}
       - AUTO_STASH_ENABLED=${AUTO_STASH_ENABLED:-false}
       - STASH_GRACE_SECONDS=${STASH_GRACE_SECONDS:-3600}
       - STASH_SAFETY_TIMEOUT_SECONDS=${STASH_SAFETY_TIMEOUT_SECONDS:-172800}

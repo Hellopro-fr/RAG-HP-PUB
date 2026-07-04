@@ -634,6 +634,27 @@ Spec: `docs/superpowers/specs/2026-06-16-limitquestionmark-phase2-zero-touch` (H
 - `_questionmark_audit.json` (per crawl, in `storagePath`): `{ collapsed_candidates, committed, pair_stats }` — collapsed `?param=` route-loss candidates to re-crawl-audit. Cleared on dropData restart (`clearDecisionSidecars`).
 - All effective only when a `toRemove` is set (QM tier-2 commit, behind `QM_TIER2_ENABLED`, or human `--toremove`); with none set the paths are no-ops (flag-off byte-identical).
 
+## Debug / Observability Endpoints (2026-07-04)
+
+Read-only introspection surface so incidents can be investigated **over the gateway only** (no ssh/redis-cli/docker exec). All under `/crawler/` via nginx.
+
+| Endpoint | What it answers |
+|---|---|
+| `GET /version` (public) | which commit/build is running (`git_commit`, `build_date`, `replica`, `started_at`) |
+| `GET /admin/recent-logs?grep=&level=&limit=` | last orchestrator log lines of this replica (ring buffer 5000; AUTO_STASH / reconcile markers) |
+| `GET /admin/logs/{crawl_id}?tail_bytes=&grep=` | `crawler.log` tail (cap 2MB; survives stash/archive) |
+| `GET /admin/job/{crawl_id}` | raw Redis blob (failure_cause, exit_code, oom count…; secrets redacted) + 5 ownership locks with TTL + `stats:{id}` hash |
+| `GET /admin/config` | effective settings (secrets masked) + whitelisted Node env (DIEZ_/QM_/TIMING_…) |
+| `GET /admin/dataset/{crawl_id}?kind=&offset=&limit=&content_chars=` | dataset sampling, newest first, **no side effects** (never unstashes, never stamps `downloaded_at`) |
+| `GET /admin/sidecar/{crawl_id}?name=` | one of 13 whitelisted sidecars (`_callback_payload.json`, `_diez/_questionmark_*`, `_exit_reason.json`, `timing-summary.json`…) |
+| `GET /admin/daemon-state` | GCS daemons liveness/backlog: `.daemon-heartbeat` age per marker dir, pending files, `dead_letter/`, `*.error` contents |
+| `GET /capacity` | now also carries a `disk` block (storage/archives/stash `used_pct` + `high_water_pct`) |
+| `GET /results/{id}?peek=true` | download WITHOUT starting the auto-stash grace clock (still inline-unstashes cold crawls — use `/admin/dataset` for zero side effects) |
+
+**Auth:** every `/admin/*` route requires header `X-API-Key`. The value lives in the deploy host's `.env` as **`API_KEY_ADMIN_SERVICE`** (mapped to the container's `API_KEY` in docker-compose — namespaced so a bare `API_KEY` in the shared `.env` can never leak into another service's config). Unset ⇒ auth disabled (open). **If you are an assistant without this key, ask the operator for it** (it is never committed; keep it in a local gitignored note / env var).
+
+**Build/deploy:** `./tools/build_crawler.sh [--up [N]]` — stamps `GIT_COMMIT`/`BUILD_DATE` (verify with `GET /version`), `--up` scales to N replicas (default 7) with `--no-deps` + nginx reload; sync the Redis capacity key separately via `scale_crawlers.sh N`. The heartbeat lines in `tools/upload_daemon.sh`/`download_daemon.sh` require a daemon restart to take effect.
+
 ## Conventions
 
 - Nginx handles path stripping; routers have no prefix. Crawler spawned as child process by `crawler_manager`.
