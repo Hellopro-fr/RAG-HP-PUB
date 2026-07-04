@@ -193,6 +193,7 @@ async def effective_config():
 
 
 _DATASET_PREFIXES = {"main": "", "error": "error-", "nfr": "nfr-", "update": "update-"}
+_DATASET_MAX_PARSE_BYTES = 20_000_000  # skip parsing pathological items; metadata still listed
 
 
 def _dataset_dir(job_info: dict, kind: str) -> Optional[str]:
@@ -240,11 +241,15 @@ async def dataset_sample(
             except OSError:
                 continue
             entries.append((entry.name, st.st_mtime, st.st_size))
-    entries.sort(key=lambda e: e[1], reverse=True)  # newest first
+    entries.sort(key=lambda e: (e[1], e[0]), reverse=True)  # newest first, name-stable on mtime ties
     records = []
     for name, mtime, size in entries[offset:offset + limit]:
         record = {"file": name, "size_bytes": size,
                   "mtime": datetime.utcfromtimestamp(mtime).isoformat(), "url": None}
+        if size > _DATASET_MAX_PARSE_BYTES:
+            record["parse_error"] = f"file too large to parse ({size} bytes)"
+            records.append(record)
+            continue
         try:
             with open(os.path.join(dataset_dir, name), "r", encoding="utf-8",
                       errors="replace") as f:

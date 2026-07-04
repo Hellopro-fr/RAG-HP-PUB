@@ -78,3 +78,13 @@ def test_html_index_excluded_and_pagination(app_and_storage):
     body = TestClient(app).get("/admin/dataset/9", params={"offset": 1, "limit": 2}).json()
     assert body["total_records"] == 5
     assert body["returned"] == 2
+
+
+def test_oversized_file_not_parsed(app_and_storage, monkeypatch):
+    app, storage = app_and_storage
+    _mk_dataset(storage, "example.com", [("a.json", {"url": "u", "content": "abc"})])
+    import app.router.admin as admin_mod
+    monkeypatch.setattr(admin_mod, "_DATASET_MAX_PARSE_BYTES", 5)
+    record = TestClient(app).get("/admin/dataset/9").json()["records"][0]
+    assert record["url"] is None
+    assert "too large" in record["parse_error"]
