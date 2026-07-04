@@ -163,3 +163,28 @@ async def job_dump(job_info: dict = Depends(get_job_or_recover)):
     reconcile_leader = await client.get("reconcile_leader_lock")
     return {"job": blob, "locks": locks, "node_stats": node_stats,
             "reconcile_leader": reconcile_leader}
+
+
+_SECRET_SETTINGS = ("API_KEY", "APIFY_PROXY")
+# Prefixes of env vars the Node subprocess consumes (it inherits container env).
+# Deliberately narrow: "REDIS_LOSS" (not "REDIS_") so REDIS_URL credentials never leak.
+_ENV_WHITELIST_PREFIXES = (
+    "DIEZ_", "QM_", "TIMING_", "DETECTION_", "NAVIGATION_", "RECOVER_",
+    "PROGRESS_", "REDIS_LOSS", "NODE_OPTIONS", "MAX_CONCURRENT",
+    "DEFAULT_MAX_GLOBAL", "AUTO_STASH", "STASH_",
+)
+
+
+@router.get("/config", dependencies=[Depends(verify_api_key)])
+async def effective_config():
+    """Effective runtime configuration: pydantic Settings (secrets masked to
+    '<set>'; None means genuinely unset) + the whitelisted env vars the Node
+    crawler subprocess inherits. Answers 'is AUTO_STASH_ENABLED / DIEZ_TIER2 /
+    QM_TIER2 actually ON on this deployment?' without VM access."""
+    cfg = settings.model_dump()
+    for key in _SECRET_SETTINGS:
+        if cfg.get(key):
+            cfg[key] = "<set>"
+    env = {k: v for k, v in sorted(os.environ.items())
+           if k.startswith(_ENV_WHITELIST_PREFIXES)}
+    return {"settings": cfg, "env": env}
