@@ -2530,21 +2530,13 @@ class CrawlerManager:
                                     pass
 
                     def _cleanup_local_data():
-                        """Remove crawl data files, keeping only logs and markers."""
-                        files_to_keep = {'crawler.log', '_callback_payload.json',
-                                         '_completion_marker.json', '_status_snapshot.json',
-                                         '_exit_reason.json', '_update_report.json',
-                                         'update_stats.json',
-                                         'timing.jsonl', 'timing-summary.json'}
-                        for root, dirs, files in os.walk(job_storage_path, topdown=False):
-                            for name in files:
-                                if name not in files_to_keep:
-                                    os.remove(os.path.join(root, name))
-                            for name in dirs:
-                                try:
-                                    os.rmdir(os.path.join(root, name))
-                                except OSError:
-                                    pass
+                        """Free the disk-heavy Crawlee tree (storage/: datasets,
+                        request_queues, key_value_stores). Everything else in the
+                        crawl dir (crawler.log, logs/, *.json sidecars) is small
+                        and kept for investigation — the tar holds a full copy."""
+                        heavy = os.path.join(job_storage_path, 'storage')
+                        if os.path.isdir(heavy):
+                            shutil.rmtree(heavy, ignore_errors=True)
 
                     # Step 1: Create archive
                     final_path, archive_size = await anyio.to_thread.run_sync(_create_archive)
@@ -2944,37 +2936,21 @@ class CrawlerManager:
                 await cache_service.set_json(job_key, fresh_job_info)
                 logger.info(f"Marked crawl '{crawl_id}' as stashed at {stashed_at} in Redis.")
 
-                # --- Cleanup data files; keep logs + markers (spec 2026-05-20 §5) ---
-                # Mirrors archive_crawl._cleanup_local_data so operator UX is
-                # consistent: ops can peek at logs locally without restoring via
-                # unstash. The tar contains everything; unstash restore is
-                # idempotent over kept files.
+                # --- Cleanup: remove ONLY the heavy Crawlee storage/ subtree; keep
+                # all root sidecars + logs (2026-07-04 change — decision/audit
+                # sidecars must survive stash for /admin/sidecar). Mirrors
+                # archive_crawl._cleanup_local_data. The tar contains everything;
+                # unstash restore is idempotent over kept files.
                 try:
                     def _cleanup_data_keep_logs():
-                        files_to_keep = {
-                            'crawler.log', '_callback_payload.json',
-                            '_completion_marker.json', '_status_snapshot.json',
-                            '_exit_reason.json', '_update_report.json',
-                            'update_stats.json',
-                            'timing.jsonl', 'timing-summary.json',
-                        }
                         if not os.path.isdir(job_storage_path):
                             return
-                        for root, dirs, files in os.walk(job_storage_path, topdown=False):
-                            for name in files:
-                                if name not in files_to_keep:
-                                    try:
-                                        os.remove(os.path.join(root, name))
-                                    except OSError:
-                                        pass
-                            for name in dirs:
-                                try:
-                                    os.rmdir(os.path.join(root, name))
-                                except OSError:
-                                    pass  # non-empty (kept file inside) → leave dir
+                        heavy = os.path.join(job_storage_path, 'storage')
+                        if os.path.isdir(heavy):
+                            shutil.rmtree(heavy, ignore_errors=True)
 
                     await anyio.to_thread.run_sync(_cleanup_data_keep_logs)
-                    logger.info(f"Cleaned data (kept logs) for stashed crawl '{crawl_id}'.")
+                    logger.info(f"Removed heavy storage/ tree for stashed crawl '{crawl_id}' (sidecars + logs kept).")
                 except Exception as e:
                     logger.warning(f"Data cleanup failed for stashed '{crawl_id}' (tar is safe): {e}")
 

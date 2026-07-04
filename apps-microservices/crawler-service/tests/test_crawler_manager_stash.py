@@ -154,7 +154,9 @@ async def test_stash_disk_space_pre_flight_fails(cm_instance, base_job_info, moc
 @pytest.mark.asyncio
 async def test_stash_success_sets_timestamp_and_keeps_logs(cm_instance, base_job_info, mock_cache_service, monkeypatch, tmp_path):
     """Happy-path stash: tar created in stash dir, Redis stashed_at set,
-    DATA files deleted from storage but LOG files kept (spec 2026-05-20 §5)."""
+    root files (log + data sidecars) kept — only the heavy storage/ subtree
+    would be removed (2026-07-04 contract; none seeded here, see the
+    dedicated test_stash_cleanup_removes_only_storage_tree)."""
     from pathlib import Path
 
     stash_dir = tmp_path / "stash"
@@ -187,11 +189,11 @@ async def test_stash_success_sets_timestamp_and_keeps_logs(cm_instance, base_job
         assert any("dataset.json" in n for n in names)
         assert any("crawler.log" in n for n in names)
 
-    # Keep-logs behavior: storage dir still exists, log kept, data gone
+    # Cleanup only removes storage/ (not seeded here) — both root files survive
     storage_path = base_job_info["storage_path"]
     assert os.path.isdir(storage_path), "storage dir should remain (kept files inside)"
     assert (Path(storage_path) / "crawler.log").exists(), "crawler.log should be kept"
-    assert not (Path(storage_path) / "dataset.json").exists(), "dataset.json should be deleted"
+    assert (Path(storage_path) / "dataset.json").exists(), "root-level dataset.json should be kept"
 
     # Redis HSET wrote stashed_at
     last_call = mock_cache_service.set_json.call_args
@@ -808,27 +810,34 @@ async def test_unstash_toctou_revalidation_blocks_concurrent_winner(cm_instance,
 
 
 @pytest.mark.asyncio
-async def test_stash_keeps_logs_and_markers_on_cleanup(
+async def test_stash_cleanup_removes_only_storage_tree(
     cm_instance, mock_cache_service, monkeypatch, tmp_path
 ):
-    """Dedicated cleanup-scope test: a richer storage tree with multiple
-    kept-class files (log + completion marker) AND data files (root +
-    nested subdir) exercises the full files_to_keep set + os.walk
-    bottom-up subdir rmdir."""
+    """Cleanup contract (2026-07-04): stash removes ONLY the heavy Crawlee
+    storage/ subtree; every other file in the crawl dir survives — including
+    sidecars OUTSIDE the old files_to_keep whitelist (diez/QM decisions) and
+    the Node logs/ tee."""
     stash_dir = tmp_path / "stash"
     stash_dir.mkdir()
 
     storage = tmp_path / "crawl_data"
     storage.mkdir()
-    # 2 kept files at root
     (storage / "crawler.log").write_text("log content")
     (storage / "_completion_marker.json").write_text('{"final_status":"finished"}')
-    # 1 data file at root
-    (storage / "dataset.json").write_text('{"records":[1,2,3]}')
-    # 1 data file in nested subdir
+    # Sidecars NOT in the old whitelist — must now survive
+    (storage / "_diez_decision.json").write_text('{"mode":"skipDiez"}')
+    (storage / "_questionmark_audit.json").write_text('{"committed":[]}')
+    # Node FS-logger tee dir — must now survive
+    logs_dir = storage / "logs" / "2026" / "07"
+    logs_dir.mkdir(parents=True)
+    (logs_dir / "example.com-logs-1.log").write_text("tee")
+    # Heavy Crawlee tree — must be removed entirely
     sub = storage / "storage" / "datasets"
     sub.mkdir(parents=True)
     (sub / "000001.json").write_text("data")
+    rq = storage / "storage" / "request_queues" / "example.com"
+    rq.mkdir(parents=True)
+    (rq / "queue.json").write_text("q")
 
     job_info = {
         "crawl_id": "rich_test_id",
@@ -851,15 +860,15 @@ async def test_stash_keeps_logs_and_markers_on_cleanup(
 
     await cm_instance.stash_crawl(job_info)
 
-    # Kept
+    # Kept: everything outside storage/
     assert (storage / "crawler.log").exists()
     assert (storage / "_completion_marker.json").exists()
-    # Deleted (root-level data file)
-    assert not (storage / "dataset.json").exists()
-    # Deleted (nested data file + its empty subdirs)
-    assert not (sub / "000001.json").exists()
-    assert not sub.exists(), "empty data subdir should be rmdir'd"
-    # Root storage dir kept (contains 2 kept files)
+    assert (storage / "_diez_decision.json").exists()
+    assert (storage / "_questionmark_audit.json").exists()
+    assert (logs_dir / "example.com-logs-1.log").exists()
+    # Removed: the whole heavy tree
+    assert not (storage / "storage").exists()
+    # Crawl root dir itself kept
     assert storage.exists()
 
 

@@ -267,9 +267,11 @@ async def dataset_sample(
             "returned": len(records), "records": records}
 
 
-# Exact filenames kept on disk for investigations (files_to_keep sets in
-# crawler_manager.py:2534/:2954 + the diez/QM decision sidecars). crawler.log
-# has its own /admin/logs endpoint; timing.jsonl excluded (unbounded size).
+# Exact filenames served for investigations. Since the 2026-07-04 cleanup
+# change, stash/archive cleanup removes only the storage/ subtree, so ALL root
+# sidecars survive on disk; this whitelist is the serving allowlist, not a
+# retention list. crawler.log has its own /admin/logs endpoint; timing.jsonl
+# excluded (unbounded size).
 _SIDECAR_WHITELIST = frozenset({
     "_callback_payload.json", "_completion_marker.json", "_status_snapshot.json",
     "_exit_reason.json", "_update_report.json", "update_stats.json",
