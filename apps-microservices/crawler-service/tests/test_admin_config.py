@@ -25,6 +25,17 @@ def test_settings_present_and_secrets_masked(client, monkeypatch):
     assert body["settings"]["API_KEY"] is None  # None stays None = auth disabled signal
 
 
+def test_api_key_masked_when_set(monkeypatch):
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "API_KEY", "sekret", raising=False)
+    from app.router.admin import router as AdminRouter
+    app = FastAPI()
+    app.include_router(AdminRouter)
+    body = TestClient(app).get("/admin/config", headers={"X-API-Key": "sekret"}).json()
+    assert body["settings"]["API_KEY"] == "<set>"
+    assert "sekret" not in str(body)
+
+
 def test_env_whitelist_only(client, monkeypatch):
     monkeypatch.setenv("DIEZ_TIER2_ENABLED", "true")
     monkeypatch.setenv("REDIS_URL", "redis://:secret@host:6379")
