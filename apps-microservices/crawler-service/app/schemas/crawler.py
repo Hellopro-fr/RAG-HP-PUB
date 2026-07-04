@@ -22,6 +22,9 @@ class CapacityResponse(BaseModel):
     running_jobs: int
     max_global_jobs: int
     is_full: bool
+    # Read-on-demand disk diagnostics (auto-stash disk-pressure verification).
+    # None only if the field is omitted; the helper itself is fail-open.
+    disk: Optional[dict] = None
 
 class ReindexResponse(BaseModel):
     """Summary of the re-indexing operation."""

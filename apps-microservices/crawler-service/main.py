@@ -35,15 +35,20 @@ logging.config.dictConfig({
             "formatter": "default",
             "stream": "ext://sys.stdout",
         },
+        "ring": {
+            "class": "app.core.log_buffer.RingBufferHandler",
+            "formatter": "default",
+        },
     },
     "root": {
         "level": "INFO",
-        "handlers": ["console"],
+        "handlers": ["console", "ring"],
     },
     "loggers": {
-        "uvicorn": {"handlers": ["console"], "level": "INFO", "propagate": False},
+        "uvicorn": {"handlers": ["console", "ring"], "level": "INFO", "propagate": False},
+        # No "ring": access lines (BO polls /status) would evict the diagnostic markers.
         "uvicorn.access": {"handlers": ["console"], "level": "INFO", "propagate": False},
-        "uvicorn.error": {"handlers": ["console"], "level": "INFO", "propagate": False},
+        "uvicorn.error": {"handlers": ["console", "ring"], "level": "INFO", "propagate": False},
     },
 })
 logger = logging.getLogger(__name__)

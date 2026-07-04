@@ -1332,6 +1332,9 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/crawler-service/Dockerfile
+      args:
+        GIT_COMMIT: ${GIT_COMMIT:-unknown}
+        BUILD_DATE: ${BUILD_DATE:-unknown}
     profiles: [ "crawling" ]
     init: true
     stop_grace_period: 30s
