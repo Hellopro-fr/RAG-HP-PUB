@@ -60,9 +60,19 @@ async def redis_debug():
     try:
         info = await client.info("clients")
         all_clients = await client.client_list()
+        # Server-side idle reaper — the ONLY mechanism recycling half-open
+        # connections left by SIGKILLed crawler processes. timeout=0 means
+        # orphans accumulate forever (the historical maxclients incident).
+        # CONFIG GET may be disabled on managed Redis — degrade gracefully.
+        try:
+            server_config = await client.config_get("timeout")
+            server_config.update(await client.config_get("tcp-keepalive"))
+        except Exception as e:
+            server_config = {"error": f"CONFIG GET unavailable: {e}"}
         return {
             "info_clients": info,
             "total_clients": len(all_clients),
+            "server_idle_reaper": server_config,
             "client_name_counts": _count_by(all_clients, "name"),
             "client_addr_counts": _count_by(all_clients, "addr"),
             "sample_clients": [_project_sample(c) for c in all_clients[:50]],
