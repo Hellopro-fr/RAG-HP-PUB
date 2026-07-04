@@ -60,3 +60,25 @@ def test_scan_truncated_flag(client_and_dirs, monkeypatch):
     dl = body["download_requests"]
     assert dl["scan_truncated"] is True
     assert dl["file_count"] == 1
+
+
+def test_heartbeat_survives_truncation(client_and_dirs, monkeypatch):
+    import os as os_mod
+    import app.router.admin as admin_mod
+    monkeypatch.setattr(admin_mod, "_DAEMON_STATE_MAX_SCAN", 1)
+    # os.listdir order is unspecified; force heartbeat LAST so the truncation
+    # slice would drop it (on NTFS the dotfile sorts first and hides the bug).
+    real_listdir = os_mod.listdir
+    monkeypatch.setattr(
+        os_mod, "listdir",
+        lambda p: sorted(real_listdir(p), key=lambda n: n == ".daemon-heartbeat"))
+    client, tmp = client_and_dirs
+    d = tmp / "dlreq"
+    d.mkdir()
+    for i in range(3):
+        (d / f"{i}.request").write_text("", encoding="utf-8")
+    (d / ".daemon-heartbeat").write_text("2026-07-04T00:00:00Z", encoding="utf-8")
+    body = client.get("/admin/daemon-state").json()
+    dl = body["download_requests"]
+    assert dl["heartbeat_age_seconds"] is not None
+    assert dl["scan_truncated"] is True

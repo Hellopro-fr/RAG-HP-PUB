@@ -332,23 +332,29 @@ def _describe_dir(path: str) -> Dict[str, Any]:
         return {"exists": False}
     now = time.time()
     files, error_markers = [], {}
-    heartbeat_age = None
     try:
         names = os.listdir(path)
     except OSError as e:
         return {"exists": True, "error": str(e)}
+    # Stat the heartbeat directly: listdir order is unspecified, so it could
+    # fall past the scan bound — exactly when a backlog makes it matter most.
+    heartbeat_age = None
+    hb_path = os.path.join(path, ".daemon-heartbeat")
+    try:
+        heartbeat_age = int(now - os.stat(hb_path).st_mtime)
+    except OSError:
+        pass
     truncated = len(names) > _DAEMON_STATE_MAX_SCAN
     names = names[:_DAEMON_STATE_MAX_SCAN]
     for name in names:
+        if name == ".daemon-heartbeat":
+            continue
         full = os.path.join(path, name)
         if not os.path.isfile(full):
             continue
         try:
             st = os.stat(full)
         except OSError:
-            continue
-        if name == ".daemon-heartbeat":
-            heartbeat_age = int(now - st.st_mtime)
             continue
         files.append({"name": name, "size_bytes": st.st_size,
                       "age_seconds": int(now - st.st_mtime)})
