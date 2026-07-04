@@ -46,3 +46,17 @@ def test_files_heartbeat_and_error_markers(client_and_dirs):
     assert dl["error_markers"]["456.error"].startswith("gcloud")
     names = {f["name"] for f in dl["files"]}
     assert names == {"123.request", "456.error"}
+
+
+def test_scan_truncated_flag(client_and_dirs, monkeypatch):
+    import app.router.admin as admin_mod
+    monkeypatch.setattr(admin_mod, "_DAEMON_STATE_MAX_SCAN", 1)
+    client, tmp = client_and_dirs
+    d = tmp / "dlreq"
+    d.mkdir()
+    for i in range(3):
+        (d / f"{i}.request").write_text("", encoding="utf-8")
+    body = client.get("/admin/daemon-state").json()
+    dl = body["download_requests"]
+    assert dl["scan_truncated"] is True
+    assert dl["file_count"] == 1

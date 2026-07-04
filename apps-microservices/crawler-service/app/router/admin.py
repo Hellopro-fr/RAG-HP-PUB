@@ -307,6 +307,7 @@ async def sidecar_file(
 
 _ERROR_MARKER_SUFFIXES = (".error", ".move-error")
 _DAEMON_STATE_MAX_FILES = 200
+_DAEMON_STATE_MAX_SCAN = 2000  # hard stat() bound; a backlog beyond this is itself the finding
 
 
 def _daemon_dirs() -> Dict[str, str]:
@@ -336,6 +337,8 @@ def _describe_dir(path: str) -> Dict[str, Any]:
         names = os.listdir(path)
     except OSError as e:
         return {"exists": True, "error": str(e)}
+    truncated = len(names) > _DAEMON_STATE_MAX_SCAN
+    names = names[:_DAEMON_STATE_MAX_SCAN]
     for name in names:
         full = os.path.join(path, name)
         if not os.path.isfile(full):
@@ -357,6 +360,7 @@ def _describe_dir(path: str) -> Dict[str, Any]:
                 pass
     files.sort(key=lambda f: f["age_seconds"])
     return {"exists": True, "file_count": len(files),
+            "scan_truncated": truncated,
             "heartbeat_age_seconds": heartbeat_age,
             "files": files[:_DAEMON_STATE_MAX_FILES],
             "error_markers": error_markers}
