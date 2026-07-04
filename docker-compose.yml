@@ -1357,6 +1357,10 @@ services:
     env_file:
       - .env
     environment:
+      # NOTE: any variable added here must be either whitelisted in
+      # app/router/admin.py (_ENV_WHITELIST_PREFIXES -> visible in /admin/config)
+      # or excluded there (_ENV_COMPOSE_EXCLUSIONS, with justification).
+      # Enforced by tests/test_admin_config.py::test_compose_env_parity.
       # Max concurrent crawls for each individual instance.
       - MAX_CONCURRENT_CRAWLS=1
       - DEFAULT_MAX_GLOBAL_CRAWLS=3

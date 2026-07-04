@@ -169,13 +169,26 @@ async def job_dump(job_info: dict = Depends(get_job_or_recover)):
 
 
 _SECRET_SETTINGS = ("API_KEY", "APIFY_PROXY")
-# Prefixes of env vars the Node subprocess consumes (it inherits container env).
-# Deliberately narrow: "REDIS_LOSS" (not "REDIS_") so REDIS_URL credentials never leak.
+# Prefixes of env vars exposed by GET /admin/config (diagnostic surface).
+# Deliberately narrow: "REDIS_LOSS"/"REDIS_MAX"/... (never "REDIS_") so
+# REDIS_URL credentials can never leak.
+# GUARDRAIL: every variable in the docker-compose crawler-service environment
+# block MUST match a prefix here OR be listed in _ENV_COMPOSE_EXCLUSIONS —
+# enforced by tests/test_admin_config.py::test_compose_env_parity, which fails
+# the moment someone adds a new env var without deciding its visibility.
 _ENV_WHITELIST_PREFIXES = (
     "DIEZ_", "QM_", "TIMING_", "DETECTION_", "NAVIGATION_", "RECOVER_",
-    "PROGRESS_", "REDIS_LOSS", "NODE_OPTIONS", "MAX_CONCURRENT",
-    "DEFAULT_MAX_GLOBAL", "AUTO_STASH", "STASH_", "QUEUE_",
+    "PROGRESS_", "REDIS_LOSS", "REDIS_MAX", "REDIS_SOCKET", "REDIS_HEALTH",
+    "NODE_OPTIONS", "MAX_CONCURRENT", "DEFAULT_MAX_GLOBAL", "AUTO_STASH",
+    "STASH_", "QUEUE_", "CONTENT_EXTRACTOR",
 )
+# Compose env vars deliberately NOT exposed by /admin/config. Add here ONLY
+# with a justification comment; anything diagnostic belongs in the whitelist.
+_ENV_COMPOSE_EXCLUSIONS = frozenset({
+    "REDIS_URL",     # carries the Redis password
+    "API_KEY",       # admin auth secret (mapped from API_KEY_ADMIN_CRAWLER_SERVICE)
+    "SERVICE_NAME",  # static identity, no diagnostic value
+})
 
 
 @router.get("/config", dependencies=[Depends(verify_api_key)])

@@ -36,6 +36,46 @@ def test_api_key_masked_when_set(monkeypatch):
     assert "sekret" not in str(body)
 
 
+def test_compose_env_parity():
+    """GUARDRAIL: every env var declared in the docker-compose crawler-service
+    environment block must be either visible via /admin/config (whitelist
+    prefix) or deliberately excluded with a justification. Fails the moment a
+    new variable is added without deciding its visibility."""
+    from pathlib import Path
+    from app.router.admin import _ENV_WHITELIST_PREFIXES, _ENV_COMPOSE_EXCLUSIONS
+
+    compose = Path(__file__).resolve().parents[3] / "docker-compose.yml"
+    lines = compose.read_text(encoding="utf-8").splitlines()
+
+    env_vars, in_service, in_env = [], False, False
+    for line in lines:
+        if line.rstrip() == "  crawler-service:":
+            in_service = True
+            continue
+        if in_service and line.strip() == "environment:":
+            in_env = True
+            continue
+        if in_env:
+            stripped = line.strip()
+            if stripped.startswith("- "):
+                env_vars.append(stripped[2:].split("=", 1)[0])
+            elif stripped.startswith("#"):
+                continue
+            else:
+                break  # dedent = end of the environment block
+
+    assert env_vars, f"could not parse crawler-service environment block from {compose}"
+
+    uncovered = [v for v in env_vars
+                 if not v.startswith(_ENV_WHITELIST_PREFIXES)
+                 and v not in _ENV_COMPOSE_EXCLUSIONS]
+    assert not uncovered, (
+        f"New crawler-service compose env var(s) {uncovered} are neither "
+        f"whitelisted (add a prefix to _ENV_WHITELIST_PREFIXES in "
+        f"app/router/admin.py to expose them in /admin/config) nor excluded "
+        f"(add to _ENV_COMPOSE_EXCLUSIONS with a justification comment).")
+
+
 def test_env_whitelist_only(client, monkeypatch):
     monkeypatch.setenv("DIEZ_TIER2_ENABLED", "true")
     monkeypatch.setenv("QUEUE_PURGE_ENABLED", "true")
