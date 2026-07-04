@@ -108,6 +108,11 @@ async def crawl_log_tail(
     storage_path = job_info.get("storage_path") or os.path.join(
         settings.CRAWLER_STORAGE_PATH, job_info["crawl_id"])
     log_path = os.path.join(storage_path, "crawler.log")
+    base = os.path.abspath(settings.CRAWLER_STORAGE_PATH)
+    # Guard only the fallback branch: it joins a URL-supplied crawl_id
+    # (encoded slashes can reach a path param). A Redis storage_path is trusted.
+    if not job_info.get("storage_path") and not os.path.abspath(log_path).startswith(base + os.sep):
+        raise HTTPException(status_code=400, detail="Invalid crawl id.")
     if not os.path.isfile(log_path):
         raise HTTPException(status_code=404, detail="crawler.log not found for this crawl.")
     size = os.path.getsize(log_path)
@@ -115,7 +120,8 @@ async def crawl_log_tail(
         f.seek(max(0, size - tail_bytes))
         data = f.read().decode("utf-8", errors="replace")
     if size > tail_bytes and "\n" in data:
-        data = data.split("\n", 1)[1]  # drop the partial first line
+        head, rest = data.split("\n", 1)
+        data = rest if rest else head  # keep the fragment rather than an empty tail
     if grep:
         try:
             rx = re.compile(grep)

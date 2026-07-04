@@ -51,3 +51,34 @@ def test_invalid_grep_400(app_and_job):
     app, storage = app_and_job
     (storage / "crawler.log").write_text("x\n", encoding="utf-8")
     assert TestClient(app).get("/admin/logs/77", params={"grep": "("}).status_code == 400
+
+
+def test_tail_single_partial_line_keeps_fragment(app_and_job):
+    """A window holding only one (partial) line must return the fragment,
+    not an empty tail after the drop-partial-first-line step."""
+    app, storage = app_and_job
+    # newline="\n": keep the file byte-exact on Windows (no CRLF translation)
+    (storage / "crawler.log").write_text("A" * 100 + "\n", encoding="utf-8", newline="\n")
+    resp = TestClient(app).get("/admin/logs/77", params={"tail_bytes": 30})
+    assert resp.status_code == 200
+    assert resp.text.strip() != ""
+    assert resp.text.strip() == "A" * 29  # end of the giant line
+
+
+def test_traversal_crawl_id_rejected(monkeypatch, tmp_path):
+    """Fallback path (no storage_path in job) must reject a crawl_id that
+    escapes CRAWLER_STORAGE_PATH."""
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "API_KEY", None, raising=False)
+    monkeypatch.setattr(settings, "CRAWLER_STORAGE_PATH", str(tmp_path), raising=False)
+    from fastapi import FastAPI
+    from app.router.admin import router as AdminRouter
+    from app.router.crawler import get_job_or_recover
+    app = FastAPI()
+    app.include_router(AdminRouter)
+
+    async def fake_dep(crawl_id: str):
+        return {"crawl_id": "../evil", "status": "failed"}  # no storage_path
+
+    app.dependency_overrides[get_job_or_recover] = fake_dep
+    assert TestClient(app).get("/admin/logs/whatever").status_code == 400
