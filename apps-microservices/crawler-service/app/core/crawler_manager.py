@@ -2087,6 +2087,37 @@ class CrawlerManager:
         logger.info(f"Re-indexing complete: {summary}")
         return ReindexResponse(**summary)
 
+    async def _finalize_completed_job(self, crawl_id: str, job_key: str,
+                                      job_info: dict, *, healed_by: str) -> None:
+        """Common finished-finalization for a crawl whose Node had already
+        COMPLETED (fresh exit-reason sidecar) when the service died — used by
+        both the shutdown guard and the reconcile crash-window heal.
+
+        State only — does NOT send the stop webhook. The two callers need
+        different delivery semantics (shutdown: bounded single-attempt,
+        awaited inline; reconcile: durable retry, must not block the
+        reconcile leader lock), so each sends it their own way after calling
+        this.
+        """
+        job_info["status"] = "finished"
+        job_info["shutdown_reason"] = healed_by
+        job_info.pop("last_heartbeat", None)
+        marker_path = os.path.join(job_info["storage_path"], '_completion_marker.json')
+        try:
+            async with aiofiles.open(marker_path, 'w') as f:
+                await f.write(json.dumps({
+                    "final_status": "finished",
+                    "healed_from_exit_reason": True,
+                    "finalized_at": datetime.utcnow().isoformat(),
+                }))
+        except Exception as e:
+            logger.warning(f"Could not write completion marker for '{crawl_id}': {e}")
+        self._stamp_terminal_fields(job_info)
+        await cache_service.set_json(job_key, job_info)
+        await cache_service.delete_key(f"{CRAWL_LOCK_PREFIX}{crawl_id}")
+        await cache_service.safe_decrement_key(CRAWL_RUNNING_COUNT_KEY)
+        await self._publish_update(crawl_id, "finished")
+
     async def _cleanup_running_job(self, crawl_id: str, process: asyncio.subprocess.Process):
         """Helper function to handle the cleanup of a single running job during shutdown."""
         logger.info(f"Cleaning up job '{crawl_id}' due to service shutdown.")
@@ -2104,29 +2135,13 @@ class CrawlerManager:
                 # dataset + callback payload on disk) and only be flushing its last
                 # files when the service goes down. Killing it then must not turn a
                 # finished crawl into a failed one — finalize as finished instead.
-                exit_reason = await self._read_exit_reason_or_none(job_info.get("storage_path", ""))
-                if exit_reason == "COMPLETED":
-                    logger.info(f"Job '{crawl_id}' had already COMPLETED (exit-reason sidecar) — "
-                                f"finalizing as finished despite service shutdown.")
-                    job_info["status"] = "finished"
-                    job_info["shutdown_reason"] = "Service instance terminated after crawl completion"
-                    if "last_heartbeat" in job_info:
-                        del job_info["last_heartbeat"]
-                    marker_path = os.path.join(job_info["storage_path"], '_completion_marker.json')
-                    try:
-                        async with aiofiles.open(marker_path, 'w') as f:
-                            await f.write(json.dumps({
-                                "final_status": "finished",
-                                "healed_from_exit_reason": True,
-                                "finalized_at": datetime.utcnow().isoformat(),
-                            }))
-                    except Exception as e:
-                        logger.warning(f"Could not write completion marker for '{crawl_id}': {e}")
-                    self._stamp_terminal_fields(job_info)
-                    await cache_service.set_json(job_key, job_info)
-                    await cache_service.delete_key(f"{CRAWL_LOCK_PREFIX}{crawl_id}")
-                    await cache_service.safe_decrement_key(CRAWL_RUNNING_COUNT_KEY)
-                    await self._publish_update(crawl_id, "finished")
+                if await self._exit_reason_completed_and_fresh(
+                        job_info.get("storage_path", ""), job_info.get("start_time")):
+                    logger.info(f"Job '{crawl_id}' had already COMPLETED (fresh exit-reason "
+                                f"sidecar) — finalizing as finished despite service shutdown.")
+                    await self._finalize_completed_job(
+                        crawl_id, job_key, job_info,
+                        healed_by="Service instance terminated after crawl completion")
                     await self._send_stop_webhook(job_info, "finished", shutdown=True)
                     return
 
@@ -3336,22 +3351,47 @@ class CrawlerManager:
             except Exception as release_err:
                 logger.warning(f"Could not release reconciliation leader lock: {release_err}")
 
-    async def _read_exit_reason_or_none(self, storage_path: str) -> Optional[str]:
-        """Reads {storage_path}/_exit_reason.json (written by the Node crawler's
-        graceful shutdown) and returns its 'reason' string, or None if absent/
-        unreadable. Never raises — used by the shutdown path to decide whether
-        a killed process had in fact already completed its crawl."""
+    async def _exit_reason_completed_and_fresh(self, storage_path: str,
+                                               job_start_time: Optional[str]) -> bool:
+        """True iff {storage_path}/_exit_reason.json (written by the Node
+        crawler's graceful shutdown, fsync'd) says reason == "COMPLETED" AND
+        its timestamp is AFTER the current run's start_time.
+
+        The timestamp check matters because a stale sidecar left over from a
+        PREVIOUS run of the same crawl_id (any start path that skipped the
+        relaunch purge in _cleanup_stale_state_for_relaunch) must never
+        qualify a half-done run as finished.
+
+        Fail-closed: missing/unreadable file, missing/unparseable
+        timestamps, or a non-COMPLETED reason all return False. Never raises
+        — used by both the shutdown guard and the reconcile crash-window
+        heal to decide whether a dead process had in fact already completed
+        its crawl."""
         path = os.path.join(storage_path or "", '_exit_reason.json')
         try:
             async with aiofiles.open(path, 'r') as f:
                 data = json.loads(await f.read())
-            reason = data.get("reason")
-            return reason if isinstance(reason, str) else None
         except FileNotFoundError:
-            return None
+            return False
         except Exception as e:
-            logger.warning(f"_read_exit_reason_or_none: failed to read {path}: {e}")
-            return None
+            logger.warning(f"_exit_reason_completed_and_fresh: failed to read {path}: {e}")
+            return False
+        if data.get("reason") != "COMPLETED":
+            return False
+        ts_raw, start_raw = data.get("timestamp"), job_start_time
+        if not ts_raw or not start_raw:
+            return False
+        try:
+            # Node writes ISO-8601 UTC with trailing Z; Python start_time is a
+            # naive-UTC str. _parse_iso_naive_utc normalizes both the same way
+            # the stale-heartbeat check above does — reuse it instead of
+            # duplicating tz handling here.
+            exit_ts = _parse_iso_naive_utc(str(ts_raw))
+            start_ts = _parse_iso_naive_utc(str(start_raw))
+        except ValueError as e:
+            logger.warning(f"_exit_reason_completed_and_fresh: bad timestamp ({e})")
+            return False
+        return exit_ts > start_ts
 
     async def _load_completion_marker_or_none(self, storage_path: str) -> Optional[dict]:
         """
@@ -3698,6 +3738,26 @@ class CrawlerManager:
                         # running/restarting_oom jobs are marked as failed with webhook.
                         is_stopping = (status == "stopping")
                         final_status = "stopped" if is_stopping else "failed"
+
+                        # Crash-window heal (recovery-side twin of the shutdown
+                        # guard in _cleanup_running_job): the dead process may
+                        # have COMPLETED its crawl before it crashed — the
+                        # fsync'd exit-reason sidecar plus a timestamp newer
+                        # than this run's start_time proves it. Finalize
+                        # finished instead of sending a false failure to the
+                        # BO. Scoped to the non-stopping path only: a
+                        # "stopping" job's own webhook was already sent by the
+                        # stop request that put it in that state.
+                        if not is_stopping and await self._exit_reason_completed_and_fresh(
+                                job_data.get("storage_path", ""), job_data.get("start_time")):
+                            logger.info(f"Stale job '{crawl_id}' had actually COMPLETED "
+                                        f"(fresh exit-reason sidecar) — healing as finished.")
+                            await self._finalize_completed_job(
+                                crawl_id, all_job_keys[i], job_data,
+                                healed_by="Stale-detected after crawl completion (service crash)")
+                            asyncio.create_task(self._send_stop_webhook(job_data, "finished", shutdown=False))
+                            stale_jobs_count += 1
+                            continue
 
                         if is_stopping:
                             logger.info(f"Job '{crawl_id}' (status: stopping) is stale. Cleaning up as 'stopped' (stop webhook already sent).")
