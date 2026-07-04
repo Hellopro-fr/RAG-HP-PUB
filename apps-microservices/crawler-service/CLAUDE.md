@@ -651,7 +651,7 @@ Read-only introspection surface so incidents can be investigated **over the gate
 | `GET /capacity` | now also carries a `disk` block (storage/archives/stash `used_pct` + `high_water_pct`) |
 | `GET /results/{id}?peek=true` | download WITHOUT starting the auto-stash grace clock (still inline-unstashes cold crawls — use `/admin/dataset` for zero side effects) |
 
-**Auth:** every `/admin/*` route requires header `X-API-Key`. The value lives in the deploy host's `.env` as **`API_KEY_ADMIN_SERVICE`** (mapped to the container's `API_KEY` in docker-compose — namespaced so a bare `API_KEY` in the shared `.env` can never leak into another service's config). Unset ⇒ auth disabled (open). **If you are an assistant without this key, ask the operator for it** (it is never committed; keep it in a local gitignored note / env var).
+**Auth:** every `/admin/*` route requires header `X-API-Key`. The value lives in the deploy host's `.env` as **`API_KEY_ADMIN_CRAWLER_SERVICE`** (mapped to the container's `API_KEY` in docker-compose — namespaced so a bare `API_KEY` in the shared `.env` can never leak into another service's config). Unset ⇒ auth disabled (open). **If you are an assistant without this key, ask the operator for it** (it is never committed; keep it in a local gitignored note / env var).
 
 **Build/deploy:** `./tools/build_crawler.sh [--up [N]]` — stamps `GIT_COMMIT`/`BUILD_DATE` (verify with `GET /version`), `--up` scales to N replicas (default 7) with `--no-deps` + nginx reload; sync the Redis capacity key separately via `scale_crawlers.sh N`. The heartbeat lines in `tools/upload_daemon.sh`/`download_daemon.sh` require a daemon restart to take effect.
 
