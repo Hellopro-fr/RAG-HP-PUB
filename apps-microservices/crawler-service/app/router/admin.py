@@ -1,8 +1,10 @@
 """Admin/operator endpoints. Authenticated. Not user-facing."""
+import json
 import logging
 import os
 import re
 from collections import Counter
+from datetime import datetime
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -188,3 +190,72 @@ async def effective_config():
     env = {k: v for k, v in sorted(os.environ.items())
            if k.startswith(_ENV_WHITELIST_PREFIXES)}
     return {"settings": cfg, "env": env}
+
+
+_DATASET_PREFIXES = {"main": "", "error": "error-", "nfr": "nfr-", "update": "update-"}
+
+
+def _dataset_dir(job_info: dict, kind: str) -> Optional[str]:
+    """Mirror crawler_manager._dataset_dir_for_job (crawler_manager.py:1742),
+    generalized to the error-/nfr-/update- dataset variants. Same
+    {domain} -> {domain with . -> -} sanitized fallback."""
+    storage_path = job_info.get("storage_path")
+    domain = job_info.get("domain")
+    if not storage_path or not domain:
+        return None
+    base = os.path.join(storage_path, "storage", "datasets")
+    prefix = _DATASET_PREFIXES[kind]
+    for candidate in (domain, domain.replace(".", "-")):
+        path = os.path.join(base, prefix + candidate)
+        if os.path.isdir(path):
+            return path
+    return None
+
+
+@router.get("/dataset/{crawl_id}", dependencies=[Depends(verify_api_key)])
+async def dataset_sample(
+    kind: str = Query("main", pattern="^(main|error|nfr|update)$"),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    content_chars: int = Query(0, ge=0, le=5000),
+    job_info: dict = Depends(get_job_or_recover),
+):
+    """List/sample a crawl's dataset records WITHOUT downloading the /results
+    tar and WITHOUT lifecycle side effects (no downloaded_at stamp, no
+    unstash). Newest records first."""
+    dataset_dir = _dataset_dir(job_info, kind)
+    if dataset_dir is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Dataset not on local disk (crawl may be stashed/archived — "
+                   "this endpoint is deliberately side-effect-free; use /unstash "
+                   "or /results to restore cold data).")
+    entries = []
+    with os.scandir(dataset_dir) as it:
+        for entry in it:
+            if not entry.name.endswith(".json") or entry.name == "html_index.json":
+                continue
+            try:
+                st = entry.stat()
+            except OSError:
+                continue
+            entries.append((entry.name, st.st_mtime, st.st_size))
+    entries.sort(key=lambda e: e[1], reverse=True)  # newest first
+    records = []
+    for name, mtime, size in entries[offset:offset + limit]:
+        record = {"file": name, "size_bytes": size,
+                  "mtime": datetime.utcfromtimestamp(mtime).isoformat(), "url": None}
+        try:
+            with open(os.path.join(dataset_dir, name), "r", encoding="utf-8",
+                      errors="replace") as f:
+                item = json.load(f)
+            record["url"] = item.get("url")
+            content = item.get("content") or ""
+            record["content_length"] = len(content)
+            if content_chars:
+                record["content_preview"] = content[:content_chars]
+        except Exception as e:  # unparseable item file is itself a finding
+            record["parse_error"] = str(e)
+        records.append(record)
+    return {"kind": kind, "total_records": len(entries), "offset": offset,
+            "returned": len(records), "records": records}
