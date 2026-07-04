@@ -1069,7 +1069,7 @@ class CrawlerManager:
         else:
             await self._send_webhook_with_retry(url, params, crawl_id, "failure")
 
-    async def _send_stop_webhook(self, job_info: dict, reason: str = "stopped"):
+    async def _send_stop_webhook(self, job_info: dict, reason: str = "stopped", shutdown: bool = False):
         """
         Send webhook when a job is stopped or force-finished. (V3 Feature)
         Uses callback_url (not failure_callback_url) to match PHP script's expected format.
@@ -1131,7 +1131,12 @@ class CrawlerManager:
         params["request_id"] = self._get_or_create_terminal_webhook_request_id(job_info)
         await cache_service.set_json(f"{CRAWL_JOB_PREFIX}{crawl_id}", job_info)
 
-        await self._send_webhook_with_retry(str(url), params, crawl_id, "stop")
+        if shutdown:
+            # Bounded shutdown path: 5s timeout, single attempt. If delivery fails,
+            # the completion marker + finished status let the BO recover via /status.
+            await self._send_webhook_once(str(url), params, crawl_id, "stop", timeout=5.0)
+        else:
+            await self._send_webhook_with_retry(str(url), params, crawl_id, "stop")
 
     async def _monitor_process(self, crawl_id: str, process: asyncio.subprocess.Process):
         job_key = f"{CRAWL_JOB_PREFIX}{crawl_id}"
@@ -2089,6 +2094,37 @@ class CrawlerManager:
             # 2. Update state in Redis
             job_info = await cache_service.get_json(job_key)
             if job_info and job_info.get("status") in ("running", "restarting_oom"):
+                # Finalization-window guard (incident 2026-07-03, crawl 4296-362):
+                # the Node may have COMPLETED the crawl (exit-reason sidecar written,
+                # dataset + callback payload on disk) and only be flushing its last
+                # files when the service goes down. Killing it then must not turn a
+                # finished crawl into a failed one — finalize as finished instead.
+                exit_reason = await self._read_exit_reason_or_none(job_info.get("storage_path", ""))
+                if exit_reason == "COMPLETED":
+                    logger.info(f"Job '{crawl_id}' had already COMPLETED (exit-reason sidecar) — "
+                                f"finalizing as finished despite service shutdown.")
+                    job_info["status"] = "finished"
+                    job_info["shutdown_reason"] = "Service instance terminated after crawl completion"
+                    if "last_heartbeat" in job_info:
+                        del job_info["last_heartbeat"]
+                    marker_path = os.path.join(job_info["storage_path"], '_completion_marker.json')
+                    try:
+                        async with aiofiles.open(marker_path, 'w') as f:
+                            await f.write(json.dumps({
+                                "final_status": "finished",
+                                "healed_from_exit_reason": True,
+                                "finalized_at": datetime.utcnow().isoformat(),
+                            }))
+                    except Exception as e:
+                        logger.warning(f"Could not write completion marker for '{crawl_id}': {e}")
+                    self._stamp_terminal_fields(job_info)
+                    await cache_service.set_json(job_key, job_info)
+                    await cache_service.delete_key(f"{CRAWL_LOCK_PREFIX}{crawl_id}")
+                    await cache_service.safe_decrement_key(CRAWL_RUNNING_COUNT_KEY)
+                    await self._publish_update(crawl_id, "finished")
+                    await self._send_stop_webhook(job_info, "finished", shutdown=True)
+                    return
+
                 job_info["status"] = "failed"
                 job_info["shutdown_reason"] = "Service instance terminated" # V3 Logic
                 job_info["failure_cause"] = "service_shutdown"
@@ -3294,6 +3330,23 @@ class CrawlerManager:
                     await cache_service.redis_client.delete(leader_lock_key)
             except Exception as release_err:
                 logger.warning(f"Could not release reconciliation leader lock: {release_err}")
+
+    async def _read_exit_reason_or_none(self, storage_path: str) -> Optional[str]:
+        """Reads {storage_path}/_exit_reason.json (written by the Node crawler's
+        graceful shutdown) and returns its 'reason' string, or None if absent/
+        unreadable. Never raises — used by the shutdown path to decide whether
+        a killed process had in fact already completed its crawl."""
+        path = os.path.join(storage_path or "", '_exit_reason.json')
+        try:
+            async with aiofiles.open(path, 'r') as f:
+                data = json.loads(await f.read())
+            reason = data.get("reason")
+            return reason if isinstance(reason, str) else None
+        except FileNotFoundError:
+            return None
+        except Exception as e:
+            logger.warning(f"_read_exit_reason_or_none: failed to read {path}: {e}")
+            return None
 
     async def _load_completion_marker_or_none(self, storage_path: str) -> Optional[dict]:
         """
