@@ -27,14 +27,13 @@ docker compose build crawler-service
 
 if [ "${1:-}" = "--up" ]; then
   REPLICAS="${2:-7}"
-  echo "Starting crawler-service scaled to ${REPLICAS} replicas (--no-deps: siblings untouched)"
-  docker compose up -d --no-deps --scale "crawler-service=${REPLICAS}" crawler-service
+  echo "Starting crawler-service with the freshly built image (--no-deps: siblings untouched)"
+  docker compose up -d --no-deps crawler-service
 
-  # Nginx must re-resolve the service hostname to pick up new replica IPs.
-  docker compose exec reverse-proxy nginx -s reload \
-    || echo "WARNING: nginx reload failed (reverse-proxy not running?) — new replicas may not receive traffic until it is reloaded."
+  # Scaling is delegated to the canonical script: it syncs the Redis capacity
+  # key (crawl_jobs:max_global_crawls), scales the replicas and reloads nginx.
+  echo "Scaling to ${REPLICAS} replicas via scale_crawlers.sh"
+  ./apps-microservices/crawler-service/scale_crawlers.sh "${REPLICAS}"
 
-  echo "NOTE: the Redis capacity key is NOT touched by this script. If the replica"
-  echo "count changed, sync it: ./apps-microservices/crawler-service/scale_crawlers.sh ${REPLICAS}"
   echo "Verify deploy: curl -s http://localhost:8050/crawler/version"
 fi
