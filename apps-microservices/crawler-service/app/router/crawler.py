@@ -183,12 +183,17 @@ async def get_capacity():
         # If the key is missing, use the configurable fallback from settings.
         max_global = int(max_global_raw) if max_global_raw else settings.DEFAULT_MAX_GLOBAL_CRAWLS
         
-        disk = {
-            "storage": crawler_manager._get_archives_disk_state(settings.CRAWLER_STORAGE_PATH),
-            "archives": crawler_manager._get_archives_disk_state(settings.ARCHIVES_SHARED_PATH),
-            "stash": crawler_manager._get_archives_disk_state(settings.STASH_SHARED_PATH),
-            "high_water_pct": settings.STASH_DISK_HIGH_WATER_PCT,
-        }
+        # Debug field only — must never 503 the admission-critical capacity response.
+        try:
+            disk = {
+                "storage": crawler_manager._get_archives_disk_state(settings.CRAWLER_STORAGE_PATH),
+                "archives": crawler_manager._get_archives_disk_state(settings.ARCHIVES_SHARED_PATH),
+                "stash": crawler_manager._get_archives_disk_state(settings.STASH_SHARED_PATH),
+                "high_water_pct": settings.STASH_DISK_HIGH_WATER_PCT,
+            }
+        except Exception:
+            logger.warning("capacity disk-state collection failed", exc_info=True)
+            disk = None
         return CapacityResponse(
             running_jobs=running_jobs,
             max_global_jobs=max_global,

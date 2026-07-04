@@ -33,3 +33,14 @@ def test_capacity_includes_disk_state(client):
     assert body["disk"]["archives"]["used_pct"] == 90.0
     assert body["disk"]["stash"]["used_pct"] == 90.0
     assert body["disk"]["high_water_pct"] == 85
+
+
+def test_capacity_survives_disk_state_failure(client):
+    """Disk block is debug-only: a failure must degrade to disk=None, never 503."""
+    from app.core.crawler_manager import crawler_manager
+    with patch.object(crawler_manager, "_get_archives_disk_state", side_effect=RuntimeError("boom")):
+        resp = client.get("/capacity")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["running_jobs"] == 2
+    assert body["disk"] is None
