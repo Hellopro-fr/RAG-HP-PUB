@@ -138,6 +138,22 @@ async def test_shutdown_still_fails_crawl_with_non_completed_reason(
     mock_stop.assert_not_awaited()
 
 
+@pytest.mark.asyncio
+async def test_relaunch_cleanup_removes_stale_exit_reason(tmp_path):
+    """A relaunched crawl must not inherit the prior run's COMPLETED sidecar:
+    if the service shuts down before the new run writes its own
+    _exit_reason.json, the shutdown guard would wrongly finalize it as
+    finished. _cleanup_stale_state_for_relaunch must purge BOTH sidecars."""
+    (tmp_path / "_completion_marker.json").write_text(json.dumps({"final_status": "finished"}))
+    _write_exit_reason(str(tmp_path), "COMPLETED")
+
+    manager = CrawlerManager()
+    await manager._cleanup_stale_state_for_relaunch("4296-362-1782907272", str(tmp_path))
+
+    assert not (tmp_path / "_completion_marker.json").exists()
+    assert not (tmp_path / "_exit_reason.json").exists()
+
+
 class TestReadExitReasonOrNone:
     """Unit tests for CrawlerManager._read_exit_reason_or_none."""
 

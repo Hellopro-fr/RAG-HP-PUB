@@ -3408,6 +3408,9 @@ class CrawlerManager:
           - {storage_path}/_completion_marker.json (any prior terminal marker:
             success, OOM-failure, OOM-relaunch-failure, force-finish, or
             reconciler-stale write — all 5 writers funnel here)
+          - {storage_path}/_exit_reason.json (prior run's Node exit-reason
+            sidecar — a stale COMPLETED would make the shutdown guard in
+            _cleanup_running_job wrongly finalize a resumed run as finished)
 
         Future items (deferred — see spec §7):
           - Stale crawl_lock:{crawl_id} Redis key
@@ -3432,6 +3435,18 @@ class CrawlerManager:
                 logger.info(f"Removed stale completion marker for crawl_id '{crawl_id}' (relaunch)")
             except OSError as e:
                 logger.warning(f"Could not remove stale completion marker for '{crawl_id}': {e}")
+
+        # 2. Exit-reason sidecar — a stale COMPLETED from the prior run would
+        #    make the shutdown guard in _cleanup_running_job finalize a
+        #    half-done resumed run as finished if the service shuts down
+        #    before the new run writes its own _exit_reason.json.
+        exit_reason_path = os.path.join(storage_path, '_exit_reason.json')
+        if os.path.isfile(exit_reason_path):
+            try:
+                os.unlink(exit_reason_path)
+                logger.info(f"Removed stale exit-reason sidecar for crawl_id '{crawl_id}' (relaunch)")
+            except OSError as e:
+                logger.warning(f"Could not remove stale exit-reason sidecar for '{crawl_id}': {e}")
 
     def _disk_used_pct(self, path: str = None) -> float:
         """Used-% of the crawl storage filesystem. Fail-open -> 0.0 (no pressure)."""
