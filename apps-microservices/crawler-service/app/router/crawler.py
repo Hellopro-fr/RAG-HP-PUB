@@ -183,10 +183,17 @@ async def get_capacity():
         # If the key is missing, use the configurable fallback from settings.
         max_global = int(max_global_raw) if max_global_raw else settings.DEFAULT_MAX_GLOBAL_CRAWLS
         
+        disk = {
+            "storage": crawler_manager._get_archives_disk_state(settings.CRAWLER_STORAGE_PATH),
+            "archives": crawler_manager._get_archives_disk_state(settings.ARCHIVES_SHARED_PATH),
+            "stash": crawler_manager._get_archives_disk_state(settings.STASH_SHARED_PATH),
+            "high_water_pct": settings.STASH_DISK_HIGH_WATER_PCT,
+        }
         return CapacityResponse(
             running_jobs=running_jobs,
             max_global_jobs=max_global,
-            is_full=running_jobs >= max_global
+            is_full=running_jobs >= max_global,
+            disk=disk,
         )
     except Exception as e:
         logger.error(f"Failed to get crawler capacity from Redis: {e}", exc_info=True)
