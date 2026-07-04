@@ -1,11 +1,13 @@
 """Admin/operator endpoints. Authenticated. Not user-facing."""
 import logging
+import re
 from collections import Counter
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.core.auth import verify_api_key
+from app.core import log_buffer
 from common_utils.redis import cache_service
 
 logger = logging.getLogger(__name__)
@@ -64,3 +66,23 @@ async def redis_debug():
     except Exception as e:
         logger.error(f"redis-debug failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"redis-debug failed: {e}")
+
+
+@router.get("/recent-logs", dependencies=[Depends(verify_api_key)])
+async def recent_logs(
+    grep: Optional[str] = None,
+    level: str = Query("INFO", description="Minimum level: DEBUG|INFO|WARNING|ERROR"),
+    limit: int = Query(500, ge=1, le=2000),
+):
+    """Last N orchestrator log lines of THIS replica (in-memory ring buffer).
+    Covers the log-based observability markers (AUTO_STASH, STASH_UPLOAD_ORPHAN,
+    UNSTASH_GCS_ORPHAN, STASH_MOVE_LIMBO, reconcile decisions) without VM access.
+    Per-replica: cross-check the answering replica via GET /version."""
+    min_levelno = logging.getLevelName(level.upper())
+    if not isinstance(min_levelno, int):
+        raise HTTPException(status_code=400, detail=f"Invalid level '{level}'.")
+    try:
+        lines = log_buffer.get_recent(grep=grep, min_levelno=min_levelno, limit=limit)
+    except re.error as e:
+        raise HTTPException(status_code=400, detail=f"Invalid grep regex: {e}")
+    return {"count": len(lines), "lines": lines}
