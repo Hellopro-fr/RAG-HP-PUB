@@ -357,6 +357,10 @@ async def get_crawl_status(crawl_id: str, job_info: dict = Depends(get_job_or_re
 @router.get("/results/{crawl_id}")
 async def download_crawl_results(
     include: List[IncludeInArchive] = Query(..., description="Specify which components to include in the archive. Can be provided multiple times (e.g., ?include=dataset&include=request_queues)."),
+    peek: bool = Query(False, description="Investigation read: skip recording "
+                       "downloaded_at (auto-stash grace clock). NOTE: does not "
+                       "prevent inline unstash of stashed crawls — for a fully "
+                       "side-effect-free view use GET /admin/dataset."),
     job_info: dict = Depends(get_job_or_recover)
 ):
     """
@@ -377,8 +381,10 @@ async def download_crawl_results(
                 f"The crawl data may have been cleaned up after archiving to GCS."
             )
 
-        # Record the consume signal (stream-start) for the auto-stash sweep.
-        await _record_downloaded_at(job_info)
+        # Record the consume signal (stream-start) for the auto-stash sweep —
+        # unless this is an investigation peek.
+        if not peek:
+            await _record_downloaded_at(job_info)
 
         if is_temporary:
             # Stream the file and clean up after streaming completes (prevents race with BackgroundTasks)
