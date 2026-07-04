@@ -872,6 +872,55 @@ async def test_stash_cleanup_removes_only_storage_tree(
     assert storage.exists()
 
 
+@pytest.mark.asyncio
+async def test_stash_cleanup_partial_failure_warns(
+    cm_instance, mock_cache_service, monkeypatch, tmp_path, caplog
+):
+    """A partially-failed storage/ removal (locked file, NFS) must NOT fail
+    the stash (tar is safe; outer except swallows) but must log the cleanup
+    warning instead of the success line — otherwise the disk-pressure sweep
+    re-selects the crawl in a loop with no signal."""
+    stash_dir = tmp_path / "stash"
+    stash_dir.mkdir()
+
+    storage = tmp_path / "crawl_data"
+    storage.mkdir()
+    (storage / "crawler.log").write_text("log content")
+    sub = storage / "storage" / "datasets"
+    sub.mkdir(parents=True)
+    (sub / "000001.json").write_text("data")
+
+    job_info = {
+        "crawl_id": "partial_test_id",
+        "status": "failed",
+        "storage_path": str(storage),
+        "domain": "example.com",
+    }
+
+    monkeypatch.setattr(cm_module.settings, "STASH_SHARED_PATH", str(stash_dir))
+    monkeypatch.setattr(cm_module.settings, "GCS_BUCKET_NAME", "test-bucket")
+    monkeypatch.setattr(
+        cm_instance,
+        "_get_archives_disk_state",
+        lambda d: {"free_bytes": 10**12, "total_bytes": 10**12, "used_pct": 0.0, "file_count": 0, "oldest_file_age_seconds": None},
+    )
+    mock_cache_service.redis_client.exists = AsyncMock(return_value=0)
+    mock_cache_service.redis_client.set = AsyncMock(return_value=True)
+    mock_cache_service.redis_client.eval = AsyncMock(return_value=1)
+    mock_cache_service.get_json = AsyncMock(return_value=dict(job_info))
+
+    # Simulate rmtree that silently removes nothing (ignore_errors swallowed all)
+    monkeypatch.setattr(cm_module.shutil, "rmtree", lambda *a, **k: None)
+
+    with caplog.at_level("WARNING", logger=cm_module.__name__):
+        result = await cm_instance.stash_crawl(job_info)
+
+    # Stash completes despite cleanup failure — degraded state is non-fatal
+    assert result["status"] == "stashing"
+    assert (storage / "storage").exists(), "heavy tree left on disk (documented degraded state)"
+    assert "Data cleanup failed" in caplog.text
+
+
 # ============================================================================
 # _LockHeartbeat integration tests (T2)
 # ============================================================================

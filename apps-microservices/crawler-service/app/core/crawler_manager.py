@@ -2537,6 +2537,9 @@ class CrawlerManager:
                         heavy = os.path.join(job_storage_path, 'storage')
                         if os.path.isdir(heavy):
                             shutil.rmtree(heavy, ignore_errors=True)
+                            if os.path.exists(heavy):
+                                raise RuntimeError(
+                                    f"storage/ tree only partially removed at '{heavy}' — disk space may not have been freed")
 
                     # Step 1: Create archive
                     final_path, archive_size = await anyio.to_thread.run_sync(_create_archive)
@@ -2948,6 +2951,9 @@ class CrawlerManager:
                         heavy = os.path.join(job_storage_path, 'storage')
                         if os.path.isdir(heavy):
                             shutil.rmtree(heavy, ignore_errors=True)
+                            if os.path.exists(heavy):
+                                raise RuntimeError(
+                                    f"storage/ tree only partially removed at '{heavy}' — disk space may not have been freed")
 
                     await anyio.to_thread.run_sync(_cleanup_data_keep_logs)
                     logger.info(f"Removed heavy storage/ tree for stashed crawl '{crawl_id}' (sidecars + logs kept).")
