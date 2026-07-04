@@ -45,6 +45,14 @@ def test_traversal_and_unknown_names_rejected(app_and_storage):
     assert c.get("/admin/sidecar/5", params={"name": "crawler.log"}).status_code == 400
 
 
+def test_raw_capped_at_100k(app_and_storage):
+    app, storage = app_and_storage
+    (storage / "_exit_reason.json").write_text("x" * 200_000, encoding="utf-8")
+    body = TestClient(app).get("/admin/sidecar/5",
+                               params={"name": "_exit_reason.json"}).json()
+    assert len(body["raw"]) == 100_000
+
+
 def test_404_when_absent(app_and_storage):
     app, _ = app_and_storage
     resp = TestClient(app).get("/admin/sidecar/5",
