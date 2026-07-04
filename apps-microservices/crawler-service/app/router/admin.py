@@ -1,13 +1,17 @@
 """Admin/operator endpoints. Authenticated. Not user-facing."""
 import logging
+import os
 import re
 from collections import Counter
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import PlainTextResponse
 
 from app.core.auth import verify_api_key
 from app.core import log_buffer
+from app.core.config import settings
+from app.router.crawler import get_job_or_recover
 from common_utils.redis import cache_service
 
 logger = logging.getLogger(__name__)
@@ -86,3 +90,36 @@ async def recent_logs(
     except re.error as e:
         raise HTTPException(status_code=400, detail=f"Invalid grep regex: {e}")
     return {"count": len(lines), "lines": lines}
+
+
+MAX_TAIL_BYTES = 2_000_000  # crawler.log has no rotation; multi-day crawls reach GB scale
+
+
+@router.get("/logs/{crawl_id}", dependencies=[Depends(verify_api_key)])
+async def crawl_log_tail(
+    tail_bytes: int = Query(200_000, ge=1, le=MAX_TAIL_BYTES),
+    grep: Optional[str] = None,
+    job_info: dict = Depends(get_job_or_recover),
+):
+    """Tail of the per-crawl Node log ({storage_path}/crawler.log). Read-only —
+    unlike /results this never stamps downloaded_at nor unstashes anything.
+    The file survives stash/archive cleanup (files_to_keep), so failed and
+    cold crawls stay inspectable."""
+    storage_path = job_info.get("storage_path") or os.path.join(
+        settings.CRAWLER_STORAGE_PATH, job_info["crawl_id"])
+    log_path = os.path.join(storage_path, "crawler.log")
+    if not os.path.isfile(log_path):
+        raise HTTPException(status_code=404, detail="crawler.log not found for this crawl.")
+    size = os.path.getsize(log_path)
+    with open(log_path, "rb") as f:
+        f.seek(max(0, size - tail_bytes))
+        data = f.read().decode("utf-8", errors="replace")
+    if size > tail_bytes and "\n" in data:
+        data = data.split("\n", 1)[1]  # drop the partial first line
+    if grep:
+        try:
+            rx = re.compile(grep)
+        except re.error as e:
+            raise HTTPException(status_code=400, detail=f"Invalid grep regex: {e}")
+        data = "\n".join(line for line in data.splitlines() if rx.search(line))
+    return PlainTextResponse(data, headers={"X-Log-Size-Bytes": str(size)})
