@@ -55,6 +55,8 @@ src/common_utils/
 
 ## Recent Security & Reliability Fixes
 
+- **embedding_client**: shared gRPC channel sets `grpc.max_receive_message_length` to 64 MB — a ~1000+ chunk page's `GetEmbeddings` response (1024 float32/chunk) exceeded the 4 MiB gRPC default → client-side `RESOURCE_EXHAUSTED`, 3 deterministic retries, DLQ. Server side raised symmetrically in `embedding-model-service/infrastructure/grpc_server.py` (`_SERVER_OPTIONS`).
+
 - **MilvusWebsiteCrud**: `insert_website()` projects each record onto the fixed `siteweb_2` schema (`_INSERT_FIELDS` whitelist) — extra upstream keys (e.g. `commentaire_si_autre` from template-llm-service) previously failed the whole insert with an empty-repr `DataNotMatchException`. `MilvusException` is now wrapped in `RuntimeError` with context before re-raising (readable DLQ `x-error-reason`).
 - **TrafilaturaCleaning**: all `markdownify` call sites go through `_md_safe()`, which converts `RecursionError` on pathologically nested DOMs (e.g. Liferay pages) into an empty extraction so the 3-tier cascade can fall through instead of crashing the message.
 

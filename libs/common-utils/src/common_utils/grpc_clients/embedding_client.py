@@ -21,6 +21,10 @@ _CHANNEL_OPTIONS = [
     ("grpc.keepalive_time_ms", 30000),
     ("grpc.keepalive_timeout_ms", 10000),
     ("grpc.keepalive_permit_without_calls", 1),
+    # 64 Mo : la réponse GetEmbeddings d'une page ~1000+ chunks (1024 float32
+    # par chunk ≈ 4,1 Ko) dépasse le défaut gRPC de 4 Mio → RESOURCE_EXHAUSTED
+    # côté client, classé transitoire, 3 retries déterministes, puis DLQ.
+    ("grpc.max_receive_message_length", 64 * 1024 * 1024),
 ]
 
 _channel = None
