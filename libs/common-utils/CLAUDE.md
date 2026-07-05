@@ -55,6 +55,9 @@ src/common_utils/
 
 ## Recent Security & Reliability Fixes
 
+- **MilvusWebsiteCrud**: `insert_website()` projects each record onto the fixed `siteweb_2` schema (`_INSERT_FIELDS` whitelist) — extra upstream keys (e.g. `commentaire_si_autre` from template-llm-service) previously failed the whole insert with an empty-repr `DataNotMatchException`. `MilvusException` is now wrapped in `RuntimeError` with context before re-raising (readable DLQ `x-error-reason`).
+- **TrafilaturaCleaning**: all `markdownify` call sites go through `_md_safe()`, which converts `RecursionError` on pathologically nested DOMs (e.g. Liferay pages) into an empty extraction so the 3-tier cascade can fall through instead of crashing the message.
+
 - **DLQProperties**: `create_dlq_headers()` now uses `repr(error)` for richer error messages in DLQ headers.
 - **MilvusDocumentCrud / MilvusPjCrud**: `_ensure_connected()` uses `utility.list_collections()` RPC health check instead of unreliable `has_connection()`. Expression injection prevented via input sanitization in `get_document()`/`get_pj()` and type validation in `delete_document()`/`delete_pj()`.
 - **MilvusPjCrud**: `update_pj()` returns serializable `"updated"` string instead of raw `MutationResult`.
