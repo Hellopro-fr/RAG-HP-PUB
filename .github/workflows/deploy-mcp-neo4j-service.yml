@@ -56,11 +56,12 @@ jobs:
       # Neo4j interne 10.0.1.218 -> VPC connector requis.
       vpc_connector: vpc-access-connector
       vpc_egress: private-ranges-only
-      # Config Neo4j (bolt+s = TLS, comme NEO4J_MCP_URI de l'env_model).
-      # NB: si l'auth Neo4j echoue, verifier que platform-neo4j-password == NEO4J_MCP_PASSWORD.
+      # Config Neo4j : neo4j:// (SANS TLS), aligne sur NEO4J_URI du .env/compose reel
+      # (10.0.1.218 ne fait pas de TLS -> bolt+s reset le handshake). Cf. test 2026-07.
+      # NB: si l'auth Neo4j echoue, verifier que platform-neo4j-password == mot de passe Neo4j.
       env_vars_json: |
         {
-          "NEO4J_URI": "bolt+s://10.0.1.218:7687",
+          "NEO4J_URI": "neo4j://10.0.1.218:7687",
           "NEO4J_USERNAME": "neo4j",
           "NEO4J_DATABASE": "neo4j"
         }
