@@ -8,10 +8,10 @@ from dataclasses import dataclass
 from common_utils.sso import get_account_credentials
 
 
-def parse_admin_emails(raw: str | None) -> set[str]:
+def parse_admin_emails(raw: str | None) -> frozenset[str]:
     if not raw:
-        return set()
-    return {e.strip().lower() for e in raw.split(",") if e.strip()}
+        return frozenset()
+    return frozenset(e.strip().lower() for e in raw.split(",") if e.strip())
 
 
 @dataclass(frozen=True)
@@ -22,7 +22,7 @@ class AuthConfig:
     client_secret: str
     redirect_uri: str
     jwt_secret: str
-    admin_emails: set[str]
+    admin_emails: frozenset[str]
     secure_cookie: bool
     session_ttl_seconds: int
     central_logout: bool
@@ -43,7 +43,9 @@ def get_auth_config() -> AuthConfig:
     except ValueError:
         ttl = 0
     if ttl <= 0:
-        raise RuntimeError(f"[account-auth] SESSION_TTL must be a positive integer, got: {ttl_raw}")
+        raise RuntimeError(
+            f"[account-auth] SESSION_TTL must be a positive integer, got: {ttl_raw}"
+        )
     return AuthConfig(
         account_public_url=_req("ACCOUNT_PUBLIC_URL").rstrip("/"),
         account_base_url=_req("ACCOUNT_BASE_URL").rstrip("/"),

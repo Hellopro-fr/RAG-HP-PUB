@@ -48,3 +48,18 @@ def test_bad_session_ttl(monkeypatch):
 def test_custom_session_ttl(monkeypatch):
     _apply(monkeypatch, {"SESSION_TTL": "3600"})
     assert get_auth_config().session_ttl_seconds == 3600
+
+
+def test_missing_required_var(monkeypatch):
+    _apply(monkeypatch)
+    monkeypatch.delenv("JWT_SECRET", raising=False)
+    with pytest.raises(RuntimeError, match="JWT_SECRET"):
+        get_auth_config()
+
+
+def test_bool_trues(monkeypatch):
+    _apply(monkeypatch, {"SECURE_COOKIE": "true", "SSO_CENTRAL_LOGOUT": "true", "ADMIN_EMAILS": "a@hp.fr"})
+    cfg = get_auth_config()
+    assert cfg.secure_cookie is True
+    assert cfg.central_logout is True
+    assert cfg.admin_emails == frozenset({"a@hp.fr"})
