@@ -50,6 +50,7 @@ import { qmConsumptionStrip, shouldSkipDequeued, recordQmCollapsed } from "./qmC
 import { isOverCap, QM_FACET_ENABLED, QM_FACET_CAP_K } from "./facetCap.js";
 import { pathBaseKey, baseKeyAbsent } from "./urlBase.js";
 import { isFilterParam } from "./filterOnSeen.js";
+import { isDeadHost, terminalFailureDetectEnabled } from "./terminalFailure.js";
 
 /**
  * Constructs the Apify proxy URL based on the provided password.
@@ -725,6 +726,20 @@ export const startCrawler = async (
             if (request.url === context.config.baseUrl && !context.crawlErrorMessage) {
                 const errorSummary = String(request.errorMessages).substring(0, 150);
                 context.crawlErrorMessage = `Page d'accueil inaccessible après ${request.retryCount} tentatives: ${errorSummary}`;
+            }
+
+            // Dead-host breaker (Task RD-T11): homepage exhausted retries with a
+            // permanent (DNS-gone) or infra (conn-refused/timeout, nothing crawled)
+            // root cause — the domain itself is unreachable. Record-only: main.ts
+            // propagates fatalExitCode at graceful shutdown (see spec 2026-06-09).
+            if (request.url === context.config.baseUrl && terminalFailureDetectEnabled()) {
+                const rootClass = classifyFailure(errorStr, response?.status() || 0);
+                const processed = context.statsManager ? await context.statsManager.getValue("processed") : 0;
+                if (isDeadHost(rootClass, processed)) {
+                    context.stopReason = "domainDead";
+                    context.fatalExitCode = 9;
+                    log.error(`⛔ DEAD HOST (${rootClass}) at ${request.url} — terminating (exit 9)`);
+                }
             }
 
             // Save rich error info. failure_class drives auto-recovery on restart:

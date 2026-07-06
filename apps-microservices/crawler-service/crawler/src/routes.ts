@@ -34,6 +34,7 @@ import { recordQuestionMarkObservation } from "./questionMarkDecision.js";
 import { recordQmTier2Sample, maybeCommitParam, commitToRemoveParam, maybeDefaultAtCeiling, QM_TIER2_TRIGGER } from "./questionMarkTier2.js";
 import { trackQmHashStatsForUrl } from "./qmHashTracker.js";
 import { classifyHttpStatus, pdfDatasetName, isPageClosedError } from "./httpStatusPolicy.js";
+import { shouldTripProxyWall, proxyWallConfig, terminalFailureDetectEnabled } from "./terminalFailure.js";
 import type { PageTimingEntry } from "./timing/types.js";
 
 export const router = createPlaywrightRouter();
@@ -404,6 +405,17 @@ router.addDefaultHandler(
                 } else if (statusClass === "block") {
                     session?.retire();
                     log.warning(`🚫 BLOCKED HTTP ${status} on ${url} — retire session, retry`);
+                    context.blockedCount = (context.blockedCount ?? 0) + 1;
+                    if (terminalFailureDetectEnabled() && context.statsManager) {
+                        const processed = await context.statsManager.getValue("processed");
+                        const wall = shouldTripProxyWall(context.blockedCount, processed, proxyWallConfig());
+                        if (wall.trip) {
+                            context.stopReason = "proxyBlocked";
+                            context.fatalExitCode = 8;
+                            log.error(`⛔ PROXY WALL — ${wall.reason} — terminating (exit 8)`);
+                            await stopCrawler(crawler, `Proxy wall: ${wall.reason}`);
+                        }
+                    }
                 } else {
                     log.warning(`↻ TRANSIENT HTTP ${status} on ${url} — retry`);
                 }

@@ -78,6 +78,11 @@ export const context = {
     // Set by a fatal in-handler breaker (e.g. domainChanged -> 7) so the crawl
     // terminates as a failure. Null = normal success path. See spec 2026-06-09.
     fatalExitCode: null as number | null,
+    // Count of "block"-classified HTTP responses (403/anti-bot wall) seen this crawl.
+    // In-memory only. Read by the proxy-wall breaker (terminalFailure.ts) when
+    // TERMINAL_FAILURE_DETECT_ENABLED=true; harmless to increment unconditionally
+    // since nothing reads it with the flag off. See Task RD-T11 (spec 2026-07-06).
+    blockedCount: 0 as number,
     robotsTxtBypassed: false,
     camoufoxEnabled: true,
     crawlErrorMessage: "",
