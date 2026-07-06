@@ -33,6 +33,10 @@ interface DataLayerWindow extends Window {
   dataLayer?: Array<Record<string, unknown>>;
 }
 
+// Dernière étape funnel relayée (mémorisée pour reconstruire la validation "page-remerciement"
+// côté parent si le relais final arrive après la redirection — cf. pushFormValidationIfNeeded).
+let lastRelayedFunnel: FunnelData | null = null;
+
 /**
  * Traite un message `hellopro_form_step`. Retourne true si le message a été reconnu
  * (et traité), false sinon — l'appelant peut alors continuer son aiguillage.
@@ -55,13 +59,41 @@ export function handleFormStepMessage(raw: unknown, pushedSteps: Set<string>): b
 
   const stepName = typeof data.funnel.step_name === 'string' ? data.funnel.step_name : '';
   // Dédup : évite de recompter une étape déjà poussée (ex. étape 1 émise par le Hero).
-  if (stepName && pushedSteps.has(stepName)) return true;
-  if (stepName) pushedSteps.add(stepName);
+  // page-remerciement (validation) : normalisé sur une clé unique pour dédupliquer avec le
+  // filet de sécurité pushFormValidationIfNeeded (poussé à la soumission, avant redirection).
+  const dedupKey = stepName.indexOf('page-remerciement') === 0 ? 'page-remerciement' : stepName;
+  if (dedupKey && pushedSteps.has(dedupKey)) return true;
+  if (dedupKey) pushedSteps.add(dedupKey);
+
+  lastRelayedFunnel = data.funnel; // mémorisé pour la validation de secours (pushFormValidationIfNeeded)
 
   const w = window as DataLayerWindow;
   w.dataLayer = w.dataLayer || [];
   w.dataLayer.push({ ...data.funnel, page_location_uri: newPath });
   return true;
+}
+
+/**
+ * Pousse la validation "page-remerciement" dans le dataLayer parent, UNE seule fois, si elle n'a
+ * pas déjà été poussée via le relais. À appeler à la soumission réussie, AVANT la redirection MCA :
+ * le relais du funnel final peut arriver après la redirection (course) et être perdu. Ce filet
+ * garantit que la validation fire côté conseils. Dédupliqué via `pushedSteps` (clé normalisée
+ * 'page-remerciement') → jamais de double avec un relais effectivement reçu à temps.
+ */
+export function pushFormValidationIfNeeded(pushedSteps: Set<string>): void {
+  if (typeof window === 'undefined') return;
+  if (pushedSteps.has('page-remerciement')) return;
+  pushedSteps.add('page-remerciement');
+  const base = (lastRelayedFunnel || {}) as Record<string, unknown>;
+  const w = window as DataLayerWindow;
+  w.dataLayer = w.dataLayer || [];
+  w.dataLayer.push({
+    ...base,
+    event: 'quote_form_funnel',
+    step_name: 'page-remerciement',
+    step_type: 'page-remerciement',
+    page_location_uri: window.location.pathname,
+  });
 }
 
 /**
