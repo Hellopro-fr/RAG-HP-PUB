@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { startLogin } from "@/lib/auth/flow"
+import { startLogin } from "@hellopro/auth"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"

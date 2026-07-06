@@ -1,6 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server"
-import { getAuthConfig } from "@/lib/auth/config"
-import { SESSION_COOKIE } from "@/lib/auth/session"
+import { getAuthConfig, SESSION_COOKIE } from "@hellopro/auth"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"

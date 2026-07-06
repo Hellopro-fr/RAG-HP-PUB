@@ -2,7 +2,7 @@ import { getCachedData } from "@/lib/application/get-cached-data"
 import { CacheHeader } from "@/components/cache-header"
 import { CacheTable } from "@/components/cache-table"
 import { cookies } from "next/headers"
-import { readSession, SESSION_COOKIE } from "@/lib/auth/session"
+import { readSession, SESSION_COOKIE } from "@hellopro/auth"
 
 export default async function Home() {
   const { entries, metadata, error } = await getCachedData()
