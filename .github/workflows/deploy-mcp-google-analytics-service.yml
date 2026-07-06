@@ -1,0 +1,71 @@
+name: 'Deploy — mcp-google-analytics-service'
+
+# Wrapper qui appelle deploy-cloud-run.yml pour mcp-google-analytics-service
+# (Python mcp-proxy + analytics-mcp officiel Google GA4, port 8583).
+#
+# Deploiement PARALLELE (shadow) : aucun trafic prod rerouté.
+#
+# *** AUTH GOOGLE (INTERIM) : cle SA JSON montee en FICHIER via Secret Manager ***
+# Le SA ga-mcp-reader@ga4-mcp-hellopro (projet distinct) est deja autorise sur les
+# proprietes GA4. On monte sa cle JSON (secret mcp-google-analytics-sa-key) en fichier
+# a /secrets/gcp-credentials.json (syntaxe --set-secrets avec un CHEMIN comme cle ->
+# Cloud Run monte le secret en fichier). GOOGLE_APPLICATION_CREDENTIALS pointe dessus.
+# CIBLE (finding F-HP-SEC-006) : migrer vers ADC (SA runtime) quand acces admin GA4 dispo
+# (evite la cle JSON). Bloque aujourd'hui : pas d'acces GA4 admin + SA cross-project.
+#
+# Dependance : APIs Google GA4 publiques (egress internet) -> PAS de VPC connector.
+# Health /status (mcp-proxy). Base python:3.10-slim + libs Google -> gate Trivy off.
+
+on:
+  push:
+    branches:
+      - 'feat/migration-**'
+    paths:
+      - 'apps-microservices/mcp-google-analytics-service/**'
+      - '.github/workflows/deploy-mcp-google-analytics-service.yml'
+      - '.github/workflows/deploy-cloud-run.yml'
+  workflow_dispatch:
+    inputs:
+      cloud_run_region:
+        description: 'Région Cloud Run (override)'
+        required: false
+        type: string
+        default: 'europe-west1'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    name: 'Deploy mcp-google-analytics-service'
+    uses: ./.github/workflows/deploy-cloud-run.yml
+    with:
+      service_name: mcp-google-analytics-service
+      dockerfile_path: apps-microservices/mcp-google-analytics-service/Dockerfile
+      build_context: .
+      cloud_run_region: ${{ github.event.inputs.cloud_run_region || 'europe-west1' }}
+      ingress: all
+      allow_unauthenticated: true
+      cpu: '1'
+      memory: '512Mi'
+      min_instances: 0
+      max_instances: 3
+      # Dockerfile: ENV MCP_PORT=8583, CMD mcp-proxy --port ${MCP_PORT}. Health /status.
+      container_port: 8583
+      health_check_path: /status
+      # Egress APIs Google -> pas de VPC connector.
+      env_vars_json: |
+        {
+          "GOOGLE_APPLICATION_CREDENTIALS": "/secrets/gcp-credentials.json",
+          "GOOGLE_PROJECT_ID": "ga4-mcp-hellopro",
+          "GOOGLE_CREDENTIALS_TYPE": "json"
+        }
+      # Cle SA JSON montee en FICHIER (cle = chemin -> Cloud Run monte le secret en fichier).
+      secret_env_vars_json: |
+        {
+          "/secrets/gcp-credentials.json": "mcp-google-analytics-sa-key:latest"
+        }
+      trivy_disable_gate: true
+    secrets:
+      slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
