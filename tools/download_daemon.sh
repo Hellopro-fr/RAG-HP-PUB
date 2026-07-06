@@ -125,6 +125,9 @@ echo "Move enabled:       $ENABLE_MOVE"
 echo "Poll interval:      ${CHECK_INTERVAL}s"
 
 while true; do
+    # Liveness signal read by crawler-service GET /admin/daemon-state.
+    date -u +"%Y-%m-%dT%H:%M:%SZ" > "$REQUESTS_DIR/.daemon-heartbeat" 2>/dev/null || true
+
     find "$REQUESTS_DIR" -maxdepth 1 -name "*.request" -print0 | while IFS= read -r -d '' request_file; do
         crawl_id=$(basename "$request_file" .request)
         echo "[$(date)] Download request received: $crawl_id"

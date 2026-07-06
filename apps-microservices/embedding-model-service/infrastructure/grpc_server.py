@@ -100,8 +100,19 @@ class EmbeddingServiceImpl(embedding_pb2_grpc.EmbeddingServiceServicer):
             context.set_details("Erreur interne lors du chunking du texte.")
             return embedding_pb2.ChunkResponse()
         
+# 64 Mo : symétrie avec le canal client common-utils — une requête
+# ChunkText/GetEmbeddings dont le texte dépasse ~4 Mo serait sinon refusée
+# côté serveur par le défaut gRPC de réception (4 Mio). L'envoi est illimité
+# par défaut, seul le plafond de réception doit être relevé.
+_SERVER_OPTIONS = [
+    ("grpc.max_receive_message_length", 64 * 1024 * 1024),
+]
+
+
 async def serve(use_case: EmbeddingUseCase):
-    server = grpc.aio.server(futures.ThreadPoolExecutor(max_workers=50))
+    server = grpc.aio.server(
+        futures.ThreadPoolExecutor(max_workers=50), options=_SERVER_OPTIONS
+    )
     embedding_pb2_grpc.add_EmbeddingServiceServicer_to_server(EmbeddingServiceImpl(use_case), server)
     server.add_insecure_port('[::]:50052')
     logging.info("Serveur gRPC Embedding démarré sur le port 50052...")

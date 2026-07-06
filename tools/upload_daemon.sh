@@ -43,6 +43,9 @@ echo "Watch dir:     $ARCHIVES_DIR"
 echo "Dead-letter:   $DEAD_LETTER_DIR"
 
 while true; do
+    # Liveness signal read by crawler-service GET /admin/daemon-state.
+    date -u +"%Y-%m-%dT%H:%M:%SZ" > "$ARCHIVES_DIR/.daemon-heartbeat" 2>/dev/null || true
+
     # Find all .tar.gz files in the directory (exclude dead_letter subdirectory)
     find "$ARCHIVES_DIR" -maxdepth 1 -name "*.tar.gz" -print0 | while IFS= read -r -d '' file; do
         filename=$(basename "$file")

@@ -2,6 +2,7 @@ import os
 import logging
 import re
 import json
+import socket
 from datetime import datetime
 from typing import Dict, Optional, List
 
@@ -18,6 +19,9 @@ from app.schemas.crawler import CrawlRequest, CrawlResponse, CrawlStatus, StopRe
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+# Deploy identity for GET /version. Stamped once at import (= process start).
+APP_STARTED_AT = datetime.utcnow().isoformat() + "Z"
 
 
 async def _record_downloaded_at(job_info: dict) -> None:
@@ -179,14 +183,39 @@ async def get_capacity():
         # If the key is missing, use the configurable fallback from settings.
         max_global = int(max_global_raw) if max_global_raw else settings.DEFAULT_MAX_GLOBAL_CRAWLS
         
+        # Debug field only — must never 503 the admission-critical capacity response.
+        try:
+            disk = {
+                "storage": crawler_manager._get_archives_disk_state(settings.CRAWLER_STORAGE_PATH),
+                "archives": crawler_manager._get_archives_disk_state(settings.ARCHIVES_SHARED_PATH),
+                "stash": crawler_manager._get_archives_disk_state(settings.STASH_SHARED_PATH),
+                "high_water_pct": settings.STASH_DISK_HIGH_WATER_PCT,
+            }
+        except Exception:
+            logger.warning("capacity disk-state collection failed", exc_info=True)
+            disk = None
         return CapacityResponse(
             running_jobs=running_jobs,
             max_global_jobs=max_global,
-            is_full=running_jobs >= max_global
+            is_full=running_jobs >= max_global,
+            disk=disk,
         )
     except Exception as e:
         logger.error(f"Failed to get crawler capacity from Redis: {e}", exc_info=True)
         raise HTTPException(status_code=503, detail="Could not determine crawler service capacity.")
+
+
+@router.get("/version")
+async def version():
+    """Deploy identity: which commit/build is running, on which replica, since
+    when. GIT_COMMIT/BUILD_DATE are baked at image build (Dockerfile ARG->ENV);
+    'unknown' means the image was built without build args."""
+    return {
+        "git_commit": os.environ.get("GIT_COMMIT", "unknown"),
+        "build_date": os.environ.get("BUILD_DATE", "unknown"),
+        "replica": socket.gethostname(),
+        "started_at": APP_STARTED_AT,
+    }
 
 
 @router.post("/start", response_model=CrawlResponse, status_code=status.HTTP_202_ACCEPTED)
@@ -328,6 +357,10 @@ async def get_crawl_status(crawl_id: str, job_info: dict = Depends(get_job_or_re
 @router.get("/results/{crawl_id}")
 async def download_crawl_results(
     include: List[IncludeInArchive] = Query(..., description="Specify which components to include in the archive. Can be provided multiple times (e.g., ?include=dataset&include=request_queues)."),
+    peek: bool = Query(False, description="Investigation read: skip recording "
+                       "downloaded_at (auto-stash grace clock). NOTE: does not "
+                       "prevent inline unstash of stashed crawls — for a fully "
+                       "side-effect-free view use GET /admin/dataset."),
     job_info: dict = Depends(get_job_or_recover)
 ):
     """
@@ -348,8 +381,10 @@ async def download_crawl_results(
                 f"The crawl data may have been cleaned up after archiving to GCS."
             )
 
-        # Record the consume signal (stream-start) for the auto-stash sweep.
-        await _record_downloaded_at(job_info)
+        # Record the consume signal (stream-start) for the auto-stash sweep —
+        # unless this is an investigation peek.
+        if not peek:
+            await _record_downloaded_at(job_info)
 
         if is_temporary:
             # Stream the file and clean up after streaming completes (prevents race with BackgroundTasks)
