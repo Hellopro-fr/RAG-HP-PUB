@@ -28,3 +28,19 @@ def test_missing_secret(monkeypatch):
     monkeypatch.delenv("SESSION_SECRET", raising=False)
     with pytest.raises(RuntimeError, match="SESSION_SECRET"):
         read_session("any.jwt")
+
+
+def test_wrong_secret(monkeypatch):
+    import jwt
+    monkeypatch.setenv("SESSION_SECRET", "s")
+    tok = create_session_token(SessionClaims(email="a@hp.fr"), 3600)
+    monkeypatch.setenv("SESSION_SECRET", "different")
+    assert read_session(tok) is None
+
+
+def test_missing_sub(monkeypatch):
+    import jwt, time
+    monkeypatch.setenv("SESSION_SECRET", "s")
+    now = int(time.time())
+    tok = jwt.encode({"name": "x", "iat": now, "exp": now + 3600}, "s", algorithm="HS256")
+    assert read_session(tok) is None
