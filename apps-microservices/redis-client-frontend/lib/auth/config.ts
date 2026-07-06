@@ -13,20 +13,39 @@ export function parseAdminEmails(raw: string | undefined): Set<string> {
   )
 }
 
+// Derive the per-service credential env keys from SERVICE_NAME. Mirrors
+// libs/account-client-go DeriveEnvKeys and libs/common-utils/sso, so this module
+// is a drop-in for any Node service: "redis-client-frontend" ->
+// ACCOUNT_CLIENT_ID_REDIS_CLIENT_FRONTEND / ACCOUNT_CLIENT_SECRET_REDIS_CLIENT_FRONTEND.
+export function deriveClientEnvKeys(serviceName: string): [string, string] {
+  const slug = serviceName
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+  return [`ACCOUNT_CLIENT_ID_${slug}`, `ACCOUNT_CLIENT_SECRET_${slug}`]
+}
+
+// Resolve (clientId, clientSecret) by SERVICE_NAME-derived keys, falling back to
+// plain ACCOUNT_CLIENT_ID / ACCOUNT_CLIENT_SECRET. Same contract as the Go/Python clients.
 export function resolveClientCredentials(env: Env = process.env): {
   clientId: string
   clientSecret: string
 } {
-  const clientId =
-    env.ACCOUNT_CLIENT_ID_REDIS_CLIENT_FRONTEND || env.ACCOUNT_CLIENT_ID
-  const clientSecret =
-    env.ACCOUNT_CLIENT_SECRET_REDIS_CLIENT_FRONTEND || env.ACCOUNT_CLIENT_SECRET
-  if (!clientId || !clientSecret) {
-    throw new Error(
-      "[redis-client] Missing ACCOUNT_CLIENT_ID(_REDIS_CLIENT_FRONTEND) / ACCOUNT_CLIENT_SECRET(_REDIS_CLIENT_FRONTEND)",
-    )
+  const serviceName = (env.SERVICE_NAME || "").trim()
+  if (serviceName) {
+    const [idKey, secretKey] = deriveClientEnvKeys(serviceName)
+    if (env[idKey] && env[secretKey]) {
+      return { clientId: env[idKey]!, clientSecret: env[secretKey]! }
+    }
   }
-  return { clientId, clientSecret }
+  if (env.ACCOUNT_CLIENT_ID && env.ACCOUNT_CLIENT_SECRET) {
+    return { clientId: env.ACCOUNT_CLIENT_ID, clientSecret: env.ACCOUNT_CLIENT_SECRET }
+  }
+  throw new Error(
+    "[account-auth] Missing account-service credentials: set " +
+      "ACCOUNT_CLIENT_ID_<SERVICE_NAME> + ACCOUNT_CLIENT_SECRET_<SERVICE_NAME>, " +
+      "or plain ACCOUNT_CLIENT_ID + ACCOUNT_CLIENT_SECRET",
+  )
 }
 
 function req(name: string, env: Env): string {

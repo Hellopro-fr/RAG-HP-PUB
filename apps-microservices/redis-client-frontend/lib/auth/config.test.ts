@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { parseAdminEmails, resolveClientCredentials, getAuthConfig } from "./config"
+import { parseAdminEmails, resolveClientCredentials, deriveClientEnvKeys, getAuthConfig } from "./config"
 
 describe("parseAdminEmails", () => {
   it("lowercases, trims, and drops empties", () => {
@@ -16,9 +16,31 @@ describe("parseAdminEmails", () => {
   })
 })
 
+describe("deriveClientEnvKeys", () => {
+  it("slugifies SERVICE_NAME like the Go/Python clients", () => {
+    expect(deriveClientEnvKeys("redis-client-frontend")).toEqual([
+      "ACCOUNT_CLIENT_ID_REDIS_CLIENT_FRONTEND",
+      "ACCOUNT_CLIENT_SECRET_REDIS_CLIENT_FRONTEND",
+    ])
+    expect(deriveClientEnvKeys("api-gateway")).toEqual([
+      "ACCOUNT_CLIENT_ID_API_GATEWAY",
+      "ACCOUNT_CLIENT_SECRET_API_GATEWAY",
+    ])
+  })
+})
+
 describe("resolveClientCredentials", () => {
-  it("prefers the suffixed vars over plain", () => {
+  it("derives the key from SERVICE_NAME (reusable by any service)", () => {
     const creds = resolveClientCredentials({
+      SERVICE_NAME: "api-gateway",
+      ACCOUNT_CLIENT_ID_API_GATEWAY: "gw-id",
+      ACCOUNT_CLIENT_SECRET_API_GATEWAY: "gw-sec",
+    })
+    expect(creds).toEqual({ clientId: "gw-id", clientSecret: "gw-sec" })
+  })
+  it("prefers the SERVICE_NAME-derived vars over plain", () => {
+    const creds = resolveClientCredentials({
+      SERVICE_NAME: "redis-client-frontend",
       ACCOUNT_CLIENT_ID_REDIS_CLIENT_FRONTEND: "id-suffixed",
       ACCOUNT_CLIENT_SECRET_REDIS_CLIENT_FRONTEND: "secret-suffixed",
       ACCOUNT_CLIENT_ID: "id-plain",
@@ -26,15 +48,18 @@ describe("resolveClientCredentials", () => {
     })
     expect(creds).toEqual({ clientId: "id-suffixed", clientSecret: "secret-suffixed" })
   })
-  it("falls back to plain vars", () => {
+  it("falls back to plain vars when SERVICE_NAME-derived pair is unset", () => {
     const creds = resolveClientCredentials({
+      SERVICE_NAME: "redis-client-frontend",
       ACCOUNT_CLIENT_ID: "id-plain",
       ACCOUNT_CLIENT_SECRET: "secret-plain",
     })
     expect(creds).toEqual({ clientId: "id-plain", clientSecret: "secret-plain" })
   })
   it("throws when neither is set", () => {
-    expect(() => resolveClientCredentials({})).toThrow(/Missing ACCOUNT_CLIENT_ID/)
+    expect(() => resolveClientCredentials({ SERVICE_NAME: "redis-client-frontend" })).toThrow(
+      /Missing account-service credentials/,
+    )
   })
 })
 
