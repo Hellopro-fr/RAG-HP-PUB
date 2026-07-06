@@ -733,12 +733,18 @@ export const startCrawler = async (
             // root cause — the domain itself is unreachable. Record-only: main.ts
             // propagates fatalExitCode at graceful shutdown (see spec 2026-06-09).
             if (request.url === context.config.baseUrl && terminalFailureDetectEnabled()) {
-                const rootClass = classifyFailure(errorStr, response?.status() || 0);
-                const processed = context.statsManager ? await context.statsManager.getValue("processed") : 0;
-                if (isDeadHost(rootClass, processed)) {
-                    context.stopReason = "domainDead";
-                    context.fatalExitCode = 9;
-                    log.error(`⛔ DEAD HOST (${rootClass}) at ${request.url} — terminating (exit 9)`);
+                const status = response?.status() || 0;
+                // Dead host = genuinely unreachable (no HTTP response): DNS / conn-refused / cert /
+                // redirect-loop all yield status 0. A permanent HTTP status (404/401/410/451/501…)
+                // means the host IS reachable — must NOT be retired as "hôte mort".
+                if (status === 0) {
+                    const rootClass = classifyFailure(errorStr, status);
+                    const processed = context.statsManager ? await context.statsManager.getValue("processed") : 0;
+                    if (isDeadHost(rootClass, processed)) {
+                        context.stopReason = "domainDead";
+                        context.fatalExitCode = 9;
+                        log.error(`⛔ DEAD HOST (${rootClass}) at ${request.url} — terminating (exit 9)`);
+                    }
                 }
             }
 

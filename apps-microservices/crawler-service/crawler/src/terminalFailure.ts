@@ -26,7 +26,12 @@ export function shouldTripProxyWall(
   return { trip: false, reason: "ratio-below-threshold" };
 }
 
-/** DNS-gone (permanent) is dead; conn-refused/timeout (infra) is dead only if nothing was crawled. */
+/**
+ * Dead host classification. CALLER must ensure this is a transport-level failure (no HTTP
+ * response, status 0) — a permanent HTTP status (404/401/…) means the host is reachable.
+ * permanent (DNS-gone/cert/redirect-loop) → dead; infra (ECONNREFUSED/ETIMEDOUT transport,
+ * not Playwright nav-timeout which is transient) → dead only if nothing was crawled.
+ */
 export function isDeadHost(rootFailureClass: string, processedCount: number): boolean {
   if (rootFailureClass === "permanent") return true;
   if (rootFailureClass === "infra" && processedCount === 0) return true;
