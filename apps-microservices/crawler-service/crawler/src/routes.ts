@@ -407,8 +407,11 @@ router.addDefaultHandler(
                     log.warning(`🚫 BLOCKED HTTP ${status} on ${url} — retire session, retry`);
                     context.blockedCount = (context.blockedCount ?? 0) + 1;
                     if (terminalFailureDetectEnabled() && context.statsManager) {
-                        const processed = await context.statsManager.getValue("processed");
-                        const wall = shouldTripProxyWall(context.blockedCount, processed, proxyWallConfig());
+                        const processedOk = await context.statsManager.getValue("processed");
+                        // processed counts only requests that passed the status check (blocked ones
+                        // throw before increment("processed") at ~L431), so the ratio denominator is
+                        // total attempts = blocked + processed-ok, matching shouldTripProxyWall's contract.
+                        const wall = shouldTripProxyWall(context.blockedCount, context.blockedCount + processedOk, proxyWallConfig());
                         if (wall.trip) {
                             context.stopReason = "proxyBlocked";
                             context.fatalExitCode = 8;
