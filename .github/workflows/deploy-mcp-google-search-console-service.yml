@@ -1,0 +1,61 @@
+name: 'Deploy — mcp-google-search-console-service'
+
+# Wrapper Cloud Run pour mcp-google-search-console-service (shadow).
+# mcp-proxy + mcp-gsc. Auth par SERVICE ACCOUNT (GSC_SKIP_OAUTH=true) : cle SA JSON
+# montee en fichier /secrets/gsc-credentials.json (Secret Manager mcp-gsc-sa-key).
+# (Les vars OAuth CLIENT_ID/SECRET/REFRESH_TOKEN ne sont pas utilisees en mode SA.)
+# Cible ADC = finding F-HP-SEC-006. Egress Google, health /status, gate Trivy off.
+#
+# NB: GSC_SITE_URL a CONFIRMER vs .env (propriete Search Console reelle).
+
+on:
+  push:
+    branches:
+      - 'feat/migration-**'
+    paths:
+      - 'apps-microservices/mcp-google-search-console-service/**'
+      - '.github/workflows/deploy-mcp-google-search-console-service.yml'
+      - '.github/workflows/deploy-cloud-run.yml'
+  workflow_dispatch:
+    inputs:
+      cloud_run_region:
+        description: 'Région Cloud Run (override)'
+        required: false
+        type: string
+        default: 'europe-west1'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    name: 'Deploy mcp-google-search-console-service'
+    uses: ./.github/workflows/deploy-cloud-run.yml
+    with:
+      service_name: mcp-google-search-console-service
+      dockerfile_path: apps-microservices/mcp-google-search-console-service/Dockerfile
+      build_context: .
+      cloud_run_region: ${{ github.event.inputs.cloud_run_region || 'europe-west1' }}
+      ingress: all
+      allow_unauthenticated: true
+      cpu: '1'
+      memory: '512Mi'
+      min_instances: 0
+      max_instances: 3
+      container_port: 8584
+      health_check_path: /status
+      env_vars_json: |
+        {
+          "GOOGLE_APPLICATION_CREDENTIALS": "/secrets/gsc-credentials.json",
+          "GSC_CREDENTIALS_PATH": "/secrets/gsc-credentials.json",
+          "GSC_SKIP_OAUTH": "true",
+          "GSC_SITE_URL": "https://www.hellopro.fr"
+        }
+      secret_env_vars_json: |
+        {
+          "/secrets/gsc-credentials.json": "mcp-gsc-sa-key:latest"
+        }
+      trivy_disable_gate: true
+    secrets:
+      slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}

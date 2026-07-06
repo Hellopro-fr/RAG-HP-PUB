@@ -330,7 +330,9 @@ module "secret_manager" {
     "api-rest-milvus-key-webhook" = { service = "api-rest-milvus" }
     # mcp-google-analytics : cle SA JSON GA4 (montee en fichier /secrets/gcp-credentials.json)
     # INTERIM : cible = ADC (SA runtime) quand acces admin GA4 dispo. Cf. finding F-HP-SEC-006.
-    "mcp-google-analytics-sa-key" = { service = "mcp-google-analytics-service" }
+    "mcp-google-analytics-sa-key"          = { service = "mcp-google-analytics-service" }
+    "mcp-google-analytics-minisite-sa-key" = { service = "mcp-google-analytics-minisite-service" }
+    "mcp-gsc-sa-key"                       = { service = "mcp-google-search-console-service" }
   }
   cloudrun_sa_email = module.service_accounts.cloudrun_sa_email
   common_labels = {

@@ -1,0 +1,59 @@
+name: 'Deploy — mcp-google-analytics-minisite-service'
+
+# Wrapper Cloud Run pour mcp-google-analytics-minisite-service (shadow).
+# Reutilise l'IMAGE mcp-google-analytics-service (meme Dockerfile) mais pointe sur
+# le projet GA4 minisite (ga4-mcp-hellopro-minisite) avec sa propre cle SA.
+# Meme pattern que mcp-google-analytics : cle SA JSON montee en fichier (Secret Manager).
+# Cible ADC = finding F-HP-SEC-006. Egress Google, health /status, gate Trivy off.
+
+on:
+  push:
+    branches:
+      - 'feat/migration-**'
+    paths:
+      - 'apps-microservices/mcp-google-analytics-service/**'
+      - '.github/workflows/deploy-mcp-google-analytics-minisite-service.yml'
+      - '.github/workflows/deploy-cloud-run.yml'
+  workflow_dispatch:
+    inputs:
+      cloud_run_region:
+        description: 'Région Cloud Run (override)'
+        required: false
+        type: string
+        default: 'europe-west1'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    name: 'Deploy mcp-google-analytics-minisite-service'
+    uses: ./.github/workflows/deploy-cloud-run.yml
+    with:
+      service_name: mcp-google-analytics-minisite-service
+      dockerfile_path: apps-microservices/mcp-google-analytics-service/Dockerfile
+      build_context: .
+      cloud_run_region: ${{ github.event.inputs.cloud_run_region || 'europe-west1' }}
+      ingress: all
+      allow_unauthenticated: true
+      cpu: '1'
+      memory: '512Mi'
+      min_instances: 0
+      max_instances: 3
+      # Service CR distinct -> on garde le port par defaut de l'image (MCP_PORT=8583).
+      container_port: 8583
+      health_check_path: /status
+      env_vars_json: |
+        {
+          "GOOGLE_APPLICATION_CREDENTIALS": "/secrets/gcp-credentials.json",
+          "GOOGLE_PROJECT_ID": "ga4-mcp-hellopro-minisite",
+          "GOOGLE_CREDENTIALS_TYPE": "json"
+        }
+      secret_env_vars_json: |
+        {
+          "/secrets/gcp-credentials.json": "mcp-google-analytics-minisite-sa-key:latest"
+        }
+      trivy_disable_gate: true
+    secrets:
+      slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
