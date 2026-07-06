@@ -60,5 +60,18 @@ def test_exchange_code_non_200(monkeypatch):
 def test_verify_and_extract():
     tok = jwt.encode({"sub": "alice@hp.fr"}, "secret", algorithm="HS256")
     assert verify_and_extract(tok, "secret").email == "alice@hp.fr"
-    with pytest.raises(Exception):
+    with pytest.raises(jwt.InvalidSignatureError):
         verify_and_extract(jwt.encode({"sub": "a@hp.fr"}, "wrong", algorithm="HS256"), "secret")
+
+
+def test_verify_missing_claims():
+    tok = jwt.encode({}, "secret", algorithm="HS256")
+    with pytest.raises(RuntimeError, match="missing sub/email"):
+        verify_and_extract(tok, "secret")
+
+
+def test_verify_expired(monkeypatch):
+    import time
+    tok = jwt.encode({"sub": "a@hp.fr", "exp": int(time.time()) - 10}, "secret", algorithm="HS256")
+    with pytest.raises(jwt.ExpiredSignatureError):
+        verify_and_extract(tok, "secret")
