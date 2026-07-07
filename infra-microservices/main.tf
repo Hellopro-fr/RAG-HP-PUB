@@ -96,6 +96,27 @@ resource "google_compute_firewall" "allow_cr_eu_to_vm_gpu_api_catalog" {
   ]
 }
 
+# Cloud Run (eu-west1 VPC Connector) -> proxy grpc-gpu-proxy (haproxy TCP) sur VM GPU.
+# Expose les gRPC internes GPU : 15051=llm-service, 15052=embedding-model, 15053=reranking-model,
+# 15054=database-recherche. Le proxy forward vers services-net :50051-50054 (aucun conteneur GPU touche).
+resource "google_compute_firewall" "allow_cr_eu_to_vm_gpu_grpc" {
+  name        = "allow-cr-eu-to-vm-gpu-grpc"
+  network     = module.vpc.vpc_name
+  direction   = "INGRESS"
+  priority    = 1000
+  description = "Allow Cloud Run eu-west1 VPC Connector to reach GPU gRPC services via grpc-gpu-proxy on VM GPU"
+
+  allow {
+    protocol = "tcp"
+    ports    = ["15051", "15052", "15053", "15054"]
+  }
+
+  source_ranges = ["10.0.2.0/28"]
+  target_service_accounts = [
+    "vm-gpu-runtime@${var.project_id}.iam.gserviceaccount.com"
+  ]
+}
+
 # -----------------------------------------------------------------------------
 # GKE Cluster
 # -----------------------------------------------------------------------------
@@ -289,6 +310,7 @@ module "secret_manager" {
     "platform-redis-secret"            = { service = "platform" }
     "platform-rabbitmq-url"            = { service = "platform" } # PROD (10.0.1.216)
     "platform-rabbitmq-url-dev"        = { service = "platform" } # DEV/TEST (10.0.1.217) — tests shadow, bascule prod au cutover
+    "platform-key-webhook"             = { service = "platform" } # KEY_WEBHOOK partagé (api-chat-llm, api-rest-milvus…)
     "platform-neo4j-password"          = { service = "platform" }
     # Zilliz/Milvus : auth user+password (ZILLIZ_API_KEY=none dans .env, non utilise).
     "platform-zilliz-user"     = { service = "platform" }

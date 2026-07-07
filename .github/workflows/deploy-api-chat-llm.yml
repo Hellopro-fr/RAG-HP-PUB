@@ -1,0 +1,76 @@
+name: 'Deploy — api-chat-llm'
+
+# Wrapper Cloud Run pour api-chat-llm (shadow).
+# 1er service du batch 3B : dependance gRPC -> llm-service GPU via l'enabler
+# grpc-gpu-proxy (VM GPU 10.11.0.2:15051) + VPC connector. Valide le chemin
+# CR -> VPC -> proxy -> llm-service GPU.
+#
+# Startup lazy (lifespan commente) : gRPC/DB utilises par requete, pas au boot.
+# Endpoints providers externes (OpenAI/DeepSeek/Gemini/OpenRouter) = egress.
+# Config heritee lourde (QDRANT/ZILLIZ/RABBITMQ/KEY_WEBHOOK requis a l'import).
+# Health "/", port 8540, gate Trivy off (python:3.10-slim + build grpc).
+
+on:
+  push:
+    branches:
+      - 'feat/migration-**'
+    paths:
+      - 'apps-microservices/api-chat-llm/**'
+      - '.github/workflows/deploy-api-chat-llm.yml'
+      - '.github/workflows/deploy-cloud-run.yml'
+  workflow_dispatch:
+    inputs:
+      cloud_run_region:
+        description: 'Région Cloud Run (override)'
+        required: false
+        type: string
+        default: 'europe-west1'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    name: 'Deploy api-chat-llm'
+    uses: ./.github/workflows/deploy-cloud-run.yml
+    with:
+      service_name: api-chat-llm
+      dockerfile_path: apps-microservices/api-chat-llm/Dockerfile
+      build_context: .
+      cloud_run_region: ${{ github.event.inputs.cloud_run_region || 'europe-west1' }}
+      ingress: all
+      allow_unauthenticated: true
+      cpu: '1'
+      memory: '512Mi'
+      min_instances: 0
+      max_instances: 3
+      container_port: 8540
+      health_check_path: /
+      # gRPC llm-service (GPU) via proxy + Milvus interne -> VPC connector requis.
+      vpc_connector: vpc-access-connector
+      vpc_egress: private-ranges-only
+      env_vars_json: |
+        {
+          "LLM_SERVICE_URL": "10.11.0.2:15051",
+          "ZILLIZ_URI": "milvus-prod.hello.dev.private.com",
+          "ZILLIZ_PORT": "19530",
+          "ZILLIZ_API_KEY": "none",
+          "QDRANT_HOST_URL": "10.0.1.237",
+          "QDRANT_PORT": "6333",
+          "QDRANT_API_KEY": "none",
+          "M_PARAMS": "32",
+          "EF_PARAMS": "300"
+        }
+      secret_env_vars_json: |
+        {
+          "OPENAI_API_KEY": "platform-openai-api-key:latest",
+          "OPENROUTER_API_KEY": "platform-openrouter-api-key:latest",
+          "DEEPSEEK_API_KEY": "platform-deepseek-api-key:latest",
+          "GEMINI_API_KEY": "platform-gemini-api-key:latest",
+          "RABBITMQ_URL": "platform-rabbitmq-url:latest",
+          "KEY_WEBHOOK": "platform-key-webhook:latest"
+        }
+      trivy_disable_gate: true
+    secrets:
+      slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
