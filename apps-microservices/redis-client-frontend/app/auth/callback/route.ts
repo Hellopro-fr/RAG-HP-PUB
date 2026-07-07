@@ -1,6 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server"
-import { completeCallback } from "@/lib/auth/flow"
-import { SESSION_COOKIE } from "@/lib/auth/session"
+import { completeCallback, SESSION_COOKIE } from "@hellopro/auth"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"

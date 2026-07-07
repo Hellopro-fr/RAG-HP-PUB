@@ -1453,8 +1453,8 @@ services:
   redis-client-frontend:
     profiles: [ "app" ]
     build:
-      context: ./apps-microservices/redis-client-frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: apps-microservices/redis-client-frontend/Dockerfile
     ports:
       - "3551:3000"
     environment:

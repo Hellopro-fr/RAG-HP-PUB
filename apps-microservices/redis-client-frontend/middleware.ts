@@ -1,6 +1,6 @@
 // Auth middleware — gates all routes on the signed rcf_session cookie (account-service SSO).
 import { NextResponse, type NextRequest } from "next/server"
-import { readSession, SESSION_COOKIE } from "@/lib/auth/session"
+import { readSession, SESSION_COOKIE } from "@hellopro/auth"
 
 export async function middleware(request: NextRequest) {
   const session = await readSession(request.cookies.get(SESSION_COOKIE)?.value)
