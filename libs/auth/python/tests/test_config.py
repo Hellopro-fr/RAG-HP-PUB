@@ -13,6 +13,13 @@ BASE = {
 }
 
 
+@pytest.fixture(autouse=True)
+def _clear_creds_cache():
+    config._reset_cache()
+    yield
+    config._reset_cache()
+
+
 def test_parse_admin_emails():
     s = parse_admin_emails(" Alice@HP.fr , bob@hp.fr ,, ")
     assert s == {"alice@hp.fr", "bob@hp.fr"}
@@ -68,7 +75,6 @@ async def test_bool_trues(monkeypatch):
 
 
 async def test_fetch_fallback(monkeypatch):
-    config._reset_cache()
     for k in ("ACCOUNT_CLIENT_ID_REDIS_CLIENT_FRONTEND", "ACCOUNT_CLIENT_SECRET_REDIS_CLIENT_FRONTEND",
               "ACCOUNT_CLIENT_ID", "ACCOUNT_CLIENT_SECRET"):
         monkeypatch.delenv(k, raising=False)
@@ -89,3 +95,33 @@ async def test_fetch_fallback(monkeypatch):
     assert (cfg.client_id, cfg.client_secret) == ("fid", "fsec")
     await config.get_auth_config()          # memoized
     assert calls["n"] == 1
+
+
+async def test_fetch_fallback_guard_fails_reraises(monkeypatch):
+    for k in ("ACCOUNT_CLIENT_ID_REDIS_CLIENT_FRONTEND", "ACCOUNT_CLIENT_SECRET_REDIS_CLIENT_FRONTEND",
+              "ACCOUNT_CLIENT_ID", "ACCOUNT_CLIENT_SECRET", "ACCOUNT_INTERNAL_TOKEN"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("SERVICE_NAME", "redis-client-frontend")
+
+    async def boom():
+        raise AssertionError("must not be called when guard fails")
+
+    monkeypatch.setattr(config, "get_account_credentials_from_api", boom)
+    with pytest.raises(config.AccountCredentialsMissing):
+        await config._resolve_credentials()
+
+
+async def test_fetch_raises_not_cached(monkeypatch):
+    for k in ("ACCOUNT_CLIENT_ID_REDIS_CLIENT_FRONTEND", "ACCOUNT_CLIENT_SECRET_REDIS_CLIENT_FRONTEND",
+              "ACCOUNT_CLIENT_ID", "ACCOUNT_CLIENT_SECRET"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("SERVICE_NAME", "redis-client-frontend")
+    monkeypatch.setenv("ACCOUNT_INTERNAL_TOKEN", "adm")
+
+    async def flaky():
+        raise config.AccountCredentialsMissing("account-service down")
+
+    monkeypatch.setattr(config, "get_account_credentials_from_api", flaky)
+    with pytest.raises(config.AccountCredentialsMissing):
+        await config._resolve_credentials()
+    assert "redis-client-frontend" not in config._fetched_creds
