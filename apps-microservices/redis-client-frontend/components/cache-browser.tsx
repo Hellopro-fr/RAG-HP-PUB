@@ -26,10 +26,15 @@ export function CacheBrowser({ userEmail }: CacheBrowserProps) {
       try {
         const result = await listCacheKeys({ cursor, match: glob })
         setState((prev) => applyScanResult(prev, result, reset))
-        if (reset) setLastRefreshed(new Date())
         if (result.error) {
           toast({ title: "Error", description: result.error, variant: "destructive" })
+        } else if (reset) {
+          setLastRefreshed(new Date())
         }
+      } catch {
+        // listCacheKeys normally returns an error object rather than throwing; guard the
+        // transport (network/RSC) case so the UI always surfaces a failure.
+        toast({ title: "Error", description: "Scan request failed", variant: "destructive" })
       } finally {
         setLoading(false)
       }

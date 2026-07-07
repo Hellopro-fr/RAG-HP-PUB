@@ -36,15 +36,17 @@ export function CacheTable({
   const [searchTerm, setSearchTerm] = useState("")
   const [deletingKey, setDeletingKey] = useState<string | null>(null)
   const { toast } = useToast()
-  const firstRender = useRef(true)
+  const lastSearched = useRef(searchTerm)
 
-  // Debounce search → server-side MATCH. Skip the mount pass so opening the page never scans.
+  // Debounce search → server-side MATCH. A value-equality ref (not a one-shot boolean) skips
+  // both the mount pass AND React StrictMode's dev double-invoke, so opening the page never
+  // triggers an unconsented scan of the shared Redis.
   useEffect(() => {
-    if (firstRender.current) {
-      firstRender.current = false
-      return
-    }
-    const id = setTimeout(() => onSearch(searchTerm), 300)
+    if (lastSearched.current === searchTerm) return
+    const id = setTimeout(() => {
+      lastSearched.current = searchTerm
+      onSearch(searchTerm)
+    }, 300)
     return () => clearTimeout(id)
   }, [searchTerm, onSearch])
 
@@ -63,9 +65,25 @@ export function CacheTable({
     }
   }
 
-  const handleCopy = (key: string) => {
-    navigator.clipboard.writeText(key)
-    toast({ title: "Copied", description: "Key copied to clipboard" })
+  const handleCopy = async (key: string) => {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(key)
+      } else {
+        // Fallback for insecure (HTTP) origins where navigator.clipboard is undefined.
+        const ta = document.createElement("textarea")
+        ta.value = key
+        ta.style.position = "fixed"
+        ta.style.opacity = "0"
+        document.body.appendChild(ta)
+        ta.select()
+        document.execCommand("copy")
+        document.body.removeChild(ta)
+      }
+      toast({ title: "Copied", description: "Key copied to clipboard" })
+    } catch {
+      toast({ title: "Error", description: "Could not copy key", variant: "destructive" })
+    }
   }
 
   const formatTTL = (ttl?: number) => {

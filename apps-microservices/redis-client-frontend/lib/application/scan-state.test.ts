@@ -37,4 +37,14 @@ describe("scan-state", () => {
     expect(toMatchGlob("   ")).toBe("*")
     expect(toMatchGlob(" foo ")).toBe("*foo*")
   })
+
+  it("append dedupes keys already loaded (SCAN may re-emit)", () => {
+    const first = applyScanResult(initialState, { entries: [a, b], nextCursor: 5, total: 42 }, true)
+    const second = applyScanResult(
+      first,
+      { entries: [b, { key: "c", type: "list", size: 5 }], nextCursor: 0, total: 0 },
+      false,
+    )
+    expect(second.entries.map((e) => e.key)).toEqual(["a", "b", "c"])
+  })
 })

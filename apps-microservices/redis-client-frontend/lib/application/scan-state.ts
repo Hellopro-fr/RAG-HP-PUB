@@ -32,12 +32,19 @@ export function applyScanResult(state: BrowserState, result: ScanResult, reset: 
     return { ...state, scanned: true, error: result.error }
   }
   return {
-    entries: reset ? result.entries : [...state.entries, ...result.entries],
+    entries: reset ? result.entries : dedupeByKey(state.entries, result.entries),
     nextCursor: result.nextCursor,
     total: reset ? result.total : state.total,
     scanned: true,
     error: undefined,
   }
+}
+
+// SCAN may re-emit a key across pages (notably during rehashing); dedupe on append so the
+// browser never renders two rows with the same key.
+function dedupeByKey(existing: KeyMeta[], incoming: KeyMeta[]): KeyMeta[] {
+  const seen = new Set(existing.map((e) => e.key))
+  return [...existing, ...incoming.filter((e) => !seen.has(e.key))]
 }
 
 // Search term → Redis glob. Empty → "*" (all keys). Wraps in * for substring match.
