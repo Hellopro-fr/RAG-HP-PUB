@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server"
-import { completeCallback, SESSION_COOKIE } from "@hellopro/auth"
+import { completeCallback, SESSION_COOKIE, appOrigin } from "@hellopro/auth"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
   })
 
   if (result.status === "ok") {
-    const res = NextResponse.redirect(new URL("/", request.url))
+    const res = NextResponse.redirect(new URL("/", appOrigin()))
     res.cookies.set(SESSION_COOKIE, result.sessionToken, {
       httpOnly: true,
       sameSite: "lax",
@@ -31,12 +31,12 @@ export async function GET(request: NextRequest) {
   }
 
   if (result.status === "denied") {
-    const url = new URL("/auth/denied", request.url)
+    const url = new URL("/auth/denied", appOrigin())
     url.searchParams.set("email", result.email)
     return clearPkce(NextResponse.redirect(url))
   }
 
-  const url = new URL("/auth/login", request.url)
+  const url = new URL("/auth/login", appOrigin())
   url.searchParams.set("error", result.reason)
   return clearPkce(NextResponse.redirect(url))
 }

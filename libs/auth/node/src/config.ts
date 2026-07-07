@@ -96,6 +96,18 @@ function req(name: string, env: Env): string {
   return v
 }
 
+// Trusted public origin of THIS app, derived from its registered callback
+// (ACCOUNT_REDIRECT_URI). Use this for app-internal redirects instead of `request.url`,
+// which is unreliable behind a reverse proxy / container port-map (it reports the
+// internal container host, e.g. http://<container-id>:3000).
+export function appOrigin(env: Env = process.env): string {
+  const uri = env.ACCOUNT_REDIRECT_URI
+  if (!uri) {
+    throw new Error("[account-auth] Missing required env var: ACCOUNT_REDIRECT_URI")
+  }
+  return new URL(uri).origin
+}
+
 export interface AuthConfig {
   accountPublicUrl: string
   accountBaseUrl: string

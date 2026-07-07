@@ -4,6 +4,7 @@ import {
   resolveClientCredentials,
   deriveClientEnvKeys,
   getAuthConfig,
+  appOrigin,
   __resetClientCredentialsCache,
 } from "./config"
 
@@ -158,5 +159,16 @@ describe("getAuthConfig", () => {
   })
   it("throws when JWT_SECRET is missing", async () => {
     await expect(getAuthConfig({ ...baseEnv, JWT_SECRET: undefined })).rejects.toThrow(/JWT_SECRET/)
+  })
+})
+
+describe("appOrigin", () => {
+  it("derives the app origin from ACCOUNT_REDIRECT_URI (ignores path/port host details)", () => {
+    expect(appOrigin({ ACCOUNT_REDIRECT_URI: "http://35.245.31.1:3551/auth/callback" })).toBe(
+      "http://35.245.31.1:3551",
+    )
+  })
+  it("throws when ACCOUNT_REDIRECT_URI is missing", () => {
+    expect(() => appOrigin({})).toThrow(/ACCOUNT_REDIRECT_URI/)
   })
 })
