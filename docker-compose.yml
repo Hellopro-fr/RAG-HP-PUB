@@ -1474,6 +1474,7 @@ services:
       - SECURE_COOKIE=${ACCOUNT_SECURE_COOKIE:-false}
       - SESSION_TTL=${REDIS_CLIENT_SESSION_TTL:-28800}
       - SSO_CENTRAL_LOGOUT=${REDIS_CLIENT_CENTRAL_LOGOUT:-false}
+      - ACCOUNT_SECURE_COOKIE=false #TODO: TO REMOVE WHEN THE SERVICE IS ACCESSIBLE THROUGH HTTPS
     networks:
       - services-net
     logging: *logging_defaults
