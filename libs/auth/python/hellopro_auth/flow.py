@@ -16,8 +16,8 @@ class LoginStart:
     secure_cookie: bool
 
 
-def start_login() -> LoginStart:
-    cfg = get_auth_config()
+async def start_login() -> LoginStart:
+    cfg = await get_auth_config()
     pkce = gen_pkce()
     state = random_state()
     url = build_authorize_url(
@@ -28,9 +28,9 @@ def start_login() -> LoginStart:
                       secure_cookie=cfg.secure_cookie)
 
 
-def complete_callback(*, code: str | None, state: str | None,
+async def complete_callback(*, code: str | None, state: str | None,
                       state_cookie: str | None, verifier_cookie: str | None) -> dict:
-    cfg = get_auth_config()
+    cfg = await get_auth_config()
 
     if not code or not state:
         return {"status": "error", "reason": "missing_code_or_state"}
