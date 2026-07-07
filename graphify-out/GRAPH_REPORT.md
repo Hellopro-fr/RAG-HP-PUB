@@ -1,12 +1,12 @@
-# Graph Report - .  (2026-07-06)
+# Graph Report - .  (2026-07-07)
 
 ## Corpus Check
 - 0 files · ~99,999 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 7540 nodes · 16744 edges · 174 communities detected
-- Extraction: 64% EXTRACTED · 36% INFERRED · 0% AMBIGUOUS · INFERRED: 6009 edges (avg confidence: 0.59)
+- 7740 nodes · 17124 edges · 187 communities detected
+- Extraction: 64% EXTRACTED · 36% INFERRED · 0% AMBIGUOUS · INFERRED: 6080 edges (avg confidence: 0.59)
 - Token cost: 0 input · 0 output
 
 ## Community Hubs (Navigation)
@@ -184,9 +184,22 @@
 - [[_COMMUNITY_Community 71|Community 71]]
 - [[_COMMUNITY_Community 82|Community 82]]
 - [[_COMMUNITY_Community 33|Community 33]]
+- [[_COMMUNITY_No-Stash Doc Task|No-Stash Doc Task]]
+- [[_COMMUNITY_Crawler Recovery Blast Radius|Crawler Recovery Blast Radius]]
+- [[_COMMUNITY_Crawler Manual Recovery|Crawler Manual Recovery]]
+- [[_COMMUNITY_Community 211|Community 211]]
+- [[_COMMUNITY_Community 212|Community 212]]
+- [[_COMMUNITY_Community 213|Community 213]]
+- [[_COMMUNITY_Community 214|Community 214]]
+- [[_COMMUNITY_Community 215|Community 215]]
+- [[_COMMUNITY_Community 216|Community 216]]
+- [[_COMMUNITY_Community 218|Community 218]]
+- [[_COMMUNITY_Community 219|Community 219]]
+- [[_COMMUNITY_Community 221|Community 221]]
+- [[_COMMUNITY_Community 223|Community 223]]
 
 ## God Nodes (most connected - your core abstractions)
-1. `CrawlerManager` - 393 edges
+1. `CrawlerManager` - 397 edges
 2. `ReindexResponse` - 319 edges
 3. `CrawlStatus` - 319 edges
 4. `IncludeInArchive` - 318 edges
@@ -200,14 +213,14 @@
 ## Surprising Connections (you probably didn't know these)
 - `GeminiClient` --semantically_similar_to--> `gemini_client Gemini Infrastructure`  [INFERRED] [semantically similar]
   D:/DevHellopro/Workspaces/RAG-HP-PUB/libs/common-utils/src/common_utils/llm/providers.py → apps-microservices/graph-rag-api-recherche-rust-service/CLAUDE.md
+- `Framework-free login flow orchestration (startLogin/completeCallback)` --semantically_similar_to--> `Framework-free login orchestration (parity with libs/auth/node flow.ts).`  [INFERRED] [semantically similar]
+  docs/superpowers/specs/2026-06-18-shared-auth-lib-design.md → libs\auth\python\hellopro_auth\flow.py
+- `Node/Python parity contract (env convention, PKCE S256, claims, TTL)` --semantically_similar_to--> `Framework-free OAuth2 + PKCE primitives (parity with libs/auth/node oauth.ts).`  [INFERRED] [semantically similar]
+  docs/superpowers/specs/2026-06-18-shared-auth-lib-design.md → libs\auth\python\hellopro_auth\oauth.py
+- `Node/Python parity contract (env convention, PKCE S256, claims, TTL)` --semantically_similar_to--> `Signed rcf_session JWT (HS256, SESSION_SECRET). Parity with libs/auth/node sessi`  [INFERRED] [semantically similar]
+  docs/superpowers/specs/2026-06-18-shared-auth-lib-design.md → libs\auth\python\hellopro_auth\session.py
 - `cache_service.py (Redis lock helper)` --semantically_similar_to--> `Redis State and Counters`  [INFERRED] [semantically similar]
   libs/common-utils/cache_service.py → apps-microservices/crawler-service/CLAUDE.md
-- `killBrowserProcesses()` --semantically_similar_to--> `killBrowserProcesses() helper`  [INFERRED] [semantically similar]
-  D:/DevHellopro/Workspaces/RAG-HP-PUB/apps-microservices/crawler-service/crawler/src/browserKill.ts → docs/superpowers/specs/2026-05-21-camoufox-oom-restart-loop-design.md
-- `MilvusProduitInserer` --conceptually_related_to--> `milvus-service gRPC (50056)`  [INFERRED]
-  D:/DevHellopro/Workspaces/RAG-HP-PUB/libs/common-utils/src/common_utils/database/MilvusProduitInserer.py → apps-microservices/graph-rag-api-recherche-rust-service/CLAUDE.md
-- `Configuration` --conceptually_related_to--> `Lazy<Settings> env var singleton`  [INFERRED]
-  D:/DevHellopro/Workspaces/RAG-HP-PUB/libs/common-utils/src/common_utils/database/config/settings.py → apps-microservices/graph-rag-api-recherche-rust-service/CLAUDE.md
 
 ## Hyperedges (group relationships)
 - **Stash to Archive GCS Move Flow** — crawler_claude_move_stash_to_archive, download_daemon_process_move_requests, download_daemon_env_enable_move, download_daemon_env_move_source_prefix, download_daemon_env_move_target_prefix, download_daemon_marker_move, crawler_claude_auto_stash [EXTRACTED 0.90]
@@ -258,7 +271,7 @@ Nodes (102): CollectionName, Enum, CollectionNameGraph, Enum for the possible co
 
 ### Community 2 - "CrawlerManager Python + DLQ"
 Cohesion: 0.01
-Nodes (438): str, DLQPropertiesAsync, create_dlq_headers(), create_dlq_message(), DeepseekOCRDocExtractor, Client asynchrone pour l'API OCR externe utilisant Deepseek, Initialise le client OCR                  Args:             base_url: URL de, Vérifie si le fichier est un format supporté (PDF ou image)                  A (+430 more)
+Nodes (440): str, DLQPropertiesAsync, create_dlq_headers(), create_dlq_message(), DeepseekOCRDocExtractor, Client asynchrone pour l'API OCR externe utilisant Deepseek, Initialise le client OCR                  Args:             base_url: URL de, Vérifie si le fichier est un format supporté (PDF ou image)                  A (+432 more)
 
 ### Community 77 - "Community 77"
 Cohesion: 0.67
@@ -386,11 +399,11 @@ Nodes (91): Closes the Redis connection pool., reconcile_running_jobs_count(), s
 
 ### Community 3 - "Rust Service Clients"
 Cohesion: 0.01
-Nodes (465): Sets a dictionary for a key, serializing it to JSON., CrawlerManager, mock_cache_service(), TestStaleHandlerCounter, test_stale_handler_decrements_counter(), test_stale_handler_skips_decrement_for_terminal_status(), TestStaleHandlerKillProcess, TestRelaunchAbort (+457 more)
+Nodes (475): Sets a dictionary for a key, serializing it to JSON., CrawlerManager, mock_cache_service(), TestStaleHandlerCounter, test_stale_handler_decrements_counter(), test_stale_handler_skips_decrement_for_terminal_status(), TestStaleHandlerKillProcess, TestRelaunchAbort (+467 more)
 
 ### Community 1 - "Node.js Crawler Core"
 Cohesion: 0.01
-Nodes (749): Gets a dictionary for a key, deserializing it from JSON., Deletes a key from Redis., Gets all keys matching a given prefix using SCAN., _count_files_in_dir(), _map_error_to_message(), Safely counts files in a directory, excluding Crawlee metadata., Read isError from _callback_payload.json in the crawl storage dir.     Returns, Flatten a dict/list payload into a list of (key, value) tuples using     PHP-st (+741 more)
+Nodes (767): Gets a dictionary for a key, deserializing it from JSON., Deletes a key from Redis., Gets all keys matching a given prefix using SCAN., _count_files_in_dir(), _map_error_to_message(), Safely counts files in a directory, excluding Crawlee metadata., Read isError from _callback_payload.json in the crawl storage dir.     Returns, Flatten a dict/list payload into a list of (key, value) tuples using     PHP-st (+759 more)
 
 ### Community 53 - "Community 53"
 Cohesion: 0.22
@@ -506,7 +519,7 @@ Nodes (488): verify_api_key(), Verifies the API key if API_KEY is configured in 
 
 ### Community 5 - "GCS Archive Classifier"
 Cohesion: 0.01
-Nodes (379): Deletes archive files that are older than `max_age_hours`.         If `delete_a, Cleans up temporary GCS download files after serving to the client., Returns all failed webhook callbacks stored in Redis., Cleans up temporary GCS download files after serving to the client., Clears all failed webhook callbacks from Redis. Returns number of keys deleted., Reads {storage_path}/_completion_marker.json and returns parsed dict if, Wipes any persistent state from a prior run of this crawl_id that         would, Archives a finished crawl job to a shared volume for host-side upload to GCS. (+371 more)
+Nodes (391): Deletes archive files that are older than `max_age_hours`.         If `delete_a, Cleans up temporary GCS download files after serving to the client., Returns all failed webhook callbacks stored in Redis., Cleans up temporary GCS download files after serving to the client., Clears all failed webhook callbacks from Redis. Returns number of keys deleted., Reads {storage_path}/_completion_marker.json and returns parsed dict if, Wipes any persistent state from a prior run of this crawl_id that         would, Archives a finished crawl job to a shared volume for host-side upload to GCS. (+383 more)
 
 ### Community 55 - "Community 55"
 Cohesion: 0.31
@@ -714,7 +727,7 @@ Nodes (1): .error marker
 
 ### Community 8 - "Milvus CRUD Layer"
 Cohesion: 0.01
-Nodes (238): mock_cache_service(), cm_instance(), base_job_info(), test_stash_blocks_active_status(), test_stash_blocks_already_archived(), test_stash_blocks_already_stashed(), test_stash_blocks_lock_held(), test_stash_disk_space_pre_flight_fails() (+230 more)
+Nodes (244): mock_cache_service(), cm_instance(), base_job_info(), test_stash_blocks_active_status(), test_stash_blocks_already_archived(), test_stash_blocks_already_stashed(), test_stash_blocks_lock_held(), test_stash_disk_space_pre_flight_fails() (+236 more)
 
 ### Community 179 - "Maps internal error codes to human-r"
 Cohesion: 1.0
@@ -948,8 +961,60 @@ Nodes (1): StaleVariantSkip
 Cohesion: 0.11
 Nodes (30): Embedding-Service Livelock Fix Implementation Plan, PREFETCH_COUNT env tunable (default 2), PROCESS_TIMEOUT env tunable (default 240s), GRPC_TIMEOUT retune (45 -> 110), Embedding-service RabbitMQ consumer (consumer.py), docker-compose embedding-service env block, Embedding-service retry livelock, Triton Semaphore(3) non-HIGH contention (model-service) (+22 more)
 
+### Community 208 - "No-Stash Doc Task"
+Cohesion: 0.14
+Nodes (26): deriveClientEnvKeys(), fetchClientCredentialsFromApi(), getAuthConfig(), parseAdminEmails(), _req(), _resolve_credentials(), resolveClientCredentials(), Auth config + email allow-list (ADMIN_EMAILS) (+18 more)
+
+### Community 209 - "Crawler Recovery Blast Radius"
+Cohesion: 0.18
+Nodes (21): completeCallback(), LoginStart, start_login(), startLogin(), Async getAuthConfig / get_auth_config (Approach A), Framework-free login flow orchestration (startLogin/completeCallback), OAuth authorization-code token exchange (Basic auth + verify), OAuth 2.1 + PKCE login core (+13 more)
+
+### Community 210 - "Crawler Manual Recovery"
+Cohesion: 0.27
+Nodes (13): pytest suite mirroring node cases (python lib), Signed rcf_session cookie (HS256, SESSION_SECRET), create_session_token(), Signed rcf_session JWT (HS256, SESSION_SECRET). Parity with libs/auth/node sessi, read_session(), _session_secret(), SessionClaims, test_expired() (+5 more)
+
+### Community 211 - "Community 211"
+Cohesion: 0.14
+Nodes (13): Core-only extraction line (config/oauth/session/flow); framework wiring stays per-service, Node consumption: file: dep + transpilePackages + repo-root Docker context, @hellopro/auth node TS package, WHY core-only extraction (D4): keeps the lib framework-agnostic; Next route handlers/middleware and FastAPI routes stay per-service thin wiring, WHY extract to shared lib: login flow (PKCE/authorize/exchange/verify/session) was NOT shared (lived in redis-client-frontend + api-gateway) so any new service re-implemented it; only credential resolution was shared, WHY file: dep + transpilePackages + repo-root Docker context (D3): mirrors common-utils precedent; no Node workspace precedent existed; raw TS with no build step, Next transpiles the linked package, WHY redis-client-frontend first consumer (D5): Phase A is the shippable proof that validates the file:/transpilePackages/repo-root consumption pattern end-to-end, redis-client-frontend (first node consumer of @hellopro/auth) (+5 more)
+
+### Community 212 - "Community 212"
+Cohesion: 0.27
+Nodes (11): AuthConfig, complete_callback(), Identity, _cfg(), test_callback_denied(), test_callback_exchange_fails(), test_callback_missing(), test_callback_missing_verifier() (+3 more)
+
+### Community 213 - "Community 213"
+Cohesion: 0.26
+Nodes (9): Auth config: resolve account-service OAuth client creds + settings from env. Cr, Framework-free login orchestration (parity with libs/auth/node flow.ts)., Python credential resolution reuses common_utils.sso, Node/Python parity contract (env convention, PKCE S256, claims, TTL), Python consumption: pip install -e (common-utils pattern), hellopro-auth Python package (import hellopro_auth), WHY build node + python now (D2): language-partitioned sibling packages; python has no live consumer yet but is built + tested, ready for the next Python login service, WHY reuse common_utils.sso (D7): credential resolution already shared (Python common_utils.sso + Go account-client-go); import, don't duplicate; consumers already pip install common-utils (+1 more)
+
+### Community 214 - "Community 214"
+Cohesion: 0.38
+Nodes (10): get_auth_config(), parse_admin_emails(), _apply(), test_bad_session_ttl(), test_bool_trues(), test_custom_session_ttl(), test_fetch_fallback(), test_get_auth_config_defaults() (+2 more)
+
+### Community 215 - "Community 215"
+Cohesion: 0.29
+Nodes (9): exchange_code(), verify_and_extract(), _b64url(), test_exchange_code(), test_exchange_code_non_200(), test_pkce_challenge(), test_verify_and_extract(), test_verify_expired() (+1 more)
+
+### Community 216 - "Community 216"
+Cohesion: 0.4
+Nodes (5): Test-only: clear the fetched-credentials memo., _reset_cache(), __resetClientCredentialsCache(), Test-only reset-cache hook (__resetClientCredentialsCache / _reset_cache), _clear_creds_cache()
+
+### Community 218 - "Community 218"
+Cohesion: 1.0
+Nodes (2): api-gateway NOT migrated (live auth path stays), WHY api-gateway not migrated (D6): migrating a live auth path is a separate later task; keep the working sso.py stable
+
+### Community 219 - "Community 219"
+Cohesion: 1.0
+Nodes (1): Maps internal error codes to human-readable French messages for DB storage.
+
+### Community 221 - "Community 221"
+Cohesion: 1.0
+Nodes (1): redis-client-frontend ACCOUNT_INTERNAL_TOKEN compose/env wiring
+
+### Community 223 - "Community 223"
+Cohesion: 1.0
+Nodes (1): Returns (error_message, failure_cause) for a subprocess exit code.          Re
+
 ## Knowledge Gaps
-- **2480 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+2475 more)
+- **2539 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+2534 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **Thin community `Community 110`** (1 nodes): `Creates a dictionary of headers for a DLQ message, compatible with both pika and`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -1137,6 +1202,14 @@ Nodes (30): Embedding-Service Livelock Fix Implementation Plan, PREFETCH_COUNT e
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 82`** (4 nodes): `staleVariantSkip.ts`, `StaleVariantSkip`, `.constructor()`, `staleVariantSkip.test.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 218`** (2 nodes): `api-gateway NOT migrated (live auth path stays)`, `WHY api-gateway not migrated (D6): migrating a live auth path is a separate later task; keep the working sso.py stable`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 219`** (1 nodes): `Maps internal error codes to human-readable French messages for DB storage.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 221`** (1 nodes): `redis-client-frontend ACCOUNT_INTERNAL_TOKEN compose/env wiring`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 223`** (1 nodes): `Returns (error_message, failure_cause) for a subprocess exit code.          Re`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
@@ -1144,9 +1217,9 @@ _Questions this graph is uniquely positioned to answer:_
 - **Why does `CrawlerManager` connect `Rust Service Clients` to `Node.js Crawler Core`, `CrawlerManager Python + DLQ`, `GCS Archive Classifier`, `Milvus CRUD Layer`, `Claude Config Audit`, `Graph Milvus gRPC Client`?**
   _High betweenness centrality (0.099) - this node is a cross-community bridge._
 - **Why does `Update mode: pre-flight validation, auto-restore from GCS (_restore_archived_crawl, restore_lock), Node exit-4 no-data safety net, post-crawl cleanup` connect `Milvus CRUD Layer` to `Node.js Crawler Core`, `Rust Service Clients`?**
-  _High betweenness centrality (0.077) - this node is a cross-community bridge._
+  _High betweenness centrality (0.076) - this node is a cross-community bridge._
 - **Why does `cache_service.py (Redis lock helper)` connect `LLM Provider Clients` to `Claude Config Audit`, `Node.js Crawler Core`, `Rust Service Clients`?**
-  _High betweenness centrality (0.072) - this node is a cross-community bridge._
+  _High betweenness centrality (0.070) - this node is a cross-community bridge._
 - **Are the 323 inferred relationships involving `CrawlerManager` (e.g. with `CrawlStatus` and `IncludeInArchive`) actually correct?**
   _`CrawlerManager` has 323 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 313 inferred relationships involving `ReindexResponse` (e.g. with `CrawlerManager` and `.reindex_storage()`) actually correct?**
