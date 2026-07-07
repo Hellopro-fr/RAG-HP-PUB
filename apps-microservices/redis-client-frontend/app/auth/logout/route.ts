@@ -5,7 +5,7 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 export async function GET(request: NextRequest) {
-  const cfg = getAuthConfig()
+  const cfg = await getAuthConfig()
   const loginUrl = new URL("/auth/login", request.url).toString()
   const target = cfg.centralLogout
     ? `${cfg.accountPublicUrl}/logout?post_logout_redirect_uri=${encodeURIComponent(loginUrl)}`
