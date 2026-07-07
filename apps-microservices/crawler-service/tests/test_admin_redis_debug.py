@@ -28,6 +28,7 @@ def test_returns_503_when_redis_client_none(app_with_admin_router, monkeypatch):
 def test_returns_full_snapshot_when_redis_alive(app_with_admin_router, monkeypatch):
     fake = AsyncMock()
     fake.info = AsyncMock(return_value={"connected_clients": "42"})
+    fake.config_get = AsyncMock(side_effect=[{"timeout": "300"}, {"tcp-keepalive": "60"}])
     fake.client_list = AsyncMock(return_value=[
         {"name": "crawler-py-r1", "addr": "10.0.0.1:1"},
         {"name": "crawler-py-r1", "addr": "10.0.0.1:2"},
@@ -49,6 +50,7 @@ def test_returns_full_snapshot_when_redis_alive(app_with_admin_router, monkeypat
     body = resp.json()
     assert body["total_clients"] == 3
     assert body["info_clients"]["connected_clients"] == "42"
+    assert body["server_idle_reaper"] == {"timeout": "300", "tcp-keepalive": "60"}
     name_counts = dict(body["client_name_counts"])
     assert name_counts["crawler-py-r1"] == 2
     assert name_counts["crawler-node-abc"] == 1

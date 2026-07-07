@@ -22,6 +22,9 @@ class CapacityResponse(BaseModel):
     running_jobs: int
     max_global_jobs: int
     is_full: bool
+    # Read-on-demand disk diagnostics (auto-stash disk-pressure verification).
+    # None only if the field is omitted; the helper itself is fail-open.
+    disk: Optional[dict] = None
 
 class ReindexResponse(BaseModel):
     """Summary of the re-indexing operation."""
@@ -86,6 +89,9 @@ class CrawlRequest(BaseModel):
     
     # Camoufox Integration
     camoufox: Optional[bool] = Field(True, description="Use Camoufox stealth browser (default). Set to false to fall back to Playwright multi-browser rotation.")
+
+    # CMS Facet Denylist (QMF-T4)
+    cms: Optional[str] = Field("", description="CMS label detected for the domain (e.g. 'wordpress', 'prestashop', 'shopify'). Best-effort: empty/unknown/null means the crawler applies no CMS facet-param denylist.")
 
 class CrawlResponse(BaseModel):
     message: str

@@ -51,6 +51,13 @@ import { createSharedRedisClient } from "./redisClient.js";
 import { buildHtmlIndex } from "./htmlIndex.js";
 import { repairQueueMetadata, recountQueueFromDisk } from "./queueRepair.js";
 import { isDrainedSample, isUnreconciledIdle, DRAIN_CONFIRM_SAMPLES, DRAIN_DISK_RECOUNT_ENABLED } from "./drainGuard.js";
+import { QUEUE_PURGE_ENABLED } from "./staleVariantSkip.js";
+import { flagStaleVariantsOnDisk } from "./queuePurge.js";
+import { baseKeyAbsent } from "./urlBase.js";
+import { QM_FACET_ENABLED } from "./facetCap.js";
+import { isFilterParam } from "./filterOnSeen.js";
+import { facetParamsForCms } from "./cmsFacetLists.js";
+import { hasIgnoredExtensionForSeed } from "./seedExtensionFilter.js";
 
 const now = new Date().toISOString().replace(/:/g, "-");
 
@@ -106,6 +113,8 @@ const toRemove = (getArg('toremove', 'npm_config_toremove') || '').split(";").fi
 const crawlMode = getArg('crawlMode', 'npm_config_crawlmode') || 'standard';
 const camoufoxEnabled = (getArg('camoufox', 'npm_config_camoufox') || 'true').toLowerCase() !== 'false';
 const previousCrawlId = getArg('previousCrawlId', 'npm_config_previouscrawlid');
+// Queue-purge CMS denylist: coarse CMS label from BO (e.g. "WordPress"), '' if unset/unknown.
+const cms = getArg('cms', 'npm_config_cms') || '';
 const maxErrors = parseNumericArg('maxErrors', 'npm_config_maxerrors', 0);
 const maxRedirects = parseNumericArg('maxRedirects', 'npm_config_maxredirects', 0);
 const maxNewUrls = parseNumericArg('maxNewUrls', 'npm_config_maxnewurls', 0);
@@ -140,6 +149,7 @@ context.config = {
     bypassDiez: bypassDiez,
     toKeep: toKeep,
     toRemove: toRemove,
+    cms: cms,
     breakLimit: breakLimit,
     circuitBreaker: {
         enabled: false,
@@ -699,6 +709,39 @@ const queuePauseInterval: ReturnType<typeof setInterval> | undefined =
         : undefined;
 
 
+// Queue-purge #2: build the seen-base oracle BEFORE the D1 disk-flag pass below,
+// so a filtered-view variant already queued from a prior run can be retracted on
+// this resume/update. Dataset + live-added only (NEVER Redis — Redis is
+// update-mode-blind, see spec). Each call below opens a FRESH generator instance;
+// none of these are reused (the ~L864 consolidator call creates its own separate
+// instance for a different purpose).
+if (QM_FACET_ENABLED) {
+    const addSeen = async (gen: AsyncGenerator<string>) => {
+        try {
+            for await (const u of gen) context.seenBases.add(baseKeyAbsent(u));
+        } catch (e) {
+            console.warn(`[qm-facet] seenBases pass skipped: ${(e as Error).message}`);
+        }
+    };
+    // Update mode: the previous crawl's dataset is the "already crawled" oracle.
+    if (previousCrawlId) await addSeen(loadDatasetUrlsGenerator(previousCrawlId, domain));
+    // Initial/resume: the current crawl's own dataset-on-disk.
+    if (context.config.crawleeStorageName) await addSeen(rehydrateDedupFromDataset(context.config.crawleeStorageName));
+    if (context.seenBases.size > 0) {
+        console.log(`[qm-facet] seenBases: ${context.seenBases.size} bases loaded from dataset.`);
+    }
+
+    // Queue-purge CMS denylist (Layer A): merge the CMS's curated cosmetic facet params
+    // into toRemove so the existing toRemove machinery (processUrl) strips them at
+    // enqueue time. Empty/unknown cms -> facetParamsForCms returns [] -> no-op.
+    const cmsFacets = facetParamsForCms(context.config.cms);
+    if (cmsFacets.length > 0) {
+        const have = new Set(context.config.toRemove.map((s) => s.toLowerCase()));
+        for (const p of cmsFacets) if (!have.has(p.toLowerCase())) context.config.toRemove.push(p);
+        console.log(`[qm-facet] CMS '${context.config.cms}': merged ${cmsFacets.length} facet param(s) into toRemove.`);
+    }
+}
+
 if (skipquestionmark || skipdiez) {
     const requestQueueList = getAllRequestQueues(domain);
     if (requestQueueList.length > 0) {
@@ -706,6 +749,34 @@ if (skipquestionmark || skipdiez) {
         if (toKeep.length > 0) parameters.toKeep = toKeep;
         if (toRemove.length > 0) parameters.toRemove = toRemove;
         parseJsonFiles(requestQueueList, Boolean(skipquestionmark), Boolean(skipdiez), parameters);
+    }
+}
+
+// Queue-purge (D1): flag already-queued stale variants (already superseded by a
+// committed skip decision) with skipNavigation, so Crawlee drops them without a
+// fetch at dispatch (handler early-guard, routes.ts). Disk-only + loss-proof: the
+// canonical set is the already-handled files on disk. Never touches orderNo, so
+// pending/handled/total stay consistent for repairQueueMetadata below. Uses the
+// LIVE context.config (persisted-decision-aware) rather than the raw CLI locals.
+if (QUEUE_PURGE_ENABLED) {
+    try {
+        const purged = flagStaleVariantsOnDisk(
+            `storage/request_queues/${domain}`,
+            (u: string) => processUrl(
+                u,
+                context.config.skipQuestionMark,
+                context.config.skipDiez,
+                { toKeep: context.config.toKeep, toRemove: context.config.toRemove },
+            ),
+            // Queue-purge #2 decider: the #1 facet counter is empty at startup (in-memory,
+            // built only as live pages are handled), so D1 only needs the seen-base check.
+            (u: string) => QM_FACET_ENABLED && isFilterParam(u, context.seenBases),
+        );
+        if (purged.flagged > 0) {
+            console.warn(`[queue-purge] ${domain}: flagged ${purged.flagged} stale queued variants skipNavigation (kept ${purged.kept}).`);
+        }
+    } catch (e) {
+        console.warn(`[queue-purge] skipped for ${domain}: ${(e as Error).message}`);
     }
 }
 
@@ -1159,12 +1230,15 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
     const external_redirects = await readStat("external_redirects");
     const timeout_individual = await readStat("timeout_individual");
     const success_extracted = await readStat("success");
+    const purged_prenav = await readStat("purged_prenav");
+    const purged_skipnav = await readStat("purged_skipnav");
+    const filtered_stale_variant = purged_prenav + purged_skipnav;
 
     // 3. Write Payloads
     const payload = {
         id_domaine: id,
-        success: finalStats?.requestsFinished || 0,
-        failed: finalStats?.requestsFailed || 0,
+        success: Math.max(0, (finalStats?.requestsFinished || 0) - purged_skipnav),
+        failed: Math.max(0, (finalStats?.requestsFailed || 0) - purged_prenav),
         isFinished: isFinished,
         method: method,
         isError: isError,
@@ -1185,6 +1259,7 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         external_redirects,
         timeout_individual,
         success_extracted,
+        filtered_stale_variant,
         // Observability — timestamps début/fin pour calculer duration_seconds côté PHP
         date_start: crawlStartTime,
         date_end: crawlEndTime,
@@ -1399,9 +1474,24 @@ if (typeCrawling == "sitemap") {
 
             let seedCount = 0;
             let skippedCount = 0;
+            let skippedExtCount = 0;
             for (const { url, source } of remainingUrls) {
                 if (excluded.length > 0 && DetectionLangueClient.isExcludedRegionalPath(url, excluded)) {
                     skippedCount++;
+                    continue;
+                }
+
+                // Baseline URLs are inherited from the PREVIOUS crawl (dataset / request_queue
+                // / request_url) via direct addRequest below, which bypasses the ignoredExtensions
+                // filtering that enqueueLinks applies to freshly discovered links (routes.ts).
+                // Without this guard, an inherited image/pdf/doc URL gets re-seeded every UPDATE
+                // crawl forever (it's re-written into this crawl's request_queue, which the NEXT
+                // update's consolidation reads again) — the inherited-image infinite re-crawl loop.
+                if (hasIgnoredExtensionForSeed(url)) {
+                    skippedExtCount++;
+                    if (context.statsManager) {
+                        await context.statsManager.increment("filtered_ext");
+                    }
                     continue;
                 }
 
@@ -1417,6 +1507,19 @@ if (typeCrawling == "sitemap") {
                         context.actionAnchorsStripped++;
                     }
                 }
+
+                // Queue-purge (D2): seedPhase2 seeds URLs cleaned with the config
+                // AS OF consolidation (crawl start). Re-clean from LIVE context.config
+                // so a mid-crawl tier-2 commit is honored at seed time, not left for
+                // the consumption/pre-nav skip to catch after enqueue.
+                if (QUEUE_PURGE_ENABLED) {
+                    seedUrl = processUrl(
+                        seedUrl,
+                        context.config.skipQuestionMark,
+                        context.config.skipDiez,
+                        { toKeep: context.config.toKeep, toRemove: context.config.toRemove },
+                    );
+                }
                 await requestQueue.addRequest({
                     url: seedUrl,
                     userData: { source: source }
@@ -1427,6 +1530,9 @@ if (typeCrawling == "sitemap") {
                 }
             }
             console.log(`[PHASE 2] Finished seeding ${seedCount} URLs (${skippedCount} excluded as regional variants).`);
+            if (skippedExtCount > 0) {
+                console.log(`[seed-filter] skipped ${skippedExtCount} ignored-extension baseline URL(s) (filtered_ext)`);
+            }
             context.phase2SeedingComplete = true;
         };
 
