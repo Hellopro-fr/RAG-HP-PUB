@@ -62,6 +62,7 @@ public/
 - **Authentication via account-service SSO (OAuth 2.1 + PKCE S256):**
   - `middleware.ts` gates every route on a signed `rcf_session` cookie (HS256, `SESSION_SECRET`).
   - Unauthenticated GET → `/auth/login` → account-service `/authorize` (PKCE S256, `code_challenge_method=S256`).
+  - OAuth client credentials resolve via (a) `ACCOUNT_CLIENT_ID_REDIS_CLIENT_FRONTEND`/`_SECRET`, or (b) `ACCOUNT_INTERNAL_TOKEN` + the registered client (fetched from account-service `/internal/credentials/{SERVICE_NAME}`); env wins when both are present.
   - account-service redirects to `/auth/callback` with the authorization code; the app exchanges it for a JWT at `{ACCOUNT_BASE_URL}/token` (HTTP Basic client auth), verifies the JWT with `JWT_SECRET` (HS256), then sets the 8h `rcf_session` cookie.
   - Authorization: signed-in email must be in the `ADMIN_EMAILS` allow-list; non-allow-listed emails are redirected to `/auth/denied`.
   - Sign out via `/auth/logout` — clears the `rcf_session` cookie; if `SSO_CENTRAL_LOGOUT=true`, also calls account-service RP-logout endpoint.
@@ -80,8 +81,9 @@ public/
 | `ACCOUNT_BASE_URL` | Yes | Server-to-server URL for token exchange (e.g. `http://account-service-backend:8600`) |
 | `ACCOUNT_PUBLIC_URL` | Yes | Browser-facing base URL for `/authorize` redirect (e.g. `http://localhost:8601`) |
 | `ACCOUNT_REDIRECT_URI` | Yes | Callback URL registered on the OAuth client (e.g. `http://localhost:3551/auth/callback`) |
-| `ACCOUNT_CLIENT_ID_REDIS_CLIENT_FRONTEND` | Yes | OAuth client ID — obtained at client registration |
-| `ACCOUNT_CLIENT_SECRET_REDIS_CLIENT_FRONTEND` | Yes | OAuth client secret — shown once at registration |
+| `ACCOUNT_CLIENT_ID_REDIS_CLIENT_FRONTEND` | No — one of two cred modes | OAuth client ID — obtained at client registration |
+| `ACCOUNT_CLIENT_SECRET_REDIS_CLIENT_FRONTEND` | No — one of two cred modes | OAuth client secret — shown once at registration |
+| `ACCOUNT_INTERNAL_TOKEN` | No — one of two cred modes | Admin token to fetch client creds from account-service `/internal/credentials/{SERVICE_NAME}` when the explicit pair is unset |
 | `JWT_SECRET` | Yes | Shared HS256 secret to verify account-service access tokens |
 | `SESSION_SECRET` | Yes | Independent secret used to sign/verify the `rcf_session` cookie |
 | `ADMIN_EMAILS` | Yes | Comma-separated email allow-list (e.g. `alice@hellopro.fr,bob@hellopro.fr`) |

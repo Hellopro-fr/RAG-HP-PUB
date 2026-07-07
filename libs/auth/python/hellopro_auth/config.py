@@ -5,7 +5,18 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
-from common_utils.sso import get_account_credentials
+from common_utils.sso import (
+    AccountCredentialsMissing,
+    get_account_credentials,
+    get_account_credentials_from_api,
+)
+
+_fetched_creds: dict[str, tuple[str, str]] = {}
+
+
+def _reset_cache() -> None:
+    """Test-only: clear the fetched-credentials memo."""
+    _fetched_creds.clear()
 
 
 def parse_admin_emails(raw: str | None) -> frozenset[str]:
@@ -35,8 +46,20 @@ def _req(name: str) -> str:
     return v
 
 
-def get_auth_config() -> AuthConfig:
-    client_id, client_secret = get_account_credentials()
+async def _resolve_credentials() -> tuple[str, str]:
+    try:
+        return get_account_credentials()  # sync, env-only
+    except AccountCredentialsMissing:
+        name = os.environ.get("SERVICE_NAME", "").strip()
+        if name and os.environ.get("ACCOUNT_INTERNAL_TOKEN"):
+            if name not in _fetched_creds:
+                _fetched_creds[name] = await get_account_credentials_from_api()
+            return _fetched_creds[name]
+        raise
+
+
+async def get_auth_config() -> AuthConfig:
+    client_id, client_secret = await _resolve_credentials()
     ttl_raw = os.environ.get("SESSION_TTL", "28800")
     try:
         ttl = int(ttl_raw)

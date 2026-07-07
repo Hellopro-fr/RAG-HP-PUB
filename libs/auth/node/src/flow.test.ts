@@ -19,7 +19,7 @@ const baseCfg: config.AuthConfig = {
 
 beforeEach(() => {
   vi.restoreAllMocks()
-  vi.spyOn(config, "getAuthConfig").mockReturnValue(baseCfg)
+  vi.spyOn(config, "getAuthConfig").mockResolvedValue(baseCfg)
 })
 
 describe("startLogin", () => {
