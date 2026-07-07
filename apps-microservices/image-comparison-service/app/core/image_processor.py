@@ -36,6 +36,27 @@ class ImageProcessor:
     }
 
     @staticmethod
+    def flatten_alpha(pil_image: Image.Image) -> Image.Image:
+        """
+        Flattens transparency onto a WHITE background before RGB conversion.
+
+        A bare convert('RGB') drops the alpha channel and exposes the arbitrary
+        colors stored UNDER fully-transparent pixels — encoder-dependent (white
+        in most PNG exports, black in WordPress WebP conversions). The same
+        visual then hashes as "content on white" vs "content on black":
+        real case capsa-container.com .png vs .png.webp -> pHash distance
+        34/64 (score 35) instead of 0/64 (score 100). Compositing on white
+        makes the features encoder-independent.
+        """
+        if pil_image.mode in ("RGBA", "LA", "PA") or (
+            pil_image.mode == "P" and "transparency" in pil_image.info
+        ):
+            rgba = pil_image.convert("RGBA")
+            background = Image.new("RGBA", rgba.size, (255, 255, 255, 255))
+            return Image.alpha_composite(background, rgba).convert("RGB")
+        return pil_image.convert("RGB")
+
+    @staticmethod
     def trim_borders(pil_image: Image.Image) -> Image.Image:
         """
         Removes whitespace/borders from the image (Auto-Crop).
@@ -114,7 +135,7 @@ class ImageProcessor:
                     # Attempt decompression (GZIP/ZLIB)
                     image_data = ImageProcessor._try_decompress(image_data)
                     
-                    pil_image = Image.open(BytesIO(image_data)).convert('RGB')
+                    pil_image = ImageProcessor.flatten_alpha(Image.open(BytesIO(image_data)))
                     
                     # Apply border trimming immediately upon load
                     images[inp.id] = ImageProcessor.trim_borders(pil_image)
@@ -204,7 +225,7 @@ class ImageProcessor:
                         # Though httpx usually handles this, double safety doesn't hurt if magic bytes match.
                         image_data = ImageProcessor._try_decompress(response.content)
                         
-                        pil_image = Image.open(BytesIO(image_data)).convert('RGB')
+                        pil_image = ImageProcessor.flatten_alpha(Image.open(BytesIO(image_data)))
                         images[img_id] = ImageProcessor.trim_borders(pil_image)
                     except Exception as e:
                         header_hex = response.content[:10].hex()
