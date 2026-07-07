@@ -14,8 +14,9 @@ const fake = {
 
 vi.mock("redis", () => ({ createClient: () => fake }))
 
-// Import AFTER the mock is registered.
-const { RedisCacheRepository } = await import("@/lib/infrastructure/redis-cache-repository")
+// vitest hoists vi.mock above this static import, so the mock is registered first.
+import { RedisCacheRepository } from "@/lib/infrastructure/redis-cache-repository"
+
 const repo = new RedisCacheRepository()
 
 beforeEach(() => {

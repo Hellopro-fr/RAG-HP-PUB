@@ -73,7 +73,7 @@ export class RedisCacheRepository {
     return {
       key,
       type: type || "unknown",
-      ttl: ttl && ttl > 0 ? ttl : undefined,
+      ttl: ttl > 0 ? ttl : undefined,
       size: size || 0,
     }
   }
