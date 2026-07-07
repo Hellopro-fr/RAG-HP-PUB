@@ -107,6 +107,16 @@ describe("resolveClientCredentials internal-API fallback", () => {
     await expect(resolveClientCredentials(base)).rejects.toThrow(/no active service/)
   })
 
+  it("throws on a non-404 error status", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 500, json: async () => ({}) }))
+    await expect(resolveClientCredentials(base)).rejects.toThrow(/returned 500/)
+  })
+
+  it("throws when the response is missing client fields", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ client_id: "only-id" }) }))
+    await expect(resolveClientCredentials(base)).rejects.toThrow(/missing fields/)
+  })
+
   it("env creds still win over the fetch", async () => {
     const fetchMock = vi.fn()
     vi.stubGlobal("fetch", fetchMock)

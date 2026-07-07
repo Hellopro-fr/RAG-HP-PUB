@@ -50,7 +50,12 @@ async function fetchClientCredentialsFromApi(
   if (!r.ok) {
     throw new Error(`[account-auth] internal credentials endpoint returned ${r.status}`)
   }
-  const body = (await r.json()) as { client_id?: string; client_secret?: string }
+  let body: { client_id?: string; client_secret?: string }
+  try {
+    body = (await r.json()) as { client_id?: string; client_secret?: string }
+  } catch {
+    throw new Error("[account-auth] internal credentials response was not valid JSON")
+  }
   if (!body.client_id || !body.client_secret) {
     throw new Error("[account-auth] internal credentials response missing fields")
   }
