@@ -28,6 +28,7 @@ export const initialState: BrowserState = {
 // reset=false → append (Load more): keep entries + prior total.
 export function applyScanResult(state: BrowserState, result: ScanResult, reset: boolean): BrowserState {
   if (result.error) {
+    // error results carry no entries by contract; keep the prior page + cursor for retry
     return { ...state, scanned: true, error: result.error }
   }
   return {

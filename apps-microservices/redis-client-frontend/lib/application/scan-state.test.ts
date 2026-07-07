@@ -29,6 +29,7 @@ describe("scan-state", () => {
     expect(errored.error).toBe("boom")
     expect(errored.scanned).toBe(true)
     expect(errored.entries).toEqual([a])
+    expect(errored.nextCursor).toBe(5)
   })
 
   it("toMatchGlob wraps non-empty terms and trims", () => {
