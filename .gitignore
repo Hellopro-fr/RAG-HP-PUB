@@ -182,4 +182,4 @@ graphify-out/graph.html
 graphify-out/.needs_update
 **/graphify-out/.needs_update
 
-bash.exe.stackdump
+bash.exe.stackdump*:Zone.Identifier

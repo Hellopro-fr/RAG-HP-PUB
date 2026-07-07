@@ -11,7 +11,8 @@ afterEach(() => {
 const BREADCRUMB = [
   { label: 'Accueil', href: 'https://conseils.hellopro.fr/' },
   { label: 'Bâtiment élevage', href: '/batiment-elevage' },
-  { label: 'Bâtiment vaches laitières' },
+  { label: 'Bâtiment vaches laitières', href: '/batiment-vaches-laitieres' },
+  { label: "Combien coûte un bâtiment vaches laitières ?" }, // titre page conseil (exclu des catégories)
 ];
 
 describe('GtmFooterScripts', () => {
@@ -56,9 +57,17 @@ describe('GtmFooterScripts', () => {
     expect(scripts[4].innerHTML).toContain('"currencyCode":"EUR"');
   });
 
-  it('construit category5 depuis le dernier élément du breadcrumb', () => {
+  it('category5 = catégorie la plus profonde (le titre de la page conseil est exclu)', () => {
     const { container } = render(<GtmFooterScripts breadcrumb={BREADCRUMB} />);
-    const scripts = container.querySelectorAll('script');
-    expect(scripts[1].innerHTML).toContain('Bâtiment-vaches-laitières');
+    const html = container.querySelectorAll('script')[1].innerHTML;
+    // category5 = dernière CATÉGORIE (avant-dernier breadcrumb), pas le titre de la page conseil
+    expect(html).toContain('"category5":"Bâtiment-vaches-laitières"');
+    // category1 = 1re catégorie
+    expect(html).toContain('"category1":"Bâtiment-élevage"');
+    // le titre de la page conseil ne doit PAS être dans le product
+    expect(html).not.toContain('Combien-coûte');
+    // clés vides omises
+    expect(html).not.toContain('category3');
+    expect(html).not.toContain('category4');
   });
 });

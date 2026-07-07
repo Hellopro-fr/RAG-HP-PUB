@@ -1,9 +1,13 @@
 import { getCachedData } from "@/lib/application/get-cached-data"
 import { CacheHeader } from "@/components/cache-header"
 import { CacheTable } from "@/components/cache-table"
+import { cookies } from "next/headers"
+import { readSession, SESSION_COOKIE } from "@/lib/auth/session"
 
 export default async function Home() {
   const { entries, metadata, error } = await getCachedData()
+  const cookieStore = await cookies()
+  const session = await readSession(cookieStore.get(SESSION_COOKIE)?.value)
 
   return (
     <main className="min-h-screen bg-background">
@@ -14,6 +18,7 @@ export default async function Home() {
           totalKeys={metadata.totalKeys}
           totalSize={metadata.totalSize}
           lastRefreshed={metadata.lastRefreshed}
+          userEmail={session?.email}
         />
 
         <div className="mt-8">

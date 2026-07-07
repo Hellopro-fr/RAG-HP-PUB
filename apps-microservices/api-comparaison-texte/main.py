@@ -1,7 +1,9 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from app.api.routes import router
 from app.core.config import settings
+from app.core import metrics  # noqa: F401  — registers metric objects with the default registry
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -13,6 +15,11 @@ app = FastAPI(
 )
 
 app.include_router(router, prefix="/api/v1")
+
+
+@app.get("/metrics", include_in_schema=False)
+async def metrics_endpoint() -> Response:
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 @app.get("/")

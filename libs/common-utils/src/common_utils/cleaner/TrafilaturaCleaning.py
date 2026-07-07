@@ -24,6 +24,17 @@ logging.basicConfig(
 )
 
 
+def _md_safe(source, **kwargs) -> str:
+    """Convert HTML to markdown, returning "" when the DOM is too deeply
+    nested for markdownify's recursive converter (RecursionError)."""
+    try:
+        return md(str(source), **kwargs)
+    except RecursionError:
+        logging.warning(
+            "markdownify exceeded the recursion limit — content skipped.")
+        return ""
+
+
 class TrafilaturaHp:
     def __init__(self, info: BaseTrafilatura, **kwargs):
         object.__setattr__(self, '_initializing', True)
@@ -198,14 +209,14 @@ class TrafilaturaHp:
         final_content = ""
         if main_element:
             logging.info(f"[{url}] - Extraction avec BS4 - Main - html5lib.")
-            final_content = md(str(main_element),
-                               heading_style="ATX", escape_html=False)
+            final_content = _md_safe(main_element,
+                                     heading_style="ATX", escape_html=False)
             if final_content.strip() == "":
                 logging.info(f"[{url}] - Extraction avec BS4 - Main - lxml.")
                 soup_lxml = self._bs(self.info.get("content", ""), "lxml")
                 main_element = self.extract_bs(soup_lxml)
-                final_content = md(str(main_element),
-                                   heading_style="ATX", escape_html=False)
+                final_content = _md_safe(main_element,
+                                         heading_style="ATX", escape_html=False)
         else:
             logging.info(
                 f"[{url}] - Pas de <main> détecté. Utilisation de la méthode Trafilatura multi-pass.")
@@ -321,7 +332,9 @@ class TrafilaturaHp:
     def extract_article(self, soup) -> str | None:
         found_articles = soup.select(
             'article[id*="product"], article[class*="product"], article[id*="produit"], article[class*="produit"]')
-        return None if not found_articles else "\n".join([md(str(article), heading_style="ATX") for article in found_articles])
+        parts = [part for part in (_md_safe(article, heading_style="ATX")
+                                   for article in found_articles) if part]
+        return "\n".join(parts) if parts else None
 
     def extract_go_trafilatura(self, content: str, url: str) -> str:
         """
@@ -360,7 +373,7 @@ class TrafilaturaHp:
                 return ""
 
             # Convert to Markdown
-            final_content = md(
+            final_content = _md_safe(
                 extracted_html, heading_style="ATX", escape_html=False)
 
             # Post-processing
@@ -397,7 +410,7 @@ class TrafilaturaHp:
                 return ""
 
             # Convert to Markdown
-            final_content = md(
+            final_content = _md_safe(
                 extracted_html, heading_style="ATX", escape_html=False)
 
             # Post-processing

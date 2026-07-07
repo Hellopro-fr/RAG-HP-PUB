@@ -27,7 +27,8 @@ async def extract_caracteristiques(request: CaracteristiqueRequest = Body(...)):
         
         result = await run_identification(
             id_categorie=request.id_categorie,
-            id_prompt=request.id_prompt
+            id_prompt=request.id_prompt,
+            source=request.source
         )
         
         # Construire la liste de ReponseResult si des données existent
@@ -127,7 +128,8 @@ async def questionnaire_prix_v2(request: QuestionnaireV2Request = Body(...)):
             texte_prompt=request.texte_prompt,
             model=request.model,
             id_reponse_q1=request.id_reponse_q1,
-            nom_reponse_q1=request.nom_reponse_q1
+            nom_reponse_q1=request.nom_reponse_q1,
+            source=request.source
         )
 
         response = QuestionnaireV2Response(
@@ -167,7 +169,7 @@ async def extract_caracteristiques_lot(request: CaracteristiqueLotRequest = Body
         
         # Convertir la liste de CaracteristiqueRequest en liste de dicts
         categories_dicts = [
-            {"id_categorie": str(cat.id_categorie), "id_prompt": cat.id_prompt}
+            {"id_categorie": str(cat.id_categorie), "id_prompt": cat.id_prompt, "source": cat.source}
             for cat in request.categories
         ]
         

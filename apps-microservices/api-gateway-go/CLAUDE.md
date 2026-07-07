@@ -94,10 +94,11 @@ Spec: `docs/superpowers/specs/2026-05-28-apitokenverifier-catalog-driven-design.
 
 ## Per-Service Downstream Timeouts
 
-The gateway applies per-service HTTP timeouts via `config.DownstreamTimeouts` in `internal/config/config.go`. Services NOT in the map use `timeout=0` (no timeout — current behavior preserved, zero blast radius on unlisted services).
+The gateway applies per-service HTTP timeouts via `config.BuildDownstreamTimeouts()` in `internal/config/service_map.go` (wired into the proxy as `HTTPDeps.DownstreamTimeout` in `cmd/gateway/main.go`). The map value is the **total** timeout in seconds; the connect timeout is a fixed 10s (`internal/proxy/http.go` `clientForService`). Services NOT in the map use `timeout=0` (no timeout — current behavior preserved, zero blast radius on unlisted services).
 
 Currently configured:
 - `api-detection-langue-fr-service`: 180s total, 10s connect
+- `extractor-service`: 60s total, 10s connect (content-extractor-api-service; route `/extractor-service/...`)
 
 Add a service to the map only after understanding its request-duration profile. On timeout, the gateway returns `504` to the caller. Downstream `503` responses (typically from admission middleware load-shedding) are logged at WARNING and passed through with `Retry-After` intact.
 

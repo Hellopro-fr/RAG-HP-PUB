@@ -8,20 +8,46 @@ export class StatsManager {
     private statsFile: string;
     private ttl: number;
     private ttlSet: boolean = false;
+    private ownsClient: boolean;
 
-    constructor(redisUrl: string, crawlId: string, storagePath: string, ttlSeconds: number = 7 * 24 * 3600) {
-        this.redis = createClient({ url: redisUrl });
-        this.redis.on('error', (err) => console.error('Redis Stats Error:', err));
+    /**
+     * Accepts either a URL (legacy: creates + owns the client) or a pre-built
+     * shared RedisClientType (injected: lifecycle managed by the owner).
+     *
+     * When a shared client is injected, the OWNER owns the 'error' listener and
+     * the connect/disconnect lifecycle — StatsManager does NOT register a second
+     * listener, and connect()/disconnect() are no-ops. Mirrors DedupManager.
+     */
+    constructor(
+        clientOrUrl: RedisClientType | string,
+        crawlId: string,
+        storagePath: string,
+        ttlSeconds: number = 7 * 24 * 3600,
+    ) {
         this.key = `stats:${crawlId}`;
         this.statsFile = path.join(storagePath, 'update_stats.json');
         this.ttl = ttlSeconds;
+
+        if (typeof clientOrUrl === 'string') {
+            // Backward-compatible URL form — StatsManager creates + owns the client.
+            this.redis = createClient({ url: clientOrUrl });
+            this.ownsClient = true;
+            this.redis.on('error', (err) => console.error('Redis Stats Error:', err));
+        } else {
+            // Injected shared client — StatsManager does NOT connect/disconnect it,
+            // and does NOT register a second 'error' listener (owner attached one).
+            this.redis = clientOrUrl;
+            this.ownsClient = false;
+        }
     }
 
     async connect() {
+        if (!this.ownsClient) return;   // shared client connected by owner
         await this.redis.connect();
     }
 
     async disconnect() {
+        if (!this.ownsClient) return;   // shared client closed by owner
         if (this.redis.isOpen) {
             await this.redis.disconnect();
         }
@@ -62,10 +88,10 @@ export class StatsManager {
 
     async checkThreshold(metric: string, limit: number): Promise<boolean> {
         if (!limit || limit <= 0) return false;
-        
+
         try {
             const val = await this.getValue(metric);
-            
+
             if (val >= limit) {
                 console.warn(`THRESHOLD BREACHED: ${metric} (${val}) >= limit (${limit})`);
                 return true;
@@ -105,7 +131,7 @@ export class StatsManager {
     async cleanup() {
         try {
             await this.redis.del(this.key);
-            await this.disconnect();
+            await this.disconnect();    // no-op when !ownsClient
             console.log(`Cleaned up stats for ${this.key}`);
         } catch (e) {
             console.error(`Stats Cleanup Error: ${e}`);

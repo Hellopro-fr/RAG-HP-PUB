@@ -1,25 +1,20 @@
-// Stub test file co-located with StatsManager.ts to satisfy the project's
-// TDD-gate hook (which expects StatsManager.test.* next to the source).
+// Co-located with StatsManager.ts to satisfy the project's TDD-gate hook.
 //
-// StatsManager uses a hard-coded `createClient` import from `redis`, so a real
-// Redis-backed test would require a dependency-injection seam (see
-// redisClient.ts `__setCreateClientForTests`). Deferred — the 7 deperdition
-// counters from Ch.A Epic 1 (filtered_qm/filtered_hash/filtered_ext/
-// filtered_nonfr/filtered_duplicate/dropped_cb/timeout_individual) are
-// validated end-to-end via crawl smoke tests on staging (webhook payload
-// contains all 8 fields including `success`).
-//
-// This file asserts compile-time class shape only.
+// The original file asserted compile-time class shape only (StatsManager hard-
+// coded `createClient`, so a real Redis-backed test needed a DI seam). After the
+// 2026-06-17 resilience migration StatsManager accepts an injected RedisClientType
+// directly, so the injected path is now unit-testable with a plain fake object —
+// no seam required. The legacy URL path's connect/disconnect lifecycle still needs
+// a live Redis and is left to staging smoke tests (see spec §8); the injected
+// no-op tests below are the active regression guard for the ownsClient branch.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import type { RedisClientType } from 'redis';
 import { StatsManager } from './StatsManager.js';
 
 test('StatsManager class is exported with expected method surface', () => {
     assert.equal(typeof StatsManager, 'function', 'StatsManager must be a class constructor');
-    // Double assertion via `unknown` — TS 5.9 strict mode rejects the direct
-    // cast because StatsManager has no string index signature. The compiler's
-    // suggested form. Safe here: we're only reading the listed method names.
     const proto = StatsManager.prototype as unknown as Record<string, unknown>;
     const expectedMethods = [
         'connect',
@@ -41,12 +36,6 @@ test('StatsManager class is exported with expected method surface', () => {
 });
 
 test('Ch.A Epic 1 deperdition counter names — compile-time check', () => {
-    // Counters incremented across UpdateChecker.ts:135 (filtered_qm),
-    // UpdateChecker filtered_hash, UrlConsolidator filtered_duplicate, and
-    // routes.ts filtered_ext/filtered_nonfr/dropped_cb/timeout_individual.
-    // `increment(metric: string, by?: number)` accepts any string — this
-    // assertion documents the canonical list expected by the PHP-side
-    // webhook handler (BO/fonctions/fonctions_crawl_metrics.php).
     const CH_A_E1_COUNTERS: readonly string[] = [
         'filtered_qm',
         'filtered_hash',
@@ -59,4 +48,101 @@ test('Ch.A Epic 1 deperdition counter names — compile-time check', () => {
     ];
     assert.equal(CH_A_E1_COUNTERS.length, 8);
     assert.ok(CH_A_E1_COUNTERS.every((c) => typeof c === 'string' && c.length > 0));
+});
+
+// --- Injected shared-client behavior (2026-06-17 resilience migration) ---
+
+interface FakeRedisCalls {
+    connect: number;
+    disconnect: number;
+    del: string[];
+    hIncrBy: Array<[string, string, number]>;
+    hGet: Array<[string, string]>;
+}
+
+function makeFakeClient(
+    overrides: Record<string, unknown> = {},
+): { client: RedisClientType; calls: FakeRedisCalls } {
+    const calls: FakeRedisCalls = { connect: 0, disconnect: 0, del: [], hIncrBy: [], hGet: [] };
+    const base = {
+        isOpen: true,
+        on: (_event: string, _fn: (...a: unknown[]) => void) => {},
+        connect: async () => { calls.connect++; },
+        disconnect: async () => { calls.disconnect++; },
+        del: async (key: string) => { calls.del.push(key); return 1; },
+        hIncrBy: async (key: string, field: string, by: number) => {
+            calls.hIncrBy.push([key, field, by]);
+            return by;
+        },
+        hGet: async (key: string, field: string) => {
+            calls.hGet.push([key, field]);
+            return '7';
+        },
+        hGetAll: async () => ({}),
+        hSet: async () => 1,
+        expire: async () => true,
+    };
+    const client = { ...base, ...overrides } as unknown as RedisClientType;
+    return { client, calls };
+}
+
+test('injected client: connect/disconnect are no-ops (owner manages lifecycle)', async () => {
+    const { client, calls } = makeFakeClient();
+    const sm = new StatsManager(client, 'job-1', '.');
+    await sm.connect();
+    await sm.disconnect();
+    assert.equal(calls.connect, 0, 'connect() must not connect an injected client');
+    assert.equal(calls.disconnect, 0, 'disconnect() must not disconnect an injected client');
+});
+
+test('injected client: cleanup deletes the key but does NOT disconnect', async () => {
+    const { client, calls } = makeFakeClient();
+    const sm = new StatsManager(client, 'job-2', '.');
+    await sm.cleanup();
+    assert.deepEqual(calls.del, ['stats:job-2'], 'cleanup() must del the stats key');
+    assert.equal(calls.disconnect, 0, 'cleanup() must not disconnect the shared client');
+});
+
+test('injected client: increment delegates to hIncrBy and returns its value', async () => {
+    const { client, calls } = makeFakeClient();
+    const sm = new StatsManager(client, 'job-3', '.');
+    const v = await sm.increment('errors', 2);
+    assert.equal(v, 2);
+    assert.deepEqual(calls.hIncrBy, [['stats:job-3', 'errors', 2]]);
+});
+
+test('injected client: getValue delegates to hGet and parses the result', async () => {
+    const { client, calls } = makeFakeClient();
+    const sm = new StatsManager(client, 'job-4', '.');
+    const v = await sm.getValue('errors');
+    assert.equal(v, 7);
+    assert.deepEqual(calls.hGet, [['stats:job-4', 'errors']]);
+});
+
+test('error path: a rejecting hIncrBy is swallowed and increment returns 0', async () => {
+    const { client } = makeFakeClient({
+        hIncrBy: async () => {
+            throw new Error('SocketClosedUnexpectedlyError: Socket closed unexpectedly');
+        },
+    });
+    const sm = new StatsManager(client, 'job-5', '.');
+    const v = await sm.increment('errors', 1);
+    assert.equal(v, 0, 'increment must return 0 (not throw) when the socket is dead');
+});
+
+test('error path: a rejecting hGet is swallowed and getValue returns 0', async () => {
+    const { client } = makeFakeClient({
+        hGet: async () => {
+            throw new Error('SocketClosedUnexpectedlyError');
+        },
+    });
+    const sm = new StatsManager(client, 'job-6', '.');
+    const v = await sm.getValue('errors');
+    assert.equal(v, 0, 'getValue must return 0 (not throw) when the socket is dead');
+});
+
+test('legacy URL path: constructs without throwing and without connecting', () => {
+    // createClient is lazy — the constructor must not open a socket.
+    const sm = new StatsManager('redis://localhost:6379', 'job-7', '.');
+    assert.equal(typeof sm.increment, 'function');
 });

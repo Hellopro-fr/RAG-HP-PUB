@@ -600,6 +600,8 @@ services:
       context: .
       dockerfile: ./apps-microservices/content-extractor-api-service/Dockerfile
     container_name: content-extractor-api-service
+    # "crawling" removed on purpose: scaling crawler-service with the crawling
+    # profile must not recreate/restart this service (it serves other consumers).
     profiles: [ "app" ]
     restart: unless-stopped
     ports:
@@ -608,6 +610,8 @@ services:
       - PORT=8600
       - LOG_LEVEL=info
       - MAX_PAYLOAD_SIZE_MB=10
+      - SERVICE_NAME=content-extractor-api-service
+      - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
     env_file:
       - .env
     networks:
@@ -1007,6 +1011,15 @@ services:
       - RERANKING_SERVICE_URL=reranking-model-service:50053
       - DATABASE_SERVICE_URL=database-recherche-service:50054
       - SERVICE_NAME=embedding-service
+      # Liveness (spec 2026-07-03) : temps_embedding.log p99=36.6s, max=109s
+      # CENSURÉ au deadline 110 => la vraie traîne dépasse 110s. Deadlines
+      # dimensionnés en bornes de liveness (au-dessus du travail réel, en
+      # dessous d'un hang). PROCESS_TIMEOUT > GRPC_TIMEOUT tient car S1 rend
+      # ChunkText non bloquant (chunk rapide + embed<=300 + publish < 360).
+      - GRPC_TIMEOUT=300
+      - PROCESS_TIMEOUT=360
+      # Backpressure : 4 replicas x 2 = 8 en vol contre Semaphore(3) non-HIGH.
+      - PREFETCH_COUNT=2
     depends_on:
       - embedding-model-service
     env_file:
@@ -1321,6 +1334,9 @@ services:
     build:
       context: .
       dockerfile: ./apps-microservices/crawler-service/Dockerfile
+      args:
+        GIT_COMMIT: ${GIT_COMMIT:-unknown}
+        BUILD_DATE: ${BUILD_DATE:-unknown}
     profiles: [ "crawling" ]
     init: true
     stop_grace_period: 30s
@@ -1341,11 +1357,19 @@ services:
     env_file:
       - .env
     environment:
+      # NOTE: any variable added here must be either whitelisted in
+      # app/router/admin.py (_ENV_WHITELIST_PREFIXES -> visible in /admin/config)
+      # or excluded there (_ENV_COMPOSE_EXCLUSIONS, with justification).
+      # Enforced by tests/test_admin_config.py::test_compose_env_parity.
       # Max concurrent crawls for each individual instance.
       - MAX_CONCURRENT_CRAWLS=1
       - DEFAULT_MAX_GLOBAL_CRAWLS=3
       - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
       - DETECTION_LANGUE_API_URL=http://api-detection-langue-fr-service:8999
+      - CONTENT_EXTRACTOR_API_URL=http://content-extractor-api-service:8600
+      - DIEZ_TIER2_ENABLED=${DIEZ_TIER2_ENABLED:-false}
+      - DIEZ_PERCLASS_ENABLED=${DIEZ_PERCLASS_ENABLED:-false}
+      - QM_TIER2_ENABLED=${QM_TIER2_ENABLED:-false}
       - REDIS_LOSS_THRESHOLD_MS=${REDIS_LOSS_THRESHOLD_MS:-60000}
       - PROGRESS_STALL_THRESHOLD_MS=${PROGRESS_STALL_THRESHOLD_MS:-600000}
       - REDIS_MAX_CONNECTIONS=${REDIS_MAX_CONNECTIONS:-20}
@@ -1353,6 +1377,10 @@ services:
       - REDIS_SOCKET_CONNECT_TIMEOUT_S=${REDIS_SOCKET_CONNECT_TIMEOUT_S:-5}
       - REDIS_HEALTH_CHECK_INTERVAL_S=${REDIS_HEALTH_CHECK_INTERVAL_S:-30}
       - SERVICE_NAME=crawler-service
+      # Admin-endpoints auth: the code reads API_KEY; the .env var is namespaced
+      # API_KEY_ADMIN_CRAWLER_SERVICE so a bare API_KEY in the shared .env can
+      # never be picked up by another service's config. Empty/unset = auth disabled.
+      - API_KEY=${API_KEY_ADMIN_CRAWLER_SERVICE:-}
       - AUTO_STASH_ENABLED=${AUTO_STASH_ENABLED:-false}
       - STASH_GRACE_SECONDS=${STASH_GRACE_SECONDS:-3600}
       - STASH_SAFETY_TIMEOUT_SECONDS=${STASH_SAFETY_TIMEOUT_SECONDS:-172800}
@@ -1383,6 +1411,7 @@ services:
     environment:
       - MAX_CONCURRENT_JOBS=4
       - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
+      - SERVICE_NAME=image-comparison-service
     deploy:
       replicas: 1
       resources:
@@ -1432,6 +1461,20 @@ services:
       - REDIS_HOST=${REDIS_HOST}
       - REDIS_PORT=${REDIS_PORT}
       - REDIS_SECRET=${REDIS_SECRET}
+      - SERVICE_NAME=redis-client-frontend
+      - ACCOUNT_BASE_URL=${ACCOUNT_BASE_URL:-http://account-service-backend:8600}
+      - ACCOUNT_PUBLIC_URL=${ACCOUNT_PUBLIC_URL:-http://localhost:8601}
+      - ACCOUNT_REDIRECT_URI=${REDIS_CLIENT_REDIRECT_URI:-http://localhost:3551/auth/callback}
+      - ACCOUNT_CLIENT_ID_REDIS_CLIENT_FRONTEND=${ACCOUNT_CLIENT_ID_REDIS_CLIENT_FRONTEND:-}
+      - ACCOUNT_CLIENT_SECRET_REDIS_CLIENT_FRONTEND=${ACCOUNT_CLIENT_SECRET_REDIS_CLIENT_FRONTEND:-}
+      - JWT_SECRET=${JWT_SECRET}
+      - SESSION_SECRET=${REDIS_CLIENT_SESSION_SECRET}
+      - ADMIN_EMAILS=${REDIS_CLIENT_ADMIN_EMAILS}
+      - SECURE_COOKIE=${ACCOUNT_SECURE_COOKIE:-false}
+      - SESSION_TTL=${REDIS_CLIENT_SESSION_TTL:-28800}
+      - SSO_CENTRAL_LOGOUT=${REDIS_CLIENT_CENTRAL_LOGOUT:-false}
+    networks:
+      - services-net
     logging: *logging_defaults
 
   crawler-monitor-backend:
@@ -2605,6 +2648,12 @@ services:
       - "3003"
     environment:
       - NODE_ENV=production
+    healthcheck:
+      test: [ "CMD", "wget", "-qO-", "http://127.0.0.1:3003/health" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     restart: unless-stopped
     env_file:
       - ./.env

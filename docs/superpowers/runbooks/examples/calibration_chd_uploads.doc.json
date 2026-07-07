@@ -1,0 +1,69 @@
+{
+  "upload_calibration_chd_uch": {
+    "database_id": 10,
+    "description": "Un run de calibration de l'outil « Calibration CHD » (Chantier D — classification des images NON-fiche-produit). Une ligne par upload CSV de domaines lancé par un opérateur BO depuis scrapping_produit_ia/calibration_chd. Le run extrait les images des pages non-produit (HTML déjà crawlé/archivé), les score (G1-G14), télécharge les pertinentes, puis agrège les compteurs. Parent 1:N de upload_calibration_chd_domaines_uchd. Stockée dans HELLOPRO_IA.",
+    "primary_key": "id_upload_uch",
+    "default_order_by": "date_creation_uch DESC",
+    "rows": null,
+    "columns": {
+      "id_upload_uch": { "type": "int", "desc": "PK auto-increment du run de calibration. Référencé par upload_calibration_chd_domaines_uchd.id_upload_uch (1:N)." },
+      "date_creation_uch": { "type": "datetime", "desc": "Date de création du run (DEFAULT CURRENT_TIMESTAMP, indexé). Bon champ de tri." },
+      "user_email_uch": { "type": "varchar(255)", "desc": "Email de l'opérateur ayant lancé le run (indexé, NULLable ; anonymisé en lecture via le MCP)." },
+      "nom_upload_uch": { "type": "varchar(255)", "desc": "Nom libre donné au run (ex. 'test_domaine_13'). NULLable." },
+      "nb_domaines_total_uch": { "type": "int", "desc": "Nombre total de domaines du CSV (après normalisation/dédup, cap 50). Défaut 0." },
+      "nb_domaines_eligibles_uch": { "type": "int", "desc": "Nombre de domaines éligibles (présents dans DSPI, statut_dspi ∈ {6,13,14}, est_archiver=1). Défaut 0." },
+      "nb_domaines_non_eligibles_uch": { "type": "int", "desc": "Nombre de domaines non éligibles (voir raison_non_eligible_uchd côté enfant). Défaut 0." },
+      "nb_total_downloaded_uch": { "type": "int", "desc": "Total d'images téléchargées sur le run (somme des nb_downloaded_uchd). NULLable." },
+      "nb_total_errors_download_uch": { "type": "int", "desc": "Total d'erreurs de téléchargement sur le run. NULLable." },
+      "nb_total_timeout_download_uch": { "type": "int", "desc": "Total de timeouts de téléchargement sur le run. NULLable." },
+      "statut_uch": { "type": "enum", "desc": "Statut du run (défaut 'pending', indexé) : pending=créé, running=orchestrateur lancé (script_calibration_chd.sh), done=finalisé (phase6), error=échec (trap ERR → update_uch_error)." },
+      "workspace_path_uch": { "type": "varchar(500)", "desc": "Chemin du workspace du run (.../script/rag/extraction_images_pages/workspace/run_calibration_<id>_<ts>/). NULLable." },
+      "csv_filename_uch": { "type": "varchar(255)", "desc": "Nom du fichier CSV uploadé (persisté sous uploads/upload_<id>_<ts>.csv). NULLable." },
+      "date_debut_traitement_uch": { "type": "datetime", "desc": "Début du traitement (passage à 'running'). NULLable." },
+      "date_fin_traitement_uch": { "type": "datetime", "desc": "Fin du traitement (passage à 'done'/'error'). NULLable." },
+      "duree_seconds_uch": { "type": "int", "desc": "Durée totale du run en secondes (fin - début). NULLable." },
+      "erreur_uch": { "type": "text", "desc": "Message d'erreur du run (constantes internes échappées). NULLable." },
+      "note_uch": { "type": "text", "desc": "Note libre de l'opérateur (parfois une liste de domaines collée). NULLable." }
+    },
+    "relations": [
+      { "column": "id_upload_uch", "referenced_by": "upload_calibration_chd_domaines_uchd.id_upload_uch", "cardinality": "1:N", "note": "Détail par domaine du run." }
+    ],
+    "notes": "Outil BO calibration_chd (Chantier D images NON-fiche-produit). Réutilise le HTML crawlé/archivé (pas de re-crawl). Orchestrateur : phase1bis → 2 (extract) → 3 (enqueue DL) → 4 (poll) → 6 (finalize) ; phase 5 délibérément sautée (téléchargements RÉELS, Milvus non ingéré). Le README de l'outil est inexact sur ce point — se fier au code."
+  },
+  "upload_calibration_chd_domaines_uchd": {
+    "database_id": 10,
+    "description": "Détail par domaine d'un run de calibration CHD : une ligne par (run, domaine). Porte le verdict d'éligibilité, les compteurs de classification d'images (pertinent/gray/hard_reject/soft_reject), de téléchargement et les métriques de traitement. Enfant de upload_calibration_chd_uch. Stockée dans HELLOPRO_IA.",
+    "primary_key": "id_uchd",
+    "default_order_by": "id_uchd ASC",
+    "rows": null,
+    "columns": {
+      "id_uchd": { "type": "int", "desc": "PK auto-increment de la ligne (run × domaine)." },
+      "id_upload_uch": { "type": "int", "desc": "FK → upload_calibration_chd_uch.id_upload_uch (run parent), NOT NULL, indexé. Fait partie de la clé UNIQUE (id_upload_uch, domaine_uchd) : un domaine unique PAR run (ré-upload du même domaine dans un autre run autorisé)." },
+      "domaine_uchd": { "type": "varchar(255)", "desc": "Domaine normalisé (minuscule, sans http(s)://, sans www., sans path), NOT NULL. Unique au sein du run." },
+      "id_domaine_dspi_uchd": { "type": "int", "desc": "FK → domaine_scrapping_produit_ia.id_domaine_scrapping_produit_ia (DSPI), indexé, NULLable (NULL si domaine introuvable dans DSPI → non_eligible/domaine_inexistant)." },
+      "statut_uchd": { "type": "enum", "desc": "Statut du domaine dans le run (défaut 'eligible', indexé) : eligible (passe la classif à l'upload) → traite (finalisé par phase6) ; non_eligible (rejeté à l'upload, voir raison_non_eligible_uchd) ; error." },
+      "raison_non_eligible_uchd": { "type": "varchar(255)", "desc": "Raison de non-éligibilité (NULLable, renseigné quand statut_uchd='non_eligible') : domaine_inexistant (absent de DSPI) · statut_dspi_invalide (statut_dspi ∉ {6,13,14}) · non_archive (est_archiver≠1) · autre (erreur SQL)." },
+      "nb_pages_total_uchd": { "type": "int", "desc": "Nombre de pages totales considérées. NULLable — souvent NULL (non renseigné par le chemin de calibration)." },
+      "nb_pages_filtrees_uchd": { "type": "int", "desc": "Nombre de pages filtrées. NULLable — souvent NULL." },
+      "nb_images_inserees_uchd": { "type": "int", "desc": "Nombre d'images candidates insérées dans image_scrapping_ia pour ce domaine sur ce run. NULLable." },
+      "nb_pertinent_uchd": { "type": "int", "desc": "Images classées « pertinent » (score de pertinence G1-G14 → conservées). NULLable. Agrégé depuis image_scrapping_ia." },
+      "nb_gray_uchd": { "type": "int", "desc": "Images classées « gray » (zone grise / incertaines). NULLable." },
+      "nb_hard_reject_uchd": { "type": "int", "desc": "Images en rejet dur (hard reject). NULLable." },
+      "nb_soft_reject_uchd": { "type": "int", "desc": "Images en rejet doux (soft reject). NULLable." },
+      "nb_downloaded_uchd": { "type": "int", "desc": "Images effectivement téléchargées (vers GCP). NULLable." },
+      "nb_errors_download_uchd": { "type": "int", "desc": "Erreurs de téléchargement pour ce domaine. NULLable." },
+      "nb_timeout_download_uchd": { "type": "int", "desc": "Timeouts de téléchargement pour ce domaine. NULLable." },
+      "nb_pending_download_uchd": { "type": "int", "desc": "Téléchargements encore en attente pour ce domaine. NULLable." },
+      "latence_e2e_p50_seconds_uchd": { "type": "int", "desc": "Latence end-to-end p50 (s). NULLable. ⚠️ Hardcodée NULL par phase6_finalize_calibration.php — toujours NULL en l'état." },
+      "latence_e2e_p95_seconds_uchd": { "type": "int", "desc": "Latence end-to-end p95 (s). NULLable. ⚠️ Hardcodée NULL par phase6 — toujours NULL en l'état." },
+      "duree_traitement_seconds_uchd": { "type": "int", "desc": "Durée de traitement du domaine (s). NULLable. ⚠️ Hardcodée NULL par phase6 — toujours NULL en l'état." },
+      "erreur_traitement_uchd": { "type": "text", "desc": "Message d'erreur de traitement pour ce domaine. NULLable." }
+    },
+    "relations": [
+      { "column": "id_upload_uch", "references": "upload_calibration_chd_uch.id_upload_uch", "note": "Run de calibration parent." },
+      { "column": "id_domaine_dspi_uchd", "references": "domaine_scrapping_produit_ia.id_domaine_scrapping_produit_ia", "note": "Domaine DSPI (NULL si inexistant)." },
+      { "via": "image_scrapping_ia", "note": "Les compteurs (pertinent/gray/hard_reject/soft_reject, downloads) sont agrégés par phase6 depuis image_scrapping_ia WHERE id_upload_calibration_isi = id_upload_uch." }
+    ],
+    "notes": "Enfant de upload_calibration_chd_uch. Clé UNIQUE (id_upload_uch, domaine_uchd). ⚠️ Concurrence : les compteurs viennent de image_scrapping_ia dont la clé UNIQUE omet l'id de calibration → deux runs concurrents sur le MÊME domaine se corrompent mutuellement ; sûr uniquement pour des domaines DISJOINTS entre runs simultanés. latence_e2e_p50/p95 et duree_traitement sont hardcodés NULL par phase6. nb_pages_total/filtrees souvent NULL."
+  }
+}

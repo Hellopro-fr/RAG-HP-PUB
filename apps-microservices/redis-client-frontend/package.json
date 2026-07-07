@@ -6,7 +6,9 @@
     "build": "next build",
     "dev": "next dev",
     "lint": "eslint .",
-    "start": "next start"
+    "start": "next start",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@radix-ui/react-alert-dialog": "1.1.4",
@@ -18,6 +20,7 @@
     "next": "16.0.0",
     "react": "^19",
     "react-dom": "^19",
+    "jose": "^5.9.6",
     "redis": "^4.6.15",
     "tailwind-merge": "^2.5.5",
     "tailwindcss-animate": "^1.0.7"
@@ -30,6 +33,7 @@
     "postcss": "^8.5",
     "tailwindcss": "^4.1.9",
     "tw-animate-css": "1.3.3",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^2.1.8"
   }
 }

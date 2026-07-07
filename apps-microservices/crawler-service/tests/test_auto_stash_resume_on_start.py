@@ -8,6 +8,8 @@ before a real subprocess spawns.
 from collections import namedtuple
 from unittest.mock import AsyncMock, Mock
 import os as _os
+import asyncio
+import copy
 
 import pytest
 from fastapi import HTTPException
@@ -117,14 +119,21 @@ async def test_start_skips_unstash_on_restart(monkeypatch, tmp_path):
 async def test_start_preserves_stashed_at_for_revalidation(monkeypatch, tmp_path):
     """The fresh job_data write must keep stashed_at so the real unstash_crawl's
     TOCTOU re-read of Redis doesn't 409 NOT_STASHED (unstash_crawl is mocked here,
-    so this guards the preservation independently)."""
+    so this guards the preservation independently). Snapshot writes at write-time:
+    the resume path now pops stashed_at from the in-memory job_data right after the
+    unstash, so a live await_args_list reference would no longer reflect the earlier
+    write that DID carry it."""
     manager, cache_mocks = _setup(monkeypatch, tmp_path, _stashed_record())
     manager.unstash_crawl = AsyncMock(return_value={"status": "unstashed"})
     monkeypatch.setattr(manager, "_cleanup_stale_state_for_relaunch",
                         AsyncMock(side_effect=_Sentinel()))
+    written = []
+
+    async def _record_set_json(key, value, *a, **k):
+        written.append(copy.deepcopy(value))
+    cache_mocks["set_json"].side_effect = _record_set_json
     with pytest.raises(_Sentinel):
         await _call_start(manager)
-    written = [c.args[1] for c in cache_mocks["set_json"].await_args_list if len(c.args) > 1]
     assert any(d.get("stashed_at") == "2026-06-01T00:00:00" for d in written), \
         "fresh job_data write must preserve stashed_at for unstash re-validation"
 
@@ -153,3 +162,56 @@ async def test_start_real_unstash_passes_toctou_with_carried_stashed_at(monkeypa
     code = detail.get("error_code") if isinstance(detail, dict) else None
     assert code == "BIND_MOUNT_MISSING"  # reached bind-mount → TOCTOU stashed_at gate passed
     assert code != "NOT_STASHED"          # carry-forward did NOT regress
+
+
+@pytest.mark.asyncio
+async def test_start_does_not_repersist_stashed_at_into_running_blob(monkeypatch, tmp_path):
+    """Regression (incident crawl 2992-160-1780994316): after the resume-on-start
+    unstash clears stashed_at in Redis, start_crawl must NOT re-persist a phantom
+    stashed_at into the gen-2 'running' blob via the pid/status patch (set_json).
+    A surviving stashed_at makes /results on a sibling replica re-unstash an
+    already-deleted GCS stash tar → 502.
+
+    Drives start_crawl all the way to the 'running' write (subprocess + monitor +
+    publish stubbed), then asserts the persisted running blob carries no stashed_at.
+    Pre-fix this FAILS (job_data still holds the carried stashed_at at the write).
+    """
+    manager, cache_mocks = _setup(monkeypatch, tmp_path, _stashed_record())
+
+    # unstash_crawl clears stashed_at in REDIS only (on a re-fetched blob), exactly
+    # like the real impl — it does NOT mutate start_crawl's in-memory job_data.
+    # Faithful to the bug: job_data still carries stashed_at after this returns.
+    manager.unstash_crawl = AsyncMock(return_value={"status": "unstashed"})
+
+    # Let start_crawl run PAST the unstash to the spawn + running write.
+    monkeypatch.setattr(manager, "_cleanup_stale_state_for_relaunch", AsyncMock())
+    manager._publish_update = AsyncMock()
+
+    async def _noop_monitor(*a, **k):
+        return None
+    monkeypatch.setattr(manager, "_monitor_process", _noop_monitor)
+
+    fake_proc = Mock()
+    fake_proc.pid = 12345
+    monkeypatch.setattr(crawler_manager.asyncio, "create_subprocess_exec",
+                        AsyncMock(return_value=fake_proc))
+
+    # Snapshot every job-blob write (deepcopy: job_data is mutated in place after the
+    # first write, so a live reference would not reflect per-write state).
+    writes = []
+
+    async def _record_set_json(key, value, *a, **k):
+        writes.append((key, copy.deepcopy(value)))
+    cache_mocks["set_json"].side_effect = _record_set_json
+
+    crawl_id = await _call_start(manager)
+    await asyncio.sleep(0)  # let the no-op monitor task drain (avoids pending-task warning)
+
+    assert crawl_id == "900"
+    manager.unstash_crawl.assert_awaited_once()
+
+    job_key = f"{crawler_manager.CRAWL_JOB_PREFIX}900"
+    running_writes = [v for k, v in writes if k == job_key and v.get("status") == "running"]
+    assert running_writes, "expected a 'running' blob write at the pid/status patch (L680)"
+    assert all("stashed_at" not in v for v in running_writes), \
+        "running blob must NOT carry stashed_at after the resume unstash cleared it in Redis"

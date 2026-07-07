@@ -381,7 +381,7 @@ Heartbeat publishes and `DedupManager` operations now multiplex on a single shar
 
 Client name: `crawler-node-{crawlId}`. Monitor attached as `'shared'`.
 
-Note: `StatsManager` still opens its own Redis client. Deferred follow-up — see spec § Deferred follow-ups.
+`StatsManager` now consumes the injected shared client (`ownsClient=false`) alongside the heartbeat/dedup/pushed/checked multiplex, eliminating its own separate idle-reaped connection — it was silently dropping stat writes when the server reaped its idle socket (`CONFIG timeout 300`) during quiet crawl gaps. The legacy URL constructor is retained for tests. See `docs/superpowers/specs/2026-06-17-statsmanager-redis-resilience-design.md`. `UrlConsolidator` likewise consumes the injected shared client (update mode, `ownsClient=false`) — no separate per-crawl Redis client remains. See `docs/superpowers/specs/2026-06-17-urlconsolidator-shared-client-design.md`.
 
 ### Server-side idle reap
 
@@ -453,6 +453,54 @@ Spec: `docs/superpowers/specs/2026-04-20-detection-langue-fr-concurrency-defense
 
 **Alternative-URL validation opt-out:** the homepage detect call (`routes.ts:473`, the crawler's only `mode:"complete"` call) sends `validateAlternatives: false` → POST body `validate_alternatives: false`. This stops the detection service from opening a browser to fetch/validate alternative-language URLs on the crawler's `html_content` calls (the OOM / `socket hang up` source). The crawler still receives parsed `alternative_urls` (hreflang prefixes) for Regional Path Exclusion. Internal-page detect calls use `mode:"simple"` and never trigger alt validation, so they need no flag.
 
+## Detection Backpressure (Auto-Adjusting Concurrency + Handler-Timeout Alignment)
+
+The default handler awaits a per-page detection call (~94% of handler time on
+detection-gated sites). Crawlee's `AutoscaledPool` scales on **local**
+CPU/event-loop/memory — all idle while handlers `await` that HTTP call — so left
+unchecked it ramps to 25+ concurrent handlers against only `DETECTION_MAX_CONCURRENCY`
+(5) detect slots. The surplus piles into the detection `p-limit` queue, inflating
+per-page detect latency past `requestHandlerTimeoutSecs`; Crawlee then kills the
+handler mid-detect and closes the page, the orphaned handler hits `page.$$eval` on the
+dead page (`Pre-batch link extraction failed: ... Target page ... has been closed`),
+the request retries, and with nothing finishing the crawl loops on `progress_stalled`
+(exit 6) — a death spiral. Incident: crawl 7033 (carflo.fr), 2026-06-19.
+
+**Auto-adjusting gate (primary throttle).** `autoscaledPoolOptions.isTaskReadyFunction`
+accepts a new page only while the detection p-limit queue
+(`detectionClient.limiter.pendingCount`) is within `DETECTION_BACKPRESSURE_MAX_PENDING`.
+Fast detection → `pendingCount≈0` → the pool ramps freely to the ceiling; slow
+detection → the gate vetoes new starts → concurrency self-settles where detection keeps
+up. It only delays *starts* (running detects drain → gate reopens; `isFinishedFunction`
+still ends the crawl), so no deadlock, and it fails open if the client is absent.
+Concurrency thus auto-adjusts per crawl instead of a one-size cap.
+
+**Safety ceiling + timeout (defense-in-depth).** `CRAWLER_MAX_CONCURRENCY` (default 20)
+is a memory/browser backstop (the incident hit ~95-100% memory at ~25 concurrent), no
+longer the primary throttle. `REQUEST_HANDLER_TIMEOUT_S` (default 200, raised from 120)
+exceeds one nav (≤90) + one detect (`DETECTION_REQUEST_TIMEOUT_S` 180) so a
+slow-but-progressing detect is not killed mid-flight. Three independent limiters: gate
+(detection), Crawlee memory snapshotter, hard ceiling.
+
+**Quiet-guard.** The `routes.ts` pre-batch block skips when `page.isClosed()` and
+downgrades the page-closed catch (`isPageClosedError`) to `log.debug`, so a benign
+`/stop`/shutdown teardown stops surfacing in Python as `Erreur crawling`.
+
+| Variable | Default | Effect |
+|---|---|---|
+| `DETECTION_BACKPRESSURE_MAX_PENDING` | `5` | Gate threshold: pause new page starts while detection `pendingCount` exceeds this. ≈ `DETECTION_MAX_CONCURRENCY`; raise in step if you raise detection concurrency. `0` = tolerate no queue. |
+| `CRAWLER_MAX_CONCURRENCY` | `20` | Hard ceiling on `autoscaledPoolOptions.maxConcurrency` (memory/browser backstop). |
+| `REQUEST_HANDLER_TIMEOUT_S` | `200` | `requestHandlerTimeoutSecs` — covers one nav + one detect. |
+
+Gate is detection-only (tier2 `/clean` excluded — flag-gated off by default; the
+predicate is generic so a second source folds in via `Math.max(...)` later). The
+upstream root (api-detection-langue-fr latency under load) is separate — this stops the
+crawler amplifying it and auto-adjusts to whatever throughput detection sustains.
+
+Spec: `docs/superpowers/specs/2026-06-21-crawler-concurrency-autoadjust-design.md`
+(supersedes the static-cap mechanism of
+`docs/superpowers/specs/2026-06-21-crawler-detection-backpressure-design.md`).
+
 ## HTTP Status & Navigation Retry Policy
 
 `page.goto` resolves on `domcontentloaded` (not Playwright's default `load`), so the
@@ -484,6 +532,128 @@ after `TIMEOUT_MAX_RETRIES`, `request.noRetry` is set.
 | `TIMEOUT_MAX_RETRIES` | `2` | Max navigation-timeout retries before `noRetry`. |
 
 Spec: `docs/superpowers/specs/2026-06-09-crawler-http-status-retry-policy-design.md`.
+
+See also "Failure Classification & Auto-Recovery on Restart" below — `classifyFailure`
+extends this module to transport errors and drives restart recovery.
+
+## Failure Classification & Auto-Recovery on Restart
+
+A failed request is classified so a same-id restart can recover the *recoverable*
+ones without re-crawling genuine permanent failures. The authoritative "permanent"
+signal is `request.noRetry` (set by the status policy, `PERMANENT_ERROR_MARKERS`, the
+navigation-timeout cap, or a permanent WAF block); only the retried-but-exhausted
+bucket is refined by `classifyFailure` (`crawler/src/httpStatusPolicy.ts`).
+
+| Class | Source | Auto-recovered on restart? |
+|-------|--------|----------------------------|
+| permanent | `noRetry` set, or DNS/SSL/redirect markers, or permanent HTTP status | No |
+| infra | transport faults — `NS_ERROR_PROXY_*`, `NS_ERROR_CONNECTION_REFUSED`, `NS_ERROR_NET_*`, `ECONNREFUSED/RESET`, `ETIMEDOUT`, `socket hang up` | Yes |
+| transient | transient/block HTTP status (5xx/429/408/…) or navigation timeout | Yes |
+| unknown | anything else (incl. `NS_ERROR_ABORT`, `browserController.newPage() failed` — ambiguous) | No |
+
+Each permanently-failed request is written to the `error-{domain}` Crawlee dataset
+with a `failure_class` field. On the next launch, `reclaimFailedRequest` runs **before**
+the queue-health early-exit in `main.ts` and re-queues only the recoverable records
+(resets `retryCount`/`handledAt`), then drops the error dataset. Legacy records with no
+`failure_class` (pre-feature crawls) are treated as recoverable so old proxy victims are
+not lost (bounded — permanent ones fail-fast on re-crawl).
+
+**Why this exists:** a temporary proxy-gateway outage produced
+`NS_ERROR_PROXY_CONNECTION_REFUSED` on valid URLs; without classification they burned the
+full retry budget and were permanently lost, and `reclaimFailedRequest` was unreachable
+for completed crawls (the queue-health `exit(0)` ran before it).
+
+**Env var:**
+
+| Variable | Default | Effect |
+|---|---|---|
+| `RECOVER_FAILED_ON_RESTART` | `true` | Auto-recover recoverable failures on a same-id restart. Set `false` to disable (revert to instant "already completed" exit). Node-only, inherited by the subprocess. |
+
+Spec: `docs/superpowers/specs/2026-06-16-crawler-failure-recovery-design.md`.
+
+## Phase-2 limitDiez (zero-touch)
+
+Auto-decides skipDiez vs bypassDiez from content evidence; never escalates limitDiez to a human. Tier-1 (URL heuristic) produces a *hypothesis*; tier-2 verifies it with real content.
+
+**How it works:**
+- URL fragments are kept as distinct request identities (`base`, `base#a`, `base#b` crawl separately), giving tier-2 real material to compare.
+- A confident tier-1 outcome (skip/bypass/promoteTier2) does NOT commit directly — it ACTIVATES the tier-2 engine, which then has the final say.
+- The engine buffers one `{fragment, content}` per fragment-stripped base; when a 2nd distinct `#`-variant of that base arrives, it cleans both pages via the content-extractor `/clean` (text mode) and classifies the pair by Jaccard similarity (match / mismatch / unusable). `/clean` failures or empty results count as unusable (no false vote).
+- It commits `skipDiez` only on positive match-evidence (≥3 comparisons AND ≥80% match ratio) and `bypassDiez` on a mismatch-majority; otherwise it keeps sampling.
+- If tier-1 escalates (≥100 hashes with no confident decision) the engine commits the **default** `bypassDiez` — the zero-touch floor, so the crawl never dies at 100 hashes. This floor is active even with the engine disabled (`DIEZ_TIER2_ENABLED=false`), so the crawl is safe without deploying the content-extractor.
+- The committed decision is persisted to `_diez_decision.json` (with `source` ∈ {tier1, tier2, default} + comparison `evidence`); on a `skipDiez` that completes, stored dataset rows are stripped of `#` and exact duplicates dropped at shutdown.
+
+**Env vars:**
+
+| Variable | Default | Effect |
+|---|---|---|
+| `DIEZ_TIER2_ENABLED` | `false` | Gates the tier-2 verification engine. Off = zero-touch floor only (bypassDiez). |
+| `DIEZ_PERCLASS_ENABLED` | `false` | Per-fragment-class `#` strip: anchor → strip, spa/ambiguous → keep (resolves mixed domains: cosmetic anchors dropped, real SPA routes kept). Applied at enqueue (`processUrl`) and on the loaded URL (`routes.ts`). Kill-switch; off = legacy global skip/bypass. Read at call time (not memoized). See spec `docs/superpowers/specs/2026-06-25-limitdiez-perclass-strip-design.md`. |
+| `CONTENT_EXTRACTOR_API_URL` | `http://content-extractor-api-service:8600` | Base URL for the content-extractor `/clean` endpoint. |
+| `CONTENT_EXTRACTOR_TIMEOUT_S` | `20` | Per-call HTTP timeout (seconds). |
+| `CONTENT_EXTRACTOR_MAX_CONCURRENCY` | `4` | Max concurrent `/clean` calls per crawl. |
+| `CONTENT_EXTRACTOR_MAX_RETRIES` | `1` | Retries on transient errors. |
+| `CONTENT_EXTRACTOR_RETRY_AFTER_CAP_S` | `5` | Max seconds the client waits on a 503 `Retry-After` before its single retry (caps server-suggested backoff so it can't stall the page handler). |
+
+- Under content-extractor admission pressure the client honours `Retry-After` (capped) and classifies 503/timeout/network as **transient**; tier-2 does not count a transient failure as a comparison — it keeps the buffered page and retries on the base's next `#`-variant (organic backoff), so a service outage biases to the safe default (bypassDiez) rather than corrupting the match ratio.
+
+**Co-deploy rule:** when `DIEZ_TIER2_ENABLED=true`, the content-extractor-api-service MUST be reachable. It now shares the `crawling` compose profile and the `services-net` network, so it starts alongside the crawler automatically. No extra compose override is needed.
+
+Spec: `docs/superpowers/specs/2026-06-12-limitdiez-phase2-zero-touch` (Hellopro planning repo).
+
+## Phase-2 limitQuestionMark (zero-touch)
+
+Auto-resolves domain-specific `?`-params per-parameter and never escalates `limitQuestionMark` to a human. On top of the shipped Tier-1 observer, a Tier-2 engine buffers each `?`-page's content, groups by "URL with param `p` removed", and when two members differ in `p` (value-vs-value, or value-vs-absent) it cleans both via the content-extractor `/clean` and compares (Jaccard). A param is committed to `toRemove` ONLY on same-majority (compared≥3, same/compared≥0.8) — the single destructive action; different-majority is ruled content-shaping and kept.
+
+**How it works:**
+- The engine buffers one `{param_value, content}` entry per (base-URL, param) pair; when a 2nd distinct value of that param arrives for the same base, it cleans both pages via `/clean` (text mode) and classifies the pair as same/different/unusable. `/clean` failures or empty results count as unusable (no false vote).
+- A param is committed to `toRemove` only on same-majority evidence (≥3 comparisons AND same/compared≥0.8). Different-majority means the param shapes content — it is kept and never removed.
+- **Bounded zero-touch default:** near the 100-`?` ceiling (≥95 `?`-pages), once, the engine sets `bypassQuestionMark=true` + `breakLimit=false` (enables the 5000-dataset-item backstop). This disables the `limitQuestionMark` stop but bounds the crawl, so a facet-explosion trap cannot run away. The engine NEVER applies `skipQuestionMark`. Any already-committed `toRemove` strips remain in effect.
+- Committed decisions are persisted to `_questionmark_decision.json` (`addedToRemove` list merged back into `toRemove` on OOM relaunch).
+- `getQuestionMarkDecisionMode` reports the current state: `tier2-resolved` / `defaulted-bypassed` / `escalated` / `observed` / `unused`.
+
+**Env vars:**
+
+| Variable | Default | Effect |
+|---|---|---|
+| `QM_TIER2_ENABLED` | `false` | Gates the Tier-2 per-param engine. Off = Tier-1 observer only (no behaviour change). |
+| `CONTENT_EXTRACTOR_API_URL` | `http://content-extractor-api-service:8600` | Shared with limitDiez phase-2. Base URL for the content-extractor `/clean` endpoint. |
+| `CONTENT_EXTRACTOR_TIMEOUT_S` | `20` | Shared with limitDiez phase-2. Per-call HTTP timeout (seconds). |
+| `CONTENT_EXTRACTOR_MAX_CONCURRENCY` | `4` | Shared with limitDiez phase-2. Max concurrent `/clean` calls per crawl. |
+| `CONTENT_EXTRACTOR_MAX_RETRIES` | `1` | Shared with limitDiez phase-2. Retries on transient errors. |
+| `CONTENT_EXTRACTOR_RETRY_AFTER_CAP_S` | `5` | Shared with limitDiez phase-2. Max seconds the client waits on a 503 `Retry-After` before its single retry. |
+
+**Co-deploy rule:** when `QM_TIER2_ENABLED=true`, the content-extractor-api-service MUST be reachable. It shares the `crawling` compose profile and the `services-net` network (already configured for limitDiez) — no extra compose override is needed.
+
+Spec: `docs/superpowers/specs/2026-06-16-limitquestionmark-phase2-zero-touch` (Hellopro planning repo).
+
+#### QM tier-2 live strip-propagation + loss-proofing (spec 2026-06-29)
+
+- A committed `toRemove` param now strips **newly-discovered links** (enqueue, ungated) and **already-queued variants** (consumption-time skip: the queued variant is fetched once, then the handler returns early — Crawlee can't cancel navigation pre-fetch from a hook), not just the one-shot queue snapshot.
+- `QM_RAW_SAME_SIM` (default `0.97`, read at call time): a tier-2 pair counts as "same" only if `/clean` text matches AND raw page HTML jaccard ≥ this threshold. Guards the `/clean` search-grid blind spot (a high value errs toward KEEP = no route loss). Tune down only if genuine cosmetics are under-committed (bloat).
+- `_questionmark_audit.json` (per crawl, in `storagePath`): `{ collapsed_candidates, committed, pair_stats }` — collapsed `?param=` route-loss candidates to re-crawl-audit. Cleared on dropData restart (`clearDecisionSidecars`).
+- All effective only when a `toRemove` is set (QM tier-2 commit, behind `QM_TIER2_ENABLED`, or human `--toremove`); with none set the paths are no-ops (flag-off byte-identical).
+
+## Debug / Observability Endpoints (2026-07-04)
+
+Read-only introspection surface so incidents can be investigated **over the gateway only** (no ssh/redis-cli/docker exec). All under `/crawler/` via nginx.
+
+| Endpoint | What it answers |
+|---|---|
+| `GET /version` (public) | which commit/build is running (`git_commit`, `build_date`, `replica`, `started_at`) |
+| `GET /admin/recent-logs?grep=&level=&limit=` | last orchestrator log lines of this replica (ring buffer 5000; AUTO_STASH / reconcile markers) |
+| `GET /admin/logs/{crawl_id}?tail_bytes=&grep=` | `crawler.log` tail (cap 2MB; survives stash/archive) |
+| `GET /admin/job/{crawl_id}` | raw Redis blob (failure_cause, exit_code, oom count…; secrets redacted) + 5 ownership locks with TTL + `stats:{id}` hash |
+| `GET /admin/config` | effective settings (secrets masked) + whitelisted Node env (DIEZ_/QM_/TIMING_…) |
+| `GET /admin/dataset/{crawl_id}?kind=&offset=&limit=&content_chars=` | dataset sampling, newest first, **no side effects** (never unstashes, never stamps `downloaded_at`) |
+| `GET /admin/sidecar/{crawl_id}?name=` | one of 13 whitelisted sidecars (`_callback_payload.json`, `_diez/_questionmark_*`, `_exit_reason.json`, `timing-summary.json`…) |
+| `GET /admin/daemon-state` | GCS daemons liveness/backlog: `.daemon-heartbeat` age per marker dir, pending files, `dead_letter/`, `*.error` contents |
+| `GET /capacity` | now also carries a `disk` block (storage/archives/stash `used_pct` + `high_water_pct`) |
+| `GET /results/{id}?peek=true` | download WITHOUT starting the auto-stash grace clock (still inline-unstashes cold crawls — use `/admin/dataset` for zero side effects) |
+
+**Auth:** every `/admin/*` route requires header `X-API-Key`. The value lives in the deploy host's `.env` as **`API_KEY_ADMIN_CRAWLER_SERVICE`** (mapped to the container's `API_KEY` in docker-compose — namespaced so a bare `API_KEY` in the shared `.env` can never leak into another service's config). Unset ⇒ auth disabled (open). **If you are an assistant without this key, ask the operator for it** (it is never committed; keep it in a local gitignored note / env var).
+
+**Build/deploy:** `./tools/build_crawler.sh [--up [N]]` — stamps `GIT_COMMIT`/`BUILD_DATE` (verify with `GET /version`), `--up` scales to N replicas (default 7) with `--no-deps` + nginx reload; sync the Redis capacity key separately via `scale_crawlers.sh N`. The heartbeat lines in `tools/upload_daemon.sh`/`download_daemon.sh` require a daemon restart to take effect.
 
 ## Conventions
 

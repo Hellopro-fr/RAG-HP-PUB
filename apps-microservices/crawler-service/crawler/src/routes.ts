@@ -21,10 +21,19 @@ import {
 import { DetectionLangueClient } from "./class/DetectionLangueClient.js";
 import { context } from "./context.js";
 import { recordClassification, maybeCommitDecision, commitSkipDiez, commitBypassDiez } from "./diezDecision.js";
+import { fragmentAwareUniqueKey, stripEmptyFragment } from "./diezKeepFragment.js";
+import { applyPerClassStrip, perClassEnabled, stripActionAnchor, actionAnchorStripEnabled } from "./diezClassify.js";
+import { qmConsumptionStrip, shouldSkipDequeued, recordQmCollapsed } from "./qmConsumptionSkip.js";
+import { recordVariant, isOverCap, QM_FACET_ENABLED, QM_FACET_CAP_K } from "./facetCap.js";
+import { isFilterParam } from "./filterOnSeen.js";
+import { baseKeyAbsent } from "./urlBase.js";
+import { recordTier2Sample, maybeCommitTier2, tier2Evidence, maybeDefaultAtCeiling as maybeDefaultDiezAtCeiling } from "./diezTier2.js";
+import { routeDiezOutcome } from "./diezHookGate.js";
 import { shouldTripExternalRedirectBreaker } from "./externalRedirectBreaker.js";
 import { recordQuestionMarkObservation } from "./questionMarkDecision.js";
+import { recordQmTier2Sample, maybeCommitParam, commitToRemoveParam, maybeDefaultAtCeiling, QM_TIER2_TRIGGER } from "./questionMarkTier2.js";
 import { trackQmHashStatsForUrl } from "./qmHashTracker.js";
-import { classifyHttpStatus } from "./httpStatusPolicy.js";
+import { classifyHttpStatus, pdfDatasetName, isPageClosedError } from "./httpStatusPolicy.js";
 import type { PageTimingEntry } from "./timing/types.js";
 
 export const router = createPlaywrightRouter();
@@ -195,6 +204,9 @@ const ALWAYS_REMOVE_PARAMS = [
     "timestamp", "random", "nocache",
 ];
 
+const DIEZ_TIER2_ENABLED = (process.env.DIEZ_TIER2_ENABLED ?? "false").toLowerCase() === "true";
+const QM_TIER2_ENABLED = (process.env.QM_TIER2_ENABLED ?? "false").toLowerCase() === "true";
+
 router.addDefaultHandler(
     async ({ request, page, enqueueLinks, log, proxyInfo, crawler, response, session }) => {
         // Shared detect client (Part B). Constructed once in main.ts so the
@@ -220,8 +232,39 @@ router.addDefaultHandler(
         let _detectOk: boolean | undefined;
 
         const proxyUrl = proxyInfo?.url || null;
+
+        // Queue-purge (D1): a request flagged skipNavigation on disk had its
+        // page.goto skipped by Crawlee; loadedUrl is undefined. Count it and return
+        // before the loadedUrl use below. Clean handled path (no error machinery).
+        if (request.skipNavigation) {
+            if (context.statsManager) await context.statsManager.increment("purged_skipnav");
+            recordQmCollapsed(request.url, request.url);
+            return;
+        }
+
+        // loadedUrl is the stored + counted identity; drop a cosmetic empty '#'
+        // (JS/browser may keep a bare hash) so it can't inflate diez or pollute the dataset.
         let url = request.loadedUrl;
+        // Per-class: strip cosmetic anchors from the stored+counted identity; keep spa
+        // routes. Flag off -> unchanged empty-'#' strip only (stripEmptyFragment).
+        if (url) url = perClassEnabled() ? applyPerClassStrip(url) : stripEmptyFragment(url);
+        const diezStripped = !!url && url !== request.loadedUrl; // a '#' was per-class-stripped from the loaded URL
         try {
+
+        // Part C (C2, spec 2026-06-29): re-apply the LIVE query/diez strip to this dequeued
+        // page. If it collapses onto an already-seen base, this queued variant is a duplicate
+        // that the commit-time queue rewrite didn't catch — skip processing (no store, no link
+        // enqueue). The page was fetched once (bounded); Crawlee marks it handled on this return.
+        // Placed INSIDE the try so the early return still runs the L1087 finally (timing
+        // record + per-attempt marker cleanup that must run for EVERY request path).
+        const qmStripped = qmConsumptionStrip(url);
+        if (qmStripped !== url && context.dedupManager) {
+            const known = (await context.dedupManager.isKnownBatch([qmStripped])).has(qmStripped);
+            if (shouldSkipDequeued(url, qmStripped, known)) {
+                recordQmCollapsed(url, qmStripped);
+                return;
+            }
+        }
 
         // Resource Blocking (Images, Fonts, Media, Binaries, etc.)
         // Uses ignoredExtensions as single source of truth for blocked file types
@@ -313,6 +356,23 @@ router.addDefaultHandler(
         if (response) {
             const contentType = (response.headers()['content-type'] || '').toLowerCase();
             if (contentType && !contentType.includes('text/html') && !contentType.includes('text/plain') && !contentType.includes('application/xhtml')) {
+                // Unified PDF/download accounting (mirrors functions.ts failedRequestHandler):
+                // count under filtered_pdf + record in the pdf-{domain} dataset so inline
+                // (rendered) PDFs are tracked the same as download-triggering ones. This guard
+                // already skips inline non-HTML today, so accounting is independent of SKIP_DOWNLOADS.
+                if (context.statsManager) {
+                    await context.statsManager.increment("filtered_pdf");
+                }
+                const pdfDataset = await Dataset.open(
+                    pdfDatasetName(context.config.crawleeStorageName, targetDomain),
+                );
+                await pdfDataset.pushData({
+                    url,
+                    source: request.userData.source ?? "",
+                    status: response.status(),
+                    content_type: contentType,
+                    timestamp: new Date().toISOString(),
+                });
                 log.warning(`Skipping non-HTML response: ${url} (Content-Type: ${contentType})`);
                 return;
             }
@@ -427,7 +487,13 @@ router.addDefaultHandler(
             const isNew = await context.dedupManager.addUrl(url);
             isDoublon = !isNew;
         }
-        
+
+        // Phase-2 audit: a per-class-stripped fragment page that collapsed onto an
+        // already-seen base — a route-loss candidate (its content is never crawled).
+        if (isDoublon && diezStripped && perClassEnabled() && context.diezCollapsed.length < 200) {
+            context.diezCollapsed.push({ collapsed: request.loadedUrl as string, base: url });
+        }
+
         // Removed early increment of "new_urls" here.
         // It is now handled inside the success block (isEnqueuingLinks) to ensure validity.
 
@@ -505,6 +571,11 @@ router.addDefaultHandler(
                                 proxy_used: maskProxyUrl(proxyUrl ?? undefined),
                                 status_code: response?.status() || 0,
                                 captcha: challengeService,
+                                // Anti-bot challenge = retryable (fresh session/proxy may pass),
+                                // consistent with the non-permanent-challenge "will retry" path in
+                                // functions.ts. Explicit so a same-id restart re-attempts the homepage
+                                // instead of falling into the legacy missing-class default.
+                                failure_class: "transient",
                                 timestamp: new Date().toISOString()
                             });
                         }
@@ -761,25 +832,61 @@ router.addDefaultHandler(
                 // Track URLs with '?' and '#' for postNavigationHook limit checks
                 if (url.includes('?')) {
                     context.countQuestionMark++;
-                    // Tier-1 observer (spec 2026-04-17). Records domain-specific params that survived Tier-0.
-                    // No-op when observation disabled (human CLI flag set).
+                    if (QM_FACET_ENABLED) recordVariant(context.facetVariantCount, url);
+                    // Tier-1 observer (spec 2026-04-17). No-op when observation disabled.
                     recordQuestionMarkObservation(url);
+
+                    // Phase-2 tier-2 per-param engine (spec 2026-06-16). Off unless QM_TIER2_ENABLED.
+                    if (QM_TIER2_ENABLED && context.questionMarkObservationEnabled && storagePath) {
+                        if (!context.qmTier2.active && context.questionMarkObservations.domainSpecificCount >= QM_TIER2_TRIGGER) {
+                            context.qmTier2.active = true;
+                            console.log(`[questionmark] Tier 2 activated at ${context.questionMarkObservations.domainSpecificCount} domain-specific ? URLs.`);
+                        }
+                        if (context.qmTier2.active && content) {
+                            await recordQmTier2Sample(url, content, context.contentExtractorClient);
+                            for (const p of Array.from(context.qmTier2.tally.keys())) {
+                                if (!context.qmTier2.decided.has(p) && maybeCommitParam(p)) {
+                                    commitToRemoveParam(p, storagePath);
+                                }
+                            }
+                        }
+                        maybeDefaultAtCeiling(storagePath);
+                    }
                 }
                 if (url.includes('#')) {
                     context.countDiez++;
-                    // Tier-1 auto-decision engine (spec 2026-04-17).
-                    // No-op when context.diezDecisionCommitted is true (persisted decision, CLI flag, or prior commit).
+                    // Tier-1 auto-decision (spec 2026-04-17). No-op once committed.
                     recordClassification(url);
                     const outcome = maybeCommitDecision();
-                    if (outcome === "skipDiez" && storagePath) {
-                        commitSkipDiez(storagePath);
-                    } else if (outcome === "bypassDiez" && storagePath) {
-                        commitBypassDiez(storagePath);
-                    } else if (outcome === "promoteTier2") {
-                        console.log(`[diez] Tier 2 promotion triggered (phase 1 no-op). Escalation will fire at MAX_SAMPLES.`);
-                    } else if (outcome === "escalate") {
-                        console.log(`[diez] Tier 1 inconclusive at ${context.diezClassification.total} samples — existing limitDiez path will fire.`);
+                    const route = routeDiezOutcome(outcome, DIEZ_TIER2_ENABLED);
+
+                    if (route.action === "commit" && storagePath) {
+                        const meta = { source: route.source } as const;
+                        if (route.decision === "skipDiez") commitSkipDiez(storagePath, meta);
+                        else commitBypassDiez(storagePath, meta);
+                    } else if (route.action === "activate") {
+                        if (!context.diezTier2.active) {
+                            context.diezTier2.active = true;
+                            console.log(`[diez] Tier 2 engine activated (tier-1 outcome=${outcome}).`);
+                        }
                     }
+
+                    // Tier-2 verification (engine active, not yet committed).
+                    if (DIEZ_TIER2_ENABLED && context.diezTier2.active && !context.diezDecisionCommitted && content) {
+                        await recordTier2Sample(url, content, context.contentExtractorClient);
+                        const t2 = maybeCommitTier2();
+                        if (t2 && storagePath) {
+                            const meta = { tier: 2 as const, source: "tier2" as const, evidence: tier2Evidence() };
+                            if (t2 === "skipDiez") commitSkipDiez(storagePath, meta);
+                            else commitBypassDiez(storagePath, meta);
+                        }
+                    }
+
+                    // Zero-touch floor (mirrors questionMark maybeDefaultAtCeiling): near the
+                    // ceiling with no decision yet, default to bypassDiez + arm the 5000-item
+                    // backstop so the crawl never dies at limitDiez. Runs in BOTH flag modes,
+                    // whatever blocked a decision (tier-2 no comparable pairs, ambiguous-heavy…).
+                    if (storagePath) maybeDefaultDiezAtCeiling(storagePath);
                 }
 
                 await routerDefaultHandler(
@@ -791,13 +898,19 @@ router.addDefaultHandler(
                     title
                 );
 
+                // Queue-purge #2: live-add this page's normalized base to the seen oracle —
+                // `url` is the final stored+counted identity for every page pushed to the
+                // dataset (just above), so the very next discovered link naming the same
+                // base with an extra param is caught even within the same crawl.
+                if (QM_FACET_ENABLED) context.seenBases.add(baseKeyAbsent(url));
+
                 // --- PRE-BATCH DEDUP: Extract links, batch-check Redis, build local Set ---
                 // CRITICAL: transformRequestFunction MUST be synchronous (Crawlee API contract).
                 // An async version causes minimatch to receive a Promise instead of a Request,
                 // crashing with "Cannot read properties of undefined (reading 'split')".
                 let knownUrlsOnPage = new Set<string>();
 
-                if (context.dedupManager) {
+                if (context.dedupManager && !page.isClosed()) {
                     try {
                         // 1. Extract all <a href> links from the page
                         const rawLinks = await page.$$eval('a[href]', (anchors: HTMLAnchorElement[]) =>
@@ -809,9 +922,15 @@ router.addDefaultHandler(
                             knownUrlsOnPage = await context.dedupManager.isKnownBatch(rawLinks);
                         }
                     } catch (e) {
-                        // Non-fatal: if link extraction fails, we proceed without pre-filtering
-                        // The handler-level dedup (line ~176) will still catch duplicates
-                        console.warn(`Pre-batch link extraction failed: ${e}`);
+                        // Non-fatal: proceed without pre-filtering; the handler-level dedup
+                        // (line ~176) still catches duplicates. A torn-down page (a concurrent
+                        // /stop or shutdown closed the pool mid-handler) is benign — log it
+                        // quietly, not as a warning that surfaces in Python as "Erreur crawling".
+                        if (isPageClosedError(String(e))) {
+                            log.debug(`Pre-batch link extraction skipped (page closed): ${e}`);
+                        } else {
+                            console.warn(`Pre-batch link extraction failed: ${e}`);
+                        }
                     }
                 }
 
@@ -825,6 +944,17 @@ router.addDefaultHandler(
                             return false;
                         }
 
+                        // Action-anchor strip (root fix for the #elementor-action
+                        // duplicate-fetch overload). Runs before skip/remove so the
+                        // '#' is gone and fragmentAwareUniqueKey collapses variants.
+                        if (actionAnchorStripEnabled()) {
+                            const strippedAa = stripActionAnchor(request.url);
+                            if (strippedAa !== request.url) {
+                                request.url = strippedAa;
+                                context.actionAnchorsStripped++;
+                            }
+                        }
+
                         // 2. Initial CLEANING of the URL (Moved to TOP)
                         // This ensures we strip parameters BEFORE checking forbidden list
                         const { skipQuestionMark, skipDiez, toKeep, toRemove } = context.config;
@@ -833,12 +963,18 @@ router.addDefaultHandler(
                         // re-instantiation on every discovered link.
 
                         // Strip empty fragment (#) — "page#" and "page" are identical content
-                        if (request.url.endsWith('#')) {
-                            request.url = request.url.slice(0, -1);
-                        }
+                        request.url = stripEmptyFragment(request.url);
 
                         // Always strip the "Always Remove" list first (skipQuestionMark=false: only remove alwaysRemove params)
                         request.url = processUrl(request.url, false, false, { toRemove: ALWAYS_REMOVE_PARAMS });
+
+                        // Per-domain toRemove (tier-2 commits + human --toremove) must apply to EVERY
+                        // discovered link, not only under the skip sledgehammers. Without this a tier-2
+                        // commit ('q' -> toRemove) never strips newly-discovered ?q= links (gate bug,
+                        // spec 2026-06-29 Part A). Mirrors the unconditional ALWAYS_REMOVE_PARAMS call above.
+                        if (toRemove && toRemove.length > 0) {
+                            request.url = processUrl(request.url, false, false, { toRemove });
+                        }
 
                         // Now apply the dynamic config (skipQuestionMark, etc)
                         if (skipQuestionMark || skipDiez) {
@@ -927,6 +1063,20 @@ router.addDefaultHandler(
                             return false;
                         }
 
+                        // Queue-purge #1: facet cap — drop discovered variants once the base is saturated.
+                        if (QM_FACET_ENABLED && isOverCap(context.facetVariantCount, request.url, QM_FACET_CAP_K)) {
+                            logBlocked('facet-cap', request.url);
+                            return false;
+                        }
+
+                        // Queue-purge #2: filter-on-seen-base — drop a discovered variant whose
+                        // param removal yields a base already crawled (structural, no content
+                        // comparison; R1 allowlist protects lang/currency/etc.).
+                        if (QM_FACET_ENABLED && isFilterParam(request.url, context.seenBases)) {
+                            logBlocked('filter-on-seen', request.url);
+                            return false;
+                        }
+
                         // 4. Pre-Crawl Deduplication (SYNCHRONOUS via pre-built Set)
                         // The Set was populated before enqueueLinks by batch-checking Redis.
                         // This avoids the async trap while still leveraging Redis dedup.
@@ -935,6 +1085,10 @@ router.addDefaultHandler(
                         }
 
                         request.userData = { source: 'discovered' };
+                        // Phase-2: pin the dedup identity to the fragment-bearing URL so
+                        // base#a / base#b do not collapse to base. No-op once skipDiez
+                        // has stripped '#' from request.url.
+                        request.uniqueKey = fragmentAwareUniqueKey(request.url);
                         return request;
                     },
                 });

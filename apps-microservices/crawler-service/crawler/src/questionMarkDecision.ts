@@ -84,11 +84,72 @@ export const applyCliFlagGuard = (): void => {
  * Phase 1 values: "escalated" | "unused" | "observed".
  * Phase 2 will add "tier2-resolved" when content comparison commits params.
  */
-export const getQuestionMarkDecisionMode = (isError?: string): "escalated" | "unused" | "observed" => {
+export const getQuestionMarkDecisionMode = (
+    isError?: string
+): "escalated" | "defaulted-bypassed" | "tier2-resolved" | "observed" | "unused" => {
     if (isError === "limitQuestionMark") return "escalated";
     if (!context.questionMarkObservationEnabled) return "unused";
+    if (context.qmTier2.defaulted) return "defaulted-bypassed";
+    if (context.qmTier2.addedToRemove.length > 0) return "tier2-resolved";
     if (context.questionMarkObservations.domainSpecificCount === 0) return "unused";
     return "observed";
+};
+
+const QM_DECISION_FILE = "_questionmark_decision.json";
+
+/**
+ * Persist the tier-2 per-param decision (atomic tmp+fsync+rename) on every commit
+ * and on default. Reflects the latest cumulative state.
+ */
+export const writeQmDecisionFile = (storagePath: string, source: "tier2" | "defaulted"): void => {
+    try {
+        const t = context.qmTier2;
+        const pairStats: Record<string, { same: number; different: number; unusable: number }> = {};
+        for (const [p, s] of t.tally) pairStats[p] = s;
+        const deferred = Array.from(t.tally.keys()).filter((p) => !t.decided.has(p));
+        const payload = {
+            addedToRemove: t.addedToRemove,
+            contentShaping: t.contentShaping,
+            deferred,
+            pairStats,
+            source,
+            committedAt: new Date().toISOString(),
+        };
+        const finalPath = path.join(storagePath, QM_DECISION_FILE);
+        const tmpPath = `${finalPath}.tmp`;
+        fs.writeFileSync(tmpPath, JSON.stringify(payload, null, 2));
+        const fd = fs.openSync(tmpPath, "r+");
+        try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+        fs.renameSync(tmpPath, finalPath);
+    } catch (e) {
+        console.warn(`[questionmark] Failed to persist decision: ${(e as Error).message}`);
+    }
+};
+
+/**
+ * At startup, merge a previously committed addedToRemove into context.config.toRemove
+ * (dedupe, case-insensitive), so OOM_RELAUNCH resumes with resolved params stripped.
+ * Returns true if a decision file was loaded.
+ */
+export const readQmPersistedDecision = (storagePath: string): boolean => {
+    const filePath = path.join(storagePath, QM_DECISION_FILE);
+    if (!fs.existsSync(filePath)) return false;
+    try {
+        const payload = JSON.parse(fs.readFileSync(filePath, "utf-8")) as { addedToRemove?: string[] };
+        const added = Array.isArray(payload.addedToRemove) ? payload.addedToRemove : [];
+        const present = new Set(context.config.toRemove.map((s) => s.toLowerCase()));
+        for (const p of added) {
+            if (!present.has(p.toLowerCase())) {
+                context.config.toRemove.push(p);
+                present.add(p.toLowerCase());
+            }
+        }
+        console.log(`[questionmark] Loaded persisted decision: addedToRemove=${JSON.stringify(added)}`);
+        return true;
+    } catch (e) {
+        console.warn(`[questionmark] Failed to parse ${filePath}: ${(e as Error).message}`);
+        return false;
+    }
 };
 
 const OBSERVATIONS_FILE = "_questionmark_observations.json";

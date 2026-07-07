@@ -1,0 +1,66 @@
+{
+  "planPath": "docs/superpowers/plans/2026-07-04-crawler-service-debug-endpoints.md",
+  "tasks": [
+    {
+      "id": 0,
+      "subject": "Task 0: /version endpoint + GIT_COMMIT build stamp",
+      "status": "completed",
+      "description": "**Goal:** Identify the deployed commit/build over HTTP.\n\n**Files:** modify app/router/crawler.py (public GET /version, APP_STARTED_AT, import socket), Dockerfile (ARG/ENV GIT_COMMIT+BUILD_DATE in final stage), docker-compose.yml:1332 (build args). Test: tests/test_crawler_version.py\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/app/router/crawler.py\", \"apps-microservices/crawler-service/Dockerfile\", \"docker-compose.yml\"], \"verifyCommand\": \"python -m pytest tests/test_crawler_version.py -v\", \"acceptanceCriteria\": [\"GET /version returns git_commit/build_date/replica/started_at\", \"defaults to unknown without env\", \"Dockerfile ARG->ENV\"]}\n```"
+    },
+    {
+      "id": 1,
+      "subject": "Task 1: Log ring buffer + GET /admin/recent-logs",
+      "status": "completed",
+      "description": "**Goal:** Orchestrator log markers (AUTO_STASH etc.) queryable over HTTP via in-memory deque(5000).\n\n**Files:** create app/core/log_buffer.py; modify main.py dictConfig (ring handler on root+uvicorn); modify app/router/admin.py (GET /admin/recent-logs?grep=&level=&limit=). Tests: tests/test_log_buffer.py, tests/test_admin_recent_logs.py, tests/test_main_ring_handler.py\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/app/core/log_buffer.py\", \"apps-microservices/crawler-service/main.py\", \"apps-microservices/crawler-service/app/router/admin.py\"], \"verifyCommand\": \"python -m pytest tests/test_log_buffer.py tests/test_admin_recent_logs.py tests/test_main_ring_handler.py -v\", \"acceptanceCriteria\": [\"records >= INFO land in ring buffer\", \"grep/level/limit filters\", \"400 on bad regex/level\", \"401 when API_KEY set and header missing\", \"handler never raises\"]}\n```"
+    },
+    {
+      "id": 2,
+      "subject": "Task 2: GET /admin/logs/{crawl_id} crawler.log tail",
+      "status": "completed",
+      "description": "**Goal:** Serve tail of {storage_path}/crawler.log (default 200KB, cap 2MB, optional grep, PlainTextResponse + X-Log-Size-Bytes). Read-only, uses get_job_or_recover.\n\n**Files:** modify app/router/admin.py. Test: tests/test_admin_crawl_log.py\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/app/router/admin.py\"], \"verifyCommand\": \"python -m pytest tests/test_admin_crawl_log.py -v\", \"acceptanceCriteria\": [\"tail with partial first line dropped\", \"grep filter, 400 on bad regex\", \"404 when file absent\", \"no lifecycle side effects\"]}\n```"
+    },
+    {
+      "id": 3,
+      "subject": "Task 3: GET /admin/job/{crawl_id} raw dump + locks + node stats",
+      "status": "completed",
+      "description": "**Goal:** Un-lossy /status companion: raw blob (callback URLs + params.proxyapify redacted) + 5 lock keys with TTL + HGETALL stats:{id} + reconcile_leader_lock.\n\n**Files:** modify app/router/admin.py. Test: tests/test_admin_job_dump.py\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/app/router/admin.py\"], \"verifyCommand\": \"python -m pytest tests/test_admin_job_dump.py -v\", \"acceptanceCriteria\": [\"failure_cause/oom fields exposed\", \"secrets redacted\", \"held locks with ttl\", \"503 when Redis down\"]}\n```"
+    },
+    {
+      "id": 4,
+      "subject": "Task 4: GET /admin/config effective runtime config",
+      "status": "completed",
+      "description": "**Goal:** settings.model_dump() with API_KEY/APIFY_PROXY masked '<set>' + whitelisted-prefix env subset (DIEZ_/QM_/TIMING_/... — REDIS_LOSS not REDIS_ so REDIS_URL never leaks).\n\n**Files:** modify app/router/admin.py. Test: tests/test_admin_config.py\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/app/router/admin.py\"], \"verifyCommand\": \"python -m pytest tests/test_admin_config.py -v\", \"acceptanceCriteria\": [\"flags visible\", \"secrets masked, None stays None\", \"REDIS_URL/APIFY_PROXY never in env block\"]}\n```"
+    },
+    {
+      "id": 5,
+      "subject": "Task 5: GET /admin/dataset/{crawl_id} sampling",
+      "status": "completed",
+      "description": "**Goal:** Paginated newest-first listing/sampling of dataset records (kind=main|error|nfr|update, offset/limit/content_chars), sanitized-domain fallback, html_index.json excluded, 404 cold-tier hint, NO side effects.\n\n**Files:** modify app/router/admin.py (_dataset_dir helper + endpoint). Test: tests/test_admin_dataset_sample.py\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/app/router/admin.py\"], \"verifyCommand\": \"python -m pytest tests/test_admin_dataset_sample.py -v\", \"acceptanceCriteria\": [\"newest first with url+content_length\", \"content_preview truncated\", \"kind prefixes + sanitized fallback\", \"404 side-effect-free hint\", \"pagination\"]}\n```"
+    },
+    {
+      "id": 6,
+      "subject": "Task 6: GET /admin/sidecar/{crawl_id} whitelisted sidecars",
+      "status": "completed",
+      "description": "**Goal:** Serve the 13 known per-crawl diagnostic sidecars (callback payload, diez/QM decisions+audits, exit reason, timing-summary...). Exact-match whitelist = no traversal. JSON parsed else raw[:100k].\n\n**Files:** modify app/router/admin.py. Test: tests/test_admin_sidecar.py\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/app/router/admin.py\"], \"verifyCommand\": \"python -m pytest tests/test_admin_sidecar.py -v\", \"acceptanceCriteria\": [\"parsed JSON under content\", \"raw fallback\", \"400 on non-whitelisted name incl. traversal\", \"404 when absent\"]}\n```"
+    },
+    {
+      "id": 7,
+      "subject": "Task 7: GET /admin/daemon-state + daemon heartbeats",
+      "status": "completed",
+      "description": "**Goal:** Liveness/backlog of the 10 shared marker dirs: file listings (cap 200), .daemon-heartbeat age, *.error/*.move-error contents (2000 chars), dead_letter. Plus heartbeat touch after 'while true; do' in tools/upload_daemon.sh:45 ($ARCHIVES_DIR) and tools/download_daemon.sh:127 ($REQUESTS_DIR).\n\n**Files:** modify app/router/admin.py, tools/upload_daemon.sh, tools/download_daemon.sh. Test: tests/test_admin_daemon_state.py + bash -n both scripts\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/app/router/admin.py\", \"tools/upload_daemon.sh\", \"tools/download_daemon.sh\"], \"verifyCommand\": \"python -m pytest tests/test_admin_daemon_state.py -v && bash -n tools/upload_daemon.sh && bash -n tools/download_daemon.sh\", \"acceptanceCriteria\": [\"per-dir exists/file_count/heartbeat_age/files/error_markers\", \"heartbeat excluded from files\", \"missing dirs not fatal\", \"daemons touch heartbeat each loop\"]}\n```"
+    },
+    {
+      "id": 8,
+      "subject": "Task 8: disk state block on GET /capacity",
+      "status": "completed",
+      "description": "**Goal:** CapacityResponse += disk: Optional[dict] = None; /capacity returns disk={storage,archives,stash,high_water_pct} via existing fail-open _get_archives_disk_state.\n\n**Files:** modify app/schemas/crawler.py:21-24, app/router/crawler.py:160-189. Test: tests/test_crawler_capacity_disk.py\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/app/schemas/crawler.py\", \"apps-microservices/crawler-service/app/router/crawler.py\"], \"verifyCommand\": \"python -m pytest tests/test_crawler_capacity_disk.py -v\", \"acceptanceCriteria\": [\"disk block with 3 volumes + high_water_pct\", \"additive schema, BO unaffected\", \"fail-open\"]}\n```"
+    },
+    {
+      "id": 9,
+      "subject": "Task 9: ?peek=true on GET /results",
+      "status": "completed",
+      "description": "**Goal:** peek=true skips _record_downloaded_at (auto-stash grace clock); default unchanged. Docstring notes peek does NOT prevent inline unstash (use /admin/dataset for fully side-effect-free).\n\n**Files:** modify app/router/crawler.py:328-352. Test: tests/test_crawler_results_peek.py + regression tests/test_auto_stash_results.py\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/app/router/crawler.py\"], \"verifyCommand\": \"python -m pytest tests/test_crawler_results_peek.py tests/test_auto_stash_results.py -v\", \"acceptanceCriteria\": [\"peek=true -> no downloaded_at stamp\", \"peek=false -> unchanged\", \"limit documented\"]}\n```"
+    }
+  ],
+  "lastUpdated": "2026-07-04T00:00:00Z"
+}

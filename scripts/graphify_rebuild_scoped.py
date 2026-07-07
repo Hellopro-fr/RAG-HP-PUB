@@ -30,7 +30,8 @@ Behaviour:
        cross-links from doc nodes that pointed at the old file-level ID.
     5. Preserve community labels from `graphify-out/labels.json` (tracked) so
        human-assigned community names survive rebuilds.
-    6. Regenerate `graph.json`, `graph.html`, `GRAPH_REPORT.md`.
+    6. Regenerate `graph.json` and `GRAPH_REPORT.md` (`graph.html` is retired:
+       the graph exceeds the 5000-node cap of graphify's HTML viz for good).
     7. For non-code files in the intersection, touch
        `graphify-out/.needs_update` so the operator knows semantic
        re-extraction (LLM) is required. The hook itself never spends LLM
@@ -66,7 +67,6 @@ GRAPH_JSON = GRAPH_DIR / "graph.json"
 MANIFEST_JSON = GRAPH_DIR / "manifest.json"
 LABELS_JSON = GRAPH_DIR / "labels.json"
 REPORT_MD = GRAPH_DIR / "GRAPH_REPORT.md"
-GRAPH_HTML = GRAPH_DIR / "graph.html"
 NEEDS_UPDATE_FLAG = GRAPH_DIR / ".needs_update"
 
 
@@ -213,7 +213,7 @@ def main() -> int:
     from graphify.cluster import cluster, score_all
     from graphify.analyze import god_nodes, surprising_connections, suggest_questions
     from graphify.report import generate
-    from graphify.export import to_json, to_html
+    from graphify.export import to_json
 
     new_ast = extract(code_changed)
 
@@ -280,7 +280,9 @@ def main() -> int:
     )
     REPORT_MD.write_text(report, encoding="utf-8")
     to_json(graph, communities, str(GRAPH_JSON))
-    to_html(graph, communities, str(GRAPH_HTML), community_labels=labels)
+    # graph.html retired: upstream to_html hard-caps at 5000 nodes and this
+    # graph is permanently beyond it. Calling it crashed every post-commit
+    # hook run and the CI auto-rebuild job.
 
     print(
         f"[graphify hook] rebuilt: {graph.number_of_nodes()} nodes, "

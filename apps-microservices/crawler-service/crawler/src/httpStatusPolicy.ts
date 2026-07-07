@@ -52,6 +52,56 @@ export function resolveTimeoutMaxRetries(raw: string | undefined): number {
 }
 
 /**
+ * Resolves the crawl-level max concurrency from an env value (positive int, default 20).
+ * This is now a memory/browser SAFETY CEILING — the detection-backpressure gate
+ * (isTaskReadyFunction in functions.ts) is the primary throttle. Left uncapped the pool
+ * could overshoot into memory pressure (the incident hit ~95-100% at ~25 concurrent).
+ * Invalid/empty/non-positive → 20.
+ * Spec: docs/superpowers/specs/2026-06-21-crawler-concurrency-autoadjust-design.md
+ */
+export function resolveMaxConcurrency(raw: string | undefined): number {
+    const n = Number(raw);
+    return Number.isFinite(n) && n >= 1 ? Math.floor(n) : 20;
+}
+
+/**
+ * Resolves the request-handler timeout in seconds from an env value (positive int, default 200).
+ * Must exceed one navigation (≤ navigationTimeoutSecs 90) plus one detection call
+ * (DETECTION_REQUEST_TIMEOUT_S 180) so a slow-but-progressing page is not killed mid-detect.
+ * The prior 120s budget sat BELOW the 180s detect timeout → orphaned handlers hit
+ * page.$$eval on a torn-down page. Invalid/empty/non-positive → 200.
+ * Spec: docs/superpowers/specs/2026-06-21-crawler-detection-backpressure-design.md
+ */
+export function resolveRequestHandlerTimeoutSecs(raw: string | undefined): number {
+    const n = Number(raw);
+    return Number.isFinite(n) && n >= 1 ? Math.floor(n) : 200;
+}
+
+/**
+ * Resolves the detection-backpressure threshold from an env value (non-negative int,
+ * default 5). The pool pauses launching new pages while the detection p-limit queue
+ * (pendingCount) exceeds this, so concurrency auto-adjusts to detection throughput.
+ * 0 is valid ("tolerate no queue"). ≈ DETECTION_MAX_CONCURRENCY; raise in step if you
+ * raise detection concurrency. Invalid/empty/negative/Infinity → 5.
+ * Spec: docs/superpowers/specs/2026-06-21-crawler-concurrency-autoadjust-design.md
+ */
+export function resolveBackpressureMaxPending(raw: string | undefined): number {
+    const trimmed = (raw ?? "").trim();
+    if (!trimmed) return 5;
+    const n = Number(trimmed);
+    return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 5;
+}
+
+/**
+ * Backpressure gate predicate: accept a new page only when the observed backpressure
+ * depth is within the threshold. `pending` is the detection p-limit pendingCount today;
+ * generic so a second source can fold in via Math.max(...) at the call site.
+ */
+export function shouldAcceptNewPage(pending: number, threshold: number): boolean {
+    return pending <= threshold;
+}
+
+/**
  * True when a failed request is a navigation timeout that has reached the retry
  * cap — bounds wasted retries on genuinely-unresponsive URLs.
  */
@@ -66,3 +116,160 @@ export const NAVIGATION_WAIT_UNTIL: NavigationWaitUntil =
     resolveNavigationWaitUntil(process.env.NAVIGATION_WAIT_UNTIL);
 export const TIMEOUT_MAX_RETRIES: number =
     resolveTimeoutMaxRetries(process.env.TIMEOUT_MAX_RETRIES);
+export const MAX_CONCURRENCY: number =
+    resolveMaxConcurrency(process.env.CRAWLER_MAX_CONCURRENCY);
+export const REQUEST_HANDLER_TIMEOUT_S: number =
+    resolveRequestHandlerTimeoutSecs(process.env.REQUEST_HANDLER_TIMEOUT_S);
+export const BACKPRESSURE_MAX_PENDING: number =
+    resolveBackpressureMaxPending(process.env.DETECTION_BACKPRESSURE_MAX_PENDING);
+
+// ---------------------------------------------------------------------------
+// Failure classification & auto-recovery on restart
+// Spec: docs/superpowers/specs/2026-06-16-crawler-failure-recovery-design.md
+// ---------------------------------------------------------------------------
+
+export type FailureClass = "permanent" | "transient" | "infra" | "unknown";
+
+/**
+ * Transport-layer error markers that mean "retrying yields the same result".
+ * Single source of truth — also consumed by functions.ts failedRequestHandler
+ * (DRY; replaces the inline NON_RETRYABLE_ERRORS list).
+ */
+export const PERMANENT_ERROR_MARKERS: readonly string[] = [
+    "ERR_NAME_NOT_RESOLVED",      // domain does not exist
+    "ERR_CERT_DATE_INVALID",      // expired TLS cert
+    "ERR_SSL_PROTOCOL_ERROR",     // incompatible TLS
+    "ERR_TOO_MANY_REDIRECTS",     // redirect loop
+    "Download is starting",       // Playwright binary-download trigger
+    "net::ERR_ABORTED",           // navigation aborted (often binary content)
+    "Execution context was destroyed", // page destroyed during download
+];
+
+/**
+ * Transport/connection faults on OUR side (proxy gateway, network) — recoverable.
+ * NOTE: NS_ERROR_ABORT and "browserController.newPage() failed" are intentionally
+ * excluded (ambiguous: binary-download abort / poison URL) → classified "unknown"
+ * → not auto-recovered. Deferred infra-marker candidates.
+ */
+const INFRA_ERROR_MARKERS: readonly string[] = [
+    "NS_ERROR_PROXY_CONNECTION_REFUSED",
+    "NS_ERROR_PROXY_",
+    "NS_ERROR_CONNECTION_REFUSED",
+    "NS_ERROR_NET_",
+    "ECONNREFUSED",
+    "ECONNRESET",
+    "ETIMEDOUT",
+    "socket hang up",
+];
+
+/**
+ * Classifies a failed request from its error string (and optional HTTP status).
+ * Precedence: permanent marker > infra marker > HTTP status > navigation-timeout > unknown.
+ */
+export function classifyFailure(errorStr: string, status?: number): FailureClass {
+    if (PERMANENT_ERROR_MARKERS.some((m) => errorStr.includes(m))) return "permanent";
+    if (INFRA_ERROR_MARKERS.some((m) => errorStr.includes(m))) return "infra";
+    if (typeof status === "number" && status > 0) {
+        const c = classifyHttpStatus(status);
+        if (c === "permanent") return "permanent";
+        if (c === "transient" || c === "block") return "transient";
+    }
+    if (errorStr.includes("Navigation timed out") || errorStr.includes("TimeoutError")) {
+        return "transient";
+    }
+    return "unknown";
+}
+
+/** Recoverable on restart = infra (our transport) or transient (server-side hiccup). */
+export function isRecoverableFailureClass(cls: FailureClass): boolean {
+    return cls === "infra" || cls === "transient";
+}
+
+/**
+ * Pure filter for reclaimFailedRequest: given error-dataset items, returns the
+ * request ids to re-queue plus the count of skipped permanent/unknown items.
+ * A missing failure_class (legacy, pre-feature crawls) is treated as recoverable
+ * so old proxy victims are not lost (bounded — permanent ones fail-fast on re-crawl).
+ */
+export function selectReclaimableIds(
+    items: ReadonlyArray<{ id?: string; failure_class?: string }>,
+): { reclaim: string[]; skippedPermanent: number } {
+    const reclaim: string[] = [];
+    let skippedPermanent = 0;
+    for (const item of items) {
+        if (!item.id) continue;
+        const cls = item.failure_class as FailureClass | undefined;
+        if (cls !== undefined && !isRecoverableFailureClass(cls)) {
+            skippedPermanent++;
+            continue;
+        }
+        reclaim.push(item.id);
+    }
+    return { reclaim, skippedPermanent };
+}
+
+/**
+ * Resolves the resolved-count stall guard. Default false; only "true" enables.
+ * When on, the ProgressMonitor tracks requestsFinished + requestsFailed so a
+ * degrading origin (rising failures, flat successes) does not false-stall a
+ * near-complete crawl. Safe: maxRequestRetries caps every request → the count
+ * always converges.
+ */
+export function resolveStallCountResolved(raw: string | undefined): boolean {
+    return (raw ?? "false").trim().toLowerCase() === "true";
+}
+
+/** Resolves the auto-recovery kill-switch. Default true; only "false" disables. */
+export function resolveRecoverFailedOnRestart(raw: string | undefined): boolean {
+    return (raw ?? "true").trim().toLowerCase() !== "false";
+}
+
+/** Auto-recovery runs only for the default crawl flow (not sitemap/generate_data). */
+export function shouldRunRecovery(flag: boolean, typeCrawling: string): boolean {
+    return flag && typeCrawling !== "sitemap" && typeCrawling !== "generate_data";
+}
+
+export const RECOVER_FAILED_ON_RESTART: boolean =
+    resolveRecoverFailedOnRestart(process.env.RECOVER_FAILED_ON_RESTART);
+
+// ---------------------------------------------------------------------------
+// Download / PDF skip (fast-fail)
+// Spec: docs/superpowers/specs/2026-06-17-crawler-skip-pdf-design.md
+// ---------------------------------------------------------------------------
+
+/**
+ * True when a navigation error is Playwright's download trigger — the response
+ * is a downloadable file (e.g. an extension-less PDF path) rather than a page.
+ * "Download is starting" is also a PERMANENT_ERROR_MARKER; this named predicate
+ * is the reusable form consumed by the errorHandler + failedRequestHandler.
+ */
+export function isDownloadError(errorStr: string): boolean {
+    return errorStr.includes("Download is starting");
+}
+
+/**
+ * True when a Playwright error means the page/context/browser was already torn down
+ * (e.g. a concurrent /stop or shutdown closed the pool mid-handler). Used to downgrade
+ * the benign pre-batch link-extraction failure from a warning to a debug log.
+ */
+export function isPageClosedError(errStr: string): boolean {
+    return errStr.includes("Target page, context or browser has been closed");
+}
+
+/** Resolves the download-skip kill-switch. Default true; only "false" disables. */
+export function resolveSkipDownloads(raw: string | undefined): boolean {
+    return (raw ?? "true").trim().toLowerCase() !== "false";
+}
+
+/** Pure skip decision: skipping is enabled AND the error is a download trigger. */
+export function shouldSkipAsDownload(skipDownloads: boolean, errorStr: string): boolean {
+    return skipDownloads && isDownloadError(errorStr);
+}
+
+/** Crawlee dataset name for skipped downloads/PDFs (mirrors error-/nfr- naming). */
+export function pdfDatasetName(crawleeStorageName: string | undefined, domain: string): string {
+    return crawleeStorageName ? `pdf-${crawleeStorageName}` : `pdf-${domain}`;
+}
+
+/** Resolved once at module load. Node-only, inherited by the crawler subprocess. */
+export const SKIP_DOWNLOADS: boolean = resolveSkipDownloads(process.env.SKIP_DOWNLOADS);

@@ -28,8 +28,28 @@ import { buildCamoufoxLaunchInput } from './camoufoxLaunchInput.js';
 import {
     NAVIGATION_WAIT_UNTIL,
     TIMEOUT_MAX_RETRIES,
+    MAX_CONCURRENCY,
+    REQUEST_HANDLER_TIMEOUT_S,
+    BACKPRESSURE_MAX_PENDING,
+    shouldAcceptNewPage,
     shouldCapTimeoutRetry,
+    PERMANENT_ERROR_MARKERS,
+    classifyFailure,
+    selectReclaimableIds,
+    shouldSkipAsDownload,
+    SKIP_DOWNLOADS,
+    pdfDatasetName,
+    type FailureClass,
 } from "./httpStatusPolicy.js";
+import { shouldStopForDiez } from "./diezLimitStop.js";
+import { shouldStopForQuestionMark } from "./qmLimitStop.js";
+import { applyPerClassStrip, perClassEnabled, fingerprint } from "./diezClassify.js";
+import { provenDiezStripActive } from "./diezDecision.js";
+import { StaleVariantSkip, QUEUE_PURGE_ENABLED, STALE_VARIANT_SKIP_MARKER } from "./staleVariantSkip.js";
+import { qmConsumptionStrip, shouldSkipDequeued, recordQmCollapsed } from "./qmConsumptionSkip.js";
+import { isOverCap, QM_FACET_ENABLED, QM_FACET_CAP_K } from "./facetCap.js";
+import { pathBaseKey, baseKeyAbsent } from "./urlBase.js";
+import { isFilterParam } from "./filterOnSeen.js";
 
 /**
  * Constructs the Apify proxy URL based on the provided password.
@@ -440,10 +460,10 @@ export const startCrawler = async (
     paramPerMinute: number,
     apifyProxyPassword?: string,
     breakLimit?: boolean,
-    bypassQuestionMark?: boolean,
-    bypassDiez?: boolean,
-    skipquestionmark?: boolean,
-    skipdiez?: boolean,
+    _bypassQuestionMark?: boolean,
+    _bypassDiez?: boolean,
+    _skipquestionmark?: boolean,
+    _skipdiez?: boolean,
     containerMemoryMb?: number,
     camoufoxEnabled?: boolean
 ) => {
@@ -532,9 +552,14 @@ export const startCrawler = async (
             ],
         },
 
-        // maxConcurrency: 1, // V3 default
+        // maxConcurrency is capped via autoscaledPoolOptions below (env CRAWLER_MAX_CONCURRENCY).
         navigationTimeoutSecs: 90,
-        requestHandlerTimeoutSecs: 120,
+        // Raised from 120 → default 200, must exceed one nav (≤90) + one detect
+        // (DETECTION_REQUEST_TIMEOUT_S 180) so a slow-but-progressing page is not killed
+        // mid-detect (the 120<180 inversion orphaned handlers onto page.$$eval).
+        // Env REQUEST_HANDLER_TIMEOUT_S.
+        // Spec: docs/superpowers/specs/2026-06-21-crawler-detection-backpressure-design.md
+        requestHandlerTimeoutSecs: REQUEST_HANDLER_TIMEOUT_S,
         maxRequestRetries: 5, // V3 resilience
 
         useSessionPool: true,
@@ -547,23 +572,56 @@ export const startCrawler = async (
             blockedStatusCodes: [],
         },
 
+        // Fast-fail download/PDF skip: stop retries the moment a download trigger
+        // is seen. errorHandler runs after each failed attempt and BEFORE the retry
+        // decision — failedRequestHandler is terminal and cannot prevent retries.
+        // Spec: docs/superpowers/specs/2026-06-17-crawler-skip-pdf-design.md
+        errorHandler: async ({ request }, error) => {
+            if (shouldSkipAsDownload(SKIP_DOWNLOADS, String(error))) {
+                request.noRetry = true;
+            }
+        },
+
         // V3 Logic: Rich error reporting
         failedRequestHandler: async ({ request, log, page, proxyInfo, response }) => {
+            // Queue-purge (A): a stale variant dropped pre-navigation. Marked
+            // NonRetryable so this is terminal on the first attempt. Count it and
+            // return BEFORE the CB errors feed / error-dataset write / captcha probe.
+            if (String(request.errorMessages).includes(STALE_VARIANT_SKIP_MARKER)) {
+                if (context.statsManager) await context.statsManager.increment("purged_prenav");
+                return;
+            }
+
             log.error(`Request ${request.url} failed: ${String(request.errorMessages)}`);
 
-            // Détection des erreurs permanentes — inutile de réessayer
-            // Aligné avec api-detection-langue-fr (redirect_tracker.py _NON_RETRYABLE_ERRORS)
-            const NON_RETRYABLE_ERRORS = [
-                'ERR_NAME_NOT_RESOLVED',     // Le domaine n'existe pas
-                'ERR_CERT_DATE_INVALID',     // Certificat SSL expiré
-                'ERR_SSL_PROTOCOL_ERROR',    // Protocole SSL incompatible
-                'ERR_TOO_MANY_REDIRECTS',    // Boucle de redirection infinie
-                'Download is starting',      // Playwright binary download trigger
-                'net::ERR_ABORTED',          // Navigation aborted (often binary content)
-                'Execution context was destroyed', // Page destroyed during download
-            ];
+            // Détection des erreurs permanentes — inutile de réessayer.
+            // Markers live in httpStatusPolicy.ts (PERMANENT_ERROR_MARKERS) so the
+            // handler and classifyFailure share one source of truth (DRY).
             const errorStr = String(request.errorMessages);
-            const isPermanentError = NON_RETRYABLE_ERRORS.some(err => errorStr.includes(err));
+
+            // Download/PDF skip: a download-triggering URL (e.g. extension-less PDF)
+            // is recorded under filtered_pdf + the pdf-{domain} dataset and returns
+            // early — NOT counted as an error (no circuit-breaker trip) and NOT
+            // written to error-{domain} (so reclaimFailedRequest never re-crawls it).
+            // Spec: docs/superpowers/specs/2026-06-17-crawler-skip-pdf-design.md
+            if (shouldSkipAsDownload(SKIP_DOWNLOADS, errorStr)) {
+                if (context.statsManager) {
+                    await context.statsManager.increment("filtered_pdf");
+                }
+                const pdfDataset = await Dataset.open(
+                    pdfDatasetName(context.config.crawleeStorageName, domain),
+                );
+                await pdfDataset.pushData({
+                    url: request.url,
+                    source: request.userData.source ?? "",
+                    status: response?.status() ?? 0,
+                    timestamp: new Date().toISOString(),
+                });
+                log.info(`Skipped download/PDF (no retry): ${request.url}`);
+                return;
+            }
+
+            const isPermanentError = PERMANENT_ERROR_MARKERS.some((err) => errorStr.includes(err));
             if (isPermanentError) {
                 request.noRetry = true;
                 log.warning(`Permanent error detected for ${request.url} — no retry`);
@@ -669,7 +727,15 @@ export const startCrawler = async (
                 context.crawlErrorMessage = `Page d'accueil inaccessible après ${request.retryCount} tentatives: ${errorSummary}`;
             }
 
-            // Save rich error info
+            // Save rich error info. failure_class drives auto-recovery on restart:
+            // request.noRetry is the authoritative "permanent" signal (set by routes.ts
+            // permanent status, PERMANENT_ERROR_MARKERS, the timeout cap, or a permanent
+            // WAF block); only the retried-but-exhausted bucket is refined by classifyFailure.
+            // Spec: docs/superpowers/specs/2026-06-16-crawler-failure-recovery-design.md
+            const status = response?.status() || 0;
+            const failureClass: FailureClass = request.noRetry
+                ? "permanent"
+                : classifyFailure(errorStr, status);
             let datasetName = context.config.crawleeStorageName ? `error-${context.config.crawleeStorageName}` : `error-${domain}`;
             let dataset = await Dataset.open(datasetName);
             await dataset.pushData({
@@ -677,8 +743,9 @@ export const startCrawler = async (
                 url: request.url,
                 errors: request.errorMessages,
                 proxy_used: maskProxyUrl(proxyInfo?.url),
-                status_code: response?.status() || 0,
+                status_code: status,
                 captcha: captchaDetected,
+                failure_class: failureClass,
                 timestamp: new Date().toISOString()
             });
         },
@@ -693,6 +760,15 @@ export const startCrawler = async (
             // networkidle + scroll), so this does not reduce extracted content.
             async (_crawlingContext, gotoOptions) => {
                 gotoOptions.waitUntil = NAVIGATION_WAIT_UNTIL;
+            },
+            // Cancel any download the navigation triggers so the browser context
+            // never holds a partial download (prevents the crawl stalling on
+            // download/PDF URLs). The download error itself is fast-failed via
+            // errorHandler above. Gated by SKIP_DOWNLOADS.
+            async ({ page }) => {
+                if (SKIP_DOWNLOADS) {
+                    page.on('download', (d) => { d.cancel().catch(() => {}); });
+                }
             },
             async ({ page }) => {
                 const isStopped = isStoppedManualy(domain, false);
@@ -739,6 +815,37 @@ export const startCrawler = async (
                     crawlingContext.request.userData._timing = { dequeueAt: Date.now() };
                 }
             },
+            // Queue-purge (A): mid-run zero-fetch skip. If a committed skip/toRemove
+            // decision now collapses this queued variant onto an already-seen base,
+            // drop it BEFORE page.goto. Reads request.url (loadedUrl does not exist
+            // pre-navigation). Cheap: short-circuits before Redis for any url that
+            // does not strip. Fail-open: Redis error -> empty set -> not known -> navigate.
+            async ({ request }) => {
+                if (!QUEUE_PURGE_ENABLED) return;
+                const stripped = qmConsumptionStrip(request.url);
+                if (stripped === request.url) return;
+                if (!context.dedupManager) return;
+                const known = (await context.dedupManager.isKnownBatch([stripped])).has(stripped);
+                if (shouldSkipDequeued(request.url, stripped, known)) {
+                    recordQmCollapsed(request.url, stripped);
+                    throw new StaleVariantSkip(request.url, stripped);
+                }
+            },
+            // Queue-purge #1: facet cap. Content-agnostic backstop — once a base path
+            // has accumulated K distinct query-signatures, drop further variants
+            // BEFORE page.goto (mirrors the Component A zero-fetch skip above).
+            async ({ request }) => {
+                if (QM_FACET_ENABLED && isOverCap(context.facetVariantCount, request.url, QM_FACET_CAP_K)) {
+                    recordQmCollapsed(request.url, pathBaseKey(request.url));
+                    throw new StaleVariantSkip(request.url, pathBaseKey(request.url));
+                }
+                // Queue-purge #2: filter-on-seen-base. A committed-live seenBases entry
+                // means the base was already crawled — drop this filtered view zero-fetch.
+                if (QM_FACET_ENABLED && isFilterParam(request.url, context.seenBases)) {
+                    recordQmCollapsed(request.url, baseKeyAbsent(request.url));
+                    throw new StaleVariantSkip(request.url, baseKeyAbsent(request.url));
+                }
+            },
         ],
 
         postNavigationHooks: [
@@ -747,11 +854,11 @@ export const startCrawler = async (
                 // when URLs are pushed to the dataset (O(1) instead of O(n²) dataset scan).
                 const limitQuestionMarkDiez = 100;
 
-                if (!bypassQuestionMark && !skipquestionmark && context.countQuestionMark >= limitQuestionMarkDiez) {
+                if (shouldStopForQuestionMark(context.countQuestionMark, context.config.bypassQuestionMark, context.config.skipQuestionMark, limitQuestionMarkDiez)) {
                     context.stopReason = "limitQuestionMark";
                     await stopCrawler(crawler, "Limit of 100 question marks reached.");
                 }
-                if (!bypassDiez && !skipdiez && context.countDiez >= limitQuestionMarkDiez) {
+                if (shouldStopForDiez(context.countDiez, context.config.bypassDiez, context.config.skipDiez, limitQuestionMarkDiez)) {
                     context.stopReason = "limitDiez";
                     await stopCrawler(crawler, "Limit of 100 hashes reached.");
                 }
@@ -772,8 +879,28 @@ export const startCrawler = async (
 
     // Prevent premature shutdown while Phase 2 is seeding URLs in update mode.
     // In standard mode, phase2SeedingComplete is true by default → no effect.
+    //
+    // maxConcurrency is now a memory/browser SAFETY CEILING (env CRAWLER_MAX_CONCURRENCY,
+    // default 20). The primary throttle is the detection-backpressure gate below.
+    //
+    // isTaskReadyFunction: accept a new page only while the detection p-limit queue is
+    // within DETECTION_BACKPRESSURE_MAX_PENDING. The pool scales on local
+    // CPU/event-loop/memory — all idle while handlers await the detection HTTP call — so
+    // without this gate it over-subscribes the 5-wide detect p-limit, inflating per-page
+    // detect latency past requestHandlerTimeoutSecs (the 7033 death-spiral). With it,
+    // fast detection (pendingCount≈0) ramps freely to the ceiling; slow detection holds
+    // concurrency where detection keeps up. Only delays STARTS (running detects drain →
+    // gate reopens); isFinishedFunction still terminates the crawl. Fails open if the
+    // client is somehow absent (?? 0) — never blocks the crawl.
+    // Spec: docs/superpowers/specs/2026-06-21-crawler-concurrency-autoadjust-design.md
     optionsCrawler.autoscaledPoolOptions = {
         ...optionsCrawler.autoscaledPoolOptions,
+        maxConcurrency: MAX_CONCURRENCY,
+        isTaskReadyFunction: async () =>
+            shouldAcceptNewPage(
+                context.detectionClient?.limiter.pendingCount ?? 0,
+                BACKPRESSURE_MAX_PENDING,
+            ),
         isFinishedFunction: async () => {
             const isEmpty = await requestQueue.isEmpty();
             return isEmpty && context.phase2SeedingComplete;
@@ -1522,13 +1649,20 @@ export const attachFSLogger = (fileName: string) => {
         flags: "a", // 'a' means appending
     });
 
+    // Prefix every persisted line with an ISO-8601 UTC timestamp.
+    // Stamp the FILE write only — the raw message is still teed to real stdout
+    // (oldLog.apply below), where the Python capture stamps it for crawler.log,
+    // so no line is ever double-stamped.
+    const writeLine = (messages: any[]) =>
+        fsLog.write(`[${new Date().toISOString()}] ${stripAnsi(messages.join("\n"))}\n`);
+
     // override console.log
     console.log = (...messages) => {
         // log the console message immediately as usual
         oldLog.apply(console, messages); // remove this line if you only want to log into the file
 
         // stream message to the file log
-        fsLog.write(stripAnsi(messages.join("\n")) + "\n");
+        writeLine(messages);
     };
 
     // override console.error
@@ -1537,7 +1671,7 @@ export const attachFSLogger = (fileName: string) => {
         oldError.apply(console, messages); // remove this line if you only want to log into the file
 
         // stream message to the file log
-        fsLog.write(stripAnsi(messages.join("\n")) + "\n");
+        writeLine(messages);
     };
 
     // override console.info
@@ -1546,7 +1680,7 @@ export const attachFSLogger = (fileName: string) => {
         oldInfo.apply(console, messages); // remove this line if you only want to log into the file
 
         // stream message to the file log
-        fsLog.write(stripAnsi(messages.join("\n")) + "\n");
+        writeLine(messages);
     };
 
     // override console.warn
@@ -1555,7 +1689,7 @@ export const attachFSLogger = (fileName: string) => {
         oldWarn.apply(console, messages); // remove this line if you only want to log into the file
 
         // stream message to the file log
-        fsLog.write(stripAnsi(messages.join("\n")) + "\n");
+        writeLine(messages);
     };
 
     // override console.debug
@@ -1564,7 +1698,7 @@ export const attachFSLogger = (fileName: string) => {
         oldDebug.apply(console, messages); // remove this line if you only want to log into the file
 
         // stream message to the file log
-        fsLog.write(stripAnsi(messages.join("\n")) + "\n");
+        writeLine(messages);
     };
 };
 
@@ -1628,10 +1762,12 @@ export const reclaimFailedRequest = async (name: string) => {
     const requestQueue = await RequestQueue.open(name);
     let reclaimedCount = 0;
 
-    await dataset.forEach(async (item) => {
-        const requestID = item["id"];
-        if (!requestID) return;
+    const { items } = await dataset.getData();
+    const { reclaim, skippedPermanent } = selectReclaimableIds(
+        items as Array<{ id?: string; failure_class?: string }>,
+    );
 
+    for (const requestID of reclaim) {
         try {
             const request = await requestQueue.getRequest(requestID);
             if (request) {
@@ -1644,14 +1780,14 @@ export const reclaimFailedRequest = async (name: string) => {
         } catch (e) {
             console.error(`Failed to reclaim request ${requestID}: ${e}`);
         }
-    });
+    }
 
-    console.log(`Successfully reclaimed ${reclaimedCount} requests.`);
+    console.log(`Reclaimed ${reclaimedCount} recoverable requests, skipped ${skippedPermanent} permanent.`);
     if (reclaimedCount > 0) {
         await dropDataset(errorDatasetName);
         console.log(`Reclaimed ${reclaimedCount} items, dropped error dataset.`);
     } else {
-        console.warn(`No items reclaimed — keeping error dataset '${errorDatasetName}' for debugging.`);
+        console.warn(`No recoverable items — keeping error dataset '${errorDatasetName}' for debugging.`);
     }
 };
 
@@ -1725,6 +1861,89 @@ export const getAllRequestQueues = (queueName: string): string[] => {
 };
 
 /**
+ * Phase-2: after a skipDiez decision, strip '#' from stored dataset rows and
+ * drop exact-duplicate URLs (keep first). Operates on flat {url,content,title}
+ * dataset files (NOT request queues — parseJsonFiles handles those). Missing
+ * dirs are a no-op. See spec §8.
+ */
+export const cleanDatasetFragments = (
+    datasetNames: string[],
+): { rewritten: number; removed: number; collisionsKept: number } => {
+    let rewritten = 0, removed = 0, collisionsKept = 0;
+    const perClass = perClassEnabled();
+    for (const name of datasetNames) {
+        const dir = `storage/datasets/${name}`;
+        if (!fs.existsSync(dir)) continue;
+        const files = fs.readdirSync(dir).filter((f) => f.endsWith(".json") && !f.startsWith("__"));
+
+        if (!perClass) {
+            // Legacy blind branch — unchanged behavior (skipDiez path).
+            const seen = new Set<string>();
+            for (const f of files) {
+                const full = `${dir}/${f}`;
+                let row: { url?: string };
+                try { row = JSON.parse(fs.readFileSync(full, "utf-8")); } catch { continue; }
+                if (!row.url) continue;
+                const cleaned = processUrl(row.url, false, true);
+                if (seen.has(cleaned)) { try { fs.unlinkSync(full); removed++; } catch { /* best-effort */ } continue; }
+                seen.add(cleaned);
+                if (cleaned !== row.url) { (row as any).url = cleaned; try { fs.writeFileSync(full, JSON.stringify(row)); rewritten++; } catch { /* best-effort */ } }
+            }
+            continue;
+        }
+
+        // Content-collision branch: group by base, collapse only content-identical siblings.
+        type Entry = { file: string; url: string; fp: string; row: any };
+        const groups = new Map<string, Entry[]>();
+        for (const f of files) {
+            const full = `${dir}/${f}`;
+            let row: { url?: string; content?: string };
+            try { row = JSON.parse(fs.readFileSync(full, "utf-8")); } catch { continue; }
+            if (!row.url) continue;
+            const i = row.url.indexOf("#");
+            const base = i === -1 ? row.url : row.url.slice(0, i);
+            const fp = fingerprint(row.content ?? "");
+            const arr = groups.get(base) ?? [];
+            arr.push({ file: full, url: row.url, fp, row });
+            groups.set(base, arr);
+        }
+        for (const [base, entries] of groups) {
+            if (entries.length < 2) continue; // lone row → no collision evidence → keep as-is
+            const allIdentical = entries.every((e) => e.fp === entries[0].fp);
+            if (!allIdentical) { collisionsKept += entries.length; continue; } // distinct routes → keep all
+            // Cosmetic: keep one (prefer the row already at base), rewrite to base, drop the rest.
+            entries.sort((a, b) => (a.url === base ? -1 : b.url === base ? 1 : 0));
+            const keep = entries[0];
+            if (keep.url !== base) {
+                keep.row.url = base;
+                try { fs.writeFileSync(keep.file, JSON.stringify(keep.row)); rewritten++; } catch { /* best-effort */ }
+            }
+            for (const e of entries.slice(1)) {
+                try { fs.unlinkSync(e.file); removed++; } catch { /* best-effort */ }
+            }
+        }
+    }
+    console.log(`[diez] Dataset cleanup (perClass=${perClass}): rewrote ${rewritten}, removed ${removed}, kept ${collisionsKept} distinct-route row(s).`);
+    return { rewritten, removed, collisionsKept };
+};
+
+/**
+ * Clean-restart (dropData) helper: delete the diez/questionMark decision sidecars
+ * that live in the storagePath ROOT. storagePath is deterministic per crawl_id and
+ * is NOT cleared by the Python relaunch path, so on a dropData restart these stale
+ * files would otherwise be re-inherited by readPersistedDecision/readQmPersistedDecision
+ * at Node startup. Missing files are a no-op. Returns the basenames actually removed.
+ */
+export const clearDecisionSidecars = (storagePath: string): string[] => {
+    const removed: string[] = [];
+    const files = ['_diez_decision.json', '_diez_audit.json', '_questionmark_decision.json', '_questionmark_observations.json', '_questionmark_audit.json'];
+    for (const f of files) {
+        try { fs.unlinkSync(`${storagePath}/${f}`); removed.push(f); } catch { /* absent = fine */ }
+    }
+    return removed;
+};
+
+/**
  * Process a URL to filter query parameters and remove hash fragments
  *
  * @param {string} url - URL to process
@@ -1755,8 +1974,9 @@ export const processUrl = (
         // Fix: Use native URL API for robust parsing
         const urlObj = new URL(url);
         
-        // 1. Always remove hash if skipDiez is true
-        if (skipDiez) {
+        // 1. Hash: legacy wholesale strip when per-class is OFF, OR when a content-proven
+        //    (tier-2) skipDiez is in force — proof overrides the per-class spa-keep heuristic.
+        if ((!perClassEnabled() || provenDiezStripActive()) && skipDiez) {
             urlObj.hash = '';
         }
 
@@ -1798,7 +2018,8 @@ export const processUrl = (
             }
         }
 
-        return urlObj.toString();
+        const result = urlObj.toString();
+        return perClassEnabled() ? applyPerClassStrip(result) : result;
 
     } catch (e) {
         // Fallback for invalid URLs

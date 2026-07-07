@@ -43,6 +43,7 @@ CRAWL_UPDATES_CHANNEL = "crawl_updates"
 # Webhook retry configuration
 WEBHOOK_RETRY_DELAYS = [5, 30, 120]  # seconds between attempts (exponential backoff)
 FAILED_CALLBACKS_KEY = "crawl_jobs:failed_callbacks"
+WEBHOOK_DEADLETTER_DRAIN_PER_TICK = 5  # bounded replay batch per reconcile tick
 
 # Capacity short-circuit + Redis retry (Spec 2026-05-22).
 # See docs/superpowers/specs/2026-05-22-start-crawl-capacity-short-circuit-design.md
@@ -178,6 +179,17 @@ async def _read_callback_isError(storage_path: str) -> Optional[str]:
         logger.debug(f"Failed to read isError from {payload_path}: {e}")
         return None
 
+async def _read_queue_stats(storage_path: str) -> Tuple[Optional[int], Optional[int]]:
+    """Read {storage_path}/_queue_stats.json written by the Node queue-stats publisher.
+    Returns (total, remaining); (None, None) if absent or unreadable."""
+    stats_path = os.path.join(storage_path, '_queue_stats.json')
+    try:
+        async with aiofiles.open(stats_path, 'r') as f:
+            data = json.loads(await f.read())
+        return data.get('total_request_count'), data.get('pending_request_count')
+    except Exception:
+        return None, None
+
 class _LockHeartbeat:
     """
     Async context manager that renews a Redis lock TTL while a long-running
@@ -289,6 +301,7 @@ class CrawlerManager:
         "circuitBreaker": "Circuit breaker déclenché",
         "limitErrors": "Trop d'erreurs HTTP rencontrées",
         "limitCrawl": "Limite de 5000 URLs atteinte",
+        "limitQueue": "File d'attente d'URLs trop volumineuse",
         "limitNewUrls": "Trop de nouvelles URLs détectées",
         "stoppedManually": "Arrêté manuellement",
         "insufficientData": "Données insuffisantes",
@@ -546,6 +559,13 @@ class CrawlerManager:
                         f"instead of starting fresh.")
             try:
                 await self.unstash_crawl(prior_job_info)
+                # unstash_crawl cleared stashed_at in Redis, but it operates on a re-fetched
+                # blob — NOT this in-memory job_data (which still carries the stashed_at copied
+                # in above for the unstash TOCTOU). Pop it here so the pid/status patch below
+                # (set_json) and the monitor's later terminal write do not re-persist a phantom
+                # stashed_at into the gen-2 blob. Left in place, /results on a sibling replica
+                # would re-unstash an already-deleted GCS stash tar and return 502.
+                job_data.pop("stashed_at", None)
             except HTTPException:
                 await _rollback_claim(decrement_counter=True)
                 raise
@@ -851,9 +871,11 @@ class CrawlerManager:
                                   webhook_type: str, timeout: float = 5.0) -> bool:
         """Single-attempt webhook send with a custom timeout.
 
-        Used by the shutdown path to bound worst-case time. Does NOT retry and does
-        NOT store in FAILED_CALLBACKS_KEY on failure — reconciliation will replay
-        using the same request_id from job_info, and PHP dedupes.
+        Used by the shutdown path to bound worst-case time. Does NOT retry; on
+        failure it enqueues the callback into FAILED_CALLBACKS_KEY (same
+        dead-letter as the retry path's exhaustion) so the reconcile leader's
+        bounded auto-drain (_drain_failed_callbacks) replays it — PHP dedupes
+        replays via the request_id embedded in params.
         """
         # Flatten nested dicts/lists into PHP bracket notation so $_GET parses them as arrays.
         flat_params = _flatten_params_for_php(params)
@@ -864,9 +886,11 @@ class CrawlerManager:
                     logger.info(f"Webhook '{webhook_type}' for '{crawl_id}' sent (shutdown). Status: {response.status_code}")
                     return True
                 logger.warning(f"Webhook '{webhook_type}' for '{crawl_id}' got {response.status_code} during shutdown")
+                await self._store_failed_callback(url, params, crawl_id, webhook_type, f"HTTP {response.status_code}")
                 return False
         except httpx.RequestError as e:
             logger.warning(f"Webhook '{webhook_type}' for '{crawl_id}' failed during shutdown: {e}")
+            await self._store_failed_callback(url, params, crawl_id, webhook_type, str(e))
             return False
 
     async def _send_webhook_with_retry(self, url: str, params: dict, crawl_id: str, webhook_type: str):
@@ -1050,7 +1074,7 @@ class CrawlerManager:
         else:
             await self._send_webhook_with_retry(url, params, crawl_id, "failure")
 
-    async def _send_stop_webhook(self, job_info: dict, reason: str = "stopped"):
+    async def _send_stop_webhook(self, job_info: dict, reason: str = "stopped", shutdown: bool = False):
         """
         Send webhook when a job is stopped or force-finished. (V3 Feature)
         Uses callback_url (not failure_callback_url) to match PHP script's expected format.
@@ -1112,7 +1136,12 @@ class CrawlerManager:
         params["request_id"] = self._get_or_create_terminal_webhook_request_id(job_info)
         await cache_service.set_json(f"{CRAWL_JOB_PREFIX}{crawl_id}", job_info)
 
-        await self._send_webhook_with_retry(str(url), params, crawl_id, "stop")
+        if shutdown:
+            # Bounded shutdown path: 5s timeout, single attempt. If delivery fails,
+            # the completion marker + finished status let the BO recover via /status.
+            await self._send_webhook_once(str(url), params, crawl_id, "stop", timeout=5.0)
+        else:
+            await self._send_webhook_with_retry(str(url), params, crawl_id, "stop")
 
     async def _monitor_process(self, crawl_id: str, process: asyncio.subprocess.Process):
         job_key = f"{CRAWL_JOB_PREFIX}{crawl_id}"
@@ -1134,7 +1163,8 @@ class CrawlerManager:
         async def log_stream(stream, prefix):
             try:
                 async for line in stream:
-                    await log_file_handle.write(f"[{prefix}] {line.decode('utf-8', errors='ignore')}")
+                    ts = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
+                    await log_file_handle.write(f"[{ts}] [{prefix}] {line.decode('utf-8', errors='ignore')}")
             except Exception as e:
                 logger.error(f"Error in log stream for crawl '{crawl_id}': {e}")
 
@@ -1524,6 +1554,10 @@ class CrawlerManager:
         
         is_error = await _read_callback_isError(storage_path)
 
+        queue_total = queue_remaining = None
+        if job_info["status"] in ("running", "stopping"):
+            queue_total, queue_remaining = await _read_queue_stats(storage_path)
+
         return CrawlStatus(
             crawl_id=crawl_id,
             id_domaine=crawl_id, # Legacy alias
@@ -1541,6 +1575,8 @@ class CrawlerManager:
             downloaded_at=job_info.get("downloaded_at"),
             finished_at=job_info.get("finished_at"),
             size_bytes=job_info.get("size_bytes"),
+            queue_total=queue_total,
+            queue_remaining=queue_remaining,
         )
         # --- END: ENHANCED STATS CALCULATION ---
         
@@ -1682,6 +1718,178 @@ class CrawlerManager:
             status_code=status.HTTP_504_GATEWAY_TIMEOUT,
             detail=f"GCS download timed out after {settings.GCS_DOWNLOAD_TIMEOUT_SECONDS}s for '{crawl_id}'. Ensure the download daemon is running."
         )
+
+    def _normalize_url_key(self, raw_url: str) -> str:
+        """Canonical URL key — MUST match PHP normalize_sfpi_url() and crawler TS
+        normalizeUrl() byte-for-byte. Keeps path+query RAW (no percent re-encoding),
+        drops scheme/port/userinfo, lowercases host, strips leading www., drops empty
+        query and #fragment, strips trailing slash(es). Inputs without an authority
+        (no 'scheme://' and no leading '//') are returned verbatim minus trailing
+        slash (PHP's no-host branch).
+        Note: rstrip('/') strips ALL trailing slashes (matches PHP rtrim); the TS side
+        strips one — divergence only on pathological multi-trailing-slash URLs, which
+        do not occur in clean crawl URLs."""
+        s0 = (raw_url or "").strip()
+        s0 = re.sub(r"#.*$", "", s0)                                  # drop fragment
+        had_authority = bool(re.match(r"^[a-zA-Z][a-zA-Z0-9+.\-]*://", s0)) or s0.startswith("//")
+        if not had_authority:
+            return s0.rstrip("/")
+        s = re.sub(r"^[a-zA-Z][a-zA-Z0-9+.\-]*://", "", s0)
+        s = re.sub(r"^//", "", s)
+        slash = s.find("/")
+        authority = s if slash == -1 else s[:slash]
+        rest = "" if slash == -1 else s[slash:]                       # raw path(+query)
+        authority = re.sub(r"^[^@]*@", "", authority)                 # drop userinfo
+        authority = re.sub(r":\d+$", "", authority)                  # drop port
+        host = authority.lower()
+        host = re.sub(r"^www\.", "", host)
+        qi = rest.find("?")
+        path_part = rest if qi == -1 else rest[:qi]
+        query_part = "" if qi == -1 else rest[qi + 1:]
+        query = ("?" + query_part) if query_part != "" else ""
+        return (host + path_part + query).rstrip("/")
+
+    def _dataset_dir_for_job(self, job_info: dict) -> Optional[str]:
+        """Resolve the local dataset directory for a crawl, mirroring the path
+        construction used by get_status() / _generate_archive_sync():
+        {storage_path}/storage/datasets/{domain} with a {domain}->{sanitized} fallback.
+        Returns the existing directory, or None if neither variant is present on disk."""
+        storage_path = job_info.get("storage_path")
+        domain = job_info.get("domain")
+        if not storage_path or not domain:
+            return None
+        crawlee_storage_base = os.path.join(storage_path, 'storage', 'datasets')
+        dataset_path = os.path.join(crawlee_storage_base, domain)
+        if os.path.isdir(dataset_path):
+            return dataset_path
+        sanitized_path = os.path.join(crawlee_storage_base, domain.replace('.', '-'))
+        if os.path.isdir(sanitized_path):
+            return sanitized_path
+        return None
+
+    async def get_single_url_html(self, job_info: dict, url: str) -> Optional[str]:
+        """Return one URL's HTML from a crawl (hot local / stashed / archived).
+        None if the URL is absent from the crawl's dataset.
+
+        Cold-tier path so PHP (no GCS access) can fetch HTML over REST:
+        - stashed crawl  -> inline unstash (mirrors get_results_archive's stashed_at branch)
+        - archived crawl with purged local data -> retrieve the GCS archive via the
+          download daemon and extract it into the crawl's storage_path so the dataset
+          reappears at {storage_path}/storage/datasets/{domain} (same layout the
+          archive was written with by _generate_archive_sync).
+        Lookup uses the Task-2 html_index.json when present, else scans the dataset."""
+        crawl_id = job_info["crawl_id"]
+
+        # Inline-unstash a stashed crawl (mirror get_results_archive's stashed_at branch).
+        if job_info.get("stashed_at"):
+            await self.unstash_crawl(job_info)
+            job_info = await cache_service.get_json(f"{CRAWL_JOB_PREFIX}{crawl_id}")
+            if job_info is None:
+                return None
+
+        dataset_dir = self._dataset_dir_for_job(job_info)
+
+        # Archived crawl whose local data was purged: pull the archive from GCS and
+        # extract it into storage_path (the archive stores 'storage/datasets/...'),
+        # then recompute the dataset dir. _retrieve_from_gcs_daemon returns the
+        # downloaded .tar.gz path (it does NOT extract), so we extract here, mirroring
+        # unstash_crawl's extract-into-{storage_path} step.
+        if job_info.get("status") == "archived" and not dataset_dir:
+            # Serialize concurrent archived extracts on the SAME ownership lock
+            # unstash_crawl uses (key 'unstash_lock:{crawl_id}', TTL
+            # UNSTASH_LOCK_TTL_SECONDS). tarfile.extractall is not atomic; two
+            # concurrent GET /html for the same archived crawl would extract into
+            # the same tree -> truncated/corrupt JSON. Mirrors unstash_crawl
+            # (lock ~L2937, preflight ~L3029-3047, extract+cleanup ~L3050-3069).
+            unstash_lock_key = f"unstash_lock:{crawl_id}"
+            lock_value = await self._acquire_ownership_lock(
+                unstash_lock_key, settings.UNSTASH_LOCK_TTL_SECONDS
+            )
+            if lock_value is None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={"error_code": "OPERATION_IN_PROGRESS", "operation": "unstash"},
+                )
+            try:
+                # Double-checked locking: another caller may have extracted while
+                # we waited on the lock. Re-check; if the dataset now exists, skip.
+                dataset_dir = self._dataset_dir_for_job(job_info)
+                if not dataset_dir:
+                    archive_tar = await self._retrieve_from_gcs_daemon(crawl_id)
+                    target_storage = job_info.get("storage_path") or os.path.join(
+                        settings.CRAWLER_STORAGE_PATH, crawl_id
+                    )
+
+                    # --- Disk pre-flight (size of tar × 2 + 500MB floor) ---
+                    try:
+                        tar_size = os.path.getsize(archive_tar)
+                        required_bytes = max(int(tar_size * 2), 500 * 1024 * 1024)
+                        baseline_state = self._get_archives_disk_state(settings.CRAWLER_STORAGE_PATH)
+                        if baseline_state.get("free_bytes") is not None and baseline_state["free_bytes"] < required_bytes:
+                            raise HTTPException(
+                                status_code=503,
+                                detail={
+                                    "error_code": "INSUFFICIENT_DISK_SPACE",
+                                    "required_bytes": required_bytes,
+                                    "available_bytes": baseline_state["free_bytes"],
+                                    "disk_state": baseline_state,
+                                },
+                            )
+                    except HTTPException:
+                        raise
+                    except Exception as e:
+                        logger.warning(f"Disk pre-flight skipped for archived /html '{crawl_id}': {e}")
+
+                    # --- Extract archive (failure cleans the partial dataset) ---
+                    try:
+                        def _extract():
+                            os.makedirs(target_storage, exist_ok=True)
+                            with tarfile.open(archive_tar, 'r:gz') as tar:
+                                tar.extractall(path=target_storage, filter="data")
+                        await anyio.to_thread.run_sync(_extract)
+                        logger.info(f"Extracted archived /html archive for '{crawl_id}' to '{target_storage}'.")
+                    except Exception as e:
+                        logger.error(f"Extract failed for archived /html '{crawl_id}': {e}", exc_info=True)
+                        # Remove the partial dataset so a later call doesn't see it
+                        # as "present" and serve incomplete data.
+                        shutil.rmtree(target_storage, ignore_errors=True)
+                        raise HTTPException(
+                            status_code=status.HTTP_502_BAD_GATEWAY,
+                            detail={"error_code": "EXTRACT_FAILED", "exception": str(e)},
+                        )
+                    dataset_dir = self._dataset_dir_for_job(job_info)
+            finally:
+                await self._release_ownership_lock(unstash_lock_key, lock_value)
+
+        if not dataset_dir or not os.path.isdir(dataset_dir):
+            return None
+
+        target = self._normalize_url_key(url)
+
+        # Prefer the html_index.json the crawler now writes (Task 2); fall back to scan.
+        index_path = os.path.join(dataset_dir, "html_index.json")
+        if os.path.exists(index_path):
+            try:
+                with open(index_path, encoding="utf-8") as f:
+                    idx = json.load(f).get("index", {})
+                fname = idx.get(target)
+                if fname:
+                    with open(os.path.join(dataset_dir, fname), encoding="utf-8") as f:
+                        return json.load(f).get("content")
+            except Exception:
+                pass  # fall through to scan
+
+        for fname in os.listdir(dataset_dir):
+            if not fname.endswith(".json") or fname == "html_index.json":
+                continue
+            try:
+                with open(os.path.join(dataset_dir, fname), encoding="utf-8") as f:
+                    rec = json.load(f)
+                if self._normalize_url_key(rec.get("url", "")) == target:
+                    return rec.get("content")
+            except Exception:
+                continue
+        return None
 
     def _generate_archive_sync(self, job_info: dict, include: List[IncludeInArchive]) -> str:
         """
@@ -1879,6 +2087,37 @@ class CrawlerManager:
         logger.info(f"Re-indexing complete: {summary}")
         return ReindexResponse(**summary)
 
+    async def _finalize_completed_job(self, crawl_id: str, job_key: str,
+                                      job_info: dict, *, healed_by: str) -> None:
+        """Common finished-finalization for a crawl whose Node had already
+        COMPLETED (fresh exit-reason sidecar) when the service died — used by
+        both the shutdown guard and the reconcile crash-window heal.
+
+        State only — does NOT send the stop webhook. The two callers need
+        different delivery semantics (shutdown: bounded single-attempt,
+        awaited inline; reconcile: durable retry, must not block the
+        reconcile leader lock), so each sends it their own way after calling
+        this.
+        """
+        job_info["status"] = "finished"
+        job_info["shutdown_reason"] = healed_by
+        job_info.pop("last_heartbeat", None)
+        marker_path = os.path.join(job_info["storage_path"], '_completion_marker.json')
+        try:
+            async with aiofiles.open(marker_path, 'w') as f:
+                await f.write(json.dumps({
+                    "final_status": "finished",
+                    "healed_from_exit_reason": True,
+                    "finalized_at": datetime.utcnow().isoformat(),
+                }))
+        except Exception as e:
+            logger.warning(f"Could not write completion marker for '{crawl_id}': {e}")
+        self._stamp_terminal_fields(job_info)
+        await cache_service.set_json(job_key, job_info)
+        await cache_service.delete_key(f"{CRAWL_LOCK_PREFIX}{crawl_id}")
+        await cache_service.safe_decrement_key(CRAWL_RUNNING_COUNT_KEY)
+        await self._publish_update(crawl_id, "finished")
+
     async def _cleanup_running_job(self, crawl_id: str, process: asyncio.subprocess.Process):
         """Helper function to handle the cleanup of a single running job during shutdown."""
         logger.info(f"Cleaning up job '{crawl_id}' due to service shutdown.")
@@ -1891,6 +2130,21 @@ class CrawlerManager:
             # 2. Update state in Redis
             job_info = await cache_service.get_json(job_key)
             if job_info and job_info.get("status") in ("running", "restarting_oom"):
+                # Finalization-window guard (incident 2026-07-03, crawl 4296-362):
+                # the Node may have COMPLETED the crawl (exit-reason sidecar written,
+                # dataset + callback payload on disk) and only be flushing its last
+                # files when the service goes down. Killing it then must not turn a
+                # finished crawl into a failed one — finalize as finished instead.
+                if await self._exit_reason_completed_and_fresh(
+                        job_info.get("storage_path", ""), job_info.get("start_time")):
+                    logger.info(f"Job '{crawl_id}' had already COMPLETED (fresh exit-reason "
+                                f"sidecar) — finalizing as finished despite service shutdown.")
+                    await self._finalize_completed_job(
+                        crawl_id, job_key, job_info,
+                        healed_by="Service instance terminated after crawl completion")
+                    await self._send_stop_webhook(job_info, "finished", shutdown=True)
+                    return
+
                 job_info["status"] = "failed"
                 job_info["shutdown_reason"] = "Service instance terminated" # V3 Logic
                 job_info["failure_cause"] = "service_shutdown"
@@ -2332,21 +2586,16 @@ class CrawlerManager:
                                     pass
 
                     def _cleanup_local_data():
-                        """Remove crawl data files, keeping only logs and markers."""
-                        files_to_keep = {'crawler.log', '_callback_payload.json',
-                                         '_completion_marker.json', '_status_snapshot.json',
-                                         '_exit_reason.json', '_update_report.json',
-                                         'update_stats.json',
-                                         'timing.jsonl', 'timing-summary.json'}
-                        for root, dirs, files in os.walk(job_storage_path, topdown=False):
-                            for name in files:
-                                if name not in files_to_keep:
-                                    os.remove(os.path.join(root, name))
-                            for name in dirs:
-                                try:
-                                    os.rmdir(os.path.join(root, name))
-                                except OSError:
-                                    pass
+                        """Free the disk-heavy Crawlee tree (storage/: datasets,
+                        request_queues, key_value_stores). Everything else in the
+                        crawl dir (crawler.log, logs/, *.json sidecars) is small
+                        and kept for investigation — the tar holds a full copy."""
+                        heavy = os.path.join(job_storage_path, 'storage')
+                        if os.path.isdir(heavy):
+                            shutil.rmtree(heavy, ignore_errors=True)
+                            if os.path.exists(heavy):
+                                raise RuntimeError(
+                                    f"storage/ tree only partially removed at '{heavy}' — disk space may not have been freed")
 
                     # Step 1: Create archive
                     final_path, archive_size = await anyio.to_thread.run_sync(_create_archive)
@@ -2746,37 +2995,24 @@ class CrawlerManager:
                 await cache_service.set_json(job_key, fresh_job_info)
                 logger.info(f"Marked crawl '{crawl_id}' as stashed at {stashed_at} in Redis.")
 
-                # --- Cleanup data files; keep logs + markers (spec 2026-05-20 §5) ---
-                # Mirrors archive_crawl._cleanup_local_data so operator UX is
-                # consistent: ops can peek at logs locally without restoring via
-                # unstash. The tar contains everything; unstash restore is
-                # idempotent over kept files.
+                # --- Cleanup: remove ONLY the heavy Crawlee storage/ subtree; keep
+                # all root sidecars + logs (2026-07-04 change — decision/audit
+                # sidecars must survive stash for /admin/sidecar). Mirrors
+                # archive_crawl._cleanup_local_data. The tar contains everything;
+                # unstash restore is idempotent over kept files.
                 try:
                     def _cleanup_data_keep_logs():
-                        files_to_keep = {
-                            'crawler.log', '_callback_payload.json',
-                            '_completion_marker.json', '_status_snapshot.json',
-                            '_exit_reason.json', '_update_report.json',
-                            'update_stats.json',
-                            'timing.jsonl', 'timing-summary.json',
-                        }
                         if not os.path.isdir(job_storage_path):
                             return
-                        for root, dirs, files in os.walk(job_storage_path, topdown=False):
-                            for name in files:
-                                if name not in files_to_keep:
-                                    try:
-                                        os.remove(os.path.join(root, name))
-                                    except OSError:
-                                        pass
-                            for name in dirs:
-                                try:
-                                    os.rmdir(os.path.join(root, name))
-                                except OSError:
-                                    pass  # non-empty (kept file inside) → leave dir
+                        heavy = os.path.join(job_storage_path, 'storage')
+                        if os.path.isdir(heavy):
+                            shutil.rmtree(heavy, ignore_errors=True)
+                            if os.path.exists(heavy):
+                                raise RuntimeError(
+                                    f"storage/ tree only partially removed at '{heavy}' — disk space may not have been freed")
 
                     await anyio.to_thread.run_sync(_cleanup_data_keep_logs)
-                    logger.info(f"Cleaned data (kept logs) for stashed crawl '{crawl_id}'.")
+                    logger.info(f"Removed heavy storage/ tree for stashed crawl '{crawl_id}' (sidecars + logs kept).")
                 except Exception as e:
                     logger.warning(f"Data cleanup failed for stashed '{crawl_id}' (tar is safe): {e}")
 
@@ -3115,6 +3351,48 @@ class CrawlerManager:
             except Exception as release_err:
                 logger.warning(f"Could not release reconciliation leader lock: {release_err}")
 
+    async def _exit_reason_completed_and_fresh(self, storage_path: str,
+                                               job_start_time: Optional[str]) -> bool:
+        """True iff {storage_path}/_exit_reason.json (written by the Node
+        crawler's graceful shutdown, fsync'd) says reason == "COMPLETED" AND
+        its timestamp is AFTER the current run's start_time.
+
+        The timestamp check matters because a stale sidecar left over from a
+        PREVIOUS run of the same crawl_id (any start path that skipped the
+        relaunch purge in _cleanup_stale_state_for_relaunch) must never
+        qualify a half-done run as finished.
+
+        Fail-closed: missing/unreadable file, missing/unparseable
+        timestamps, or a non-COMPLETED reason all return False. Never raises
+        — used by both the shutdown guard and the reconcile crash-window
+        heal to decide whether a dead process had in fact already completed
+        its crawl."""
+        path = os.path.join(storage_path or "", '_exit_reason.json')
+        try:
+            async with aiofiles.open(path, 'r') as f:
+                data = json.loads(await f.read())
+        except FileNotFoundError:
+            return False
+        except Exception as e:
+            logger.warning(f"_exit_reason_completed_and_fresh: failed to read {path}: {e}")
+            return False
+        if data.get("reason") != "COMPLETED":
+            return False
+        ts_raw, start_raw = data.get("timestamp"), job_start_time
+        if not ts_raw or not start_raw:
+            return False
+        try:
+            # Node writes ISO-8601 UTC with trailing Z; Python start_time is a
+            # naive-UTC str. _parse_iso_naive_utc normalizes both the same way
+            # the stale-heartbeat check above does — reuse it instead of
+            # duplicating tz handling here.
+            exit_ts = _parse_iso_naive_utc(str(ts_raw))
+            start_ts = _parse_iso_naive_utc(str(start_raw))
+        except ValueError as e:
+            logger.warning(f"_exit_reason_completed_and_fresh: bad timestamp ({e})")
+            return False
+        return exit_ts > start_ts
+
     async def _load_completion_marker_or_none(self, storage_path: str) -> Optional[dict]:
         """
         Reads {storage_path}/_completion_marker.json and returns parsed dict if
@@ -3175,6 +3453,9 @@ class CrawlerManager:
           - {storage_path}/_completion_marker.json (any prior terminal marker:
             success, OOM-failure, OOM-relaunch-failure, force-finish, or
             reconciler-stale write — all 5 writers funnel here)
+          - {storage_path}/_exit_reason.json (prior run's Node exit-reason
+            sidecar — a stale COMPLETED would make the shutdown guard in
+            _cleanup_running_job wrongly finalize a resumed run as finished)
 
         Future items (deferred — see spec §7):
           - Stale crawl_lock:{crawl_id} Redis key
@@ -3199,6 +3480,18 @@ class CrawlerManager:
                 logger.info(f"Removed stale completion marker for crawl_id '{crawl_id}' (relaunch)")
             except OSError as e:
                 logger.warning(f"Could not remove stale completion marker for '{crawl_id}': {e}")
+
+        # 2. Exit-reason sidecar — a stale COMPLETED from the prior run would
+        #    make the shutdown guard in _cleanup_running_job finalize a
+        #    half-done resumed run as finished if the service shuts down
+        #    before the new run writes its own _exit_reason.json.
+        exit_reason_path = os.path.join(storage_path, '_exit_reason.json')
+        if os.path.isfile(exit_reason_path):
+            try:
+                os.unlink(exit_reason_path)
+                logger.info(f"Removed stale exit-reason sidecar for crawl_id '{crawl_id}' (relaunch)")
+            except OSError as e:
+                logger.warning(f"Could not remove stale exit-reason sidecar for '{crawl_id}': {e}")
 
     def _disk_used_pct(self, path: str = None) -> float:
         """Used-% of the crawl storage filesystem. Fail-open -> 0.0 (no pressure)."""
@@ -3446,6 +3739,26 @@ class CrawlerManager:
                         is_stopping = (status == "stopping")
                         final_status = "stopped" if is_stopping else "failed"
 
+                        # Crash-window heal (recovery-side twin of the shutdown
+                        # guard in _cleanup_running_job): the dead process may
+                        # have COMPLETED its crawl before it crashed — the
+                        # fsync'd exit-reason sidecar plus a timestamp newer
+                        # than this run's start_time proves it. Finalize
+                        # finished instead of sending a false failure to the
+                        # BO. Scoped to the non-stopping path only: a
+                        # "stopping" job's own webhook was already sent by the
+                        # stop request that put it in that state.
+                        if not is_stopping and await self._exit_reason_completed_and_fresh(
+                                job_data.get("storage_path", ""), job_data.get("start_time")):
+                            logger.info(f"Stale job '{crawl_id}' had actually COMPLETED "
+                                        f"(fresh exit-reason sidecar) — healing as finished.")
+                            await self._finalize_completed_job(
+                                crawl_id, all_job_keys[i], job_data,
+                                healed_by="Stale-detected after crawl completion (service crash)")
+                            asyncio.create_task(self._send_stop_webhook(job_data, "finished", shutdown=False))
+                            stale_jobs_count += 1
+                            continue
+
                         if is_stopping:
                             logger.info(f"Job '{crawl_id}' (status: stopping) is stale. Cleaning up as 'stopped' (stop webhook already sent).")
                         else:
@@ -3564,6 +3877,46 @@ class CrawlerManager:
             await cache_service.set_key(CRAWL_RUNNING_COUNT_KEY, true_running_count)
         else:
             logger.info(f"Reconciliation complete. Running: {true_running_count}, Stale/Fixed: {stale_jobs_count}")
+
+        # --- Webhook dead-letter drain (leader only, bounded per tick) ---
+        # Shutdown-path webhooks are single-attempt; failures land in
+        # FAILED_CALLBACKS_KEY (Fix A). Replay a bounded batch each tick —
+        # request_id in the stored params lets PHP dedupe replays.
+        try:
+            await self._drain_failed_callbacks()
+        except Exception as e:
+            logger.warning(f"Dead-letter drain failed this tick: {e}")
+
+    async def _drain_failed_callbacks(self) -> int:
+        """Replays a bounded batch of the webhook dead-letter queue (FAILED_CALLBACKS_KEY).
+
+        Called once per reconcile tick, leader-only (inside _reconcile_locked's
+        lock), so no multi-replica double-send — request_id dedupe on the PHP
+        side is the backstop anyway. Replays fire-and-forget via
+        _send_webhook_with_retry, which re-enqueues on exhaustion, so a failed
+        replay cycles back instead of being lost.
+
+        Returns the number of entries replayed (scheduled, not necessarily
+        delivered) this tick.
+
+        ponytail: LPOP+resend N per tick; dedicated worker only if backlog grows.
+        """
+        replayed = 0
+        for _ in range(WEBHOOK_DEADLETTER_DRAIN_PER_TICK):
+            raw = await cache_service.redis_client.lpop(FAILED_CALLBACKS_KEY)
+            if raw is None:
+                break
+            try:
+                entry = json.loads(raw)
+            except (json.JSONDecodeError, TypeError):
+                logger.warning(f"Dead-letter drain: dropping unparseable entry: {raw[:200]}")
+                continue
+            logger.info(f"Dead-letter drain: replaying {entry.get('webhook_type')} webhook "
+                        f"for crawl '{entry.get('crawl_id')}'.")
+            asyncio.create_task(self._send_webhook_with_retry(
+                entry["url"], entry["params"], entry["crawl_id"], entry["webhook_type"]))
+            replayed += 1
+        return replayed
 
     async def cleanup_archives(self, max_age_hours: int, delete_all: bool = False) -> Tuple[int, int, int]:
         """

@@ -3,6 +3,7 @@ import { StatsManager } from './StatsManager.js';
 import { JsonlWriter } from './JsonlWriter.js';
 import { PushedSet } from './PushedSet.js';
 import { rightTrimSlash, processUrl } from '../functions.js';
+import { hasIgnoredExtensionForSeed } from '../seedExtensionFilter.js';
 
 /**
  * Result returned by checkUrl for each processed page.
@@ -16,24 +17,10 @@ export interface CheckUrlResult {
 }
 
 /**
- * ignoredExtensions and FORBIDDEN_PARAMS — duplicated from routes.ts
- * to avoid circular imports. These are used for eligibility checks.
+ * FORBIDDEN_PARAMS — duplicated from routes.ts to avoid circular imports.
+ * Used for eligibility checks. Ignored-extension knowledge instead lives in
+ * seedExtensionFilter.ts (single source of truth, imported below).
  */
-const IGNORED_EXTENSIONS_SET = new Set([
-    // archives
-    "7z", "7zip", "bz2", "rar", "tar", "tar.gz", "xz", "zip",
-    // images
-    "mng", "pct", "bmp", "gif", "jpg", "jpeg", "png", "pst", "psp", "tif", "tiff",
-    "ai", "drw", "dxf", "eps", "ps", "svg", "cdr", "ico", "webp",
-    // audio
-    "mp3", "wma", "ogg", "wav", "ra", "aac", "mid", "au", "aiff",
-    // video
-    "3gp", "asf", "asx", "avi", "mov", "mp4", "mpg", "qt", "rm", "swf", "wmv", "m4a", "m4v", "flv", "webm",
-    // office suites
-    "xls", "xlsx", "ppt", "pptx", "pps", "doc", "docx", "odt", "ods", "odg", "odp",
-    // other
-    "css", "pdf", "exe", "bin", "rss", "dmg", "iso", "apk", "xml",
-]);
 
 // IMPORTANT: Keep in sync with FORBIDDEN_PARAMS in routes.ts
 const FORBIDDEN_PARAMS = [
@@ -108,22 +95,6 @@ export class UpdateChecker {
     }
 
     /**
-     * Check if a URL has a forbidden file extension.
-     */
-    private hasIgnoredExtension(url: string): boolean {
-        try {
-            const urlObj = new URL(url);
-            const pathname = urlObj.pathname;
-            const lastDot = pathname.lastIndexOf('.');
-            if (lastDot === -1) return false;
-            const ext = pathname.substring(lastDot + 1).toLowerCase();
-            return IGNORED_EXTENSIONS_SET.has(ext);
-        } catch {
-            return false;
-        }
-    }
-
-    /**
      * Check if a URL contains any forbidden query parameter.
      *
      * Pure check — no side effects. The `filtered_qm` stat is now incremented
@@ -157,7 +128,7 @@ export class UpdateChecker {
      */
     isEligible(url: string, isFrenchContent: boolean): boolean {
         // Check 1: Extension
-        if (this.hasIgnoredExtension(url)) {
+        if (hasIgnoredExtensionForSeed(url)) {
             return false;
         }
 

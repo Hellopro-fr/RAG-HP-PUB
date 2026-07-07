@@ -82,6 +82,13 @@ class InflightDedup:
             result = await factory()
         except BaseException as e:
             fut.set_exception(e)
+            # Mark the stored exception as retrieved. The owner already
+            # propagates `e` via the `raise` below; followers (if any) still
+            # observe it via `await fut`. Without this, when NO follower ever
+            # awaits the future, asyncio logs a spurious "Future exception was
+            # never retrieved" ERROR on GC — noise that floods logs during
+            # admission-rejection storms.
+            fut.exception()
             raise
         else:
             fut.set_result(result)

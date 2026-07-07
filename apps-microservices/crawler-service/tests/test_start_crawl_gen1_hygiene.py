@@ -24,6 +24,7 @@ import logging
 from collections import namedtuple
 from unittest.mock import AsyncMock
 import os as _os
+import copy
 
 import pytest
 
@@ -103,10 +104,17 @@ async def test_fresh_start_carries_stashed_at_and_unstashes_for_any_prior_status
     manager.unstash_crawl = AsyncMock(return_value={"status": "unstashed"})
     monkeypatch.setattr(manager, "_cleanup_stale_state_for_relaunch",
                         AsyncMock(side_effect=_Sentinel()))
+    # Snapshot writes at write-time: the resume path now pops stashed_at from the
+    # in-memory job_data right after the unstash, so a live await_args_list reference
+    # would no longer reflect the earlier fresh write that DID carry it.
+    written = []
+
+    async def _record_set_json(key, value, *a, **k):
+        written.append(copy.deepcopy(value))
+    cache_mocks["set_json"].side_effect = _record_set_json
     with pytest.raises(_Sentinel):
         await _call_start(manager)
     manager.unstash_crawl.assert_awaited_once()
-    written = _written_job_data(cache_mocks)
     assert any(d.get("stashed_at") == STASHED_AT for d in written), \
         f"fresh job_data write must preserve stashed_at for a '{prior_status}' prior"
 

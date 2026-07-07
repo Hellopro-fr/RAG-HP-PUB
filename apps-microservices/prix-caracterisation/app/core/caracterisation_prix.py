@@ -44,7 +44,7 @@ class CaracterisationPrixGenerator:
     # Prompts (chargés depuis action_prompt_chatgpt via l'API BO)
     PROMPT_CARACTERISATION_ID = settings.PROMPT_CARACTERISATION_ID
     PROMPT_REPASSE_ID = settings.PROMPT_REPASSE_ID
-    DEEPSEEK_MODEL = "deepseek-v4-flash"
+    DEEPSEEK_MODEL = "deepseek-v4-pro"
 
     # ID étape prix
     ETAPE = "13"
@@ -271,8 +271,10 @@ class CaracterisationPrixGenerator:
         jeu_carac_dict: Dict[Any, Dict],
     ) -> List[Dict[str, Any]]:
         """
-        Caractérisation LLM (2 passes : extraction + repasse de validation).
-        Pattern identique à QC-caracterisation.caracterise_produit + repasse_caracterisation.
+        Caractérisation LLM (passe unique : extraction).
+        Repasse de validation DÉSACTIVÉE avec DeepSeek v4-pro (une seule passe suffit),
+        en miroir de QC-caracterisation. Bloc conservé en commentaire pour la trace.
+        Pattern : QC-caracterisation.caracterise_produit.
         """
         titre = str(item.get("nom_produit", "") or "")
         description = str(item.get("description_produit", "") or item.get("text", "") or "")
@@ -328,50 +330,51 @@ class CaracterisationPrixGenerator:
         if not produit_caract:
             return []
 
-        # Pass 2 : repasse de validation
-        carac_referentiel = [
-            jeu_carac_dict[c.get("id_caracteristique")]
-            for c in produit_caract
-            if c.get("id_caracteristique") in jeu_carac_dict
-        ]
-
-        if carac_referentiel:
-            prompt_config_r = self.prompt_repasse.copy()
-            prompt_text_r = prompt_config_r["contenu_prompt"]
-            prompt_text_r = prompt_text_r.replace("{JEU_CARACTERISTIQUE}", utils.to_json_string(carac_referentiel))
-            prompt_text_r = prompt_text_r.replace("{CARACTERISTIQUE_PRODUIT}", utils.to_json_string(produit_caract))
-            prompt_text_r = prompt_text_r.replace("{CATEGORIE}", nom_rubrique)
-            prompt_text_r = prompt_text_r.replace("{TITRE_DESCRIPTION}", f"{titre} {description}")
-
-            temperature_r = float(prompt_config_r.get("temperature") or 0.1)
-            deepseek_r = DeepSeek(temperature=temperature_r, max_retries=5)
-            result_r = await asyncio.to_thread(deepseek_r.chat, prompt_text_r)
-
-            is_error_r = "code" in result_r
-            response_obj_r = result_r.get("response")
-            if response_obj_r and hasattr(response_obj_r, "usage"):
-                await self.api_client.log_llm_usage(
-                    type_ia=2,
-                    model=self.DEEPSEEK_MODEL,
-                    input_token=response_obj_r.usage.prompt_tokens or 0,
-                    output_token=response_obj_r.usage.completion_tokens or 0,
-                    id_process=self.ID_PROCESS,
-                    origine="prix-caracterisation-repasse",
-                    etat=2 if is_error_r else 1,
-                    retour_erreur=str(result_r.get("error", "")) if is_error_r else "",
-                    temperature=temperature_r,
-                )
-            if is_error_r:
-                raise Exception(f"Erreur LLM repasse: {result_r.get('error')}")
-
-            response_text_r = (result_r.get("content") or "").strip()
-            self._log(f"Pass 2 (repasse) réponse LLM: {response_text_r[:200]}...")
-            json_data_r = utils.extract_json_from_text(response_text_r)
-
-            if json_data_r is None and re.sub(r"[^\[\]]", "", response_text_r) == "[]":
-                return []
-            if json_data_r is not None and (json_data_r or json_data_r == []):
-                produit_caract = json_data_r if isinstance(json_data_r, list) else [json_data_r]
+        # Pass 2 : repasse de validation — DÉSACTIVÉE avec DeepSeek v4-pro (passe unique).
+        # Conservée en commentaire pour garder la trace et pouvoir la réactiver si besoin.
+        # carac_referentiel = [
+        #     jeu_carac_dict[c.get("id_caracteristique")]
+        #     for c in produit_caract
+        #     if c.get("id_caracteristique") in jeu_carac_dict
+        # ]
+        #
+        # if carac_referentiel:
+        #     prompt_config_r = self.prompt_repasse.copy()
+        #     prompt_text_r = prompt_config_r["contenu_prompt"]
+        #     prompt_text_r = prompt_text_r.replace("{JEU_CARACTERISTIQUE}", utils.to_json_string(carac_referentiel))
+        #     prompt_text_r = prompt_text_r.replace("{CARACTERISTIQUE_PRODUIT}", utils.to_json_string(produit_caract))
+        #     prompt_text_r = prompt_text_r.replace("{CATEGORIE}", nom_rubrique)
+        #     prompt_text_r = prompt_text_r.replace("{TITRE_DESCRIPTION}", f"{titre} {description}")
+        #
+        #     temperature_r = float(prompt_config_r.get("temperature") or 0.1)
+        #     deepseek_r = DeepSeek(temperature=temperature_r, max_retries=5)
+        #     result_r = await asyncio.to_thread(deepseek_r.chat, prompt_text_r)
+        #
+        #     is_error_r = "code" in result_r
+        #     response_obj_r = result_r.get("response")
+        #     if response_obj_r and hasattr(response_obj_r, "usage"):
+        #         await self.api_client.log_llm_usage(
+        #             type_ia=2,
+        #             model=self.DEEPSEEK_MODEL,
+        #             input_token=response_obj_r.usage.prompt_tokens or 0,
+        #             output_token=response_obj_r.usage.completion_tokens or 0,
+        #             id_process=self.ID_PROCESS,
+        #             origine="prix-caracterisation-repasse",
+        #             etat=2 if is_error_r else 1,
+        #             retour_erreur=str(result_r.get("error", "")) if is_error_r else "",
+        #             temperature=temperature_r,
+        #         )
+        #     if is_error_r:
+        #         raise Exception(f"Erreur LLM repasse: {result_r.get('error')}")
+        #
+        #     response_text_r = (result_r.get("content") or "").strip()
+        #     self._log(f"Pass 2 (repasse) réponse LLM: {response_text_r[:200]}...")
+        #     json_data_r = utils.extract_json_from_text(response_text_r)
+        #
+        #     if json_data_r is None and re.sub(r"[^\[\]]", "", response_text_r) == "[]":
+        #         return []
+        #     if json_data_r is not None and (json_data_r or json_data_r == []):
+        #         produit_caract = json_data_r if isinstance(json_data_r, list) else [json_data_r]
 
         return produit_caract
 
