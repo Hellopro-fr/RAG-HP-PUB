@@ -3,7 +3,7 @@
 import { useEffect, useRef } from 'react';
 import { Loader2 } from 'lucide-react';
 import { useIframeAutoRetry } from '@/hooks/useIframeAutoRetry';
-import { handleFormStepMessage, resetFormStepUri } from '@/lib/analytics/formFunnelBridge';
+import { handleFormStepMessage, resetFormStepUri, pushFormValidationIfNeeded } from '@/lib/analytics/formFunnelBridge';
 import { pushPopupAppelOffre } from '@/lib/analytics/gtm';
 import { sendPageView, resolveTrackingSessionId } from '@/lib/analytics/sessionTracking';
 
@@ -95,6 +95,10 @@ export function IframeProduitModal({
       if (data?.status === 'success' && typeof data.extraData === 'string') {
         const url = data.extraData;
         if (/^https?:/.test(url)) {
+          // Valide (page-remerciement) de façon déterministe AVANT la redirection : le relais du
+          // funnel final peut arriver après le window.top.location (course) et être perdu.
+          // Dédupliqué avec un éventuel relais déjà reçu → une seule validation.
+          pushFormValidationIfNeeded(pushedStepsRef.current);
           onClose();
           window.top!.location.href = url;
         }
