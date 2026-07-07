@@ -10,7 +10,7 @@ export interface LoginStart {
 }
 
 export async function startLogin(): Promise<LoginStart> {
-  const cfg = getAuthConfig()
+  const cfg = await getAuthConfig()
   const { verifier, challenge } = await generatePkce()
   const state = randomState()
   const authorizeUrl = buildAuthorizeUrl({
@@ -34,7 +34,7 @@ export async function completeCallback(input: {
   stateCookie?: string
   verifierCookie?: string
 }): Promise<CallbackResult> {
-  const cfg = getAuthConfig()
+  const cfg = await getAuthConfig()
 
   if (!input.code || !input.state) return { status: "error", reason: "missing_code_or_state" }
   if (!input.stateCookie || input.stateCookie !== input.state) {

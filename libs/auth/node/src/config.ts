@@ -25,12 +25,45 @@ export function deriveClientEnvKeys(serviceName: string): [string, string] {
   return [`ACCOUNT_CLIENT_ID_${slug}`, `ACCOUNT_CLIENT_SECRET_${slug}`]
 }
 
-// Resolve (clientId, clientSecret) by SERVICE_NAME-derived keys, falling back to
-// plain ACCOUNT_CLIENT_ID / ACCOUNT_CLIENT_SECRET. Same contract as the Go/Python clients.
-export function resolveClientCredentials(env: Env = process.env): {
-  clientId: string
-  clientSecret: string
-} {
+// Module-level memo of creds fetched from the internal API (keyed by service name).
+const _fetchedCredsCache = new Map<string, { clientId: string; clientSecret: string }>()
+
+// Test-only: clear the fetched-credentials memo so cases are isolated.
+export function __resetClientCredentialsCache(): void {
+  _fetchedCredsCache.clear()
+}
+
+// Fetch (clientId, clientSecret) from account-service's admin-gated internal endpoint.
+// Mirrors libs/account-client-go credentials_api.go GetCredentialsFromAPI.
+async function fetchClientCredentialsFromApi(
+  baseUrl: string,
+  serviceName: string,
+  adminToken: string,
+): Promise<{ clientId: string; clientSecret: string }> {
+  const cached = _fetchedCredsCache.get(serviceName)
+  if (cached) return cached
+  const url = `${baseUrl.replace(/\/+$/, "")}/internal/credentials/${encodeURIComponent(serviceName)}`
+  const r = await fetch(url, { headers: { "X-Admin-Token": adminToken } })
+  if (r.status === 404) {
+    throw new Error(`[account-auth] no active service named "${serviceName}" in account-service`)
+  }
+  if (!r.ok) {
+    throw new Error(`[account-auth] internal credentials endpoint returned ${r.status}`)
+  }
+  const body = (await r.json()) as { client_id?: string; client_secret?: string }
+  if (!body.client_id || !body.client_secret) {
+    throw new Error("[account-auth] internal credentials response missing fields")
+  }
+  const creds = { clientId: body.client_id, clientSecret: body.client_secret }
+  _fetchedCredsCache.set(serviceName, creds)
+  return creds
+}
+
+// Resolve (clientId, clientSecret): SERVICE_NAME-derived env keys, then plain env,
+// then (if ACCOUNT_INTERNAL_TOKEN set) the account-service internal API. Env wins.
+export async function resolveClientCredentials(
+  env: Env = process.env,
+): Promise<{ clientId: string; clientSecret: string }> {
   const serviceName = (env.SERVICE_NAME || "").trim()
   if (serviceName) {
     const [idKey, secretKey] = deriveClientEnvKeys(serviceName)
@@ -41,10 +74,14 @@ export function resolveClientCredentials(env: Env = process.env): {
   if (env.ACCOUNT_CLIENT_ID && env.ACCOUNT_CLIENT_SECRET) {
     return { clientId: env.ACCOUNT_CLIENT_ID, clientSecret: env.ACCOUNT_CLIENT_SECRET }
   }
+  if (serviceName && env.ACCOUNT_INTERNAL_TOKEN && env.ACCOUNT_BASE_URL) {
+    return fetchClientCredentialsFromApi(env.ACCOUNT_BASE_URL, serviceName, env.ACCOUNT_INTERNAL_TOKEN)
+  }
   throw new Error(
     "[account-auth] Missing account-service credentials: set " +
       "ACCOUNT_CLIENT_ID_<SERVICE_NAME> + ACCOUNT_CLIENT_SECRET_<SERVICE_NAME>, " +
-      "or plain ACCOUNT_CLIENT_ID + ACCOUNT_CLIENT_SECRET",
+      "plain ACCOUNT_CLIENT_ID + ACCOUNT_CLIENT_SECRET, " +
+      "or SERVICE_NAME + ACCOUNT_INTERNAL_TOKEN (+ ACCOUNT_BASE_URL) for the internal API",
   )
 }
 
@@ -67,8 +104,8 @@ export interface AuthConfig {
   centralLogout: boolean
 }
 
-export function getAuthConfig(env: Env = process.env): AuthConfig {
-  const { clientId, clientSecret } = resolveClientCredentials(env)
+export async function getAuthConfig(env: Env = process.env): Promise<AuthConfig> {
+  const { clientId, clientSecret } = await resolveClientCredentials(env)
   const ttl = Number(env.SESSION_TTL || "28800")
   if (!Number.isFinite(ttl) || ttl <= 0) {
     throw new Error(`[redis-client] SESSION_TTL must be a positive integer, got: ${env.SESSION_TTL}`)
