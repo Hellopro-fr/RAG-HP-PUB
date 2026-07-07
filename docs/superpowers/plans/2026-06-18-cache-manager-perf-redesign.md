@@ -214,8 +214,11 @@ const fake = {
 
 vi.mock("redis", () => ({ createClient: () => fake }))
 
-// Import AFTER the mock is registered.
-const { RedisCacheRepository } = await import("@/lib/infrastructure/redis-cache-repository")
+// Static import — vitest hoists vi.mock above imports, so this receives the mock.
+// (Do NOT use top-level `await import`: it triggers TS1378 under tsconfig target ES6,
+// and `next build` runs with ignoreBuildErrors:false over **/*.ts.)
+import { RedisCacheRepository } from "@/lib/infrastructure/redis-cache-repository"
+
 const repo = new RedisCacheRepository()
 
 beforeEach(() => {
@@ -370,8 +373,9 @@ vi.mock("@/lib/infrastructure/redis-cache-repository", () => ({
   },
 }))
 
-const { listCacheKeys, invalidateCacheEntry } = await import("@/app/actions/cache-actions")
-const { cacheRepository } = await import("@/lib/infrastructure/redis-cache-repository")
+// Static imports — vitest hoists vi.mock above imports (avoids TS1378 under target ES6).
+import { listCacheKeys, invalidateCacheEntry } from "@/app/actions/cache-actions"
+import { cacheRepository } from "@/lib/infrastructure/redis-cache-repository"
 
 beforeEach(() => vi.clearAllMocks())
 
