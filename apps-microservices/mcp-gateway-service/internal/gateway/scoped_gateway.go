@@ -87,8 +87,14 @@ type ScopedGateway struct {
 	allowedTools map[string]map[string]bool // server_id → tool_name → true; nil = all tools
 	// instructions are the LLM instruction snippets the token / OAuth2 client
 	// has selected (already filtered by allowed servers upstream). Rendered into
-	// the MCP initialize response's `instructions` field.
+	// the MCP initialize response's `instructions` field — or, when
+	// injectInstructionsIntoTools is set, appended to tool descriptions.
 	instructions []InstructionView
+	// injectInstructionsIntoTools mirrors the OAuth2 client flag: deliver the
+	// instructions through tool descriptions (tools/list) instead of the
+	// initialize `instructions` field, for hosts that ignore the latter
+	// (claude.ai web). Never both — that would double-inject on compliant hosts.
+	injectInstructionsIntoTools bool
 	// leexiAdmin (optional) is used to expand "teams" filter mode to user
 	// UUIDs at request time. nil = no team expansion (treat empty list).
 	leexiAdmin *leexiadmin.Client
@@ -135,6 +141,13 @@ func NewScopedGateway(gw *Gateway, allowedServerIDs map[string]bool, allowedTool
 	}
 }
 
+// SetInjectInstructionsIntoTools switches instruction delivery from the
+// initialize `instructions` field to tool descriptions. Called by the scope
+// factory when the active OAuth2 client carries the flag.
+func (sg *ScopedGateway) SetInjectInstructionsIntoTools(v bool) {
+	sg.injectInstructionsIntoTools = v
+}
+
 // Handle dispatches a JSON-RPC request with scope filtering.
 func (sg *ScopedGateway) Handle(ctx context.Context, req *mcp.Request) *mcp.Response {
 	switch req.Method {
@@ -170,7 +183,11 @@ func (sg *ScopedGateway) handleInitialize(ctx context.Context, req *mcp.Request)
 		ProtocolVersion: mcp.ProtocolVersion,
 		Capabilities:    caps,
 		ServerInfo:      mcp.Implementation{Name: name, Version: sg.version},
-		Instructions:    ComposeInstructions(sg.instructions, name),
+	}
+	// Tool-description injection mode omits the initialize field entirely so
+	// hosts that honor both channels never receive the text twice.
+	if !sg.injectInstructionsIntoTools {
+		result.Instructions = ComposeInstructions(sg.instructions, name)
 	}
 	return okResp(req.ID, result)
 }
@@ -186,10 +203,7 @@ func (sg *ScopedGateway) handleToolsList(ctx context.Context, req *mcp.Request) 
 	zohoBackends := sg.zohoBackendsInScope()
 	if !hasEmail || len(zohoBackends) == 0 {
 		tools := sg.registry.MergedToolsFilteredWithTools(sg.allowedIDs, sg.allowedTools)
-		if tools == nil {
-			tools = []mcp.Tool{}
-		}
-		return okResp(req.ID, mcp.ListToolsResult{Tools: tools})
+		return sg.toolsListResp(req.ID, tools, nil)
 	}
 
 	// When the viewer is not configured for Zoho (no admin row + no per-user
@@ -203,21 +217,41 @@ func (sg *ScopedGateway) handleToolsList(ctx context.Context, req *mcp.Request) 
 		if !state.Configured {
 			log.Printf("[scoped] tools/list email=%s: zoho catalog unconfigured (granted=%t) — omitting %d zoho backend(s) from result", email, granted, len(zohoBackends))
 			tools := sg.registry.MergedToolsFilteredWithTools(sg.nonZohoAllowedIDs(zohoBackends), sg.allowedTools)
-			if tools == nil {
-				tools = []mcp.Tool{}
-			}
-			return okResp(req.ID, mcp.ListToolsResult{Tools: tools})
+			return sg.toolsListResp(req.ID, tools, nil)
 		}
 	}
 
 	tools := sg.registry.MergedToolsFilteredWithTools(sg.nonZohoAllowedIDs(zohoBackends), sg.allowedTools)
+	// Live-fetched Zoho tools are absent from the registry index — record
+	// their owning backend so per-server instruction rows still reach them.
+	zohoIndex := make(map[string]string)
 	for _, b := range zohoBackends {
-		tools = append(tools, sg.fetchZohoTools(ctx, b)...)
+		zt := sg.fetchZohoTools(ctx, b)
+		for _, t := range zt {
+			zohoIndex[t.Name] = b.ID
+		}
+		tools = append(tools, zt...)
 	}
+	return sg.toolsListResp(req.ID, tools, zohoIndex)
+}
+
+// toolsListResp finalizes a tools/list result. When tool-description
+// injection is enabled, it appends the scope's instruction blocks to the
+// matching tool descriptions (general rows → every tool, per_server rows →
+// that server's tools). extraIndex supplements the registry's tool→server
+// index for live-fetched tools the registry doesn't know (per-user Zoho).
+func (sg *ScopedGateway) toolsListResp(id json.RawMessage, tools []mcp.Tool, extraIndex map[string]string) *mcp.Response {
 	if tools == nil {
 		tools = []mcp.Tool{}
 	}
-	return okResp(req.ID, mcp.ListToolsResult{Tools: tools})
+	if sg.injectInstructionsIntoTools && len(sg.instructions) > 0 {
+		idx := sg.registry.ToolServerIndex(sg.allowedIDs)
+		for name, sid := range extraIndex {
+			idx[name] = sid
+		}
+		tools = DecorateToolsWithInstructions(tools, sg.instructions, idx, sg.name)
+	}
+	return okResp(id, mcp.ListToolsResult{Tools: tools})
 }
 
 // nonZohoAllowedIDs returns sg.allowedIDs minus every backend in zohoBackends.

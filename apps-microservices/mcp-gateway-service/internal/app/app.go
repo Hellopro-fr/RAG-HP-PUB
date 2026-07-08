@@ -459,10 +459,15 @@ func mountMCPTransports(
 			for _, ri := range resolved {
 				instructions = append(instructions, gateway.InstructionView{
 					ID: ri.ID, Title: ri.Title, Body: ri.Body,
+					Kind: ri.Kind, ServerIDs: ri.ServerIDs,
 				})
 			}
 		}
-		return gateway.NewScopedGateway(gw, allowedIDs, allowedTools, instructions)
+		sg := gateway.NewScopedGateway(gw, allowedIDs, allowedTools, instructions)
+		if scopetoken.InjectInstructionsIntoToolsFromContext(ctx) {
+			sg.SetInjectInstructionsIntoTools(true)
+		}
+		return sg
 	}
 
 	mcpMux := http.NewServeMux()
