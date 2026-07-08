@@ -1,0 +1,98 @@
+name: 'Deploy — api-embedding-service'
+
+# Wrapper qui appelle deploy-cloud-run.yml pour api-embedding-service
+# (Python FastAPI, port 8555).
+#
+# Deploiement PARALLELE (shadow) : le service tourne sur Cloud Run sans rerouter
+# aucun trafic. La VM continue de servir via api-gateway.
+#
+# *** SERVICE DE PREUVE E2E DE L'ENABLER gRPC -> GPU ***
+# Contrairement a api-chat-llm (qui teste seulement l'egress LLM en lazy),
+# ce service appelle REELLEMENT le GPU en gRPC des qu'on frappe ses endpoints :
+#   POST /embedding  -> common_utils embedding_client -> EMBEDDING_SERVICE_URL
+#   POST /reranking  -> common_utils reranking_client -> RERANKING_SERVICE_URL
+# Les deux clients utilisent grpc.aio.insecure_channel (plaintext HTTP/2),
+# compatible avec le proxy haproxy TCP passthrough sur la VM GPU.
+#
+# Chemin prouve : Cloud Run (eu-west1) -> VPC Connector (10.0.2.0/28)
+#   -> firewall allow-cr-eu-to-vm-gpu-grpc -> proxy grpc-gpu-proxy (10.11.0.2)
+#     -> 15052 -> embedding-model-service:50052 (GPU)
+#     -> 15053 -> reranking-model-service:50053 (GPU)
+#
+# VPC Connector + egress private-ranges-only OBLIGATOIRES (cible = IP interne 10.11.0.2).
+
+on:
+  push:
+    branches:
+      - 'feat/migration-**'
+    paths:
+      - 'apps-microservices/api-embedding-service/**'
+      - '.github/workflows/deploy-api-embedding-service.yml'
+      - '.github/workflows/deploy-cloud-run.yml'
+  workflow_dispatch:
+    inputs:
+      cloud_run_region:
+        description: 'Région Cloud Run (override)'
+        required: false
+        type: string
+        default: 'europe-west1'
+
+permissions:
+  id-token: write   # WIF OIDC vers GCP
+  contents: read    # checkout du code
+
+jobs:
+  deploy:
+    name: 'Deploy api-embedding-service'
+    uses: ./.github/workflows/deploy-cloud-run.yml
+    with:
+      service_name: api-embedding-service
+      dockerfile_path: apps-microservices/api-embedding-service/Dockerfile
+      # Build context = racine du repo (le Dockerfile COPY protos/ + libs/ + apps-microservices/).
+      build_context: .
+      cloud_run_region: ${{ github.event.inputs.cloud_run_region || 'europe-west1' }}
+      ingress: all
+      allow_unauthenticated: true
+      cpu: '1'
+      memory: '512Mi'
+      # Shadow : pas de trafic route -> scale-to-zero.
+      min_instances: 0
+      max_instances: 3
+      # CMD gunicorn --bind 0.0.0.0:8555 (hardcode dans le Dockerfile).
+      container_port: 8555
+      # Pas de /health : la racine "/" renvoie le message de bienvenue (200).
+      health_check_path: /
+      # *** VPC Connector requis : cible gRPC = IP interne VM GPU (10.11.0.2) via proxy ***
+      vpc_connector: vpc-access-connector
+      vpc_egress: private-ranges-only
+      # EMBEDDING_SERVICE_URL / RERANKING_SERVICE_URL -> proxy grpc-gpu-proxy (enabler).
+      # ZILLIZ_/QDRANT_/M_/EF_ : requis par le Settings() pydantic au startup (inertes ici,
+      # aucune connexion Milvus/Qdrant ouverte par /embedding ni /reranking).
+      env_vars_json: |
+        {
+          "EMBEDDING_SERVICE_URL": "10.11.0.2:15052",
+          "RERANKING_SERVICE_URL": "10.11.0.2:15053",
+          "SERVICE_NAME": "api-embedding-service",
+          "ZILLIZ_URI": "milvus-prod.hello.dev.private.com",
+          "ZILLIZ_PORT": "19530",
+          "ZILLIZ_API_KEY": "none",
+          "QDRANT_HOST_URL": "10.0.1.237",
+          "QDRANT_PORT": "6333",
+          "QDRANT_API_KEY": "none",
+          "M_PARAMS": "32",
+          "EF_PARAMS": "300"
+        }
+      # Secrets requis par le Settings() (inertes pour le test gRPC). Reutilise les
+      # platform-* existants + platform-key-webhook (cree pour api-chat-llm) -> 0 nouveau secret.
+      secret_env_vars_json: |
+        {
+          "OPENAI_API_KEY": "platform-openai-api-key:latest",
+          "OPENROUTER_API_KEY": "platform-openrouter-api-key:latest",
+          "DEEPSEEK_API_KEY": "platform-deepseek-api-key:latest",
+          "RABBITMQ_URL": "platform-rabbitmq-url:latest",
+          "KEY_WEBHOOK": "platform-key-webhook:latest"
+        }
+      # Gate Trivy desactive : base python:3.10-slim (CVE HIGH build deps connues). Dette tracee.
+      trivy_disable_gate: true
+    secrets:
+      slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
