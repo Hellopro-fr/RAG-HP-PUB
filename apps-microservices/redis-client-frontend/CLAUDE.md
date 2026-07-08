@@ -47,9 +47,9 @@ lib/
     oauth.ts                  # PKCE S256 gen, authorize URL, token exchange, HS256 token verify
     session.ts                # Sign/verify rcf_session cookie (HS256 via SESSION_SECRET)
     flow.ts                   # startLogin/completeCallback orchestration (framework-free)
-  domain/cache-entry.ts      # CacheEntry + CacheMetadata interfaces
-  infrastructure/             # Redis repository (Singleton + SCAN)
-  application/                # getCachedData use case (parallel fetches)
+  domain/cache-entry.ts      # KeyMeta interface (key/type/ttl/size)
+  infrastructure/             # Redis repository (Singleton; scanKeys/getKeyMeta/dbSize)
+  application/                # scan-state.ts (pure scan transitions + glob builder)
   utils.ts                    # cn(), formatBytes()
 public/
 ```
@@ -58,7 +58,7 @@ public/
 
 - `output: 'standalone'` in next.config.mjs
 - TypeScript build errors are enforced (`ignoreBuildErrors: false`)
-- Redis uses `SCAN` (not `KEYS *`) for non-blocking key enumeration
+- Redis uses paginated `SCAN` (not `KEYS *`); the browser is **consent-gated** — opening `/` makes zero Redis contact until the operator confirms a scan. Each page reads `TTL`/`TYPE`/`MEMORY USAGE` per key, never `GET` (values are not displayed). Total Keys = `DBSIZE`; there is no aggregate size (would require a full scan). If the shared Redis grows large enough that even paginated scans matter, point this UI at a read replica (`REDIS_HOST`).
 - **Authentication via account-service SSO (OAuth 2.1 + PKCE S256):**
   - `middleware.ts` gates every route on a signed `rcf_session` cookie (HS256, `SESSION_SECRET`).
   - Unauthenticated GET → `/auth/login` → account-service `/authorize` (PKCE S256, `code_challenge_method=S256`).
