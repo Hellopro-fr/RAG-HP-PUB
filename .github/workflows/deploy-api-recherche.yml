@@ -65,7 +65,10 @@ jobs:
       # de demarrage -> crash-loop 503. On repasse a 2 workers et on laisse Cloud Run scaler
       # par INSTANCES (concurrence 80). cpu-boost accelere le cold start (imports lourds). ***
       container_command: python
-      container_args: '-m,gunicorn,-w,2,-k,uvicorn.workers.UvicornWorker,--bind,0.0.0.0:8510,--timeout,120,--access-logfile,-,--error-logfile,-,main:app'
+      # NB : pas de "--access-logfile,-" / "--error-logfile,-" -> gcloud --args refuse le
+      # tiret nu "-" repete. Gunicorn logue sur stdout/stderr par defaut (capture Cloud Run) ;
+      # le middleware de l'app logue deja chaque requete.
+      container_args: '-m,gunicorn,-w,2,-k,uvicorn.workers.UvicornWorker,--bind,0.0.0.0:8510,--timeout,120,main:app'
       startup_cpu_boost: true
       # Health = /openapi.json (fourni par FastAPI, 200 fiable). PAS "/" : read_root fait
       # `await cache_or_execute(lambda: ...)` -> await d'un lambda sync -> TypeError 500
