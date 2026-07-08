@@ -50,6 +50,6 @@ class Settings:
     FEATURE_CACHE_TTL_S: int = int(os.getenv("FEATURE_CACHE_TTL_S", "604800"))
     # Algorithm version tag in the cache key. Bump when trim_borders / extract_features change
     # so old (incompatible) cached features are ignored rather than mixed in.
-    FEATURE_CACHE_VERSION: str = os.getenv("FEATURE_CACHE_VERSION", "v2")  # v2: alpha flattened on white (2026-07-07)
+    FEATURE_CACHE_VERSION: str = os.getenv("FEATURE_CACHE_VERSION", "v3")  # v2: alpha flattened; v3: tolerant trim_borders (2026-07-08)
 
 settings = Settings()
