@@ -1,0 +1,110 @@
+name: 'Deploy — api-classification'
+
+# Wrapper qui appelle deploy-cloud-run.yml pour api-classification
+# (Python FastAPI, classification produits par LLM, port 8577).
+#
+# Deploiement PARALLELE (shadow) : le service tourne sur Cloud Run sans rerouter
+# aucun trafic. La VM continue de servir via api-gateway.
+#
+# *** BATCH 3B — prouve le 4e et DERNIER port de l'enabler : le LLM gRPC (15051) ***
+# /classify avec llm="Qwen" enchaine :
+#   1. recherche des categories candidates -> api_recherche_lib.search_in_milvus
+#      -> embedding (15052) + database (15054) + reranking (15053)
+#   2. classification par le LLM Qwen -> llm_client.get_llm_chat_response
+#      -> LLM_SERVICE_URL (15051 -> llm-service GPU)  [1re preuve E2E du LLM gRPC]
+# Clients grpc.aio.insecure_channel (plaintext) -> proxy haproxy TCP grpc-gpu-proxy.
+#
+# Le Dockerfile copie api-recherche/app -> api_recherche_lib ; son credentials.py fait
+# `settings = Settings()` a l'import -> TOUTES les vars ZILLIZ/QDRANT/RABBITMQ/LLM keys/M/EF
+# sont OBLIGATOIRES au startup (meme si /classify n'ouvre pas de connexion Milvus directe :
+# la recherche passe par database_client gRPC). LECTURE SEULE (search).
+#
+# optimize=false par defaut -> l'appel HTTP vers optimize-service (VM, non migre/injoignable
+# depuis CR) N'EST PAS declenche. Ne pas passer optimize=true tant qu'optimize-service n'est
+# pas migre.
+#
+# CMD = uvicorn mono-process (pas de gunicorn -w N) -> pas d'override workers necessaire.
+# startup_cpu_boost pour accelerer le cold start (imports lourds : api_recherche_lib + pymilvus).
+#
+# VPC Connector + egress private-ranges-only OBLIGATOIRES (cibles gRPC = IP interne 10.11.0.2).
+
+on:
+  push:
+    branches:
+      - 'feat/migration-**'
+    paths:
+      - 'apps-microservices/api-classification/**'
+      - '.github/workflows/deploy-api-classification.yml'
+      - '.github/workflows/deploy-cloud-run.yml'
+  workflow_dispatch:
+    inputs:
+      cloud_run_region:
+        description: 'Région Cloud Run (override)'
+        required: false
+        type: string
+        default: 'europe-west1'
+
+permissions:
+  id-token: write   # WIF OIDC vers GCP
+  contents: read    # checkout du code
+
+jobs:
+  deploy:
+    name: 'Deploy api-classification'
+    uses: ./.github/workflows/deploy-cloud-run.yml
+    with:
+      service_name: api-classification
+      dockerfile_path: apps-microservices/api-classification/Dockerfile
+      # Build context = racine du repo (COPY protos/ + libs/ + apps-microservices/api-recherche + api-classification).
+      build_context: .
+      cloud_run_region: ${{ github.event.inputs.cloud_run_region || 'europe-west1' }}
+      ingress: all
+      allow_unauthenticated: true
+      cpu: '1'
+      # 1Gi : imports lourds (api_recherche_lib + pymilvus + grpc + common_utils).
+      memory: '1Gi'
+      # Shadow : pas de trafic route -> scale-to-zero.
+      min_instances: 0
+      max_instances: 3
+      # CMD uvicorn --port 8577 (hardcode dans le Dockerfile, mono-process).
+      container_port: 8577
+      # Cold start plus rapide (imports lourds). Pas d'override commande : deja mono-uvicorn.
+      startup_cpu_boost: true
+      # Vrai endpoint health (retourne {"status":"healthy"}).
+      health_check_path: /health
+      # *** VPC Connector requis : cibles gRPC = IP interne VM GPU (10.11.0.2) via proxy ***
+      vpc_connector: vpc-access-connector
+      vpc_egress: private-ranges-only
+      # 4 cibles gRPC -> proxy grpc-gpu-proxy (enabler complet). ZILLIZ_/QDRANT_/M_/EF_ requis
+      # par api_recherche_lib.credentials.Settings() au startup (inertes : search via gRPC).
+      env_vars_json: |
+        {
+          "LLM_SERVICE_URL": "10.11.0.2:15051",
+          "EMBEDDING_SERVICE_URL": "10.11.0.2:15052",
+          "RERANKING_SERVICE_URL": "10.11.0.2:15053",
+          "DATABASE_SERVICE_URL": "10.11.0.2:15054",
+          "SERVICE_NAME": "api-classification",
+          "ZILLIZ_URI": "milvus-prod.hello.dev.private.com",
+          "ZILLIZ_PORT": "19530",
+          "ZILLIZ_API_KEY": "none",
+          "QDRANT_HOST_URL": "10.0.1.237",
+          "QDRANT_PORT": "6333",
+          "QDRANT_API_KEY": "none",
+          "M_PARAMS": "32",
+          "EF_PARAMS": "300"
+        }
+      # Secrets requis par Settings() (api_recherche_lib) + classifier (OpenAI/DeepSeek).
+      # Reutilise les platform-* existants + platform-key-webhook -> 0 nouveau secret.
+      secret_env_vars_json: |
+        {
+          "OPENAI_API_KEY": "platform-openai-api-key:latest",
+          "OPENROUTER_API_KEY": "platform-openrouter-api-key:latest",
+          "DEEPSEEK_API_KEY": "platform-deepseek-api-key:latest",
+          "GEMINI_API_KEY": "platform-gemini-api-key:latest",
+          "RABBITMQ_URL": "platform-rabbitmq-url:latest",
+          "KEY_WEBHOOK": "platform-key-webhook:latest"
+        }
+      # Gate Trivy desactive : base python:3.10-slim (CVE HIGH build deps connues). Dette tracee.
+      trivy_disable_gate: true
+    secrets:
+      slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
