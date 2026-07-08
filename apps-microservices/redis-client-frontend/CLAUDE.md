@@ -47,9 +47,9 @@ lib/
     oauth.ts                  # PKCE S256 gen, authorize URL, token exchange, HS256 token verify
     session.ts                # Sign/verify rcf_session cookie (HS256 via SESSION_SECRET)
     flow.ts                   # startLogin/completeCallback orchestration (framework-free)
-  domain/cache-entry.ts      # CacheEntry + CacheMetadata interfaces
-  infrastructure/             # Redis repository (Singleton + SCAN)
-  application/                # getCachedData use case (parallel fetches)
+  domain/cache-entry.ts      # KeyMeta interface (key/type/ttl/size)
+  infrastructure/             # Redis repository (Singleton; scanKeys/getKeyMeta/dbSize)
+  application/                # scan-state.ts (pure scan transitions + glob builder)
   utils.ts                    # cn(), formatBytes()
 public/
 ```

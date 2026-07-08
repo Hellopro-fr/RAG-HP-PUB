@@ -133,7 +133,9 @@ export function CacheTable({
       </div>
 
       {entries.length === 0 ? (
-        <div className="py-8 text-center text-muted-foreground">No keys match this filter</div>
+        <div className="py-8 text-center text-muted-foreground">
+          {nextCursor !== 0 ? "No matches on this page — Load more to keep scanning" : "No keys match this filter"}
+        </div>
       ) : (
         <div className="border rounded-lg overflow-hidden">
           <Table>
