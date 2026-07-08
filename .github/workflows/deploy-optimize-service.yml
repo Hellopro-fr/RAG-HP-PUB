@@ -1,0 +1,77 @@
+name: 'Deploy — optimize-service'
+
+# Wrapper qui appelle deploy-cloud-run.yml pour optimize-service
+# (Python FastAPI, optimisation de titres/descriptions produits via LLM, port 8563).
+#
+# Deploiement PARALLELE (shadow) : le service tourne sur Cloud Run sans rerouter
+# aucun trafic. La VM continue de servir.
+#
+# *** BATCH 3B — debloque optimize=true d'api-classification ***
+# Endpoint POST /optimize-product/qwen/v2 -> llm_client.get_llm_chat_response
+#   -> LLM_SERVICE_URL (15051 -> llm-service GPU) via l'enabler gRPC->GPU.
+# (Gere correctement le dict retourne par le client : extrait response['full_message']
+#  AVANT json.loads -> PAS le bug F-HP-DEV-002 du chemin Qwen d'api-classification.)
+#
+# Service tres simple : AUCUN os.getenv dans le code, AUCUN secret. Seul LLM_SERVICE_URL
+# (consomme par common_utils.llm_client) + VPC Connector requis (cible IP interne 10.11.0.2).
+# CMD = uvicorn mono-process -> pas d'override workers. startup_cpu_boost pour le cold start.
+#
+# NB observabilite : main.py logue dans un FICHIER (/app/logs/app.log) -> les logs applicatifs
+# ne remontent PAS dans Cloud Logging (seul stdout/stderr uvicorn est capture). A ajuster
+# (logging stdout) lors de la reprise definitive du service. Sans impact fonctionnel shadow.
+
+on:
+  push:
+    branches:
+      - 'feat/migration-**'
+    paths:
+      - 'apps-microservices/optimize-service/**'
+      - '.github/workflows/deploy-optimize-service.yml'
+      - '.github/workflows/deploy-cloud-run.yml'
+  workflow_dispatch:
+    inputs:
+      cloud_run_region:
+        description: 'Région Cloud Run (override)'
+        required: false
+        type: string
+        default: 'europe-west1'
+
+permissions:
+  id-token: write   # WIF OIDC vers GCP
+  contents: read    # checkout du code
+
+jobs:
+  deploy:
+    name: 'Deploy optimize-service'
+    uses: ./.github/workflows/deploy-cloud-run.yml
+    with:
+      service_name: optimize-service
+      dockerfile_path: apps-microservices/optimize-service/Dockerfile
+      # Build context = racine du repo (COPY protos/ + libs/ + apps-microservices/optimize-service).
+      build_context: .
+      cloud_run_region: ${{ github.event.inputs.cloud_run_region || 'europe-west1' }}
+      ingress: all
+      allow_unauthenticated: true
+      cpu: '1'
+      memory: '512Mi'
+      # Shadow : pas de trafic route -> scale-to-zero.
+      min_instances: 0
+      max_instances: 3
+      # CMD uvicorn --port 8563 (hardcode dans le Dockerfile, mono-process).
+      container_port: 8563
+      startup_cpu_boost: true
+      # Pas de /health : le service n'expose que /optimize-product/qwen/v2. /openapi.json (FastAPI) = 200 fiable.
+      health_check_path: /openapi.json
+      # *** VPC Connector requis : cible gRPC LLM = IP interne VM GPU (10.11.0.2) via proxy ***
+      vpc_connector: vpc-access-connector
+      vpc_egress: private-ranges-only
+      # Seul LLM_SERVICE_URL (lu par common_utils.llm_client). Aucun secret (0 os.getenv dans le code).
+      env_vars_json: |
+        {
+          "LLM_SERVICE_URL": "10.11.0.2:15051",
+          "SERVICE_NAME": "optimize-service"
+        }
+      # Gate Trivy desactive : base python:3.10-slim (CVE HIGH build deps connues). Dette tracee.
+      trivy_disable_gate: true
+    secrets:
+      slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
