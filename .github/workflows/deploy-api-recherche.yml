@@ -1,0 +1,101 @@
+name: 'Deploy — api-recherche'
+
+# Wrapper qui appelle deploy-cloud-run.yml pour api-recherche
+# (Python FastAPI, moteur de recherche RAG, port 8510).
+#
+# Deploiement PARALLELE (shadow) : le service tourne sur Cloud Run sans rerouter
+# aucun trafic. La VM continue de servir via api-gateway.
+#
+# *** BATCH 3B — 1er service metier d'inference sur l'enabler gRPC->GPU ***
+# api-recherche orchestre les 3 services GPU en gRPC (via common_utils) :
+#   embedding (query -> vecteur)      -> EMBEDDING_SERVICE_URL  (15052)
+#   database  (search vectoriel)      -> DATABASE_SERVICE_URL   (15054)
+#   reranking (re-scoring resultats)  -> RERANKING_SERVICE_URL  (15053)
+# Clients grpc.aio.insecure_channel (plaintext) -> proxy haproxy TCP grpc-gpu-proxy.
+# Chemin prouve E2E par api-embedding-service (2026-07-08) : CR->VPC->FW->proxy->GPU.
+#
+# La recherche Milvus se fait cote GPU par database-recherche-service ;
+# api-recherche N'OUVRE AUCUNE connexion Milvus directe. Endpoint /search = LECTURE SEULE
+# (la base Milvus interrogee cote GPU est la PROD -> aucune ecriture cote shadow).
+#
+# VPC Connector + egress private-ranges-only OBLIGATOIRES (cible = IP interne 10.11.0.2).
+
+on:
+  push:
+    branches:
+      - 'feat/migration-**'
+    paths:
+      - 'apps-microservices/api-recherche/**'
+      - '.github/workflows/deploy-api-recherche.yml'
+      - '.github/workflows/deploy-cloud-run.yml'
+  workflow_dispatch:
+    inputs:
+      cloud_run_region:
+        description: 'Région Cloud Run (override)'
+        required: false
+        type: string
+        default: 'europe-west1'
+
+permissions:
+  id-token: write   # WIF OIDC vers GCP
+  contents: read    # checkout du code
+
+jobs:
+  deploy:
+    name: 'Deploy api-recherche'
+    uses: ./.github/workflows/deploy-cloud-run.yml
+    with:
+      service_name: api-recherche
+      dockerfile_path: apps-microservices/api-recherche/Dockerfile
+      # Build context = racine du repo (le Dockerfile COPY protos/ + libs/ + apps-microservices/).
+      build_context: .
+      cloud_run_region: ${{ github.event.inputs.cloud_run_region || 'europe-west1' }}
+      ingress: all
+      allow_unauthenticated: true
+      cpu: '1'
+      memory: '512Mi'
+      # Shadow : pas de trafic route -> scale-to-zero.
+      min_instances: 0
+      max_instances: 3
+      # CMD gunicorn --bind 0.0.0.0:8510 (hardcode dans le Dockerfile).
+      container_port: 8510
+      # "/" renvoie le message de bienvenue (200). NB : async + cache_or_execute
+      # -> fonctionne meme sans Redis (fallback execution directe).
+      health_check_path: /
+      # *** VPC Connector requis : cibles gRPC = IP interne VM GPU (10.11.0.2) via proxy ***
+      vpc_connector: vpc-access-connector
+      vpc_egress: private-ranges-only
+      # 3 cibles gRPC -> proxy grpc-gpu-proxy (enabler). ZILLIZ_/QDRANT_/M_/EF_ requis par
+      # Settings() au startup (inertes : la recherche passe par database_client gRPC, pas de
+      # connexion Milvus/Qdrant directe). REDIS_URL OMIS au 1er deploy (optionnel, degrade
+      # gracieusement) pour isoler le chemin gRPC->GPU sous test ; a ajouter au deploy suivant.
+      env_vars_json: |
+        {
+          "EMBEDDING_SERVICE_URL": "10.11.0.2:15052",
+          "RERANKING_SERVICE_URL": "10.11.0.2:15053",
+          "DATABASE_SERVICE_URL": "10.11.0.2:15054",
+          "SERVICE_NAME": "api-recherche",
+          "ZILLIZ_URI": "milvus-prod.hello.dev.private.com",
+          "ZILLIZ_PORT": "19530",
+          "ZILLIZ_API_KEY": "none",
+          "QDRANT_HOST_URL": "10.0.1.237",
+          "QDRANT_PORT": "6333",
+          "QDRANT_API_KEY": "none",
+          "M_PARAMS": "32",
+          "EF_PARAMS": "300"
+        }
+      # Secrets requis par Settings(). Reutilise les platform-* existants (dont GEMINI,
+      # requis ici contrairement a api-embedding-service) + platform-key-webhook -> 0 nouveau secret.
+      secret_env_vars_json: |
+        {
+          "OPENAI_API_KEY": "platform-openai-api-key:latest",
+          "OPENROUTER_API_KEY": "platform-openrouter-api-key:latest",
+          "DEEPSEEK_API_KEY": "platform-deepseek-api-key:latest",
+          "GEMINI_API_KEY": "platform-gemini-api-key:latest",
+          "RABBITMQ_URL": "platform-rabbitmq-url:latest",
+          "KEY_WEBHOOK": "platform-key-webhook:latest"
+        }
+      # Gate Trivy desactive : base python:3.10-slim (CVE HIGH build deps connues). Dette tracee.
+      trivy_disable_gate: true
+    secrets:
+      slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
