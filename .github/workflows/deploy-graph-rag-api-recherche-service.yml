@@ -1,0 +1,97 @@
+name: 'Deploy — graph-rag-api-recherche-service'
+
+# Wrapper qui appelle deploy-cloud-run.yml pour graph-rag-api-recherche-service
+# (Python FastAPI, Graph RAG Search API, port 8525).
+#
+# Deploiement PARALLELE (shadow) : le service tourne sur Cloud Run sans rerouter
+# aucun trafic. La VM continue de servir.
+#
+# *** BATCH 3B — 1er service de la FAMILLE graph-rag (~17 services) ***
+# Utilise 6 clients gRPC (common_utils) + Neo4j direct :
+#   embedding (15052) · reranking (15053) · [llm 15051 si LLM gRPC]
+#   graph_milvus (15055) · graph_database (15056) · normalization (15057) · spacy (15058)
+#   -> proxy grpc-gpu-proxy ETENDU a 8 ports (firewall allow-cr-eu-to-vm-gpu-grpc 15051-15058).
+#   Neo4j direct via VPC : neo4j://10.0.1.218:7687 (serveur SANS TLS -> PAS bolt+s://, cf. mcp-neo4j).
+# Gemini (egress, LLM_PROVIDER=gemini) + API HelloPro (egress, bearer token).
+#
+# Config a defauts partout (0 champ obligatoire) + lifespan LAZY (metrics only) -> startup safe.
+# NB : les *_SERVICE_URL de config.py sont "morts" ; les cibles reelles viennent des memes
+# noms d'env vars lus par les clients common_utils -> on les set une seule fois.
+#
+# LECTURE SEULE (recherche / recommandation). CMD = uvicorn mono-process -> pas d'override workers.
+#
+# VPC Connector + egress private-ranges-only OBLIGATOIRES (cibles internes 10.11.0.2 + 10.0.1.218).
+
+on:
+  push:
+    branches:
+      - 'feat/migration-**'
+    paths:
+      - 'apps-microservices/graph-rag-api-recherche-service/**'
+      - '.github/workflows/deploy-graph-rag-api-recherche-service.yml'
+      - '.github/workflows/deploy-cloud-run.yml'
+  workflow_dispatch:
+    inputs:
+      cloud_run_region:
+        description: 'Région Cloud Run (override)'
+        required: false
+        type: string
+        default: 'europe-west1'
+
+permissions:
+  id-token: write   # WIF OIDC vers GCP
+  contents: read    # checkout du code
+
+jobs:
+  deploy:
+    name: 'Deploy graph-rag-api-recherche-service'
+    uses: ./.github/workflows/deploy-cloud-run.yml
+    with:
+      service_name: graph-rag-api-recherche-service
+      dockerfile_path: apps-microservices/graph-rag-api-recherche-service/Dockerfile
+      build_context: .
+      cloud_run_region: ${{ github.event.inputs.cloud_run_region || 'europe-west1' }}
+      ingress: all
+      allow_unauthenticated: true
+      cpu: '1'
+      # 1Gi : imports lourds (langchain + neo4j driver + grpc stubs + gemini SDK).
+      memory: '1Gi'
+      min_instances: 0
+      max_instances: 3
+      # CMD uvicorn --port 8525 (hardcode Dockerfile, mono-process).
+      container_port: 8525
+      startup_cpu_boost: true
+      # Vrai endpoint health.
+      health_check_path: /health
+      # *** VPC Connector requis : proxy gRPC (10.11.0.2) + Neo4j (10.0.1.218) internes ***
+      vpc_connector: vpc-access-connector
+      vpc_egress: private-ranges-only
+      # 7 cibles gRPC via l'enabler etendu + Neo4j direct + provider LLM. Ces noms sont lus
+      # par les clients common_utils (embedding/reranking/graph_milvus/graph_database/
+      # normalization/spacy) ET par config.py Settings.
+      env_vars_json: |
+        {
+          "EMBEDDING_SERVICE_URL": "10.11.0.2:15052",
+          "RERANKING_SERVICE_URL": "10.11.0.2:15053",
+          "LLM_SERVICE_URL": "10.11.0.2:15051",
+          "MILVUS_SERVICE_URL": "10.11.0.2:15055",
+          "GRAPH_DATABASE_SERVICE_URL": "10.11.0.2:15056",
+          "NORMALIZATION_SERVICE_URL": "10.11.0.2:15057",
+          "SPACY_SERVICE_URL": "10.11.0.2:15058",
+          "NEO4J_URI": "neo4j://10.0.1.218:7687",
+          "NEO4J_USER": "neo4j",
+          "NEO4J_DATABASE": "neo4j",
+          "LLM_PROVIDER": "gemini",
+          "SERVICE_NAME": "graph-rag-api-recherche-service"
+        }
+      # Secrets : Neo4j password (partage) + Gemini (LLM_PROVIDER=gemini) + bearer API HelloPro.
+      secret_env_vars_json: |
+        {
+          "NEO4J_PASSWORD": "platform-neo4j-password:latest",
+          "GEMINI_API_KEY": "platform-gemini-api-key:latest",
+          "HELLOPRO_API_BEARER_TOKEN": "platform-hellopro-api-bearer-token:latest"
+        }
+      # Gate Trivy desactive : base python:3.10-slim (CVE HIGH build deps connues). Dette tracee.
+      trivy_disable_gate: true
+    secrets:
+      slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
