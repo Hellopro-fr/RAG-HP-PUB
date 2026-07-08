@@ -128,6 +128,21 @@ on:
         required: false
         type: boolean
         default: false
+      container_command:
+        description: 'Override de l''ENTRYPOINT (ex: "python"). Vide = commande du Dockerfile. Utile pour ajuster une commande calibrée VM (ex: gunicorn -w 8) au modèle Cloud Run (scaling par instances).'
+        required: false
+        type: string
+        default: ''
+      container_args:
+        description: 'Override du CMD/args, séparés par des virgules (ex: "-m,gunicorn,-w,2,--bind,0.0.0.0:8510,main:app"). Vide = args du Dockerfile.'
+        required: false
+        type: string
+        default: ''
+      startup_cpu_boost:
+        description: 'Active le CPU boost au démarrage (cold start plus rapide — recommandé pour les services à imports lourds).'
+        required: false
+        type: boolean
+        default: false
     outputs:
       service_url:
         description: 'URL publique du service Cloud Run déployé'
@@ -323,6 +338,16 @@ jobs:
           fi
           if [ -n "${{ steps.args.outputs.secret_args }}" ]; then
             EXTRA_FLAGS+=(--set-secrets="${{ steps.args.outputs.secret_args }}")
+          fi
+          # Override commande/args du conteneur (ex: réduire gunicorn -w 8 -> -w 2 sur Cloud Run)
+          if [ -n "${{ inputs.container_command }}" ]; then
+            EXTRA_FLAGS+=(--command="${{ inputs.container_command }}")
+          fi
+          if [ -n "${{ inputs.container_args }}" ]; then
+            EXTRA_FLAGS+=(--args="${{ inputs.container_args }}")
+          fi
+          if [ "${{ inputs.startup_cpu_boost }}" = "true" ]; then
+            EXTRA_FLAGS+=(--cpu-boost)
           fi
 
           gcloud run deploy "${{ inputs.service_name }}" \

@@ -53,15 +53,24 @@ jobs:
       ingress: all
       allow_unauthenticated: true
       cpu: '1'
-      memory: '512Mi'
+      # 1Gi : 2 workers gunicorn + pymilvus/grpc/common_utils (512Mi trop juste au boot).
+      memory: '1Gi'
       # Shadow : pas de trafic route -> scale-to-zero.
       min_instances: 0
       max_instances: 3
       # CMD gunicorn --bind 0.0.0.0:8510 (hardcode dans le Dockerfile).
       container_port: 8510
-      # "/" renvoie le message de bienvenue (200). NB : async + cache_or_execute
-      # -> fonctionne meme sans Redis (fallback execution directe).
-      health_check_path: /
+      # *** Override workers : le Dockerfile lance "gunicorn -w 8" (calibre VM 24 vCPU).
+      # Sur Cloud Run (1 vCPU/instance) 8 workers se battent pour le CPU au boot -> timeout
+      # de demarrage -> crash-loop 503. On repasse a 2 workers et on laisse Cloud Run scaler
+      # par INSTANCES (concurrence 80). cpu-boost accelere le cold start (imports lourds). ***
+      container_command: python
+      container_args: '-m,gunicorn,-w,2,-k,uvicorn.workers.UvicornWorker,--bind,0.0.0.0:8510,--timeout,120,--access-logfile,-,--error-logfile,-,main:app'
+      startup_cpu_boost: true
+      # Health = /openapi.json (fourni par FastAPI, 200 fiable). PAS "/" : read_root fait
+      # `await cache_or_execute(lambda: ...)` -> await d'un lambda sync -> TypeError 500
+      # (bug code dev, cf. finding F-HP-DEV). /openapi.json prouve que l'app sert en HTTP.
+      health_check_path: /openapi.json
       # *** VPC Connector requis : cibles gRPC = IP interne VM GPU (10.11.0.2) via proxy ***
       vpc_connector: vpc-access-connector
       vpc_egress: private-ranges-only
