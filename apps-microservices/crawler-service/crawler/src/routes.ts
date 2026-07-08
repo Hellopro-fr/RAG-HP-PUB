@@ -22,6 +22,7 @@ import { DetectionLangueClient } from "./class/DetectionLangueClient.js";
 import { context } from "./context.js";
 import { recordClassification, maybeCommitDecision, commitSkipDiez, commitBypassDiez } from "./diezDecision.js";
 import { fragmentAwareUniqueKey, stripEmptyFragment } from "./diezKeepFragment.js";
+import { matchesMainSite } from "./isMainSite.js";
 import { applyPerClassStrip, perClassEnabled, stripActionAnchor, actionAnchorStripEnabled } from "./diezClassify.js";
 import { qmConsumptionStrip, shouldSkipDequeued, recordQmCollapsed } from "./qmConsumptionSkip.js";
 import { recordVariant, isOverCap, QM_FACET_ENABLED, QM_FACET_CAP_K } from "./facetCap.js";
@@ -309,7 +310,7 @@ router.addDefaultHandler(
             || (siteHostname && hostname.includes(siteHostname));
         if (!isInternal) {
             log.warning(`Blocked external redirect: ${url} (Target: ${targetDomain})`);
-            const isHomepageRedirect = request.url === site;
+            const isHomepageRedirect = matchesMainSite(request.url, site);
             // Set structured error message for "1 seul URL crawlé" case: domain change
             if (isHomepageRedirect) {
                 context.crawlErrorMessage = "L'URL après la page d'accueil change de domaine";
@@ -389,7 +390,7 @@ router.addDefaultHandler(
             const statusClass = classifyHttpStatus(status);
             if (statusClass !== "ok") {
                 // Preserve existing bookkeeping: homepage error message + error tracking.
-                if (request.url === site) {
+                if (matchesMainSite(request.url, site)) {
                     context.crawlErrorMessage = `Erreur HTTP ${status}`;
                 }
                 const source = request.userData.source || '';
@@ -543,7 +544,7 @@ router.addDefaultHandler(
                 }
             }
 
-            const isMainSite = request.url === site;
+            const isMainSite = matchesMainSite(request.url, site);
             let frenchDetectionMethod: string | Error;
             let isEnqueuingLinks = false;
             let content = "";
@@ -1156,7 +1157,7 @@ router.addDefaultHandler(
         // Signal that homepage detection is complete (for update mode two-phase seeding).
         // Must be OUTSIDE the isDoublon check — homepage may be marked as Doublon
         // in update mode (pre-added to DedupManager during Phase 1 seeding).
-        if (request.url === site && context.homepageReady) {
+        if (matchesMainSite(request.url, site) && context.homepageReady) {
             context.homepageReady.resolve();
         }
         } finally {

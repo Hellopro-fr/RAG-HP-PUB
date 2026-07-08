@@ -5,6 +5,7 @@ import fsPromises from "fs/promises";
 import os from 'os';
 import { router } from "./routes.js";
 import { RECOVER_FAILED_ON_RESTART, shouldRunRecovery, resolveStallCountResolved } from "./httpStatusPolicy.js";
+import { matchesMainSite } from "./isMainSite.js";
 import {
     getPathAfterDomain,
     getScrapingData,
@@ -945,7 +946,7 @@ if (crawlMode === 'update') {
 
     // Collect remaining URLs for Phase 2 (all consolidated URLs except the homepage)
     for await (const { url: consolidatedUrl, source } of allUrls) {
-        if (consolidatedUrl === site) continue; // Already seeded as homepage
+        if (matchesMainSite(consolidatedUrl, site)) continue; // Already seeded as homepage
         remainingUrls.push({ url: consolidatedUrl, source });
     }
 
