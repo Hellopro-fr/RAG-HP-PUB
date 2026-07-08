@@ -1,0 +1,87 @@
+name: 'Deploy — graph-rag-api-recherche-rust-service'
+
+# Wrapper qui appelle deploy-cloud-run.yml pour graph-rag-api-recherche-rust-service
+# (Rust / Actix-web, port de bind = API_PORT, /health).
+#
+# Deploiement PARALLELE (shadow), zero trafic reroute.
+#
+# *** BATCH 3B — famille graph-rag, variante RUST (port Rust de #21) ***
+# Memes deps que #21 -> enabler gRPC->GPU DEJA ETENDU a 8 ports (rien a changer cote infra) :
+#   embedding (15052) · reranking (15053) · llm (15051)
+#   graph_milvus (15055) · graph_database (15056) · normalization (15057) · spacy (15058)
+#   Neo4j direct (neo4rs) : bolt://10.0.1.218:7687 (SANS TLS, single-instance -> bolt:// direct,
+#   PAS neo4j:// qui declenche la decouverte de routing cluster).
+# Gemini (egress) + API HelloPro (egress).
+#
+# *** PORT : le binaire bind API_PORT (defaut 8527 dans config.rs, != EXPOSE 8528 du Dockerfile).
+#     On FORCE API_PORT=8528 == container_port=8528 pour aligner Cloud Run. ***
+#
+# Trivy : gate LAISSE ACTIF (runtime debian:bookworm-slim + binaire Rust = surface CVE faible,
+# principe Rust/Go = on garde le gate, on bump si besoin ; != Python ou on desactive).
+# CMD = binaire unique -> pas d'override commande.
+
+on:
+  push:
+    branches:
+      - 'feat/migration-**'
+    paths:
+      - 'apps-microservices/graph-rag-api-recherche-rust-service/**'
+      - '.github/workflows/deploy-graph-rag-api-recherche-rust-service.yml'
+      - '.github/workflows/deploy-cloud-run.yml'
+  workflow_dispatch:
+    inputs:
+      cloud_run_region:
+        description: 'Région Cloud Run (override)'
+        required: false
+        type: string
+        default: 'europe-west1'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    name: 'Deploy graph-rag-api-recherche-rust-service'
+    uses: ./.github/workflows/deploy-cloud-run.yml
+    with:
+      service_name: graph-rag-api-recherche-rust-service
+      dockerfile_path: apps-microservices/graph-rag-api-recherche-rust-service/Dockerfile
+      build_context: .
+      cloud_run_region: ${{ github.event.inputs.cloud_run_region || 'europe-west1' }}
+      ingress: all
+      allow_unauthenticated: true
+      cpu: '1'
+      # Rust binaire = leger (pas de python/langchain).
+      memory: '512Mi'
+      min_instances: 0
+      max_instances: 3
+      # Bind = API_PORT ci-dessous (force a 8528 pour matcher container_port).
+      container_port: 8528
+      startup_cpu_boost: true
+      health_check_path: /health
+      # *** VPC Connector requis : proxy gRPC (10.11.0.2) + Neo4j (10.0.1.218) internes ***
+      vpc_connector: vpc-access-connector
+      vpc_egress: private-ranges-only
+      env_vars_json: |
+        {
+          "API_PORT": "8528",
+          "EMBEDDING_SERVICE_URL": "10.11.0.2:15052",
+          "RERANKING_SERVICE_URL": "10.11.0.2:15053",
+          "LLM_SERVICE_URL": "10.11.0.2:15051",
+          "MILVUS_SERVICE_URL": "10.11.0.2:15055",
+          "GRAPH_DATABASE_SERVICE_URL": "10.11.0.2:15056",
+          "NORMALIZATION_SERVICE_URL": "10.11.0.2:15057",
+          "SPACY_SERVICE_URL": "10.11.0.2:15058",
+          "NEO4J_URI": "bolt://10.0.1.218:7687",
+          "NEO4J_USER": "neo4j",
+          "NEO4J_DATABASE": "neo4j"
+        }
+      secret_env_vars_json: |
+        {
+          "NEO4J_PASSWORD": "platform-neo4j-password:latest",
+          "GEMINI_API_KEY": "platform-gemini-api-key:latest",
+          "HELLOPRO_API_BEARER_TOKEN": "platform-hellopro-api-bearer-token:latest"
+        }
+    secrets:
+      slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
