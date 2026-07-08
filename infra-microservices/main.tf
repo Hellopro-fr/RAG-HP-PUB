@@ -98,7 +98,8 @@ resource "google_compute_firewall" "allow_cr_eu_to_vm_gpu_api_catalog" {
 
 # Cloud Run (eu-west1 VPC Connector) -> proxy grpc-gpu-proxy (haproxy TCP) sur VM GPU.
 # Expose les gRPC internes GPU : 15051=llm-service, 15052=embedding-model, 15053=reranking-model,
-# 15054=database-recherche. Le proxy forward vers services-net :50051-50054 (aucun conteneur GPU touche).
+# 15054=database-recherche. Extension graph-rag : 15055=graph-rag-milvus, 15056=graph-rag-database-connector,
+# 15057=graph-rag-normalize-unite, 15058=graph-rag-spacy. Le proxy forward vers services-net (aucun conteneur GPU touche).
 resource "google_compute_firewall" "allow_cr_eu_to_vm_gpu_grpc" {
   name        = "allow-cr-eu-to-vm-gpu-grpc"
   network     = module.vpc.vpc_name
@@ -108,7 +109,7 @@ resource "google_compute_firewall" "allow_cr_eu_to_vm_gpu_grpc" {
 
   allow {
     protocol = "tcp"
-    ports    = ["15051", "15052", "15053", "15054"]
+    ports    = ["15051", "15052", "15053", "15054", "15055", "15056", "15057", "15058"]
   }
 
   source_ranges = ["10.0.2.0/28"]
