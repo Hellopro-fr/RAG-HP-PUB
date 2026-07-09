@@ -67,12 +67,17 @@ class ImageProcessor:
             if pil_image.mode != "RGB":
                 pil_image = pil_image.convert("RGB")
             
-            # 2. Invert image (assuming white background becomes black)
-            # This helps getbbox find the "content" (non-black pixels)
-            inverted_image = ImageOps.invert(pil_image)
+            # 2. Background mask with TOLERANCE: near-white pixels (>= 230 in
+            # grayscale) count as background. A strict invert+getbbox treated any
+            # 253/254 pixel sown by lossy re-encoding (JPEG->WebP) as content, so
+            # the SAME visual cropped differently per encoder (real case:
+            # euromag terra-et-mera.jpg vs .jpg.webp -> bbox 305 vs 400 wide ->
+            # pHash distance 34/64 on identical images).
+            gray = pil_image.convert("L")
+            content_mask = gray.point(lambda p: 255 if p < 230 else 0)
             
-            # 3. Get bounding box of non-zero regions
-            bbox = inverted_image.getbbox()
+            # 3. Get bounding box of the actual content
+            bbox = content_mask.getbbox()
             
             if bbox:
                 # 4. Crop to the content
