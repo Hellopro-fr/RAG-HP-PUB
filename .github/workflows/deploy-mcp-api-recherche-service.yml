@@ -1,0 +1,73 @@
+name: 'Deploy — mcp-api-recherche-service'
+
+# Wrapper qui appelle deploy-cloud-run.yml pour mcp-api-recherche-service
+# (Go 1.26, serveur MCP SSE exposant la recherche HelloPro comme tools MCP, port 8580).
+#
+# Deploiement PARALLELE (shadow), zero trafic reroute. Le mcp-gateway-service (VM) continue
+# d'agreger ce service ; shadow = la gateway garde le container VM.
+#
+# *** BATCH 3B — MCP Go sur les 4 ports coeur de l'enabler gRPC->GPU ***
+# Backend = gRPC (persistant, etabli au startup, dial lazy Go -> pas de hang) :
+#   embedding (15052) · database (15054, search Milvus) · reranking (15053) · llm (15051)
+#   -> proxy grpc-gpu-proxy (deja en place). VPC Connector + private-ranges-only requis.
+#
+# 0 secret (config = URLs en env seulement). MCP NON authentifie (comme les MCP tierces shadow)
+# -> expose search/llm en lecture ; durcissement au cutover (gateway/LB interne).
+# Health = GET /health. LECTURE SEULE (search Milvus prod cote GPU).
+#
+# Trivy : builder Go bumpe 1.24->1.26 (fix CVE stdlib preemptif, pattern leexi/ringover) ->
+# gate LAISSE ACTIF (principe Rust/Go). CMD = binaire unique -> pas d'override commande.
+
+on:
+  push:
+    branches:
+      - 'feat/migration-**'
+    paths:
+      - 'apps-microservices/mcp-api-recherche-service/**'
+      - '.github/workflows/deploy-mcp-api-recherche-service.yml'
+      - '.github/workflows/deploy-cloud-run.yml'
+  workflow_dispatch:
+    inputs:
+      cloud_run_region:
+        description: 'Région Cloud Run (override)'
+        required: false
+        type: string
+        default: 'europe-west1'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    name: 'Deploy mcp-api-recherche-service'
+    uses: ./.github/workflows/deploy-cloud-run.yml
+    with:
+      service_name: mcp-api-recherche-service
+      dockerfile_path: apps-microservices/mcp-api-recherche-service/Dockerfile
+      build_context: .
+      cloud_run_region: ${{ github.event.inputs.cloud_run_region || 'europe-west1' }}
+      ingress: all
+      allow_unauthenticated: true
+      cpu: '1'
+      # Go binaire = tres leger.
+      memory: '256Mi'
+      min_instances: 0
+      max_instances: 3
+      # Bind = MCP_PORT ci-dessous (8580, defaut du binaire).
+      container_port: 8580
+      health_check_path: /health
+      # *** VPC Connector requis : cibles gRPC = IP interne VM GPU (10.11.0.2) via proxy ***
+      vpc_connector: vpc-access-connector
+      vpc_egress: private-ranges-only
+      # 4 cibles gRPC coeur enabler + MCP_PORT. 0 secret.
+      env_vars_json: |
+        {
+          "MCP_PORT": "8580",
+          "EMBEDDING_SERVICE_URL": "10.11.0.2:15052",
+          "DATABASE_SERVICE_URL": "10.11.0.2:15054",
+          "RERANKING_SERVICE_URL": "10.11.0.2:15053",
+          "LLM_SERVICE_URL": "10.11.0.2:15051"
+        }
+    secrets:
+      slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
