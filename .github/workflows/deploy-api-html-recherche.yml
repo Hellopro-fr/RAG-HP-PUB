@@ -1,0 +1,76 @@
+name: 'Deploy — api-html-recherche'
+
+# Wrapper qui appelle deploy-cloud-run.yml pour api-html-recherche
+# (Python FastAPI, frontend web HTML de la recherche, port 8550).
+#
+# Deploiement PARALLELE (shadow), zero trafic reroute.
+#
+# Frontend HTML pur (Jinja2 + JWT session). Login = egress HTTPS vers
+# hellopro.fr/.../auth.php. La recherche temps reel = WebSocket cote NAVIGATEUR
+# (JS -> api-recherche), PAS ce service -> AUCUN gRPC/DB interne, AUCUN VPC Connector.
+# Egress internet seul.
+#
+# Public (allow_unauthenticated) = page de login. Au cutover, routage via DNS/Apache
+# (Ecritel), comme les autres frontaux, PAS via api-gateway.
+#
+# Secrets : JWT_SECRET (partage) requis meme au startup (SessionMiddleware secret_key).
+# JWT_ALGO/JWT_AUDIENCE = config. ⚠️ JWT_AUDIENCE : valeur reelle a CONFIRMER depuis .env
+# au cutover (validation token downstream) ; non exercee par le smoke /login GET.
+#
+# NB : bloc d'auth de TEST en dur dans main.py (leftover, non lie a la base d'auth) -> a
+# retirer au passage (cleanup, non prioritaire). CMD uvicorn mono-process -> pas d'override.
+
+on:
+  push:
+    branches:
+      - 'feat/migration-**'
+    paths:
+      - 'apps-microservices/api-html-recherche/**'
+      - '.github/workflows/deploy-api-html-recherche.yml'
+      - '.github/workflows/deploy-cloud-run.yml'
+  workflow_dispatch:
+    inputs:
+      cloud_run_region:
+        description: 'Région Cloud Run (override)'
+        required: false
+        type: string
+        default: 'europe-west1'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    name: 'Deploy api-html-recherche'
+    uses: ./.github/workflows/deploy-cloud-run.yml
+    with:
+      service_name: api-html-recherche
+      dockerfile_path: apps-microservices/api-html-recherche/Dockerfile
+      build_context: .
+      cloud_run_region: ${{ github.event.inputs.cloud_run_region || 'europe-west1' }}
+      ingress: all
+      allow_unauthenticated: true
+      cpu: '1'
+      memory: '512Mi'
+      min_instances: 0
+      max_instances: 3
+      # CMD uvicorn --port 8550 (hardcode Dockerfile, mono-process).
+      container_port: 8550
+      startup_cpu_boost: true
+      # Pas de /health : /login (GET) rend la page HTML (200) sans auth.
+      health_check_path: /login
+      # Pas de VPC Connector : egress internet seul (auth hellopro.fr).
+      env_vars_json: |
+        {
+          "JWT_ALGO": "HS256",
+          "JWT_AUDIENCE": "https://rag.hellopro.eu"
+        }
+      secret_env_vars_json: |
+        {
+          "JWT_SECRET": "platform-jwt-secret:latest"
+        }
+      # Gate Trivy desactive : base python:3.10-slim (CVE HIGH build deps connues). Dette tracee.
+      trivy_disable_gate: true
+    secrets:
+      slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
