@@ -1,0 +1,72 @@
+name: 'Deploy — image-comparison-service'
+
+# Wrapper qui appelle deploy-cloud-run.yml pour image-comparison-service
+# (Python FastAPI, comparaison/dedup d'images via cv2/imagehash, port 8504).
+#
+# Deploiement PARALLELE (shadow), zero trafic reroute. VAGUE 4A.
+#
+# Deps : Redis (etat des jobs + feature cache, via job_manager) -> REDIS_URL secret + VPC.
+#        egress HTTP (download des images depuis URLs). CPU lourd (cv2/imagehash) -> cpu-boost.
+# 1er consommateur du secret platform-redis-url (redis://:<pwd>@10.0.1.220:6379).
+# init_redis_pool en lifespan (degrade gracieusement mais requis pour /start fonctionnel).
+# CMD uvicorn mono -> pas d'override workers. Health GET /.
+#
+# VPC Connector requis (Redis interne 10.0.1.220).
+
+on:
+  push:
+    branches:
+      - 'feat/migration-**'
+    paths:
+      - 'apps-microservices/image-comparison-service/**'
+      - '.github/workflows/deploy-image-comparison-service.yml'
+  workflow_dispatch:
+    inputs:
+      cloud_run_region:
+        description: 'Région Cloud Run (override)'
+        required: false
+        type: string
+        default: 'europe-west1'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    name: 'Deploy image-comparison-service'
+    uses: ./.github/workflows/deploy-cloud-run.yml
+    with:
+      service_name: image-comparison-service
+      dockerfile_path: apps-microservices/image-comparison-service/Dockerfile
+      build_context: .
+      cloud_run_region: ${{ github.event.inputs.cloud_run_region || 'europe-west1' }}
+      ingress: all
+      allow_unauthenticated: true
+      cpu: '1'
+      # 1Gi : cv2/imagehash/Pillow + buffers images concurrents (MAX_CONCURRENT_JOBS=2).
+      memory: '1Gi'
+      min_instances: 0
+      max_instances: 3
+      # CMD uvicorn --port 8504 (hardcode Dockerfile, mono-process).
+      container_port: 8504
+      startup_cpu_boost: true
+      # "/" = Health Check (200).
+      health_check_path: /
+      # *** VPC Connector requis : Redis interne 10.0.1.220 ***
+      vpc_connector: vpc-access-connector
+      vpc_egress: private-ranges-only
+      # MAX_CONCURRENT_JOBS modeste sur 1 vCPU (defaut 2).
+      env_vars_json: |
+        {
+          "MAX_CONCURRENT_JOBS": "2"
+        }
+      # REDIS_URL : 1er usage du secret platform-redis-url (URL complete avec mdp).
+      secret_env_vars_json: |
+        {
+          "REDIS_URL": "platform-redis-url:latest"
+        }
+      # Gate Trivy desactive : base python:3.11-slim (CVE HIGH build deps connues). Dette tracee.
+      trivy_disable_gate: true
+    secrets:
+      slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
