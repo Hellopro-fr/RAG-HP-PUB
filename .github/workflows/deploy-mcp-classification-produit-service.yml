@@ -1,0 +1,62 @@
+name: 'Deploy — mcp-classification-produit-service'
+
+# Wrapper qui appelle deploy-cloud-run.yml pour mcp-classification-produit-service
+# (Go 1.26 stdlib pur, serveur MCP SSE + /mcp, port 8593).
+#
+# Deploiement PARALLELE (shadow), zero trafic reroute. mcp-gateway (VM) garde son container.
+#
+# *** BATCH 3B — MCP Go qui PROXIE api-classification en HTTP (pas de gRPC direct) ***
+# CLASSIFICATION_API_URL -> URL Cloud Run d'api-classification (#19, deja migre, public).
+# Chaine : mcp-classification (CR) -> api-classification (CR #19) -> enabler gRPC -> GPU.
+# EGRESS SEUL (appel HTTP vers l'URL run.app publique de #19) -> AUCUN VPC Connector.
+#
+# 0 secret. 0 dependance externe (go.mod stdlib pur) -> bump builder Go 1.24->1.26 suffit
+# pour les CVE stdlib (gate Trivy ACTIF, pattern Go). MCP non authentifie. Health GET /health.
+# CMD = binaire unique -> pas d'override commande.
+
+on:
+  push:
+    branches:
+      - 'feat/migration-**'
+    paths:
+      - 'apps-microservices/mcp-classification-produit-service/**'
+      - '.github/workflows/deploy-mcp-classification-produit-service.yml'
+      - '.github/workflows/deploy-cloud-run.yml'
+  workflow_dispatch:
+    inputs:
+      cloud_run_region:
+        description: 'Région Cloud Run (override)'
+        required: false
+        type: string
+        default: 'europe-west1'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    name: 'Deploy mcp-classification-produit-service'
+    uses: ./.github/workflows/deploy-cloud-run.yml
+    with:
+      service_name: mcp-classification-produit-service
+      dockerfile_path: apps-microservices/mcp-classification-produit-service/Dockerfile
+      build_context: .
+      cloud_run_region: ${{ github.event.inputs.cloud_run_region || 'europe-west1' }}
+      ingress: all
+      allow_unauthenticated: true
+      cpu: '1'
+      memory: '256Mi'
+      min_instances: 0
+      max_instances: 3
+      # Bind = MCP_PORT (8593).
+      container_port: 8593
+      health_check_path: /health
+      # Egress seul (HTTP vers l'URL CR publique d'api-classification #19). Pas de VPC.
+      env_vars_json: |
+        {
+          "MCP_PORT": "8593",
+          "CLASSIFICATION_API_URL": "https://api-classification-xqksdwdiga-ew.a.run.app"
+        }
+    secrets:
+      slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
