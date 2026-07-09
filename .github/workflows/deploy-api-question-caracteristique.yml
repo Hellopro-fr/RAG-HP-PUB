@@ -1,0 +1,87 @@
+name: 'Deploy — api-question-caracteristique'
+
+# Wrapper qui appelle deploy-cloud-run.yml pour api-question-caracteristique
+# (Python FastAPI, génération questions/caractéristiques produit via LLM+RAG, port 8540).
+#
+# Deploiement PARALLELE (shadow), zero trafic reroute. VAGUE 4A.
+#
+# Profil = famille api-recherche : credentials.Settings() OBLIGATOIRE a l'import
+# (ZILLIZ/QDRANT/RABBITMQ/KEY_WEBHOOK/OPENAI/OPENROUTER/DEEPSEEK/M/EF/GEMINI).
+# Deps : LLM (DeepSeek egress défaut + gRPC llm via enabler possible) + HP API (egress) +
+# éventuel Milvus/Qdrant. common_utils.grpc_clients → cibles gRPC via l'enabler.
+# ConnexionManager = WebSocket (pas de connexion Milvus au startup → startup safe).
+# LECTURE SEULE (génération). CMD uvicorn mono → pas d'override workers.
+#
+# VPC Connector requis (enabler gRPC 10.11.0.2 + éventuel Milvus interne).
+
+on:
+  push:
+    branches:
+      - 'feat/migration-**'
+    paths:
+      - 'apps-microservices/api-question-caracteristique/**'
+      - '.github/workflows/deploy-api-question-caracteristique.yml'
+  workflow_dispatch:
+    inputs:
+      cloud_run_region:
+        description: 'Région Cloud Run (override)'
+        required: false
+        type: string
+        default: 'europe-west1'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    name: 'Deploy api-question-caracteristique'
+    uses: ./.github/workflows/deploy-cloud-run.yml
+    with:
+      service_name: api-question-caracteristique
+      dockerfile_path: apps-microservices/api-question-caracteristique/Dockerfile
+      build_context: .
+      cloud_run_region: ${{ github.event.inputs.cloud_run_region || 'europe-west1' }}
+      ingress: all
+      allow_unauthenticated: true
+      cpu: '1'
+      memory: '1Gi'
+      min_instances: 0
+      max_instances: 3
+      # CMD uvicorn --port 8540 (hardcode Dockerfile, mono-process).
+      container_port: 8540
+      startup_cpu_boost: true
+      # "/" renvoie le message de bienvenue (Monitoring, 200).
+      health_check_path: /
+      # *** VPC Connector requis : enabler gRPC (10.11.0.2) + éventuel Milvus interne ***
+      vpc_connector: vpc-access-connector
+      vpc_egress: private-ranges-only
+      env_vars_json: |
+        {
+          "EMBEDDING_SERVICE_URL": "10.11.0.2:15052",
+          "RERANKING_SERVICE_URL": "10.11.0.2:15053",
+          "DATABASE_SERVICE_URL": "10.11.0.2:15054",
+          "LLM_SERVICE_URL": "10.11.0.2:15051",
+          "SERVICE_NAME": "api-question-caracteristique",
+          "ZILLIZ_URI": "milvus-prod.hello.dev.private.com",
+          "ZILLIZ_PORT": "19530",
+          "ZILLIZ_API_KEY": "none",
+          "QDRANT_HOST_URL": "10.0.1.237",
+          "QDRANT_PORT": "6333",
+          "QDRANT_API_KEY": "none",
+          "M_PARAMS": "32",
+          "EF_PARAMS": "300"
+        }
+      secret_env_vars_json: |
+        {
+          "OPENAI_API_KEY": "platform-openai-api-key:latest",
+          "OPENROUTER_API_KEY": "platform-openrouter-api-key:latest",
+          "DEEPSEEK_API_KEY": "platform-deepseek-api-key:latest",
+          "GEMINI_API_KEY": "platform-gemini-api-key:latest",
+          "RABBITMQ_URL": "platform-rabbitmq-url:latest",
+          "KEY_WEBHOOK": "platform-key-webhook:latest"
+        }
+      # Gate Trivy desactive : base python:3.10-slim (CVE HIGH build deps connues). Dette tracee.
+      trivy_disable_gate: true
+    secrets:
+      slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
