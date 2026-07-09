@@ -1,5 +1,5 @@
 # ── Stage 1: Generate Go gRPC stubs ──────────────────────────────────────────
-FROM golang:1.24-alpine AS protogen
+FROM golang:1.26-alpine AS protogen
 
 RUN apk add --no-cache protobuf protobuf-dev
 RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
@@ -51,7 +51,7 @@ RUN mkdir -p /build/proto/gen/embedding \
         /protos/grpc_stubs/llm.proto
 
 # ── Stage 2: Build Go binary ─────────────────────────────────────────────────
-FROM golang:1.24-alpine AS builder
+FROM golang:1.26-alpine AS builder
 
 WORKDIR /build
 COPY --from=protogen /build/ /build/
