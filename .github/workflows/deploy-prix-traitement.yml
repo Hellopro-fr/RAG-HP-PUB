@@ -1,0 +1,92 @@
+name: 'Deploy — prix-traitement'
+
+# Wrapper qui appelle deploy-cloud-run.yml pour prix-traitement
+# (Python FastAPI, extraction caractéristiques + questionnaire prix RAG+LLM, port 8591).
+#
+# Deploiement PARALLELE (shadow), zero trafic reroute.
+#
+# *** BATCH 3B — service prix, embarque api-recherche (comme api-classification) ***
+# app/core/search.py -> api_recherche_lib.search_in_milvus (RAG questionnaire) -> 3 gRPC
+# via l'enabler : embedding (15052) + database (15054) + reranking (15053). LLM (15051) au cas ou.
+# credentials api_recherche_lib.Settings() OBLIGATOIRE a l'import (ZILLIZ/QDRANT/RABBITMQ/keys).
+# Egress : LLM (Gemini/Claude/OpenAI) + API HelloPro (api.hellopro.fr, HP_TOKEN ; BASE_URL hardcode).
+# LECTURE SEULE (search Milvus prod cote GPU). CMD uvicorn mono -> pas d'override workers.
+#
+# VPC Connector + egress private-ranges-only OBLIGATOIRES (cibles gRPC = IP interne 10.11.0.2).
+
+on:
+  push:
+    branches:
+      - 'feat/migration-**'
+    paths:
+      - 'apps-microservices/prix-traitement/**'
+      - '.github/workflows/deploy-prix-traitement.yml'
+  workflow_dispatch:
+    inputs:
+      cloud_run_region:
+        description: 'Région Cloud Run (override)'
+        required: false
+        type: string
+        default: 'europe-west1'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    name: 'Deploy prix-traitement'
+    uses: ./.github/workflows/deploy-cloud-run.yml
+    with:
+      service_name: prix-traitement
+      dockerfile_path: apps-microservices/prix-traitement/Dockerfile
+      build_context: .
+      cloud_run_region: ${{ github.event.inputs.cloud_run_region || 'europe-west1' }}
+      ingress: all
+      allow_unauthenticated: true
+      cpu: '1'
+      # 1Gi : imports lourds (api_recherche_lib + pymilvus + grpc).
+      memory: '1Gi'
+      min_instances: 0
+      max_instances: 3
+      # CMD uvicorn --port 8591 (hardcode Dockerfile, mono-process).
+      container_port: 8591
+      startup_cpu_boost: true
+      # "/" renvoie le message de bienvenue (dict simple, 200 fiable — pas de bug cache_or_execute).
+      health_check_path: /
+      # *** VPC Connector requis : cibles gRPC = IP interne VM GPU (10.11.0.2) via proxy ***
+      vpc_connector: vpc-access-connector
+      vpc_egress: private-ranges-only
+      # gRPC enabler (search RAG) + config api_recherche_lib.Settings() (inerte : search via gRPC).
+      env_vars_json: |
+        {
+          "EMBEDDING_SERVICE_URL": "10.11.0.2:15052",
+          "RERANKING_SERVICE_URL": "10.11.0.2:15053",
+          "DATABASE_SERVICE_URL": "10.11.0.2:15054",
+          "LLM_SERVICE_URL": "10.11.0.2:15051",
+          "SERVICE_NAME": "prix-traitement",
+          "ZILLIZ_URI": "milvus-prod.hello.dev.private.com",
+          "ZILLIZ_PORT": "19530",
+          "ZILLIZ_API_KEY": "none",
+          "QDRANT_HOST_URL": "10.0.1.237",
+          "QDRANT_PORT": "6333",
+          "QDRANT_API_KEY": "none",
+          "M_PARAMS": "32",
+          "EF_PARAMS": "300"
+        }
+      # Secrets : prix-traitement (GEMINI, HP_TOKEN) + api_recherche_lib.Settings (OPENAI/OPENROUTER/
+      # DEEPSEEK/RABBITMQ/KEY_WEBHOOK). ANTHROPIC omis (optionnel, defaut "" ; chemin Gemini par defaut).
+      secret_env_vars_json: |
+        {
+          "GEMINI_API_KEY": "platform-gemini-api-key:latest",
+          "HP_TOKEN": "platform-hp-token:latest",
+          "OPENAI_API_KEY": "platform-openai-api-key:latest",
+          "OPENROUTER_API_KEY": "platform-openrouter-api-key:latest",
+          "DEEPSEEK_API_KEY": "platform-deepseek-api-key:latest",
+          "RABBITMQ_URL": "platform-rabbitmq-url:latest",
+          "KEY_WEBHOOK": "platform-key-webhook:latest"
+        }
+      # Gate Trivy desactive : base python:3.10-slim (CVE HIGH build deps connues). Dette tracee.
+      trivy_disable_gate: true
+    secrets:
+      slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
