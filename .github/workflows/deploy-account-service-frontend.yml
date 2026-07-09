@@ -21,7 +21,6 @@ on:
     paths:
       - 'apps-microservices/account-service-frontend/**'
       - '.github/workflows/deploy-account-service-frontend.yml'
-      - '.github/workflows/deploy-cloud-run.yml'
   workflow_dispatch:
     inputs:
       cloud_run_region:

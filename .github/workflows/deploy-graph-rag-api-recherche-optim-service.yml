@@ -21,7 +21,6 @@ on:
     paths:
       - 'apps-microservices/graph-rag-api-recherche-optim-service/**'
       - '.github/workflows/deploy-graph-rag-api-recherche-optim-service.yml'
-      - '.github/workflows/deploy-cloud-run.yml'
   workflow_dispatch:
     inputs:
       cloud_run_region:

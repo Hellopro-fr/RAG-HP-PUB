@@ -27,7 +27,6 @@ on:
     paths:
       - 'apps-microservices/optimize-service/**'
       - '.github/workflows/deploy-optimize-service.yml'
-      - '.github/workflows/deploy-cloud-run.yml'
   workflow_dispatch:
     inputs:
       cloud_run_region:

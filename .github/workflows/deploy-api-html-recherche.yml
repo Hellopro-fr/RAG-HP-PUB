@@ -27,7 +27,6 @@ on:
     paths:
       - 'apps-microservices/api-html-recherche/**'
       - '.github/workflows/deploy-api-html-recherche.yml'
-      - '.github/workflows/deploy-cloud-run.yml'
   workflow_dispatch:
     inputs:
       cloud_run_region:

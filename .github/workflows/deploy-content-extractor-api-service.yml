@@ -22,7 +22,6 @@ on:
       - 'apps-microservices/content-extractor-api-service/**'
       - 'libs/common-utils/**'   # HeaderFooterExtractor dépendance directe
       - '.github/workflows/deploy-content-extractor-api-service.yml'
-      - '.github/workflows/deploy-cloud-run.yml'
   workflow_dispatch:
     inputs:
       cloud_run_region:

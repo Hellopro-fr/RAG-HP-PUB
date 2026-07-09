@@ -18,7 +18,6 @@ on:
     paths:
       - 'apps-microservices/mcp-leexi-service/**'
       - '.github/workflows/deploy-mcp-leexi-service.yml'
-      - '.github/workflows/deploy-cloud-run.yml'
   workflow_dispatch:
     inputs:
       cloud_run_region:
