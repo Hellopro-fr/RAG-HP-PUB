@@ -309,6 +309,7 @@ module "secret_manager" {
     "platform-gateway-mysql-pass"      = { service = "platform" }
     "platform-gateway-mysql-root-pass" = { service = "platform" }
     "platform-redis-secret"            = { service = "platform" }
+    "platform-redis-url"               = { service = "platform" } # REDIS_URL complet (redis://:<pwd>@10.0.1.220:6379) pour consommateurs Redis (image-comparison…)
     "platform-rabbitmq-url"            = { service = "platform" } # PROD (10.0.1.216)
     "platform-rabbitmq-url-dev"        = { service = "platform" } # DEV/TEST (10.0.1.217) — tests shadow, bascule prod au cutover
     "platform-key-webhook"             = { service = "platform" } # KEY_WEBHOOK partagé (api-chat-llm, api-rest-milvus…)
