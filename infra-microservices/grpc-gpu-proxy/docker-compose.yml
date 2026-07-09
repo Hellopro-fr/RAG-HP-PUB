@@ -1,0 +1,45 @@
+# grpc-gpu-proxy — enabler gRPC Cloud Run (eu-west1) -> services gRPC internes VM GPU.
+#
+# Compose SEPARE (volontairement HORS du docker-compose.yml global) : le proxy est un
+# sidecar d'infra transverse, pas un service applicatif. Deploiement sur la VM GPU dans
+# ~/infra/grpc-gpu-proxy/ (avec haproxy.cfg). Codifie le conteneur auparavant lance a la
+# main (F-HP-IaC-001).
+#
+# Reseau : rejoint le reseau applicatif EXISTANT (external) pour resoudre les noms de
+# service Docker (llm-service, embedding-model-service, graph-rag-*, etc.).
+# Ports : bind sur l'IP privee VM 10.11.0.2, 8 ports (15051-15058) mappes 1:1.
+#   15051 llm · 15052 embedding · 15053 reranking · 15054 database-recherche
+#   15055 graph-rag-milvus · 15056 graph-rag-database-connector
+#   15057 graph-rag-normalize-unite · 15058 graph-rag-spacy
+# Firewall GCP : allow-cr-eu-to-vm-gpu-grpc (source 10.0.2.0/28, ports 15051-15058).
+#
+# Deploiement :
+#   cd ~/infra/grpc-gpu-proxy
+#   docker rm -f grpc-gpu-proxy 2>/dev/null || true   # retire l'ancien conteneur manuel
+#   docker compose up -d
+#   docker compose ps && docker compose logs --tail 20
+
+services:
+  grpc-gpu-proxy:
+    image: haproxy:2.9-alpine
+    container_name: grpc-gpu-proxy
+    restart: unless-stopped
+    networks:
+      - services-net
+    ports:
+      - "10.11.0.2:15051:15051"
+      - "10.11.0.2:15052:15052"
+      - "10.11.0.2:15053:15053"
+      - "10.11.0.2:15054:15054"
+      - "10.11.0.2:15055:15055"
+      - "10.11.0.2:15056:15056"
+      - "10.11.0.2:15057:15057"
+      - "10.11.0.2:15058:15058"
+    volumes:
+      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+
+# Reseau applicatif existant (cree par le docker-compose.yml global du stack rag-hp-pub).
+networks:
+  services-net:
+    external: true
+    name: rag-hp-pub_services-net
