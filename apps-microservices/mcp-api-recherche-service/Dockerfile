@@ -56,6 +56,10 @@ FROM golang:1.26-alpine AS builder
 WORKDIR /build
 COPY --from=protogen /build/ /build/
 
+# Bump deps CVE (Trivy) : x/net 0.40->0.55 (XSS/DoS/idna HIGH), grpc 1.72->1.79 (authz bypass CRITICAL).
+# Fait au build (pas de Go/Docker local dispo) ; `go mod tidy` en dessous reconcilie go.sum.
+# NB : go.mod/go.sum SOURCE restent a l'ancienne version -> a reconcilier au rapatriement poc (Go requis).
+RUN go get golang.org/x/net@v0.55.0 google.golang.org/grpc@v1.79.3
 RUN go mod tidy
 RUN CGO_ENABLED=0 GOOS=linux go build -o /bin/mcp-api-recherche ./cmd/server/
 
