@@ -7,8 +7,9 @@ double-extension pairs (2026-07-08):
   edge -> pHash 34/64 on identical visuals. Fixed by thresholding the
   background at >= 240 grayscale.
 - pacamodul IMG-20211108-WA0017.jpg vs .jpg.webp: pHash distance 0 but HSV
-  histogram 70 < 85 -> no forced_match -> score 94 < threshold 100. Fixed by
-  forcing the match at distance 0 from hist >= 60.
+  histogram 70 < 85 -> no forced_match -> score 94 < threshold 100. Choix
+  conservateur : NON corrige (aucun elargissement du forced_match), faux
+  negatif assume pour garantir zero nouveau chemin d acceptation.
 """
 import cv2
 import numpy as np
@@ -56,7 +57,11 @@ def _hist_pair_medium_correlation():
     return x, y
 
 
-def test_forced_match_at_zero_distance_with_medium_hist():
+def test_zero_distance_with_medium_hist_is_deliberately_not_forced():
+    # Choix conservateur (2026-07-09) : PAS d elargissement du forced_match a
+    # distance 0 avec hist moyen — zero nouveau chemin d acceptation vs l etat
+    # d avant les fixes. La classe pacamodul (dist 0, hist ~70 apres
+    # recompression) reste un faux negatif ASSUME (score ~94 < threshold 100).
     img = _photo_on_white()
     ph = imagehash.phash(img)
     h1, h2 = _hist_pair_medium_correlation()
@@ -66,7 +71,7 @@ def test_forced_match_at_zero_distance_with_medium_hist():
     score, details = ImageProcessor.calculate_similarity(
         {"phash": ph, "hist": h1}, {"phash": ph, "hist": h2}
     )
-    assert score == 100.0 and details.get("forced_match") is True, (score, details)
+    assert score < 100.0 and not details.get("forced_match"), (score, details)
 
 
 def test_no_forced_match_when_structure_differs():

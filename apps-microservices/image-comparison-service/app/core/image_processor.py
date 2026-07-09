@@ -292,12 +292,6 @@ class ImageProcessor:
         # lower the histogram score slightly.
         # Distance 0 = Exact
         # Distance 1-3 = Very likely resized/compressed version
-        # At distance 0 the 64-bit structure is STRICTLY identical: two genuinely
-        # different photos virtually never collide, while format recompression
-        # (JPEG->WebP) can drag the color histogram down to ~70 (real case:
-        # pacamodul IMG-20211108-WA0017.jpg vs .jpg.webp -> hist 70, score 94 < 100).
-        if hamming_dist == 0 and hist_score >= 60:
-            return 100.0, {"phash": phash_score, "hist": hist_score, "forced_match": True}
         if hamming_dist <= 3 and hist_score >= 85:
             # Force 100% for miniatures/duplicates to satisfy strict thresholds
             return 100.0, {"phash": phash_score, "hist": hist_score, "forced_match": True}
