@@ -61,7 +61,8 @@ func setupOAuth2BDDTestDB(t *testing.T) *gorm.DB {
 			ringover_allowed_user_ids TEXT,
 			ringover_allowed_team_ids TEXT,
 			zoho_filter_mode TEXT NOT NULL DEFAULT 'none',
-			zoho_allowed_emails TEXT
+			zoho_allowed_emails TEXT,
+			inject_instructions_into_tools INTEGER NOT NULL DEFAULT 0
 		)`,
 		`CREATE TABLE oauth2_client_servers (
 			client_id TEXT NOT NULL,

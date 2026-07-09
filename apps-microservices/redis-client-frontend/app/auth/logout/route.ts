@@ -1,12 +1,12 @@
-import { NextResponse, type NextRequest } from "next/server"
-import { getAuthConfig, SESSION_COOKIE } from "@hellopro/auth"
+import { NextResponse } from "next/server"
+import { getAuthConfig, SESSION_COOKIE, appOrigin } from "@hellopro/auth"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   const cfg = await getAuthConfig()
-  const loginUrl = new URL("/auth/login", request.url).toString()
+  const loginUrl = new URL("/auth/login", appOrigin()).toString()
   const target = cfg.centralLogout
     ? `${cfg.accountPublicUrl}/logout?post_logout_redirect_uri=${encodeURIComponent(loginUrl)}`
     : loginUrl

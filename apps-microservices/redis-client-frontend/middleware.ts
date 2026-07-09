@@ -1,6 +1,6 @@
 // Auth middleware — gates all routes on the signed rcf_session cookie (account-service SSO).
 import { NextResponse, type NextRequest } from "next/server"
-import { readSession, SESSION_COOKIE } from "@hellopro/auth"
+import { readSession, SESSION_COOKIE, appOrigin } from "@hellopro/auth"
 
 export async function middleware(request: NextRequest) {
   const session = await readSession(request.cookies.get(SESSION_COOKIE)?.value)
@@ -13,7 +13,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const loginUrl = new URL("/auth/login", request.url)
+  const loginUrl = new URL("/auth/login", appOrigin())
   return NextResponse.redirect(loginUrl)
 }
 

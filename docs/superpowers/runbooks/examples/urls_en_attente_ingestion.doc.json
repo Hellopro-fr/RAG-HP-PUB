@@ -1,0 +1,19 @@
+{
+  "urls_en_attente_ingestion": {
+    "database_id": 10,
+    "description": "File/snapshot de réconciliation du pipeline guérison-archivage RAG site-web (script_guerison_archivage.sh, 5 phases). 1 ligne = 1 URL de page NON-produit (« site_web ») présente dans le dataset crawl local d'un domaine mais MANQUANTE dans la collection Milvus siteweb (et non archivée en DLQ) → à (ré)ingérer. Table transitoire à très haute rotation : recréée par domaine à chaque cycle (DELETE puis INSERT), d'où un PK à ~1,9M pour seulement quelques lignes vivantes. Stockée dans HELLOPRO_IA.",
+    "primary_key": "id",
+    "default_order_by": "id DESC",
+    "rows": null,
+    "columns": {
+      "id": { "type": "int", "desc": "Identifiant unique de la ligne (PK, auto-increment). Non stable dans le temps : la ligne est supprimée puis recréée à chaque cycle de réconciliation → PK très élevé (~1,9M) malgré un faible nombre de lignes vivantes." },
+      "id_domaine_scrapping_produit_ia": { "type": "int", "desc": "FK → domaine_scrapping_produit_ia.id_domaine_scrapping_produit_ia (DSPI). Domaine dont l'URL est en attente d'ingestion. Indexé (idx_id_domaine). Pas d'unicité en base : l'unicité par domaine est garantie par le motif DELETE-tout-le-domaine puis INSERT (Phase 3)." },
+      "url": { "type": "varchar(2048)", "desc": "URL de la page site_web (non-produit) manquante dans Milvus siteweb (les fiches produit sont exclues en amont, statut_dspi≠14). URL BRUTE (envoyée verbatim car Milvus la stocke telle quelle — une normalisation créerait de faux « manquants »). Indexée idx_url(255). Peut contenir des URLs spider-trap (chemins répétés) non filtrées par ce pipeline." },
+      "date_ajout": { "type": "timestamp", "desc": "Horodatage d'écriture de la ligne (DEFAULT CURRENT_TIMESTAMP, jamais posé explicitement). Purement informatif : le drain n'est PAS FIFO (aucun ORDER BY date_ajout côté lecteur). Fuseau Europe/Paris." }
+    },
+    "relations": [
+      { "column": "id_domaine_scrapping_produit_ia", "references": "domaine_scrapping_produit_ia.id_domaine_scrapping_produit_ia", "cardinality": "N:1", "note": "Domaine d'origine. JOIN systématique côté lecteur (Phase 1 et Phase 4), filtré est_archiver=0." }
+    ],
+    "notes": "Handoff Phase 3 → Phase 4 du pipeline RAG site-web (script_guerison_archivage.sh). Phase 2 (2_check_urls_in_milvus.php) interroge api.hellopro.eu/rest_milvus-service/check-urls-existence pour déterminer les URLs manquantes. Phase 3 (3_archive_eligible_domains.php) ÉCRIT : par domaine, DELETE de toutes ses lignes puis INSERT des seules URLs « bloquantes » (manquantes ET non-DLQ) — colonnes (id_domaine, url) seulement, id auto-inc, date_ajout par défaut, INSERT simple (pas d'ON DUPLICATE) ; un domaine complet n'insère rien et est archivé. Phase 4 (4_regenerate_missing_urls.php) LIT (ne supprime pas) : match chaque URL à son .json de dataset local, filtre DLQ, écrit du JSONL (source='site_web') → .gz → rag/ingestion/data/siteweb/ → server.py → POST ingestion-service/ingestion/publier-lot → Milvus siteweb. Phase 1 (1_export_urls_for_verification.php) relit la table comme focus-list du contrôle Milvus suivant. Le DRAIN réel = le DELETE de Phase 3 au cycle SUIVANT, une fois que Phase 2 confirme la présence de l'URL dans Milvus → d'où le delete+reinsert par cycle (churn PK). Piège : une URL au .json local présent mais jamais ingérée (contenu trop mince rejeté, ou mismatch de normalisation d'URL) est re-queue à chaque cycle → lignes résiduelles bloquées. Pas de DDL versionné (schéma sur la base distante)."
+  }
+}

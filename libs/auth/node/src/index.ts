@@ -3,6 +3,7 @@ export {
   resolveClientCredentials,
   parseAdminEmails,
   getAuthConfig,
+  appOrigin,
   __resetClientCredentialsCache,
   type AuthConfig,
 } from "./config"

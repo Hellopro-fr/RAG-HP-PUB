@@ -78,6 +78,11 @@ type ResolvedInstruction struct {
 	ID    string
 	Title string
 	Body  string
+	// Kind mirrors db.LLMInstructionRow.Kind ("general" | "per_server");
+	// empty is treated as "general". ServerIDs carries the per_server row's
+	// linked servers for tool-description routing.
+	Kind      string
+	ServerIDs []string
 }
 
 // AllowedInstructionsFromContext returns the resolved instruction list, if any.
@@ -85,6 +90,19 @@ type ResolvedInstruction struct {
 func AllowedInstructionsFromContext(ctx context.Context) ([]ResolvedInstruction, bool) {
 	v, ok := ctx.Value(AllowedInstructionsContextKey).([]ResolvedInstruction)
 	return v, ok
+}
+
+// InjectInstructionsIntoToolsContextKey carries the OAuth2 client's
+// inject_instructions_into_tools flag. When true, ScopedGateway appends the
+// resolved instructions to tool descriptions in tools/list and omits the
+// initialize `instructions` field. Scope tokens never set it. Value type: bool.
+const InjectInstructionsIntoToolsContextKey = "scope_inject_instructions_into_tools"
+
+// InjectInstructionsIntoToolsFromContext reports whether tool-description
+// injection was enabled for the active credential. Missing key = false.
+func InjectInstructionsIntoToolsFromContext(ctx context.Context) bool {
+	v, _ := ctx.Value(InjectInstructionsIntoToolsContextKey).(bool)
+	return v
 }
 
 // EndUserEmailContextKey carries the authenticated end-user's email captured
@@ -267,8 +285,13 @@ func ValidateAndBuildContext(
 			if err == nil && len(rows) > 0 {
 				ct.Instructions = make([]CachedInstruction, 0, len(rows))
 				for _, row := range rows {
+					rowServerIDs := make([]string, 0, len(row.Servers))
+					for _, s := range row.Servers {
+						rowServerIDs = append(rowServerIDs, s.ServerID)
+					}
 					ct.Instructions = append(ct.Instructions, CachedInstruction{
 						ID: row.ID, Title: row.Title, Body: row.Body,
+						Kind: row.Kind, ServerIDs: rowServerIDs,
 					})
 				}
 			} else if err != nil {
@@ -339,7 +362,10 @@ func ValidateAndBuildContext(
 	if len(ct.Instructions) > 0 {
 		resolved := make([]ResolvedInstruction, 0, len(ct.Instructions))
 		for _, ci := range ct.Instructions {
-			resolved = append(resolved, ResolvedInstruction{ID: ci.ID, Title: ci.Title, Body: ci.Body})
+			resolved = append(resolved, ResolvedInstruction{
+				ID: ci.ID, Title: ci.Title, Body: ci.Body,
+				Kind: ci.Kind, ServerIDs: ci.ServerIDs,
+			})
 		}
 		ctx = context.WithValue(ctx, AllowedInstructionsContextKey, resolved)
 	}

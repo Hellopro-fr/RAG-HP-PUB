@@ -119,13 +119,14 @@ func CombinedMiddleware(
 					}
 
 					cc = &CachedClient{
-						ID:           client.ID,
-						Name:         client.Name,
-						ServerIDs:    serverIDs,
-						AllowedTools: allowedTools,
-						ExpiresAt:    client.ExpiresAt,
-						IsActive:     client.IsActive,
-						TTL:          client.AccessTokenTTL,
+						ID:                          client.ID,
+						Name:                        client.Name,
+						ServerIDs:                   serverIDs,
+						AllowedTools:                allowedTools,
+						ExpiresAt:                   client.ExpiresAt,
+						IsActive:                    client.IsActive,
+						TTL:                         client.AccessTokenTTL,
+						InjectInstructionsIntoTools: client.InjectInstructionsIntoTools,
 					}
 
 					if instructionRepo != nil && len(client.Instructions) > 0 && len(serverIDs) > 0 {
@@ -137,8 +138,13 @@ func CombinedMiddleware(
 						if rerr == nil && len(rows) > 0 {
 							cc.Instructions = make([]CachedInstruction, 0, len(rows))
 							for _, row := range rows {
+								rowServerIDs := make([]string, 0, len(row.Servers))
+								for _, s := range row.Servers {
+									rowServerIDs = append(rowServerIDs, s.ServerID)
+								}
 								cc.Instructions = append(cc.Instructions, CachedInstruction{
 									ID: row.ID, Title: row.Title, Body: row.Body,
+									Kind: row.Kind, ServerIDs: rowServerIDs,
 								})
 							}
 						} else if rerr != nil {
@@ -201,9 +207,15 @@ func CombinedMiddleware(
 				if len(cc.Instructions) > 0 {
 					resolved := make([]scopetoken.ResolvedInstruction, 0, len(cc.Instructions))
 					for _, ci := range cc.Instructions {
-						resolved = append(resolved, scopetoken.ResolvedInstruction{ID: ci.ID, Title: ci.Title, Body: ci.Body})
+						resolved = append(resolved, scopetoken.ResolvedInstruction{
+							ID: ci.ID, Title: ci.Title, Body: ci.Body,
+							Kind: ci.Kind, ServerIDs: ci.ServerIDs,
+						})
 					}
 					ctx = context.WithValue(ctx, scopetoken.AllowedInstructionsContextKey, resolved)
+					if cc.InjectInstructionsIntoTools {
+						ctx = context.WithValue(ctx, scopetoken.InjectInstructionsIntoToolsContextKey, true)
+					}
 				}
 				if cc.LeexiFilterMode != "" && cc.LeexiFilterMode != "none" {
 					ctx = context.WithValue(ctx, scopetoken.LeexiFilterContextKey, &scopetoken.LeexiFilterContext{
