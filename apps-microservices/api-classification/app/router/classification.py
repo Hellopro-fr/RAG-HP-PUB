@@ -246,6 +246,7 @@ async def classify_batch_products(batch_input: BatchProductsInput):
         llm_to_use = batch_input.llm if batch_input.llm else "DeepSeek"
         enable_thinking = batch_input.enable_thinking if batch_input.enable_thinking is not None else False
         optimize = batch_input.optimize if batch_input.optimize is not None else False
+        prompt_id_to_use = batch_input.prompt_id if batch_input.prompt_id else 20
 
         if not classifier.is_llm_configured():
             raise HTTPException(status_code=503, detail="LLM non configuré")
@@ -266,7 +267,7 @@ async def classify_batch_products(batch_input: BatchProductsInput):
                 'id_categorie_attendue': product.id_categorie_attendue
             })
 
-        result = await classifier.classify_batch(products_dict, llm_override=llm_to_use, enable_thinking=enable_thinking, optimize=optimize)
+        result = await classifier.classify_batch(products_dict, llm_override=llm_to_use, enable_thinking=enable_thinking, optimize=optimize, prompt_id=prompt_id_to_use)
 
         # Conversion en modèle de réponse
         classification_results = [ClassificationResult(**res) for res in result['resultats']]

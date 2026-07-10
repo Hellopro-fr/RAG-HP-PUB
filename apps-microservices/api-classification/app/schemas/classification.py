@@ -29,6 +29,7 @@ class BatchProductsInput(BaseModel):
     llm: Optional[Literal["OpenAI", "DeepSeek", "Qwen"]] = Field(None, description="LLM à utiliser pour ce batch (par défaut: DeepSeek)")
     enable_thinking: Optional[bool] = Field(False, description="Activer le mode thinking pour Qwen (par défaut: False)")
     optimize: Optional[bool] = Field(False, description="Optimiser les titres avant classification (par défaut: False)")
+    prompt_id: Optional[int] = Field(None, description="ID du prompt à utiliser pour ce batch (par défaut: 20)")
 
     class Config:
         json_schema_extra = {
