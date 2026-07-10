@@ -1129,6 +1129,9 @@ router.addDefaultHandler(
                 }
             } else {
                 log.warning(`Le site ${url} n'est pas en Français.`);
+                // Revive the (previously dead) filtered_nonfr counter → the terminal webhook
+                // carries a machine-readable non-French signal that the BO turns into isError='not_french'.
+                if (context.statsManager) await context.statsManager.increment("filtered_nonfr");
 
                 // --- UPDATE MODE: Non-French page = not eligible ---
                 if (context.updateChecker && source) {
