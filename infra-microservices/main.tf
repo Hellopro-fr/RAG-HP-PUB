@@ -357,6 +357,8 @@ module "secret_manager" {
     "mcp-google-analytics-sa-key"          = { service = "mcp-google-analytics-service" }
     "mcp-google-analytics-minisite-sa-key" = { service = "mcp-google-analytics-minisite-service" }
     "mcp-gsc-sa-key"                       = { service = "mcp-google-search-console-service" }
+    # crawler-monitor-backend : hash scrypt du mot de passe admin (login JWT, propre au service)
+    "crawler-monitor-admin-password-hash" = { service = "crawler-monitor-backend" }
   }
   cloudrun_sa_email = module.service_accounts.cloudrun_sa_email
   common_labels = {
