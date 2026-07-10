@@ -1307,6 +1307,8 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                 }
             }
 
+            
+
     async def classify_single(self, product: Dict, llm_override: Optional[str] = None, enable_thinking: bool = False, optimize: bool = False, prompt_id: int = 20) -> Dict:
         """Classifie un seul produit (asynchrone). prompt_id=110 pour classify-provider."""
         start_time = time.time()
@@ -1341,6 +1343,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                     'llm_type': llm_override,
                     'enable_thinking': enable_thinking,
                     'llm_response': None,
+                    'prompt_id': prompt_id,
                     'processing_time': time.time() - start_time,
                     'input_tokens': 0,
                     'output_tokens': 0
@@ -1393,6 +1396,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                     'llm_type': self.llm_choice,
                     'enable_thinking': enable_thinking,
                     'llm_response': None,
+                    'prompt_id': prompt_id,
                     'processing_time': time.time() - start_time,
                     'input_tokens': 0,
                     'output_tokens': 0
@@ -1416,6 +1420,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                     'llm_type': self.llm_choice,
                     'enable_thinking': enable_thinking,
                     'llm_response': None,
+                    'prompt_id': prompt_id,
                     'processing_time': time.time() - start_time,
                     'input_tokens': 0,
                     'output_tokens': 0
@@ -1524,6 +1529,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                     'llm_type': self.llm_choice,
                     'enable_thinking': enable_thinking,
                     'llm_response': [llm_result_wrapper.get('raw_response')] if llm_result_wrapper.get('raw_response') else None,
+                    'prompt_id': prompt_id,
                     'processing_time': time.time() - start_time,
                     'input_tokens': total_input_tokens,
                     'output_tokens': total_output_tokens
@@ -1567,6 +1573,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                     'llm_type': self.llm_choice,
                     'enable_thinking': enable_thinking,
                     'llm_response': [llm_result_wrapper.get('raw_response')] if llm_result_wrapper.get('raw_response') else None,
+                    'prompt_id': prompt_id,
                     'processing_time': time.time() - start_time,
                     'input_tokens': total_input_tokens,
                     'output_tokens': total_output_tokens
@@ -1591,6 +1598,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                     'llm_type': self.llm_choice,
                     'enable_thinking': enable_thinking,
                     'llm_response': [llm_result_wrapper.get('raw_response')] if llm_result_wrapper.get('raw_response') else None,
+                    'prompt_id': prompt_id,
                     'processing_time': time.time() - start_time,
                     'input_tokens': total_input_tokens,
                     'output_tokens': total_output_tokens
@@ -1614,6 +1622,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                     'llm_type': self.llm_choice,
                     'enable_thinking': enable_thinking,
                     'llm_response': [llm_result_wrapper.get('raw_response')] if llm_result_wrapper.get('raw_response') else None,
+                    'prompt_id': prompt_id,
                     'processing_time': time.time() - start_time,
                     'input_tokens': total_input_tokens,
                     'output_tokens': total_output_tokens
@@ -1644,6 +1653,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                 'enable_thinking': enable_thinking,
                 'processing_time': time.time() - start_time,
                 'llm_response': [llm_result_wrapper.get('raw_response')] if llm_result_wrapper.get('raw_response') else None,
+                'prompt_id': prompt_id,
                 'input_tokens': total_input_tokens,
                 'output_tokens': total_output_tokens
             }
@@ -1665,6 +1675,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                 'llm_type': self.llm_choice,
                 'enable_thinking': enable_thinking,
                 'llm_response': [{'error': f'Exception générale: {str(e)}'}],
+                'prompt_id': prompt_id,
                 'processing_time': time.time() - start_time,
                 'input_tokens': 0,
                 'output_tokens': 0
@@ -1687,6 +1698,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                 'error_count': 0,
                 'resultats': [],
                 'llm_type': llm_override if llm_override else self.llm_choice,
+                'prompt_id': prompt_id,
                 'processing_time_total': time.time() - start_time
             }
 
@@ -1772,6 +1784,7 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                     'llm_type': llm_override if llm_override else self.llm_choice,
                     'enable_thinking': enable_thinking,
                     'llm_response': None,
+                    'prompt_id': prompt_id,
                     'processing_time': 0,
                     'input_tokens': 0,
                     'output_tokens': 0
@@ -1820,5 +1833,6 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
             'error_count': error_count,
             'resultats': results,
             'llm_type': actual_llm_type,
+            'prompt_id': prompt_id,
             'processing_time_total': time.time() - start_time
         }

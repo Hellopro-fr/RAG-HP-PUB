@@ -13,6 +13,13 @@ type CachedInstruction struct {
 	ID    string
 	Title string
 	Body  string
+	// Kind mirrors db.LLMInstructionRow.Kind ("general" | "per_server").
+	// Empty (pre-upgrade cache fills) is treated as "general" downstream.
+	Kind string
+	// ServerIDs are the row's linked server IDs — set only for per_server
+	// rows. Used to route the row to the right tool descriptions when
+	// tool-description injection is enabled.
+	ServerIDs []string
 }
 
 // CachedToken holds the resolved scope for a token hash.
