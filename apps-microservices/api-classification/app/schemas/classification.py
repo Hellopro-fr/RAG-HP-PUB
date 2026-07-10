@@ -69,6 +69,7 @@ class ClassificationResult(BaseModel):
     llm_type: Optional[Literal["OpenAI", "DeepSeek", "Qwen"]] = Field(None, description="Type de LLM utilisé pour la classification")
     enable_thinking: Optional[bool] = Field(None, description="Indique si le mode thinking était activé (applicable pour Qwen)")
     llm_response: Optional[List[Dict[str, Any]]] = Field(None, description="Réponse brute de DeepSeek (si applicable)")
+    prompt_id: Optional[int] = Field(None, description="ID du prompt utilisé pour la classification")
     error: Optional[str] = Field(None, description="Message d'erreur si échec")
 
 class BatchClassificationResponse(BaseModel):
@@ -78,6 +79,7 @@ class BatchClassificationResponse(BaseModel):
     error_count: int = Field(..., description="Nombre d'erreurs")
     resultats: List[ClassificationResult] = Field(..., description="Résultats détaillés")
     llm_type: Optional[Literal["OpenAI", "DeepSeek", "Qwen"]] = Field(None, description="Type de LLM utilisé pour la classification")
+    prompt_id: Optional[int] = Field(None, description="ID du prompt utilisé pour ce batch")
     processing_time_total: float = Field(..., description="Temps total de traitement")
 
 class ConfigurationRequest(BaseModel):

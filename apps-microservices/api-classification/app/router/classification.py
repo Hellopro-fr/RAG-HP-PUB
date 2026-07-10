@@ -278,6 +278,7 @@ async def classify_batch_products(batch_input: BatchProductsInput):
             error_count=result['error_count'],
             resultats=classification_results,
             llm_type=result.get('llm_type'),
+            prompt_id=result.get('prompt_id'),
             processing_time_total=result['processing_time_total']
         )
 
@@ -397,6 +398,7 @@ async def classify_batch_products_provider(batch_input: BatchProductsInput):
             error_count=result['error_count'],
             resultats=classification_results,
             llm_type=result.get('llm_type'),
+            prompt_id=result.get('prompt_id'),
             processing_time_total=result['processing_time_total']
         )
 
@@ -610,6 +612,7 @@ async def classify_batch_distributed(batch_input: BatchProductsInput):
         llm_to_use = batch_input.llm if batch_input.llm else "DeepSeek"
         enable_thinking = batch_input.enable_thinking if batch_input.enable_thinking is not None else False
         optimize = batch_input.optimize if batch_input.optimize is not None else False
+        prompt_id_to_use = batch_input.prompt_id if batch_input.prompt_id else 20
 
         if not classifier.is_llm_configured():
             raise HTTPException(status_code=503, detail="LLM non configuré")
@@ -657,7 +660,8 @@ async def classify_batch_distributed(batch_input: BatchProductsInput):
                     "produits": [p.dict() for p in sub_batch],
                     "llm": llm_to_use,
                     "enable_thinking": enable_thinking,
-                    "optimize": optimize
+                    "optimize": optimize,
+                    "prompt_id": prompt_id_to_use
                 }
 
                 # Créer un nouveau client pour chaque requête avec keep-alive désactivé
@@ -705,6 +709,7 @@ async def classify_batch_distributed(batch_input: BatchProductsInput):
                         'llm_type': llm_to_use,
                         'enable_thinking': enable_thinking,
                         'llm_response': None,
+                        'prompt_id': prompt_id_to_use,
                         'processing_time': 0.0
                     })
                 return {
@@ -732,6 +737,7 @@ async def classify_batch_distributed(batch_input: BatchProductsInput):
                         'llm_type': llm_to_use,
                         'enable_thinking': enable_thinking,
                         'llm_response': None,
+                        'prompt_id': prompt_id_to_use,
                         'processing_time': 0.0
                     })
                 return {
@@ -792,6 +798,7 @@ async def classify_batch_distributed(batch_input: BatchProductsInput):
             error_count=total_errors,
             resultats=classification_results,
             llm_type=llm_to_use,
+            prompt_id=prompt_id_to_use,
             processing_time_total=processing_time
         )
 
