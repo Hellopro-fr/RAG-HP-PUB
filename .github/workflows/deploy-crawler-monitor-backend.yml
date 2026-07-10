@@ -69,10 +69,8 @@ jobs:
       # *** VPC Connector requis : Redis interne GKE (10.0.1.220) ***
       vpc_connector: vpc-access-connector
       vpc_egress: private-ranges-only
-      env_vars_json: |
-        {
-          "PORT": "3001"
-        }
+      # PORT est RÉSERVÉ par Cloud Run (injecté = --port ci-dessus, soit 3001) → jamais en env.
+      # L'app lit envOr("PORT","3001") → reçoit 3001 automatiquement.
       secret_env_vars_json: |
         {
           "REDIS_URL": "platform-redis-url:latest",
