@@ -48,8 +48,8 @@ import { provenDiezStripActive } from "./diezDecision.js";
 import { StaleVariantSkip, QUEUE_PURGE_ENABLED, STALE_VARIANT_SKIP_MARKER } from "./staleVariantSkip.js";
 import { qmConsumptionStrip, shouldSkipDequeued, recordQmCollapsed } from "./qmConsumptionSkip.js";
 import { isOverCap, QM_FACET_ENABLED, QM_FACET_CAP_K } from "./facetCap.js";
-import { pathBaseKey, baseKeyAbsent } from "./urlBase.js";
-import { isFilterParam } from "./filterOnSeen.js";
+import { pathBaseKey } from "./urlBase.js";
+import { filterParamCollapseTarget } from "./filterOnSeen.js";
 import { isDeadHost, terminalFailureDetectEnabled } from "./terminalFailure.js";
 
 /**
@@ -862,9 +862,10 @@ export const startCrawler = async (
                 }
                 // Queue-purge #2: filter-on-seen-base. A committed-live seenBases entry
                 // means the base was already crawled — drop this filtered view zero-fetch.
-                if (QM_FACET_ENABLED && isFilterParam(request.url, context.seenBases)) {
-                    recordQmCollapsed(request.url, baseKeyAbsent(request.url));
-                    throw new StaleVariantSkip(request.url, baseKeyAbsent(request.url));
+                const target = filterParamCollapseTarget(request.url, context.seenBases);
+                if (QM_FACET_ENABLED && target) {
+                    recordQmCollapsed(request.url, target);
+                    throw new StaleVariantSkip(request.url, target);
                 }
             },
         ],

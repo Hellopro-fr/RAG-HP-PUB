@@ -24,7 +24,7 @@ import { recordClassification, maybeCommitDecision, commitSkipDiez, commitBypass
 import { fragmentAwareUniqueKey, stripEmptyFragment } from "./diezKeepFragment.js";
 import { matchesMainSite } from "./isMainSite.js";
 import { applyPerClassStrip, perClassEnabled, stripActionAnchor, actionAnchorStripEnabled } from "./diezClassify.js";
-import { qmConsumptionStrip, shouldSkipDequeued, recordQmCollapsed } from "./qmConsumptionSkip.js";
+import { qmConsumptionStrip, shouldSkipDequeued, recordQmCollapsed, skipnavCollapseTarget } from "./qmConsumptionSkip.js";
 import { recordVariant, isOverCap, QM_FACET_ENABLED, QM_FACET_CAP_K } from "./facetCap.js";
 import { isFilterParam } from "./filterOnSeen.js";
 import { baseKeyAbsent } from "./urlBase.js";
@@ -240,7 +240,7 @@ router.addDefaultHandler(
         // before the loadedUrl use below. Clean handled path (no error machinery).
         if (request.skipNavigation) {
             if (context.statsManager) await context.statsManager.increment("purged_skipnav");
-            recordQmCollapsed(request.url, request.url);
+            recordQmCollapsed(request.url, skipnavCollapseTarget(request.url, context.seenBases));
             return;
         }
 
