@@ -1978,6 +1978,13 @@ class CrawlerManager:
                                         arcname = arcname.replace(sanitized_name, domain)
 
                                     tar.add(source_path, arcname=arcname)
+                                    if item == IncludeInArchive.DATASET_UPDATE:
+                                        # Ship the health report next to the update JSONLs —
+                                        # the BO gate (script_process_update_crawling.php) reads
+                                        # it from the extracted update-{domain}/ directory.
+                                        report_src = os.path.join(job_storage_path, '_update_report.json')
+                                        if os.path.exists(report_src):
+                                            tar.add(report_src, arcname=os.path.join(arcname, '_update_report.json'))
                                     copied_anything = True
                                     found = True
                                     break # Stop checking fallbacks for this item type

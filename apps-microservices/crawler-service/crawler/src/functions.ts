@@ -769,6 +769,32 @@ export const startCrawler = async (
                 failure_class: failureClass,
                 timestamp: new Date().toISOString()
             });
+
+            // Update mode: final classification once retries are exhausted. Permanent
+            // statuses were already classified inline (status policy, routes.ts) —
+            // checkUrl dedupes via its PushedSet claim, so a second call is harmless.
+            // This covers exhausted transients/blocks/timeouts, which no longer
+            // classify (nor claim) on intermediate attempts.
+            // Only classify on PAGE evidence: an HTTP error, no response at all, or a
+            // followed redirect. A 2xx same-URL exhaustion (handler timeout / crash on
+            // a live page) is a crawler-side failure — classifying it would emit a
+            // false 'deleted (not_eligible)' for a live fiche.
+            const finalSource = request.userData?.source || '';
+            const hasPageEvidence = status === 0 || status >= 400
+                || (!!request.loadedUrl && request.loadedUrl !== request.url);
+            if (context.updateChecker && finalSource && hasPageEvidence) {
+                try {
+                    await context.updateChecker.checkUrl(
+                        request.url,
+                        request.loadedUrl || request.url,
+                        finalSource,
+                        status,
+                        false
+                    );
+                } catch (e) {
+                    log.warning(`UpdateChecker final classification failed for ${request.url}: ${e}`);
+                }
+            }
         },
 
         preNavigationHooks: [
@@ -1404,6 +1430,16 @@ export const generateUpdateReport = async (domain: string) => {
                 status = "PENDING_SAMPLE";
                 statusMessage = `Waiting for minimum sample (${processed}/${cb.minSample})`;
             }
+        }
+
+        // Mass-deletion guard: 'errors' ≈ deleted candidates (UpdateChecker CASE 1/3).
+        // A mass-404 restructure never trips the STANDARD breaker (errors don't count
+        // toward 'processed', so min_sample may never be reached) — flag it here so
+        // the BO health gate refuses the destructive apply (incident 636-389-1783326914).
+        if (cb.previousTotal > 0 && errors / cb.previousTotal > 0.5
+            && (status === "HEALTHY" || status === "PENDING_SAMPLE")) {
+            status = "SUSPECT";
+            statusMessage = `Deleted/error volume (${errors}) exceeds 50% of previous corpus (${cb.previousTotal})`;
         }
 
         if (context.stopReason) {

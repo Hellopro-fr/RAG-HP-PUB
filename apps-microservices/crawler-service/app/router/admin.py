@@ -255,6 +255,45 @@ async def dataset_sample(
             detail="Dataset not on local disk (crawl may be stashed/archived — "
                    "this endpoint is deliberately side-effect-free; use /unstash "
                    "or /results to restore cold data).")
+    if kind == "update":
+        # The update dir holds JSONL event files (deleted/redirected/new_urls):
+        # one record per LINE, not one .json file per record like the other kinds
+        # (previously this branch always reported 0 records). Newest file first.
+        jsonl_entries = []
+        with os.scandir(dataset_dir) as it:
+            for entry in it:
+                if not entry.name.endswith(".jsonl"):
+                    continue
+                try:
+                    st = entry.stat()
+                except OSError:
+                    continue
+                jsonl_entries.append((entry.name, st.st_mtime, st.st_size))
+        jsonl_entries.sort(key=lambda e: (e[1], e[0]), reverse=True)
+        lines = []
+        for name, _mtime, size in jsonl_entries:
+            if size > _DATASET_MAX_PARSE_BYTES:
+                lines.append({"file": name, "parse_error": f"file too large to parse ({size} bytes)"})
+                continue
+            try:
+                with open(os.path.join(dataset_dir, name), "r", encoding="utf-8",
+                          errors="replace") as f:
+                    for i, raw in enumerate(f):
+                        raw = raw.strip()
+                        if not raw:
+                            continue
+                        try:
+                            # provenance keys applied LAST so a record field named
+                            # 'file'/'line' can never clobber them
+                            rec = {**json.loads(raw), "file": name, "line": i + 1}
+                        except Exception as e:
+                            rec = {"file": name, "line": i + 1, "parse_error": str(e)}
+                        lines.append(rec)
+            except OSError as e:
+                lines.append({"file": name, "parse_error": str(e)})
+        page = lines[offset:offset + limit]
+        return {"kind": kind, "total_records": len(lines), "offset": offset,
+                "returned": len(page), "records": page}
     entries = []
     with os.scandir(dataset_dir) as it:
         for entry in it:
