@@ -2024,8 +2024,8 @@ export const processUrl = (
                 // If 'toKeep' is NOT provided, we fall back to defaults ["page", "id", "lang"]
                 
                 const defaultKeep = ["page", "id", "lang"];
-                const keepList = parameters.toKeep 
-                    ? parameters.toKeep.map(p => p.toLowerCase()) 
+                const keepList = parameters.toKeep && parameters.toKeep.length > 0
+                    ? parameters.toKeep.map(p => p.toLowerCase())
                     : defaultKeep;
 
                 // Re-scan keys (some might have been deleted by toRemove already)
