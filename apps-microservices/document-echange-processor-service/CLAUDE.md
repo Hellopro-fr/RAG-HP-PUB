@@ -41,6 +41,7 @@ requirements.txt
 - Batch processing: accumulates up to 10 messages, processes together via DeepseekOCR
 - ACK-early strategy: JSON decode runs BEFORE ACK; malformed messages sent to DLQ, valid messages ACKed before long OCR processing
 - Validates PDF page count (<20 pages) and minimum text length (>200 chars)
+- PDF page-count pre-gate FAILS OPEN: a PDF pypdf can't parse (e.g. malformed `startref` trailer) is deferred to the OCR renderer, not permanent-DLQ (fix in `common_utils.ocr.DeepseekOCRDocExtractor._validate_pdf_page_count`); the post-OCR page/text gates still apply
 - Anonymizes PII using Presidio before publishing
 - GC collect after each batch to manage memory
 - OCR HTTP timeout: configurable via `DeepseekOCRDocExtractor(timeout=N)` (default 300s, was unbounded)
