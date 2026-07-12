@@ -557,6 +557,8 @@ services:
       - .env
     environment:
       - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
+      # Client name du pool Redis partagé (common_utils cache_service)
+      - SERVICE_NAME=api-detection-langue-fr-service
       # Capacity tuning — see docs/superpowers/specs/2026-04-20-detection-langue-fr-concurrency-defense-design.md § B.1
       # Reduced from defaults (10/12) after observed OOM kill loop under real load:
       # 10 Camoufox × ~600 MB > 4500m cgroup limit → restarts=9, dmesg WebExtensions OOM kills.
