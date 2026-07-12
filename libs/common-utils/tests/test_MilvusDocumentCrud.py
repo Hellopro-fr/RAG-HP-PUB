@@ -26,7 +26,19 @@ def _make_crud():
 
 
 @pytest.mark.asyncio
-async def test_get_document_sanitizes_invalid_utf8_in_query_expr():
+async def test_get_document_embeds_real_nonprintable_char_not_repr_escape():
+    crud = _make_crud()
+    await crud.get_document("docs/2025_\xa0plan.pdf")  # NBSP
+
+    _, kwargs = crud.collection.query.call_args
+    expr = kwargs["expr"]
+    expr.encode("utf-8")  # valid UTF-8 on the wire
+    assert "\xa0" in expr
+    assert "\\x" not in expr
+
+
+@pytest.mark.asyncio
+async def test_get_document_strips_unencodable_surrogate():
     crud = _make_crud()
     await crud.get_document("docs/2025_\udca0plan.pdf")
 

@@ -75,12 +75,37 @@ async def test_insert_pj_projects_onto_schema_fields():
 
 
 @pytest.mark.asyncio
-async def test_get_pj_sanitizes_invalid_utf8_in_query_expr():
+async def test_get_pj_embeds_real_nonprintable_char_not_repr_escape():
+    # NBSP (U+00A0) is valid UTF-8 but non-printable: Python repr would render
+    # it as the literal \xa0 escape, which Milvus decodes back into an invalid
+    # byte (code 65535). The expr must carry the REAL char instead.
     crud = _make_crud()
-    # lone surrogate in the filename (the real DLQ trigger)
-    await crud.get_pj("mon_compte/upload_file/2025_\udca0cabine.jpg")
+    await crud.get_pj("mon_compte/upload_file/2025_\xa0cabine.jpg")
 
     _, kwargs = crud.collection.query.call_args
     expr = kwargs["expr"]
-    expr.encode("utf-8")  # must not raise — Milvus rejects invalid UTF-8
+    expr.encode("utf-8")  # valid UTF-8 on the wire
+    assert "\xa0" in expr  # real NBSP embedded...
+    assert "\\x" not in expr  # ...not the repr \xa0 escape
+
+
+@pytest.mark.asyncio
+async def test_get_pj_strips_unencodable_surrogate():
+    crud = _make_crud()
+    # lone surrogate cannot be UTF-8 encoded at all → must be dropped
+    await crud.get_pj("f_\udca0.jpg")
+
+    _, kwargs = crud.collection.query.call_args
+    expr = kwargs["expr"]
+    expr.encode("utf-8")  # must not raise
     assert "\udca0" not in expr
+
+
+@pytest.mark.asyncio
+async def test_get_pj_escapes_double_quote_injection():
+    crud = _make_crud()
+    await crud.get_pj('a" or id >= 0 or "x')
+
+    _, kwargs = crud.collection.query.call_args
+    # the injected double-quote must be backslash-escaped, not break the literal
+    assert '\\"' in kwargs["expr"]

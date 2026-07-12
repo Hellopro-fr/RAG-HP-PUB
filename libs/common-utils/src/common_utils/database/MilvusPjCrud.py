@@ -407,14 +407,16 @@ class MilvusPjCrud:
             raise
 
     async def get_pj(self, fichier_source: str) -> Dict[str, Any]:
-        # Sanitize: drop invalid UTF-8 (Milvus rejects it) then escape quotes
-        # to prevent expression injection.
-        sanitized = (
+        # Build the filter literal manually: embed the real (UTF-8) characters,
+        # escaping only backslash + double-quote. Do NOT interpolate a Python
+        # list — repr() renders non-printable chars (e.g. NBSP U+00A0) as \xNN
+        # escapes that Milvus then decodes back into invalid UTF-8 (code 65535).
+        # to_valid_utf8 first drops unencodable lone surrogates / C0 controls.
+        escaped = (
             Utils.to_valid_utf8(fichier_source)
-            .replace("'", "\\'")
+            .replace("\\", "\\\\")
             .replace('"', '\\"')
         )
-        list_fichier_source = [sanitized]
         model_config = ModelConfig()
         model_key = model_config.model_id
 
@@ -437,7 +439,7 @@ class MilvusPjCrud:
 
             result = await asyncio.to_thread(
                 self.collection.query,
-                expr=f"fichier_source in {list_fichier_source}",
+                expr=f'fichier_source in ["{escaped}"]',
                 output_fields=["id"],
                 consistency_level="Bounded",
             )
