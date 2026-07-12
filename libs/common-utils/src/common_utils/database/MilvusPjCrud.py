@@ -28,6 +28,36 @@ class ModelConfig:
     dimension: int = 1024
 
 
+# Insertable fields of the fixed 'pjechanges' schema ('id' is auto_id; dynamic
+# fields are disabled, so any extra upstream key fails the insert with
+# DataNotMatchException). Keep aligned with _get_or_create_collection.
+_INSERT_FIELDS = frozenset(
+    {
+        "embedding",
+        "page_type",
+        "id_demande",
+        "categorie",
+        "id_categorie",
+        "produit",
+        "id_produit",
+        "acheteur",
+        "id_acheteur",
+        "fournisseur",
+        "id_fournisseur",
+        "etat",
+        "affichage",
+        "text",
+        "source",
+        "fichier_source",
+        "chunk_id",
+        "chunk_number",
+        "total_chunks",
+        "date_ajout",
+        "date_maj",
+    }
+)
+
+
 class MilvusPjCrud:
     _CONNECTION_ALIAS = "milvus_pjechanges"
 
@@ -240,11 +270,10 @@ class MilvusPjCrud:
                 )  # ex: "2025-08-18T14:23:45.123456"
                 data["date_maj"] = None
 
-                if "document" in data:
-                    del data["document"]
-
-                if "annnee" in data:
-                    del data["annnee"]
+                # Keep only fields in the fixed schema (dynamic fields disabled).
+                # Extra upstream keys (e.g. 'document', 'annnee', or any future
+                # field) would otherwise fail the insert with DataNotMatchException.
+                data = {k: v for k, v in data.items() if k in _INSERT_FIELDS}
 
                 # Sanitize the record to ensure no None values
                 # This is important for Milvus compatibility
@@ -378,8 +407,13 @@ class MilvusPjCrud:
             raise
 
     async def get_pj(self, fichier_source: str) -> Dict[str, Any]:
-        # Sanitize to prevent expression injection
-        sanitized = fichier_source.replace("'", "\\'").replace('"', '\\"')
+        # Sanitize: drop invalid UTF-8 (Milvus rejects it) then escape quotes
+        # to prevent expression injection.
+        sanitized = (
+            Utils.to_valid_utf8(fichier_source)
+            .replace("'", "\\'")
+            .replace('"', '\\"')
+        )
         list_fichier_source = [sanitized]
         model_config = ModelConfig()
         model_key = model_config.model_id

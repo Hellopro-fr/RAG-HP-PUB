@@ -355,8 +355,13 @@ class MilvusDocumentCrud:
             raise
 
     async def get_document(self, fichier_source: str) -> Dict[str, Any]:
-        # Sanitize to prevent expression injection
-        sanitized = fichier_source.replace("'", "\\'").replace('"', '\\"')
+        # Sanitize: drop invalid UTF-8 (Milvus rejects it) then escape quotes
+        # to prevent expression injection.
+        sanitized = (
+            Utils.to_valid_utf8(fichier_source)
+            .replace("'", "\\'")
+            .replace('"', '\\"')
+        )
         list_fichier_source = [sanitized]
         model_config = ModelConfig()
         model_key = model_config.model_id
