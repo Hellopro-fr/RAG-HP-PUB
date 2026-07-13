@@ -359,6 +359,8 @@ module "secret_manager" {
     "mcp-gsc-sa-key"                       = { service = "mcp-google-search-console-service" }
     # crawler-monitor-backend : hash scrypt du mot de passe admin (login JWT, propre au service)
     "crawler-monitor-admin-password-hash" = { service = "crawler-monitor-backend" }
+    # api-detection-langue-fr : mot de passe proxy Apify (egress fetch via proxy.apify.com, propre au service)
+    "api-detection-langue-fr-apify-proxy" = { service = "api-detection-langue-fr" }
   }
   cloudrun_sa_email = module.service_accounts.cloudrun_sa_email
   common_labels = {
