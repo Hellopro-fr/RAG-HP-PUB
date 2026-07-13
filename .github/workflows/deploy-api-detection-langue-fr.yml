@@ -1,0 +1,82 @@
+name: 'Deploy — api-detection-langue-fr'
+
+# Wrapper qui appelle deploy-cloud-run.yml pour api-detection-langue-fr
+# (Python 3.10 FastAPI, détection de langue FR d'un site web, port 8999).
+#
+# Deploiement PARALLELE (shadow), zero trafic reroute. Le container VM continue de servir
+# crawler-service + BO ; shadow = instance CR isolee.
+#
+# *** VAGUE 4A — dernier service CR standalone (aucun couplage DB/gateway/front) ***
+# Pipeline : fetch HTML (Playwright) -> validation page -> NLP (fastText + langdetect/langid)
+# -> matrice de decision. Egress : proxy Apify (proxy.apify.com) + sites cibles.
+#
+# NAVIGATEUR : Camoufox (Firefox stealth) par defaut -> forcé en CHROMIUM (CAMOUFOX_ENABLED=false)
+# car le fallback Chromium lance deja avec --no-sandbox + --disable-dev-shm-usage (scraper.py),
+# seuls flags compatibles Cloud Run. 2Gi + cpu-boost. Semaphore navigateur reduit 6->2 (capacite CR).
+# fastText NON bloquant : modele monte du host sur la VM, absent sur CR -> fallback langdetect+langid
+# (graceful, domain_fr.py). NLP degrade mais service fonctionnel.
+#
+# ingress=all + allow_unauthenticated=true pour valider /detect (Chromium sur CR) + smoke auto.
+# ⚠️ SSRF/quota : ce service fetch des URLs arbitraires via le proxy Apify -> F-HP-SEC-005
+# (durcissement cutover : ingress interne / auth / LB). Shadow court.
+#
+# Redis OMIS (pas de VPC) : endpoints async (/detect-batch-async) -> 503 ; sync (/detect,
+# /check-url) OK. Suffisant en shadow. Redis + VPC = ajout cutover si besoin de l'async.
+#
+# 1 secret : APIFY_PROXY -> api-detection-langue-fr-apify-proxy (dedie, cree 2026-07-13).
+#
+# Trivy : image Python lourde (playwright + chromium + camoufox ~200Mo + fasttext) -> dette CVE
+# Python connue (F-HP-T001-SEC-001) -> gate DESACTIVEE (scan informatif). ≠ Go (ou on corrige).
+
+on:
+  push:
+    branches:
+      - 'feat/migration-**'
+    paths:
+      - 'apps-microservices/api-detection-langue-fr/**'
+      - '.github/workflows/deploy-api-detection-langue-fr.yml'
+  workflow_dispatch:
+    inputs:
+      cloud_run_region:
+        description: 'Région Cloud Run (override)'
+        required: false
+        type: string
+        default: 'europe-west1'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    name: 'Deploy api-detection-langue-fr'
+    uses: ./.github/workflows/deploy-cloud-run.yml
+    with:
+      service_name: api-detection-langue-fr
+      dockerfile_path: apps-microservices/api-detection-langue-fr/Dockerfile
+      build_context: .
+      cloud_run_region: ${{ github.event.inputs.cloud_run_region || 'europe-west1' }}
+      ingress: all
+      allow_unauthenticated: true
+      # Chromium lourd au launch -> cpu 2 + boost cold start ; 2Gi pour ≤2 instances navigateur.
+      cpu: '2'
+      memory: '2Gi'
+      startup_cpu_boost: true
+      min_instances: 0
+      max_instances: 3
+      container_port: 8999
+      health_check_path: /api/v1/health
+      env_vars_json: |
+        {
+          "CAMOUFOX_ENABLED": "false",
+          "BROWSER_SEMAPHORE_SIZE": "2",
+          "ADMISSION_MAX_SLOTS": "4"
+        }
+      secret_env_vars_json: |
+        {
+          "APIFY_PROXY": "api-detection-langue-fr-apify-proxy:latest"
+        }
+      # Image Python lourde (chromium+camoufox+fasttext) : dette CVE Python assumée (F-HP-T001-SEC-001).
+      trivy_disable_gate: true
+    secrets:
+      slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
