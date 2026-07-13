@@ -36,7 +36,11 @@ class Settings(BaseSettings):
     INVALID_PAGE_TTL_HARD_S: int = 604800       # 7 days — http_error + redirected_to_home
     INVALID_PAGE_TTL_SOFT_S: int = 21600        # 6 hours — soft_404 (heuristic, give site time to fix)
 
-    # Redis cache
+    # Redis (shared pool via common_utils.redis.cache_service — initialised in
+    # main.py's lifespan; bridged to the process env there because cache_service
+    # reads os.environ, not this Settings object). Pool tuning is env-only:
+    # REDIS_MAX_CONNECTIONS, REDIS_SOCKET_TIMEOUT_S, REDIS_SOCKET_CONNECT_TIMEOUT_S,
+    # REDIS_HEALTH_CHECK_INTERVAL_S, SERVICE_NAME (client name).
     REDIS_URL: Optional[str] = None
 
     # Proxy (optionnel)

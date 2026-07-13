@@ -6,6 +6,7 @@
  */
 import { createRequire } from "node:module";
 import { context } from "./context.js";
+import { filterParamCollapseTarget } from "./filterOnSeen.js";
 
 const _require = createRequire(import.meta.url);
 const QM_COLLAPSED_CAP = 200;
@@ -27,6 +28,15 @@ export const qmConsumptionStrip = (url: string): string => {
     } catch {
         return url;
     }
+};
+
+/** Best-effort collapse target for a request flagged skipNavigation on disk (D1).
+ * Mirrors the D1 flag deciders in main.ts: processUrl-strip first, filter-on-seen second. */
+export const skipnavCollapseTarget = (url: string, seenBases: Set<string>): string => {
+    const stripped = qmConsumptionStrip(url);
+    if (stripped !== url) return stripped;
+    const t = filterParamCollapseTarget(url, seenBases);
+    return t ?? url;
 };
 
 /** Skip iff the strip changed the URL AND its stripped form is already known. */

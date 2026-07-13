@@ -9,17 +9,18 @@ Detects whether a website is in French or has a French version. Uses URL analysi
 - **Scraping:** Camoufox (stealth Firefox, default) via Playwright; Chromium fallback via `CAMOUFOX_ENABLED=false` or on Camoufox launch failure. Apify proxy mandatory for both.
 - **NLP:** fastText (primary), langdetect + langid (cross-check)
 - **HTML parsing:** BeautifulSoup4 + lxml
-- **Cache:** Redis (optional, graceful degradation)
-- **No shared libs** (standalone service)
+- **Cache:** Redis (optional, graceful degradation) via the shared `common_utils.redis.cache_service` pool (`libs/common-utils`) — bounded connections, socket timeouts, health checks, named client (`SERVICE_NAME`). `init_redis_pool()`/`close_redis_pool()` run in `main.py`'s lifespan; `DomainCache` and `JobStore` read `cache_service.redis_client` live at each call (None → cache invisible / async submit 503). Same system as crawler-service and image-comparison-service.
+- **Shared libs:** `libs/common-utils` (Redis only — installed from `/opt/libs/common-utils` in the Dockerfile so the dev bind mount on `/app` can't hide it)
 
 ## Build / Run
 
 - **Port:** 8999
+- **Prerequisite (local run + tests):** `pip install -e libs/common-utils` (from repo root) — `main.py`/`domain_fr.py`/`async_jobs.py` import `common_utils.redis` unconditionally. The Docker image installs it at build time.
 - **Run:** `uvicorn main:app --host 0.0.0.0 --port 8999 --proxy-headers --timeout-keep-alive 300`
 - **Tests:** `pytest tests/`
-- **Docker build:** installs Playwright + Chromium (fallback) and fetches the Camoufox binary at build time. Camoufox's ~200MB browser is stored in the image.
+- **Docker build:** installs Playwright + Chromium (fallback) and fetches the Camoufox binary at build time. Camoufox's ~200MB browser is stored in the image. `libs/common-utils` is installed **editable** from `/opt/libs/common-utils` (its `setup.py` `find_packages` would exclude `common_utils/redis` from a wheel — no `__init__.py`; `/opt` so the dev bind mount on `/app` can't hide it).
 - **Required env vars:** `APIFY_PROXY` (proxy password)
-- **Optional env vars:** `REDIS_URL` (cache)
+- **Optional env vars:** `REDIS_URL` (cache; read from the process env by `cache_service` — the lifespan bridges a `.env`-file value into `os.environ`), `SERVICE_NAME` (Redis client name, set in docker-compose), `REDIS_MAX_CONNECTIONS`/`REDIS_SOCKET_TIMEOUT_S`/`REDIS_SOCKET_CONNECT_TIMEOUT_S`/`REDIS_HEALTH_CHECK_INTERVAL_S` (pool tuning, defaults 20/10/5/30), `REDIS_RECONNECT_INTERVAL_S` (default 30 — lifespan retry loop re-runs `init_redis_pool()` while the pool is down, so Redis unavailable at boot heals without a restart)
 
 ## Folder Structure
 
@@ -219,4 +220,4 @@ Metric: `detection_alt_validation_skipped_total` (no labels) — increments once
 
 ## Dependencies on Other Services
 
-None (standalone). Requires Apify proxy (`APIFY_PROXY` env var). Optionally uses Redis for caching (`REDIS_URL` env var).
+No other microservice. Uses `libs/common-utils` for the shared Redis pool (`common_utils.redis.cache_service`). Requires Apify proxy (`APIFY_PROXY` env var). Optionally uses Redis for caching (`REDIS_URL` env var; required for the async job API).

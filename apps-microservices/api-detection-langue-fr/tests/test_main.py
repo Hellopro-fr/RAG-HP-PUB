@@ -1,8 +1,10 @@
 import asyncio
+import os
 import types
 import pytest
 import httpx
 
+import main as main_module
 from main import app
 from app.core.async_jobs import JobManager, JobStore
 from app.models.schemas import BatchCounts, DetectionResponse
@@ -25,7 +27,7 @@ async def _runner(items, mode, opts, cb):
 
 @pytest.mark.asyncio
 async def test_submit_then_poll_completed():
-    jm = JobManager(JobStore(None, client=FakeRedis()), _runner, _settings())
+    jm = JobManager(JobStore(client=FakeRedis()), _runner, _settings())
     app.state.job_manager = jm
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://t") as c:
@@ -40,7 +42,7 @@ async def test_submit_then_poll_completed():
 
 @pytest.mark.asyncio
 async def test_poll_unknown_404():
-    jm = JobManager(JobStore(None, client=FakeRedis()), _runner, _settings())
+    jm = JobManager(JobStore(client=FakeRedis()), _runner, _settings())
     app.state.job_manager = jm
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://t") as c:
@@ -52,7 +54,7 @@ async def test_capacity_503_has_retry_after():
     async def slow(items, mode, opts, cb):
         await asyncio.sleep(0.3)
         return ([], BatchCounts(0, 0, 0))
-    jm = JobManager(JobStore(None, client=FakeRedis()), slow, _settings(MAX_ACTIVE_JOBS=1))
+    jm = JobManager(JobStore(client=FakeRedis()), slow, _settings(MAX_ACTIVE_JOBS=1))
     app.state.job_manager = jm
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://t") as c:
@@ -64,9 +66,35 @@ async def test_capacity_503_has_retry_after():
 
 @pytest.mark.asyncio
 async def test_disabled_503_no_retry_after():
-    jm = JobManager(JobStore(None, client=FakeRedis()), _runner, _settings(ASYNC_JOBS_ENABLED=False))
+    jm = JobManager(JobStore(client=FakeRedis()), _runner, _settings(ASYNC_JOBS_ENABLED=False))
     app.state.job_manager = jm
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://t") as c:
         r = await c.post("/api/v1/detect-batch-async", json={"items": [{"url": "https://a.fr"}]})
         assert r.status_code == 503 and "retry-after" not in {k.lower() for k in r.headers}
+
+
+@pytest.mark.asyncio
+async def test_lifespan_inits_shared_pool_and_bridges_redis_url(monkeypatch):
+    """Lifespan must bridge settings.REDIS_URL into the process env (cache_service
+    reads os.environ), init the shared pool at startup, and close it after the
+    JobManager drain at shutdown."""
+    calls = []
+
+    async def fake_init():
+        calls.append("init")
+
+    async def fake_close():
+        calls.append("close")
+
+    monkeypatch.setattr(main_module, "init_redis_pool", fake_init)
+    monkeypatch.setattr(main_module, "close_redis_pool", fake_close)
+    monkeypatch.delenv("REDIS_URL", raising=False)
+    monkeypatch.setattr(main_module._settings, "REDIS_URL", "redis://from-settings:6379")
+
+    async with main_module.lifespan(app):
+        assert os.environ["REDIS_URL"] == "redis://from-settings:6379"
+        assert os.environ.get("SERVICE_NAME")  # client-name default bridged too
+        assert calls == ["init"]
+        assert app.state.job_manager is not None
+    assert calls == ["init", "close"]

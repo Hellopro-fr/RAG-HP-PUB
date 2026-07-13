@@ -99,10 +99,23 @@ class DeepseekOCRDocExtractor:
         if not self._is_pdf(filename):
             # Les images et autres formats ne sont pas concernés
             return
-        
-        page_count = self._count_pdf_pages(content)
+
+        try:
+            page_count = self._count_pdf_pages(content)
+        except ValueError as e:
+            # pypdf est le parseur le plus strict de la chaîne : un PDF qu'il
+            # refuse (ex. trailer malformé 'startref') est délégué au moteur OCR,
+            # plus tolérant, au lieu d'aller définitivement en DLQ. La limite de
+            # pages reste appliquée après OCR (nb_pages >= MAX_PAGES) côté service.
+            logger.warning(
+                "PDF %s: pré-vérification des pages ignorée (%s) — délégué à l'OCR",
+                filename,
+                e,
+            )
+            content.seek(0)
+            return
         logger.info(f"Nombre de pages du PDF: {page_count}")
-        
+
         if page_count > self.max_pdf_pages:
             error_msg = (
                 f"Contient {page_count} pages, limite autorisee: {self.max_pdf_pages}"

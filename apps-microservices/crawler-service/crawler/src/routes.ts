@@ -24,7 +24,7 @@ import { recordClassification, maybeCommitDecision, commitSkipDiez, commitBypass
 import { fragmentAwareUniqueKey, stripEmptyFragment } from "./diezKeepFragment.js";
 import { matchesMainSite } from "./isMainSite.js";
 import { applyPerClassStrip, perClassEnabled, stripActionAnchor, actionAnchorStripEnabled } from "./diezClassify.js";
-import { qmConsumptionStrip, shouldSkipDequeued, recordQmCollapsed } from "./qmConsumptionSkip.js";
+import { qmConsumptionStrip, shouldSkipDequeued, recordQmCollapsed, skipnavCollapseTarget } from "./qmConsumptionSkip.js";
 import { recordVariant, isOverCap, QM_FACET_ENABLED, QM_FACET_CAP_K } from "./facetCap.js";
 import { isFilterParam } from "./filterOnSeen.js";
 import { baseKeyAbsent } from "./urlBase.js";
@@ -240,7 +240,7 @@ router.addDefaultHandler(
         // before the loadedUrl use below. Clean handled path (no error machinery).
         if (request.skipNavigation) {
             if (context.statsManager) await context.statsManager.increment("purged_skipnav");
-            recordQmCollapsed(request.url, request.url);
+            recordQmCollapsed(request.url, skipnavCollapseTarget(request.url, context.seenBases));
             return;
         }
 
@@ -393,11 +393,19 @@ router.addDefaultHandler(
                 if (matchesMainSite(request.url, site)) {
                     context.crawlErrorMessage = `Erreur HTTP ${status}`;
                 }
+                // Update-mode classification ONLY for permanent failures here. Transient/
+                // block statuses used to classify (and PushedSet-claim) the URL on the
+                // FIRST failed attempt — a later successful retry then hit 'already_pushed'
+                // and its redirect/confirmed evidence was lost forever (incident 1079-327:
+                // 503 → retry → 301 never recorded). Exhausted transients are classified
+                // once in failedRequestHandler instead.
                 const source = request.userData.source || '';
-                if (context.updateChecker && source) {
-                    await context.updateChecker.checkUrl(request.url, request.loadedUrl, source, status, false);
-                } else if (context.statsManager && request.userData.is_existing) {
-                    await context.statsManager.increment("errors");
+                if (statusClass === "permanent") {
+                    if (context.updateChecker && source) {
+                        await context.updateChecker.checkUrl(request.url, request.loadedUrl, source, status, false);
+                    } else if (context.statsManager && request.userData.is_existing) {
+                        await context.statsManager.increment("errors");
+                    }
                 }
 
                 if (statusClass === "permanent") {

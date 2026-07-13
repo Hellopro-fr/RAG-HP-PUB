@@ -92,16 +92,32 @@ export const provenDiezOverrideEnabled = (): boolean =>
     (process.env.DIEZ_PROVEN_OVERRIDE_ENABLED ?? "false").toLowerCase() === "true";
 
 /**
+ * Minimum tier-2 comparison count required to ARM the proven override. Default 3
+ * (= the tier-2 commit minimum, i.e. no behavior change). Raise via env after a
+ * _diez_audit.json shows route loss on a thin proof (e.g. tae.be 4296-362:
+ * compared=3 governed a 15k-URL wholesale strip). Read at call time (testable).
+ */
+export const provenOverrideMinCompared = (): number => {
+    const n = parseInt(process.env.DIEZ_PROVEN_OVERRIDE_MIN_COMPARED ?? "3", 10);
+    return Number.isFinite(n) && n > 0 ? n : 3;
+};
+
+/**
  * Pure predicate: should a committed skipDiez override the per-class spa-keep and
  * force the wholesale '#' strip? Only when the decision is CONTENT-PROVEN (tier-2).
  * tier1 (URL-shape confidence) and default (ceiling fallback) never override.
+ * comparedCount = the tier-2 proof size (evidence.compared); null (unknown, e.g.
+ * legacy decision file without evidence) keeps the pre-knob behavior (armed).
  */
 export const isProvenDiezStrip = (
     enabled: boolean,
     committed: boolean,
     skipDiez: boolean,
     source: "tier1" | "tier2" | "default",
-): boolean => enabled && committed && skipDiez && source === "tier2";
+    comparedCount: number | null = null,
+    minCompared: number = 3,
+): boolean => enabled && committed && skipDiez && source === "tier2"
+    && (comparedCount === null || comparedCount >= minCompared);
 
 /**
  * Cheap, stable content fingerprint for collision detection — FNV-1a over the

@@ -48,8 +48,8 @@ import { provenDiezStripActive } from "./diezDecision.js";
 import { StaleVariantSkip, QUEUE_PURGE_ENABLED, STALE_VARIANT_SKIP_MARKER } from "./staleVariantSkip.js";
 import { qmConsumptionStrip, shouldSkipDequeued, recordQmCollapsed } from "./qmConsumptionSkip.js";
 import { isOverCap, QM_FACET_ENABLED, QM_FACET_CAP_K } from "./facetCap.js";
-import { pathBaseKey, baseKeyAbsent } from "./urlBase.js";
-import { isFilterParam } from "./filterOnSeen.js";
+import { pathBaseKey } from "./urlBase.js";
+import { filterParamCollapseTarget } from "./filterOnSeen.js";
 import { isDeadHost, terminalFailureDetectEnabled } from "./terminalFailure.js";
 
 /**
@@ -769,6 +769,32 @@ export const startCrawler = async (
                 failure_class: failureClass,
                 timestamp: new Date().toISOString()
             });
+
+            // Update mode: final classification once retries are exhausted. Permanent
+            // statuses were already classified inline (status policy, routes.ts) —
+            // checkUrl dedupes via its PushedSet claim, so a second call is harmless.
+            // This covers exhausted transients/blocks/timeouts, which no longer
+            // classify (nor claim) on intermediate attempts.
+            // Only classify on PAGE evidence: an HTTP error, no response at all, or a
+            // followed redirect. A 2xx same-URL exhaustion (handler timeout / crash on
+            // a live page) is a crawler-side failure — classifying it would emit a
+            // false 'deleted (not_eligible)' for a live fiche.
+            const finalSource = request.userData?.source || '';
+            const hasPageEvidence = status === 0 || status >= 400
+                || (!!request.loadedUrl && request.loadedUrl !== request.url);
+            if (context.updateChecker && finalSource && hasPageEvidence) {
+                try {
+                    await context.updateChecker.checkUrl(
+                        request.url,
+                        request.loadedUrl || request.url,
+                        finalSource,
+                        status,
+                        false
+                    );
+                } catch (e) {
+                    log.warning(`UpdateChecker final classification failed for ${request.url}: ${e}`);
+                }
+            }
         },
 
         preNavigationHooks: [
@@ -862,9 +888,10 @@ export const startCrawler = async (
                 }
                 // Queue-purge #2: filter-on-seen-base. A committed-live seenBases entry
                 // means the base was already crawled — drop this filtered view zero-fetch.
-                if (QM_FACET_ENABLED && isFilterParam(request.url, context.seenBases)) {
-                    recordQmCollapsed(request.url, baseKeyAbsent(request.url));
-                    throw new StaleVariantSkip(request.url, baseKeyAbsent(request.url));
+                const target = filterParamCollapseTarget(request.url, context.seenBases);
+                if (QM_FACET_ENABLED && target) {
+                    recordQmCollapsed(request.url, target);
+                    throw new StaleVariantSkip(request.url, target);
                 }
             },
         ],
@@ -1403,6 +1430,16 @@ export const generateUpdateReport = async (domain: string) => {
                 status = "PENDING_SAMPLE";
                 statusMessage = `Waiting for minimum sample (${processed}/${cb.minSample})`;
             }
+        }
+
+        // Mass-deletion guard: 'errors' ≈ deleted candidates (UpdateChecker CASE 1/3).
+        // A mass-404 restructure never trips the STANDARD breaker (errors don't count
+        // toward 'processed', so min_sample may never be reached) — flag it here so
+        // the BO health gate refuses the destructive apply (incident 636-389-1783326914).
+        if (cb.previousTotal > 0 && errors / cb.previousTotal > 0.5
+            && (status === "HEALTHY" || status === "PENDING_SAMPLE")) {
+            status = "SUSPECT";
+            statusMessage = `Deleted/error volume (${errors}) exceeds 50% of previous corpus (${cb.previousTotal})`;
         }
 
         if (context.stopReason) {
@@ -2024,8 +2061,8 @@ export const processUrl = (
                 // If 'toKeep' is NOT provided, we fall back to defaults ["page", "id", "lang"]
                 
                 const defaultKeep = ["page", "id", "lang"];
-                const keepList = parameters.toKeep 
-                    ? parameters.toKeep.map(p => p.toLowerCase()) 
+                const keepList = parameters.toKeep && parameters.toKeep.length > 0
+                    ? parameters.toKeep.map(p => p.toLowerCase())
                     : defaultKeep;
 
                 // Re-scan keys (some might have been deleted by toRemove already)

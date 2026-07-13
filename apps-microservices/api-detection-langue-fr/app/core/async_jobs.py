@@ -12,10 +12,7 @@ import time
 import uuid
 from typing import Optional, Callable, Awaitable
 
-try:
-    import redis.asyncio as aioredis
-except ImportError:  # pragma: no cover
-    aioredis = None
+from common_utils.redis import cache_service
 
 logger = logging.getLogger(__name__)
 
@@ -36,27 +33,22 @@ class _JobCapacityExceeded(Exception):
 
 
 class JobStore:
-    """Redis CRUD for job records + idempotency index. Lazy connect."""
+    """Redis CRUD for job records + idempotency index.
 
-    def __init__(self, redis_url: Optional[str], client=None) -> None:
-        self._redis_url = redis_url
-        self._client = client
-        self._initialized = client is not None
-        self._init_lock = asyncio.Lock()
+    Backed by the shared common_utils cache_service pool — main.py's lifespan
+    calls init_redis_pool()/close_redis_pool(). The pool client is read live
+    at each call so a startup without Redis degrades to 503 on submit.
+    `client` overrides the pool (test seam)."""
 
-    async def _get_client(self):
-        async with self._init_lock:
-            if not self._initialized:
-                self._initialized = True
-                if self._redis_url and aioredis:
-                    try:
-                        self._client = aioredis.from_url(self._redis_url, decode_responses=True)
-                    except Exception as e:  # URL parse only; conn is lazy
-                        logger.warning(f"[async-jobs] Redis client init failed: {e}")
-        return self._client
+    def __init__(self, client=None) -> None:
+        self._client_override = client
+
+    @property
+    def _client(self):
+        return self._client_override or cache_service.redis_client
 
     async def ping(self) -> bool:
-        client = await self._get_client()
+        client = self._client
         if not client:
             return False
         try:
@@ -66,41 +58,37 @@ class JobStore:
             return False
 
     async def claim_index(self, client_job_id: str, job_id: str, ttl: int) -> bool:
-        client = await self._get_client()
-        ok = await client.set(_IDX_KEY.format(client_job_id), job_id, nx=True, ex=ttl)
+        ok = await self._client.set(_IDX_KEY.format(client_job_id), job_id, nx=True, ex=ttl)
         return bool(ok)
 
     async def get_index(self, client_job_id: str) -> Optional[str]:
-        client = await self._get_client()
         try:
-            return await client.get(_IDX_KEY.format(client_job_id))
+            return await self._client.get(_IDX_KEY.format(client_job_id))
         except Exception:
             return None
 
     async def delete_index(self, client_job_id: str) -> None:
-        client = await self._get_client()
         try:
-            await client.delete(_IDX_KEY.format(client_job_id))
+            await self._client.delete(_IDX_KEY.format(client_job_id))
         except Exception:
             pass
 
     async def refresh_index_ttl(self, client_job_id: str, ttl: int) -> None:
-        client = await self._get_client()
         try:
-            await client.expire(_IDX_KEY.format(client_job_id), ttl)
+            await self._client.expire(_IDX_KEY.format(client_job_id), ttl)
         except Exception:
             pass
 
     async def write(self, record: dict, ttl: int) -> None:
         """Write a record. RAISES on failure — the submit path relies on this
         to detect an unreachable Redis (do NOT swallow here)."""
-        client = await self._get_client()
+        client = self._client
         if not client:
             raise RuntimeError("Redis client unavailable")
         await client.setex(_JOB_KEY.format(record["job_id"]), ttl, json.dumps(record))
 
     async def get(self, job_id: str) -> Optional[dict]:
-        client = await self._get_client()
+        client = self._client
         if not client:
             return None
         try:

@@ -7,10 +7,7 @@ from typing import Optional
 from urllib.parse import urlparse, urljoin
 from bs4 import BeautifulSoup
 
-try:
-    import redis.asyncio as aioredis
-except ImportError:
-    aioredis = None
+from common_utils.redis import cache_service
 
 from app.models.schemas import (
     DetectionMode, DetectionResponse, AlternativeUrl,
@@ -37,6 +34,10 @@ class DomainCache:
     - Échecs transitoires (challenge_page, fetch_empty_content, etc.) → 6 heures
     - Erreurs critiques (fetch_failed, error) → jamais cachées
     - En cas d'indisponibilité Redis, dégrade silencieusement (pas d'exception)
+
+    Client Redis : pool partagé common_utils.redis.cache_service, initialisé
+    par init_redis_pool() dans le lifespan de main.py (lu à chaque appel —
+    None si Redis indisponible au démarrage → cache invisible).
     """
 
     TTL_OK = 30 * 24 * 3600          # 30 jours — résultats définitifs positifs
@@ -54,24 +55,6 @@ class DomainCache:
         'info_vide',                     # URL ou contenu absent
     })
 
-    def __init__(self) -> None:
-        self._client = None
-        self._initialized = False
-        self._init_lock = asyncio.Lock()
-
-    async def _get_client(self):
-        async with self._init_lock:
-            if not self._initialized:
-                self._initialized = True
-                redis_url = settings.REDIS_URL
-                if redis_url and aioredis:
-                    try:
-                        self._client = aioredis.from_url(redis_url, decode_responses=True)
-                        logger.info("Redis cache client créé (connexion au premier appel)")
-                    except Exception as e:
-                        logger.warning(f"Redis cache indisponible : {e}")
-        return self._client
-
     @staticmethod
     def _normalize_domain(url: str) -> Optional[str]:
         try:
@@ -86,7 +69,7 @@ class DomainCache:
         return f"fr_detect:{domain}"
 
     async def get(self, url: str) -> Optional[dict]:
-        client = await self._get_client()
+        client = cache_service.redis_client
         if not client:
             return None
         try:
@@ -117,7 +100,7 @@ class DomainCache:
         so cross-URL cache HITs (different path on the same domain) can
         surface the originating URL via DetectionResponse.analyzed_url.
         """
-        client = await self._get_client()
+        client = cache_service.redis_client
         if not client:
             return
         method = result.get('method', '')
