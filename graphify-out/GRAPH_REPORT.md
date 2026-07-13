@@ -1,12 +1,12 @@
-# Graph Report - .  (2026-07-07)
+# Graph Report - .  (2026-07-13)
 
 ## Corpus Check
 - 0 files · ~99,999 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 7740 nodes · 17124 edges · 187 communities detected
-- Extraction: 64% EXTRACTED · 36% INFERRED · 0% AMBIGUOUS · INFERRED: 6080 edges (avg confidence: 0.59)
+- 7969 nodes · 17526 edges · 198 communities detected
+- Extraction: 65% EXTRACTED · 35% INFERRED · 0% AMBIGUOUS · INFERRED: 6191 edges (avg confidence: 0.59)
 - Token cost: 0 input · 0 output
 
 ## Community Hubs (Navigation)
@@ -197,6 +197,17 @@
 - [[_COMMUNITY_Auth Lib Session|Auth Lib Session]]
 - [[_COMMUNITY_Community 218|Community 218]]
 - [[_COMMUNITY_Community 221|Community 221]]
+- [[_COMMUNITY_Detection FR Domain-URL Rationale|Detection FR Domain-URL Rationale]]
+- [[_COMMUNITY_Detection FR Domain-URL Rationale|Detection FR Domain-URL Rationale]]
+- [[_COMMUNITY_Detection FR Domain-URL Rationale|Detection FR Domain-URL Rationale]]
+- [[_COMMUNITY_Detection FR Domain-URL Rationale|Detection FR Domain-URL Rationale]]
+- [[_COMMUNITY_Detection FR Domain-URL Rationale|Detection FR Domain-URL Rationale]]
+- [[_COMMUNITY_Detection FR Domain-URL Rationale|Detection FR Domain-URL Rationale]]
+- [[_COMMUNITY_Detection FR Domain-URL Rationale|Detection FR Domain-URL Rationale]]
+- [[_COMMUNITY_Detection FR Domain-URL Rationale|Detection FR Domain-URL Rationale]]
+- [[_COMMUNITY_Detection Cache TTL Test|Detection Cache TTL Test]]
+- [[_COMMUNITY_Main-Site Identity (isMainSite)|Main-Site Identity (isMainSite)]]
+- [[_COMMUNITY_UTF-8 Sanitize Rationale (Utils)|UTF-8 Sanitize Rationale (Utils)]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `CrawlerManager` - 397 edges
@@ -204,7 +215,7 @@
 3. `CrawlStatus` - 319 edges
 4. `IncludeInArchive` - 318 edges
 5. `DetectionMode` - 183 edges
-6. `DomainFR` - 170 edges
+6. `DomainFR` - 173 edges
 7. `LanguageDetector` - 111 edges
 8. `CrawlerManager` - 100 edges
 9. `DetectionResponse` - 97 edges
@@ -271,7 +282,7 @@ Nodes (102): CollectionName, Enum, CollectionNameGraph, Enum for the possible co
 
 ### Community 2 - "CrawlerManager Core + DLQ"
 Cohesion: 0.01
-Nodes (440): str, DLQPropertiesAsync, create_dlq_headers(), create_dlq_message(), DeepseekOCRDocExtractor, Client asynchrone pour l'API OCR externe utilisant Deepseek, Initialise le client OCR                  Args:             base_url: URL de, Vérifie si le fichier est un format supporté (PDF ou image)                  A (+432 more)
+Nodes (451): str, DLQPropertiesAsync, create_dlq_headers(), create_dlq_message(), DeepseekOCRDocExtractor, Client asynchrone pour l'API OCR externe utilisant Deepseek, Initialise le client OCR                  Args:             base_url: URL de, Vérifie si le fichier est un format supporté (PDF ou image)                  A (+443 more)
 
 ### Community 77 - "DLQ Properties"
 Cohesion: 0.67
@@ -294,12 +305,12 @@ Cohesion: 1.0
 Nodes (1): Creates a persistent aio_pika.Message ready for the Dead Letter Queue.
 
 ### Community 66 - "Text Anonymizer"
-Cohesion: 0.47
-Nodes (2): gen_email_uuid(), AnonymizeText
+Cohesion: 0.24
+Nodes (8): gen_email_uuid(), AnonymizeText, _get_engines(), test_engines_built_once_across_documents(), test_anonymize_returns_text(), Tests for AnonymizeText Presidio-engine singleton reuse.  presidio_* are heavy, Text anonymization (Presidio), Why lazy Presidio engine singletons: per-doc reload of ~1GB spaCy model churned memory toward OOM
 
 ### Community 49 - "HTML Cleaner"
-Cohesion: 0.22
-Nodes (5): CleanHTML, Class base to clean data., Convert HTML content to BeautifulSoup object., Steps:         1. Convert HTML to BeautifulSoup object.         2. Keep only tag, Strip HTML tags and return cleaned text.         Remove all tags except tags rel
+Cohesion: 0.16
+Nodes (11): CleanHTML, Class base to clean data., Convert HTML content to BeautifulSoup object., Steps:         1. Convert HTML to BeautifulSoup object.         2. Keep only t, Strip HTML tags and return cleaned text.         Remove all tags except tags rel, Strip HTML tags and return cleaned text.         Remove all tags except tags re, test_clean_converts_table_content(), test_clean_returns_empty_on_recursion_error() (+3 more)
 
 ### Community 114 - "Community 114"
 Cohesion: 1.0
@@ -330,8 +341,8 @@ Cohesion: 1.0
 Nodes (1): Atomic Lua scripts for Redis-based concurrency guard. All slot operations (acqu
 
 ### Community 7 - "Milvus CRUD Layer"
-Cohesion: 0.02
-Nodes (89): MilvusProduitsMigration, main(), Script de migration de la collection produits_3 vers produits_4 Objectif: Augmen, Classe pour gérer la migration de produits_3 vers produits_4, Vérifier que la collection source existe, Créer une copie de sauvegarde (optionnel mais recommandé pour petites collection, Créer la nouvelle collection produits_4 avec le schéma corrigé, Filtre les chunks qui existent déjà dans la collection cible         Vérifie: id (+81 more)
+Cohesion: 0.01
+Nodes (115): MilvusProduitsMigration, main(), Script de migration de la collection produits_3 vers produits_4 Objectif: Augmen, Classe pour gérer la migration de produits_3 vers produits_4, Vérifier que la collection source existe, Créer une copie de sauvegarde (optionnel mais recommandé pour petites collection, Créer la nouvelle collection produits_4 avec le schéma corrigé, Filtre les chunks qui existent déjà dans la collection cible         Vérifie: id (+107 more)
 
 ### Community 96 - "Community 96"
 Cohesion: 1.0
@@ -395,15 +406,15 @@ Nodes (310): Initializes the Redis connection pool.     Connects to Redis using 
 
 ### Community 16 - "Detection Async Job Store"
 Cohesion: 0.03
-Nodes (91): Closes the Redis connection pool., reconcile_running_jobs_count(), scheduled_archive_cleanup(), validation_exception_handler(), startup_event(), shutdown_event(), read_root(), Periodically checks the actual number of 'running' jobs in Redis and corrects (+83 more)
+Nodes (103): Closes the Redis connection pool., reconcile_running_jobs_count(), scheduled_archive_cleanup(), validation_exception_handler(), startup_event(), shutdown_event(), read_root(), Periodically checks the actual number of 'running' jobs in Redis and corrects (+95 more)
 
 ### Community 3 - "CrawlerManager Retry & Capacity Tests"
 Cohesion: 0.01
-Nodes (475): Sets a dictionary for a key, serializing it to JSON., CrawlerManager, mock_cache_service(), TestStaleHandlerCounter, test_stale_handler_decrements_counter(), test_stale_handler_skips_decrement_for_terminal_status(), TestStaleHandlerKillProcess, TestRelaunchAbort (+467 more)
+Nodes (480): Sets a dictionary for a key, serializing it to JSON., CrawlerManager, mock_cache_service(), TestStaleHandlerCounter, test_stale_handler_decrements_counter(), test_stale_handler_skips_decrement_for_terminal_status(), TestStaleHandlerKillProcess, TestRelaunchAbort (+472 more)
 
 ### Community 1 - "Crawler Service API Schemas"
 Cohesion: 0.01
-Nodes (767): Gets a dictionary for a key, deserializing it from JSON., Deletes a key from Redis., Gets all keys matching a given prefix using SCAN., _count_files_in_dir(), _map_error_to_message(), Safely counts files in a directory, excluding Crawlee metadata., Read isError from _callback_payload.json in the crawl storage dir.     Returns, Flatten a dict/list payload into a list of (key, value) tuples using     PHP-st (+759 more)
+Nodes (797): Gets a dictionary for a key, deserializing it from JSON., Deletes a key from Redis., Gets all keys matching a given prefix using SCAN., _count_files_in_dir(), _map_error_to_message(), Safely counts files in a directory, excluding Crawlee metadata., Read isError from _callback_payload.json in the crawl storage dir.     Returns, Flatten a dict/list payload into a list of (key, value) tuples using     PHP-st (+789 more)
 
 ### Community 53 - "Redis Lua Scripts Tests"
 Cohesion: 0.22
@@ -418,8 +429,8 @@ Cohesion: 0.02
 Nodes (104): _run_gcloud(), check_gcloud_auth(), gcloud_ls(), gcloud_download(), gcloud_delete(), gcloud_move(), extract_crawl_id(), classify_by_name() (+96 more)
 
 ### Community 84 - "CleanHTML Module"
-Cohesion: 0.67
-Nodes (1): Pytest conftest for tools/ tests.  Adds the tools/ directory to sys.path so te
+Cohesion: 0.33
+Nodes (1): Shared test fixtures.  Since the migration to the shared common_utils Redis po
 
 ### Community 85 - "Stale-Variant Skip Hook"
 Cohesion: 0.67
@@ -515,11 +526,11 @@ Nodes (16): Archive Pre-flight Disk Space Check (2026-04-18), Rationale: Diagnos
 
 ### Community 0 - "Crawler Engine Core (main/functions)"
 Cohesion: 0.0
-Nodes (488): verify_api_key(), Verifies the API key if API_KEY is configured in settings.     If API_KEY is not, resetContextState(), makeTmpStorage(), classifyFragment(), recordClassification(), maybeCommitDecision(), writeDecisionFile() (+480 more)
+Nodes (500): verify_api_key(), Verifies the API key if API_KEY is configured in settings.     If API_KEY is not, resetContextState(), makeTmpStorage(), classifyFragment(), recordClassification(), maybeCommitDecision(), writeDecisionFile() (+492 more)
 
 ### Community 5 - "Crawler Reconcile & Archive Cleanup"
 Cohesion: 0.01
-Nodes (391): Deletes archive files that are older than `max_age_hours`.         If `delete_a, Cleans up temporary GCS download files after serving to the client., Returns all failed webhook callbacks stored in Redis., Cleans up temporary GCS download files after serving to the client., Clears all failed webhook callbacks from Redis. Returns number of keys deleted., Reads {storage_path}/_completion_marker.json and returns parsed dict if, Wipes any persistent state from a prior run of this crawl_id that         would, Archives a finished crawl job to a shared volume for host-side upload to GCS. (+383 more)
+Nodes (404): Deletes archive files that are older than `max_age_hours`.         If `delete_a, Cleans up temporary GCS download files after serving to the client., Returns all failed webhook callbacks stored in Redis., Cleans up temporary GCS download files after serving to the client., Clears all failed webhook callbacks from Redis. Returns number of keys deleted., Reads {storage_path}/_completion_marker.json and returns parsed dict if, Wipes any persistent state from a prior run of this crawl_id that         would, Archives a finished crawl job to a shared volume for host-side upload to GCS. (+396 more)
 
 ### Community 55 - "Robots.txt Guard"
 Cohesion: 0.31
@@ -555,7 +566,7 @@ Nodes (85): account-service SSO, account-service-backend, account-service-fronte
 
 ### Community 4 - "Detection Langue FR Core"
 Cohesion: 0.02
-Nodes (411): _normalize_url_for_dedup(), _homepage_of(), _is_homepage(), _ttl_from_verdict(), _build_challenge_error_msg(), _with_group(), _detect_single_url(), detect_french() (+403 more)
+Nodes (450): _normalize_url_for_dedup(), _homepage_of(), _is_homepage(), _ttl_from_verdict(), _build_challenge_error_msg(), _with_group(), _detect_single_url(), detect_french() (+442 more)
 
 ### Community 27 - "Detection Admission Control"
 Cohesion: 0.08
@@ -727,7 +738,7 @@ Nodes (1): .error marker
 
 ### Community 8 - "Crawler Stash / Unstash"
 Cohesion: 0.01
-Nodes (244): mock_cache_service(), cm_instance(), base_job_info(), test_stash_blocks_active_status(), test_stash_blocks_already_archived(), test_stash_blocks_already_stashed(), test_stash_blocks_lock_held(), test_stash_disk_space_pre_flight_fails() (+236 more)
+Nodes (247): mock_cache_service(), cm_instance(), base_job_info(), test_stash_blocks_active_status(), test_stash_blocks_already_archived(), test_stash_blocks_already_stashed(), test_stash_blocks_lock_held(), test_stash_disk_space_pre_flight_fails() (+239 more)
 
 ### Community 179 - "Maps internal error codes to human-r"
 Cohesion: 1.0
@@ -794,8 +805,8 @@ Cohesion: 1.0
 Nodes (1): Deferred: server-side BackgroundTasks migration of stash_crawl
 
 ### Community 61 - "Crawler Admin Endpoints"
-Cohesion: 0.36
-Nodes (7): _count_by(), _project_sample(), _pool_stats(), redis_debug(), Admin/operator endpoints. Authenticated. Not user-facing., Whitelist sampled client fields so future redis-py additions cannot     silently, Operator-only snapshot of this replica's Redis pool + global CLIENT LIST.     Se
+Cohesion: 0.08
+Nodes (36): _count_by(), _project_sample(), _pool_stats(), redis_debug(), Admin/operator endpoints. Authenticated. Not user-facing., Whitelist sampled client fields so future redis-py additions cannot     silently, Operator-only snapshot of this replica's Redis pool + global CLIENT LIST.     Se, _count_by() (+28 more)
 
 ### Community 50 - "Crawler Update Checker"
 Cohesion: 0.33
@@ -974,8 +985,8 @@ Cohesion: 0.14
 Nodes (13): sessionKey(), createSessionToken(), readSession(), Shared account-service auth lib (libs/auth/{node,python}), @hellopro/auth node TS package, redis-client-frontend (first node consumer of @hellopro/auth), Node consumption: file: dep + transpilePackages + repo-root Docker context, Core-only extraction line (config/oauth/session/flow); framework wiring stays per-service (+5 more)
 
 ### Community 208 - "Auth Lib Internal-Creds Fetch"
-Cohesion: 0.14
-Nodes (26): parseAdminEmails(), deriveClientEnvKeys(), fetchClientCredentialsFromApi(), resolveClientCredentials(), _req(), getAuthConfig(), _resolve_credentials(), test_fetch_fallback_guard_fails_reraises() (+18 more)
+Cohesion: 0.13
+Nodes (26): parseAdminEmails(), deriveClientEnvKeys(), fetchClientCredentialsFromApi(), resolveClientCredentials(), req(), getAuthConfig(), _resolve_credentials(), test_fetch_fallback_guard_fails_reraises() (+18 more)
 
 ### Community 216 - "Auth Lib Cache-Reset Hook"
 Cohesion: 0.4
@@ -1013,8 +1024,52 @@ Nodes (2): api-gateway NOT migrated (live auth path stays), WHY api-gateway not 
 Cohesion: 1.0
 Nodes (1): redis-client-frontend ACCOUNT_INTERNAL_TOKEN compose/env wiring
 
+### Community 237 - "Detection FR Domain-URL Rationale"
+Cohesion: 1.0
+Nodes (1): Extrait le nom de domaine principal d'une URL.
+
+### Community 233 - "Detection FR Domain-URL Rationale"
+Cohesion: 1.0
+Nodes (1): Résout une URL relative en URL absolue.
+
+### Community 235 - "Detection FR Domain-URL Rationale"
+Cohesion: 1.0
+Nodes (1): Détermine si l'URL a un signal très fort de site français.                  Le
+
+### Community 231 - "Detection FR Domain-URL Rationale"
+Cohesion: 1.0
+Nodes (1): Vérifie si une URL indique explicitement une version française.
+
+### Community 228 - "Detection FR Domain-URL Rationale"
+Cohesion: 1.0
+Nodes (1): Return True only if candidate_url is plausibly a language variant of homepage.
+
+### Community 234 - "Detection FR Domain-URL Rationale"
+Cohesion: 1.0
+Nodes (1): Compare two URLs ignoring scheme (http vs https) and trailing slashes.
+
+### Community 227 - "Detection FR Domain-URL Rationale"
+Cohesion: 1.0
+Nodes (1): Determine la priorite regionale d'une URL francaise.          Retourne:
+
+### Community 229 - "Detection FR Domain-URL Rationale"
+Cohesion: 1.0
+Nodes (1): Identifie le cas de decision applique pour le debug.
+
+### Community 232 - "Detection Cache TTL Test"
+Cohesion: 1.0
+Nodes (1): Forward compat: an old entry lacking 'requested_url' should still be readable.
+
+### Community 226 - "Main-Site Identity (isMainSite)"
+Cohesion: 1.0
+Nodes (2): stripFragment(), matchesMainSite()
+
+### Community 236 - "UTF-8 Sanitize Rationale (Utils)"
+Cohesion: 1.0
+Nodes (1): Drop lone surrogates and C0/C1 control chars (keeping tab/newline/CR)         s
+
 ## Knowledge Gaps
-- **2539 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+2534 more)
+- **2632 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+2627 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **Thin community `Community 110`** (1 nodes): `Creates a dictionary of headers for a DLQ message, compatible with both pika and`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -1023,8 +1078,6 @@ Nodes (1): redis-client-frontend ACCOUNT_INTERNAL_TOKEN compose/env wiring
 - **Thin community `Community 112`** (1 nodes): `Creates a dictionary of headers for a DLQ message based on an aio_pika message.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 113`** (1 nodes): `Creates a persistent aio_pika.Message ready for the Dead Letter Queue.`
-  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Text Anonymizer`** (6 nodes): `AnonymizeText.py`, `gen_email_uuid()`, `AnonymizeText`, `.anonymize_text()`, `.presidio_anonymizer()`, `.normalize_text()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 114`** (1 nodes): `Cleans up whitespace and removes control characters.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -1040,7 +1093,7 @@ Nodes (1): redis-client-frontend ACCOUNT_INTERNAL_TOKEN compose/env wiring
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Redis Lua Scripts Tests`** (9 nodes): `test_lua_scripts.py`, `TestLuaScripts`, `.test_acquire_script_is_non_empty_string()`, `.test_acquire_script_contains_expected_commands()`, `.test_release_script_is_non_empty_string()`, `.test_release_script_contains_expected_commands()`, `.test_correct_counters_script_is_non_empty_string()`, `.test_correct_counters_script_contains_expected_commands()`, `Tests for Lua script string definitions. Validates that the scripts are well-fo`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `CleanHTML Module`** (3 nodes): `conftest.py`, `Pytest conftest for tools/ tests.  Adds the tools/ directory to sys.path so te`, `conftest.py`
+- **Thin community `CleanHTML Module`** (6 nodes): `conftest.py`, `Shared test fixtures.  Since the migration to the shared common_utils Redis po`, `conftest.py`, `conftest.py`, `_no_real_redis()`, `conftest.py`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Stale-Variant Skip Hook`** (3 nodes): `export_embedding_to_onnx.py`, `export_embedding_model()`, `Charge le modèle d'embedding, exporte le module Transformer sous-jacent en ONNX,`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -1210,16 +1263,38 @@ Nodes (1): redis-client-frontend ACCOUNT_INTERNAL_TOKEN compose/env wiring
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 221`** (1 nodes): `redis-client-frontend ACCOUNT_INTERNAL_TOKEN compose/env wiring`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Detection FR Domain-URL Rationale`** (1 nodes): `Extrait le nom de domaine principal d'une URL.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Detection FR Domain-URL Rationale`** (1 nodes): `Résout une URL relative en URL absolue.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Detection FR Domain-URL Rationale`** (1 nodes): `Détermine si l'URL a un signal très fort de site français.                  Le`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Detection FR Domain-URL Rationale`** (1 nodes): `Vérifie si une URL indique explicitement une version française.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Detection FR Domain-URL Rationale`** (1 nodes): `Return True only if candidate_url is plausibly a language variant of homepage.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Detection FR Domain-URL Rationale`** (1 nodes): `Compare two URLs ignoring scheme (http vs https) and trailing slashes.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Detection FR Domain-URL Rationale`** (1 nodes): `Determine la priorite regionale d'une URL francaise.          Retourne:`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Detection FR Domain-URL Rationale`** (1 nodes): `Identifie le cas de decision applique pour le debug.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Detection Cache TTL Test`** (1 nodes): `Forward compat: an old entry lacking 'requested_url' should still be readable.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Main-Site Identity (isMainSite)`** (2 nodes): `stripFragment()`, `matchesMainSite()`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `UTF-8 Sanitize Rationale (Utils)`** (1 nodes): `Drop lone surrogates and C0/C1 control chars (keeping tab/newline/CR)         s`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `CrawlerManager` connect `CrawlerManager Retry & Capacity Tests` to `Crawler Service API Schemas`, `CrawlerManager Core + DLQ`, `Crawler Reconcile & Archive Cleanup`, `Crawler Stash / Unstash`, `Detection Async Job Store`, `Crawler Stash-Lock & Redis Design (docs)`?**
-  _High betweenness centrality (0.099) - this node is a cross-community bridge._
-- **Why does `Update mode: pre-flight validation, auto-restore from GCS (_restore_archived_crawl, restore_lock), Node exit-4 no-data safety net, post-crawl cleanup` connect `Crawler Engine Core (main/functions)` to `Crawler Service API Schemas`, `CrawlerManager Retry & Capacity Tests`?**
-  _High betweenness centrality (0.076) - this node is a cross-community bridge._
+  _High betweenness centrality (0.089) - this node is a cross-community bridge._
 - **Why does `cache_service.py (Redis lock helper)` connect `Crawler Cache & Detection Client` to `Detection Async Job Store`, `Crawler Service API Schemas`, `CrawlerManager Retry & Capacity Tests`?**
-  _High betweenness centrality (0.070) - this node is a cross-community bridge._
+  _High betweenness centrality (0.071) - this node is a cross-community bridge._
+- **Why does `cleanDatasetFragments()` connect `Crawler Engine Core (main/functions)` to `Detection Async Job Store`, `Crawler Service API Schemas`?**
+  _High betweenness centrality (0.062) - this node is a cross-community bridge._
 - **Are the 323 inferred relationships involving `CrawlerManager` (e.g. with `CrawlStatus` and `IncludeInArchive`) actually correct?**
   _`CrawlerManager` has 323 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 313 inferred relationships involving `ReindexResponse` (e.g. with `CrawlerManager` and `.reindex_storage()`) actually correct?**
