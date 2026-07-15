@@ -15,24 +15,31 @@ WHY
     Requires Milvus/Zilliz >= 2.5. Existing rows are untouched.
 
 IDEMPOTENT
-    Re-running is safe: if the field is already >= target, it is a no-op.
+    Re-running is safe: if the field is already >= target, it is a no-op. Run it
+    ONCE -- it alters the shared Zilliz collection, so replicas all see it.
 
-RUN (inside a container that has common_utils + the ZILLIZ_* env vars):
-    docker exec -it <product-database-qdrant-service> \
-        python scripts/migrate_id_produit_milvus_maxlen.py
+RUN -- the scripts/ folder is NOT baked into the image, so copy the file into a
+running service container (which already has pymilvus + the ZILLIZ_* env) and
+exec it:
 
-    # verify the parsing logic without touching any server:
+    CID=$(docker ps -qf name=product-database-qdrant-service | head -1)
+    docker cp apps-microservices/product-database-qdrant-service/scripts/migrate_id_produit_milvus_maxlen.py "$CID":/tmp/mig.py
+    docker exec "$CID" python /tmp/mig.py
+
+    # verify the parsing logic without touching any server (no deps needed):
     python scripts/migrate_id_produit_milvus_maxlen.py --selfcheck
 
-Optional endpoint overrides (if the host:port form below is not reachable):
-    ZILLIZ_MILVUS_URI   full client uri, e.g. https://in03-xxxx.zillizcloud.com
-    ZILLIZ_MILVUS_TOKEN full token, e.g. "user:password" or an API key
+Needs only pymilvus + these env vars (already present in the service container):
+    ZILLIZ_URI, ZILLIZ_PORT, ZILLIZ_USER, ZILLIZ_PASSWORD
+Optional full-endpoint overrides (if the host:port form is not reachable):
+    ZILLIZ_MILVUS_URI    full client uri, e.g. https://in03-xxxx.zillizcloud.com
+    ZILLIZ_MILVUS_TOKEN  full token, e.g. "user:password" or an API key
 """
 
 import logging
 import os
 import sys
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Mapping, Optional, Tuple
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
@@ -42,6 +49,23 @@ log = logging.getLogger("migrate_id_produit_milvus_maxlen")
 COLLECTION = "correspondance_produits_bo_milvus_3"
 FIELD = "id_produit_milvus"
 NEW_MAX_LENGTH = 65535
+
+
+def resolve_uri_token(env: Mapping[str, str]) -> Tuple[str, str]:
+    """Build (uri, token) for MilvusClient from env, matching how the service's
+    ORM connects (host/port/user/password). Pure -> unit-checkable. Prefers the
+    explicit ZILLIZ_MILVUS_URI / ZILLIZ_MILVUS_TOKEN overrides when present.
+    """
+    uri = env.get("ZILLIZ_MILVUS_URI")
+    if not uri:
+        host = env.get("ZILLIZ_URI")
+        if not host:
+            raise SystemExit("Set ZILLIZ_URI (or ZILLIZ_MILVUS_URI) to connect.")
+        uri = f"http://{host}:{env.get('ZILLIZ_PORT', '19530')}"
+    token = env.get("ZILLIZ_MILVUS_TOKEN") or (
+        f"{env.get('ZILLIZ_USER', '')}:{env.get('ZILLIZ_PASSWORD', '')}"
+    )
+    return uri, token
 
 
 def extract_max_length(describe: Dict[str, Any], field_name: str) -> Optional[int]:
@@ -61,22 +85,14 @@ def extract_max_length(describe: Dict[str, Any], field_name: str) -> Optional[in
 
 def _build_client():
     from pymilvus import MilvusClient
-    from common_utils.database.config.settings import settings
 
-    uri = os.getenv("ZILLIZ_MILVUS_URI")
-    if not uri:
-        if not settings.ZILLIZ_URI:
-            raise SystemExit("ZILLIZ_URI not set and ZILLIZ_MILVUS_URI missing.")
-        uri = f"http://{settings.ZILLIZ_URI}:{settings.ZILLIZ_PORT}"
-    token = os.getenv("ZILLIZ_MILVUS_TOKEN") or (
-        f"{settings.ZILLIZ_USER}:{settings.ZILLIZ_PASSWORD}"
-    )
+    uri, token = resolve_uri_token(os.environ)
     log.info("Connecting to Milvus at %s", uri)
     return MilvusClient(uri=uri, token=token)
 
 
 def _selfcheck() -> int:
-    """Server-free check of the describe-parsing logic."""
+    """Server-free check of the pure logic (describe parsing + uri resolution)."""
     desc_new = {"fields": [{"name": FIELD, "params": {"max_length": 65535}}]}
     desc_old = {"fields": [{"name": FIELD, "params": {"max_length": 512}}]}
     desc_flat = {"fields": [{"name": FIELD, "max_length": 512}]}  # alt shape
@@ -88,6 +104,13 @@ def _selfcheck() -> int:
     # Idempotency decision: skip only when already >= target.
     assert not (512 >= NEW_MAX_LENGTH)
     assert 65535 >= NEW_MAX_LENGTH
+    # uri/token resolution
+    assert resolve_uri_token({"ZILLIZ_URI": "h", "ZILLIZ_PORT": "19530",
+                              "ZILLIZ_USER": "u", "ZILLIZ_PASSWORD": "p"}) == (
+        "http://h:19530", "u:p")
+    assert resolve_uri_token({"ZILLIZ_MILVUS_URI": "https://x",
+                              "ZILLIZ_MILVUS_TOKEN": "tok"}) == ("https://x", "tok")
+    assert resolve_uri_token({"ZILLIZ_URI": "h"})[0] == "http://h:19530"  # default port
     log.info("selfcheck OK")
     return 0
 
