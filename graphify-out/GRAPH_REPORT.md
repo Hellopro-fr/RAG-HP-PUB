@@ -1,11 +1,11 @@
-# Graph Report - .  (2026-07-13)
+# Graph Report - .  (2026-07-15)
 
 ## Corpus Check
 - 0 files · ~99,999 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 7969 nodes · 17526 edges · 198 communities detected
+- 7976 nodes · 17532 edges · 199 communities detected
 - Extraction: 65% EXTRACTED · 35% INFERRED · 0% AMBIGUOUS · INFERRED: 6191 edges (avg confidence: 0.59)
 - Token cost: 0 input · 0 output
 
@@ -208,6 +208,7 @@
 - [[_COMMUNITY_Detection Cache TTL Test|Detection Cache TTL Test]]
 - [[_COMMUNITY_Main-Site Identity (isMainSite)|Main-Site Identity (isMainSite)]]
 - [[_COMMUNITY_UTF-8 Sanitize Rationale (Utils)|UTF-8 Sanitize Rationale (Utils)]]
+- [[_COMMUNITY_MilvusProduitInserer Tests|MilvusProduitInserer Tests]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `CrawlerManager` - 397 edges
@@ -342,7 +343,7 @@ Nodes (1): Atomic Lua scripts for Redis-based concurrency guard. All slot operat
 
 ### Community 7 - "Milvus CRUD Layer"
 Cohesion: 0.01
-Nodes (115): MilvusProduitsMigration, main(), Script de migration de la collection produits_3 vers produits_4 Objectif: Augmen, Classe pour gérer la migration de produits_3 vers produits_4, Vérifier que la collection source existe, Créer une copie de sauvegarde (optionnel mais recommandé pour petites collection, Créer la nouvelle collection produits_4 avec le schéma corrigé, Filtre les chunks qui existent déjà dans la collection cible         Vérifie: id (+107 more)
+Nodes (119): MilvusProduitsMigration, main(), Script de migration de la collection produits_3 vers produits_4 Objectif: Augmen, Classe pour gérer la migration de produits_3 vers produits_4, Vérifier que la collection source existe, Créer une copie de sauvegarde (optionnel mais recommandé pour petites collection, Créer la nouvelle collection produits_4 avec le schéma corrigé, Filtre les chunks qui existent déjà dans la collection cible         Vérifie: id (+111 more)
 
 ### Community 96 - "Community 96"
 Cohesion: 1.0
@@ -1068,8 +1069,12 @@ Nodes (2): stripFragment(), matchesMainSite()
 Cohesion: 1.0
 Nodes (1): Drop lone surrogates and C0/C1 control chars (keeping tab/newline/CR)         s
 
+### Community 238 - "MilvusProduitInserer Tests"
+Cohesion: 0.67
+Nodes (1): Regression guard for the correspondance ``id_produit_milvus`` field size.  ``id_
+
 ## Knowledge Gaps
-- **2632 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+2627 more)
+- **2637 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+2632 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **Thin community `Community 110`** (1 nodes): `Creates a dictionary of headers for a DLQ message, compatible with both pika and`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -1284,6 +1289,8 @@ Nodes (1): Drop lone surrogates and C0/C1 control chars (keeping tab/newline/CR)
 - **Thin community `Main-Site Identity (isMainSite)`** (2 nodes): `stripFragment()`, `matchesMainSite()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `UTF-8 Sanitize Rationale (Utils)`** (1 nodes): `Drop lone surrogates and C0/C1 control chars (keeping tab/newline/CR)         s`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `MilvusProduitInserer Tests`** (3 nodes): `test_MilvusProduitInserer.py`, `test_id_produit_milvus_holds_many_chunk_pks()`, `Regression guard for the correspondance ``id_produit_milvus`` field size.  ``id_`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 
 ## Suggested Questions
