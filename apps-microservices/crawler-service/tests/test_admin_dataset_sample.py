@@ -80,6 +80,25 @@ def test_html_index_excluded_and_pagination(app_and_storage):
     assert body["returned"] == 2
 
 
+def test_kind_update_serves_jsonl_lines(app_and_storage):
+    app, storage = app_and_storage
+    d = storage / "storage" / "datasets" / "update-example.com"
+    d.mkdir(parents=True)
+    lines = [
+        {"action": "redirected", "url": "https://example.com/old",
+         "destination": "https://example.com/new"},
+        {"action": "deleted", "url": "https://example.com/gone",
+         "reason": "http_error_404"},
+    ]
+    (d / "redirected_urls.jsonl").write_text(
+        "\n".join(json.dumps(l) for l in lines) + "\n", encoding="utf-8")
+    body = TestClient(app).get("/admin/dataset/9", params={"kind": "update"}).json()
+    assert body["total_records"] == 2
+    assert body["records"][0]["file"] == "redirected_urls.jsonl"
+    assert body["records"][0]["destination"] == "https://example.com/new"
+    assert body["records"][1]["action"] == "deleted"
+
+
 def test_oversized_file_not_parsed(app_and_storage, monkeypatch):
     app, storage = app_and_storage
     _mk_dataset(storage, "example.com", [("a.json", {"url": "u", "content": "abc"})])

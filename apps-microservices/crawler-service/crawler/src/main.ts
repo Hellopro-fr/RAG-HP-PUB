@@ -5,6 +5,7 @@ import fsPromises from "fs/promises";
 import os from 'os';
 import { router } from "./routes.js";
 import { RECOVER_FAILED_ON_RESTART, shouldRunRecovery, resolveStallCountResolved } from "./httpStatusPolicy.js";
+import { matchesMainSite } from "./isMainSite.js";
 import {
     getPathAfterDomain,
     getScrapingData,
@@ -55,6 +56,7 @@ import { QUEUE_PURGE_ENABLED } from "./staleVariantSkip.js";
 import { flagStaleVariantsOnDisk } from "./queuePurge.js";
 import { baseKeyAbsent } from "./urlBase.js";
 import { QM_FACET_ENABLED } from "./facetCap.js";
+import { writeQmAudit, writeDiezAudit } from "./auditSidecars.js";
 import { isFilterParam } from "./filterOnSeen.js";
 import { facetParamsForCms } from "./cmsFacetLists.js";
 import { hasIgnoredExtensionForSeed } from "./seedExtensionFilter.js";
@@ -945,7 +947,7 @@ if (crawlMode === 'update') {
 
     // Collect remaining URLs for Phase 2 (all consolidated URLs except the homepage)
     for await (const { url: consolidatedUrl, source } of allUrls) {
-        if (consolidatedUrl === site) continue; // Already seeded as homepage
+        if (matchesMainSite(consolidatedUrl, site)) continue; // Already seeded as homepage
         remainingUrls.push({ url: consolidatedUrl, source });
     }
 
@@ -1039,10 +1041,27 @@ if (shouldRunRecovery(RECOVER_FAILED_ON_RESTART, typeCrawling ?? "")) {
 // Intelligent queue state detection using handled/pending/total counts
 const queueInfo = await requestQueue.getInfo();
 
+// The two early exits below bypass gracefulShutdown (a `const` declared later —
+// TDZ at this point of top-level execution), leaving _exit_reason.json stale from
+// a previous segment. Refresh it: the Python shutdown/crash-heal guards require
+// reason=COMPLETED with a timestamp FRESHER than the run's start_time.
+const writeCompletedExitReason = () => {
+    try {
+        const p = `${storagePath}/_exit_reason.json`;
+        fs.writeFileSync(p, JSON.stringify({ reason: "COMPLETED", timestamp: new Date().toISOString(), stats: null }, null, 2));
+        const fd = fs.openSync(p, 'r');
+        fs.fsyncSync(fd);
+        fs.closeSync(fd);
+    } catch (e) {
+        console.error("Failed to refresh _exit_reason.json on early exit", e);
+    }
+};
+
 // Case 1: Crawl completed successfully (all items handled)
 if (queueInfo && queueInfo.totalRequestCount > 0 && queueInfo.handledRequestCount === queueInfo.totalRequestCount && queueInfo.pendingRequestCount === 0) {
     console.log(`✅ Crawl already completed: ${queueInfo.handledRequestCount}/${queueInfo.totalRequestCount} items handled.`);
     console.log(`ℹ️  No pending items. Exiting gracefully.`);
+    writeCompletedExitReason();
     process.exit(0); // Success exit
 }
 
@@ -1054,6 +1073,7 @@ if (queueInfo && queueInfo.totalRequestCount > 0 && queueInfo.handledRequestCoun
 if (queueInfo && queueInfo.handledRequestCount === 0 && queueInfo.pendingRequestCount === 0 && queueInfo.totalRequestCount > 0) {
     console.warn(`⚠️  WARNING: Detected ${queueInfo.totalRequestCount} in-progress items from a previous interrupted run.`);
     console.warn(`ℹ️  No dispatchable requests after repair — exiting 0 (treating as complete) to avoid a progress stall + relaunch loop.`);
+    writeCompletedExitReason();
     process.exit(0);
 }
 
@@ -1295,6 +1315,45 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
     // helper, never throws. See questionMarkDecision.ts persistObservations().
     persistQuestionMarkObservations(storagePath);
 
+    // Audit sidecars EARLY (merge-on-write, auditSidecars.ts): they must land BEFORE
+    // the heavy steps below (html index / update report / dataset cleanup) — in prod
+    // a kill during those steps lost the audits of a 30k-request purge (tae.be
+    // 4296-362), and a restart segment's empty in-memory state must not clobber an
+    // earlier segment's file. The diez audit is re-written after
+    // cleanDatasetFragments fills content_collision.
+    if (storagePath) {
+        const qmPairStats: Record<string, { same: number; different: number; unusable: number }> = {};
+        for (const [p, s] of context.qmTier2.tally) qmPairStats[p] = s;
+        const qmAudit = writeQmAudit(storagePath, {
+            collapsed: context.qmCollapsed,
+            committed: context.qmTier2.addedToRemove,
+            pairStats: qmPairStats,
+        });
+        if (qmAudit.collapsedTotal > 0) {
+            console.warn(`[questionmark] route-loss candidates: ${qmAudit.collapsedTotal} ?param= page(s) collapsed onto an existing base — see _questionmark_audit.json (re-crawl to confirm).`);
+        }
+        if (perClassEnabled()) {
+            const diezAudit = writeDiezAudit(storagePath, {
+                collapsed: context.diezCollapsed,
+                contentCollision: context.diezContentCollision ?? null,
+            });
+            if (diezAudit.collapsedTotal > 0) {
+                console.warn(`[diez] route-loss candidates: ${diezAudit.collapsedTotal} fragment page(s) collapsed onto an existing base — see _diez_audit.json (re-crawl to confirm).`);
+            }
+        }
+    }
+
+    // update_stats.json early too — cheap Redis reads only; previously written after
+    // the heavy steps + URL streaming, i.e. inside the same kill window as the audits.
+    try {
+        if (context.statsManager) {
+            await context.statsManager.saveStateToDisk();
+            console.log("Stats saved to update_stats.json");
+        }
+    } catch (e) {
+        console.error("Failed to save stats:", e);
+    }
+
     // Build the per-domain URL->filename index for the SFPI HTML store (hot tier). Fail-open.
     buildHtmlIndex(storagePath, domain);
 
@@ -1326,44 +1385,13 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         }
     }
 
-    // Phase-2: per-crawl audit sidecar (collapsed-fragment candidates + content-collision stats).
-    if (storagePath && perClassEnabled()) {
-        try {
-            fs.writeFileSync(
-                `${storagePath}/_diez_audit.json`,
-                JSON.stringify({
-                    collapsed_candidates: context.diezCollapsed,
-                    content_collision: context.diezContentCollision,
-                }, null, 2),
-            );
-            if (context.diezCollapsed.length > 0) {
-                console.warn(`[diez] route-loss candidates: ${context.diezCollapsed.length} fragment page(s) collapsed onto an existing base — see _diez_audit.json (re-crawl to confirm).`);
-            }
-        } catch (e) {
-            console.error("Diez audit sidecar write failed:", e);
-        }
-    }
-
-    // Phase-2 QM audit sidecar (spec 2026-06-29): committed params + their pair stats +
-    // collapsed-param route-loss candidates. Mirrors _diez_audit.json.
-    if (storagePath && (context.qmTier2.addedToRemove.length > 0 || context.qmCollapsed.length > 0)) {
-        try {
-            const pairStats: Record<string, { same: number; different: number; unusable: number }> = {};
-            for (const [p, s] of context.qmTier2.tally) pairStats[p] = s;
-            fs.writeFileSync(
-                `${storagePath}/_questionmark_audit.json`,
-                JSON.stringify({
-                    collapsed_candidates: context.qmCollapsed,
-                    committed: context.qmTier2.addedToRemove,
-                    pair_stats: pairStats,
-                }, null, 2),
-            );
-            if (context.qmCollapsed.length > 0) {
-                console.warn(`[questionmark] route-loss candidates: ${context.qmCollapsed.length} ?param= page(s) collapsed onto an existing base — see _questionmark_audit.json (re-crawl to confirm).`);
-            }
-        } catch (e) {
-            console.error("QM audit sidecar write failed:", e);
-        }
+    // Re-write the diez audit now that content_collision is populated (the early
+    // write above carried null; merge-on-write keeps the collapsed candidates).
+    if (storagePath && perClassEnabled() && context.diezContentCollision) {
+        writeDiezAudit(storagePath, {
+            collapsed: context.diezCollapsed,
+            contentCollision: context.diezContentCollision,
+        });
     }
 
     // 4. Persist Data (Critical Step)
@@ -1385,15 +1413,7 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         console.error("Failed to persist URL history:", e);
     }
 
-    // 2. Save stats state
-    try {
-        if (context.statsManager) {
-            await context.statsManager.saveStateToDisk();
-            console.log("Stats saved to update_stats.json");
-        }
-    } catch (e) {
-        console.error("Failed to save stats:", e);
-    }
+    // (update_stats.json is saved earlier in this shutdown, before the heavy steps.)
 
     // 3. Close JSONL streams (flush to disk before Redis cleanup)
     if (context.jsonlWriter) {

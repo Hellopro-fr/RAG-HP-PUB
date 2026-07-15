@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 from fastapi import FastAPI, Response
@@ -10,21 +11,61 @@ from app.middleware.admission import AdmissionMiddleware
 from contextlib import asynccontextmanager
 from app.core.config import settings as _settings
 from app.core.async_jobs import JobStore, JobManager
+from common_utils.redis import cache_service
+from common_utils.redis.cache_service import init_redis_pool, close_redis_pool
 
 # Configuration du logging — INFO pour voir les logs de stratégie proxy, retry, etc.
 # Sans cette configuration, Python utilise WARNING par défaut et masque les logs INFO.
+# force=True : l'import de cache_service ci-dessus exécute son propre
+# basicConfig au niveau module — sans force, celui-ci serait un no-op silencieux
+# (perte des timestamps et noms de logger).
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    force=True,
 )
+
+# Le pool cache_service est init une seule fois au startup ; si Redis était
+# injoignable à cet instant, redis_client reste None pour toujours (dégradation
+# permanente : cache invisible + submit async 503 non-retryable). Les anciens
+# clients lazy se reconnectaient d'eux-mêmes — cette boucle restaure ce
+# comportement. init_redis_pool est idempotent (ping-guard) donc sans coût
+# quand le pool est sain.
+_REDIS_RECONNECT_INTERVAL_S = int(os.getenv("REDIS_RECONNECT_INTERVAL_S", "30"))
+
+# Référence capturée à l'import : des tests patchent asyncio.sleep au niveau
+# module (via app.api.routes.asyncio) — sans capture, la boucle de reconnexion
+# deviendrait une boucle chaude pendant ces tests.
+_sleep = asyncio.sleep
+
+
+async def _redis_reconnect_loop() -> None:
+    while True:
+        await _sleep(_REDIS_RECONNECT_INTERVAL_S)
+        # Pas de retry si REDIS_URL n'est pas configuré : rien à reconnecter,
+        # et init_redis_pool loggue un CRITICAL à chaque appel sans URL.
+        if cache_service.redis_client is None and os.getenv("REDIS_URL"):
+            await init_redis_pool()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    store = JobStore(redis_url=_settings.REDIS_URL)
+    # cache_service reads REDIS_URL/SERVICE_NAME from the process env; bridge
+    # the pydantic-settings value so a .env-file-only config keeps working,
+    # and default the Redis client name for non-compose runs (bare uvicorn
+    # would otherwise register as 'crawler-py', the cache_service fallback).
+    if _settings.REDIS_URL:
+        os.environ.setdefault("REDIS_URL", _settings.REDIS_URL)
+    os.environ.setdefault("SERVICE_NAME", "api-detection-langue-fr-service")
+    await init_redis_pool()
+    reconnect_task = asyncio.create_task(_redis_reconnect_loop())
+    store = JobStore()
     app.state.job_manager = JobManager(store=store, batch_runner=_run_batch_core, settings=_settings)
     logging.getLogger(__name__).info("Async JobManager initialised (lifespan startup)")
     yield
+    reconnect_task.cancel()
+    await asyncio.gather(reconnect_task, return_exceptions=True)
     await app.state.job_manager.shutdown()
+    await close_redis_pool()
     logging.getLogger(__name__).info("Async JobManager shut down (lifespan shutdown)")
 
 

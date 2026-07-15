@@ -196,8 +196,18 @@ export class UpdateChecker {
 
             if (isFromDataset) {
                 if (destInDataset) {
-                    // Redirect to another Dataset URL → the source URL becomes redundant
-                    // No action needed, the destination is already tracked
+                    // Redirect to another Dataset URL → destination already tracked.
+                    // Still RECORD the mapping: the BO needs old→new to retire the old
+                    // fiche, and the signal must be repeatable across MAJs (a missed
+                    // one-shot delivery = permanent divergence, incident 1079-327).
+                    // No 'redirects' increment — that counter feeds the circuit breaker.
+                    await this.writeJsonl(UpdateChecker.REDIRECTED_FILE, {
+                        action: 'redirected',
+                        url: originalUrl,
+                        source,
+                        destination: loadedUrl,
+                        reason: 'redirect_to_existing',
+                    });
                     return { action: 'confirmed', url: originalUrl, source, reason: 'redirect_to_existing' };
                 } else {
                     // Redirect to a URL NOT in Dataset → track the redirection
@@ -214,7 +224,16 @@ export class UpdateChecker {
             } else {
                 // Non-dataset URL redirected
                 if (destInDataset) {
-                    // Redirects to an existing Dataset URL → ignore
+                    // Redirects to an existing Dataset URL → ignored for counters, but
+                    // RECORD the mapping (repeatable signal — request_queue re-seeds the
+                    // old URL every MAJ; this lets the BO retire a leftover old fiche).
+                    await this.writeJsonl(UpdateChecker.REDIRECTED_FILE, {
+                        action: 'redirected',
+                        url: originalUrl,
+                        source,
+                        destination: loadedUrl,
+                        reason: 'redirect_to_existing_dataset',
+                    });
                     return { action: 'ignored', url: originalUrl, source, reason: 'redirect_to_existing_dataset' };
                 } else {
                     // Redirects to a new URL — check eligibility of the DESTINATION

@@ -20,6 +20,7 @@ def _req(items, client_job_id=None):
         items=[BatchItem(url=u) for u in items], mode=DetectionMode.COMPLETE,
         proxy_url=None, use_nlp_detection=True, force_refresh=False,
         max_concurrency=10, homepage_fallback=True, client_job_id=client_job_id,
+        validate_alternatives=True,
     )
 
 
@@ -31,7 +32,7 @@ async def _instant_runner(items, mode, opts, cb):
 
 @pytest.mark.asyncio
 async def test_submit_completes_with_authoritative_counts():
-    jm = JobManager(JobStore(None, client=FakeRedis()), _instant_runner, _settings())
+    jm = JobManager(JobStore(client=FakeRedis()), _instant_runner, _settings())
     job_id, code = await jm.submit(_req(["https://a.fr", "https://b.fr"]))
     assert code == 202
     await asyncio.gather(*list(jm._job_tasks.values()))
@@ -41,7 +42,7 @@ async def test_submit_completes_with_authoritative_counts():
 
 @pytest.mark.asyncio
 async def test_idempotent_concurrent_submit_spawns_once():
-    store = JobStore(None, client=FakeRedis())
+    store = JobStore(client=FakeRedis())
     spawns = {"n": 0}
     async def counting_runner(items, mode, opts, cb):
         spawns["n"] += 1
@@ -61,7 +62,7 @@ async def test_capacity_rejected():
     async def slow_runner(items, mode, opts, cb):
         await asyncio.sleep(0.2)
         return await _instant_runner(items, mode, opts, cb)
-    jm = JobManager(JobStore(None, client=FakeRedis()), slow_runner, _settings(MAX_ACTIVE_JOBS=1))
+    jm = JobManager(JobStore(client=FakeRedis()), slow_runner, _settings(MAX_ACTIVE_JOBS=1))
     await jm.submit(_req(["https://a.fr"]))
     with pytest.raises(_JobCapacityExceeded):
         await jm.submit(_req(["https://b.fr"]))
@@ -70,7 +71,7 @@ async def test_capacity_rejected():
 
 @pytest.mark.asyncio
 async def test_disabled():
-    jm = JobManager(JobStore(None, client=FakeRedis()), _instant_runner, _settings(ASYNC_JOBS_ENABLED=False))
+    jm = JobManager(JobStore(client=FakeRedis()), _instant_runner, _settings(ASYNC_JOBS_ENABLED=False))
     with pytest.raises(_JobsDisabled):
         await jm.submit(_req(["https://a.fr"]))
 
@@ -81,7 +82,7 @@ async def test_shutdown_marks_running_failed():
     async def hang_runner(items, mode, opts, cb):
         started.set()
         await asyncio.sleep(60)
-    jm = JobManager(JobStore(None, client=FakeRedis()), hang_runner, _settings())
+    jm = JobManager(JobStore(client=FakeRedis()), hang_runner, _settings())
     job_id, _ = await jm.submit(_req(["https://a.fr"]))
     await started.wait()
     await jm.shutdown()

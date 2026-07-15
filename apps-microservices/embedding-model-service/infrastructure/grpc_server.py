@@ -104,8 +104,21 @@ class EmbeddingServiceImpl(embedding_pb2_grpc.EmbeddingServiceServicer):
 # ChunkText/GetEmbeddings dont le texte dépasse ~4 Mo serait sinon refusée
 # côté serveur par le défaut gRPC de réception (4 Mio). L'envoi est illimité
 # par défaut, seul le plafond de réception doit être relevé.
+#
+# Keepalive : le client (common_utils.grpc_clients.embedding_client) envoie un
+# PING toutes les 30s (keepalive_time_ms=30000, keepalive_permit_without_calls=1).
+# Par défaut le serveur gRPC n'accepte pas de PING plus fréquent que 300s sans
+# frame DATA et coupe la connexion (GOAWAY ENHANCE_YOUR_CALM "too_many_pings")
+# au bout de 2 strikes. Pendant un GetEmbeddings long (gros batch, aucune frame
+# DATA renvoyée), les PING de liveness du client déclenchaient donc UNAVAILABLE
+# ~4 min après le début de l'appel -> retry transitoire en boucle. On aligne le
+# serveur sur la cadence du client. min_ping_interval doit rester <= keepalive_time
+# client (30000ms). max_ping_strikes=0 = accepter n'importe quel nombre de pings.
 _SERVER_OPTIONS = [
     ("grpc.max_receive_message_length", 64 * 1024 * 1024),
+    ("grpc.keepalive_permit_without_calls", 1),
+    ("grpc.http2.min_ping_interval_without_data_ms", 10000),
+    ("grpc.http2.max_ping_strikes", 0),
 ]
 
 

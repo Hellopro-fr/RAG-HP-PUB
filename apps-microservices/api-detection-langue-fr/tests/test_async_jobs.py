@@ -1,4 +1,5 @@
 import pytest
+from common_utils.redis import cache_service
 from app.core.async_jobs import JobStore, poll_status
 
 
@@ -39,7 +40,7 @@ class FakeRedis:
 
 @pytest.mark.asyncio
 async def test_claim_index_atomic():
-    store = JobStore(redis_url=None, client=FakeRedis())
+    store = JobStore(client=FakeRedis())
     assert await store.claim_index("c1", "job-A", 100) is True
     assert await store.claim_index("c1", "job-B", 100) is False   # already claimed
     assert await store.get_index("c1") == "job-A"
@@ -47,21 +48,34 @@ async def test_claim_index_atomic():
 
 @pytest.mark.asyncio
 async def test_write_raises_on_failure():
-    store = JobStore(redis_url=None, client=FakeRedis(fail=True))
+    store = JobStore(client=FakeRedis(fail=True))
     with pytest.raises(Exception):
         await store.write({"job_id": "x"}, 100)
 
 
 @pytest.mark.asyncio
 async def test_get_degrades_to_none():
-    store = JobStore(redis_url=None, client=FakeRedis(fail=True))
+    store = JobStore(client=FakeRedis(fail=True))
     assert await store.get("x") is None
 
 
 @pytest.mark.asyncio
 async def test_ping():
-    assert await JobStore(None, client=FakeRedis()).ping() is True
-    assert await JobStore(None, client=FakeRedis(fail=True)).ping() is False
+    assert await JobStore(client=FakeRedis()).ping() is True
+    assert await JobStore(client=FakeRedis(fail=True)).ping() is False
+
+
+@pytest.mark.asyncio
+async def test_default_store_uses_shared_pool_client(monkeypatch):
+    """JobStore() with no override must read cache_service.redis_client live."""
+    fake = FakeRedis()
+    monkeypatch.setattr(cache_service, "redis_client", fake, raising=False)
+    store = JobStore()
+    assert store._client is fake
+    assert await store.ping() is True
+    monkeypatch.setattr(cache_service, "redis_client", None, raising=False)
+    assert store._client is None
+    assert await store.ping() is False
 
 
 def test_poll_status_stale():

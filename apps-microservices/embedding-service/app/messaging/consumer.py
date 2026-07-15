@@ -10,11 +10,13 @@ from common_utils.autres.DLQProperties import DLQProperties
 MAX_RETRIES = 3
 RETRY_TTL_MS = 30000
 # Tunables (spec 2026-07-02 livelock) : backpressure + budget par message.
-# PREFETCH_COUNT : messages simultanés par replica (défaut 2 — aligné sur le
-#   Semaphore(3) non-HIGH du model-service ; 4 replicas x 2 = 8 en vol).
-# PROCESS_TIMEOUT : plafond global par message ; doit rester > 2x GRPC_TIMEOUT
-#   (pire cas ChunkText + GetEmbeddings au deadline) pour que le DEADLINE gRPC
-#   (retryable proprement) parte AVANT ce plafond.
+# PREFETCH_COUNT : messages simultanés par replica (défaut 2 ; 4 replicas x 2
+#   = 8 en vol, throttlés côté model-service par
+#   Semaphore(TRITON_MAX_CONCURRENT_DEFAULT), déployé à 1).
+# PROCESS_TIMEOUT : plafond global par message ; doit rester > GRPC_TIMEOUT
+#   (ChunkText est offload server-side, donc pire cas ~= GetEmbeddings au
+#   deadline + publish) pour que le DEADLINE gRPC (retryable proprement) parte
+#   AVANT ce plafond. Déployé : GRPC_TIMEOUT=300, PROCESS_TIMEOUT=360.
 # Valeur <1 clampée à 1 — 0 signifierait 'illimité' côté AMQP (anti-backpressure).
 PREFETCH_COUNT = max(1, int(os.getenv("PREFETCH_COUNT") or 2))
 PROCESS_TIMEOUT = max(1.0, float(os.getenv("PROCESS_TIMEOUT") or 240))
