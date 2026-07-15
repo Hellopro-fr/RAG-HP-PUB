@@ -123,3 +123,14 @@ async def test_chunktext_error_sets_internal():
     resp = await impl.ChunkText(_Req(), Ctx())
     assert list(resp.chunks) == []
     assert codes["code"] == server.grpc.StatusCode.INTERNAL
+
+
+def test_server_options_permit_client_keepalive_cadence():
+    """Regression: the server must accept the client's 30s liveness pings during
+    a long GetEmbeddings, or it sends GOAWAY too_many_pings -> UNAVAILABLE loop.
+    min_ping_interval_without_data_ms must be <= client keepalive_time_ms (30000)."""
+    server = _load_server()
+    opts = dict(server._SERVER_OPTIONS)
+    assert opts["grpc.keepalive_permit_without_calls"] == 1
+    assert opts["grpc.http2.max_ping_strikes"] == 0
+    assert opts["grpc.http2.min_ping_interval_without_data_ms"] <= 30000
