@@ -19,6 +19,15 @@ from pymilvus import (
 )
 
 
+# id_produit_milvus holds the comma-joined list of a product's chunk PKs. It is
+# read+parsed by the BO cleanup job to delete those vectors, so it must fit the
+# FULL list — never truncate. VARCHAR(512) overflowed at ~28 chunks (Milvus code
+# 1100). 65535 is the Milvus VARCHAR ceiling (~3400 chunks of headroom).
+# NOTE: the schema below only applies when the collection is CREATED; an existing
+# collection must be migrated with scripts/migrate_id_produit_milvus_maxlen.py.
+ID_PRODUIT_MILVUS_MAX_LENGTH = 65535
+
+
 @dataclass
 class ModelConfig:
     model_id: str = settings.MODEL
@@ -98,7 +107,9 @@ class MilvusProduitInserer:
                 ),
                 FieldSchema(name="id_produit", dtype=DataType.VARCHAR, max_length=64),
                 FieldSchema(
-                    name="id_produit_milvus", dtype=DataType.VARCHAR, max_length=512
+                    name="id_produit_milvus",
+                    dtype=DataType.VARCHAR,
+                    max_length=ID_PRODUIT_MILVUS_MAX_LENGTH,
                 ),
                 FieldSchema(name="origin", dtype=DataType.VARCHAR, max_length=64),
                 FieldSchema(name="date_ajout", dtype=DataType.VARCHAR, max_length=64),
