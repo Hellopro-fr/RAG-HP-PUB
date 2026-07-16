@@ -382,6 +382,40 @@ export function trackBudgetReturn(budgetRange: string | null) {
   });
 }
 
+// =============================================================================
+// ÉTAPE TRANSPARENCE (email avant le loader de matching)
+// =============================================================================
+
+/**
+ * Track l'affichage de l'étape transparence (fond tableau produits flouté +
+ * champ email). Affichée pour toutes les variantes A/B, entre la dernière
+ * question et le loader de matching.
+ */
+export function trackTransparenceView() {
+  currentStepIndex++;
+  trackQuoteFunnel(currentStepIndex, 'transparence', 'contact');
+}
+
+/**
+ * Track la validation de l'étape transparence (clic CTA avec email valide).
+ * @param isKnownBuyer - true si l'email saisi correspond à un acheteur connu
+ */
+export function trackTransparenceComplete(isKnownBuyer: boolean) {
+  currentStepIndex++;
+  trackQuoteFunnel(currentStepIndex, 'transparence-complete', 'contact', {
+    is_known_buyer: isKnownBuyer,
+  });
+}
+
+/**
+ * Track le retour à la dernière question depuis l'étape transparence
+ * (clic "Précédent" ou back navigateur).
+ * Pas d'incrément de step_index : recul dans le funnel.
+ */
+export function trackTransparenceReturn() {
+  trackQuoteFunnel(currentStepIndex, 'transparence-retour', 'contact');
+}
+
 /**
  * Track l'ouverture du modal de comparaison
  */

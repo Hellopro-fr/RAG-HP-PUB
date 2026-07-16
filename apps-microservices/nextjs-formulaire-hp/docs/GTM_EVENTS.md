@@ -149,6 +149,13 @@ submit-success            ▼
 | `budget-complete` | `prix` | Validation de l'étape budget — clic "Voir ma sélection". Payload : `budget_range` |
 | `budget-retour` | `prix` | Retour au questionnaire depuis /budget — clic "Précédent". Payload : `budget_range` (peut être `null`). N'incrémente pas `step_number` |
 
+#### Étape transparence (email avant le loader de matching)
+| step_name | step_type | Description |
+|-----------|-----------|-------------|
+| `transparence` | `contact` | Affichage de l'étape transparence (fond tableau produits flouté + champ email obligatoire), entre la dernière question et le loader. Affichée pour toutes les variantes A/B |
+| `transparence-complete` | `contact` | Validation de l'étape — clic CTA "Voir ma sélection et Recevoir mes devis" avec email valide. Payload : `is_known_buyer` |
+| `transparence-retour` | `contact` | Retour à la dernière question — clic "Précédent" ou back navigateur. N'incrémente pas `step_number` |
+
 #### Sélection produits
 | step_name | step_type | Description |
 |-----------|-----------|-------------|
@@ -414,6 +421,9 @@ Sources de trafic (paramètres UTM).
 | `trackBudgetView()` | Affichage de la page /budget (étape prix) |
 | `trackBudgetComplete(budgetRange)` | Clic "Voir ma sélection" sur /budget |
 | `trackBudgetReturn(budgetRange)` | Clic "Précédent" sur /budget (retour questionnaire) |
+| `trackTransparenceView()` | Affichage de l'étape transparence (email pré-loader) |
+| `trackTransparenceComplete(isKnownBuyer)` | Clic CTA transparence avec email valide |
+| `trackTransparenceReturn()` | Retour à la dernière question depuis transparence |
 | `trackSelectionPageView(recommended, total)` | Page sélection |
 | `trackProductCardClick(id, name, score, action)` | Clic produit |
 | `trackProductSelectionChange(id, action, total)` | Sélection changée |

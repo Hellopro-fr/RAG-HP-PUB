@@ -58,7 +58,10 @@ interface UseProcessMatchingResult {
   isLoading: boolean;
   isRefetching: boolean;
   error: Error | null;
-  processMatching: (onProgress?: (progress: number) => void) => Promise<'selection' | 'something-to-add'>;
+  processMatching: (
+    onProgress?: (progress: number) => void,
+    isStale?: () => boolean
+  ) => Promise<'selection' | 'something-to-add'>;
   refetchMatchingWithUpdatedCriteria: (
     updatedEquivalences: any[],
     removedCritiqueIds?: number[],
@@ -91,7 +94,15 @@ export function useProcessMatching(): UseProcessMatchingResult {
   const { trackDbEvent } = useDbTracking();
 
   // ─── processMatching : matching initial après le questionnaire ───
-  const processMatching = useCallback(async (onProgress?: (progress: number) => void): Promise<'selection' | 'something-to-add'> => {
+  // isStale : sonde d'invalidation fournie par l'appelant. Le matching démarre
+  // désormais dès l'affichage de l'étape transparence ; si l'utilisateur revient
+  // en arrière et change une réponse, un nouveau run démarre pendant que
+  // celui-ci est encore en vol — ses écritures tardives dans le store
+  // écraseraient les résultats frais sans cette garde.
+  const processMatching = useCallback(async (
+    onProgress?: (progress: number) => void,
+    isStale?: () => boolean
+  ): Promise<'selection' | 'something-to-add'> => {
     setIsLoading(true);
     setError(null);
     // // Ancien: onProgress?.(0); — supprimé car le segment 0→25% est géré par le prix
@@ -158,6 +169,12 @@ export function useProcessMatching(): UseProcessMatchingResult {
 
       const apiData: MatchingResponse = await res.json();
 
+      // Run périmé pendant l'appel matching : ne rien écrire, ne rien tracker
+      if (isStale?.()) {
+        setIsLoading(false);
+        return 'something-to-add';
+      }
+
       // Normaliser les données de matching
       const { recommended, others } = normalizeMatchingToSuppliers(
         apiData.top_produit,
@@ -190,6 +207,10 @@ export function useProcessMatching(): UseProcessMatchingResult {
       const recommendedIds = recommended.map((s) => s.id);
       if (recommendedIds.length > 0) {
         const productInfo = await fetchProductInfo(recommendedIds, categoryId, apiBase2);
+        if (isStale?.()) {
+          setIsLoading(false);
+          return 'something-to-add';
+        }
         if (productInfo?.items) {
           enrichedRecommended = enrichSuppliersWithProductInfo(recommended, productInfo.items);
           setMatchingResults({ recommended: enrichedRecommended, others });
@@ -204,6 +225,10 @@ export function useProcessMatching(): UseProcessMatchingResult {
       const othersIds = others.map((s) => s.id);
       if (othersIds.length > 0) {
         const othersInfo = await fetchProductInfo(othersIds, categoryId, apiBase2);
+        if (isStale?.()) {
+          setIsLoading(false);
+          return 'something-to-add';
+        }
         if (othersInfo?.items) {
           enrichedOthers = enrichSuppliersWithProductInfo(others, othersInfo.items);
           setMatchingResults({ recommended: enrichedRecommended, others: enrichedOthers });

@@ -29,7 +29,10 @@ export function usePriceEstimation() {
 
   const { trackDbEvent } = useDbTracking();
 
-  const fetchPriceEstimation = useCallback(async () => {
+  // isStale : sonde d'invalidation fournie par l'appelant (voir useProcessMatching) —
+  // l'estimation démarre dès l'étape transparence ; un run périmé (retour +
+  // changement de réponse) ne doit pas écraser l'estimation du run suivant.
+  const fetchPriceEstimation = useCallback(async (isStale?: () => boolean) => {
     // 1. Consolider les équivalences du questionnaire
     const consolidated = consolidateEquivalences(dynamicEquivalences);
     if (consolidated.length === 0) {
@@ -74,6 +77,9 @@ export function usePriceEstimation() {
       if (!res.ok) throw new Error(`Prix API error: ${res.status}`);
 
       const data: PrixApiResponse = await res.json();
+
+      // Run périmé pendant l'appel prix : ne rien écrire, ne rien tracker
+      if (isStale?.()) return;
 
       // Données de tracking communes (requête + temps)
       const trackingRequest = {
@@ -163,6 +169,7 @@ export function usePriceEstimation() {
       setPriceEstimation({ data: data.reponse, error: null });
 
     } catch (err) {
+      if (isStale?.()) return;
       console.error('[usePriceEstimation] Error:', err);
       trackDbEvent('pricing', 'estimation_error', {
         request: {
