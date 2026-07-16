@@ -1,12 +1,12 @@
-# Graph Report - .  (2026-07-15)
+# Graph Report - .  (2026-07-16)
 
 ## Corpus Check
 - 0 files · ~99,999 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 7976 nodes · 17532 edges · 199 communities detected
-- Extraction: 65% EXTRACTED · 35% INFERRED · 0% AMBIGUOUS · INFERRED: 6191 edges (avg confidence: 0.59)
+- 7993 nodes · 17556 edges · 200 communities detected
+- Extraction: 65% EXTRACTED · 35% INFERRED · 0% AMBIGUOUS · INFERRED: 6194 edges (avg confidence: 0.59)
 - Token cost: 0 input · 0 output
 
 ## Community Hubs (Navigation)
@@ -209,6 +209,7 @@
 - [[_COMMUNITY_Main-Site Identity (isMainSite)|Main-Site Identity (isMainSite)]]
 - [[_COMMUNITY_UTF-8 Sanitize Rationale (Utils)|UTF-8 Sanitize Rationale (Utils)]]
 - [[_COMMUNITY_MilvusProduitInserer Tests|MilvusProduitInserer Tests]]
+- [[_COMMUNITY_Embedding Limits|Embedding Limits]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `CrawlerManager` - 397 edges
@@ -351,7 +352,7 @@ Nodes (1): Shared threading lock for pymilvus connection management.  All Milvus
 
 ### Community 12 - "gRPC Service Clients (proto stubs)"
 Cohesion: 0.02
-Nodes (105): Config, Embedding, _clean_text(), Ajoute une ligne avec le temps d’exécution dans temps_embedding.log, Délègue le chunking au microservice d'embedding., get_embeddings(), get_embedding(), tokenize() (+97 more)
+Nodes (118): Config, Embedding, _clean_text(), Ajoute une ligne avec le temps d’exécution dans temps_embedding.log, Délègue le chunking au microservice d'embedding., get_embeddings(), get_embedding(), tokenize() (+110 more)
 
 ### Community 118 - "Community 118"
 Cohesion: 1.0
@@ -1073,8 +1074,12 @@ Nodes (1): Drop lone surrogates and C0/C1 control chars (keeping tab/newline/CR)
 Cohesion: 0.67
 Nodes (1): Regression guard for the correspondance ``id_produit_milvus`` field size.  ``id_
 
+### Community 239 - "Embedding Limits"
+Cohesion: 1.0
+Nodes (1): Nettoie une chaîne de texte en normalisant les espaces et en corrigeant
+
 ## Knowledge Gaps
-- **2637 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+2632 more)
+- **2643 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+2638 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **Thin community `Community 110`** (1 nodes): `Creates a dictionary of headers for a DLQ message, compatible with both pika and`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -1291,6 +1296,8 @@ Nodes (1): Regression guard for the correspondance ``id_produit_milvus`` field s
 - **Thin community `UTF-8 Sanitize Rationale (Utils)`** (1 nodes): `Drop lone surrogates and C0/C1 control chars (keeping tab/newline/CR)         s`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `MilvusProduitInserer Tests`** (3 nodes): `test_MilvusProduitInserer.py`, `test_id_produit_milvus_holds_many_chunk_pks()`, `Regression guard for the correspondance ``id_produit_milvus`` field size.  ``id_`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Embedding Limits`** (1 nodes): `Nettoie une chaîne de texte en normalisant les espaces et en corrigeant`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 
 ## Suggested Questions
