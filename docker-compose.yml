@@ -928,6 +928,9 @@ services:
       dockerfile: ./apps-microservices/document-echange-processor-service/Dockerfile
     profiles: [ "app" ] # Profile for the main application stack
     restart: unless-stopped
+    # Let an in-flight OCR batch drain on stop/recreate before SIGKILL. Must be
+    # >= a batch's worst case (OCR timeout ~300s); the app drains within 290s.
+    stop_grace_period: 300s
     volumes:
       - ./apps-microservices/document-echange-processor-service/app:/app/document_echange_processor_service:rw
     environment:
