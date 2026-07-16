@@ -13,5 +13,12 @@ class Settings(BaseSettings):
     # Taille max du batch
     BATCH_MAX_ITEMS: int = 500
 
+    # Workers (parallélisme CPU ; GIL → ce sont les process, pas les threads)
+    UVICORN_WORKERS: int = 2
+
+    # Admission synchrone (0 = désactivé, admet toujours)
+    SYNC_MAX_INFLIGHT: int = 0
+    ADMISSION_RETRY_AFTER_S: int = 15
+
 
 settings = Settings()

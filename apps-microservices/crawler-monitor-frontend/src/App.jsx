@@ -3,6 +3,8 @@ import { Routes, Route, useNavigate, Navigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { RefreshCw } from 'lucide-react';
 import { setOnUnauthorized } from './lib/api';
+import { isReplicaLive } from './lib/replicas';
+import { wsBackoffDelay } from './lib/backoff';
 import { useCallbacksQuery, useWsInvalidator, queryKeys } from './hooks/queries';
 import LoginPage from './components/LoginPage';
 import Overview from './pages/Overview';
@@ -46,8 +48,11 @@ const PageFallback = () => (
 const App = () => {
   const [token, setToken] = useState(localStorage.getItem('authToken'));
   const [replicas, setReplicas] = useState({});
-  const [, setIsConnected] = useState(false);
+  const [isConnected, setIsConnected] = useState(false);
   const wsRef = useRef(null);
+  // Reconnexion WS : timer en attente et compteur de tentatives (backoff).
+  const reconnectTimerRef = useRef(null);
+  const reconnectAttemptRef = useRef(0);
 
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -86,19 +91,11 @@ const App = () => {
   const pendingReplicasRef = useRef({});
   const replicasFlushTimerRef = useRef(null);
 
-  // WebSocket connection
+  // WebSocket connection — avec reconnexion automatique (backoff exponentiel)
   useEffect(() => {
     if (!token) return;
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/api?token=${token}`;
-    console.log('Connecting to WebSocket:', wsUrl);
-    wsRef.current = new WebSocket(wsUrl);
-
-    wsRef.current.onopen = () => {
-      console.log('Connected to WebSocket');
-      setIsConnected(true);
-    };
+    let cancelled = false; // fermé volontairement (cleanup) — propre à CETTE instance d'effet
 
     const flushReplicas = () => {
       replicasFlushTimerRef.current = null;
@@ -108,31 +105,61 @@ const App = () => {
       setReplicas(prev => ({ ...prev, ...pending }));
     };
 
-    wsRef.current.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'job_update') {
-          handleJobUpdate(data.crawl_id);
-        } else if (data.type === 'replica_heartbeat') {
-          const hb = data.data;
-          if (!hb || !hb.replicaId) return;
-          // Buffer: same replicaId collapses to the latest heartbeat only.
-          pendingReplicasRef.current[hb.replicaId] = hb;
-          if (!replicasFlushTimerRef.current) {
-            replicasFlushTimerRef.current = setTimeout(flushReplicas, 1000);
+    const connect = () => {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}/api?token=${token}`;
+      console.log('Connecting to WebSocket:', wsUrl);
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        console.log('Connected to WebSocket');
+        setIsConnected(true);
+        reconnectAttemptRef.current = 0; // reset du backoff après une connexion réussie
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'job_update') {
+            handleJobUpdate(data.crawl_id);
+          } else if (data.type === 'replica_heartbeat') {
+            const hb = data.data;
+            if (!hb || !hb.replicaId) return;
+            // Buffer: same replicaId collapses to the latest heartbeat only.
+            // Stamp browser-local receive time → liveness immune to clock skew
+            // between this machine and the crawler container (see lib/replicas).
+            pendingReplicasRef.current[hb.replicaId] = { ...hb, receivedAt: Date.now() };
+            if (!replicasFlushTimerRef.current) {
+              replicasFlushTimerRef.current = setTimeout(flushReplicas, 1000);
+            }
           }
+        } catch (e) {
+          console.error('WebSocket message error:', e);
         }
-      } catch (e) {
-        console.error('WebSocket message error:', e);
-      }
+      };
+
+      ws.onclose = () => {
+        setIsConnected(false);
+        // Fermeture volontaire (unmount / changement de token) : pas de reconnexion.
+        if (cancelled) return;
+        const delay = wsBackoffDelay(reconnectAttemptRef.current++);
+        console.log(`WebSocket disconnected — retry in ${delay}ms`);
+        reconnectTimerRef.current = setTimeout(() => {
+          reconnectTimerRef.current = null;
+          connect();
+        }, delay);
+      };
     };
 
-    wsRef.current.onclose = () => {
-      console.log('WebSocket disconnected');
-      setIsConnected(false);
-    };
+    connect();
 
     return () => {
+      cancelled = true;
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
       if (wsRef.current) wsRef.current.close();
       // Drop any pending flush to avoid setState after unmount
       if (replicasFlushTimerRef.current) {
@@ -143,6 +170,18 @@ const App = () => {
     };
   }, [token, handleJobUpdate]);
 
+  // Fallback REST : si le WS est déconnecté, on rafraîchit les données clés
+  // toutes les 15s pour que le dashboard ne gèle pas silencieusement.
+  useEffect(() => {
+    if (!token || isConnected) return;
+    const interval = setInterval(() => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.jobs() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.capacity() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.callbacks() });
+    }, 15_000);
+    return () => clearInterval(interval);
+  }, [token, isConnected, queryClient]);
+
   // Clean up zombie replicas (older than 30s)
   useEffect(() => {
     const interval = setInterval(() => {
@@ -151,7 +190,7 @@ const App = () => {
         const next = {};
         let changed = false;
         Object.entries(prev).forEach(([id, data]) => {
-          if (now - data.timestamp < 30000) {
+          if (isReplicaLive(data, now)) {
             next[id] = data;
           } else {
             changed = true;
@@ -176,6 +215,7 @@ const App = () => {
   return (
     <CoherenceProvider token={token} replicas={replicas}>
       <AppShell
+        wsConnected={isConnected}
         badges={{ failedCallbacks: failedCallbackCount }}
         onLogout={handleLogout}
         onRefresh={handleManualRefresh}

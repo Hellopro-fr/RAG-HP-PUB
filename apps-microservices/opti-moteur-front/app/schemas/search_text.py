@@ -36,3 +36,14 @@ class SearchTextRequest(BaseModel):
             "plus rapide d'environ 300-500 ms, perd la remontee semantique de synonymes)."
         ),
     )
+    vector_only: bool = Field(
+        False,
+        description=(
+            "Si True : pas de BM25 textuel cote Typesense (q=*), uniquement kNN "
+            "vecteur + reranker Python. Use case : quand Solr V2 fait deja le "
+            "match exact en page 1, on veut que Typesense apporte uniquement la "
+            "valeur semantique en complement (pages 2-4 + extensions). "
+            "Si vector_only=True ET use_vector=False -> warning + fallback BM25 "
+            "(coherence : vector_only sans vecteur = pas de recherche)."
+        ),
+    )

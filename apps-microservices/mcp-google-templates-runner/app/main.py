@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from app.api.admin import router as admin_router
 from app.config import settings
 from app.credentials import CredentialsStore
-from app.gateway_sync import sync_with_gateway
+from app.gateway_sync import reconcile_loop
 from app.port_pool import PortPool
 from app.supervisor import Supervisor
 
@@ -33,11 +33,14 @@ async def lifespan(app: FastAPI):
         settings.runner_instance_port_start,
         settings.runner_instance_port_end,
     )
-    # Startup sync — fire-and-forget so lifespan is not blocked if the gateway
-    # is down (retries take up to ~150s; admin API must still come up).
+    # Background reconcile loop — fire-and-forget so lifespan is not blocked if
+    # the gateway is down. The loop runs immediately at boot and keeps retrying
+    # on a short interval until the gateway is reachable, then settles to a long
+    # interval. This is what prevents a boot-time gateway-DNS race from leaving
+    # the runner with empty state forever, and self-heals port drift.
     # Held on app.state so shutdown can cancel it cleanly — otherwise Python
     # prints "Task was destroyed but it is pending!" if shutdown lands mid-retry.
-    app.state.sync_task = asyncio.create_task(sync_with_gateway(supervisor))
+    app.state.sync_task = asyncio.create_task(reconcile_loop(supervisor))
     yield
     app.state.sync_task.cancel()
     await asyncio.gather(app.state.sync_task, return_exceptions=True)

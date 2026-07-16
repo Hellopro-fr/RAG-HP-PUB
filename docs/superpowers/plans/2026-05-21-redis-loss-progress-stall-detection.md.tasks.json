@@ -1,0 +1,79 @@
+{
+  "planPath": "docs/superpowers/plans/2026-05-21-redis-loss-progress-stall-detection.md",
+  "tasks": [
+    {
+      "id": 9,
+      "subject": "Task 0: Implement RedisHealthMonitor (Node, TDD)",
+      "status": "completed",
+      "description": "**Goal:** Standalone class tracking Redis client health, fires callback after sustained loss.\n\n**Files:** Create `apps-microservices/crawler-service/crawler/src/class/RedisHealthMonitor.ts` + `.test.ts`.\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-service/crawler/src/class/RedisHealthMonitor.ts\",\"apps-microservices/crawler-service/crawler/src/class/RedisHealthMonitor.test.ts\"],\"verifyCommand\":\"cd apps-microservices/crawler-service/crawler && npm test -- src/class/RedisHealthMonitor.test.ts\",\"acceptanceCriteria\":[\"8 unit tests pass\",\"No real timers\",\"Idempotent fire\",\"Per-client + global path\"]}\n```"
+    },
+    {
+      "id": 10,
+      "subject": "Task 1: Implement ProgressMonitor (Node, TDD)",
+      "status": "completed",
+      "blockedBy": [9],
+      "description": "**Goal:** Class samples requestsFinished, fires on stall.\n\n**Files:** Create `apps-microservices/crawler-service/crawler/src/class/ProgressMonitor.ts` + `.test.ts`.\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-service/crawler/src/class/ProgressMonitor.ts\",\"apps-microservices/crawler-service/crawler/src/class/ProgressMonitor.test.ts\"],\"verifyCommand\":\"cd apps-microservices/crawler-service/crawler && npm test -- src/class/ProgressMonitor.test.ts\",\"acceptanceCriteria\":[\"5 unit tests pass\",\"Samples pruned\",\"Idempotent\"]}\n```"
+    },
+    {
+      "id": 11,
+      "subject": "Task 2: Wire DedupManager to RedisHealthMonitor",
+      "status": "completed",
+      "blockedBy": [9],
+      "description": "**Goal:** DedupManager reports per-op success/error to injected monitor.\n\n**Files:** Modify DedupManager.ts; create DedupManager.monitor.test.ts.\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-service/crawler/src/class/DedupManager.ts\",\"apps-microservices/crawler-service/crawler/src/class/DedupManager.monitor.test.ts\"],\"verifyCommand\":\"cd apps-microservices/crawler-service/crawler && npm test -- src/class/DedupManager.monitor.test.ts && npm run build\",\"acceptanceCriteria\":[\"Monitor wired to all ops\",\"connect() rethrows\",\"Build clean\"]}\n```"
+    },
+    {
+      "id": 12,
+      "subject": "Task 3: Wire heartbeat block in main.ts + fail-fast on connect failure",
+      "status": "completed",
+      "blockedBy": [9],
+      "description": "**Goal:** Heartbeat reports per-publish success/error; initial connect failure exits 5.\n\n**Files:** Modify main.ts (~L29 import, ~L379-494).\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-service/crawler/src/main.ts\"],\"verifyCommand\":\"cd apps-microservices/crawler-service/crawler && npm run build\",\"acceptanceCriteria\":[\"Build clean\",\"Fail-fast on initial connect\",\"Per-publish reporting\"]}\n```"
+    },
+    {
+      "id": 13,
+      "subject": "Task 4: Wire ProgressMonitor + DedupManager fail-fast + gracefulShutdown teardown",
+      "status": "completed",
+      "blockedBy": [10, 11, 12],
+      "description": "**Goal:** Complete the wiring in main.ts.\n\n**Files:** Modify main.ts (~L552 DedupManager + ~L897 gracefulShutdown + before startCrawler).\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-service/crawler/src/main.ts\"],\"verifyCommand\":\"cd apps-microservices/crawler-service/crawler && npm run build && npm test\",\"acceptanceCriteria\":[\"DedupManager monitor wired\",\"ProgressMonitor started\",\"Monitors stopped in gracefulShutdown\",\"Build clean\"]}\n```"
+    },
+    {
+      "id": 14,
+      "subject": "Task 5: Python _send_failure_webhook — exit codes 5+6 + failure_cause",
+      "status": "completed",
+      "description": "**Goal:** Failure webhook maps codes 5/6 + adds failure_cause field.\n\n**Files:** Modify crawler_manager.py (~L818-845).\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-service/app/core/crawler_manager.py\"],\"verifyCommand\":\"cd apps-microservices/crawler-service && python -m pytest tests/test_crawler_manager.py -x -q\",\"acceptanceCriteria\":[\"Codes 5/6 mapped\",\"Existing branches preserved\",\"No regression\"]}\n```"
+    },
+    {
+      "id": 15,
+      "subject": "Task 6: Python _monitor_process persists failure_cause in job_data",
+      "status": "completed",
+      "blockedBy": [14],
+      "description": "**Goal:** job_data terminal writes include failure_cause.\n\n**Files:** Modify crawler_manager.py (~L979-1058).\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-service/app/core/crawler_manager.py\"],\"verifyCommand\":\"cd apps-microservices/crawler-service && python -m pytest tests/ -x -q -k \\\"monitor_process or callback_payload or crawler_manager\\\"\",\"acceptanceCriteria\":[\"failure_cause persisted in job_data\",\"All codes mapped consistently\",\"No regression\"]}\n```"
+    },
+    {
+      "id": 16,
+      "subject": "Task 7: Python tests for exit-code dispatch (5/6 + failure_cause)",
+      "status": "completed",
+      "blockedBy": [14, 15],
+      "description": "**Goal:** Lock new behavior with explicit tests.\n\n**Files:** Create tests/test_exit_code_dispatch.py.\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-service/tests/test_exit_code_dispatch.py\"],\"verifyCommand\":\"cd apps-microservices/crawler-service && python -m pytest tests/test_exit_code_dispatch.py -x -v\",\"acceptanceCriteria\":[\"4 tests pass\",\"Terminal-status invariant preserved\"]}\n```"
+    },
+    {
+      "id": 17,
+      "subject": "Task 8: Config defaults + docker-compose env passthrough",
+      "status": "completed",
+      "description": "**Goal:** Thresholds configurable across Settings + container env.\n\n**Files:** Modify app/core/config.py + docker-compose.yml (~L1336).\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-service/app/core/config.py\",\"docker-compose.yml\"],\"verifyCommand\":\"cd apps-microservices/crawler-service && python -c \\\"from app.core.config import settings; print(settings.REDIS_LOSS_THRESHOLD_MS, settings.PROGRESS_STALL_THRESHOLD_MS)\\\"\",\"acceptanceCriteria\":[\"Settings fields added\",\"Compose env passthroughs\",\"Compose config valid\"]}\n```"
+    },
+    {
+      "id": 18,
+      "subject": "Task 9: PHP whitelist failure_cause (Marketplace repo)",
+      "status": "completed",
+      "description": "**Goal:** BO persists failure_cause via existing telemetry whitelist.\n\n**Files:** Modify fonctions_scrapping.php (~L636). CROSS-REPO commit in Marketplace.\n\n```json:metadata\n{\"files\":[\"D:/DevHellopro/Marketplace/BO/admin/repertoire_test/moulinettes_interne/scrapping_produit_ia/fonctions/fonctions_scrapping.php\"],\"verifyCommand\":\"php -l D:/DevHellopro/Marketplace/BO/admin/repertoire_test/moulinettes_interne/scrapping_produit_ia/fonctions/fonctions_scrapping.php\",\"acceptanceCriteria\":[\"failure_cause in whitelist\",\"php -l clean\",\"Commit in Marketplace repo\"]}\n```"
+    },
+    {
+      "id": 19,
+      "subject": "Task 10: CLAUDE.md updates + smoke-test playbook",
+      "status": "completed",
+      "blockedBy": [13, 16, 17, 18],
+      "description": "**Goal:** Docs reflect new exit codes, env vars, operational behavior.\n\n**Files:** Modify apps-microservices/crawler-service/CLAUDE.md.\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-service/CLAUDE.md\"],\"verifyCommand\":\"grep -E \\\"REDIS_LOST|PROGRESS_STALL|failure_cause\\\" apps-microservices/crawler-service/CLAUDE.md | head -10\",\"acceptanceCriteria\":[\"Exit table rows 5/6 added\",\"New section present\",\"Smoke-test playbook included\"]}\n```"
+    }
+  ],
+  "lastUpdated": "2026-05-21T00:00:00Z"
+}

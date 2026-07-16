@@ -85,43 +85,168 @@ paths:
   /auth/token/generate:
     post:
       summary: Générer un refresh token + access token pour un service (admin uniquement)
+      operationId: generate_token
       security: [{AdminCle: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenGenerateRequest'
       responses:
         '200':
           description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenGenerateResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /auth/token/refresh:
     post:
       summary: Échanger un refresh token contre un nouvel access token
+      operationId: refresh_token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
       responses:
         '200':
           description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenRefreshResponse'
+        '401':
+          description: Refresh token invalide ou révoqué
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /auth/token/revoke:
     post:
       summary: Révoquer le refresh token d'un service (admin uniquement)
+      operationId: revoke_token
       security: [{AdminCle: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRevokeRequest'
       responses:
         '200':
           description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenRevokeResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /auth/token/refresh-tokens:
     get:
       summary: Lister les refresh tokens d'un service
+      operationId: list_refresh_tokens
+      parameters:
+        - name: service_name
+          in: query
+          required: true
+          description: Nom du service ciblé
+          schema:
+            type: string
+        - name: active_only
+          in: query
+          required: false
+          description: Filtrer uniquement les tokens actifs (défaut true).
+          schema:
+            type: boolean
+            default: true
       responses:
         '200':
           description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshTokenList'
+        '422':
+          description: Paramètre manquant ou invalide
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /auth/token/all-refresh-tokens:
     get:
       summary: Lister tous les refresh tokens — tous services (admin uniquement)
+      operationId: list_all_refresh_tokens
       security: [{AdminCle: []}]
+      parameters:
+        - name: active_only
+          in: query
+          required: false
+          description: |
+            Filtre optionnel : `true` (actifs seulement), `false` (inactifs seulement),
+            absent (tous les tokens).
+          schema:
+            type: boolean
       responses:
         '200':
           description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshTokenList'
   /auth/logs:
     get:
       summary: Journal d'audit paginé des appels API (admin uniquement)
+      operationId: list_logs
       security: [{AdminCle: []}]
+      parameters:
+        - name: page
+          in: query
+          required: false
+          description: Numéro de page (1-indexed).
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: page_size
+          in: query
+          required: false
+          description: Taille de page (max 500).
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 50
+        - name: service_name
+          in: query
+          required: false
+          description: Filtrer par nom de service.
+          schema:
+            type: string
       responses:
         '200':
           description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiCallHistoryList'
 components:
   securitySchemes:
     Bearer Token:
@@ -134,5 +259,191 @@ components:
       in: header
       name: X-Admin-Key
       description: Clé Admin (variable env `GATEWAY_ADMIN_KEY`) — gestion des historiques et refresh tokens.
+  schemas:
+    TokenGenerateRequest:
+      type: object
+      required: [service_name]
+      properties:
+        service_name:
+          type: string
+          description: Nom unique du microservice.
+    TokenGenerateResponse:
+      type: object
+      required:
+        - service_name
+        - refresh_token
+        - access_token
+        - access_token_expires_minutes
+        - access_token_expires_at
+        - created_at
+      properties:
+        service_name:
+          type: string
+        refresh_token:
+          type: string
+        access_token:
+          type: string
+        access_token_expires_minutes:
+          type: integer
+        access_token_expires_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+    TokenRefreshRequest:
+      type: object
+      required: [service_name, refresh_token]
+      properties:
+        service_name:
+          type: string
+          description: Nom du service.
+        refresh_token:
+          type: string
+          description: Refresh token opaque.
+    TokenRefreshResponse:
+      type: object
+      required:
+        - service_name
+        - access_token
+        - access_token_expires_minutes
+        - access_token_expires_at
+      properties:
+        service_name:
+          type: string
+        access_token:
+          type: string
+        access_token_expires_minutes:
+          type: integer
+        access_token_expires_at:
+          type: string
+          format: date-time
+    TokenRevokeRequest:
+      type: object
+      required: [service_name]
+      properties:
+        service_name:
+          type: string
+          description: Nom du service à révoquer.
+    TokenRevokeResponse:
+      type: object
+      required: [service_name, revoked, message]
+      properties:
+        service_name:
+          type: string
+        revoked:
+          type: boolean
+        message:
+          type: string
+    RefreshTokenEntry:
+      type: object
+      required:
+        - id
+        - service_name
+        - token
+        - date_creation
+        - ip_creation
+        - est_actif
+      properties:
+        id:
+          type: integer
+          format: int64
+        service_name:
+          type: string
+        token:
+          type: string
+        date_creation:
+          type: string
+          format: date-time
+        ip_creation:
+          type: string
+        est_actif:
+          type: boolean
+    RefreshTokenList:
+      type: object
+      required: [total, items]
+      properties:
+        total:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RefreshTokenEntry'
+    ApiCallHistoryEntry:
+      type: object
+      required:
+        - id
+        - service_name
+        - method
+        - path
+        - status_code
+        - client_ip
+        - called_at
+      properties:
+        id:
+          type: integer
+          format: int64
+        service_name:
+          type: string
+        method:
+          type: string
+        path:
+          type: string
+        status_code:
+          type: integer
+        client_ip:
+          type: string
+        request_headers:
+          type: string
+          nullable: true
+          description: JSON brut des en-têtes (champs sensibles caviardés).
+        called_at:
+          type: string
+          format: date-time
+        duration_ms:
+          type: integer
+          nullable: true
+    ApiCallHistoryList:
+      type: object
+      required: [total, page, page_size, items]
+      properties:
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        page_size:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApiCallHistoryEntry'
+    ErrorResponse:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          type: string
+    ValidationError:
+      type: object
+      required: [loc, msg, type]
+      properties:
+        loc:
+          type: array
+          items:
+            oneOf:
+              - type: string
+              - type: integer
+        msg:
+          type: string
+        type:
+          type: string
+    HTTPValidationError:
+      type: object
+      properties:
+        detail:
+          type: array
+          items:
+            $ref: '#/components/schemas/ValidationError'
 security:
   - Bearer Token: []

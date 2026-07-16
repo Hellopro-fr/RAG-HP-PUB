@@ -23,6 +23,8 @@ type ServiceRow struct {
 	LastScanOK      *bool  `gorm:"column:last_scan_ok"`
 	LastScanError   string `gorm:"type:text;column:last_scan_error"`
 	CreatedBy       string `gorm:"size:255"`
+	AuthPolicy      int    `gorm:"column:auth_policy;not null;default:1"`
+	PublicPaths     string `gorm:"size:2048;column:public_paths"`
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 }
@@ -39,6 +41,7 @@ type EndpointRow struct {
 	OperationID string `gorm:"size:255;column:operation_id"`
 	Tags        string `gorm:"size:1024"`
 	Deprecated  bool   `gorm:"not null;default:false"`
+	AuthPolicy  *int   `gorm:"column:auth_policy"`
 }
 
 func (EndpointRow) TableName() string { return "catalog_endpoints" }

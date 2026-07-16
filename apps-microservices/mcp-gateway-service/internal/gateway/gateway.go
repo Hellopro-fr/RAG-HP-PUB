@@ -22,13 +22,17 @@ type BDDTableResolver interface {
 }
 
 // ZohoUserCatalog returns the per-viewer Zoho tool catalog state. The
-// implementation MUST resolve the viewer's role first (admin vs non-admin)
-// and consult only the appropriate zoho_imports row — there is no admin-row
-// fallback for non-admin viewers. Configured == false means the row is
-// missing (or has no tools); the consent screen renders this as
-// "Non configuré" with a docs CTA.
+// implementation resolves which zoho_imports row to consult:
+//   - adminGranted == true (server-authorization grant on the Zoho stub) OR
+//     the viewer's gateway role is admin → the admin row.
+//   - otherwise → the viewer's own per-user row (no admin fallback).
+//
+// adminGranted mirrors mcp-zoho-service's resolver Branch 2: a grant routes
+// the caller to the admin Zoho account. Configured == false means the
+// resolved row is missing (or has no tools); the consent screen renders this
+// as "Non configuré" with a docs CTA.
 type ZohoUserCatalog interface {
-	StateForEmail(ctx context.Context, email string) ZohoCatalogState
+	StateForEmail(ctx context.Context, email string, adminGranted bool) ZohoCatalogState
 }
 
 // Gateway routes MCP JSON-RPC requests to the appropriate backend servers.
@@ -227,17 +231,21 @@ func (g *Gateway) FetchZohoStateForUser(ctx context.Context, email string) map[s
 		return out
 	}
 
-	st := g.zohoCatalog.StateForEmail(ctx, email)
+	// Per-backend resolution: a server-authorization grant is keyed by
+	// (server_id, email), so the admin-row decision can differ per Zoho
+	// backend. Mirrors mcp-zoho-service resolver Branch 2.
 	for _, srv := range zohoBackends {
+		granted := g.serverAuth != nil && g.serverAuth.IsAuthorized(srv.ID, email)
+		st := g.zohoCatalog.StateForEmail(ctx, email, granted)
 		out[srv.ID] = ZohoServerState{
 			Tools:      st.Tools,
 			Configured: st.Configured,
 		}
-	}
-	if st.Configured {
-		log.Printf("[gateway] consent zoho catalog email=%s configured=true tool_count=%d", email, len(st.Tools))
-	} else {
-		log.Printf("[gateway] consent zoho catalog email=%s configured=false — docs CTA", email)
+		if st.Configured {
+			log.Printf("[gateway] consent zoho catalog email=%s server=%s granted=%t configured=true tool_count=%d", email, srv.ID, granted, len(st.Tools))
+		} else {
+			log.Printf("[gateway] consent zoho catalog email=%s server=%s granted=%t configured=false — docs CTA", email, srv.ID, granted)
+		}
 	}
 	return out
 }

@@ -52,6 +52,18 @@ class Settings(BaseSettings):
     # --- Service ---
     SERVICE_PORT: int = 8570
 
+    # --- Admin (routes d'administration sensibles : compute-idf, etc.) ---
+    # Token jetable en header X-Admin-Token. A changer en prod via env var.
+    ADMIN_TOKEN: str = "hp_admin_2026_05_22_xZ7q"
+
+    # --- Persistance IDF via GCS (alternative au PVC ReadWriteMany) ---
+    # Si defini, le service upload/download idf_nom_produit.json vers/depuis
+    # ce bucket. Le SA Kubernetes du pod doit avoir le role
+    # `roles/storage.objectAdmin` sur ce bucket (Workload Identity).
+    # Vide -> pas de persistance GCS, fallback fichier local du pod.
+    GCS_IDF_BUCKET: str = ""
+    GCS_IDF_OBJECT: str = "idf_nom_produit.json"
+
     class Config:
         env_file = ".env"
         extra = "ignore"

@@ -36,7 +36,11 @@ class Settings(BaseSettings):
     INVALID_PAGE_TTL_HARD_S: int = 604800       # 7 days — http_error + redirected_to_home
     INVALID_PAGE_TTL_SOFT_S: int = 21600        # 6 hours — soft_404 (heuristic, give site time to fix)
 
-    # Redis cache
+    # Redis (shared pool via common_utils.redis.cache_service — initialised in
+    # main.py's lifespan; bridged to the process env there because cache_service
+    # reads os.environ, not this Settings object). Pool tuning is env-only:
+    # REDIS_MAX_CONNECTIONS, REDIS_SOCKET_TIMEOUT_S, REDIS_SOCKET_CONNECT_TIMEOUT_S,
+    # REDIS_HEALTH_CHECK_INTERVAL_S, SERVICE_NAME (client name).
     REDIS_URL: Optional[str] = None
 
     # Proxy (optionnel)
@@ -60,6 +64,17 @@ class Settings(BaseSettings):
     # User-Agent
     USER_AGENT: str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     
+    # Async job API (POST /detect-batch-async + GET poll)
+    ASYNC_JOBS_ENABLED: bool = True
+    MAX_ACTIVE_JOBS: int = 8
+    JOB_TTL_ACTIVE_S: int = 7200          # 2h — pending/running record TTL (refreshed by heartbeat)
+    JOB_RESULT_TTL_S: int = 3600          # 1h — terminal record TTL (BO must poll within this)
+    STALE_THRESHOLD_S: int = 120          # no heartbeat beyond this -> poll reports 'stale'
+    HEARTBEAT_INTERVAL_S: int = 5         # wall-clock heartbeat tick
+    ASYNC_SUBMIT_RETRY_AFTER_S: int = 15  # Retry-After on capacity 503
+    ASYNC_POLL_HINT_MAX_S: int = 30       # upper bound on server poll_after_seconds hint
+    SHUTDOWN_GRACE_S: int = 5             # bound on JobManager.shutdown() task drain
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

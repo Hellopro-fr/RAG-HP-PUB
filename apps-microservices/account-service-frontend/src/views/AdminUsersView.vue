@@ -2,7 +2,7 @@
 import { h, onMounted, ref, type Component } from 'vue'
 import { useRouter } from 'vue-router'
 import type { ColumnDef } from '@tanstack/vue-table'
-import { ChevronUp, ChevronDown, Lock, Unlock, KeyRound, Users } from 'lucide-vue-next'
+import { ChevronUp, ChevronDown, Lock, Unlock, KeyRound, Users, CloudUpload } from 'lucide-vue-next'
 import * as usersApi from '@/api/users'
 import DataTable from '@/components/common/DataTable.vue'
 
@@ -26,6 +26,7 @@ const router = useRouter()
 const items = ref<usersApi.AdminUser[]>([])
 const loading = ref(true)
 const error = ref('')
+const info = ref('')
 
 async function load() {
   loading.value = true
@@ -37,6 +38,18 @@ async function load() {
     error.value = e instanceof Error ? e.message : 'Erreur'
   } finally {
     loading.value = false
+  }
+}
+
+async function runSync(fn: () => Promise<usersApi.McpSyncResult>, confirmText: string) {
+  if (!confirm(confirmText)) return
+  error.value = ''
+  info.value = ''
+  try {
+    const r = await fn()
+    info.value = `MCP sync : ${r.created.length} créé(s), ${r.skipped.length} déjà présent(s)`
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Erreur'
   }
 }
 
@@ -118,6 +131,11 @@ const columns: ColumnDef<usersApi.AdminUser, any>[] = [
         ),
       )
       buttons.push(
+        iconButton(CloudUpload, 'Sync vers MCP gateway', 'hover:text-blue-600', () =>
+          runSync(() => usersApi.syncMcp(u.email), `Sync ${u.email} vers MCP gateway ?`),
+        ),
+      )
+      buttons.push(
         iconButton(Users, 'Voir les sessions', 'hover:text-gray-700', () =>
           router.push(`/admin/users/${encodeURIComponent(u.email)}/sessions`),
         ),
@@ -130,8 +148,18 @@ const columns: ColumnDef<usersApi.AdminUser, any>[] = [
 
 <template>
   <div class="p-6">
-    <h1 class="text-2xl font-semibold mb-4">Utilisateurs</h1>
+    <div class="flex items-center justify-between mb-4">
+      <h1 class="text-2xl font-semibold">Utilisateurs</h1>
+      <button
+        type="button"
+        class="px-3 py-2 text-sm rounded-md bg-brand-500 text-white hover:bg-brand-600"
+        @click="runSync(usersApi.syncMcpAll, 'Sync tous les utilisateurs autorisés vers MCP gateway ?')"
+      >
+        Sync MCP
+      </button>
+    </div>
     <div v-if="error" class="mb-4 p-3 bg-red-50 text-red-700 rounded">{{ error }}</div>
+    <div v-if="info" class="mb-4 p-3 bg-green-50 text-green-700 rounded">{{ info }}</div>
     <p v-if="loading" class="text-sm text-gray-500">Chargement...</p>
     <DataTable
       v-else

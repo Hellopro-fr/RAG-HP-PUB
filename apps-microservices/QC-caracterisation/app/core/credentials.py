@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     
     # LLM - DeepSeek (utilisé par ce service)
     DEEPSEEK_API_KEY: str
-    DEEPSEEK_MODEL_NAME: str = "deepseek-v4-flash"
+    DEEPSEEK_MODEL_NAME: str = "deepseek-v4-pro"
     DEEPSEEK_API_URL: str = "https://api.deepseek.com/v1"
     
     # API HelloPro

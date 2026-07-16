@@ -44,6 +44,14 @@ def prepare_etl_statements(
     # 1. Cleanup Logic
     # Extract product ID to clean up existing A_POUR_CARACTERISTIQUE relations
     product_id = _extract_product_id_from_nodes(nodes)
+
+    # Fallback: the LLM extractor never includes the Produit node in `nodes`
+    # (it extracts only CaracteristiqueTechnique), so the lookup above returns "".
+    # For product extractions, the product's graph id is carried in data["graph_id"]
+    # (e.g. "id_produit_496191"), which matches the Produit node's `id` property.
+    if not product_id and data.get("source_type") == "Produit":
+        product_id = data.get("graph_id", "")
+
     if product_id:
         cleanup_query = """
         MATCH (p:Produit {id: $product_id})-[r:A_POUR_CARACTERISTIQUE]->()

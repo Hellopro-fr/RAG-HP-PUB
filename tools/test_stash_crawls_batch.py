@@ -1,0 +1,250 @@
+# tools/test_stash_crawls_batch.py
+"""Unit tests for tools/stash_crawls_batch.py."""
+import sys
+from pathlib import Path
+
+import pytest
+
+sys.path.insert(0, str(Path(__file__).parent))
+from stash_crawls_batch import (  # noqa: E402
+    BatchState,
+    FatalError,
+    load_work_list,
+    parse_line,
+    parse_size,
+)
+
+
+def test_parse_size_units():
+    assert parse_size("106M") == 106 * 1024**2
+    assert parse_size("1.1G") == int(1.1 * 1024**3)
+    assert parse_size("21G") == 21 * 1024**3
+    assert parse_size("500K") == 500 * 1024
+    assert parse_size("2T") == 2 * 1024**4
+
+
+def test_parse_line_skips_markers():
+    assert parse_line("106M\t6511 → Done\n") is None
+    assert parse_line("21G\t5821 → Supprimé\n") is None
+    assert parse_line("5.2G\t6434 → Done") is None
+
+
+def test_parse_line_handles_blank_and_malformed():
+    assert parse_line("") is None
+    assert parse_line("\n") is None
+    assert parse_line("no-tab-here 6271\n") is None
+    assert parse_line("106M\tabc\n") is None  # non-digit id
+    assert parse_line("139M\t6271\n") == (139 * 1024**2, "6271")
+
+
+def test_load_work_list_rejects_duplicates(tmp_path):
+    input_file = tmp_path / "ids.txt"
+    input_file.write_text("139M\t6271\n142M\t6271\n", encoding="utf-8")
+    with pytest.raises(FatalError, match="Duplicate"):
+        load_work_list(input_file, done=set())
+
+
+def test_load_work_list_filters_done_and_sorts(tmp_path):
+    input_file = tmp_path / "ids.txt"
+    input_file.write_text(
+        "20G\t6080\n"
+        "106M\t6511 → Done\n"
+        "139M\t6271\n"
+        "142M\t6299\n"
+        "17G\t5621\n",
+        encoding="utf-8",
+    )
+    work = load_work_list(input_file, done={"6299"})
+    assert [crawl_id for _, crawl_id in work] == ["6271", "5621", "6080"]
+
+
+def test_batch_state_append_done_and_classes(tmp_path):
+    input_file = tmp_path / "ids.txt"
+    input_file.write_text("139M\t6271\n", encoding="utf-8")
+    state = BatchState(input_file)
+
+    state.append("done", "6271")
+    state.append("skipped", "6299", "409 already stashed")
+    state.append("notfound", "9999")
+
+    done_lines = (tmp_path / "ids.txt.stash_done.txt").read_text().splitlines()
+    assert done_lines == ["6271"]
+    assert "6271" in state.done
+
+    skipped = (tmp_path / "ids.txt.stash_skipped.txt").read_text()
+    assert skipped.startswith("6299\t409 already stashed\t")
+    assert len(skipped.strip().split("\t")) == 3
+
+    notfound = (tmp_path / "ids.txt.stash_notfound.txt").read_text()
+    assert notfound.startswith("9999\t")
+
+
+def test_batch_state_loads_existing_done(tmp_path):
+    input_file = tmp_path / "ids.txt"
+    input_file.write_text("139M\t6271\n", encoding="utf-8")
+    (tmp_path / "ids.txt.stash_done.txt").write_text("100\n200\n300\n")
+
+    state = BatchState(input_file)
+    assert state.done == {"100", "200", "300"}
+
+
+# ============================================================
+# T1: per_crawl_timeout + wait_for_disk tests
+# ============================================================
+from collections import namedtuple  # noqa: E402
+
+from stash_crawls_batch import (  # noqa: E402
+    per_crawl_timeout,
+    wait_for_disk,
+)
+
+
+def test_per_crawl_timeout_formula():
+    # New formula: floor 10 min, ceiling 120 min, 5 min/GB.
+    assert per_crawl_timeout(100 * 1024**2) == 600        # 0.1 GB → 30s < 600s → floor
+    assert per_crawl_timeout(1 * 1024**3) == 600          # 1 GB → 300s < 600s → floor
+    assert per_crawl_timeout(5 * 1024**3) == 1500         # 5 GB → 5*300 = 1500s
+    assert per_crawl_timeout(20 * 1024**3) == 6000        # 20 GB → 20*300 = 6000s
+    assert per_crawl_timeout(100 * 1024**3) == 7200       # 100 GB → ceiling 120 min
+
+
+_Usage = namedtuple("_Usage", ["total", "used", "free"])
+
+
+def test_disk_guard_waits_then_passes(monkeypatch):
+    calls = {"n": 0}
+
+    def fake_usage(_target):
+        calls["n"] += 1
+        if calls["n"] < 3:
+            return _Usage(0, 0, 5 * 1024**3)          # below threshold first 2 calls
+        return _Usage(0, 0, 50 * 1024**3)             # passes on 3rd call
+
+    monkeypatch.setattr("stash_crawls_batch.shutil.disk_usage", fake_usage)
+    monkeypatch.setattr("stash_crawls_batch.time.sleep", lambda _s: None)
+
+    wait_for_disk(needed_bytes=10 * 1024**3, disk_target="/mnt/data")
+    assert calls["n"] == 3
+
+
+def test_disk_guard_aborts_on_timeout(monkeypatch):
+    monkeypatch.setattr(
+        "stash_crawls_batch.shutil.disk_usage",
+        lambda _t: _Usage(0, 0, 1 * 1024**3),         # always insufficient
+    )
+    t = {"now": 0.0}
+
+    def fake_time():
+        return t["now"]
+
+    def fake_sleep(_s):
+        t["now"] += 10_000  # jump 10000s ahead of any deadline
+
+    monkeypatch.setattr("stash_crawls_batch.time.time", fake_time)
+    monkeypatch.setattr("stash_crawls_batch.time.sleep", fake_sleep)
+
+    with pytest.raises(FatalError, match="Disk free"):
+        wait_for_disk(needed_bytes=10 * 1024**3, disk_target="/mnt/data")
+
+
+# ============================================================
+# T2: process_crawl fall-through tests (POST timeout / 5xx persisted / poll timeout)
+# ============================================================
+from unittest.mock import MagicMock  # noqa: E402
+
+from stash_crawls_batch import (  # noqa: E402
+    Config,
+    HttpResponse,
+    process_crawl,
+)
+
+
+def _cfg() -> Config:
+    return Config(
+        crawler_base_url="http://localhost:8500/crawler",
+        stash_local_dir="/app/stash",
+        stash_dead_letter_dir="/app/crawler_archives/dead_letter",
+        stash_gcs_bucket="test-bucket",
+        stash_gcs_prefix="stash",
+        disk_target="/mnt/data",
+        http_timeout_seconds=30,
+        poll_interval_seconds=10,
+    )
+
+
+def test_process_crawl_post_timeout_falls_through_to_poll(monkeypatch, tmp_path):
+    """POST raises TimeoutError → fall-through → poll sees GCS object → 'done'."""
+    input_file = tmp_path / "ids.txt"
+    input_file.write_text("139M\t6271\n", encoding="utf-8")
+    state = BatchState(input_file)
+
+    monkeypatch.setattr("stash_crawls_batch.wait_for_disk", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        "stash_crawls_batch.http_post",
+        MagicMock(side_effect=TimeoutError("timed out")),
+    )
+    monkeypatch.setattr("stash_crawls_batch.local_tar_exists", lambda *_a: False)
+    monkeypatch.setattr("stash_crawls_batch.dead_letter_exists", lambda *_a: False)
+    monkeypatch.setattr("stash_crawls_batch.gcs_tar_exists", lambda *_a: True)
+    monkeypatch.setattr("stash_crawls_batch.time.sleep", lambda _s: None)
+
+    process_crawl(139 * 1024**2, "6271", state, _cfg())
+
+    assert "6271" in state.done
+    done_lines = (tmp_path / "ids.txt.stash_done.txt").read_text().splitlines()
+    assert done_lines == ["6271"]
+
+
+def test_process_crawl_5xx_persisted_falls_through_to_poll(monkeypatch, tmp_path):
+    """Both POST attempts return 503 → fall-through → poll sees GCS object → 'done'."""
+    input_file = tmp_path / "ids.txt"
+    input_file.write_text("139M\t6271\n", encoding="utf-8")
+    state = BatchState(input_file)
+
+    http_post_mock = MagicMock(return_value=HttpResponse(status_code=503, text="overloaded"))
+    monkeypatch.setattr("stash_crawls_batch.wait_for_disk", lambda *_a, **_k: None)
+    monkeypatch.setattr("stash_crawls_batch.http_post", http_post_mock)
+    monkeypatch.setattr("stash_crawls_batch.local_tar_exists", lambda *_a: False)
+    monkeypatch.setattr("stash_crawls_batch.dead_letter_exists", lambda *_a: False)
+    monkeypatch.setattr("stash_crawls_batch.gcs_tar_exists", lambda *_a: True)
+    monkeypatch.setattr("stash_crawls_batch.time.sleep", lambda _s: None)
+
+    process_crawl(139 * 1024**2, "6271", state, _cfg())
+
+    assert "6271" in state.done
+    assert http_post_mock.call_count == 2, "Expected retry POST to fire on first 5xx"
+
+
+def test_process_crawl_fall_through_times_out_marks_failed(monkeypatch, tmp_path):
+    """POST raises TimeoutError, GCS never appears → poll deadline elapses → 'failed' carries fell_through=True."""
+    input_file = tmp_path / "ids.txt"
+    input_file.write_text("139M\t6271\n", encoding="utf-8")
+    state = BatchState(input_file)
+
+    monkeypatch.setattr("stash_crawls_batch.wait_for_disk", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        "stash_crawls_batch.http_post",
+        MagicMock(side_effect=TimeoutError("timed out")),
+    )
+    monkeypatch.setattr("stash_crawls_batch.local_tar_exists", lambda *_a: True)
+    monkeypatch.setattr("stash_crawls_batch.dead_letter_exists", lambda *_a: False)
+    monkeypatch.setattr("stash_crawls_batch.gcs_tar_exists", lambda *_a: False)
+
+    # Fast-forward the clock so the poll-deadline elapses after one iteration.
+    t = {"now": 0.0}
+
+    def fake_time():
+        return t["now"]
+
+    def fake_advance(_s):
+        t["now"] += 1_000_000
+
+    monkeypatch.setattr("stash_crawls_batch.time.time", fake_time)
+    monkeypatch.setattr("stash_crawls_batch.time.sleep", fake_advance)
+
+    with pytest.raises(FatalError, match="Timeout waiting for 6271"):
+        process_crawl(139 * 1024**2, "6271", state, _cfg())
+
+    failed = (tmp_path / "ids.txt.stash_failed.txt").read_text()
+    assert "6271" in failed
+    assert "fell_through=True" in failed

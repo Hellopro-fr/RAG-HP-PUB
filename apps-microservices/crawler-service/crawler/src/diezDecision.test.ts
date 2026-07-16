@@ -47,7 +47,7 @@ test("classifyFragment: rule 6 — short alphanumeric is anchor", () => {
 });
 
 test("classifyFragment: rule 7 — long random string is ambiguous", () => {
-    assert.equal(classifyFragment("xkc9f8h2kj34lmn7pqr5stuvwxyz"), "ambiguous");
+    assert.equal(classifyFragment("foo.bar.baz.qux.lorem.ipsum.dolor"), "ambiguous"); // 33 chars, dots → not a valid HTML id
 });
 
 test("classifyFragment: rule 7 — non-ASCII is ambiguous", () => {
@@ -77,6 +77,11 @@ test("classifyFragment: rule precedence — fragment with / and short length is 
     assert.equal(classifyFragment("a/b"), "spa");
 });
 
+test("classifyFragment: rule 5 — id with digits is anchor (digit fix)", () => {
+    assert.equal(classifyFragment("section2"), "anchor");
+    assert.equal(classifyFragment("product12345section67890abcdef"), "anchor"); // 30 chars
+});
+
 import { context } from "./context.js";
 import { recordClassification, maybeCommitDecision } from "./diezDecision.js";
 
@@ -94,7 +99,7 @@ test("recordClassification: increments correct counter", () => {
 
 test("recordClassification: ambiguous URL is appended to samplesForTier2", () => {
     resetContextState();
-    const url = "https://example.com/page#xkc9f8h2kj34lmn7pqr5stuvwxyz";
+    const url = "https://example.com/page#foo.bar.baz.qux.lorem.ipsum.dolor";
     recordClassification(url);
     assert.equal(context.diezClassification.ambiguous, 1);
     assert.deepEqual(context.diezClassification.samplesForTier2, [url]);
@@ -103,7 +108,7 @@ test("recordClassification: ambiguous URL is appended to samplesForTier2", () =>
 test("recordClassification: samplesForTier2 capped at 50", () => {
     resetContextState();
     for (let i = 0; i < 60; i++) {
-        recordClassification(`https://example.com/p#xkc9f8h2kj34lmn7pqr5stuvwxyz${i}`);
+        recordClassification(`https://example.com/p#foo.bar.baz.qux${i}`);
     }
     assert.equal(context.diezClassification.samplesForTier2.length, 50);
     assert.equal(context.diezClassification.ambiguous, 60);
@@ -156,7 +161,7 @@ test("maybeCommitDecision: 80/20 split below 90% threshold returns null", () => 
 test("maybeCommitDecision: ambiguous ≥ 40% at total ≥ 20 returns promoteTier2", () => {
     resetContextState();
     for (let i = 0; i < 10; i++) {
-        recordClassification(`https://e.com/p#xkc9f8h2kj34lmn7pqr5stuvwxyz${i}`);
+        recordClassification(`https://e.com/p#foo.bar.baz.qux${i}`);
     }
     for (let i = 0; i < 5; i++) recordClassification(`https://e.com/p#top${i}`);
     for (let i = 0; i < 5; i++) recordClassification(`https://e.com/p#/r${i}`);
@@ -167,14 +172,14 @@ test("maybeCommitDecision: 100 samples mixed below confidence returns escalate",
     resetContextState();
     for (let i = 0; i < 40; i++) recordClassification(`https://e.com/p#top${i}`);
     for (let i = 0; i < 40; i++) recordClassification(`https://e.com/p#/r${i}`);
-    for (let i = 0; i < 20; i++) recordClassification(`https://e.com/p#xkc9f8h2kj34lmn7pqr5stuvwxyz${i}`);
+    for (let i = 0; i < 20; i++) recordClassification(`https://e.com/p#foo.bar.baz.qux${i}`); // ambiguous (dots): 20% < 40% → no promoteTier2
     assert.equal(maybeCommitDecision(), "escalate");
 });
 
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { commitSkipDiez, commitBypassDiez } from "./diezDecision.js";
+import { commitSkipDiez, commitBypassDiez, getDiezDecisionMode } from "./diezDecision.js";
 
 const makeTmpStorage = (): string => {
     return fs.mkdtempSync(path.join(os.tmpdir(), "diez-test-"));
@@ -235,8 +240,8 @@ test("commit flag stops further recording", () => {
 test("persistence file does not include samplesForTier2", () => {
     resetContextState();
     const storage = makeTmpStorage();
-    // Add some ambiguous samples
-    for (let i = 0; i < 3; i++) recordClassification(`https://e.com/p#xkc9f8h2kj34lmn7pqr5stuvwxyz${i}`);
+    // Add some ambiguous samples (dots → ambiguous, so samplesForTier2 is populated)
+    for (let i = 0; i < 3; i++) recordClassification(`https://e.com/p#foo.bar.baz.qux${i}`);
     for (let i = 0; i < 4; i++) recordClassification(`https://e.com/p#top${i}`);
     commitSkipDiez(storage);
 
@@ -309,5 +314,65 @@ test("readPersistedDecision: malformed file returns false, no crash", () => {
     assert.equal(loaded, false);
     assert.equal(context.diezDecisionCommitted, false);
 
+    fs.rmSync(storage, { recursive: true, force: true });
+});
+
+test("commitSkipDiez tier-2 meta writes source + evidence to the decision file", () => {
+    resetContextState();
+    const storage = makeTmpStorage();
+    const evidence = { compared: 3, matches: 3, mismatches: 0, unusable: 0 };
+    commitSkipDiez(storage, { tier: 2, source: "tier2", evidence });
+    const payload = JSON.parse(fs.readFileSync(path.join(storage, "_diez_decision.json"), "utf-8"));
+    assert.equal(payload.source, "tier2");
+    assert.equal(payload.tier, 2);
+    assert.deepEqual(payload.evidence, evidence);
+    fs.rmSync(storage, { recursive: true, force: true });
+});
+
+test("getDiezDecisionMode reports defaulted-bypassdiez for a default-source commit", () => {
+    resetContextState();
+    const storage = makeTmpStorage();
+    commitBypassDiez(storage, { tier: 2, source: "default" });
+    assert.equal(getDiezDecisionMode(undefined), "defaulted-bypassdiez");
+    fs.rmSync(storage, { recursive: true, force: true });
+});
+
+test("readPersistedDecision restores tier-2 source → getDiezDecisionMode reports tier2-skipdiez (OOM relaunch)", () => {
+    // Force _committedSource to a non-tier2 value first (a fresh process defaults to "tier1").
+    resetContextState();
+    context.config.skipDiez = false;
+    context.config.bypassDiez = false;
+    const seed = makeTmpStorage();
+    commitBypassDiez(seed, { source: "tier1" }); // sets _committedSource = "tier1"
+    fs.rmSync(seed, { recursive: true, force: true });
+
+    // Simulate relaunch: a prior run persisted a tier-2 skipDiez decision.
+    resetContextState();
+    context.config.skipDiez = false;
+    context.config.bypassDiez = false;
+    const storage = makeTmpStorage();
+    fs.writeFileSync(
+        path.join(storage, "_diez_decision.json"),
+        JSON.stringify({ decision: "skipDiez", tier: 2, source: "tier2", evidence: { compared: 3, matches: 3, mismatches: 0, unusable: 0 } })
+    );
+
+    assert.equal(readPersistedDecision(storage), true);
+    assert.equal(context.config.skipDiez, true);
+    assert.equal(getDiezDecisionMode(undefined), "tier2-skipdiez");
+
+    fs.rmSync(storage, { recursive: true, force: true });
+});
+
+test("readPersistedDecision: legacy file without source reports tier1 (backward compat)", () => {
+    resetContextState();
+    context.config.skipDiez = false;
+    context.config.bypassDiez = false;
+    const storage = makeTmpStorage();
+    fs.writeFileSync(
+        path.join(storage, "_diez_decision.json"),
+        JSON.stringify({ decision: "bypassDiez", tier: 1, committedAt: "2026-04-17T00:00:00Z", counts: { anchor: 0, spa: 5, ambiguous: 0, total: 5 } })
+    );
+    assert.equal(readPersistedDecision(storage), true);
+    assert.equal(getDiezDecisionMode(undefined), "tier1-bypassdiez");
     fs.rmSync(storage, { recursive: true, force: true });
 });

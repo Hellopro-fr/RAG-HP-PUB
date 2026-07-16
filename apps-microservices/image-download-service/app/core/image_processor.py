@@ -534,3 +534,110 @@ class ImageProcessor:
         name = name.strip('-')
 
         return name
+
+
+def _parse_svg_dimensions(content: bytes) -> tuple[int | None, int | None]:
+    """
+    Extract (width, height) from an SVG's root <svg> tag.
+
+    Prefers the `viewBox` attribute (format: "minx miny W H" -> uses W/H,
+    rounded to the nearest int). Falls back to numeric `width`/`height`
+    attributes (units like 'px'/'%' are ignored, only the leading number is
+    parsed). Returns (None, None) if neither is present/parsable.
+    """
+    import re
+
+    try:
+        text = content.decode("utf-8", errors="ignore")
+    except Exception:
+        return None, None
+
+    svg_tag_match = re.search(r'<svg\b[^>]*>', text, re.IGNORECASE | re.DOTALL)
+    svg_tag = svg_tag_match.group(0) if svg_tag_match else text
+
+    viewbox_match = re.search(
+        r'viewBox\s*=\s*["\']\s*([-\d.]+)[\s,]+([-\d.]+)[\s,]+([-\d.]+)[\s,]+([-\d.]+)\s*["\']',
+        svg_tag,
+        re.IGNORECASE,
+    )
+    if viewbox_match:
+        width = int(round(float(viewbox_match.group(3))))
+        height = int(round(float(viewbox_match.group(4))))
+        return width, height
+
+    width_match = re.search(r'\bwidth\s*=\s*["\']\s*([\d.]+)', svg_tag, re.IGNORECASE)
+    height_match = re.search(r'\bheight\s*=\s*["\']\s*([\d.]+)', svg_tag, re.IGNORECASE)
+    width = int(round(float(width_match.group(1)))) if width_match else None
+    height = int(round(float(height_match.group(1)))) if height_match else None
+    return width, height
+
+
+def process_logo(content: bytes, domain: str, filename: str) -> dict:
+    """
+    Process a supplier logo image without any destructive transformation.
+
+    Unlike process_image / process_image_page (product images), a logo must
+    stay visually intact for downstream reuse (site header, listings, etc.):
+      - SVG (vector, resolution-independent) is kept byte-for-byte verbatim,
+        never rasterized.
+      - Raster formats (PNG/WEBP/GIF/JPEG) are NOT flattened onto a white
+        background and NOT resized/thumbnailed — alpha channel and mode
+        (RGBA/LA/P) are preserved exactly as decoded, via a bytes passthrough.
+
+    Args:
+        content:  Raw logo bytes (as downloaded).
+        domain:   Supplier domain — accepted for parity/logging, not used
+                  in the computation.
+        filename: Original filename — accepted for parity/logging, not used
+                  in the computation.
+
+    Returns:
+        dict with keys:
+          - bytes:     bytes to persist (verbatim for SVG, passthrough for raster)
+          - format:    'svg' | 'png' | 'jpg' | 'webp' | 'gif'
+          - width:     int | None
+          - height:    int | None
+          - extension: '.svg' | '.png' | '.jpg' | '.webp' | '.gif'
+
+    Raises:
+        Exception (e.g. PIL.UnidentifiedImageError) if content is neither an
+        SVG nor a decodable raster image. Left to the caller (Task 2 consumer)
+        to handle/report.
+    """
+    header_bytes = content[:10]
+
+    # SVG: detected from raw bytes before any decoding (same heuristic as
+    # _detect_extension), kept verbatim (no re-encoding, no rasterization).
+    if b'<svg' in header_bytes or b'<?xml' in header_bytes:
+        width, height = _parse_svg_dimensions(content)
+        return {
+            "bytes": content,
+            "format": "svg",
+            "width": width,
+            "height": height,
+            "extension": ".svg",
+        }
+
+    # Raster: open with PIL only to sniff format/dimensions. No thumbnail(),
+    # no flatten — output bytes are the original content, untouched.
+    with Image.open(io.BytesIO(content)) as img:
+        width, height = img.size
+        original_format = (img.format or "").upper()
+
+    if original_format == "GIF":
+        out_format, extension = "gif", ".gif"
+    elif original_format in ("JPEG", "JPG"):
+        out_format, extension = "jpg", ".jpg"
+    elif original_format == "WEBP":
+        out_format, extension = "webp", ".webp"
+    else:
+        # PNG and anything else PIL can decode defaults to PNG.
+        out_format, extension = "png", ".png"
+
+    return {
+        "bytes": content,
+        "format": out_format,
+        "width": width,
+        "height": height,
+        "extension": extension,
+    }

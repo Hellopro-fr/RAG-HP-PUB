@@ -17,6 +17,20 @@ cd apps-microservices/api-catalog-service
 go run ./cmd/server/
 ```
 
+## Auth Policy fields
+
+Services + endpoints carry auth metadata consumed by api-gateway-go's verifier:
+
+- `Service.auth_policy` (public/bearer/admin-key) + `Service.public_paths` (exact-match bypass list).
+- `Endpoint.auth_policy` — optional per-endpoint override (NULL = inherit service default).
+- `Service.has_endpoint_overrides` — server-computed hint; lets the gateway refresher skip
+  `ListEndpoints` for services with no overrides.
+- `UpdateEndpoint(UpdateEndpointRequest)` RPC sets/clears a single endpoint's override.
+- DB columns seeded via `init-db/02_seed_auth_policy.sql` (all existing services → PUBLIC;
+  `graphdlq-service` keeps `/dlq/queues` as a public path).
+
+Spec: `docs/superpowers/specs/2026-05-28-apitokenverifier-catalog-driven-design.md`.
+
 ## Spec & Plan
 
 - Spec: `docs/superpowers/specs/2026-05-08-api-catalog-design.md`

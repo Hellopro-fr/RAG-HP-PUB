@@ -1,7 +1,9 @@
 import { UrlConsolidator } from './UrlConsolidator.js';
 import { StatsManager } from './StatsManager.js';
 import { JsonlWriter } from './JsonlWriter.js';
+import { PushedSet } from './PushedSet.js';
 import { rightTrimSlash, processUrl } from '../functions.js';
+import { hasIgnoredExtensionForSeed } from '../seedExtensionFilter.js';
 
 /**
  * Result returned by checkUrl for each processed page.
@@ -15,24 +17,10 @@ export interface CheckUrlResult {
 }
 
 /**
- * ignoredExtensions and FORBIDDEN_PARAMS — duplicated from routes.ts
- * to avoid circular imports. These are used for eligibility checks.
+ * FORBIDDEN_PARAMS — duplicated from routes.ts to avoid circular imports.
+ * Used for eligibility checks. Ignored-extension knowledge instead lives in
+ * seedExtensionFilter.ts (single source of truth, imported below).
  */
-const IGNORED_EXTENSIONS_SET = new Set([
-    // archives
-    "7z", "7zip", "bz2", "rar", "tar", "tar.gz", "xz", "zip",
-    // images
-    "mng", "pct", "bmp", "gif", "jpg", "jpeg", "png", "pst", "psp", "tif", "tiff",
-    "ai", "drw", "dxf", "eps", "ps", "svg", "cdr", "ico", "webp",
-    // audio
-    "mp3", "wma", "ogg", "wav", "ra", "aac", "mid", "au", "aiff",
-    // video
-    "3gp", "asf", "asx", "avi", "mov", "mp4", "mpg", "qt", "rm", "swf", "wmv", "m4a", "m4v", "flv", "webm",
-    // office suites
-    "xls", "xlsx", "ppt", "pptx", "pps", "doc", "docx", "odt", "ods", "odg", "odp",
-    // other
-    "css", "pdf", "exe", "bin", "rss", "dmg", "iso", "apk", "xml",
-]);
 
 // IMPORTANT: Keep in sync with FORBIDDEN_PARAMS in routes.ts
 const FORBIDDEN_PARAMS = [
@@ -87,6 +75,7 @@ export class UpdateChecker {
     private consolidator: UrlConsolidator;
     private statsManager: StatsManager;
     private jsonlWriter: JsonlWriter | null;
+    private pushedSet: PushedSet | null;
 
     // JSONL filenames
     static readonly DELETED_FILE = 'deleted_urls.jsonl';
@@ -97,30 +86,20 @@ export class UpdateChecker {
         consolidator: UrlConsolidator,
         statsManager: StatsManager,
         jsonlWriter: JsonlWriter | null = null,
+        pushedSet: PushedSet | null = null,
     ) {
         this.consolidator = consolidator;
         this.statsManager = statsManager;
         this.jsonlWriter = jsonlWriter;
-    }
-
-    /**
-     * Check if a URL has a forbidden file extension.
-     */
-    private hasIgnoredExtension(url: string): boolean {
-        try {
-            const urlObj = new URL(url);
-            const pathname = urlObj.pathname;
-            const lastDot = pathname.lastIndexOf('.');
-            if (lastDot === -1) return false;
-            const ext = pathname.substring(lastDot + 1).toLowerCase();
-            return IGNORED_EXTENSIONS_SET.has(ext);
-        } catch {
-            return false;
-        }
+        this.pushedSet = pushedSet;
     }
 
     /**
      * Check if a URL contains any forbidden query parameter.
+     *
+     * Pure check — no side effects. The `filtered_qm` stat is now incremented
+     * centrally in routes.ts for every URL containing '?', which already covers
+     * URLs with a forbidden param. Double-counting here would inflate the counter.
      */
     private hasForbiddenParams(url: string): boolean {
         try {
@@ -128,7 +107,6 @@ export class UpdateChecker {
             const keys = Array.from(urlObj.searchParams.keys());
             for (const param of FORBIDDEN_PARAMS) {
                 if (keys.some(key => key === param || key.startsWith(param))) {
-                    void this.statsManager.increment("filtered_qm");
                     return true;
                 }
             }
@@ -150,7 +128,7 @@ export class UpdateChecker {
      */
     isEligible(url: string, isFrenchContent: boolean): boolean {
         // Check 1: Extension
-        if (this.hasIgnoredExtension(url)) {
+        if (hasIgnoredExtensionForSeed(url)) {
             return false;
         }
 
@@ -179,6 +157,12 @@ export class UpdateChecker {
         httpStatus: number,
         isFrenchContent: boolean,
     ): Promise<CheckUrlResult> {
+        // PushedSet guard — if a prior attempt already emitted for this URL,
+        // skip all side effects (writeJsonl + statsManager.increment).
+        if (this.pushedSet && !(await this.pushedSet.tryClaim(originalUrl))) {
+            return { action: 'ignored', url: originalUrl, source, reason: 'already_pushed' };
+        }
+
         const isFromDataset = source === 'dataset';
         const isHttpError = httpStatus >= 400 || httpStatus === 0;
         const isRedirect = rightTrimSlash(originalUrl) !== rightTrimSlash(loadedUrl);
@@ -212,8 +196,18 @@ export class UpdateChecker {
 
             if (isFromDataset) {
                 if (destInDataset) {
-                    // Redirect to another Dataset URL → the source URL becomes redundant
-                    // No action needed, the destination is already tracked
+                    // Redirect to another Dataset URL → destination already tracked.
+                    // Still RECORD the mapping: the BO needs old→new to retire the old
+                    // fiche, and the signal must be repeatable across MAJs (a missed
+                    // one-shot delivery = permanent divergence, incident 1079-327).
+                    // No 'redirects' increment — that counter feeds the circuit breaker.
+                    await this.writeJsonl(UpdateChecker.REDIRECTED_FILE, {
+                        action: 'redirected',
+                        url: originalUrl,
+                        source,
+                        destination: loadedUrl,
+                        reason: 'redirect_to_existing',
+                    });
                     return { action: 'confirmed', url: originalUrl, source, reason: 'redirect_to_existing' };
                 } else {
                     // Redirect to a URL NOT in Dataset → track the redirection
@@ -230,7 +224,16 @@ export class UpdateChecker {
             } else {
                 // Non-dataset URL redirected
                 if (destInDataset) {
-                    // Redirects to an existing Dataset URL → ignore
+                    // Redirects to an existing Dataset URL → ignored for counters, but
+                    // RECORD the mapping (repeatable signal — request_queue re-seeds the
+                    // old URL every MAJ; this lets the BO retire a leftover old fiche).
+                    await this.writeJsonl(UpdateChecker.REDIRECTED_FILE, {
+                        action: 'redirected',
+                        url: originalUrl,
+                        source,
+                        destination: loadedUrl,
+                        reason: 'redirect_to_existing_dataset',
+                    });
                     return { action: 'ignored', url: originalUrl, source, reason: 'redirect_to_existing_dataset' };
                 } else {
                     // Redirects to a new URL — check eligibility of the DESTINATION

@@ -1,0 +1,27 @@
+{
+  "planPath": "docs/superpowers/plans/2026-06-02-auto-stash-followup.md",
+  "specPath": "docs/superpowers/specs/2026-06-02-auto-stash-followup-design.md",
+  "tasks": [
+    {
+      "id": 85,
+      "subject": "FU-Task 1: Fix A resume-on-start inline unstash",
+      "status": "completed",
+      "description": "**Goal:** start_crawl unstashes the started crawl's own stashed id before STORAGE SETUP so it resumes (not fresh).\n\n```json:metadata\n{\"phase\":\"FixA\",\"files\":[\"apps-microservices/crawler-service/app/core/crawler_manager.py\",\"apps-microservices/crawler-service/tests/test_auto_stash_resume_on_start.py\"],\"verifyCommand\":\"cd apps-microservices/crawler-service && python -m pytest tests/test_auto_stash_resume_on_start.py -v\",\"acceptanceCriteria\":[\"stashed id -> unstash_crawl before STORAGE SETUP\",\"unstash failure -> rollback + propagate\",\"no prior/no stashed_at -> not called\",\"is_restart -> not called\"]}\n```"
+    },
+    {
+      "id": 86,
+      "subject": "FU-Task 2: Fix B expose auto-stash fields on /status",
+      "status": "completed",
+      "blockedBy": [85],
+      "description": "**Goal:** Add stashed_at/downloaded_at/finished_at/size_bytes as optional CrawlStatus fields; map in both get_status paths (snapshot + main).\n\n```json:metadata\n{\"phase\":\"FixB\",\"files\":[\"apps-microservices/crawler-service/app/schemas/crawler.py\",\"apps-microservices/crawler-service/app/core/crawler_manager.py\",\"apps-microservices/crawler-service/tests/test_status_autostash_fields.py\"],\"verifyCommand\":\"cd apps-microservices/crawler-service && python -m pytest tests/test_status_autostash_fields.py -v\",\"acceptanceCriteria\":[\"4 optional fields on CrawlStatus\",\"main path maps all 4\",\"snapshot path injects all 4\",\"absent -> null\"]}\n```"
+    },
+    {
+      "id": 87,
+      "subject": "FU-Task 3: Documentation (crawler-service CLAUDE.md)",
+      "status": "completed",
+      "blockedBy": [86],
+      "description": "**Goal:** Document resume-on-start, failed-crawl 48h-timeout stashing, new /status fields, one-time stash_crawls_batch.py drain. Link follow-up spec.\n\n```json:metadata\n{\"phase\":\"Docs\",\"files\":[\"apps-microservices/crawler-service/CLAUDE.md\"],\"verifyCommand\":\"manual review\",\"acceptanceCriteria\":[\"resume-on-start note\",\"failed-crawl 48h timeout note\",\"/status fields note\",\"existing-data batch-drain note\",\"spec linked\"]}\n```"
+    }
+  ],
+  "lastUpdated": "2026-06-02"
+}

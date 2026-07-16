@@ -78,6 +78,11 @@ type ResolvedInstruction struct {
 	ID    string
 	Title string
 	Body  string
+	// Kind mirrors db.LLMInstructionRow.Kind ("general" | "per_server");
+	// empty is treated as "general". ServerIDs carries the per_server row's
+	// linked servers for tool-description routing.
+	Kind      string
+	ServerIDs []string
 }
 
 // AllowedInstructionsFromContext returns the resolved instruction list, if any.
@@ -85,6 +90,19 @@ type ResolvedInstruction struct {
 func AllowedInstructionsFromContext(ctx context.Context) ([]ResolvedInstruction, bool) {
 	v, ok := ctx.Value(AllowedInstructionsContextKey).([]ResolvedInstruction)
 	return v, ok
+}
+
+// InjectInstructionsIntoToolsContextKey carries the OAuth2 client's
+// inject_instructions_into_tools flag. When true, ScopedGateway appends the
+// resolved instructions to tool descriptions in tools/list and omits the
+// initialize `instructions` field. Scope tokens never set it. Value type: bool.
+const InjectInstructionsIntoToolsContextKey = "scope_inject_instructions_into_tools"
+
+// InjectInstructionsIntoToolsFromContext reports whether tool-description
+// injection was enabled for the active credential. Missing key = false.
+func InjectInstructionsIntoToolsFromContext(ctx context.Context) bool {
+	v, _ := ctx.Value(InjectInstructionsIntoToolsContextKey).(bool)
+	return v
 }
 
 // EndUserEmailContextKey carries the authenticated end-user's email captured
@@ -183,164 +201,197 @@ func Middleware(cache *Cache, repo *repository.TokenRepo, instructionRepo *repos
 				return
 			}
 
-			hash := Hash(rawToken)
-
-			// Cache lookup
-			ct, ok := cache.Get(hash)
+			ctx, ok := ValidateAndBuildContext(w, r, rawToken, "x-mcp-scope-token", cache, repo, instructionRepo, slackClient)
 			if !ok {
-				// DB lookup
-				if repo == nil {
-					http.Error(w, `{"error":"scope tokens not configured"}`, http.StatusServiceUnavailable)
-					return
-				}
-				dbToken, err := repo.FindByHash(hash)
-				if err != nil {
-					log.Printf("[scope] invalid token: %s...", hash[:8])
-					http.Error(w, `{"error":"invalid scope token"}`, http.StatusUnauthorized)
-					notifyUnauthorized(slackClient, r, "invalid scope token")
-					return
-				}
-				serverIDs := make(map[string]bool, len(dbToken.Servers))
-				for _, s := range dbToken.Servers {
-					serverIDs[s.ServerID] = true
-				}
-
-				// Build allowed tools map from DB tool rows
-				// server_id → tool_name → true; missing server_id key = all tools
-				var allowedTools map[string]map[string]bool
-				if len(dbToken.Tools) > 0 {
-					allowedTools = make(map[string]map[string]bool)
-					for _, t := range dbToken.Tools {
-						if allowedTools[t.ServerID] == nil {
-							allowedTools[t.ServerID] = make(map[string]bool)
-						}
-						allowedTools[t.ServerID][t.ToolName] = true
-					}
-				}
-
-				ct = &CachedToken{
-					ID:           dbToken.ID,
-					Name:         dbToken.Name,
-					ServerIDs:    serverIDs,
-					AllowedTools: allowedTools,
-					ExpiresAt:    dbToken.ExpiresAt,
-					IsActive:     dbToken.IsActive,
-				}
-
-				// Resolve LLM instruction rows once per cache-miss. The
-				// repo flattens the token's picked pages into rows and filters
-				// each row by its own server scope, so the cache only ever
-				// holds renderable content.
-				if instructionRepo != nil && len(dbToken.Instructions) > 0 && len(serverIDs) > 0 {
-					allowedSlice := make([]string, 0, len(serverIDs))
-					for sid := range serverIDs {
-						allowedSlice = append(allowedSlice, sid)
-					}
-					rows, err := instructionRepo.ResolveForToken(dbToken.ID, allowedSlice)
-					if err == nil && len(rows) > 0 {
-						ct.Instructions = make([]CachedInstruction, 0, len(rows))
-						for _, row := range rows {
-							ct.Instructions = append(ct.Instructions, CachedInstruction{
-								ID: row.ID, Title: row.Title, Body: row.Body,
-							})
-						}
-					} else if err != nil {
-						log.Printf("[scope] resolve instructions for token %s: %v", dbToken.ID, err)
-					}
-				}
-
-				// Decode persisted Leexi filter (JSON columns) into typed slices.
-				ct.LeexiFilterMode = dbToken.LeexiFilterMode
-				if len(dbToken.LeexiAllowedUserUUIDs) > 0 {
-					_ = json.Unmarshal(dbToken.LeexiAllowedUserUUIDs, &ct.LeexiAllowedUserUUIDs)
-				}
-				if len(dbToken.LeexiAllowedTeamUUIDs) > 0 {
-					_ = json.Unmarshal(dbToken.LeexiAllowedTeamUUIDs, &ct.LeexiAllowedTeamUUIDs)
-				}
-
-				// Decode persisted Ringover filter (JSON columns of ints).
-				ct.RingoverFilterMode = dbToken.RingoverFilterMode
-				if len(dbToken.RingoverAllowedUserIDs) > 0 {
-					_ = json.Unmarshal(dbToken.RingoverAllowedUserIDs, &ct.RingoverAllowedUserIDs)
-				}
-				if len(dbToken.RingoverAllowedTeamIDs) > 0 {
-					_ = json.Unmarshal(dbToken.RingoverAllowedTeamIDs, &ct.RingoverAllowedTeamIDs)
-				}
-
-				// Decode persisted Zoho filter for runtime header injection.
-				ct.ZohoFilterMode = dbToken.ZohoFilterMode
-				if len(dbToken.ZohoAllowedEmails) > 0 {
-					_ = json.Unmarshal(dbToken.ZohoAllowedEmails, &ct.ZohoAllowedEmails)
-				}
-				if ct.ZohoFilterMode == "creator" {
-					ct.ZohoCreatorEmail = dbToken.CreatedBy
-				}
-
-				// BDD scope: flatten the join rows into a flat slice of IDs.
-				// Empty slice = no restriction; the runtime injector keys off
-				// the presence of the slice (len > 0), see ScopedGateway.
-				if len(dbToken.BDDTables) > 0 {
-					ct.BDDAllowedTableIDs = make([]string, 0, len(dbToken.BDDTables))
-					for _, b := range dbToken.BDDTables {
-						ct.BDDAllowedTableIDs = append(ct.BDDAllowedTableIDs, b.UsedTableID)
-					}
-				}
-
-				cache.Set(hash, ct)
-			}
-
-			// Validate
-			if !ct.IsActive {
-				http.Error(w, `{"error":"scope token is revoked"}`, http.StatusForbidden)
-				notifyUnauthorized(slackClient, r, "revoked scope token")
 				return
-			}
-			if ct.ExpiresAt != nil && ct.ExpiresAt.Before(time.Now()) {
-				http.Error(w, `{"error":"scope token has expired"}`, http.StatusForbidden)
-				notifyUnauthorized(slackClient, r, "expired scope token")
-				return
-			}
-
-			// Store allowed server IDs and tool selections in context
-			ctx := context.WithValue(r.Context(), AllowedServersContextKey, ct.ServerIDs)
-			if ct.AllowedTools != nil {
-				ctx = context.WithValue(ctx, AllowedToolsContextKey, ct.AllowedTools)
-			}
-			if ct.Name != "" {
-				ctx = context.WithValue(ctx, ScopeNameContextKey, ct.Name)
-			}
-			if len(ct.Instructions) > 0 {
-				resolved := make([]ResolvedInstruction, 0, len(ct.Instructions))
-				for _, ci := range ct.Instructions {
-					resolved = append(resolved, ResolvedInstruction{ID: ci.ID, Title: ci.Title, Body: ci.Body})
-				}
-				ctx = context.WithValue(ctx, AllowedInstructionsContextKey, resolved)
-			}
-			if ct.LeexiFilterMode != "" && ct.LeexiFilterMode != "none" {
-				ctx = context.WithValue(ctx, LeexiFilterContextKey, &LeexiFilterContext{
-					Mode:             ct.LeexiFilterMode,
-					AllowedUserUUIDs: ct.LeexiAllowedUserUUIDs,
-					AllowedTeamUUIDs: ct.LeexiAllowedTeamUUIDs,
-				})
-			}
-			if ct.RingoverFilterMode != "" && ct.RingoverFilterMode != "none" {
-				ctx = context.WithValue(ctx, RingoverFilterContextKey, &RingoverFilterContext{
-					Mode:           ct.RingoverFilterMode,
-					AllowedUserIDs: ct.RingoverAllowedUserIDs,
-					AllowedTeamIDs: ct.RingoverAllowedTeamIDs,
-				})
-			}
-			if ct.ZohoFilterMode != "" && ct.ZohoFilterMode != "none" {
-				ctx = context.WithValue(ctx, ZohoFilterContextKey, &ZohoFilterContext{
-					Mode:          ct.ZohoFilterMode,
-					AllowedEmails: ct.ZohoAllowedEmails,
-					CreatorEmail:  ct.ZohoCreatorEmail,
-				})
-			}
-			if len(ct.BDDAllowedTableIDs) > 0 {
-				ctx = context.WithValue(ctx, BDDFilterContextKey, ct.BDDAllowedTableIDs)
 			}
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+// ValidateAndBuildContext validates rawToken against the cache (and the DB
+// on miss) and returns a context populated with the token's allowed servers,
+// tools, filters and instructions. On any rejection it writes the JSON
+// error body, fires a Slack notification, and returns ok=false. authSource
+// ("x-mcp-scope-token" | "bearer") is recorded in log lines and Slack
+// reasons so operators can tell which header the client used.
+//
+// Callers MUST guard against empty rawToken before calling — the function
+// assumes a non-empty value.
+func ValidateAndBuildContext(
+	w http.ResponseWriter,
+	r *http.Request,
+	rawToken, authSource string,
+	cache *Cache,
+	repo *repository.TokenRepo,
+	instructionRepo *repository.InstructionRepo,
+	slackClient *slack.Client,
+) (context.Context, bool) {
+	hash := Hash(rawToken)
+
+	// Cache lookup
+	ct, ok := cache.Get(hash)
+	if !ok {
+		// DB lookup
+		if repo == nil {
+			http.Error(w, `{"error":"scope tokens not configured"}`, http.StatusServiceUnavailable)
+			return nil, false
+		}
+		dbToken, err := repo.FindByHash(hash)
+		if err != nil {
+			log.Printf("[scope] invalid token: %s... source=%s", hash[:8], authSource)
+			http.Error(w, `{"error":"invalid scope token"}`, http.StatusUnauthorized)
+			notifyUnauthorized(slackClient, r, "invalid scope token (source="+authSource+")")
+			return nil, false
+		}
+		serverIDs := make(map[string]bool, len(dbToken.Servers))
+		for _, s := range dbToken.Servers {
+			serverIDs[s.ServerID] = true
+		}
+
+		// Build allowed tools map from DB tool rows
+		// server_id → tool_name → true; missing server_id key = all tools
+		var allowedTools map[string]map[string]bool
+		if len(dbToken.Tools) > 0 {
+			allowedTools = make(map[string]map[string]bool)
+			for _, t := range dbToken.Tools {
+				if allowedTools[t.ServerID] == nil {
+					allowedTools[t.ServerID] = make(map[string]bool)
+				}
+				allowedTools[t.ServerID][t.ToolName] = true
+			}
+		}
+
+		ct = &CachedToken{
+			ID:           dbToken.ID,
+			Name:         dbToken.Name,
+			ServerIDs:    serverIDs,
+			AllowedTools: allowedTools,
+			ExpiresAt:    dbToken.ExpiresAt,
+			IsActive:     dbToken.IsActive,
+		}
+
+		// Resolve LLM instruction rows once per cache-miss. The
+		// repo flattens the token's picked pages into rows and filters
+		// each row by its own server scope, so the cache only ever
+		// holds renderable content.
+		if instructionRepo != nil && len(dbToken.Instructions) > 0 && len(serverIDs) > 0 {
+			allowedSlice := make([]string, 0, len(serverIDs))
+			for sid := range serverIDs {
+				allowedSlice = append(allowedSlice, sid)
+			}
+			rows, err := instructionRepo.ResolveForToken(dbToken.ID, allowedSlice)
+			if err == nil && len(rows) > 0 {
+				ct.Instructions = make([]CachedInstruction, 0, len(rows))
+				for _, row := range rows {
+					rowServerIDs := make([]string, 0, len(row.Servers))
+					for _, s := range row.Servers {
+						rowServerIDs = append(rowServerIDs, s.ServerID)
+					}
+					ct.Instructions = append(ct.Instructions, CachedInstruction{
+						ID: row.ID, Title: row.Title, Body: row.Body,
+						Kind: row.Kind, ServerIDs: rowServerIDs,
+					})
+				}
+			} else if err != nil {
+				log.Printf("[scope] resolve instructions for token %s: %v", dbToken.ID, err)
+			}
+		}
+
+		// Decode persisted Leexi filter (JSON columns) into typed slices.
+		ct.LeexiFilterMode = dbToken.LeexiFilterMode
+		if len(dbToken.LeexiAllowedUserUUIDs) > 0 {
+			_ = json.Unmarshal(dbToken.LeexiAllowedUserUUIDs, &ct.LeexiAllowedUserUUIDs)
+		}
+		if len(dbToken.LeexiAllowedTeamUUIDs) > 0 {
+			_ = json.Unmarshal(dbToken.LeexiAllowedTeamUUIDs, &ct.LeexiAllowedTeamUUIDs)
+		}
+
+		// Decode persisted Ringover filter (JSON columns of ints).
+		ct.RingoverFilterMode = dbToken.RingoverFilterMode
+		if len(dbToken.RingoverAllowedUserIDs) > 0 {
+			_ = json.Unmarshal(dbToken.RingoverAllowedUserIDs, &ct.RingoverAllowedUserIDs)
+		}
+		if len(dbToken.RingoverAllowedTeamIDs) > 0 {
+			_ = json.Unmarshal(dbToken.RingoverAllowedTeamIDs, &ct.RingoverAllowedTeamIDs)
+		}
+
+		// Decode persisted Zoho filter for runtime header injection.
+		ct.ZohoFilterMode = dbToken.ZohoFilterMode
+		if len(dbToken.ZohoAllowedEmails) > 0 {
+			_ = json.Unmarshal(dbToken.ZohoAllowedEmails, &ct.ZohoAllowedEmails)
+		}
+		if ct.ZohoFilterMode == "creator" {
+			ct.ZohoCreatorEmail = dbToken.CreatedBy
+		}
+
+		// BDD scope: flatten the join rows into a flat slice of IDs.
+		if len(dbToken.BDDTables) > 0 {
+			ct.BDDAllowedTableIDs = make([]string, 0, len(dbToken.BDDTables))
+			for _, b := range dbToken.BDDTables {
+				ct.BDDAllowedTableIDs = append(ct.BDDAllowedTableIDs, b.UsedTableID)
+			}
+		}
+
+		cache.Set(hash, ct)
+	}
+
+	// Validate state
+	if !ct.IsActive {
+		http.Error(w, `{"error":"scope token is revoked"}`, http.StatusForbidden)
+		notifyUnauthorized(slackClient, r, "revoked scope token (source="+authSource+")")
+		return nil, false
+	}
+	if ct.ExpiresAt != nil && ct.ExpiresAt.Before(time.Now()) {
+		http.Error(w, `{"error":"scope token has expired"}`, http.StatusForbidden)
+		notifyUnauthorized(slackClient, r, "expired scope token (source="+authSource+")")
+		return nil, false
+	}
+
+	log.Printf("[scope] accepted token=%s... source=%s", hash[:8], authSource)
+
+	// Store allowed server IDs and tool selections in context
+	ctx := context.WithValue(r.Context(), AllowedServersContextKey, ct.ServerIDs)
+	if ct.AllowedTools != nil {
+		ctx = context.WithValue(ctx, AllowedToolsContextKey, ct.AllowedTools)
+	}
+	if ct.Name != "" {
+		ctx = context.WithValue(ctx, ScopeNameContextKey, ct.Name)
+	}
+	if len(ct.Instructions) > 0 {
+		resolved := make([]ResolvedInstruction, 0, len(ct.Instructions))
+		for _, ci := range ct.Instructions {
+			resolved = append(resolved, ResolvedInstruction{
+				ID: ci.ID, Title: ci.Title, Body: ci.Body,
+				Kind: ci.Kind, ServerIDs: ci.ServerIDs,
+			})
+		}
+		ctx = context.WithValue(ctx, AllowedInstructionsContextKey, resolved)
+	}
+	if ct.LeexiFilterMode != "" && ct.LeexiFilterMode != "none" {
+		ctx = context.WithValue(ctx, LeexiFilterContextKey, &LeexiFilterContext{
+			Mode:             ct.LeexiFilterMode,
+			AllowedUserUUIDs: ct.LeexiAllowedUserUUIDs,
+			AllowedTeamUUIDs: ct.LeexiAllowedTeamUUIDs,
+		})
+	}
+	if ct.RingoverFilterMode != "" && ct.RingoverFilterMode != "none" {
+		ctx = context.WithValue(ctx, RingoverFilterContextKey, &RingoverFilterContext{
+			Mode:           ct.RingoverFilterMode,
+			AllowedUserIDs: ct.RingoverAllowedUserIDs,
+			AllowedTeamIDs: ct.RingoverAllowedTeamIDs,
+		})
+	}
+	if ct.ZohoFilterMode != "" && ct.ZohoFilterMode != "none" {
+		ctx = context.WithValue(ctx, ZohoFilterContextKey, &ZohoFilterContext{
+			Mode:          ct.ZohoFilterMode,
+			AllowedEmails: ct.ZohoAllowedEmails,
+			CreatorEmail:  ct.ZohoCreatorEmail,
+		})
+	}
+	if len(ct.BDDAllowedTableIDs) > 0 {
+		ctx = context.WithValue(ctx, BDDFilterContextKey, ct.BDDAllowedTableIDs)
+	}
+	return ctx, true
 }

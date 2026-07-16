@@ -334,6 +334,33 @@ class HeaderFooterExtractor:
         index = len(siblings) + 1
         return f"{el.name}:nth-of-type({index})"
 
+    def _build_structural_sig_map(self, root) -> dict:
+        """O(N) batch equivalent of calling _get_signature_structural on every
+        descendant Tag. One pre-order DFS: each parent keeps a running per-tag-name
+        counter, so a child's nth-of-type index is assigned in O(1) instead of the
+        O(position) find_previous_siblings(name) scan that made the per-element path
+        O(N^2) over a large/repetitive DOM. Returns {id(el): "tag:nth-of-type(i) > ..."},
+        byte-identical to _get_signature_structural(el) for every Tag.
+
+        Valid only for the tree as it stands at call time (rebuild after any decompose);
+        used for the read-only intersection scan (steps 3-4). The few post-purge re-signs
+        (step 9) keep calling _get_signature_structural on the mutated tree."""
+        sig_map = {}
+
+        def walk(node, prefix):
+            counts = {}  # per-parent same-tag-name running index
+            for child in node.children:
+                if not isinstance(child, Tag):
+                    continue
+                counts[child.name] = counts.get(child.name, 0) + 1
+                segment = f"{child.name}:nth-of-type({counts[child.name]})"
+                path = f"{prefix} > {segment}" if prefix else segment
+                sig_map[id(child)] = path
+                walk(child, path)
+
+        walk(root, "")
+        return sig_map
+
     def _is_cookie_banner(self, text: str) -> bool:
         """
         Detects if a text block is likely a cookie/consent banner using robust regex patterns.
@@ -410,11 +437,12 @@ class HeaderFooterExtractor:
         target_tags = ['div', 'header', 'footer', 'nav', 'ul', 'ol', 'dl', 'dt', 'dd', 'section', 'aside', 'main', 'article', 'table', 'thead', 'tbody', 'tfoot', 'tr', 'td']
 
         for ref_soup in clean_refs:
+            struct_map = self._build_structural_sig_map(ref_soup) if strategy == "structural" else None
             sig_map = {}
             for el in ref_soup.find_all(target_tags):
                 if strategy == "class" and not el.get('class') and el.name not in ['header', 'footer', 'nav', 'main', 'article']:
                     continue
-                s = get_sig(el)
+                s = struct_map[id(el)] if struct_map is not None else get_sig(el)
                 # Store the text. If multiple elements have the same signature, we store the first one found.
                 # In most boilerplate scenarios, structural signatures are unique enough or repetition is acceptable.
                 if s not in sig_map:
@@ -424,10 +452,11 @@ class HeaderFooterExtractor:
         # 4. Find matching nodes in the Main HTML (The Intersection)
         potential_candidates = []
         all_main_elements = main_soup.find_all(target_tags)
-        
+        main_struct_map = self._build_structural_sig_map(main_soup) if strategy == "structural" else None
+
         for index, el in enumerate(all_main_elements):
-            sig = get_sig(el)
-            
+            sig = main_struct_map[id(el)] if main_struct_map is not None else get_sig(el)
+
             if strategy == "class" and not el.get('class') and el.name not in ['header', 'footer', 'nav', 'main', 'article']:
                 continue
             

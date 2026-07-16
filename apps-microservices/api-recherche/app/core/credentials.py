@@ -102,6 +102,7 @@ model_settings = {
         "gpt-4o-2024-08-06",
         "gpt-4o-2024-11-20",
         "deepseek",
+        "deepseek-v4-pro",
     ],
     "or": ["qwen/qwen3-coder:free", "qwen/qwen3-coder", "google/gemini-flash-1.5"],
     "gemini": ["gemini-3-pro-preview"],

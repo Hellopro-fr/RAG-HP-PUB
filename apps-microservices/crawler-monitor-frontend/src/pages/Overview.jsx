@@ -174,7 +174,7 @@ const Overview = ({ token, replicas }) => {
   }, [allJobs]);
 
   // Total slots from capacity or replica count
-  const totalSlots = capacity?.total ?? (replicas ? Object.keys(replicas).length : 0);
+  const totalSlots = capacity?.max_global_jobs ?? (replicas ? Object.keys(replicas).length : 0);
 
   // Build timeline data: aggregate jobs by hour (last 24 buckets)
   const timelineData = useMemo(() => {
@@ -397,11 +397,11 @@ const Overview = ({ token, replicas }) => {
         <SectionCard
           icon={Cpu}
           title="Capacité globale"
-          subtitle={`${capacity?.used ?? 0} / ${capacity?.total ?? totalSlots} slots utilisés`}
+          subtitle={`${capacity?.running_jobs ?? 0} / ${capacity?.max_global_jobs ?? totalSlots} slots utilisés`}
         >
           <CapacityRing
-            used={capacity?.used ?? 0}
-            total={capacity?.total ?? Math.max(1, totalSlots)}
+            used={capacity?.running_jobs ?? 0}
+            total={capacity?.max_global_jobs ?? Math.max(1, totalSlots)}
             format="count"
           />
           {/* Replica list with mini progress bars */}

@@ -35,7 +35,7 @@ esac
 
 # Skip config, infrastructure, and documentation files
 case "$BASENAME" in
-    config.*|credentials.*|settings.*|Dockerfile|docker-compose*|*.yml|*.yaml|*.toml|*.json|*.md|*.txt|*.cfg|*.ini|main.py|__init__.py) exit 0 ;;
+    config.*|*.config.*|credentials.*|settings.*|Dockerfile|docker-compose*|*.yml|*.yaml|*.toml|*.json|*.md|*.txt|*.cfg|*.ini|main.py|__init__.py) exit 0 ;;
 esac
 
 # Skip known non-testable paths

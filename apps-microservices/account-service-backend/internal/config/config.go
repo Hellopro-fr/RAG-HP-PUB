@@ -8,29 +8,32 @@ import (
 )
 
 type Configuration struct {
-	Port              int
-	PublicURL         string
-	MySQLDSN          string
-	EncryptionKey     string
-	JWTSecret         string
-	JWTAlgo           string
-	JWTAudience       string
-	AuthURL           string
-	FallbackUser      string
-	FallbackPass      string
-	FallbackEmail     string
-	AdminEmails       []string
-	DefaultTokenTTL   int
-	DefaultRefreshTTL int
-	AuthCodeTTL       int
-	WebhookTimeoutS   int
-	WebhookRetries    int
-	LogoutWorkers     int
-	SecureCookie      bool
+	Port               int
+	PublicURL          string
+	MySQLDSN           string
+	EncryptionKey      string
+	JWTSecret          string
+	JWTAlgo            string
+	JWTAudience        string
+	AuthURL            string
+	FallbackUser       string
+	FallbackPass       string
+	FallbackEmail      string
+	AdminEmails        []string
+	DefaultTokenTTL    int
+	DefaultRefreshTTL  int
+	AuthCodeTTL        int
+	WebhookTimeoutS    int
+	WebhookRetries     int
+	LogoutWorkers      int
+	SecureCookie       bool
 	SlackWebhookURL    string
 	SlackEnvLabel      string
 	SlackCooldownS     int
 	InternalAdminToken string
+	// MCPGatewayInternalURL is the in-cluster base URL of mcp-gateway-service
+	// (e.g. http://mcp-gateway-service:8592). Empty = MCP user sync disabled.
+	MCPGatewayInternalURL string
 	// API Catalog gRPC backend address and admin key.
 	APICatalogGRPC  string
 	CatalogAdminKey string
@@ -56,31 +59,32 @@ func buildMySQLDSN() string {
 
 func Load() (*Configuration, error) {
 	cfg := &Configuration{
-		Port:              envInt("ACCOUNT_PORT", 8600),
-		PublicURL:         strings.TrimRight(os.Getenv("ACCOUNT_PUBLIC_URL"), "/"),
-		MySQLDSN:          buildMySQLDSN(),
-		EncryptionKey:     os.Getenv("ENCRYPTION_KEY"),
-		JWTSecret:         os.Getenv("JWT_SECRET"),
-		JWTAlgo:           envStr("JWT_ALGO", "HS256"),
-		JWTAudience:       envStr("JWT_AUDIENCE", "https://www.hellopro.fr"),
-		AuthURL:           envStr("AUTH_URL", "https://www.hellopro.fr/partenaires_externes/info_produit/auth/auth.php"),
-		FallbackUser:      os.Getenv("FALLBACK_USER"),
-		FallbackPass:      os.Getenv("FALLBACK_PASS"),
-		FallbackEmail:     os.Getenv("FALLBACK_EMAIL"),
-		AdminEmails:       splitCSV(os.Getenv("ADMIN_EMAILS")),
-		DefaultTokenTTL:   envInt("OAUTH2_DEFAULT_TOKEN_TTL", 60),
-		DefaultRefreshTTL: envInt("OAUTH2_DEFAULT_REFRESH_TTL", 2592000),
-		AuthCodeTTL:       envInt("OAUTH2_AUTH_CODE_TTL", 600),
-		WebhookTimeoutS:   envInt("LOGOUT_WEBHOOK_TIMEOUT", 5),
-		WebhookRetries:    envInt("LOGOUT_WEBHOOK_RETRIES", 3),
-		LogoutWorkers:     envInt("LOGOUT_WORKERS", 4),
-		SecureCookie:      envBool("SECURE_COOKIE", true),
-		SlackWebhookURL:    os.Getenv("SLACK_WEBHOOK_URL"),
-		SlackEnvLabel:      os.Getenv("SLACK_ENV_LABEL"),
-		SlackCooldownS:     envInt("SLACK_AUTH_ALERT_COOLDOWN", 600),
-		InternalAdminToken: os.Getenv("INTERNAL_ADMIN_TOKEN"),
-		APICatalogGRPC:     envStr("API_CATALOG_GRPC", "api-catalog-service:9100"),
-		CatalogAdminKey:    os.Getenv("CATALOG_ADMIN_KEY"),
+		Port:                  envInt("ACCOUNT_PORT", 8600),
+		PublicURL:             strings.TrimRight(os.Getenv("ACCOUNT_PUBLIC_URL"), "/"),
+		MySQLDSN:              buildMySQLDSN(),
+		EncryptionKey:         os.Getenv("ENCRYPTION_KEY"),
+		JWTSecret:             os.Getenv("JWT_SECRET"),
+		JWTAlgo:               envStr("JWT_ALGO", "HS256"),
+		JWTAudience:           envStr("JWT_AUDIENCE", "https://www.hellopro.fr"),
+		AuthURL:               envStr("AUTH_URL", "https://www.hellopro.fr/partenaires_externes/info_produit/auth/auth.php"),
+		FallbackUser:          os.Getenv("FALLBACK_USER"),
+		FallbackPass:          os.Getenv("FALLBACK_PASS"),
+		FallbackEmail:         os.Getenv("FALLBACK_EMAIL"),
+		AdminEmails:           splitCSV(os.Getenv("ADMIN_EMAILS")),
+		DefaultTokenTTL:       envInt("OAUTH2_DEFAULT_TOKEN_TTL", 60),
+		DefaultRefreshTTL:     envInt("OAUTH2_DEFAULT_REFRESH_TTL", 2592000),
+		AuthCodeTTL:           envInt("OAUTH2_AUTH_CODE_TTL", 600),
+		WebhookTimeoutS:       envInt("LOGOUT_WEBHOOK_TIMEOUT", 5),
+		WebhookRetries:        envInt("LOGOUT_WEBHOOK_RETRIES", 3),
+		LogoutWorkers:         envInt("LOGOUT_WORKERS", 4),
+		SecureCookie:          envBool("SECURE_COOKIE", true),
+		SlackWebhookURL:       os.Getenv("SLACK_WEBHOOK_URL"),
+		SlackEnvLabel:         os.Getenv("SLACK_ENV_LABEL"),
+		SlackCooldownS:        envInt("SLACK_AUTH_ALERT_COOLDOWN", 600),
+		InternalAdminToken:    os.Getenv("INTERNAL_ADMIN_TOKEN"),
+		MCPGatewayInternalURL: strings.TrimRight(os.Getenv("MCP_GATEWAY_INTERNAL_URL"), "/"),
+		APICatalogGRPC:        envStr("API_CATALOG_GRPC", "api-catalog-service:9100"),
+		CatalogAdminKey:       os.Getenv("CATALOG_ADMIN_KEY"),
 	}
 	if err := cfg.validate(); err != nil {
 		return nil, err
