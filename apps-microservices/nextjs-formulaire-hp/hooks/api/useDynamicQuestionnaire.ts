@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useFlowStore } from '@/lib/stores/flow-store';
 import { basePath } from '@/lib/utils';
+import { getProductImageUrl } from '@/lib/utils/image-url';
 import type { CharacteristicDefinition, CharacteristicsMap } from '@/types/characteristics';
 import type { BulleAide } from '@/types';
 import { useDbTracking } from '@/hooks/tracking/useDbTracking';
@@ -71,6 +72,20 @@ async function prefetchCategoryPhotos(
     // API retourne: {"id_categorie":"2007702","produits":[{"nom":"...","image":"domaine/produit-2/..."}]}
     if (Array.isArray(data.produits)) {
       setCategoryPreviewProducts(data.produits);
+
+      // Préchauffe le cache navigateur des images du fond PENDANT que
+      // l'utilisateur répond au questionnaire → affichage quasi instantané à
+      // l'étape transparence (sinon le LazyThumbnail ne les charge qu'au montage
+      // de l'écran, d'où la latence). Le proxy /api/images renvoie déjà un
+      // Cache-Control immutable, donc le LazyThumbnail retombe sur le cache.
+      if (typeof window !== 'undefined') {
+        data.produits.slice(0, 3).forEach((p: { image?: string }) => {
+          if (p && p.image) {
+            const img = new window.Image();
+            img.src = getProductImageUrl(p.image);
+          }
+        });
+      }
     }
   } catch (error) {
     console.error('Prefetch category photos error:', error);
