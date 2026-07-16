@@ -4045,7 +4045,7 @@
     {
       "label": "Embedding.py",
       "file_type": "code",
-      "source_file": "D:/DevHellopro/Workspaces/RAG-HP-PUB/libs/common-utils/src/common_utils/embedding/Embedding.py",
+      "source_file": "libs\\common-utils\\src\\common_utils\\embedding\\Embedding.py",
       "source_location": "L1",
       "community": 12,
       "norm_label": "embedding.py",
@@ -4054,8 +4054,8 @@
     {
       "label": "Config",
       "file_type": "code",
-      "source_file": "D:/DevHellopro/Workspaces/RAG-HP-PUB/libs/common-utils/src/common_utils/embedding/Embedding.py",
-      "source_location": "L59",
+      "source_file": "libs\\common-utils\\src\\common_utils\\embedding\\Embedding.py",
+      "source_location": "L60",
       "community": 12,
       "norm_label": "config",
       "id": "embedding_config"
@@ -4063,8 +4063,8 @@
     {
       "label": "Embedding",
       "file_type": "code",
-      "source_file": "D:/DevHellopro/Workspaces/RAG-HP-PUB/libs/common-utils/src/common_utils/embedding/Embedding.py",
-      "source_location": "L83",
+      "source_file": "libs\\common-utils\\src\\common_utils\\embedding\\Embedding.py",
+      "source_location": "L84",
       "community": 12,
       "norm_label": "embedding",
       "id": "embedding_embedding"
@@ -4072,8 +4072,8 @@
     {
       "label": ".__init__()",
       "file_type": "code",
-      "source_file": "D:/DevHellopro/Workspaces/RAG-HP-PUB/libs/common-utils/src/common_utils/embedding/Embedding.py",
-      "source_location": "L84",
+      "source_file": "libs\\common-utils\\src\\common_utils\\embedding\\Embedding.py",
+      "source_location": "L85",
       "community": 12,
       "norm_label": ".__init__()",
       "id": "embedding_embedding_init"
@@ -4081,8 +4081,8 @@
     {
       "label": "._append_time_log()",
       "file_type": "code",
-      "source_file": "D:/DevHellopro/Workspaces/RAG-HP-PUB/libs/common-utils/src/common_utils/embedding/Embedding.py",
-      "source_location": "L103",
+      "source_file": "libs\\common-utils\\src\\common_utils\\embedding\\Embedding.py",
+      "source_location": "L104",
       "community": 12,
       "norm_label": "._append_time_log()",
       "id": "embedding_embedding_append_time_log"
@@ -4090,8 +4090,8 @@
     {
       "label": ".embed()",
       "file_type": "code",
-      "source_file": "D:/DevHellopro/Workspaces/RAG-HP-PUB/libs/common-utils/src/common_utils/embedding/Embedding.py",
-      "source_location": "L109",
+      "source_file": "libs\\common-utils\\src\\common_utils\\embedding\\Embedding.py",
+      "source_location": "L110",
       "community": 12,
       "norm_label": ".embed()",
       "id": "embedding_embedding_embed"
@@ -4099,8 +4099,8 @@
     {
       "label": "_clean_text()",
       "file_type": "code",
-      "source_file": "D:/DevHellopro/Workspaces/RAG-HP-PUB/libs/common-utils/src/common_utils/embedding/Embedding.py",
-      "source_location": "L148",
+      "source_file": "libs\\common-utils\\src\\common_utils\\embedding\\Embedding.py",
+      "source_location": "L149",
       "community": 12,
       "norm_label": "_clean_text()",
       "id": "embedding_clean_text"
@@ -4108,8 +4108,8 @@
     {
       "label": "._create_chunks()",
       "file_type": "code",
-      "source_file": "D:/DevHellopro/Workspaces/RAG-HP-PUB/libs/common-utils/src/common_utils/embedding/Embedding.py",
-      "source_location": "L178",
+      "source_file": "libs\\common-utils\\src\\common_utils\\embedding\\Embedding.py",
+      "source_location": "L179",
       "community": 12,
       "norm_label": "._create_chunks()",
       "id": "embedding_embedding_create_chunks"
@@ -4117,8 +4117,8 @@
     {
       "label": ".embed_data_clean()",
       "file_type": "code",
-      "source_file": "D:/DevHellopro/Workspaces/RAG-HP-PUB/libs/common-utils/src/common_utils/embedding/Embedding.py",
-      "source_location": "L193",
+      "source_file": "libs\\common-utils\\src\\common_utils\\embedding\\Embedding.py",
+      "source_location": "L194",
       "community": 12,
       "norm_label": ".embed_data_clean()",
       "id": "embedding_embedding_embed_data_clean"
@@ -79470,63 +79470,216 @@
       "file_type": "rationale",
       "source_file": "libs\\common-utils\\src\\common_utils\\database\\MilvusProduitInserer.py",
       "source_location": "L202",
-      "id": "milvusproduitinserer_rationale_202",
       "community": 7,
-      "norm_label": "recupere l'enregistrement de correspondance par id_produit          args:"
+      "norm_label": "recupere l'enregistrement de correspondance par id_produit          args:",
+      "id": "milvusproduitinserer_rationale_202"
     },
     {
       "label": "Supprime l'enregistrement de correspondance par id_produit ET origin avec retry",
       "file_type": "rationale",
       "source_file": "libs\\common-utils\\src\\common_utils\\database\\MilvusProduitInserer.py",
       "source_location": "L274",
-      "id": "milvusproduitinserer_rationale_274",
       "community": 7,
-      "norm_label": "supprime l'enregistrement de correspondance par id_produit et origin avec retry"
+      "norm_label": "supprime l'enregistrement de correspondance par id_produit et origin avec retry",
+      "id": "milvusproduitinserer_rationale_274"
     },
     {
       "label": "Supprime l'enregistrement de correspondance par id_produit avec retry",
       "file_type": "rationale",
       "source_file": "libs\\common-utils\\src\\common_utils\\database\\MilvusProduitInserer.py",
       "source_location": "L342",
-      "id": "milvusproduitinserer_rationale_342",
       "community": 7,
-      "norm_label": "supprime l'enregistrement de correspondance par id_produit avec retry"
+      "norm_label": "supprime l'enregistrement de correspondance par id_produit avec retry",
+      "id": "milvusproduitinserer_rationale_342"
     },
     {
       "label": "# NOTE: the schema below only applies when the collection is CREATED; an existin",
       "file_type": "rationale",
       "source_file": "libs\\common-utils\\src\\common_utils\\database\\MilvusProduitInserer.py",
       "source_location": "L26",
-      "id": "milvusproduitinserer_rationale_26",
       "community": 7,
-      "norm_label": "# note: the schema below only applies when the collection is created; an existin"
+      "norm_label": "# note: the schema below only applies when the collection is created; an existin",
+      "id": "milvusproduitinserer_rationale_26"
     },
     {
       "label": "test_MilvusProduitInserer.py",
       "file_type": "code",
       "source_file": "libs\\common-utils\\tests\\test_MilvusProduitInserer.py",
       "source_location": "L1",
-      "id": "libs_common_utils_tests_test_milvusproduitinserer_py",
       "community": 238,
-      "norm_label": "test_milvusproduitinserer.py"
+      "norm_label": "test_milvusproduitinserer.py",
+      "id": "libs_common_utils_tests_test_milvusproduitinserer_py"
     },
     {
       "label": "test_id_produit_milvus_holds_many_chunk_pks()",
       "file_type": "code",
       "source_file": "libs\\common-utils\\tests\\test_MilvusProduitInserer.py",
       "source_location": "L26",
-      "id": "test_milvusproduitinserer_test_id_produit_milvus_holds_many_chunk_pks",
       "community": 238,
-      "norm_label": "test_id_produit_milvus_holds_many_chunk_pks()"
+      "norm_label": "test_id_produit_milvus_holds_many_chunk_pks()",
+      "id": "test_milvusproduitinserer_test_id_produit_milvus_holds_many_chunk_pks"
     },
     {
       "label": "Regression guard for the correspondance ``id_produit_milvus`` field size.  ``id_",
       "file_type": "rationale",
       "source_file": "libs\\common-utils\\tests\\test_MilvusProduitInserer.py",
       "source_location": "L1",
-      "id": "test_milvusproduitinserer_rationale_1",
       "community": 238,
-      "norm_label": "regression guard for the correspondance ``id_produit_milvus`` field size.  ``id_"
+      "norm_label": "regression guard for the correspondance ``id_produit_milvus`` field size.  ``id_",
+      "id": "test_milvusproduitinserer_rationale_1"
+    },
+    {
+      "label": "Ajoute une ligne avec le temps d\u2019ex\u00e9cution dans temps_embedding.log",
+      "file_type": "rationale",
+      "source_file": "libs\\common-utils\\src\\common_utils\\embedding\\Embedding.py",
+      "source_location": "L105",
+      "id": "embedding_rationale_105",
+      "community": 12,
+      "norm_label": "ajoute une ligne avec le temps d\u2019execution dans temps_embedding.log"
+    },
+    {
+      "label": "Nettoie une cha\u00eene de texte en normalisant les espaces et en corrigeant",
+      "file_type": "rationale",
+      "source_file": "libs\\common-utils\\src\\common_utils\\embedding\\Embedding.py",
+      "source_location": "L150",
+      "id": "embedding_rationale_150",
+      "community": 239,
+      "norm_label": "nettoie une chaine de texte en normalisant les espaces et en corrigeant"
+    },
+    {
+      "label": "D\u00e9l\u00e8gue le chunking au microservice d'embedding.",
+      "file_type": "rationale",
+      "source_file": "libs\\common-utils\\src\\common_utils\\embedding\\Embedding.py",
+      "source_location": "L180",
+      "id": "embedding_rationale_180",
+      "community": 12,
+      "norm_label": "delegue le chunking au microservice d'embedding."
+    },
+    {
+      "label": "limits.py",
+      "file_type": "code",
+      "source_file": "libs\\common-utils\\src\\common_utils\\embedding\\limits.py",
+      "source_location": "L1",
+      "id": "libs_common_utils_src_common_utils_embedding_limits_py",
+      "community": 12,
+      "norm_label": "limits.py"
+    },
+    {
+      "label": "enforce_chunk_ceiling()",
+      "file_type": "code",
+      "source_file": "libs\\common-utils\\src\\common_utils\\embedding\\limits.py",
+      "source_location": "L27",
+      "id": "limits_enforce_chunk_ceiling",
+      "community": 12,
+      "norm_label": "enforce_chunk_ceiling()"
+    },
+    {
+      "label": "Payload-size guard for the embedding pipeline.  A pathological item (multi-MB te",
+      "file_type": "rationale",
+      "source_file": "libs\\common-utils\\src\\common_utils\\embedding\\limits.py",
+      "source_location": "L1",
+      "id": "limits_rationale_1",
+      "community": 12,
+      "norm_label": "payload-size guard for the embedding pipeline.  a pathological item (multi-mb te"
+    },
+    {
+      "label": "Raise ValueError (permanent -> DLQ) when an item produces too many chunks.",
+      "file_type": "rationale",
+      "source_file": "libs\\common-utils\\src\\common_utils\\embedding\\limits.py",
+      "source_location": "L28",
+      "id": "limits_rationale_28",
+      "community": 12,
+      "norm_label": "raise valueerror (permanent -> dlq) when an item produces too many chunks."
+    },
+    {
+      "label": "test_embedding_limits.py",
+      "file_type": "code",
+      "source_file": "libs\\common-utils\\tests\\test_embedding_limits.py",
+      "source_location": "L1",
+      "id": "libs_common_utils_tests_test_embedding_limits_py",
+      "community": 12,
+      "norm_label": "test_embedding_limits.py"
+    },
+    {
+      "label": "_load()",
+      "file_type": "code",
+      "source_file": "libs\\common-utils\\tests\\test_embedding_limits.py",
+      "source_location": "L21",
+      "id": "test_embedding_limits_load",
+      "community": 12,
+      "norm_label": "_load()"
+    },
+    {
+      "label": "_raises_value_error()",
+      "file_type": "code",
+      "source_file": "libs\\common-utils\\tests\\test_embedding_limits.py",
+      "source_location": "L28",
+      "id": "test_embedding_limits_raises_value_error",
+      "community": 12,
+      "norm_label": "_raises_value_error()"
+    },
+    {
+      "label": "test_over_ceiling_raises_payload_too_large()",
+      "file_type": "code",
+      "source_file": "libs\\common-utils\\tests\\test_embedding_limits.py",
+      "source_location": "L36",
+      "id": "test_embedding_limits_test_over_ceiling_raises_payload_too_large",
+      "community": 12,
+      "norm_label": "test_over_ceiling_raises_payload_too_large()"
+    },
+    {
+      "label": "test_at_ceiling_does_not_raise()",
+      "file_type": "code",
+      "source_file": "libs\\common-utils\\tests\\test_embedding_limits.py",
+      "source_location": "L42",
+      "id": "test_embedding_limits_test_at_ceiling_does_not_raise",
+      "community": 12,
+      "norm_label": "test_at_ceiling_does_not_raise()"
+    },
+    {
+      "label": "test_under_ceiling_does_not_raise()",
+      "file_type": "code",
+      "source_file": "libs\\common-utils\\tests\\test_embedding_limits.py",
+      "source_location": "L47",
+      "id": "test_embedding_limits_test_under_ceiling_does_not_raise",
+      "community": 12,
+      "norm_label": "test_under_ceiling_does_not_raise()"
+    },
+    {
+      "label": "test_default_ceiling_is_5000()",
+      "file_type": "code",
+      "source_file": "libs\\common-utils\\tests\\test_embedding_limits.py",
+      "source_location": "L52",
+      "id": "test_embedding_limits_test_default_ceiling_is_5000",
+      "community": 12,
+      "norm_label": "test_default_ceiling_is_5000()"
+    },
+    {
+      "label": "test_message_includes_count_and_source()",
+      "file_type": "code",
+      "source_file": "libs\\common-utils\\tests\\test_embedding_limits.py",
+      "source_location": "L57",
+      "id": "test_embedding_limits_test_message_includes_count_and_source",
+      "community": 12,
+      "norm_label": "test_message_includes_count_and_source()"
+    },
+    {
+      "label": "_run()",
+      "file_type": "code",
+      "source_file": "libs\\common-utils\\tests\\test_embedding_limits.py",
+      "source_location": "L64",
+      "id": "test_embedding_limits_run",
+      "community": 12,
+      "norm_label": "_run()"
+    },
+    {
+      "label": "Chunk-count ceiling guard for embed_data_clean.  A pathological item (multi-MB t",
+      "file_type": "rationale",
+      "source_file": "libs\\common-utils\\tests\\test_embedding_limits.py",
+      "source_location": "L1",
+      "id": "test_embedding_limits_rationale_1",
+      "community": 12,
+      "norm_label": "chunk-count ceiling guard for embed_data_clean.  a pathological item (multi-mb t"
     }
   ],
   "links": [
@@ -92299,9 +92452,9 @@
       "weight": 1.0,
       "_src": "milvusproduitinserer_rationale_26",
       "_tgt": "libs_common_utils_src_common_utils_database_milvusproduitinserer_py",
+      "confidence_score": 1.0,
       "source": "libs_common_utils_src_common_utils_database_milvusproduitinserer_py",
-      "target": "milvusproduitinserer_rationale_26",
-      "confidence_score": 1.0
+      "target": "milvusproduitinserer_rationale_26"
     },
     {
       "relation": "calls",
@@ -92599,9 +92752,9 @@
       "weight": 1.0,
       "_src": "milvusproduitinserer_rationale_202",
       "_tgt": "milvusproduitinserer_milvusproduitinserer_get_correspondance_by_id_produit",
+      "confidence_score": 1.0,
       "source": "milvusproduitinserer_milvusproduitinserer_get_correspondance_by_id_produit",
-      "target": "milvusproduitinserer_rationale_202",
-      "confidence_score": 1.0
+      "target": "milvusproduitinserer_rationale_202"
     },
     {
       "relation": "rationale_for",
@@ -92623,9 +92776,9 @@
       "weight": 1.0,
       "_src": "milvusproduitinserer_rationale_274",
       "_tgt": "milvusproduitinserer_milvusproduitinserer_delete_correspondance_by_id_produit_and_origin",
+      "confidence_score": 1.0,
       "source": "milvusproduitinserer_milvusproduitinserer_delete_correspondance_by_id_produit_and_origin",
-      "target": "milvusproduitinserer_rationale_274",
-      "confidence_score": 1.0
+      "target": "milvusproduitinserer_rationale_274"
     },
     {
       "relation": "rationale_for",
@@ -92647,9 +92800,9 @@
       "weight": 1.0,
       "_src": "milvusproduitinserer_rationale_342",
       "_tgt": "milvusproduitinserer_milvusproduitinserer_delete_correspondance_by_id_produit",
+      "confidence_score": 1.0,
       "source": "milvusproduitinserer_milvusproduitinserer_delete_correspondance_by_id_produit",
-      "target": "milvusproduitinserer_rationale_342",
-      "confidence_score": 1.0
+      "target": "milvusproduitinserer_rationale_342"
     },
     {
       "relation": "uses",
@@ -94670,8 +94823,8 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "D:/DevHellopro/Workspaces/RAG-HP-PUB/libs/common-utils/src/common_utils/embedding/Embedding.py",
-      "source_location": "L148",
+      "source_file": "libs\\common-utils\\src\\common_utils\\embedding\\Embedding.py",
+      "source_location": "L149",
       "weight": 1.0,
       "confidence_score": 1.0,
       "_src": "libs_common_utils_src_common_utils_embedding_embedding_py",
@@ -94682,8 +94835,8 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "D:/DevHellopro/Workspaces/RAG-HP-PUB/libs/common-utils/src/common_utils/embedding/Embedding.py",
-      "source_location": "L59",
+      "source_file": "libs\\common-utils\\src\\common_utils\\embedding\\Embedding.py",
+      "source_location": "L60",
       "weight": 1.0,
       "confidence_score": 1.0,
       "_src": "libs_common_utils_src_common_utils_embedding_embedding_py",
@@ -94694,8 +94847,8 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "D:/DevHellopro/Workspaces/RAG-HP-PUB/libs/common-utils/src/common_utils/embedding/Embedding.py",
-      "source_location": "L83",
+      "source_file": "libs\\common-utils\\src\\common_utils\\embedding\\Embedding.py",
+      "source_location": "L84",
       "weight": 1.0,
       "confidence_score": 1.0,
       "_src": "libs_common_utils_src_common_utils_embedding_embedding_py",
@@ -94706,8 +94859,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "D:/DevHellopro/Workspaces/RAG-HP-PUB/libs/common-utils/src/common_utils/embedding/Embedding.py",
-      "source_location": "L103",
+      "source_file": "libs\\common-utils\\src\\common_utils\\embedding\\Embedding.py",
+      "source_location": "L104",
       "weight": 1.0,
       "confidence_score": 1.0,
       "_src": "embedding_embedding",
@@ -94718,8 +94871,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "D:/DevHellopro/Workspaces/RAG-HP-PUB/libs/common-utils/src/common_utils/embedding/Embedding.py",
-      "source_location": "L178",
+      "source_file": "libs\\common-utils\\src\\common_utils\\embedding\\Embedding.py",
+      "source_location": "L179",
       "weight": 1.0,
       "confidence_score": 1.0,
       "_src": "embedding_embedding",
@@ -94730,8 +94883,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "D:/DevHellopro/Workspaces/RAG-HP-PUB/libs/common-utils/src/common_utils/embedding/Embedding.py",
-      "source_location": "L109",
+      "source_file": "libs\\common-utils\\src\\common_utils\\embedding\\Embedding.py",
+      "source_location": "L110",
       "weight": 1.0,
       "confidence_score": 1.0,
       "_src": "embedding_embedding",
@@ -94742,8 +94895,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "D:/DevHellopro/Workspaces/RAG-HP-PUB/libs/common-utils/src/common_utils/embedding/Embedding.py",
-      "source_location": "L193",
+      "source_file": "libs\\common-utils\\src\\common_utils\\embedding\\Embedding.py",
+      "source_location": "L194",
       "weight": 1.0,
       "confidence_score": 1.0,
       "_src": "embedding_embedding",
@@ -94754,8 +94907,8 @@
     {
       "relation": "method",
       "confidence": "EXTRACTED",
-      "source_file": "D:/DevHellopro/Workspaces/RAG-HP-PUB/libs/common-utils/src/common_utils/embedding/Embedding.py",
-      "source_location": "L84",
+      "source_file": "libs\\common-utils\\src\\common_utils\\embedding\\Embedding.py",
+      "source_location": "L85",
       "weight": 1.0,
       "confidence_score": 1.0,
       "_src": "embedding_embedding",
@@ -94766,12 +94919,12 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "D:/DevHellopro/Workspaces/RAG-HP-PUB/libs/common-utils/src/common_utils/embedding/Embedding.py",
-      "source_location": "L141",
+      "source_file": "libs\\common-utils\\src\\common_utils\\embedding\\Embedding.py",
+      "source_location": "L142",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "embedding_embedding_append_time_log",
-      "_tgt": "embedding_embedding_embed",
+      "_src": "embedding_embedding_embed",
+      "_tgt": "embedding_embedding_append_time_log",
       "source": "embedding_embedding_append_time_log",
       "target": "embedding_embedding_embed"
     },
@@ -94788,6 +94941,18 @@
       "target": "embedding_rationale_104"
     },
     {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "libs\\common-utils\\src\\common_utils\\embedding\\Embedding.py",
+      "source_location": "L105",
+      "weight": 1.0,
+      "_src": "embedding_rationale_105",
+      "_tgt": "embedding_embedding_append_time_log",
+      "source": "embedding_embedding_append_time_log",
+      "target": "embedding_rationale_105",
+      "confidence_score": 1.0
+    },
+    {
       "relation": "calls",
       "confidence": "INFERRED",
       "confidence_score": 0.8,
@@ -94802,24 +94967,24 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "D:/DevHellopro/Workspaces/RAG-HP-PUB/libs/common-utils/src/common_utils/embedding/Embedding.py",
-      "source_location": "L217",
+      "source_file": "libs\\common-utils\\src\\common_utils\\embedding\\Embedding.py",
+      "source_location": "L231",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "embedding_embedding_embed",
-      "_tgt": "embedding_embedding_embed_data_clean",
+      "_src": "embedding_embedding_embed_data_clean",
+      "_tgt": "embedding_embedding_embed",
       "source": "embedding_embedding_embed",
       "target": "embedding_embedding_embed_data_clean"
     },
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "D:/DevHellopro/Workspaces/RAG-HP-PUB/libs/common-utils/src/common_utils/embedding/Embedding.py",
-      "source_location": "L201",
+      "source_file": "libs\\common-utils\\src\\common_utils\\embedding\\Embedding.py",
+      "source_location": "L202",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "embedding_clean_text",
-      "_tgt": "embedding_embedding_embed_data_clean",
+      "_src": "embedding_embedding_embed_data_clean",
+      "_tgt": "embedding_clean_text",
       "source": "embedding_clean_text",
       "target": "embedding_embedding_embed_data_clean"
     },
@@ -94838,12 +95003,12 @@
     {
       "relation": "calls",
       "confidence": "EXTRACTED",
-      "source_file": "D:/DevHellopro/Workspaces/RAG-HP-PUB/libs/common-utils/src/common_utils/embedding/Embedding.py",
-      "source_location": "L209",
+      "source_file": "libs\\common-utils\\src\\common_utils\\embedding\\Embedding.py",
+      "source_location": "L210",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "embedding_embedding_create_chunks",
-      "_tgt": "embedding_embedding_embed_data_clean",
+      "_src": "embedding_embedding_embed_data_clean",
+      "_tgt": "embedding_embedding_create_chunks",
       "source": "embedding_embedding_create_chunks",
       "target": "embedding_embedding_embed_data_clean"
     },
@@ -94858,6 +95023,30 @@
       "_tgt": "embedding_rationale_179",
       "source": "embedding_embedding_create_chunks",
       "target": "embedding_rationale_179"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "libs\\common-utils\\src\\common_utils\\embedding\\Embedding.py",
+      "source_location": "L180",
+      "weight": 1.0,
+      "_src": "embedding_rationale_180",
+      "_tgt": "embedding_embedding_create_chunks",
+      "source": "embedding_embedding_create_chunks",
+      "target": "embedding_rationale_180",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "libs\\common-utils\\src\\common_utils\\embedding\\Embedding.py",
+      "source_location": "L225",
+      "weight": 1.0,
+      "_src": "embedding_embedding_embed_data_clean",
+      "_tgt": "limits_enforce_chunk_ceiling",
+      "source": "embedding_embedding_embed_data_clean",
+      "target": "limits_enforce_chunk_ceiling"
     },
     {
       "relation": "contains",
@@ -290570,9 +290759,9 @@
       "weight": 1.0,
       "_src": "libs_common_utils_tests_test_milvusproduitinserer_py",
       "_tgt": "test_milvusproduitinserer_test_id_produit_milvus_holds_many_chunk_pks",
+      "confidence_score": 1.0,
       "source": "libs_common_utils_tests_test_milvusproduitinserer_py",
-      "target": "test_milvusproduitinserer_test_id_produit_milvus_holds_many_chunk_pks",
-      "confidence_score": 1.0
+      "target": "test_milvusproduitinserer_test_id_produit_milvus_holds_many_chunk_pks"
     },
     {
       "relation": "rationale_for",
@@ -290582,8 +290771,260 @@
       "weight": 1.0,
       "_src": "test_milvusproduitinserer_rationale_1",
       "_tgt": "libs_common_utils_tests_test_milvusproduitinserer_py",
+      "confidence_score": 1.0,
       "source": "libs_common_utils_tests_test_milvusproduitinserer_py",
-      "target": "test_milvusproduitinserer_rationale_1",
+      "target": "test_milvusproduitinserer_rationale_1"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "libs\\common-utils\\src\\common_utils\\embedding\\limits.py",
+      "source_location": "L27",
+      "weight": 1.0,
+      "_src": "libs_common_utils_src_common_utils_embedding_limits_py",
+      "_tgt": "limits_enforce_chunk_ceiling",
+      "source": "libs_common_utils_src_common_utils_embedding_limits_py",
+      "target": "limits_enforce_chunk_ceiling",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "libs\\common-utils\\src\\common_utils\\embedding\\limits.py",
+      "source_location": "L1",
+      "weight": 1.0,
+      "_src": "limits_rationale_1",
+      "_tgt": "libs_common_utils_src_common_utils_embedding_limits_py",
+      "source": "libs_common_utils_src_common_utils_embedding_limits_py",
+      "target": "limits_rationale_1",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "libs\\common-utils\\src\\common_utils\\embedding\\limits.py",
+      "source_location": "L28",
+      "weight": 1.0,
+      "_src": "limits_rationale_28",
+      "_tgt": "limits_enforce_chunk_ceiling",
+      "source": "limits_enforce_chunk_ceiling",
+      "target": "limits_rationale_28",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "libs\\common-utils\\tests\\test_embedding_limits.py",
+      "source_location": "L44",
+      "weight": 1.0,
+      "_src": "test_embedding_limits_test_at_ceiling_does_not_raise",
+      "_tgt": "limits_enforce_chunk_ceiling",
+      "source": "limits_enforce_chunk_ceiling",
+      "target": "test_embedding_limits_test_at_ceiling_does_not_raise"
+    },
+    {
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "libs\\common-utils\\tests\\test_embedding_limits.py",
+      "source_location": "L49",
+      "weight": 1.0,
+      "_src": "test_embedding_limits_test_under_ceiling_does_not_raise",
+      "_tgt": "limits_enforce_chunk_ceiling",
+      "source": "limits_enforce_chunk_ceiling",
+      "target": "test_embedding_limits_test_under_ceiling_does_not_raise"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "libs\\common-utils\\tests\\test_embedding_limits.py",
+      "source_location": "L21",
+      "weight": 1.0,
+      "_src": "libs_common_utils_tests_test_embedding_limits_py",
+      "_tgt": "test_embedding_limits_load",
+      "source": "libs_common_utils_tests_test_embedding_limits_py",
+      "target": "test_embedding_limits_load",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "libs\\common-utils\\tests\\test_embedding_limits.py",
+      "source_location": "L28",
+      "weight": 1.0,
+      "_src": "libs_common_utils_tests_test_embedding_limits_py",
+      "_tgt": "test_embedding_limits_raises_value_error",
+      "source": "libs_common_utils_tests_test_embedding_limits_py",
+      "target": "test_embedding_limits_raises_value_error",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "libs\\common-utils\\tests\\test_embedding_limits.py",
+      "source_location": "L36",
+      "weight": 1.0,
+      "_src": "libs_common_utils_tests_test_embedding_limits_py",
+      "_tgt": "test_embedding_limits_test_over_ceiling_raises_payload_too_large",
+      "source": "libs_common_utils_tests_test_embedding_limits_py",
+      "target": "test_embedding_limits_test_over_ceiling_raises_payload_too_large",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "libs\\common-utils\\tests\\test_embedding_limits.py",
+      "source_location": "L42",
+      "weight": 1.0,
+      "_src": "libs_common_utils_tests_test_embedding_limits_py",
+      "_tgt": "test_embedding_limits_test_at_ceiling_does_not_raise",
+      "source": "libs_common_utils_tests_test_embedding_limits_py",
+      "target": "test_embedding_limits_test_at_ceiling_does_not_raise",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "libs\\common-utils\\tests\\test_embedding_limits.py",
+      "source_location": "L47",
+      "weight": 1.0,
+      "_src": "libs_common_utils_tests_test_embedding_limits_py",
+      "_tgt": "test_embedding_limits_test_under_ceiling_does_not_raise",
+      "source": "libs_common_utils_tests_test_embedding_limits_py",
+      "target": "test_embedding_limits_test_under_ceiling_does_not_raise",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "libs\\common-utils\\tests\\test_embedding_limits.py",
+      "source_location": "L52",
+      "weight": 1.0,
+      "_src": "libs_common_utils_tests_test_embedding_limits_py",
+      "_tgt": "test_embedding_limits_test_default_ceiling_is_5000",
+      "source": "libs_common_utils_tests_test_embedding_limits_py",
+      "target": "test_embedding_limits_test_default_ceiling_is_5000",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "libs\\common-utils\\tests\\test_embedding_limits.py",
+      "source_location": "L57",
+      "weight": 1.0,
+      "_src": "libs_common_utils_tests_test_embedding_limits_py",
+      "_tgt": "test_embedding_limits_test_message_includes_count_and_source",
+      "source": "libs_common_utils_tests_test_embedding_limits_py",
+      "target": "test_embedding_limits_test_message_includes_count_and_source",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "libs\\common-utils\\tests\\test_embedding_limits.py",
+      "source_location": "L64",
+      "weight": 1.0,
+      "_src": "libs_common_utils_tests_test_embedding_limits_py",
+      "_tgt": "test_embedding_limits_run",
+      "source": "libs_common_utils_tests_test_embedding_limits_py",
+      "target": "test_embedding_limits_run",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "libs\\common-utils\\tests\\test_embedding_limits.py",
+      "source_location": "L1",
+      "weight": 1.0,
+      "_src": "test_embedding_limits_rationale_1",
+      "_tgt": "libs_common_utils_tests_test_embedding_limits_py",
+      "source": "libs_common_utils_tests_test_embedding_limits_py",
+      "target": "test_embedding_limits_rationale_1",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "libs\\common-utils\\tests\\test_embedding_limits.py",
+      "source_location": "L37",
+      "weight": 1.0,
+      "_src": "test_embedding_limits_test_over_ceiling_raises_payload_too_large",
+      "_tgt": "test_embedding_limits_load",
+      "source": "test_embedding_limits_load",
+      "target": "test_embedding_limits_test_over_ceiling_raises_payload_too_large",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "libs\\common-utils\\tests\\test_embedding_limits.py",
+      "source_location": "L43",
+      "weight": 1.0,
+      "_src": "test_embedding_limits_test_at_ceiling_does_not_raise",
+      "_tgt": "test_embedding_limits_load",
+      "source": "test_embedding_limits_load",
+      "target": "test_embedding_limits_test_at_ceiling_does_not_raise",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "libs\\common-utils\\tests\\test_embedding_limits.py",
+      "source_location": "L48",
+      "weight": 1.0,
+      "_src": "test_embedding_limits_test_under_ceiling_does_not_raise",
+      "_tgt": "test_embedding_limits_load",
+      "source": "test_embedding_limits_load",
+      "target": "test_embedding_limits_test_under_ceiling_does_not_raise",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "libs\\common-utils\\tests\\test_embedding_limits.py",
+      "source_location": "L53",
+      "weight": 1.0,
+      "_src": "test_embedding_limits_test_default_ceiling_is_5000",
+      "_tgt": "test_embedding_limits_load",
+      "source": "test_embedding_limits_load",
+      "target": "test_embedding_limits_test_default_ceiling_is_5000",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "libs\\common-utils\\tests\\test_embedding_limits.py",
+      "source_location": "L58",
+      "weight": 1.0,
+      "_src": "test_embedding_limits_test_message_includes_count_and_source",
+      "_tgt": "test_embedding_limits_load",
+      "source": "test_embedding_limits_load",
+      "target": "test_embedding_limits_test_message_includes_count_and_source",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "libs\\common-utils\\tests\\test_embedding_limits.py",
+      "source_location": "L38",
+      "weight": 1.0,
+      "_src": "test_embedding_limits_test_over_ceiling_raises_payload_too_large",
+      "_tgt": "test_embedding_limits_raises_value_error",
+      "source": "test_embedding_limits_raises_value_error",
+      "target": "test_embedding_limits_test_over_ceiling_raises_payload_too_large",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "libs\\common-utils\\tests\\test_embedding_limits.py",
+      "source_location": "L59",
+      "weight": 1.0,
+      "_src": "test_embedding_limits_test_message_includes_count_and_source",
+      "_tgt": "test_embedding_limits_raises_value_error",
+      "source": "test_embedding_limits_raises_value_error",
+      "target": "test_embedding_limits_test_message_includes_count_and_source",
       "confidence_score": 1.0
     }
   ],
