@@ -147,3 +147,18 @@ def test_undecodable_content_raises():
         assert False, "une exception était attendue pour un contenu non décodable"
     except Exception:
         pass
+
+
+def test_ico_converted_to_png():
+    # Un favicon ICO multi-frames doit devenir un VRAI PNG (plus grande frame),
+    # pas des octets ICO servis en .png (rendu casse). Cf. fix audit logo.
+    buf = io.BytesIO()
+    Image.new("RGBA", (48, 48), (255, 0, 0, 255)).save(
+        buf, format="ICO", sizes=[(16, 16), (32, 32), (48, 48)]
+    )
+    out = process_logo(buf.getvalue(), domain="acme.fr", filename="acme")
+    assert out["format"] == "png"
+    assert out["extension"] == ".png"
+    img = Image.open(io.BytesIO(out["bytes"]))
+    assert img.format == "PNG"          # vrai PNG, plus de l'ICO
+    assert out["width"] == 48 and out["height"] == 48   # plus grande frame

@@ -624,6 +624,28 @@ def process_logo(content: bytes, domain: str, filename: str) -> dict:
         width, height = img.size
         original_format = (img.format or "").upper()
 
+        # ICO (favicon) : convertir la plus grande frame en vrai PNG. Sinon des
+        # octets ICO seraient heberges en .png (rendu casse) et PIL peut annoncer
+        # une frame >=64px trompeuse pour le gate qualite. (fix audit logo)
+        if original_format == "ICO":
+            try:
+                _sizes = list(img.ico.sizes())
+            except Exception:
+                _sizes = []
+            if _sizes:
+                width, height = max(_sizes, key=lambda wh: wh[0] * wh[1])
+                img.size = (width, height)
+            frame = img.convert("RGBA")
+            buf = io.BytesIO()
+            frame.save(buf, format="PNG", optimize=True)
+            return {
+                "bytes": buf.getvalue(),
+                "format": "png",
+                "width": width,
+                "height": height,
+                "extension": ".png",
+            }
+
     if original_format == "GIF":
         out_format, extension = "gif", ".gif"
     elif original_format in ("JPEG", "JPG"):
