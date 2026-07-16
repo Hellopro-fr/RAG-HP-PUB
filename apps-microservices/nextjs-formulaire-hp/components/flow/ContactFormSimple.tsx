@@ -28,17 +28,24 @@ const STEPS = [
 ];
 
 const ContactFormSimple = ({ onBack, onContactComplete }: ContactFormSimpleProps) => {
-  const [formData, setFormData] = useState<ContactFormData>({
-    email: "",
-    isKnown: false,
-    civility: "",
-    firstName: "",
-    lastName: "",
-    company: "",
-    countryCode: "+33",
-    id_pays_tel: 1, // France par défaut
-    phone: "",
-    message: "",
+  // Semé depuis contactData (renseigné à l'étape transparence ou lors d'une
+  // soumission précédente) pour pré-remplir email + identité.
+  // Initializer lazy via getState() : le destructure useFlowStore() est plus bas.
+  const [formData, setFormData] = useState<ContactFormData>(() => {
+    const contactData = useFlowStore.getState().contactData;
+    return {
+      email: contactData?.email ?? "",
+      isKnown: contactData?.isKnown ?? false,
+      civility: contactData?.civility || "",
+      firstName: contactData?.firstName || "",
+      lastName: contactData?.lastName || "",
+      company: contactData?.company || "",
+      countryCode: contactData?.countryCode || "+33",
+      id_pays_tel: contactData?.id_pays_tel ?? 1, // France par défaut
+      phone: contactData?.phone || "",
+      message: "",
+      id_acheteur: contactData?.id_acheteur,
+    };
   });
 
   const [errors, setErrors] = useState<Partial<Record<keyof ContactFormData, string>>>({});
@@ -50,7 +57,7 @@ const ContactFormSimple = ({ onBack, onContactComplete }: ContactFormSimpleProps
   }, [formData.email]);
 
   const leadSubmission = useLeadSubmission();
-  const { profileData, userAnswers, selectedSupplierIds, setContactData, categoryId, priceEstimation } = useFlowStore();
+  const { profileData, userAnswers, selectedSupplierIds, contactData, setContactData, categoryId, priceEstimation } = useFlowStore();
   const { trackDbEvent } = useDbTracking();
 
    // Dynamic buyer check via API
@@ -63,9 +70,19 @@ const ContactFormSimple = ({ onBack, onContactComplete }: ContactFormSimpleProps
   );
 
   const isExistingBuyer = buyerCheckResult?.isDuplicate || false;
-  const isKnownBuyer    = buyerCheckResult?.isKnown || false;
+  // Email déjà vérifié à l'étape transparence : tant que la re-vérification
+  // n'a pas répondu, se fier à la connaissance persistée dans le store.
+  const isSeededEmail = !!contactData?.email && formData.email === contactData.email;
+  const isKnownBuyer = buyerCheckResult !== undefined
+    ? (buyerCheckResult?.isKnown || false)
+    : (isSeededEmail && (contactData?.isKnown ?? false));
 
   useEffect(() => {
+    // Ne rien faire tant que la vérification n'a pas rendu de résultat :
+    // au montage (cache react-query froid) buyerCheckResult est undefined et
+    // la branche else écraserait les champs semés depuis contactData.
+    if (isCheckingBuyer || buyerCheckResult === undefined) return;
+
     let updatedData: ContactFormData | null = null;
 
     // 1. On vérifie si l'acheteur est reconnu et si on a les données
@@ -84,7 +101,7 @@ const ContactFormSimple = ({ onBack, onContactComplete }: ContactFormSimpleProps
         company  : info.societe || formData.company || "",
         id_acheteur: info.id || undefined,
       };
-            
+
     }else{
       updatedData = {
         ...formData,
@@ -104,7 +121,7 @@ const ContactFormSimple = ({ onBack, onContactComplete }: ContactFormSimpleProps
     }
     
     // On ne déclenche cet effet que lorsque 'isKnownBuyer' ou 'infoBuyer' change
-  }, [isKnownBuyer, buyerCheckResult?.infoBuyer]);  
+  }, [isKnownBuyer, isCheckingBuyer, buyerCheckResult, buyerCheckResult?.infoBuyer]);
 
 
   const handleChange = (
@@ -120,7 +137,8 @@ const ContactFormSimple = ({ onBack, onContactComplete }: ContactFormSimpleProps
 
   // Show additional fields only if email is valid and not an existing buyer
   // AND we are not currently checking (to avoid flickering)
-  const showAdditionalFields = isEmailValid && !isKnownBuyer && !isCheckingBuyer;
+  // Exception : email semé (transparence) → statut déjà connu, pas de masquage
+  const showAdditionalFields = isEmailValid && !isKnownBuyer && (!isCheckingBuyer || isSeededEmail);
 
   const isFormValid = !showAdditionalFields || !!formData.civility;
 

@@ -26,6 +26,7 @@ interface CustomNeedFormProps {
 
 const CustomNeedForm = ({ onBack, onContactComplete, variant = 'initial' }: CustomNeedFormProps) => {
   const {
+    contactData,
     setContactData,
     flowType,
     profileData,
@@ -44,17 +45,20 @@ const CustomNeedForm = ({ onBack, onContactComplete, variant = 'initial' }: Cust
   const [fileName, setFileName] = useState<string | null>(null);
   const [isListening, setIsListening] = useState(false);
 
+  // Semé depuis contactData (renseigné à l'étape transparence ou lors d'une
+  // soumission précédente) pour pré-remplir email + identité.
   const [formData, setFormData] = useState<ContactFormData>({
-    email: "",
-    isKnown: false,
-    civility: "",
-    firstName: "",
-    lastName: "",
-    company: profileData?.company?.name || profileData?.companyName || "",
-    countryCode: "+33",
-    id_pays_tel: 1, // France par défaut
-    phone: "",
+    email: contactData?.email ?? "",
+    isKnown: contactData?.isKnown ?? false,
+    civility: contactData?.civility || "",
+    firstName: contactData?.firstName || "",
+    lastName: contactData?.lastName || "",
+    company: profileData?.company?.name || profileData?.companyName || contactData?.company || "",
+    countryCode: contactData?.countryCode || "+33",
+    id_pays_tel: contactData?.id_pays_tel ?? 1, // France par défaut
+    phone: contactData?.phone || "",
     message: "",
+    id_acheteur: contactData?.id_acheteur,
   });
 
 
@@ -124,9 +128,19 @@ const CustomNeedForm = ({ onBack, onContactComplete, variant = 'initial' }: Cust
   );
 
   const isExistingBuyer = buyerCheckResult?.isDuplicate || false;
-  const isKnownBuyer = buyerCheckResult?.isKnown || false;
+  // Email déjà vérifié à l'étape transparence : tant que la re-vérification
+  // n'a pas répondu, se fier à la connaissance persistée dans le store.
+  const isSeededEmail = !!contactData?.email && formData.email === contactData.email;
+  const isKnownBuyer = buyerCheckResult !== undefined
+    ? (buyerCheckResult?.isKnown || false)
+    : (isSeededEmail && (contactData?.isKnown ?? false));
 
   useEffect(() => {
+    // Ne rien faire tant que la vérification n'a pas rendu de résultat :
+    // au montage (cache react-query froid) buyerCheckResult est undefined et
+    // la branche else écraserait les champs semés depuis contactData.
+    if (isCheckingBuyer || buyerCheckResult === undefined) return;
+
     let updatedData: ContactFormData | null = null;
 
     // 1. On vérifie si l'acheteur est reconnu et si on a les données
@@ -164,11 +178,12 @@ const CustomNeedForm = ({ onBack, onContactComplete, variant = 'initial' }: Cust
     }
 
     // On ne déclenche cet effet que lorsque 'isKnownBuyer' ou 'infoBuyer' change
-  }, [isKnownBuyer, buyerCheckResult?.infoBuyer]);
+  }, [isKnownBuyer, isCheckingBuyer, buyerCheckResult, buyerCheckResult?.infoBuyer]);
 
   // Show additional fields only if email is valid and not an existing buyer
   // AND we are not currently checking (to avoid flickering)
-  const showAdditionalFields = isEmailValid && !isKnownBuyer && !isCheckingBuyer;
+  // Exception : email semé (transparence) → statut déjà connu, pas de masquage
+  const showAdditionalFields = isEmailValid && !isKnownBuyer && (!isCheckingBuyer || isSeededEmail);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
