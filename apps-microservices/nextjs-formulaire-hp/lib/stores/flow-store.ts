@@ -218,6 +218,10 @@ export interface FlowState {
   // Vignette de la catégorie (depuis l'API vignette-categorie)
   categoryVignette: string | null;
 
+  // Aperçu produits de la catégorie (nom + image) — depuis l'API get_photos_categorie,
+  // sert de fond à l'étape transparence (image au format proxy /api/images).
+  categoryPreviewProducts: Array<{ nom: string; image: string }>;
+
   // Type de parcours (pour tracking GTM)
   flowType: FlowType;
 
@@ -329,6 +333,7 @@ export interface FlowState {
   setCategoryName: (name: string | null) => void;
   setCategoryStats: (stats: CategoryStats | null) => void;
   setCategoryVignette: (url: string | null) => void;
+  setCategoryPreviewProducts: (products: Array<{ nom: string; image: string }>) => void;
   setDdc: (ddc: string) => void;
   setUserAnswers: (answers: Record<number, string[]>) => void;
   setOtherTexts: (texts: Record<number, string>) => void;
@@ -371,6 +376,7 @@ const initialState = {
   categoryName: null,
   categoryStats: null,
   categoryVignette: null,
+  categoryPreviewProducts: [],
   flowType: null as FlowType,
   userAnswers: {},
   otherTexts: {},
@@ -423,6 +429,7 @@ export const useFlowStore = create<FlowState>()(
       setCategoryStats: (stats) => set({ categoryStats: stats }),
 
       setCategoryVignette: (url) => set({ categoryVignette: url }),
+      setCategoryPreviewProducts: (products) => set({ categoryPreviewProducts: products }),
 
       setUserAnswers: (answers) => set({ userAnswers: answers }),
 

@@ -150,6 +150,9 @@ submit-success            ▼
 | `budget` | `prix` | `trackBudgetView()` | — |
 | `budget-complete` | `prix` | `trackBudgetComplete(budgetRange)` | `budget_range: string` |
 | `budget-retour` | `prix` | `trackBudgetReturn(budgetRange)` | `budget_range: string \| null` |
+| `transparence` | `contact` | `trackTransparenceView()` | — |
+| `transparence-complete` | `contact` | `trackTransparenceComplete(isKnownBuyer)` | `is_known_buyer: boolean` |
+| `transparence-retour` | `contact` | `trackTransparenceReturn()` | — |
 | `selection-produits` | `selection` | `trackSelectionPageView(recommended, total)` | `recommended_count: number`, `total_count: number` |
 | `product-selection` | `selection` | `trackProductSelectionChange(productId, action, totalSelected)` | `product_id: string`, `action: 'ajouter'\|'retirer'`, `total_selected: number`, `is_first_add?: boolean`, `is_first_remove?: boolean` |
 | `vue-comparaison` | `selection` | `trackComparisonModalView()` **[non utilisé]** | `is_first_view: boolean` |
@@ -270,6 +273,9 @@ Source : `lib/analytics/index.ts` (qui ré-exporte `gtm.ts`).
 | `trackBudgetView()` | `budget-client.tsx` |
 | `trackBudgetComplete(budgetRange)` | `budget-client.tsx` |
 | `trackBudgetReturn(budgetRange)` | `budget-client.tsx` |
+| `trackTransparenceView()` | `TransparencePage.tsx` |
+| `trackTransparenceComplete(isKnownBuyer)` | `TransparencePage.tsx` |
+| `trackTransparenceReturn()` | `questionnaire-client.tsx` |
 | `trackSelectionPageView(recommended, total)` | `selection-client.tsx` |
 | `trackProductSelectionChange(productId, action, total)` | `SupplierSelectionModal.tsx` |
 | `trackModifyCriteriaModalView()` | `ModifyCriteriaForm.tsx` |

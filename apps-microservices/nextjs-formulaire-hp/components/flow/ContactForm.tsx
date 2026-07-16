@@ -31,6 +31,7 @@ const ContactForm = ({ selectedSuppliers, onBack, onContactComplete }: ContactFo
     categoryId,
     userAnswers,
     profileData,
+    contactData,
     setContactData,
     files: filesStore,
     setFilesStore,
@@ -48,22 +49,29 @@ const ContactForm = ({ selectedSuppliers, onBack, onContactComplete }: ContactFo
   const leadSubmission = useLeadSubmission({ suppliers: selectedSuppliers });
   const { trackDbEvent } = useDbTracking();
 
+  // Semé depuis contactData (renseigné à l'étape transparence ou lors d'une
+  // soumission précédente) pour pré-remplir email + identité.
   const [formData, setFormData] = useState<ContactFormData>({
-    email: "",
-    isKnown: false,
-    civility: "",
-    firstName: "",
-    lastName: "",
-    company: profileData?.company?.name || profileData?.companyName || "",
-    countryCode: "+33",
-    id_pays_tel: 1, // France par défaut
-    phone: "",
+    email: contactData?.email ?? "",
+    isKnown: contactData?.isKnown ?? false,
+    civility: contactData?.civility || "",
+    firstName: contactData?.firstName || "",
+    lastName: contactData?.lastName || "",
+    company: profileData?.company?.name || profileData?.companyName || contactData?.company || "",
+    countryCode: contactData?.countryCode || "+33",
+    id_pays_tel: contactData?.id_pays_tel ?? 1, // France par défaut
+    phone: contactData?.phone || "",
     message: "",
+    id_acheteur: contactData?.id_acheteur,
   });
 
   const [errors, setErrors] = useState<Partial<Record<keyof ContactFormData, string>>>({});
   const [files, setFiles] = useState<File[]>([]);
-  const [showAdditionalFields, setShowAdditionalFields] = useState<boolean>(false);
+  // Statut déjà connu depuis l'étape transparence : email inconnu → afficher
+  // les champs coordonnées dès le montage, sans attendre la re-vérification.
+  const [showAdditionalFields, setShowAdditionalFields] = useState<boolean>(
+    !!contactData?.email && !contactData?.isKnown
+  );
   const [showFallbackRedirect, setShowFallbackRedirect] = useState<boolean>(false);
   const fallbackMessageRef = useRef<HTMLParagraphElement>(null);
 
@@ -135,9 +143,20 @@ const ContactForm = ({ selectedSuppliers, onBack, onContactComplete }: ContactFo
   );
 
   const isExistingBuyer = buyerCheckResult?.isDuplicate || false;
-  const isKnownBuyer = buyerCheckResult?.isKnown || false;
+  // Email déjà vérifié à l'étape transparence : tant que la re-vérification
+  // n'a pas répondu, se fier à la connaissance persistée dans le store
+  // (contactData.isKnown) au lieu de considérer l'acheteur comme inconnu.
+  const isSeededEmail = !!contactData?.email && formData.email === contactData.email;
+  const isKnownBuyer = buyerCheckResult !== undefined
+    ? (buyerCheckResult?.isKnown || false)
+    : (isSeededEmail && (contactData?.isKnown ?? false));
 
   useEffect(() => {
+    // Ne rien faire tant que la vérification n'a pas rendu de résultat :
+    // au montage (cache react-query froid) buyerCheckResult est undefined et
+    // la branche else écraserait les champs semés depuis contactData.
+    if (isCheckingBuyer || buyerCheckResult === undefined) return;
+
     let updatedData: ContactFormData | null = null;
 
     // 1. On vérifie si l'acheteur est reconnu et si on a les données
@@ -175,20 +194,22 @@ const ContactForm = ({ selectedSuppliers, onBack, onContactComplete }: ContactFo
     }
     
     // On ne déclenche cet effet que lorsque 'isKnownBuyer' ou 'infoBuyer' change
-  }, [isKnownBuyer, buyerCheckResult?.infoBuyer]);  
+  }, [isKnownBuyer, isCheckingBuyer, buyerCheckResult, buyerCheckResult?.infoBuyer]);  
 
   // Show additional fields only if email is valid and not a known buyer
   // AND we are not currently checking (to avoid flickering)
   useEffect(() => {
     // Si on est en train de vérifier, on ne change rien (ou on cache)
     // Si la vérification est terminée, on décide d'afficher ou non
-    if (!isCheckingBuyer) {
+    // Exception : email semé depuis l'étape transparence → statut déjà connu,
+    // ne pas masquer les champs pendant la re-vérification.
+    if (!isCheckingBuyer || isSeededEmail) {
       setShowAdditionalFields(isEmailValid && !isKnownBuyer);
     } else {
       // Pendant le chargement, on cache les champs additionnels
       setShowAdditionalFields(false);
     }
-  }, [isEmailValid, isKnownBuyer, isCheckingBuyer]);
+  }, [isEmailValid, isKnownBuyer, isCheckingBuyer, isSeededEmail]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {

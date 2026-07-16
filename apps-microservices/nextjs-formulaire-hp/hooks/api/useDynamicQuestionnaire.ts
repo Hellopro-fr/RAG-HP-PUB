@@ -48,6 +48,36 @@ async function prefetchCategoryVignette(
   }
 }
 
+/**
+ * Prefetch les photos produit de la catégorie (nom + image) via /api/pht.
+ * Appelé dès que rubriqueId est disponible (en parallèle de Q1) pour que le
+ * fond de l'étape transparence soit prêt bien avant son affichage.
+ */
+async function prefetchCategoryPhotos(
+  categoryId: number,
+  setCategoryPreviewProducts: (products: Array<{ nom: string; image: string }>) => void
+): Promise<void> {
+  try {
+    const apiBase = getApiBasePath();
+    const response = await fetch(`${apiBase}/api/pht`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id_categorie: categoryId, nb: 3 }),
+    });
+
+    if (!response.ok) return;
+
+    const data = await response.json();
+    // API retourne: {"id_categorie":"2007702","produits":[{"nom":"...","image":"domaine/produit-2/..."}]}
+    if (Array.isArray(data.produits)) {
+      setCategoryPreviewProducts(data.produits);
+    }
+  } catch (error) {
+    console.error('Prefetch category photos error:', error);
+    // En cas d'erreur, on garde [] (le fond retombe sur son fallback)
+  }
+}
+
 async function prefetchCategoryStats(
   categoryId: number,
   setCategoryStats: (stats: { productsCount: number; suppliersCount: number } | null) => void
@@ -233,6 +263,7 @@ export function useDynamicQuestionnaire(rubriqueId: string) {
     setCategoryName,
     setCategoryStats,
     setCategoryVignette,
+    setCategoryPreviewProducts,
     setCaracteristiquesPrix,
     truncateAnswersAfterIndex,
   } = useFlowStore();
@@ -243,8 +274,9 @@ export function useDynamicQuestionnaire(rubriqueId: string) {
   useEffect(() => {
     if (rubriqueId) {
       prefetchCategoryVignette(Number(rubriqueId), setCategoryVignette);
+      prefetchCategoryPhotos(Number(rubriqueId), setCategoryPreviewProducts);
     }
-  }, [rubriqueId, setCategoryVignette]);
+  }, [rubriqueId, setCategoryVignette, setCategoryPreviewProducts]);
 
   // Restaurer l'index à partir des réponses déjà enregistrées dans le store.
   // Si l'utilisateur revient (ex: retour depuis /profile), on affiche la question suivante.

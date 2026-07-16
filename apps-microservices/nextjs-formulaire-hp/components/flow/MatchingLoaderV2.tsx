@@ -29,7 +29,13 @@ export default function MatchingLoaderV2({
 }: MatchingLoaderV2Props) {
   const useExternal = externalProgress !== undefined;
 
-  const [displayProgress, setDisplayProgress] = useState(0);
+  // Démarrer l'interpolation à la progression déjà atteinte : le matching
+  // tourne désormais derrière l'étape transparence, le loader peut donc être
+  // monté avec externalProgress déjà à 50-100 — repartir de 0 laisserait la
+  // barre à ~30% au moment de la navigation.
+  const [displayProgress, setDisplayProgress] = useState(() =>
+    externalProgress !== undefined ? externalProgress : 0
+  );
   const [internalTarget, setInternalTarget] = useState(0);
 
   const targetProgress = useExternal ? (externalProgress ?? 0) : internalTarget;
