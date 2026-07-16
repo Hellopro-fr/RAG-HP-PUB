@@ -140,7 +140,11 @@ class DeepseekOCRDocExtractor:
             httpx.HTTPError: En cas d'erreur de téléchargement
         """
         try:
-            async with httpx.AsyncClient() as client:
+            # follow_redirects=True: hellopro.fr intermittently 302s a PJ URL to
+            # itself (WAF/cookie gate); without following, the 302 raised and the
+            # message went permanently to the DLQ. The cookie jar is carried
+            # across the redirect within this client, resolving to the 200.
+            async with httpx.AsyncClient(follow_redirects=True) as client:
                 response = await client.get(
                     url,
                     timeout=self.download_timeout,

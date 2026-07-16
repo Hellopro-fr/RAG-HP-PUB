@@ -33,3 +33,43 @@ def test_validate_skips_non_pdf(monkeypatch):
     monkeypatch.setattr(ext, "_count_pdf_pages", lambda content: calls.append(1) or 1)
     ext._validate_pdf_page_count(BytesIO(b"x"), "f.jpg")
     assert calls == []  # image formats never hit the pypdf gate
+
+
+def test_download_file_follows_redirects(monkeypatch):
+    """_download_file must FOLLOW redirects. hellopro.fr intermittently 302s a
+    PJ URL to itself (WAF/cookie gate); with follow_redirects=False the 302 was
+    raised and the message permanently DLQ'd. Following it reaches the 200."""
+    import asyncio
+    import httpx
+
+    calls = {"n": 0}
+
+    def handler(request):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            # 302 to the SAME url + Set-Cookie (the observed WAF/cookie gate)
+            return httpx.Response(
+                302, headers={"Location": str(request.url), "Set-Cookie": "s=1"}
+            )
+        return httpx.Response(200, content=b"JPEGDATA", headers={"Content-Type": "image/jpeg"})
+
+    real_client = httpx.AsyncClient
+
+    def factory(*args, **kwargs):
+        # Force the real client's redirect engine over a mocked transport,
+        # preserving the follow_redirects kwarg the code under test passes.
+        kwargs["transport"] = httpx.MockTransport(handler)
+        return real_client(*args, **kwargs)
+
+    monkeypatch.setattr(
+        "common_utils.ocr.DeepseekOCRDocExtractor.httpx.AsyncClient", factory
+    )
+
+    ext = DeepseekOCRDocExtractor()
+    content, filename = asyncio.run(
+        ext._download_file("https://www.hellopro.fr/x/y.jpg")
+    )
+
+    assert content.read() == b"JPEGDATA"
+    assert filename == "y.jpg"
+    assert calls["n"] == 2  # proves the 302 was followed through to the 200
