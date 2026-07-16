@@ -1,10 +1,23 @@
-"""Tests for the fail-open pypdf page-count pre-gate."""
+"""Tests for the fail-open pypdf page-count pre-gate + download resilience."""
 
+import asyncio
 from io import BytesIO
 
+import httpx
 import pytest
 
-from common_utils.ocr.DeepseekOCRDocExtractor import DeepseekOCRDocExtractor
+from common_utils.ocr.DeepseekOCRDocExtractor import (
+    DeepseekOCRDocExtractor,
+    is_transient_download_error,
+    RETRYABLE_STATUS,
+)
+
+
+def _status_error(code):
+    req = httpx.Request("GET", "https://www.hellopro.fr/x/y.jpg")
+    return httpx.HTTPStatusError(
+        f"{code}", request=req, response=httpx.Response(code, request=req)
+    )
 
 
 def _raise_unparseable(content):
@@ -73,3 +86,51 @@ def test_download_file_follows_redirects(monkeypatch):
     assert content.read() == b"JPEGDATA"
     assert filename == "y.jpg"
     assert calls["n"] == 2  # proves the 302 was followed through to the 200
+
+
+@pytest.mark.parametrize(
+    "code,transient",
+    [(404, False), (403, False), (400, False), (401, False), (410, False),
+     (429, True), (500, True), (502, True), (503, True), (504, True), (408, True)],
+)
+def test_is_transient_download_error_by_status(code, transient):
+    assert is_transient_download_error(_status_error(code)) is transient
+    assert (code in RETRYABLE_STATUS) is transient
+
+
+def test_is_transient_download_error_network_and_redirects():
+    req = httpx.Request("GET", "https://x")
+    assert is_transient_download_error(httpx.ConnectTimeout("t", request=req)) is True
+    assert is_transient_download_error(httpx.ReadTimeout("t", request=req)) is True
+    assert is_transient_download_error(httpx.ConnectError("c", request=req)) is True
+    assert is_transient_download_error(httpx.TooManyRedirects("r", request=req)) is True
+    assert is_transient_download_error(TimeoutError()) is True
+    assert is_transient_download_error(ConnectionError()) is True
+
+
+def test_is_transient_download_error_permanent_defaults():
+    assert is_transient_download_error(ValueError("too many pages")) is False
+    assert is_transient_download_error(Exception("boom")) is False
+
+
+def test_download_file_raises_typed_status_error(monkeypatch):
+    """A 404 must propagate as httpx.HTTPStatusError (status preserved), NOT be
+    flattened to a base httpx.HTTPError — otherwise the caller cannot tell a
+    permanent 404 from a retryable 503."""
+    def handler(request):
+        return httpx.Response(404)
+
+    real_client = httpx.AsyncClient
+
+    def factory(*args, **kwargs):
+        kwargs["transport"] = httpx.MockTransport(handler)
+        return real_client(*args, **kwargs)
+
+    monkeypatch.setattr(
+        "common_utils.ocr.DeepseekOCRDocExtractor.httpx.AsyncClient", factory
+    )
+
+    ext = DeepseekOCRDocExtractor()
+    with pytest.raises(httpx.HTTPStatusError) as excinfo:
+        asyncio.run(ext._download_file("https://www.hellopro.fr/x/y.jpg"))
+    assert excinfo.value.response.status_code == 404

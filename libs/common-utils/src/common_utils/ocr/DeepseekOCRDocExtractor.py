@@ -15,6 +15,27 @@ from pypdf import PdfReader
 BASE_URL_OCR = os.environ.get("URL_OCR", "https://api.hellopro.eu/deepseek_ocr-service")
 MAX_PDF_PAGES = int(os.environ.get("MAX_PDF_PAGES", "19"))
 
+# HTTP statuses worth retrying (transient server/infra states). Everything else
+# (404, 403, 400, 401, 410, ...) is a permanent failure that will not self-heal.
+RETRYABLE_STATUS = frozenset({408, 425, 429, 500, 502, 503, 504})
+
+
+def is_transient_download_error(exc: BaseException) -> bool:
+    """True if a download/OCR error should be RETRIED rather than sent to the DLQ.
+
+    Transient: network/timeout errors (``httpx.TransportError`` covers connect,
+    read, write, pool and protocol errors), redirect loops
+    (``httpx.TooManyRedirects``), and the retryable HTTP statuses above.
+    Permanent: definitive 4xx (404/403/...) and anything unrecognized.
+    """
+    if isinstance(
+        exc, (httpx.TransportError, httpx.TooManyRedirects, ConnectionError, TimeoutError)
+    ):
+        return True
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code in RETRYABLE_STATUS
+    return False
+
 
 class DeepseekOCRDocExtractor:
     """Client asynchrone pour l'API OCR externe utilisant Deepseek"""
@@ -175,9 +196,11 @@ class DeepseekOCRDocExtractor:
                 return file_content, filename
                 
         except httpx.HTTPError as e:
-            raise httpx.HTTPError(
-                f"Erreur lors du téléchargement de {url}: {str(e)}"
-            )
+            # Propagate the ORIGINAL typed error (HTTPStatusError keeps its status
+            # code) so the caller can distinguish permanent (404) from transient
+            # (5xx / redirect loop) — see is_transient_download_error.
+            logger.warning("Echec telechargement %s: %r", url, e)
+            raise
     
     async def extract_from_urls(
         self, 
@@ -309,18 +332,16 @@ class DeepseekOCRDocExtractor:
                 
                 # Vérification de la réponse
                 response.raise_for_status()
-                
+
                 return response.json()
-            
-        except httpx.TimeoutException:
-            raise httpx.HTTPError(
-                f"Timeout après {self.timeout}s lors de l'appel à l'API OCR"
-            )
+
         except httpx.HTTPError as e:
-            raise httpx.HTTPError(
-                f"Erreur lors du traitement: {str(e)}"
-            )
-    
+            # Propagate the original typed error (TimeoutException / HTTPStatusError)
+            # so is_transient_download_error can classify OCR timeouts and 5xx as
+            # transient (retry) instead of collapsing them to a permanent DLQ.
+            logger.warning("Echec appel OCR %s: %r", self.endpoint, e)
+            raise
+
     async def extract_from_url(
         self, 
         url: str, 
