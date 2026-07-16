@@ -5621,7 +5621,7 @@
       "label": "DeepseekOCRDocExtractor",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
-      "source_location": "L19",
+      "source_location": "L40",
       "community": 2,
       "norm_label": "deepseekocrdocextractor",
       "id": "deepseekocrdocextractor_deepseekocrdocextractor"
@@ -5630,7 +5630,7 @@
       "label": ".__init__()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
-      "source_location": "L22",
+      "source_location": "L43",
       "community": 2,
       "norm_label": ".__init__()",
       "id": "deepseekocrdocextractor_deepseekocrdocextractor_init"
@@ -5639,7 +5639,7 @@
       "label": "._is_supported_format()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
-      "source_location": "L40",
+      "source_location": "L61",
       "community": 2,
       "norm_label": "._is_supported_format()",
       "id": "deepseekocrdocextractor_deepseekocrdocextractor_is_supported_format"
@@ -5648,7 +5648,7 @@
       "label": "._is_pdf()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
-      "source_location": "L54",
+      "source_location": "L75",
       "community": 2,
       "norm_label": "._is_pdf()",
       "id": "deepseekocrdocextractor_deepseekocrdocextractor_is_pdf"
@@ -5657,7 +5657,7 @@
       "label": "._count_pdf_pages()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
-      "source_location": "L66",
+      "source_location": "L87",
       "community": 2,
       "norm_label": "._count_pdf_pages()",
       "id": "deepseekocrdocextractor_deepseekocrdocextractor_count_pdf_pages"
@@ -5666,7 +5666,7 @@
       "label": "._validate_pdf_page_count()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
-      "source_location": "L88",
+      "source_location": "L109",
       "community": 2,
       "norm_label": "._validate_pdf_page_count()",
       "id": "deepseekocrdocextractor_deepseekocrdocextractor_validate_pdf_page_count"
@@ -5675,7 +5675,7 @@
       "label": "._download_file()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
-      "source_location": "L128",
+      "source_location": "L149",
       "community": 2,
       "norm_label": "._download_file()",
       "id": "deepseekocrdocextractor_deepseekocrdocextractor_download_file"
@@ -5684,7 +5684,7 @@
       "label": ".extract_from_urls()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
-      "source_location": "L178",
+      "source_location": "L205",
       "community": 2,
       "norm_label": ".extract_from_urls()",
       "id": "deepseekocrdocextractor_deepseekocrdocextractor_extract_from_urls"
@@ -5693,7 +5693,7 @@
       "label": ".extract_from_files()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
-      "source_location": "L258",
+      "source_location": "L285",
       "community": 2,
       "norm_label": ".extract_from_files()",
       "id": "deepseekocrdocextractor_deepseekocrdocextractor_extract_from_files"
@@ -5702,7 +5702,7 @@
       "label": ".extract_from_url()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
-      "source_location": "L320",
+      "source_location": "L345",
       "community": 2,
       "norm_label": ".extract_from_url()",
       "id": "deepseekocrdocextractor_deepseekocrdocextractor_extract_from_url"
@@ -5711,7 +5711,7 @@
       "label": ".get_clean_result()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
-      "source_location": "L338",
+      "source_location": "L363",
       "community": 2,
       "norm_label": ".get_clean_result()",
       "id": "deepseekocrdocextractor_deepseekocrdocextractor_get_clean_result"
@@ -5720,7 +5720,7 @@
       "label": "._convert_to_pdf()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
-      "source_location": "L373",
+      "source_location": "L398",
       "community": 2,
       "norm_label": "._convert_to_pdf()",
       "id": "deepseekocrdocextractor_deepseekocrdocextractor_convert_to_pdf"
@@ -5744,12 +5744,12 @@
       "id": "deepseekocrdocextractor_rationale_23"
     },
     {
-      "label": "V\u00e9rifie si le fichier est un format support\u00e9 (PDF ou image)                  A",
+      "label": "Client asynchrone pour l'API OCR externe utilisant Deepseek",
       "file_type": "rationale",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
       "source_location": "L41",
       "community": 2,
-      "norm_label": "verifie si le fichier est un format supporte (pdf ou image)                  a",
+      "norm_label": "client asynchrone pour l'api ocr externe utilisant deepseek",
       "id": "deepseekocrdocextractor_rationale_41"
     },
     {
@@ -78553,7 +78553,7 @@
     {
       "label": "test_DeepseekOCRDocExtractor.py",
       "file_type": "code",
-      "source_file": "libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
       "source_location": "L1",
       "community": 2,
       "norm_label": "test_deepseekocrdocextractor.py",
@@ -78562,8 +78562,8 @@
     {
       "label": "_raise_unparseable()",
       "file_type": "code",
-      "source_file": "libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
-      "source_location": "L10",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
+      "source_location": "L23",
       "community": 2,
       "norm_label": "_raise_unparseable()",
       "id": "test_deepseekocrdocextractor_raise_unparseable"
@@ -78571,8 +78571,8 @@
     {
       "label": "test_validate_failopen_when_pypdf_cannot_parse()",
       "file_type": "code",
-      "source_file": "libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
-      "source_location": "L14",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
+      "source_location": "L27",
       "community": 2,
       "norm_label": "test_validate_failopen_when_pypdf_cannot_parse()",
       "id": "test_deepseekocrdocextractor_test_validate_failopen_when_pypdf_cannot_parse"
@@ -78580,8 +78580,8 @@
     {
       "label": "test_validate_still_rejects_too_many_pages()",
       "file_type": "code",
-      "source_file": "libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
-      "source_location": "L23",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
+      "source_location": "L36",
       "community": 2,
       "norm_label": "test_validate_still_rejects_too_many_pages()",
       "id": "test_deepseekocrdocextractor_test_validate_still_rejects_too_many_pages"
@@ -78589,19 +78589,19 @@
     {
       "label": "test_validate_skips_non_pdf()",
       "file_type": "code",
-      "source_file": "libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
-      "source_location": "L30",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
+      "source_location": "L43",
       "community": 2,
       "norm_label": "test_validate_skips_non_pdf()",
       "id": "test_deepseekocrdocextractor_test_validate_skips_non_pdf"
     },
     {
-      "label": "Tests for the fail-open pypdf page-count pre-gate.",
+      "label": "Tests for the fail-open pypdf page-count pre-gate + download resilience.",
       "file_type": "rationale",
-      "source_file": "libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
       "source_location": "L1",
       "community": 2,
-      "norm_label": "tests for the fail-open pypdf page-count pre-gate.",
+      "norm_label": "tests for the fail-open pypdf page-count pre-gate + download resilience.",
       "id": "test_deepseekocrdocextractor_rationale_1"
     },
     {
@@ -79533,153 +79533,432 @@
       "file_type": "rationale",
       "source_file": "libs\\common-utils\\src\\common_utils\\embedding\\Embedding.py",
       "source_location": "L105",
-      "id": "embedding_rationale_105",
       "community": 12,
-      "norm_label": "ajoute une ligne avec le temps d\u2019execution dans temps_embedding.log"
+      "norm_label": "ajoute une ligne avec le temps d\u2019execution dans temps_embedding.log",
+      "id": "embedding_rationale_105"
     },
     {
       "label": "Nettoie une cha\u00eene de texte en normalisant les espaces et en corrigeant",
       "file_type": "rationale",
       "source_file": "libs\\common-utils\\src\\common_utils\\embedding\\Embedding.py",
       "source_location": "L150",
-      "id": "embedding_rationale_150",
       "community": 239,
-      "norm_label": "nettoie une chaine de texte en normalisant les espaces et en corrigeant"
+      "norm_label": "nettoie une chaine de texte en normalisant les espaces et en corrigeant",
+      "id": "embedding_rationale_150"
     },
     {
       "label": "D\u00e9l\u00e8gue le chunking au microservice d'embedding.",
       "file_type": "rationale",
       "source_file": "libs\\common-utils\\src\\common_utils\\embedding\\Embedding.py",
       "source_location": "L180",
-      "id": "embedding_rationale_180",
       "community": 12,
-      "norm_label": "delegue le chunking au microservice d'embedding."
+      "norm_label": "delegue le chunking au microservice d'embedding.",
+      "id": "embedding_rationale_180"
     },
     {
       "label": "limits.py",
       "file_type": "code",
       "source_file": "libs\\common-utils\\src\\common_utils\\embedding\\limits.py",
       "source_location": "L1",
-      "id": "libs_common_utils_src_common_utils_embedding_limits_py",
       "community": 12,
-      "norm_label": "limits.py"
+      "norm_label": "limits.py",
+      "id": "libs_common_utils_src_common_utils_embedding_limits_py"
     },
     {
       "label": "enforce_chunk_ceiling()",
       "file_type": "code",
       "source_file": "libs\\common-utils\\src\\common_utils\\embedding\\limits.py",
       "source_location": "L27",
-      "id": "limits_enforce_chunk_ceiling",
       "community": 12,
-      "norm_label": "enforce_chunk_ceiling()"
+      "norm_label": "enforce_chunk_ceiling()",
+      "id": "limits_enforce_chunk_ceiling"
     },
     {
       "label": "Payload-size guard for the embedding pipeline.  A pathological item (multi-MB te",
       "file_type": "rationale",
       "source_file": "libs\\common-utils\\src\\common_utils\\embedding\\limits.py",
       "source_location": "L1",
-      "id": "limits_rationale_1",
       "community": 12,
-      "norm_label": "payload-size guard for the embedding pipeline.  a pathological item (multi-mb te"
+      "norm_label": "payload-size guard for the embedding pipeline.  a pathological item (multi-mb te",
+      "id": "limits_rationale_1"
     },
     {
       "label": "Raise ValueError (permanent -> DLQ) when an item produces too many chunks.",
       "file_type": "rationale",
       "source_file": "libs\\common-utils\\src\\common_utils\\embedding\\limits.py",
       "source_location": "L28",
-      "id": "limits_rationale_28",
       "community": 12,
-      "norm_label": "raise valueerror (permanent -> dlq) when an item produces too many chunks."
+      "norm_label": "raise valueerror (permanent -> dlq) when an item produces too many chunks.",
+      "id": "limits_rationale_28"
     },
     {
       "label": "test_embedding_limits.py",
       "file_type": "code",
       "source_file": "libs\\common-utils\\tests\\test_embedding_limits.py",
       "source_location": "L1",
-      "id": "libs_common_utils_tests_test_embedding_limits_py",
       "community": 12,
-      "norm_label": "test_embedding_limits.py"
+      "norm_label": "test_embedding_limits.py",
+      "id": "libs_common_utils_tests_test_embedding_limits_py"
     },
     {
       "label": "_load()",
       "file_type": "code",
       "source_file": "libs\\common-utils\\tests\\test_embedding_limits.py",
       "source_location": "L21",
-      "id": "test_embedding_limits_load",
       "community": 12,
-      "norm_label": "_load()"
+      "norm_label": "_load()",
+      "id": "test_embedding_limits_load"
     },
     {
       "label": "_raises_value_error()",
       "file_type": "code",
       "source_file": "libs\\common-utils\\tests\\test_embedding_limits.py",
       "source_location": "L28",
-      "id": "test_embedding_limits_raises_value_error",
       "community": 12,
-      "norm_label": "_raises_value_error()"
+      "norm_label": "_raises_value_error()",
+      "id": "test_embedding_limits_raises_value_error"
     },
     {
       "label": "test_over_ceiling_raises_payload_too_large()",
       "file_type": "code",
       "source_file": "libs\\common-utils\\tests\\test_embedding_limits.py",
       "source_location": "L36",
-      "id": "test_embedding_limits_test_over_ceiling_raises_payload_too_large",
       "community": 12,
-      "norm_label": "test_over_ceiling_raises_payload_too_large()"
+      "norm_label": "test_over_ceiling_raises_payload_too_large()",
+      "id": "test_embedding_limits_test_over_ceiling_raises_payload_too_large"
     },
     {
       "label": "test_at_ceiling_does_not_raise()",
       "file_type": "code",
       "source_file": "libs\\common-utils\\tests\\test_embedding_limits.py",
       "source_location": "L42",
-      "id": "test_embedding_limits_test_at_ceiling_does_not_raise",
       "community": 12,
-      "norm_label": "test_at_ceiling_does_not_raise()"
+      "norm_label": "test_at_ceiling_does_not_raise()",
+      "id": "test_embedding_limits_test_at_ceiling_does_not_raise"
     },
     {
       "label": "test_under_ceiling_does_not_raise()",
       "file_type": "code",
       "source_file": "libs\\common-utils\\tests\\test_embedding_limits.py",
       "source_location": "L47",
-      "id": "test_embedding_limits_test_under_ceiling_does_not_raise",
       "community": 12,
-      "norm_label": "test_under_ceiling_does_not_raise()"
+      "norm_label": "test_under_ceiling_does_not_raise()",
+      "id": "test_embedding_limits_test_under_ceiling_does_not_raise"
     },
     {
       "label": "test_default_ceiling_is_5000()",
       "file_type": "code",
       "source_file": "libs\\common-utils\\tests\\test_embedding_limits.py",
       "source_location": "L52",
-      "id": "test_embedding_limits_test_default_ceiling_is_5000",
       "community": 12,
-      "norm_label": "test_default_ceiling_is_5000()"
+      "norm_label": "test_default_ceiling_is_5000()",
+      "id": "test_embedding_limits_test_default_ceiling_is_5000"
     },
     {
       "label": "test_message_includes_count_and_source()",
       "file_type": "code",
       "source_file": "libs\\common-utils\\tests\\test_embedding_limits.py",
       "source_location": "L57",
-      "id": "test_embedding_limits_test_message_includes_count_and_source",
       "community": 12,
-      "norm_label": "test_message_includes_count_and_source()"
+      "norm_label": "test_message_includes_count_and_source()",
+      "id": "test_embedding_limits_test_message_includes_count_and_source"
     },
     {
       "label": "_run()",
       "file_type": "code",
       "source_file": "libs\\common-utils\\tests\\test_embedding_limits.py",
       "source_location": "L64",
-      "id": "test_embedding_limits_run",
       "community": 12,
-      "norm_label": "_run()"
+      "norm_label": "_run()",
+      "id": "test_embedding_limits_run"
     },
     {
       "label": "Chunk-count ceiling guard for embed_data_clean.  A pathological item (multi-MB t",
       "file_type": "rationale",
       "source_file": "libs\\common-utils\\tests\\test_embedding_limits.py",
       "source_location": "L1",
-      "id": "test_embedding_limits_rationale_1",
       "community": 12,
-      "norm_label": "chunk-count ceiling guard for embed_data_clean.  a pathological item (multi-mb t"
+      "norm_label": "chunk-count ceiling guard for embed_data_clean.  a pathological item (multi-mb t",
+      "id": "test_embedding_limits_rationale_1"
+    },
+    {
+      "label": "graceful.py",
+      "file_type": "code",
+      "source_file": "libs\\common-utils\\src\\common_utils\\concurrency\\graceful.py",
+      "source_location": "L1",
+      "id": "libs_common_utils_src_common_utils_concurrency_graceful_py",
+      "community": 241,
+      "norm_label": "graceful.py"
+    },
+    {
+      "label": "get_message_or_stop()",
+      "file_type": "code",
+      "source_file": "libs\\common-utils\\src\\common_utils\\concurrency\\graceful.py",
+      "source_location": "L7",
+      "id": "graceful_get_message_or_stop",
+      "community": 241,
+      "norm_label": "get_message_or_stop()"
+    },
+    {
+      "label": "Graceful-drain helper for asyncio queue consumers.",
+      "file_type": "rationale",
+      "source_file": "libs\\common-utils\\src\\common_utils\\concurrency\\graceful.py",
+      "source_location": "L1",
+      "id": "graceful_rationale_1",
+      "community": 241,
+      "norm_label": "graceful-drain helper for asyncio queue consumers."
+    },
+    {
+      "label": "Await the next item from ``buffer``, or return ``None`` as soon as     ``stop_ev",
+      "file_type": "rationale",
+      "source_file": "libs\\common-utils\\src\\common_utils\\concurrency\\graceful.py",
+      "source_location": "L10",
+      "id": "graceful_rationale_10",
+      "community": 241,
+      "norm_label": "await the next item from ``buffer``, or return ``none`` as soon as     ``stop_ev"
+    },
+    {
+      "label": "is_transient_download_error()",
+      "file_type": "code",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
+      "source_location": "L23",
+      "id": "deepseekocrdocextractor_is_transient_download_error",
+      "community": 2,
+      "norm_label": "is_transient_download_error()"
+    },
+    {
+      "label": "True if a download/OCR error should be RETRIED rather than sent to the DLQ.",
+      "file_type": "rationale",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
+      "source_location": "L24",
+      "id": "deepseekocrdocextractor_rationale_24",
+      "community": 2,
+      "norm_label": "true if a download/ocr error should be retried rather than sent to the dlq."
+    },
+    {
+      "label": "Initialise le client OCR                  Args:             base_url: URL de",
+      "file_type": "rationale",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
+      "source_location": "L44",
+      "id": "deepseekocrdocextractor_rationale_44",
+      "community": 2,
+      "norm_label": "initialise le client ocr                  args:             base_url: url de"
+    },
+    {
+      "label": "V\u00e9rifie si le fichier est un format support\u00e9 (PDF ou image)                  A",
+      "file_type": "rationale",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
+      "source_location": "L62",
+      "id": "deepseekocrdocextractor_rationale_62",
+      "community": 2,
+      "norm_label": "verifie si le fichier est un format supporte (pdf ou image)                  a"
+    },
+    {
+      "label": "V\u00e9rifie si le fichier est un PDF                  Args:             filename:",
+      "file_type": "rationale",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
+      "source_location": "L76",
+      "id": "deepseekocrdocextractor_rationale_76",
+      "community": 2,
+      "norm_label": "verifie si le fichier est un pdf                  args:             filename:"
+    },
+    {
+      "label": "Compte le nombre de pages d'un PDF                  Args:             content",
+      "file_type": "rationale",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
+      "source_location": "L88",
+      "id": "deepseekocrdocextractor_rationale_88",
+      "community": 2,
+      "norm_label": "compte le nombre de pages d'un pdf                  args:             content"
+    },
+    {
+      "label": "Valide que le nombre de pages du PDF ne d\u00e9passe pas la limite autoris\u00e9e",
+      "file_type": "rationale",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
+      "source_location": "L110",
+      "id": "deepseekocrdocextractor_rationale_110",
+      "community": 2,
+      "norm_label": "valide que le nombre de pages du pdf ne depasse pas la limite autorisee"
+    },
+    {
+      "label": "T\u00e9l\u00e9charge un fichier depuis une URL directement en m\u00e9moire (asynchrone)",
+      "file_type": "rationale",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
+      "source_location": "L150",
+      "id": "deepseekocrdocextractor_rationale_150",
+      "community": 2,
+      "norm_label": "telecharge un fichier depuis une url directement en memoire (asynchrone)"
+    },
+    {
+      "label": "Traite des fichiers \u00e0 partir d'URLs (asynchrone)         Les fichiers sont t\u00e9l\u00e9",
+      "file_type": "rationale",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
+      "source_location": "L210",
+      "id": "deepseekocrdocextractor_rationale_210",
+      "community": 2,
+      "norm_label": "traite des fichiers a partir d'urls (asynchrone)         les fichiers sont tele"
+    },
+    {
+      "label": "Traite des fichiers d\u00e9j\u00e0 t\u00e9l\u00e9charg\u00e9s en m\u00e9moire (asynchrone)         \u00c9vite le r",
+      "file_type": "rationale",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
+      "source_location": "L290",
+      "id": "deepseekocrdocextractor_rationale_290",
+      "community": 2,
+      "norm_label": "traite des fichiers deja telecharges en memoire (asynchrone)         evite le r"
+    },
+    {
+      "label": "Traite un seul fichier \u00e0 partir d'une URL (asynchrone)                  Args:",
+      "file_type": "rationale",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
+      "source_location": "L350",
+      "id": "deepseekocrdocextractor_rationale_350",
+      "community": 2,
+      "norm_label": "traite un seul fichier a partir d'une url (asynchrone)                  args:"
+    },
+    {
+      "label": "Convertit un fichier non-support\u00e9 en PDF en utilisant LibreOffice (asynchrone)",
+      "file_type": "rationale",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
+      "source_location": "L399",
+      "id": "deepseekocrdocextractor_rationale_399",
+      "community": 2,
+      "norm_label": "convertit un fichier non-supporte en pdf en utilisant libreoffice (asynchrone)"
+    },
+    {
+      "label": "_status_error()",
+      "file_type": "code",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
+      "source_location": "L16",
+      "id": "test_deepseekocrdocextractor_status_error",
+      "community": 2,
+      "norm_label": "_status_error()"
+    },
+    {
+      "label": "test_download_file_follows_redirects()",
+      "file_type": "code",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
+      "source_location": "L51",
+      "id": "test_deepseekocrdocextractor_test_download_file_follows_redirects",
+      "community": 2,
+      "norm_label": "test_download_file_follows_redirects()"
+    },
+    {
+      "label": "test_is_transient_download_error_by_status()",
+      "file_type": "code",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
+      "source_location": "L96",
+      "id": "test_deepseekocrdocextractor_test_is_transient_download_error_by_status",
+      "community": 2,
+      "norm_label": "test_is_transient_download_error_by_status()"
+    },
+    {
+      "label": "test_is_transient_download_error_network_and_redirects()",
+      "file_type": "code",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
+      "source_location": "L101",
+      "id": "test_deepseekocrdocextractor_test_is_transient_download_error_network_and_redirects",
+      "community": 2,
+      "norm_label": "test_is_transient_download_error_network_and_redirects()"
+    },
+    {
+      "label": "test_is_transient_download_error_permanent_defaults()",
+      "file_type": "code",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
+      "source_location": "L111",
+      "id": "test_deepseekocrdocextractor_test_is_transient_download_error_permanent_defaults",
+      "community": 2,
+      "norm_label": "test_is_transient_download_error_permanent_defaults()"
+    },
+    {
+      "label": "test_download_file_raises_typed_status_error()",
+      "file_type": "code",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
+      "source_location": "L116",
+      "id": "test_deepseekocrdocextractor_test_download_file_raises_typed_status_error",
+      "community": 2,
+      "norm_label": "test_download_file_raises_typed_status_error()"
+    },
+    {
+      "label": "A PDF pypdf refuses (malformed trailer) must NOT be rejected here \u2014     it is d",
+      "file_type": "rationale",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
+      "source_location": "L28",
+      "id": "test_deepseekocrdocextractor_rationale_28",
+      "community": 2,
+      "norm_label": "a pdf pypdf refuses (malformed trailer) must not be rejected here \u2014     it is d"
+    },
+    {
+      "label": "_download_file must FOLLOW redirects. hellopro.fr intermittently 302s a     PJ",
+      "file_type": "rationale",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
+      "source_location": "L52",
+      "id": "test_deepseekocrdocextractor_rationale_52",
+      "community": 2,
+      "norm_label": "_download_file must follow redirects. hellopro.fr intermittently 302s a     pj"
+    },
+    {
+      "label": "A 404 must propagate as httpx.HTTPStatusError (status preserved), NOT be     fl",
+      "file_type": "rationale",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
+      "source_location": "L117",
+      "id": "test_deepseekocrdocextractor_rationale_117",
+      "community": 2,
+      "norm_label": "a 404 must propagate as httpx.httpstatuserror (status preserved), not be     fl"
+    },
+    {
+      "label": "test_graceful.py",
+      "file_type": "code",
+      "source_file": "libs\\common-utils\\tests\\test_graceful.py",
+      "source_location": "L1",
+      "id": "libs_common_utils_tests_test_graceful_py",
+      "community": 240,
+      "norm_label": "test_graceful.py"
+    },
+    {
+      "label": "test_returns_item_when_available()",
+      "file_type": "code",
+      "source_file": "libs\\common-utils\\tests\\test_graceful.py",
+      "source_location": "L9",
+      "id": "test_graceful_test_returns_item_when_available",
+      "community": 240,
+      "norm_label": "test_returns_item_when_available()"
+    },
+    {
+      "label": "test_returns_none_when_already_stopped_without_consuming()",
+      "file_type": "code",
+      "source_file": "libs\\common-utils\\tests\\test_graceful.py",
+      "source_location": "L18",
+      "id": "test_graceful_test_returns_none_when_already_stopped_without_consuming",
+      "community": 240,
+      "norm_label": "test_returns_none_when_already_stopped_without_consuming()"
+    },
+    {
+      "label": "test_returns_none_when_stopped_while_waiting()",
+      "file_type": "code",
+      "source_file": "libs\\common-utils\\tests\\test_graceful.py",
+      "source_location": "L31",
+      "id": "test_graceful_test_returns_none_when_stopped_while_waiting",
+      "community": 240,
+      "norm_label": "test_returns_none_when_stopped_while_waiting()"
+    },
+    {
+      "label": "test_returns_item_if_it_arrives_while_waiting()",
+      "file_type": "code",
+      "source_file": "libs\\common-utils\\tests\\test_graceful.py",
+      "source_location": "L42",
+      "id": "test_graceful_test_returns_item_if_it_arrives_while_waiting",
+      "community": 240,
+      "norm_label": "test_returns_item_if_it_arrives_while_waiting()"
+    },
+    {
+      "label": "Graceful-drain helper: interrupt an idle queue wait on shutdown without dropping",
+      "file_type": "rationale",
+      "source_file": "libs\\common-utils\\tests\\test_graceful.py",
+      "source_location": "L1",
+      "id": "test_graceful_rationale_1",
+      "community": 240,
+      "norm_label": "graceful-drain helper: interrupt an idle queue wait on shutdown without dropping"
     }
   ],
   "links": [
@@ -94948,9 +95227,9 @@
       "weight": 1.0,
       "_src": "embedding_rationale_105",
       "_tgt": "embedding_embedding_append_time_log",
+      "confidence_score": 1.0,
       "source": "embedding_embedding_append_time_log",
-      "target": "embedding_rationale_105",
-      "confidence_score": 1.0
+      "target": "embedding_rationale_105"
     },
     {
       "relation": "calls",
@@ -95032,9 +95311,9 @@
       "weight": 1.0,
       "_src": "embedding_rationale_180",
       "_tgt": "embedding_embedding_create_chunks",
+      "confidence_score": 1.0,
       "source": "embedding_embedding_create_chunks",
-      "target": "embedding_rationale_180",
-      "confidence_score": 1.0
+      "target": "embedding_rationale_180"
     },
     {
       "relation": "calls",
@@ -97560,7 +97839,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
-      "source_location": "L19",
+      "source_location": "L40",
       "weight": 1.0,
       "confidence_score": 1.0,
       "_src": "libs_common_utils_src_common_utils_ocr_deepseekocrdocextractor_py",
@@ -97569,10 +97848,22 @@
       "target": "deepseekocrdocextractor_deepseekocrdocextractor"
     },
     {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
+      "source_location": "L23",
+      "weight": 1.0,
+      "_src": "libs_common_utils_src_common_utils_ocr_deepseekocrdocextractor_py",
+      "_tgt": "deepseekocrdocextractor_is_transient_download_error",
+      "source": "libs_common_utils_src_common_utils_ocr_deepseekocrdocextractor_py",
+      "target": "deepseekocrdocextractor_is_transient_download_error",
+      "confidence_score": 1.0
+    },
+    {
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
-      "source_location": "L373",
+      "source_location": "L398",
       "weight": 1.0,
       "confidence_score": 1.0,
       "_src": "deepseekocrdocextractor_deepseekocrdocextractor",
@@ -97584,7 +97875,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
-      "source_location": "L66",
+      "source_location": "L87",
       "weight": 1.0,
       "confidence_score": 1.0,
       "_src": "deepseekocrdocextractor_deepseekocrdocextractor",
@@ -97596,7 +97887,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
-      "source_location": "L128",
+      "source_location": "L149",
       "weight": 1.0,
       "confidence_score": 1.0,
       "_src": "deepseekocrdocextractor_deepseekocrdocextractor",
@@ -97608,7 +97899,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
-      "source_location": "L258",
+      "source_location": "L285",
       "weight": 1.0,
       "confidence_score": 1.0,
       "_src": "deepseekocrdocextractor_deepseekocrdocextractor",
@@ -97620,7 +97911,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
-      "source_location": "L320",
+      "source_location": "L345",
       "weight": 1.0,
       "confidence_score": 1.0,
       "_src": "deepseekocrdocextractor_deepseekocrdocextractor",
@@ -97632,7 +97923,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
-      "source_location": "L178",
+      "source_location": "L205",
       "weight": 1.0,
       "confidence_score": 1.0,
       "_src": "deepseekocrdocextractor_deepseekocrdocextractor",
@@ -97644,7 +97935,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
-      "source_location": "L338",
+      "source_location": "L363",
       "weight": 1.0,
       "confidence_score": 1.0,
       "_src": "deepseekocrdocextractor_deepseekocrdocextractor",
@@ -97656,7 +97947,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
-      "source_location": "L22",
+      "source_location": "L43",
       "weight": 1.0,
       "confidence_score": 1.0,
       "_src": "deepseekocrdocextractor_deepseekocrdocextractor",
@@ -97668,7 +97959,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
-      "source_location": "L54",
+      "source_location": "L75",
       "weight": 1.0,
       "confidence_score": 1.0,
       "_src": "deepseekocrdocextractor_deepseekocrdocextractor",
@@ -97680,7 +97971,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
-      "source_location": "L40",
+      "source_location": "L61",
       "weight": 1.0,
       "confidence_score": 1.0,
       "_src": "deepseekocrdocextractor_deepseekocrdocextractor",
@@ -97692,7 +97983,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
-      "source_location": "L88",
+      "source_location": "L109",
       "weight": 1.0,
       "confidence_score": 1.0,
       "_src": "deepseekocrdocextractor_deepseekocrdocextractor",
@@ -97740,8 +98031,8 @@
       "relation": "calls",
       "confidence": "INFERRED",
       "confidence_score": 0.8,
-      "source_file": "libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
-      "source_location": "L17",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
+      "source_location": "L30",
       "weight": 1.0,
       "_src": "test_deepseekocrdocextractor_test_validate_failopen_when_pypdf_cannot_parse",
       "_tgt": "deepseekocrdocextractor_deepseekocrdocextractor",
@@ -97752,8 +98043,8 @@
       "relation": "calls",
       "confidence": "INFERRED",
       "confidence_score": 0.8,
-      "source_file": "libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
-      "source_location": "L24",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
+      "source_location": "L37",
       "weight": 1.0,
       "_src": "test_deepseekocrdocextractor_test_validate_still_rejects_too_many_pages",
       "_tgt": "deepseekocrdocextractor_deepseekocrdocextractor",
@@ -97764,8 +98055,8 @@
       "relation": "calls",
       "confidence": "INFERRED",
       "confidence_score": 0.8,
-      "source_file": "libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
-      "source_location": "L31",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
+      "source_location": "L44",
       "weight": 1.0,
       "_src": "test_deepseekocrdocextractor_test_validate_skips_non_pdf",
       "_tgt": "deepseekocrdocextractor_deepseekocrdocextractor",
@@ -97788,6 +98079,42 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
+      "source_location": "L41",
+      "weight": 1.0,
+      "_src": "deepseekocrdocextractor_rationale_41",
+      "_tgt": "deepseekocrdocextractor_deepseekocrdocextractor",
+      "source": "deepseekocrdocextractor_deepseekocrdocextractor",
+      "target": "deepseekocrdocextractor_rationale_41",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
+      "source_location": "L81",
+      "weight": 1.0,
+      "_src": "test_deepseekocrdocextractor_test_download_file_follows_redirects",
+      "_tgt": "deepseekocrdocextractor_deepseekocrdocextractor",
+      "source": "deepseekocrdocextractor_deepseekocrdocextractor",
+      "target": "test_deepseekocrdocextractor_test_download_file_follows_redirects"
+    },
+    {
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
+      "source_location": "L133",
+      "weight": 1.0,
+      "_src": "test_deepseekocrdocextractor_test_download_file_raises_typed_status_error",
+      "_tgt": "deepseekocrdocextractor_deepseekocrdocextractor",
+      "source": "deepseekocrdocextractor_deepseekocrdocextractor",
+      "target": "test_deepseekocrdocextractor_test_download_file_raises_typed_status_error"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
       "source_location": "L23",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -97797,10 +98124,22 @@
       "target": "deepseekocrdocextractor_rationale_23"
     },
     {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
+      "source_location": "L44",
+      "weight": 1.0,
+      "_src": "deepseekocrdocextractor_rationale_44",
+      "_tgt": "deepseekocrdocextractor_deepseekocrdocextractor_init",
+      "source": "deepseekocrdocextractor_deepseekocrdocextractor_init",
+      "target": "deepseekocrdocextractor_rationale_44",
+      "confidence_score": 1.0
+    },
+    {
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
-      "source_location": "L163",
+      "source_location": "L188",
       "weight": 1.0,
       "confidence_score": 1.0,
       "_src": "deepseekocrdocextractor_deepseekocrdocextractor_download_file",
@@ -97821,10 +98160,22 @@
       "target": "deepseekocrdocextractor_rationale_41"
     },
     {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
+      "source_location": "L62",
+      "weight": 1.0,
+      "_src": "deepseekocrdocextractor_rationale_62",
+      "_tgt": "deepseekocrdocextractor_deepseekocrdocextractor_is_supported_format",
+      "source": "deepseekocrdocextractor_deepseekocrdocextractor_is_supported_format",
+      "target": "deepseekocrdocextractor_rationale_62",
+      "confidence_score": 1.0
+    },
+    {
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
-      "source_location": "L99",
+      "source_location": "L120",
       "weight": 1.0,
       "confidence_score": 1.0,
       "_src": "deepseekocrdocextractor_deepseekocrdocextractor_validate_pdf_page_count",
@@ -97845,10 +98196,22 @@
       "target": "deepseekocrdocextractor_rationale_55"
     },
     {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
+      "source_location": "L76",
+      "weight": 1.0,
+      "_src": "deepseekocrdocextractor_rationale_76",
+      "_tgt": "deepseekocrdocextractor_deepseekocrdocextractor_is_pdf",
+      "source": "deepseekocrdocextractor_deepseekocrdocextractor_is_pdf",
+      "target": "deepseekocrdocextractor_rationale_76",
+      "confidence_score": 1.0
+    },
+    {
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
-      "source_location": "L104",
+      "source_location": "L125",
       "weight": 1.0,
       "confidence_score": 1.0,
       "_src": "deepseekocrdocextractor_deepseekocrdocextractor_validate_pdf_page_count",
@@ -97869,10 +98232,22 @@
       "target": "deepseekocrdocextractor_rationale_67"
     },
     {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
+      "source_location": "L88",
+      "weight": 1.0,
+      "_src": "deepseekocrdocextractor_rationale_88",
+      "_tgt": "deepseekocrdocextractor_deepseekocrdocextractor_count_pdf_pages",
+      "source": "deepseekocrdocextractor_deepseekocrdocextractor_count_pdf_pages",
+      "target": "deepseekocrdocextractor_rationale_88",
+      "confidence_score": 1.0
+    },
+    {
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
-      "source_location": "L210",
+      "source_location": "L237",
       "weight": 1.0,
       "confidence_score": 1.0,
       "_src": "deepseekocrdocextractor_deepseekocrdocextractor_extract_from_urls",
@@ -97896,8 +98271,8 @@
       "relation": "calls",
       "confidence": "INFERRED",
       "confidence_score": 0.8,
-      "source_file": "libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
-      "source_location": "L20",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
+      "source_location": "L33",
       "weight": 1.0,
       "_src": "test_deepseekocrdocextractor_test_validate_failopen_when_pypdf_cannot_parse",
       "_tgt": "deepseekocrdocextractor_deepseekocrdocextractor_validate_pdf_page_count",
@@ -97908,8 +98283,8 @@
       "relation": "calls",
       "confidence": "INFERRED",
       "confidence_score": 0.8,
-      "source_file": "libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
-      "source_location": "L27",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
+      "source_location": "L40",
       "weight": 1.0,
       "_src": "test_deepseekocrdocextractor_test_validate_still_rejects_too_many_pages",
       "_tgt": "deepseekocrdocextractor_deepseekocrdocextractor_validate_pdf_page_count",
@@ -97920,8 +98295,8 @@
       "relation": "calls",
       "confidence": "INFERRED",
       "confidence_score": 0.8,
-      "source_file": "libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
-      "source_location": "L34",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
+      "source_location": "L47",
       "weight": 1.0,
       "_src": "test_deepseekocrdocextractor_test_validate_skips_non_pdf",
       "_tgt": "deepseekocrdocextractor_deepseekocrdocextractor_validate_pdf_page_count",
@@ -97929,10 +98304,22 @@
       "target": "test_deepseekocrdocextractor_test_validate_skips_non_pdf"
     },
     {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
+      "source_location": "L110",
+      "weight": 1.0,
+      "_src": "deepseekocrdocextractor_rationale_110",
+      "_tgt": "deepseekocrdocextractor_deepseekocrdocextractor_validate_pdf_page_count",
+      "source": "deepseekocrdocextractor_deepseekocrdocextractor_validate_pdf_page_count",
+      "target": "deepseekocrdocextractor_rationale_110",
+      "confidence_score": 1.0
+    },
+    {
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
-      "source_location": "L165",
+      "source_location": "L190",
       "weight": 1.0,
       "confidence_score": 1.0,
       "_src": "deepseekocrdocextractor_deepseekocrdocextractor_download_file",
@@ -97944,7 +98331,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
-      "source_location": "L202",
+      "source_location": "L229",
       "weight": 1.0,
       "confidence_score": 1.0,
       "_src": "deepseekocrdocextractor_deepseekocrdocextractor_extract_from_urls",
@@ -97989,10 +98376,46 @@
       "target": "deepseekocrdocextractor_rationale_129"
     },
     {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
+      "source_location": "L150",
+      "weight": 1.0,
+      "_src": "deepseekocrdocextractor_rationale_150",
+      "_tgt": "deepseekocrdocextractor_deepseekocrdocextractor_download_file",
+      "source": "deepseekocrdocextractor_deepseekocrdocextractor_download_file",
+      "target": "deepseekocrdocextractor_rationale_150",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
+      "source_location": "L83",
+      "weight": 1.0,
+      "_src": "test_deepseekocrdocextractor_test_download_file_follows_redirects",
+      "_tgt": "deepseekocrdocextractor_deepseekocrdocextractor_download_file",
+      "source": "deepseekocrdocextractor_deepseekocrdocextractor_download_file",
+      "target": "test_deepseekocrdocextractor_test_download_file_follows_redirects"
+    },
+    {
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
+      "source_location": "L135",
+      "weight": 1.0,
+      "_src": "test_deepseekocrdocextractor_test_download_file_raises_typed_status_error",
+      "_tgt": "deepseekocrdocextractor_deepseekocrdocextractor_download_file",
+      "source": "deepseekocrdocextractor_deepseekocrdocextractor_download_file",
+      "target": "test_deepseekocrdocextractor_test_download_file_raises_typed_status_error"
+    },
+    {
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
-      "source_location": "L335",
+      "source_location": "L360",
       "weight": 1.0,
       "confidence_score": 1.0,
       "_src": "deepseekocrdocextractor_deepseekocrdocextractor_extract_from_url",
@@ -98027,6 +98450,18 @@
     {
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
+      "source_location": "L210",
+      "weight": 1.0,
+      "_src": "deepseekocrdocextractor_rationale_210",
+      "_tgt": "deepseekocrdocextractor_deepseekocrdocextractor_extract_from_urls",
+      "source": "deepseekocrdocextractor_deepseekocrdocextractor_extract_from_urls",
+      "target": "deepseekocrdocextractor_rationale_210",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
       "source_file": "D:/DevHellopro/Workspaces/RAG-HP-PUB/libs/common-utils/src/common_utils/ocr/DeepseekOCRDocExtractor.py",
       "source_location": "L250",
       "weight": 1.0,
@@ -98051,6 +98486,18 @@
     {
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
+      "source_location": "L290",
+      "weight": 1.0,
+      "_src": "deepseekocrdocextractor_rationale_290",
+      "_tgt": "deepseekocrdocextractor_deepseekocrdocextractor_extract_from_files",
+      "source": "deepseekocrdocextractor_deepseekocrdocextractor_extract_from_files",
+      "target": "deepseekocrdocextractor_rationale_290",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
       "source_file": "D:/DevHellopro/Workspaces/RAG-HP-PUB/libs/common-utils/src/common_utils/ocr/DeepseekOCRDocExtractor.py",
       "source_location": "L312",
       "weight": 1.0,
@@ -98071,6 +98518,18 @@
       "confidence_score": 1.0,
       "source": "deepseekocrdocextractor_deepseekocrdocextractor_extract_from_url",
       "target": "deepseekocrdocextractor_rationale_325"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
+      "source_location": "L350",
+      "weight": 1.0,
+      "_src": "deepseekocrdocextractor_rationale_350",
+      "_tgt": "deepseekocrdocextractor_deepseekocrdocextractor_extract_from_url",
+      "source": "deepseekocrdocextractor_deepseekocrdocextractor_extract_from_url",
+      "target": "deepseekocrdocextractor_rationale_350",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -98131,6 +98590,18 @@
       "confidence_score": 1.0,
       "source": "deepseekocrdocextractor_deepseekocrdocextractor_convert_to_pdf",
       "target": "deepseekocrdocextractor_rationale_374"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
+      "source_location": "L399",
+      "weight": 1.0,
+      "_src": "deepseekocrdocextractor_rationale_399",
+      "_tgt": "deepseekocrdocextractor_deepseekocrdocextractor_convert_to_pdf",
+      "source": "deepseekocrdocextractor_deepseekocrdocextractor_convert_to_pdf",
+      "target": "deepseekocrdocextractor_rationale_399",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -289662,8 +290133,8 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
-      "source_location": "L10",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
+      "source_location": "L23",
       "weight": 1.0,
       "_src": "libs_common_utils_tests_test_deepseekocrdocextractor_py",
       "_tgt": "test_deepseekocrdocextractor_raise_unparseable",
@@ -289674,8 +290145,8 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
-      "source_location": "L14",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
+      "source_location": "L27",
       "weight": 1.0,
       "_src": "libs_common_utils_tests_test_deepseekocrdocextractor_py",
       "_tgt": "test_deepseekocrdocextractor_test_validate_failopen_when_pypdf_cannot_parse",
@@ -289686,8 +290157,8 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
-      "source_location": "L23",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
+      "source_location": "L36",
       "weight": 1.0,
       "_src": "libs_common_utils_tests_test_deepseekocrdocextractor_py",
       "_tgt": "test_deepseekocrdocextractor_test_validate_still_rejects_too_many_pages",
@@ -289698,8 +290169,8 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
-      "source_location": "L30",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
+      "source_location": "L43",
       "weight": 1.0,
       "_src": "libs_common_utils_tests_test_deepseekocrdocextractor_py",
       "_tgt": "test_deepseekocrdocextractor_test_validate_skips_non_pdf",
@@ -289710,7 +290181,7 @@
     {
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
-      "source_file": "libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
       "source_location": "L1",
       "weight": 1.0,
       "_src": "test_deepseekocrdocextractor_rationale_1",
@@ -289718,6 +290189,78 @@
       "confidence_score": 1.0,
       "source": "libs_common_utils_tests_test_deepseekocrdocextractor_py",
       "target": "test_deepseekocrdocextractor_rationale_1"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
+      "source_location": "L16",
+      "weight": 1.0,
+      "_src": "libs_common_utils_tests_test_deepseekocrdocextractor_py",
+      "_tgt": "test_deepseekocrdocextractor_status_error",
+      "source": "libs_common_utils_tests_test_deepseekocrdocextractor_py",
+      "target": "test_deepseekocrdocextractor_status_error",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
+      "source_location": "L51",
+      "weight": 1.0,
+      "_src": "libs_common_utils_tests_test_deepseekocrdocextractor_py",
+      "_tgt": "test_deepseekocrdocextractor_test_download_file_follows_redirects",
+      "source": "libs_common_utils_tests_test_deepseekocrdocextractor_py",
+      "target": "test_deepseekocrdocextractor_test_download_file_follows_redirects",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
+      "source_location": "L96",
+      "weight": 1.0,
+      "_src": "libs_common_utils_tests_test_deepseekocrdocextractor_py",
+      "_tgt": "test_deepseekocrdocextractor_test_is_transient_download_error_by_status",
+      "source": "libs_common_utils_tests_test_deepseekocrdocextractor_py",
+      "target": "test_deepseekocrdocextractor_test_is_transient_download_error_by_status",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
+      "source_location": "L101",
+      "weight": 1.0,
+      "_src": "libs_common_utils_tests_test_deepseekocrdocextractor_py",
+      "_tgt": "test_deepseekocrdocextractor_test_is_transient_download_error_network_and_redirects",
+      "source": "libs_common_utils_tests_test_deepseekocrdocextractor_py",
+      "target": "test_deepseekocrdocextractor_test_is_transient_download_error_network_and_redirects",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
+      "source_location": "L111",
+      "weight": 1.0,
+      "_src": "libs_common_utils_tests_test_deepseekocrdocextractor_py",
+      "_tgt": "test_deepseekocrdocextractor_test_is_transient_download_error_permanent_defaults",
+      "source": "libs_common_utils_tests_test_deepseekocrdocextractor_py",
+      "target": "test_deepseekocrdocextractor_test_is_transient_download_error_permanent_defaults",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
+      "source_location": "L116",
+      "weight": 1.0,
+      "_src": "libs_common_utils_tests_test_deepseekocrdocextractor_py",
+      "_tgt": "test_deepseekocrdocextractor_test_download_file_raises_typed_status_error",
+      "source": "libs_common_utils_tests_test_deepseekocrdocextractor_py",
+      "target": "test_deepseekocrdocextractor_test_download_file_raises_typed_status_error",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -289730,6 +290273,18 @@
       "confidence_score": 1.0,
       "source": "test_deepseekocrdocextractor_test_validate_failopen_when_pypdf_cannot_parse",
       "target": "test_deepseekocrdocextractor_rationale_15"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
+      "source_location": "L28",
+      "weight": 1.0,
+      "_src": "test_deepseekocrdocextractor_rationale_28",
+      "_tgt": "test_deepseekocrdocextractor_test_validate_failopen_when_pypdf_cannot_parse",
+      "source": "test_deepseekocrdocextractor_test_validate_failopen_when_pypdf_cannot_parse",
+      "target": "test_deepseekocrdocextractor_rationale_28",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -290783,9 +291338,9 @@
       "weight": 1.0,
       "_src": "libs_common_utils_src_common_utils_embedding_limits_py",
       "_tgt": "limits_enforce_chunk_ceiling",
+      "confidence_score": 1.0,
       "source": "libs_common_utils_src_common_utils_embedding_limits_py",
-      "target": "limits_enforce_chunk_ceiling",
-      "confidence_score": 1.0
+      "target": "limits_enforce_chunk_ceiling"
     },
     {
       "relation": "rationale_for",
@@ -290795,9 +291350,9 @@
       "weight": 1.0,
       "_src": "limits_rationale_1",
       "_tgt": "libs_common_utils_src_common_utils_embedding_limits_py",
+      "confidence_score": 1.0,
       "source": "libs_common_utils_src_common_utils_embedding_limits_py",
-      "target": "limits_rationale_1",
-      "confidence_score": 1.0
+      "target": "limits_rationale_1"
     },
     {
       "relation": "rationale_for",
@@ -290807,9 +291362,9 @@
       "weight": 1.0,
       "_src": "limits_rationale_28",
       "_tgt": "limits_enforce_chunk_ceiling",
+      "confidence_score": 1.0,
       "source": "limits_enforce_chunk_ceiling",
-      "target": "limits_rationale_28",
-      "confidence_score": 1.0
+      "target": "limits_rationale_28"
     },
     {
       "relation": "calls",
@@ -290843,9 +291398,9 @@
       "weight": 1.0,
       "_src": "libs_common_utils_tests_test_embedding_limits_py",
       "_tgt": "test_embedding_limits_load",
+      "confidence_score": 1.0,
       "source": "libs_common_utils_tests_test_embedding_limits_py",
-      "target": "test_embedding_limits_load",
-      "confidence_score": 1.0
+      "target": "test_embedding_limits_load"
     },
     {
       "relation": "contains",
@@ -290855,9 +291410,9 @@
       "weight": 1.0,
       "_src": "libs_common_utils_tests_test_embedding_limits_py",
       "_tgt": "test_embedding_limits_raises_value_error",
+      "confidence_score": 1.0,
       "source": "libs_common_utils_tests_test_embedding_limits_py",
-      "target": "test_embedding_limits_raises_value_error",
-      "confidence_score": 1.0
+      "target": "test_embedding_limits_raises_value_error"
     },
     {
       "relation": "contains",
@@ -290867,9 +291422,9 @@
       "weight": 1.0,
       "_src": "libs_common_utils_tests_test_embedding_limits_py",
       "_tgt": "test_embedding_limits_test_over_ceiling_raises_payload_too_large",
+      "confidence_score": 1.0,
       "source": "libs_common_utils_tests_test_embedding_limits_py",
-      "target": "test_embedding_limits_test_over_ceiling_raises_payload_too_large",
-      "confidence_score": 1.0
+      "target": "test_embedding_limits_test_over_ceiling_raises_payload_too_large"
     },
     {
       "relation": "contains",
@@ -290879,9 +291434,9 @@
       "weight": 1.0,
       "_src": "libs_common_utils_tests_test_embedding_limits_py",
       "_tgt": "test_embedding_limits_test_at_ceiling_does_not_raise",
+      "confidence_score": 1.0,
       "source": "libs_common_utils_tests_test_embedding_limits_py",
-      "target": "test_embedding_limits_test_at_ceiling_does_not_raise",
-      "confidence_score": 1.0
+      "target": "test_embedding_limits_test_at_ceiling_does_not_raise"
     },
     {
       "relation": "contains",
@@ -290891,9 +291446,9 @@
       "weight": 1.0,
       "_src": "libs_common_utils_tests_test_embedding_limits_py",
       "_tgt": "test_embedding_limits_test_under_ceiling_does_not_raise",
+      "confidence_score": 1.0,
       "source": "libs_common_utils_tests_test_embedding_limits_py",
-      "target": "test_embedding_limits_test_under_ceiling_does_not_raise",
-      "confidence_score": 1.0
+      "target": "test_embedding_limits_test_under_ceiling_does_not_raise"
     },
     {
       "relation": "contains",
@@ -290903,9 +291458,9 @@
       "weight": 1.0,
       "_src": "libs_common_utils_tests_test_embedding_limits_py",
       "_tgt": "test_embedding_limits_test_default_ceiling_is_5000",
+      "confidence_score": 1.0,
       "source": "libs_common_utils_tests_test_embedding_limits_py",
-      "target": "test_embedding_limits_test_default_ceiling_is_5000",
-      "confidence_score": 1.0
+      "target": "test_embedding_limits_test_default_ceiling_is_5000"
     },
     {
       "relation": "contains",
@@ -290915,9 +291470,9 @@
       "weight": 1.0,
       "_src": "libs_common_utils_tests_test_embedding_limits_py",
       "_tgt": "test_embedding_limits_test_message_includes_count_and_source",
+      "confidence_score": 1.0,
       "source": "libs_common_utils_tests_test_embedding_limits_py",
-      "target": "test_embedding_limits_test_message_includes_count_and_source",
-      "confidence_score": 1.0
+      "target": "test_embedding_limits_test_message_includes_count_and_source"
     },
     {
       "relation": "contains",
@@ -290927,9 +291482,9 @@
       "weight": 1.0,
       "_src": "libs_common_utils_tests_test_embedding_limits_py",
       "_tgt": "test_embedding_limits_run",
+      "confidence_score": 1.0,
       "source": "libs_common_utils_tests_test_embedding_limits_py",
-      "target": "test_embedding_limits_run",
-      "confidence_score": 1.0
+      "target": "test_embedding_limits_run"
     },
     {
       "relation": "rationale_for",
@@ -290939,9 +291494,9 @@
       "weight": 1.0,
       "_src": "test_embedding_limits_rationale_1",
       "_tgt": "libs_common_utils_tests_test_embedding_limits_py",
+      "confidence_score": 1.0,
       "source": "libs_common_utils_tests_test_embedding_limits_py",
-      "target": "test_embedding_limits_rationale_1",
-      "confidence_score": 1.0
+      "target": "test_embedding_limits_rationale_1"
     },
     {
       "relation": "calls",
@@ -290951,9 +291506,9 @@
       "weight": 1.0,
       "_src": "test_embedding_limits_test_over_ceiling_raises_payload_too_large",
       "_tgt": "test_embedding_limits_load",
+      "confidence_score": 1.0,
       "source": "test_embedding_limits_load",
-      "target": "test_embedding_limits_test_over_ceiling_raises_payload_too_large",
-      "confidence_score": 1.0
+      "target": "test_embedding_limits_test_over_ceiling_raises_payload_too_large"
     },
     {
       "relation": "calls",
@@ -290963,9 +291518,9 @@
       "weight": 1.0,
       "_src": "test_embedding_limits_test_at_ceiling_does_not_raise",
       "_tgt": "test_embedding_limits_load",
+      "confidence_score": 1.0,
       "source": "test_embedding_limits_load",
-      "target": "test_embedding_limits_test_at_ceiling_does_not_raise",
-      "confidence_score": 1.0
+      "target": "test_embedding_limits_test_at_ceiling_does_not_raise"
     },
     {
       "relation": "calls",
@@ -290975,9 +291530,9 @@
       "weight": 1.0,
       "_src": "test_embedding_limits_test_under_ceiling_does_not_raise",
       "_tgt": "test_embedding_limits_load",
+      "confidence_score": 1.0,
       "source": "test_embedding_limits_load",
-      "target": "test_embedding_limits_test_under_ceiling_does_not_raise",
-      "confidence_score": 1.0
+      "target": "test_embedding_limits_test_under_ceiling_does_not_raise"
     },
     {
       "relation": "calls",
@@ -290987,9 +291542,9 @@
       "weight": 1.0,
       "_src": "test_embedding_limits_test_default_ceiling_is_5000",
       "_tgt": "test_embedding_limits_load",
+      "confidence_score": 1.0,
       "source": "test_embedding_limits_load",
-      "target": "test_embedding_limits_test_default_ceiling_is_5000",
-      "confidence_score": 1.0
+      "target": "test_embedding_limits_test_default_ceiling_is_5000"
     },
     {
       "relation": "calls",
@@ -290999,9 +291554,9 @@
       "weight": 1.0,
       "_src": "test_embedding_limits_test_message_includes_count_and_source",
       "_tgt": "test_embedding_limits_load",
+      "confidence_score": 1.0,
       "source": "test_embedding_limits_load",
-      "target": "test_embedding_limits_test_message_includes_count_and_source",
-      "confidence_score": 1.0
+      "target": "test_embedding_limits_test_message_includes_count_and_source"
     },
     {
       "relation": "calls",
@@ -291011,9 +291566,9 @@
       "weight": 1.0,
       "_src": "test_embedding_limits_test_over_ceiling_raises_payload_too_large",
       "_tgt": "test_embedding_limits_raises_value_error",
+      "confidence_score": 1.0,
       "source": "test_embedding_limits_raises_value_error",
-      "target": "test_embedding_limits_test_over_ceiling_raises_payload_too_large",
-      "confidence_score": 1.0
+      "target": "test_embedding_limits_test_over_ceiling_raises_payload_too_large"
     },
     {
       "relation": "calls",
@@ -291023,8 +291578,188 @@
       "weight": 1.0,
       "_src": "test_embedding_limits_test_message_includes_count_and_source",
       "_tgt": "test_embedding_limits_raises_value_error",
+      "confidence_score": 1.0,
       "source": "test_embedding_limits_raises_value_error",
-      "target": "test_embedding_limits_test_message_includes_count_and_source",
+      "target": "test_embedding_limits_test_message_includes_count_and_source"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "libs\\common-utils\\src\\common_utils\\concurrency\\graceful.py",
+      "source_location": "L7",
+      "weight": 1.0,
+      "_src": "libs_common_utils_src_common_utils_concurrency_graceful_py",
+      "_tgt": "graceful_get_message_or_stop",
+      "source": "libs_common_utils_src_common_utils_concurrency_graceful_py",
+      "target": "graceful_get_message_or_stop",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "libs\\common-utils\\src\\common_utils\\concurrency\\graceful.py",
+      "source_location": "L1",
+      "weight": 1.0,
+      "_src": "graceful_rationale_1",
+      "_tgt": "libs_common_utils_src_common_utils_concurrency_graceful_py",
+      "source": "libs_common_utils_src_common_utils_concurrency_graceful_py",
+      "target": "graceful_rationale_1",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "libs\\common-utils\\src\\common_utils\\concurrency\\graceful.py",
+      "source_location": "L10",
+      "weight": 1.0,
+      "_src": "graceful_rationale_10",
+      "_tgt": "graceful_get_message_or_stop",
+      "source": "graceful_get_message_or_stop",
+      "target": "graceful_rationale_10",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
+      "source_location": "L24",
+      "weight": 1.0,
+      "_src": "deepseekocrdocextractor_rationale_24",
+      "_tgt": "deepseekocrdocextractor_is_transient_download_error",
+      "source": "deepseekocrdocextractor_is_transient_download_error",
+      "target": "deepseekocrdocextractor_rationale_24",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
+      "source_location": "L97",
+      "weight": 1.0,
+      "_src": "test_deepseekocrdocextractor_test_is_transient_download_error_by_status",
+      "_tgt": "deepseekocrdocextractor_is_transient_download_error",
+      "source": "deepseekocrdocextractor_is_transient_download_error",
+      "target": "test_deepseekocrdocextractor_test_is_transient_download_error_by_status"
+    },
+    {
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
+      "source_location": "L103",
+      "weight": 1.0,
+      "_src": "test_deepseekocrdocextractor_test_is_transient_download_error_network_and_redirects",
+      "_tgt": "deepseekocrdocextractor_is_transient_download_error",
+      "source": "deepseekocrdocextractor_is_transient_download_error",
+      "target": "test_deepseekocrdocextractor_test_is_transient_download_error_network_and_redirects"
+    },
+    {
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
+      "source_location": "L112",
+      "weight": 1.0,
+      "_src": "test_deepseekocrdocextractor_test_is_transient_download_error_permanent_defaults",
+      "_tgt": "deepseekocrdocextractor_is_transient_download_error",
+      "source": "deepseekocrdocextractor_is_transient_download_error",
+      "target": "test_deepseekocrdocextractor_test_is_transient_download_error_permanent_defaults"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
+      "source_location": "L97",
+      "weight": 1.0,
+      "_src": "test_deepseekocrdocextractor_test_is_transient_download_error_by_status",
+      "_tgt": "test_deepseekocrdocextractor_status_error",
+      "source": "test_deepseekocrdocextractor_status_error",
+      "target": "test_deepseekocrdocextractor_test_is_transient_download_error_by_status",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
+      "source_location": "L52",
+      "weight": 1.0,
+      "_src": "test_deepseekocrdocextractor_rationale_52",
+      "_tgt": "test_deepseekocrdocextractor_test_download_file_follows_redirects",
+      "source": "test_deepseekocrdocextractor_test_download_file_follows_redirects",
+      "target": "test_deepseekocrdocextractor_rationale_52",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
+      "source_location": "L117",
+      "weight": 1.0,
+      "_src": "test_deepseekocrdocextractor_rationale_117",
+      "_tgt": "test_deepseekocrdocextractor_test_download_file_raises_typed_status_error",
+      "source": "test_deepseekocrdocextractor_test_download_file_raises_typed_status_error",
+      "target": "test_deepseekocrdocextractor_rationale_117",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "libs\\common-utils\\tests\\test_graceful.py",
+      "source_location": "L9",
+      "weight": 1.0,
+      "_src": "libs_common_utils_tests_test_graceful_py",
+      "_tgt": "test_graceful_test_returns_item_when_available",
+      "source": "libs_common_utils_tests_test_graceful_py",
+      "target": "test_graceful_test_returns_item_when_available",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "libs\\common-utils\\tests\\test_graceful.py",
+      "source_location": "L18",
+      "weight": 1.0,
+      "_src": "libs_common_utils_tests_test_graceful_py",
+      "_tgt": "test_graceful_test_returns_none_when_already_stopped_without_consuming",
+      "source": "libs_common_utils_tests_test_graceful_py",
+      "target": "test_graceful_test_returns_none_when_already_stopped_without_consuming",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "libs\\common-utils\\tests\\test_graceful.py",
+      "source_location": "L31",
+      "weight": 1.0,
+      "_src": "libs_common_utils_tests_test_graceful_py",
+      "_tgt": "test_graceful_test_returns_none_when_stopped_while_waiting",
+      "source": "libs_common_utils_tests_test_graceful_py",
+      "target": "test_graceful_test_returns_none_when_stopped_while_waiting",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "libs\\common-utils\\tests\\test_graceful.py",
+      "source_location": "L42",
+      "weight": 1.0,
+      "_src": "libs_common_utils_tests_test_graceful_py",
+      "_tgt": "test_graceful_test_returns_item_if_it_arrives_while_waiting",
+      "source": "libs_common_utils_tests_test_graceful_py",
+      "target": "test_graceful_test_returns_item_if_it_arrives_while_waiting",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "libs\\common-utils\\tests\\test_graceful.py",
+      "source_location": "L1",
+      "weight": 1.0,
+      "_src": "test_graceful_rationale_1",
+      "_tgt": "libs_common_utils_tests_test_graceful_py",
+      "source": "libs_common_utils_tests_test_graceful_py",
+      "target": "test_graceful_rationale_1",
       "confidence_score": 1.0
     }
   ],

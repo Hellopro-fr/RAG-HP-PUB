@@ -5,8 +5,8 @@
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 7993 nodes · 17556 edges · 200 communities detected
-- Extraction: 65% EXTRACTED · 35% INFERRED · 0% AMBIGUOUS · INFERRED: 6194 edges (avg confidence: 0.59)
+- 8024 nodes · 17594 edges · 202 communities detected
+- Extraction: 65% EXTRACTED · 35% INFERRED · 0% AMBIGUOUS · INFERRED: 6201 edges (avg confidence: 0.59)
 - Token cost: 0 input · 0 output
 
 ## Community Hubs (Navigation)
@@ -210,6 +210,8 @@
 - [[_COMMUNITY_UTF-8 Sanitize Rationale (Utils)|UTF-8 Sanitize Rationale (Utils)]]
 - [[_COMMUNITY_MilvusProduitInserer Tests|MilvusProduitInserer Tests]]
 - [[_COMMUNITY_Embedding Limits|Embedding Limits]]
+- [[_COMMUNITY_Graceful Drain Helper|Graceful Drain Helper]]
+- [[_COMMUNITY_Graceful Drain Helper|Graceful Drain Helper]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `CrawlerManager` - 397 edges
@@ -283,8 +285,8 @@ Cohesion: 0.05
 Nodes (102): CollectionName, Enum, CollectionNameGraph, Enum for the possible collection names.     The values correspond to the string, Enum for the possible collection names.     The values correspond to the string, # TODO:, get_llm_chat_response(), get_llm_chat_batch_response() (+94 more)
 
 ### Community 2 - "CrawlerManager Core + DLQ"
-Cohesion: 0.01
-Nodes (451): str, DLQPropertiesAsync, create_dlq_headers(), create_dlq_message(), DeepseekOCRDocExtractor, Client asynchrone pour l'API OCR externe utilisant Deepseek, Initialise le client OCR                  Args:             base_url: URL de, Vérifie si le fichier est un format supporté (PDF ou image)                  A (+443 more)
+Cohesion: 0.0
+Nodes (472): str, DLQPropertiesAsync, create_dlq_headers(), create_dlq_message(), DeepseekOCRDocExtractor, Client asynchrone pour l'API OCR externe utilisant Deepseek, Initialise le client OCR                  Args:             base_url: URL de, Client asynchrone pour l'API OCR externe utilisant Deepseek (+464 more)
 
 ### Community 77 - "DLQ Properties"
 Cohesion: 0.67
@@ -1078,8 +1080,16 @@ Nodes (1): Regression guard for the correspondance ``id_produit_milvus`` field s
 Cohesion: 1.0
 Nodes (1): Nettoie une chaîne de texte en normalisant les espaces et en corrigeant
 
+### Community 241 - "Graceful Drain Helper"
+Cohesion: 0.5
+Nodes (3): get_message_or_stop(), Graceful-drain helper for asyncio queue consumers., Await the next item from ``buffer``, or return ``None`` as soon as     ``stop_ev
+
+### Community 240 - "Graceful Drain Helper"
+Cohesion: 0.33
+Nodes (1): Graceful-drain helper: interrupt an idle queue wait on shutdown without dropping
+
 ## Knowledge Gaps
-- **2643 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+2638 more)
+- **2659 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+2654 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **Thin community `Community 110`** (1 nodes): `Creates a dictionary of headers for a DLQ message, compatible with both pika and`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -1298,6 +1308,8 @@ Nodes (1): Nettoie une chaîne de texte en normalisant les espaces et en corrige
 - **Thin community `MilvusProduitInserer Tests`** (3 nodes): `test_MilvusProduitInserer.py`, `test_id_produit_milvus_holds_many_chunk_pks()`, `Regression guard for the correspondance ``id_produit_milvus`` field size.  ``id_`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Embedding Limits`** (1 nodes): `Nettoie une chaîne de texte en normalisant les espaces et en corrigeant`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Graceful Drain Helper`** (6 nodes): `test_graceful.py`, `test_returns_item_when_available()`, `test_returns_none_when_already_stopped_without_consuming()`, `test_returns_none_when_stopped_while_waiting()`, `test_returns_item_if_it_arrives_while_waiting()`, `Graceful-drain helper: interrupt an idle queue wait on shutdown without dropping`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 
 ## Suggested Questions
