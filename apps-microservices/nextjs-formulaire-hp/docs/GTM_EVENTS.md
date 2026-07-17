@@ -138,7 +138,7 @@ submit-success            ▼
 
 | step_name | step_type | Fonction émettrice | Payload additionnel |
 |---|---|---|---|
-| `funnel-start` | `init` | `trackFunnelStart(context?)` | — |
+| `funnel-start` | `init` | `trackFunnelStart(context?)` | Émis **une seule fois par session** (dédup sessionStorage `hp_viewed_funnel_start`) — le remontage du questionnaire (retour depuis l'étape transparence ou /budget) ne le re-déclenche pas ; un F5/nouveau funnel le ré-arme via `resetTrackingState()` |
 | `assurance` | `init` | `trackAssuranceView()` | `is_first_view: boolean` |
 | `assurance-complete` | `init` | `trackAssuranceComplete()` | — |
 | `1ere-question`, `2eme-question`, … `Neme-question` | `question` | `trackQuestionView(questionIndex)` | — (le numéro est codé dans `step_name`) |
