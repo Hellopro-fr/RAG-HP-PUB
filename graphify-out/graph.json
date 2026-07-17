@@ -79686,279 +79686,315 @@
       "file_type": "code",
       "source_file": "libs\\common-utils\\src\\common_utils\\concurrency\\graceful.py",
       "source_location": "L1",
-      "id": "libs_common_utils_src_common_utils_concurrency_graceful_py",
       "community": 241,
-      "norm_label": "graceful.py"
+      "norm_label": "graceful.py",
+      "id": "libs_common_utils_src_common_utils_concurrency_graceful_py"
     },
     {
       "label": "get_message_or_stop()",
       "file_type": "code",
-      "source_file": "libs\\common-utils\\src\\common_utils\\concurrency\\graceful.py",
-      "source_location": "L7",
-      "id": "graceful_get_message_or_stop",
+      "source_file": "libs\\common-utils\\src\\common_utils\\autres\\graceful.py",
+      "source_location": "L13",
       "community": 241,
-      "norm_label": "get_message_or_stop()"
+      "norm_label": "get_message_or_stop()",
+      "id": "graceful_get_message_or_stop"
     },
     {
-      "label": "Graceful-drain helper for asyncio queue consumers.",
+      "label": "Graceful-drain helper for asyncio queue consumers.  Lives in ``autres`` (a std",
       "file_type": "rationale",
-      "source_file": "libs\\common-utils\\src\\common_utils\\concurrency\\graceful.py",
+      "source_file": "libs\\common-utils\\src\\common_utils\\autres\\graceful.py",
       "source_location": "L1",
-      "id": "graceful_rationale_1",
       "community": 241,
-      "norm_label": "graceful-drain helper for asyncio queue consumers."
+      "norm_label": "graceful-drain helper for asyncio queue consumers.  lives in ``autres`` (a std",
+      "id": "graceful_rationale_1"
     },
     {
       "label": "Await the next item from ``buffer``, or return ``None`` as soon as     ``stop_ev",
       "file_type": "rationale",
       "source_file": "libs\\common-utils\\src\\common_utils\\concurrency\\graceful.py",
       "source_location": "L10",
-      "id": "graceful_rationale_10",
       "community": 241,
-      "norm_label": "await the next item from ``buffer``, or return ``none`` as soon as     ``stop_ev"
+      "norm_label": "await the next item from ``buffer``, or return ``none`` as soon as     ``stop_ev",
+      "id": "graceful_rationale_10"
     },
     {
       "label": "is_transient_download_error()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
       "source_location": "L23",
-      "id": "deepseekocrdocextractor_is_transient_download_error",
       "community": 2,
-      "norm_label": "is_transient_download_error()"
+      "norm_label": "is_transient_download_error()",
+      "id": "deepseekocrdocextractor_is_transient_download_error"
     },
     {
       "label": "True if a download/OCR error should be RETRIED rather than sent to the DLQ.",
       "file_type": "rationale",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
       "source_location": "L24",
-      "id": "deepseekocrdocextractor_rationale_24",
       "community": 2,
-      "norm_label": "true if a download/ocr error should be retried rather than sent to the dlq."
+      "norm_label": "true if a download/ocr error should be retried rather than sent to the dlq.",
+      "id": "deepseekocrdocextractor_rationale_24"
     },
     {
       "label": "Initialise le client OCR                  Args:             base_url: URL de",
       "file_type": "rationale",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
       "source_location": "L44",
-      "id": "deepseekocrdocextractor_rationale_44",
       "community": 2,
-      "norm_label": "initialise le client ocr                  args:             base_url: url de"
+      "norm_label": "initialise le client ocr                  args:             base_url: url de",
+      "id": "deepseekocrdocextractor_rationale_44"
     },
     {
       "label": "V\u00e9rifie si le fichier est un format support\u00e9 (PDF ou image)                  A",
       "file_type": "rationale",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
       "source_location": "L62",
-      "id": "deepseekocrdocextractor_rationale_62",
       "community": 2,
-      "norm_label": "verifie si le fichier est un format supporte (pdf ou image)                  a"
+      "norm_label": "verifie si le fichier est un format supporte (pdf ou image)                  a",
+      "id": "deepseekocrdocextractor_rationale_62"
     },
     {
       "label": "V\u00e9rifie si le fichier est un PDF                  Args:             filename:",
       "file_type": "rationale",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
       "source_location": "L76",
-      "id": "deepseekocrdocextractor_rationale_76",
       "community": 2,
-      "norm_label": "verifie si le fichier est un pdf                  args:             filename:"
+      "norm_label": "verifie si le fichier est un pdf                  args:             filename:",
+      "id": "deepseekocrdocextractor_rationale_76"
     },
     {
       "label": "Compte le nombre de pages d'un PDF                  Args:             content",
       "file_type": "rationale",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
       "source_location": "L88",
-      "id": "deepseekocrdocextractor_rationale_88",
       "community": 2,
-      "norm_label": "compte le nombre de pages d'un pdf                  args:             content"
+      "norm_label": "compte le nombre de pages d'un pdf                  args:             content",
+      "id": "deepseekocrdocextractor_rationale_88"
     },
     {
       "label": "Valide que le nombre de pages du PDF ne d\u00e9passe pas la limite autoris\u00e9e",
       "file_type": "rationale",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
       "source_location": "L110",
-      "id": "deepseekocrdocextractor_rationale_110",
       "community": 2,
-      "norm_label": "valide que le nombre de pages du pdf ne depasse pas la limite autorisee"
+      "norm_label": "valide que le nombre de pages du pdf ne depasse pas la limite autorisee",
+      "id": "deepseekocrdocextractor_rationale_110"
     },
     {
       "label": "T\u00e9l\u00e9charge un fichier depuis une URL directement en m\u00e9moire (asynchrone)",
       "file_type": "rationale",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
       "source_location": "L150",
-      "id": "deepseekocrdocextractor_rationale_150",
       "community": 2,
-      "norm_label": "telecharge un fichier depuis une url directement en memoire (asynchrone)"
+      "norm_label": "telecharge un fichier depuis une url directement en memoire (asynchrone)",
+      "id": "deepseekocrdocextractor_rationale_150"
     },
     {
       "label": "Traite des fichiers \u00e0 partir d'URLs (asynchrone)         Les fichiers sont t\u00e9l\u00e9",
       "file_type": "rationale",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
       "source_location": "L210",
-      "id": "deepseekocrdocextractor_rationale_210",
       "community": 2,
-      "norm_label": "traite des fichiers a partir d'urls (asynchrone)         les fichiers sont tele"
+      "norm_label": "traite des fichiers a partir d'urls (asynchrone)         les fichiers sont tele",
+      "id": "deepseekocrdocextractor_rationale_210"
     },
     {
       "label": "Traite des fichiers d\u00e9j\u00e0 t\u00e9l\u00e9charg\u00e9s en m\u00e9moire (asynchrone)         \u00c9vite le r",
       "file_type": "rationale",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
       "source_location": "L290",
-      "id": "deepseekocrdocextractor_rationale_290",
       "community": 2,
-      "norm_label": "traite des fichiers deja telecharges en memoire (asynchrone)         evite le r"
+      "norm_label": "traite des fichiers deja telecharges en memoire (asynchrone)         evite le r",
+      "id": "deepseekocrdocextractor_rationale_290"
     },
     {
       "label": "Traite un seul fichier \u00e0 partir d'une URL (asynchrone)                  Args:",
       "file_type": "rationale",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
       "source_location": "L350",
-      "id": "deepseekocrdocextractor_rationale_350",
       "community": 2,
-      "norm_label": "traite un seul fichier a partir d'une url (asynchrone)                  args:"
+      "norm_label": "traite un seul fichier a partir d'une url (asynchrone)                  args:",
+      "id": "deepseekocrdocextractor_rationale_350"
     },
     {
       "label": "Convertit un fichier non-support\u00e9 en PDF en utilisant LibreOffice (asynchrone)",
       "file_type": "rationale",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\ocr\\DeepseekOCRDocExtractor.py",
       "source_location": "L399",
-      "id": "deepseekocrdocextractor_rationale_399",
       "community": 2,
-      "norm_label": "convertit un fichier non-supporte en pdf en utilisant libreoffice (asynchrone)"
+      "norm_label": "convertit un fichier non-supporte en pdf en utilisant libreoffice (asynchrone)",
+      "id": "deepseekocrdocextractor_rationale_399"
     },
     {
       "label": "_status_error()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
       "source_location": "L16",
-      "id": "test_deepseekocrdocextractor_status_error",
       "community": 2,
-      "norm_label": "_status_error()"
+      "norm_label": "_status_error()",
+      "id": "test_deepseekocrdocextractor_status_error"
     },
     {
       "label": "test_download_file_follows_redirects()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
       "source_location": "L51",
-      "id": "test_deepseekocrdocextractor_test_download_file_follows_redirects",
       "community": 2,
-      "norm_label": "test_download_file_follows_redirects()"
+      "norm_label": "test_download_file_follows_redirects()",
+      "id": "test_deepseekocrdocextractor_test_download_file_follows_redirects"
     },
     {
       "label": "test_is_transient_download_error_by_status()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
       "source_location": "L96",
-      "id": "test_deepseekocrdocextractor_test_is_transient_download_error_by_status",
       "community": 2,
-      "norm_label": "test_is_transient_download_error_by_status()"
+      "norm_label": "test_is_transient_download_error_by_status()",
+      "id": "test_deepseekocrdocextractor_test_is_transient_download_error_by_status"
     },
     {
       "label": "test_is_transient_download_error_network_and_redirects()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
       "source_location": "L101",
-      "id": "test_deepseekocrdocextractor_test_is_transient_download_error_network_and_redirects",
       "community": 2,
-      "norm_label": "test_is_transient_download_error_network_and_redirects()"
+      "norm_label": "test_is_transient_download_error_network_and_redirects()",
+      "id": "test_deepseekocrdocextractor_test_is_transient_download_error_network_and_redirects"
     },
     {
       "label": "test_is_transient_download_error_permanent_defaults()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
       "source_location": "L111",
-      "id": "test_deepseekocrdocextractor_test_is_transient_download_error_permanent_defaults",
       "community": 2,
-      "norm_label": "test_is_transient_download_error_permanent_defaults()"
+      "norm_label": "test_is_transient_download_error_permanent_defaults()",
+      "id": "test_deepseekocrdocextractor_test_is_transient_download_error_permanent_defaults"
     },
     {
       "label": "test_download_file_raises_typed_status_error()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
       "source_location": "L116",
-      "id": "test_deepseekocrdocextractor_test_download_file_raises_typed_status_error",
       "community": 2,
-      "norm_label": "test_download_file_raises_typed_status_error()"
+      "norm_label": "test_download_file_raises_typed_status_error()",
+      "id": "test_deepseekocrdocextractor_test_download_file_raises_typed_status_error"
     },
     {
       "label": "A PDF pypdf refuses (malformed trailer) must NOT be rejected here \u2014     it is d",
       "file_type": "rationale",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
       "source_location": "L28",
-      "id": "test_deepseekocrdocextractor_rationale_28",
       "community": 2,
-      "norm_label": "a pdf pypdf refuses (malformed trailer) must not be rejected here \u2014     it is d"
+      "norm_label": "a pdf pypdf refuses (malformed trailer) must not be rejected here \u2014     it is d",
+      "id": "test_deepseekocrdocextractor_rationale_28"
     },
     {
       "label": "_download_file must FOLLOW redirects. hellopro.fr intermittently 302s a     PJ",
       "file_type": "rationale",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
       "source_location": "L52",
-      "id": "test_deepseekocrdocextractor_rationale_52",
       "community": 2,
-      "norm_label": "_download_file must follow redirects. hellopro.fr intermittently 302s a     pj"
+      "norm_label": "_download_file must follow redirects. hellopro.fr intermittently 302s a     pj",
+      "id": "test_deepseekocrdocextractor_rationale_52"
     },
     {
       "label": "A 404 must propagate as httpx.HTTPStatusError (status preserved), NOT be     fl",
       "file_type": "rationale",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_DeepseekOCRDocExtractor.py",
       "source_location": "L117",
-      "id": "test_deepseekocrdocextractor_rationale_117",
       "community": 2,
-      "norm_label": "a 404 must propagate as httpx.httpstatuserror (status preserved), not be     fl"
+      "norm_label": "a 404 must propagate as httpx.httpstatuserror (status preserved), not be     fl",
+      "id": "test_deepseekocrdocextractor_rationale_117"
     },
     {
       "label": "test_graceful.py",
       "file_type": "code",
       "source_file": "libs\\common-utils\\tests\\test_graceful.py",
       "source_location": "L1",
-      "id": "libs_common_utils_tests_test_graceful_py",
       "community": 240,
-      "norm_label": "test_graceful.py"
+      "norm_label": "test_graceful.py",
+      "id": "libs_common_utils_tests_test_graceful_py"
     },
     {
       "label": "test_returns_item_when_available()",
       "file_type": "code",
       "source_file": "libs\\common-utils\\tests\\test_graceful.py",
-      "source_location": "L9",
-      "id": "test_graceful_test_returns_item_when_available",
+      "source_location": "L26",
       "community": 240,
-      "norm_label": "test_returns_item_when_available()"
+      "norm_label": "test_returns_item_when_available()",
+      "id": "test_graceful_test_returns_item_when_available"
     },
     {
       "label": "test_returns_none_when_already_stopped_without_consuming()",
       "file_type": "code",
       "source_file": "libs\\common-utils\\tests\\test_graceful.py",
-      "source_location": "L18",
-      "id": "test_graceful_test_returns_none_when_already_stopped_without_consuming",
+      "source_location": "L35",
       "community": 240,
-      "norm_label": "test_returns_none_when_already_stopped_without_consuming()"
+      "norm_label": "test_returns_none_when_already_stopped_without_consuming()",
+      "id": "test_graceful_test_returns_none_when_already_stopped_without_consuming"
     },
     {
       "label": "test_returns_none_when_stopped_while_waiting()",
       "file_type": "code",
       "source_file": "libs\\common-utils\\tests\\test_graceful.py",
-      "source_location": "L31",
-      "id": "test_graceful_test_returns_none_when_stopped_while_waiting",
+      "source_location": "L48",
       "community": 240,
-      "norm_label": "test_returns_none_when_stopped_while_waiting()"
+      "norm_label": "test_returns_none_when_stopped_while_waiting()",
+      "id": "test_graceful_test_returns_none_when_stopped_while_waiting"
     },
     {
       "label": "test_returns_item_if_it_arrives_while_waiting()",
       "file_type": "code",
       "source_file": "libs\\common-utils\\tests\\test_graceful.py",
-      "source_location": "L42",
-      "id": "test_graceful_test_returns_item_if_it_arrives_while_waiting",
+      "source_location": "L59",
       "community": 240,
-      "norm_label": "test_returns_item_if_it_arrives_while_waiting()"
+      "norm_label": "test_returns_item_if_it_arrives_while_waiting()",
+      "id": "test_graceful_test_returns_item_if_it_arrives_while_waiting"
     },
     {
-      "label": "Graceful-drain helper: interrupt an idle queue wait on shutdown without dropping",
+      "label": "Graceful-drain helper: interrupt an idle queue wait on shutdown without droppin",
       "file_type": "rationale",
       "source_file": "libs\\common-utils\\tests\\test_graceful.py",
       "source_location": "L1",
-      "id": "test_graceful_rationale_1",
       "community": 240,
-      "norm_label": "graceful-drain helper: interrupt an idle queue wait on shutdown without dropping"
+      "norm_label": "graceful-drain helper: interrupt an idle queue wait on shutdown without droppin",
+      "id": "test_graceful_rationale_1"
+    },
+    {
+      "label": "graceful.py",
+      "file_type": "code",
+      "source_file": "libs\\common-utils\\src\\common_utils\\autres\\graceful.py",
+      "source_location": "L1",
+      "id": "libs_common_utils_src_common_utils_autres_graceful_py",
+      "community": 241,
+      "norm_label": "graceful.py"
+    },
+    {
+      "label": "Await the next item from ``buffer``, or return ``None`` as soon as     ``stop_e",
+      "file_type": "rationale",
+      "source_file": "libs\\common-utils\\src\\common_utils\\autres\\graceful.py",
+      "source_location": "L16",
+      "id": "graceful_rationale_16",
+      "community": 241,
+      "norm_label": "await the next item from ``buffer``, or return ``none`` as soon as     ``stop_e"
+    },
+    {
+      "label": "test_imports_without_heavy_optional_deps()",
+      "file_type": "code",
+      "source_file": "libs\\common-utils\\tests\\test_graceful.py",
+      "source_location": "L11",
+      "id": "test_graceful_test_imports_without_heavy_optional_deps",
+      "community": 240,
+      "norm_label": "test_imports_without_heavy_optional_deps()"
+    },
+    {
+      "label": "Regression guard: the drain helper must import with only the stdlib.      It i",
+      "file_type": "rationale",
+      "source_file": "libs\\common-utils\\tests\\test_graceful.py",
+      "source_location": "L12",
+      "id": "test_graceful_rationale_12",
+      "community": 240,
+      "norm_label": "regression guard: the drain helper must import with only the stdlib.      it i"
     }
   ],
   "links": [
@@ -97855,9 +97891,9 @@
       "weight": 1.0,
       "_src": "libs_common_utils_src_common_utils_ocr_deepseekocrdocextractor_py",
       "_tgt": "deepseekocrdocextractor_is_transient_download_error",
+      "confidence_score": 1.0,
       "source": "libs_common_utils_src_common_utils_ocr_deepseekocrdocextractor_py",
-      "target": "deepseekocrdocextractor_is_transient_download_error",
-      "confidence_score": 1.0
+      "target": "deepseekocrdocextractor_is_transient_download_error"
     },
     {
       "relation": "method",
@@ -98083,9 +98119,9 @@
       "weight": 1.0,
       "_src": "deepseekocrdocextractor_rationale_41",
       "_tgt": "deepseekocrdocextractor_deepseekocrdocextractor",
+      "confidence_score": 1.0,
       "source": "deepseekocrdocextractor_deepseekocrdocextractor",
-      "target": "deepseekocrdocextractor_rationale_41",
-      "confidence_score": 1.0
+      "target": "deepseekocrdocextractor_rationale_41"
     },
     {
       "relation": "calls",
@@ -98131,9 +98167,9 @@
       "weight": 1.0,
       "_src": "deepseekocrdocextractor_rationale_44",
       "_tgt": "deepseekocrdocextractor_deepseekocrdocextractor_init",
+      "confidence_score": 1.0,
       "source": "deepseekocrdocextractor_deepseekocrdocextractor_init",
-      "target": "deepseekocrdocextractor_rationale_44",
-      "confidence_score": 1.0
+      "target": "deepseekocrdocextractor_rationale_44"
     },
     {
       "relation": "calls",
@@ -98167,9 +98203,9 @@
       "weight": 1.0,
       "_src": "deepseekocrdocextractor_rationale_62",
       "_tgt": "deepseekocrdocextractor_deepseekocrdocextractor_is_supported_format",
+      "confidence_score": 1.0,
       "source": "deepseekocrdocextractor_deepseekocrdocextractor_is_supported_format",
-      "target": "deepseekocrdocextractor_rationale_62",
-      "confidence_score": 1.0
+      "target": "deepseekocrdocextractor_rationale_62"
     },
     {
       "relation": "calls",
@@ -98203,9 +98239,9 @@
       "weight": 1.0,
       "_src": "deepseekocrdocextractor_rationale_76",
       "_tgt": "deepseekocrdocextractor_deepseekocrdocextractor_is_pdf",
+      "confidence_score": 1.0,
       "source": "deepseekocrdocextractor_deepseekocrdocextractor_is_pdf",
-      "target": "deepseekocrdocextractor_rationale_76",
-      "confidence_score": 1.0
+      "target": "deepseekocrdocextractor_rationale_76"
     },
     {
       "relation": "calls",
@@ -98239,9 +98275,9 @@
       "weight": 1.0,
       "_src": "deepseekocrdocextractor_rationale_88",
       "_tgt": "deepseekocrdocextractor_deepseekocrdocextractor_count_pdf_pages",
+      "confidence_score": 1.0,
       "source": "deepseekocrdocextractor_deepseekocrdocextractor_count_pdf_pages",
-      "target": "deepseekocrdocextractor_rationale_88",
-      "confidence_score": 1.0
+      "target": "deepseekocrdocextractor_rationale_88"
     },
     {
       "relation": "calls",
@@ -98311,9 +98347,9 @@
       "weight": 1.0,
       "_src": "deepseekocrdocextractor_rationale_110",
       "_tgt": "deepseekocrdocextractor_deepseekocrdocextractor_validate_pdf_page_count",
+      "confidence_score": 1.0,
       "source": "deepseekocrdocextractor_deepseekocrdocextractor_validate_pdf_page_count",
-      "target": "deepseekocrdocextractor_rationale_110",
-      "confidence_score": 1.0
+      "target": "deepseekocrdocextractor_rationale_110"
     },
     {
       "relation": "calls",
@@ -98383,9 +98419,9 @@
       "weight": 1.0,
       "_src": "deepseekocrdocextractor_rationale_150",
       "_tgt": "deepseekocrdocextractor_deepseekocrdocextractor_download_file",
+      "confidence_score": 1.0,
       "source": "deepseekocrdocextractor_deepseekocrdocextractor_download_file",
-      "target": "deepseekocrdocextractor_rationale_150",
-      "confidence_score": 1.0
+      "target": "deepseekocrdocextractor_rationale_150"
     },
     {
       "relation": "calls",
@@ -98455,9 +98491,9 @@
       "weight": 1.0,
       "_src": "deepseekocrdocextractor_rationale_210",
       "_tgt": "deepseekocrdocextractor_deepseekocrdocextractor_extract_from_urls",
+      "confidence_score": 1.0,
       "source": "deepseekocrdocextractor_deepseekocrdocextractor_extract_from_urls",
-      "target": "deepseekocrdocextractor_rationale_210",
-      "confidence_score": 1.0
+      "target": "deepseekocrdocextractor_rationale_210"
     },
     {
       "relation": "rationale_for",
@@ -98491,9 +98527,9 @@
       "weight": 1.0,
       "_src": "deepseekocrdocextractor_rationale_290",
       "_tgt": "deepseekocrdocextractor_deepseekocrdocextractor_extract_from_files",
+      "confidence_score": 1.0,
       "source": "deepseekocrdocextractor_deepseekocrdocextractor_extract_from_files",
-      "target": "deepseekocrdocextractor_rationale_290",
-      "confidence_score": 1.0
+      "target": "deepseekocrdocextractor_rationale_290"
     },
     {
       "relation": "rationale_for",
@@ -98527,9 +98563,9 @@
       "weight": 1.0,
       "_src": "deepseekocrdocextractor_rationale_350",
       "_tgt": "deepseekocrdocextractor_deepseekocrdocextractor_extract_from_url",
+      "confidence_score": 1.0,
       "source": "deepseekocrdocextractor_deepseekocrdocextractor_extract_from_url",
-      "target": "deepseekocrdocextractor_rationale_350",
-      "confidence_score": 1.0
+      "target": "deepseekocrdocextractor_rationale_350"
     },
     {
       "relation": "calls",
@@ -98599,9 +98635,9 @@
       "weight": 1.0,
       "_src": "deepseekocrdocextractor_rationale_399",
       "_tgt": "deepseekocrdocextractor_deepseekocrdocextractor_convert_to_pdf",
+      "confidence_score": 1.0,
       "source": "deepseekocrdocextractor_deepseekocrdocextractor_convert_to_pdf",
-      "target": "deepseekocrdocextractor_rationale_399",
-      "confidence_score": 1.0
+      "target": "deepseekocrdocextractor_rationale_399"
     },
     {
       "relation": "contains",
@@ -290198,9 +290234,9 @@
       "weight": 1.0,
       "_src": "libs_common_utils_tests_test_deepseekocrdocextractor_py",
       "_tgt": "test_deepseekocrdocextractor_status_error",
+      "confidence_score": 1.0,
       "source": "libs_common_utils_tests_test_deepseekocrdocextractor_py",
-      "target": "test_deepseekocrdocextractor_status_error",
-      "confidence_score": 1.0
+      "target": "test_deepseekocrdocextractor_status_error"
     },
     {
       "relation": "contains",
@@ -290210,9 +290246,9 @@
       "weight": 1.0,
       "_src": "libs_common_utils_tests_test_deepseekocrdocextractor_py",
       "_tgt": "test_deepseekocrdocextractor_test_download_file_follows_redirects",
+      "confidence_score": 1.0,
       "source": "libs_common_utils_tests_test_deepseekocrdocextractor_py",
-      "target": "test_deepseekocrdocextractor_test_download_file_follows_redirects",
-      "confidence_score": 1.0
+      "target": "test_deepseekocrdocextractor_test_download_file_follows_redirects"
     },
     {
       "relation": "contains",
@@ -290222,9 +290258,9 @@
       "weight": 1.0,
       "_src": "libs_common_utils_tests_test_deepseekocrdocextractor_py",
       "_tgt": "test_deepseekocrdocextractor_test_is_transient_download_error_by_status",
+      "confidence_score": 1.0,
       "source": "libs_common_utils_tests_test_deepseekocrdocextractor_py",
-      "target": "test_deepseekocrdocextractor_test_is_transient_download_error_by_status",
-      "confidence_score": 1.0
+      "target": "test_deepseekocrdocextractor_test_is_transient_download_error_by_status"
     },
     {
       "relation": "contains",
@@ -290234,9 +290270,9 @@
       "weight": 1.0,
       "_src": "libs_common_utils_tests_test_deepseekocrdocextractor_py",
       "_tgt": "test_deepseekocrdocextractor_test_is_transient_download_error_network_and_redirects",
+      "confidence_score": 1.0,
       "source": "libs_common_utils_tests_test_deepseekocrdocextractor_py",
-      "target": "test_deepseekocrdocextractor_test_is_transient_download_error_network_and_redirects",
-      "confidence_score": 1.0
+      "target": "test_deepseekocrdocextractor_test_is_transient_download_error_network_and_redirects"
     },
     {
       "relation": "contains",
@@ -290246,9 +290282,9 @@
       "weight": 1.0,
       "_src": "libs_common_utils_tests_test_deepseekocrdocextractor_py",
       "_tgt": "test_deepseekocrdocextractor_test_is_transient_download_error_permanent_defaults",
+      "confidence_score": 1.0,
       "source": "libs_common_utils_tests_test_deepseekocrdocextractor_py",
-      "target": "test_deepseekocrdocextractor_test_is_transient_download_error_permanent_defaults",
-      "confidence_score": 1.0
+      "target": "test_deepseekocrdocextractor_test_is_transient_download_error_permanent_defaults"
     },
     {
       "relation": "contains",
@@ -290258,9 +290294,9 @@
       "weight": 1.0,
       "_src": "libs_common_utils_tests_test_deepseekocrdocextractor_py",
       "_tgt": "test_deepseekocrdocextractor_test_download_file_raises_typed_status_error",
+      "confidence_score": 1.0,
       "source": "libs_common_utils_tests_test_deepseekocrdocextractor_py",
-      "target": "test_deepseekocrdocextractor_test_download_file_raises_typed_status_error",
-      "confidence_score": 1.0
+      "target": "test_deepseekocrdocextractor_test_download_file_raises_typed_status_error"
     },
     {
       "relation": "rationale_for",
@@ -290282,9 +290318,9 @@
       "weight": 1.0,
       "_src": "test_deepseekocrdocextractor_rationale_28",
       "_tgt": "test_deepseekocrdocextractor_test_validate_failopen_when_pypdf_cannot_parse",
+      "confidence_score": 1.0,
       "source": "test_deepseekocrdocextractor_test_validate_failopen_when_pypdf_cannot_parse",
-      "target": "test_deepseekocrdocextractor_rationale_28",
-      "confidence_score": 1.0
+      "target": "test_deepseekocrdocextractor_rationale_28"
     },
     {
       "relation": "contains",
@@ -291590,9 +291626,9 @@
       "weight": 1.0,
       "_src": "libs_common_utils_src_common_utils_concurrency_graceful_py",
       "_tgt": "graceful_get_message_or_stop",
+      "confidence_score": 1.0,
       "source": "libs_common_utils_src_common_utils_concurrency_graceful_py",
-      "target": "graceful_get_message_or_stop",
-      "confidence_score": 1.0
+      "target": "graceful_get_message_or_stop"
     },
     {
       "relation": "rationale_for",
@@ -291602,9 +291638,9 @@
       "weight": 1.0,
       "_src": "graceful_rationale_1",
       "_tgt": "libs_common_utils_src_common_utils_concurrency_graceful_py",
+      "confidence_score": 1.0,
       "source": "libs_common_utils_src_common_utils_concurrency_graceful_py",
-      "target": "graceful_rationale_1",
-      "confidence_score": 1.0
+      "target": "graceful_rationale_1"
     },
     {
       "relation": "rationale_for",
@@ -291614,8 +291650,44 @@
       "weight": 1.0,
       "_src": "graceful_rationale_10",
       "_tgt": "graceful_get_message_or_stop",
+      "confidence_score": 1.0,
       "source": "graceful_get_message_or_stop",
-      "target": "graceful_rationale_10",
+      "target": "graceful_rationale_10"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "libs\\common-utils\\src\\common_utils\\autres\\graceful.py",
+      "source_location": "L13",
+      "weight": 1.0,
+      "_src": "libs_common_utils_src_common_utils_autres_graceful_py",
+      "_tgt": "graceful_get_message_or_stop",
+      "source": "graceful_get_message_or_stop",
+      "target": "libs_common_utils_src_common_utils_autres_graceful_py",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "libs\\common-utils\\src\\common_utils\\autres\\graceful.py",
+      "source_location": "L16",
+      "weight": 1.0,
+      "_src": "graceful_rationale_16",
+      "_tgt": "graceful_get_message_or_stop",
+      "source": "graceful_get_message_or_stop",
+      "target": "graceful_rationale_16",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "libs\\common-utils\\src\\common_utils\\autres\\graceful.py",
+      "source_location": "L1",
+      "weight": 1.0,
+      "_src": "graceful_rationale_1",
+      "_tgt": "libs_common_utils_src_common_utils_autres_graceful_py",
+      "source": "graceful_rationale_1",
+      "target": "libs_common_utils_src_common_utils_autres_graceful_py",
       "confidence_score": 1.0
     },
     {
@@ -291626,9 +291698,9 @@
       "weight": 1.0,
       "_src": "deepseekocrdocextractor_rationale_24",
       "_tgt": "deepseekocrdocextractor_is_transient_download_error",
+      "confidence_score": 1.0,
       "source": "deepseekocrdocextractor_is_transient_download_error",
-      "target": "deepseekocrdocextractor_rationale_24",
-      "confidence_score": 1.0
+      "target": "deepseekocrdocextractor_rationale_24"
     },
     {
       "relation": "calls",
@@ -291674,9 +291746,9 @@
       "weight": 1.0,
       "_src": "test_deepseekocrdocextractor_test_is_transient_download_error_by_status",
       "_tgt": "test_deepseekocrdocextractor_status_error",
+      "confidence_score": 1.0,
       "source": "test_deepseekocrdocextractor_status_error",
-      "target": "test_deepseekocrdocextractor_test_is_transient_download_error_by_status",
-      "confidence_score": 1.0
+      "target": "test_deepseekocrdocextractor_test_is_transient_download_error_by_status"
     },
     {
       "relation": "rationale_for",
@@ -291686,9 +291758,9 @@
       "weight": 1.0,
       "_src": "test_deepseekocrdocextractor_rationale_52",
       "_tgt": "test_deepseekocrdocextractor_test_download_file_follows_redirects",
+      "confidence_score": 1.0,
       "source": "test_deepseekocrdocextractor_test_download_file_follows_redirects",
-      "target": "test_deepseekocrdocextractor_rationale_52",
-      "confidence_score": 1.0
+      "target": "test_deepseekocrdocextractor_rationale_52"
     },
     {
       "relation": "rationale_for",
@@ -291698,57 +291770,57 @@
       "weight": 1.0,
       "_src": "test_deepseekocrdocextractor_rationale_117",
       "_tgt": "test_deepseekocrdocextractor_test_download_file_raises_typed_status_error",
+      "confidence_score": 1.0,
       "source": "test_deepseekocrdocextractor_test_download_file_raises_typed_status_error",
-      "target": "test_deepseekocrdocextractor_rationale_117",
-      "confidence_score": 1.0
+      "target": "test_deepseekocrdocextractor_rationale_117"
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "libs\\common-utils\\tests\\test_graceful.py",
-      "source_location": "L9",
+      "source_location": "L26",
       "weight": 1.0,
       "_src": "libs_common_utils_tests_test_graceful_py",
       "_tgt": "test_graceful_test_returns_item_when_available",
+      "confidence_score": 1.0,
       "source": "libs_common_utils_tests_test_graceful_py",
-      "target": "test_graceful_test_returns_item_when_available",
-      "confidence_score": 1.0
+      "target": "test_graceful_test_returns_item_when_available"
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "libs\\common-utils\\tests\\test_graceful.py",
-      "source_location": "L18",
+      "source_location": "L35",
       "weight": 1.0,
       "_src": "libs_common_utils_tests_test_graceful_py",
       "_tgt": "test_graceful_test_returns_none_when_already_stopped_without_consuming",
+      "confidence_score": 1.0,
       "source": "libs_common_utils_tests_test_graceful_py",
-      "target": "test_graceful_test_returns_none_when_already_stopped_without_consuming",
-      "confidence_score": 1.0
+      "target": "test_graceful_test_returns_none_when_already_stopped_without_consuming"
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "libs\\common-utils\\tests\\test_graceful.py",
-      "source_location": "L31",
+      "source_location": "L48",
       "weight": 1.0,
       "_src": "libs_common_utils_tests_test_graceful_py",
       "_tgt": "test_graceful_test_returns_none_when_stopped_while_waiting",
+      "confidence_score": 1.0,
       "source": "libs_common_utils_tests_test_graceful_py",
-      "target": "test_graceful_test_returns_none_when_stopped_while_waiting",
-      "confidence_score": 1.0
+      "target": "test_graceful_test_returns_none_when_stopped_while_waiting"
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "libs\\common-utils\\tests\\test_graceful.py",
-      "source_location": "L42",
+      "source_location": "L59",
       "weight": 1.0,
       "_src": "libs_common_utils_tests_test_graceful_py",
       "_tgt": "test_graceful_test_returns_item_if_it_arrives_while_waiting",
+      "confidence_score": 1.0,
       "source": "libs_common_utils_tests_test_graceful_py",
-      "target": "test_graceful_test_returns_item_if_it_arrives_while_waiting",
-      "confidence_score": 1.0
+      "target": "test_graceful_test_returns_item_if_it_arrives_while_waiting"
     },
     {
       "relation": "rationale_for",
@@ -291758,8 +291830,32 @@
       "weight": 1.0,
       "_src": "test_graceful_rationale_1",
       "_tgt": "libs_common_utils_tests_test_graceful_py",
+      "confidence_score": 1.0,
       "source": "libs_common_utils_tests_test_graceful_py",
-      "target": "test_graceful_rationale_1",
+      "target": "test_graceful_rationale_1"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "libs\\common-utils\\tests\\test_graceful.py",
+      "source_location": "L11",
+      "weight": 1.0,
+      "_src": "libs_common_utils_tests_test_graceful_py",
+      "_tgt": "test_graceful_test_imports_without_heavy_optional_deps",
+      "source": "libs_common_utils_tests_test_graceful_py",
+      "target": "test_graceful_test_imports_without_heavy_optional_deps",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "libs\\common-utils\\tests\\test_graceful.py",
+      "source_location": "L12",
+      "weight": 1.0,
+      "_src": "test_graceful_rationale_12",
+      "_tgt": "test_graceful_test_imports_without_heavy_optional_deps",
+      "source": "test_graceful_test_imports_without_heavy_optional_deps",
+      "target": "test_graceful_rationale_12",
       "confidence_score": 1.0
     }
   ],
