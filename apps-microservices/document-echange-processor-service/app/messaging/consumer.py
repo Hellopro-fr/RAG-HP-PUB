@@ -10,6 +10,7 @@ import gc
 from document_echange_processor_service.messaging.publisher import Publisher  # Importe notre publisher local
 from document_echange_processor_service.core.processor import process_document_data_for_templating # Importe la logique métier
 from common_utils.autres.DLQProperties import DLQProperties
+from common_utils.concurrency.graceful import get_message_or_stop
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,13 @@ class Consumer:
         self.retry_queue_name = f'{self.queue_name}_retry'
         self.dead_letter_exchange = 'dead_letter_exchange'
         self.dead_letter_queue_name = f'{self.queue_name}_dlq'
-        
+
+        # Set at start_consuming; used for the graceful drain on shutdown.
+        self._stop_event: asyncio.Event | None = None
+        self._queue = None
+        self._consumer_tag = None
+        self._batch_task = None
+
         logger.info("✅ Consumer initialisé.")
 
     async def _setup_queues(self, channel: aio_pika.abc.AbstractChannel):
@@ -72,8 +79,12 @@ class Consumer:
         while True:
             batch = []
             try:
-                # 1. Attendre indéfiniment le premier message pour démarrer un batch
-                first_message = await self.message_buffer.get()
+                # 1. Attendre le premier message, OU sortir si un arrêt gracieux
+                #    est demandé alors qu'aucun batch n'est en cours.
+                first_message = await get_message_or_stop(self.message_buffer, self._stop_event)
+                if first_message is None:
+                    logger.info("   -> Arrêt gracieux: aucun nouveau batch, sortie du processeur.")
+                    break
                 batch.append(first_message)
 
                 # 2. Une fois le premier message reçu, essayer de remplir le reste du batch
@@ -272,16 +283,42 @@ class Consumer:
         await self.message_buffer.put(message)
 
 
-    async def start_consuming(self):
+    async def start_consuming(self, stop_event: asyncio.Event):
         """Démarre le consumer et la tâche de traitement de batch."""
+        self._stop_event = stop_event
         self._channel = await self.connection.channel()
         await self._channel.set_qos(prefetch_count=BATCH_SIZE)
 
-        queue = await self._setup_queues(self._channel)
+        self._queue = await self._setup_queues(self._channel)
 
         # Démarrer la tâche de fond qui traitera les batches
         self._batch_task = asyncio.create_task(self.batch_processor())
-        
+
         # Commencer à consommer les messages et à les mettre dans le buffer
         logger.info("👂 Document-processor-service: En attente de messages...")
-        await queue.consume(self._on_message)
+        self._consumer_tag = await self._queue.consume(self._on_message)
+
+    async def stop(self, drain_timeout: float = 290.0):
+        """Arrêt gracieux : cesser de prendre de nouveaux messages, laisser le
+        batch en cours se terminer (les messages déjà ACK doivent quand même être
+        publiés/DLQ), puis sortir. Les messages en buffer non traités restent
+        non-ACK et seront redélivrés au redémarrage — aucune perte."""
+        if self._stop_event is not None:
+            self._stop_event.set()
+
+        # 1. Stopper les nouvelles livraisons dans le buffer.
+        if self._queue is not None and self._consumer_tag is not None:
+            try:
+                await self._queue.cancel(self._consumer_tag)
+            except Exception as e:
+                logger.warning("Annulation du consumer échouée: %s", e)
+
+        # 2. Attendre que le batch en cours finisse et que le processeur sorte.
+        if self._batch_task is not None:
+            try:
+                await asyncio.wait_for(self._batch_task, timeout=drain_timeout)
+                logger.info("✅ Drain terminé proprement.")
+            except asyncio.TimeoutError:
+                logger.warning("Drain timeout (%ss) — batch en cours annulé.", drain_timeout)
+            except asyncio.CancelledError:
+                pass
