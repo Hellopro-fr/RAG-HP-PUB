@@ -56,7 +56,15 @@ Le funnel GTM repose sur **un événement principal** (`devis_funnel_formulaire`
   // Contexte funnel — setFunnelContext(...)
   rubrique_id: number,
   'product.category5': string,
-  abtest2?: string,           // optionnel — provient du token URL, omis si absent
+
+  // Slots A/B test GTM HelloPro (dimensions custom GA4) — depuis le bloc `data`
+  // du token URL chiffré, chaque slot présent est poussé tel quel, omis si absent
+  abtest1?: string,
+  abtest2?: string,
+  abtest3?: string,
+  abtest4?: string,
+  abtest5?: string,
+
   page_template?: string,     // optionnel — template GTM de la page d'entrée, depuis le token URL (champ `page_template_gtm` côté token, remappé en `page_template` pour le push)
   funnel_context?: string,    // optionnel — contexte funnel, depuis le token URL
   page_location_uri?: string, // optionnel — URI de la page d'entrée, depuis le token URL
@@ -71,6 +79,19 @@ Le funnel GTM repose sur **un événement principal** (`devis_funnel_formulaire`
   // + champs additionnels selon l'étape (cf. tableau ci-dessous)
 }
 ```
+
+**Contrat émetteur des slots A/B** : côté PHP, `generateCategoryToken($idCategorie, ['abtestN' => 'label_bras', ...])`
+(`FRONT/fonctions/fonctions_generales.php`) ; tout `abtest1`..`abtest5` présent dans le bloc `data` du token chiffré est
+propagé dans chaque event du funnel (source de vérité : `ABTEST_SLOTS` dans [types/category-token.ts](../types/category-token.ts)).
+Pour fabriquer un token de test côté Next : `POST /api/category-token` avec `{ categoryId, data: { abtest1: '...' } }`.
+
+**Réhydratation après full page load** : le contexte funnel (`funnelContext`) est une variable de module — perdue à
+chaque full page load. Le cas réel est le **back/forward navigateur** (le store persisté est conservé mais le re-parse
+du token est sauté quand Q1 est déjà répondue) ; le F5, lui, vide le store et redirige vers le token d'origine
+(comportement voulu de `flow-store`). Au premier event suivant, `trackQuoteFunnel` réhydrate le contexte depuis le
+store Zustand persisté (slots abtest1..5, `page_template`, `funnel_context`, `page_location_uri`, `rubrique_id`,
+`product.category5`) via `ensureFunnelContextFromStore()` ; les valeurs déjà posées dans le contexte priment sur
+celles du store.
 
 ### Types d'étapes (`step_type`)
 
@@ -388,7 +409,8 @@ Le composant `<Hotjar />` ([components/analytics/](../components/analytics)) cha
 ### Data Layer Variables
 
 - `step_name`, `step_type`, `step_index`, `step_number`
-- `flow_type`, `rubrique_id`, `product.category5`, `abtest2`
+- `flow_type`, `rubrique_id`, `product.category5`
+- `abtest1`, `abtest2`, `abtest3`, `abtest4`, `abtest5` (slots A/B partagés HelloPro, depuis le bloc `data` du token URL)
 - `page_template`, `funnel_context`, `page_location_uri` (depuis le token URL — `page_template` correspond au champ `page_template_gtm` du payload chiffré)
 - `conversion`, `profile_type`, `user_known_status`
 - `user_id`, `session_id`

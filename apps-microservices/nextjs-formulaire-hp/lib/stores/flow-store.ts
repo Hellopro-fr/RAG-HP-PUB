@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import type { ContactFormData, ProfileData, UserAnswers, Supplier } from '@/types';
 import type { CharacteristicsMap } from '@/types/characteristics';
 import type { PriceEstimationState } from '@/types/prix';
+import type { AbtestSlot } from '@/types/category-token';
 
 // =============================================================================
 // STORAGE WRAPPER - Gère le reset sur reload (F5) et changement manuel d'URL
@@ -198,9 +199,10 @@ export interface FlowState {
   // Version A/B test piloté par le token URL (champ abtest_UX_lead_version du payload décrypté)
   abtestUxLeadVersion: number | null;
 
-  // A/B test secondaire piloté par le token URL (champ abtest2 du payload décrypté).
-  // String libre injecté dans tous les events GTM devis_funnel_formulaire.
-  abtest2: string | null;
+  // Slots A/B test GTM HelloPro pilotés par le token URL (champs abtest1..abtest5
+  // du payload décrypté). Strings libres injectés dans tous les events GTM
+  // devis_funnel_formulaire (omis si absents).
+  abtests: Partial<Record<AbtestSlot, string>>;
 
   // 3 champs additionnels piloté par le token URL, injectés dans tous les events
   // GTM devis_funnel_formulaire (omis si absent). Naming côté token et GTM en
@@ -326,7 +328,7 @@ export interface FlowState {
   // Actions
   setCategoryId: (id: number) => void;
   setAbtestUxLeadVersion: (value: number | null) => void;
-  setAbtest2: (value: string | null) => void;
+  setAbtest: (slot: AbtestSlot, value: string) => void;
   setPageTemplateGtm: (value: string | null) => void;
   setFunnelContextValue: (value: string | null) => void;
   setPageLocationUri: (value: string | null) => void;
@@ -369,7 +371,7 @@ export interface FlowState {
 const initialState = {
   categoryId: null,
   abtestUxLeadVersion: null as number | null,
-  abtest2: null as string | null,
+  abtests: {} as Partial<Record<AbtestSlot, string>>,
   pageTemplateGtm: null as string | null,
   funnelContextValue: null as string | null,
   pageLocationUri: null as string | null,
@@ -416,7 +418,7 @@ export const useFlowStore = create<FlowState>()(
 
       setAbtestUxLeadVersion: (value) => set({ abtestUxLeadVersion: value }),
 
-      setAbtest2: (value) => set({ abtest2: value }),
+      setAbtest: (slot, value) => set((state) => ({ abtests: { ...state.abtests, [slot]: value } })),
 
       setPageTemplateGtm: (value) => set({ pageTemplateGtm: value }),
 

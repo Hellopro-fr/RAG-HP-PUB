@@ -1,5 +1,8 @@
 // Global types are declared in types/global.d.ts
 
+import { ABTEST_SLOTS, type AbtestSlot } from '@/types/category-token';
+import { useFlowStore } from '@/lib/stores/flow-store';
+
 // =============================================================================
 // TYPES
 // =============================================================================
@@ -8,10 +11,9 @@ type StepType = 'init' | 'question' | 'localisation' | 'choix-propart' | 'select
 
 type FlowType = 'principal' | 'pas_assez_produits' | 'pas_trouve_recherchez' | 'budget_ne_correspond_pas' | null;
 
-interface FunnelContext {
+interface FunnelContext extends Partial<Record<AbtestSlot, string>> {
   rubrique_id?: number;
   'product.category5'?: string;
-  abtest2?: string;
   page_template_gtm?: string;
   funnel_context?: string;
   page_location_uri?: string;
@@ -111,6 +113,7 @@ export function resetTrackingState(): void {
   funnelContext = {};
   currentStepIndex = 0;
   currentFlowType = null;
+  contextHydratedFromStore = false;
 }
 
 /**
@@ -153,11 +156,45 @@ function getDeviceInfo() {
 let funnelContext: FunnelContext = {};
 let currentFlowType: FlowType = null;
 
+// Garde one-shot de la réhydratation du contexte depuis le store persisté
+let contextHydratedFromStore = false;
+
 /**
  * Initialiser le contexte du funnel (à appeler au début)
  */
 export function setFunnelContext(context: FunnelContext) {
   funnelContext = { ...funnelContext, ...context };
+}
+
+/**
+ * Réhydrate le contexte funnel depuis le store Zustand persisté (sessionStorage).
+ * funnelContext est une variable de module : tout full page load la vide. Le cas
+ * réel est le back/forward navigateur (le store est conservé mais le re-parse du
+ * token est sauté quand Q1 est déjà répondue) — le F5, lui, vide le store et
+ * redirige vers le token d'origine (cf. flow-store). Appelé en lazy au premier
+ * event pour couvrir tous les points d'entrée — les valeurs déjà posées (token
+ * frais) priment sur celles du store.
+ */
+function ensureFunnelContextFromStore(): void {
+  if (contextHydratedFromStore || typeof window === 'undefined') return;
+  contextHydratedFromStore = true;
+
+  try {
+    const { abtests, pageTemplateGtm, funnelContextValue, pageLocationUri, categoryId, categoryName } =
+      useFlowStore.getState();
+
+    funnelContext = {
+      ...abtests,
+      ...(pageTemplateGtm && { page_template_gtm: pageTemplateGtm }),
+      ...(funnelContextValue && { funnel_context: funnelContextValue }),
+      ...(pageLocationUri && { page_location_uri: pageLocationUri }),
+      ...(categoryId && { rubrique_id: categoryId }),
+      ...(categoryName && { 'product.category5': categoryName }),
+      ...funnelContext,
+    };
+  } catch {
+    // Store indisponible : contexte inchangé
+  }
 }
 
 /**
@@ -195,6 +232,8 @@ export function trackQuoteFunnel(
   stepType: StepType,
   additionalData?: Record<string, unknown>
 ) {
+  ensureFunnelContextFromStore();
+
   const userId = getUserId();
   const sessionId = getSessionId();
 
@@ -208,8 +247,10 @@ export function trackQuoteFunnel(
     rubrique_id: funnelContext.rubrique_id,
     'product.category5': funnelContext['product.category5'],
 
-    // A/B test secondaire (token URL) — omis si absent
-    ...(funnelContext.abtest2 && { abtest2: funnelContext.abtest2 }),
+    // Slots A/B test GTM HelloPro abtest1..abtest5 (token URL) — omis si absents
+    ...Object.fromEntries(
+      ABTEST_SLOTS.filter((slot) => funnelContext[slot]).map((slot) => [slot, funnelContext[slot]])
+    ),
 
     // Champs additionnels token URL — omis si absent.
     // Note : `page_template_gtm` du token est pousse sous la cle `page_template` dans le dataLayer.
