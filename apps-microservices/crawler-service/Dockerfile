@@ -23,12 +23,6 @@ FROM mcr.microsoft.com/playwright:v1.56.1-noble
 
 WORKDIR /app
 
-# Deploy identity served by GET /version. Passed by docker-compose build args;
-# defaults keep local builds working without them.
-ARG GIT_COMMIT=unknown
-ARG BUILD_DATE=unknown
-ENV GIT_COMMIT=$GIT_COMMIT BUILD_DATE=$BUILD_DATE
-
 ENV PYTHONPATH=/app
 
 # Install Python, pip, venv module, and Firefox/Camoufox system dependencies.

@@ -4,7 +4,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.router.comparator import router as ComparatorRouter
-from common_utils.redis.cache_service import init_redis_pool, close_redis_pool
+from app.core.job_manager import job_manager
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -28,12 +28,12 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 @app.on_event("startup")
 async def startup_event():
     logger.info("Image Comparison Service starting up.")
-    await init_redis_pool()
+    await job_manager.connect_redis()
 
 @app.on_event("shutdown")
 async def shutdown_event():
     logger.info("Service shutting down.")
-    await close_redis_pool()
+    await job_manager.close_redis()
 
 # Include router WITHOUT prefix. Nginx handles the path stripping.
 app.include_router(ComparatorRouter, tags=["Comparator"])

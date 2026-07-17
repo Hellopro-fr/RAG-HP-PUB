@@ -9,18 +9,17 @@ Detects whether a website is in French or has a French version. Uses URL analysi
 - **Scraping:** Camoufox (stealth Firefox, default) via Playwright; Chromium fallback via `CAMOUFOX_ENABLED=false` or on Camoufox launch failure. Apify proxy mandatory for both.
 - **NLP:** fastText (primary), langdetect + langid (cross-check)
 - **HTML parsing:** BeautifulSoup4 + lxml
-- **Cache:** Redis (optional, graceful degradation) via the shared `common_utils.redis.cache_service` pool (`libs/common-utils`) — bounded connections, socket timeouts, health checks, named client (`SERVICE_NAME`). `init_redis_pool()`/`close_redis_pool()` run in `main.py`'s lifespan; `DomainCache` and `JobStore` read `cache_service.redis_client` live at each call (None → cache invisible / async submit 503). Same system as crawler-service and image-comparison-service.
-- **Shared libs:** `libs/common-utils` (Redis only — installed from `/opt/libs/common-utils` in the Dockerfile so the dev bind mount on `/app` can't hide it)
+- **Cache:** Redis (optional, graceful degradation)
+- **No shared libs** (standalone service)
 
 ## Build / Run
 
 - **Port:** 8999
-- **Prerequisite (local run + tests):** `pip install -e libs/common-utils` (from repo root) — `main.py`/`domain_fr.py`/`async_jobs.py` import `common_utils.redis` unconditionally. The Docker image installs it at build time.
 - **Run:** `uvicorn main:app --host 0.0.0.0 --port 8999 --proxy-headers --timeout-keep-alive 300`
 - **Tests:** `pytest tests/`
-- **Docker build:** installs Playwright + Chromium (fallback) and fetches the Camoufox binary at build time. Camoufox's ~200MB browser is stored in the image. `libs/common-utils` is installed **editable** from `/opt/libs/common-utils` (its `setup.py` `find_packages` would exclude `common_utils/redis` from a wheel — no `__init__.py`; `/opt` so the dev bind mount on `/app` can't hide it).
+- **Docker build:** installs Playwright + Chromium (fallback) and fetches the Camoufox binary at build time. Camoufox's ~200MB browser is stored in the image.
 - **Required env vars:** `APIFY_PROXY` (proxy password)
-- **Optional env vars:** `REDIS_URL` (cache; read from the process env by `cache_service` — the lifespan bridges a `.env`-file value into `os.environ`), `SERVICE_NAME` (Redis client name, set in docker-compose), `REDIS_MAX_CONNECTIONS`/`REDIS_SOCKET_TIMEOUT_S`/`REDIS_SOCKET_CONNECT_TIMEOUT_S`/`REDIS_HEALTH_CHECK_INTERVAL_S` (pool tuning, defaults 20/10/5/30), `REDIS_RECONNECT_INTERVAL_S` (default 30 — lifespan retry loop re-runs `init_redis_pool()` while the pool is down, so Redis unavailable at boot heals without a restart)
+- **Optional env vars:** `REDIS_URL` (cache)
 
 ## Folder Structure
 
@@ -49,38 +48,10 @@ api-detection-langue-fr/
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/api/v1/detect` | Detect French for a single URL (simple/complete mode) |
-| `POST` | `/api/v1/detect-batch` | Batch detection (max 100 URLs, 2-pass parallel+retry, first_match mode). Sync; shares `_run_batch_core` with the async worker. |
-| `POST` | `/api/v1/detect-batch-async` | Submit a batch async → `202 {job_id}` (or `200` on idempotent re-submit). Poll-based; decouples callers from the gateway 180s ceiling. |
-| `GET`  | `/api/v1/detect-batch-async/{job_id}` | Poll an async job: `pending\|running\|completed\|failed\|stale`; `results` populated when terminal; `404` when unknown/expired. |
+| `POST` | `/api/v1/detect-batch` | Batch detection (max 100 URLs, 2-pass parallel+retry, first_match mode) |
 | `GET`  | `/api/v1/check-url` | URL-only check (no HTML fetch) |
 | `POST` | `/api/v1/detect-debug` | Debug mode with full pipeline trace (fetch, cleaning, URL, HTML, NLP, alternatives, decision) |
 | `GET`  | `/api/v1/health` | Health check |
-
-### Async Batch Job API (`/detect-batch-async`)
-
-In-process asyncio worker + Redis job store (`app/core/async_jobs.py`), wired via a FastAPI `lifespan` in `main.py` (`app.state.job_manager`). The worker reuses the same `_run_batch_core` as the sync `/detect-batch` (DRY) and the shared prod admission pool — **crawler-service is immune** because it passes `html_content` (bypasses admission).
-
-- **Submit** (`POST /detect-batch-async`, body = `AsyncBatchSubmitRequest`): `202 {job_id, status, total, poll_after_seconds}`. With `client_job_id` set, a re-submit returns the existing job (`200`, atomic `SET NX` idempotency).
-- **Poll** (`GET /detect-batch-async/{job_id}`): `AsyncBatchStatusResponse`. `stale` is computed on read (heartbeat older than `STALE_THRESHOLD_S` → dead worker, e.g. OOM restart).
-- **503 differentiation:** capacity (`MAX_ACTIVE_JOBS` reached) → `Retry-After` header set (`retryable:true`); kill-switch (`ASYNC_JOBS_ENABLED=false`) or Redis-unavailable → **no `Retry-After`** (`retryable:false`). Callers key off the header presence.
-- **Restart = fail-fast:** no resume. Stale/failed jobs are re-enqueued by the caller (BO `domaine_fr_retry`). Graceful shutdown marks running jobs `failed(service_shutdown)`.
-- **Redis required for async** (cache stays optional): if `REDIS_URL` is unset/unreachable, submit returns `503`; sync endpoints are unaffected.
-- **TTL invariant:** `JOB_RESULT_TTL_S < JOB_TTL_ACTIVE_S`; callers must poll within `JOB_RESULT_TTL_S`.
-- Metrics: `detect_async_jobs_submitted_total`, `detect_async_jobs_active`, `detect_async_jobs_terminal_total{status}`, `detect_async_job_duration_seconds`, `detect_async_job_capacity_rejected_total`. Per-item async fetches reuse `ADMISSION_REJECTED{endpoint="/api/v1/detect-batch-async"}`.
-
-| Variable | Default | Purpose |
-|---|---|---|
-| `ASYNC_JOBS_ENABLED` | `true` | Kill switch for the async job API (`false` → submit 503, not retryable). |
-| `MAX_ACTIVE_JOBS` | `8` | Max concurrent async jobs (capacity 503 + `Retry-After` beyond this). |
-| `JOB_TTL_ACTIVE_S` | `7200` | TTL of a pending/running job record (refreshed by heartbeat). |
-| `JOB_RESULT_TTL_S` | `3600` | TTL of a terminal job record (poll window). |
-| `STALE_THRESHOLD_S` | `120` | No-heartbeat window after which poll reports `stale`. |
-| `HEARTBEAT_INTERVAL_S` | `5` | Wall-clock heartbeat tick. |
-| `ASYNC_SUBMIT_RETRY_AFTER_S` | `15` | `Retry-After` value on capacity 503. |
-| `ASYNC_POLL_HINT_MAX_S` | `30` | Upper bound on the server `poll_after_seconds` hint. |
-| `SHUTDOWN_GRACE_S` | `5` | Bound on `JobManager.shutdown()` task drain. |
-
-Spec: `docs/superpowers/specs/2026-06-01-detection-langue-fr-async-job-api-design.md`. Plan: `docs/superpowers/plans/2026-06-01-detection-langue-fr-async-job-api.md`.
 
 ## Detection Pipeline
 
@@ -203,21 +174,6 @@ Batch Pass 2 retry: `fetch_failed`, `challenge_page`, and `admission_rejected` (
 - `detection_validation_verdicts_total{verdict}` — counter, label values: `valid`, `http_error`, `soft_404`, `redirected_to_home`.
 - `detection_homepage_fallback_triggered_total{outcome}` — counter, label values: `success`, `rejected`, `network_failure`.
 
-## Alternative-URL Validation Skip (`validate_alternatives`)
-
-`validate_alternatives: bool = true` on `DetectionRequest`, `BatchDetectionRequest`, and `AsyncBatchSubmitRequest` (threaded via `BatchOpts`). When **false**, COMPLETE-mode detection still **parses** alternatives from the HTML but performs **zero HTTP/browser work** on them:
-
-- skips the httpx Phase-1 + Phase-2 browser validation (`_validate_alternative_urls` → `scrape_html`),
-- skips the Case-6 browser NLP-confirmation loop (`fetch_html` per validated alt).
-
-Returned alts: hreflang → `validated:true` (trusted declaration, unchanged); medium (`data-lang`/`link`/`option`) → `validated:false, reliability:'low'`. Default **true** ⇒ existing callers (BO) keep full validation.
-
-**Why:** `crawler-service` sends `html_content` for the homepage in `complete` mode; the alt-validation browser opens (not the initial page) were the residual OOM / `socket hang up` source. Setting `validate_alternatives=false` removes them while preserving the hreflang prefixes the crawler's Regional Path Exclusion consumes.
-
-**Deliberate behavior change (flagged calls only):** a site whose provided homepage content is not NLP-confirmed French but exposes an NLP-confirmable French alternative previously returned `ok=true` via Case 6; with the flag off it returns `ok=false` (falls through to Case 7/9). `/detect-debug` **ignores** the flag (always validates, to show the full pipeline).
-
-Metric: `detection_alt_validation_skipped_total` (no labels) — increments once per flagged skip with ≥1 candidate.
-
 ## Dependencies on Other Services
 
-No other microservice. Uses `libs/common-utils` for the shared Redis pool (`common_utils.redis.cache_service`). Requires Apify proxy (`APIFY_PROXY` env var). Optionally uses Redis for caching (`REDIS_URL` env var; required for the async job API).
+None (standalone). Requires Apify proxy (`APIFY_PROXY` env var). Optionally uses Redis for caching (`REDIS_URL` env var).

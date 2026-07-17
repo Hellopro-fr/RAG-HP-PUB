@@ -27,7 +27,6 @@ import (
 	"account-service/internal/config"
 	"account-service/internal/crypto"
 	"account-service/internal/db"
-	"account-service/internal/gatewaysync"
 	"account-service/internal/logout"
 	"account-service/internal/repository"
 )
@@ -35,10 +34,10 @@ import (
 // App owns every long-lived dependency built at boot. main() drives Run /
 // Shutdown without touching the inner objects.
 type App struct {
-	cfg       *config.Configuration
-	server    *http.Server
-	pool      *logout.WorkerPool
-	bcgCancel context.CancelFunc
+	cfg        *config.Configuration
+	server     *http.Server
+	pool       *logout.WorkerPool
+	bcgCancel  context.CancelFunc
 }
 
 // Build assembles every dependency the service needs. It does NOT start the
@@ -87,13 +86,6 @@ func Build(cfg *config.Configuration, version string) (*App, error) {
 		}
 	}
 
-	// MCP gateway user sync — nil when MCP_GATEWAY_INTERNAL_URL is unset so
-	// the sync routes return 503 instead of dialing nowhere.
-	var mcpSync api.McpSyncer
-	if cfg.MCPGatewayInternalURL != "" {
-		mcpSync = gatewaysync.New(cfg.MCPGatewayInternalURL, cfg.InternalAdminToken)
-	}
-
 	mux := http.NewServeMux()
 	registerRoutes(mux, routeDeps{
 		cfg:          cfg,
@@ -105,7 +97,6 @@ func Build(cfg *config.Configuration, version string) (*App, error) {
 		version:      version,
 		catalog:      catCli,
 		catalogAudit: catAudit,
-		mcpSync:      mcpSync,
 	})
 
 	root := api.RequestLog(api.Recover(mux))

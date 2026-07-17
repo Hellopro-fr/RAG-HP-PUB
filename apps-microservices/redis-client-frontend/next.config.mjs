@@ -7,7 +7,6 @@ const nextConfig = {
     unoptimized: true,
   },
   output: 'standalone',
-  transpilePackages: ['@hellopro/auth'],
 }
 
 export default nextConfig

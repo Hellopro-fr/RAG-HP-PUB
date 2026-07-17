@@ -184,7 +184,6 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	apiMux.HandleFunc("/api/v1/bdd/used/tables/import", h.handleBDDUsedImport)
 	apiMux.HandleFunc("/api/v1/bdd/used/tables/import-doc", h.handleBDDUsedImportDoc)
 	apiMux.HandleFunc("/api/v1/bdd/used/tables/doc", h.handleBDDUsedDoc)
-	apiMux.HandleFunc("/api/v1/bdd/used/tables/sync-field-types", h.handleBDDUsedSyncAllFieldTypes)
 	apiMux.HandleFunc("/api/v1/bdd/used/tables", h.handleBDDUsedTables)
 	apiMux.HandleFunc("/api/v1/bdd/used/tables/", h.handleBDDUsedTableByID)
 	apiMux.HandleFunc("/api/v1/bdd/used/meta", h.handleBDDUsedMeta)
@@ -418,19 +417,6 @@ func (h *Handler) Register(mux *http.ServeMux) {
 			return
 		}
 		h.handleRunnerSync(w, r)
-	})
-
-	// Account-service → gateway user sync. account-service-backend
-	// authenticates with X-Admin-Token (shared ACCOUNT_INTERNAL_TOKEN);
-	// the handler enforces it. Path is in the auth middleware's
-	// publicExact list so JWT is bypassed.
-	apiMux.HandleFunc("/api/v1/internal/users/sync", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			w.Header().Set("Allow", "POST")
-			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
-			return
-		}
-		h.handleUserSync(w, r)
 	})
 
 	// ── Server icons routes ──────────────────────────────────────────────────

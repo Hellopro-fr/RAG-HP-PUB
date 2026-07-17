@@ -79,11 +79,6 @@ async function deleteService() {
     error.value = e instanceof Error ? e.message : 'Erreur de suppression'
   }
 }
-
-function onEndpointUpdated(next: ApiCatalogEndpoint) {
-  const i = endpoints.value.findIndex((e) => e.id === next.id)
-  if (i >= 0) endpoints.value[i] = next
-}
 </script>
 
 <template>
@@ -156,11 +151,7 @@ function onEndpointUpdated(next: ApiCatalogEndpoint) {
               </p>
             </div>
             <div class="p-4">
-              <EndpointTable
-                :service-id="service.id"
-                :endpoints="tabEndpoints"
-                @updated="onEndpointUpdated"
-              />
+              <EndpointTable :endpoints="tabEndpoints" />
             </div>
           </div>
         </div>

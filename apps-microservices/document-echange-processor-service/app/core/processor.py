@@ -2,13 +2,17 @@ import os
 import logging
 from typing import List, Dict
 import urllib.parse
+import httpx
 
 from common_utils.autres.CollectionName import CollectionName
 from common_utils.cleaner.CleanHTML import CleanHTML
 from common_utils.cleaner.AnonymizeText import AnonymizeText
-from common_utils.ocr.DeepseekOCRDocExtractor import (
-    DeepseekOCRDocExtractor,
-    is_transient_download_error,
+from common_utils.ocr.DeepseekOCRDocExtractor import DeepseekOCRDocExtractor
+
+# Transient error types that should be retried, not sent to DLQ
+_TRANSIENT_EXCEPTIONS = (
+    httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout,
+    httpx.WriteTimeout, httpx.PoolTimeout, ConnectionError, TimeoutError,
 )
 
 logger = logging.getLogger(__name__)
@@ -72,20 +76,20 @@ async def process_document_data_for_templating(documents: List[Dict], bdd: str =
                 "error_message": str(e),
                 "processed_message": {"text": "", "len": 0, "nb_pages": 0}
             }
-        except Exception as e:
-            # Transient (connection/timeout, 5xx, redirect loop) -> retry;
-            # permanent (404/403, etc.) -> DLQ. See is_transient_download_error.
-            if is_transient_download_error(e):
-                logger.warning("Erreur transitoire lors du telechargement: %r", e)
-                status = "transient_error"
-                error_message = f"Erreur transitoire: {type(e).__name__}"
-            else:
-                logger.error("Erreur permanente lors du telechargement: %r", e)
-                status = "error"
-                error_message = str(e)
+        except _TRANSIENT_EXCEPTIONS as e:
+            # Transient error (connection, timeout) -> should be retried
+            logger.warning("Erreur transitoire lors du telechargement: %s", e)
             results_by_index[index] = {
-                "status": status,
-                "error_message": error_message,
+                "status": "transient_error",
+                "error_message": f"Erreur transitoire: {type(e).__name__}",
+                "processed_message": {"text": "", "len": 0, "nb_pages": 0}
+            }
+        except Exception as e:
+            # Other error (HTTP 403/404, etc.) -> permanent DLQ
+            logger.error("Erreur lors de la validation: %s", e)
+            results_by_index[index] = {
+                "status": "error",
+                "error_message": str(e),
                 "processed_message": {"text": "", "len": 0, "nb_pages": 0}
             }
     
@@ -106,15 +110,15 @@ async def process_document_data_for_templating(documents: List[Dict], bdd: str =
             ocr_raw_response = response
             ocr_results = extractor.get_clean_result(response)
             del response
+        except _TRANSIENT_EXCEPTIONS as e:
+            ocr_failed = True
+            ocr_is_transient = True
+            ocr_error_msg = f"Erreur transitoire OCR: {type(e).__name__}"
+            logger.warning(ocr_error_msg)
         except Exception as e:
             ocr_failed = True
-            ocr_is_transient = is_transient_download_error(e)
-            if ocr_is_transient:
-                ocr_error_msg = f"Erreur transitoire OCR: {type(e).__name__}"
-                logger.warning(ocr_error_msg)
-            else:
-                ocr_error_msg = f"Erreur OCR: {type(e).__name__}: {e}"
-                logger.error(ocr_error_msg)
+            ocr_error_msg = f"Erreur OCR: {type(e).__name__}: {e}"
+            logger.error(ocr_error_msg)
         finally:
             for _, file_content, _, _ in valid_files_data:
                 file_content.close()

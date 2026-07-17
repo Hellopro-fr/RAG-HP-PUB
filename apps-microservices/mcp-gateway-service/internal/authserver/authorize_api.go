@@ -36,7 +36,6 @@ type authorizeInfoResponse struct {
 type authorizeServerDTO struct {
 	ID         string             `json:"id"`
 	Name       string             `json:"name"`
-	Icon       string             `json:"icon,omitempty"`
 	Tools      []authorizeToolDTO `json:"tools"`
 	Configured bool               `json:"configured"`
 	DocsURL    string             `json:"docs_url,omitempty"`
@@ -453,10 +452,8 @@ func (s *AuthServer) buildServerList(ctx context.Context, client *db.OAuth2Clien
 				continue
 			}
 			entry := authorizeServerDTO{
-				ID:         srv.ID,
-				Name:       srv.Name,
-				Icon:       srv.Icon,
-				Configured: true,
+				ID:   srv.ID,
+				Name: srv.Name,
 			}
 			srvTools := allowedTools[srv.ID]
 			for _, t := range srv.Tools {
@@ -474,10 +471,8 @@ func (s *AuthServer) buildServerList(ctx context.Context, client *db.OAuth2Clien
 		// No pre-configured scope — show all active servers
 		for _, srv := range servers {
 			entry := authorizeServerDTO{
-				ID:         srv.ID,
-				Name:       srv.Name,
-				Icon:       srv.Icon,
-				Configured: true,
+				ID:   srv.ID,
+				Name: srv.Name,
 			}
 			for _, t := range srv.Tools {
 				if !t.IsActive {

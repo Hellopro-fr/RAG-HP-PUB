@@ -12,7 +12,6 @@ from logging.handlers import TimedRotatingFileHandler
 
 import re
 from common_utils.grpc_clients import embedding_client
-from common_utils.embedding.limits import enforce_chunk_ceiling
 
 # --- CONFIGURATION ---
 
@@ -213,20 +212,7 @@ class Embedding:
             self.logger.warning(f"Aucun chunk créé pour le texte donné.")
             # self.logger.warning(f"Data: {data_clean}")
             return []
-
-        # Garde anti-débordement : un item pathologique (blob base64 / texte
-        # multi-Mo ayant échappé au nettoyage HTML) produit des milliers de
-        # chunks ; chaque enregistrement porte un vecteur 1024 floats (~18 Ko
-        # sérialisés), donc le message publié dépasse le max_message_size
-        # RabbitMQ (128 Mio) -> rejet PRECONDITION_FAILED -> boucle de retry.
-        # On rejette AVANT le GetEmbeddings coûteux, en ValueError (permanent
-        # -> DLQ, pas de retry). Les items en DLQ servent de samples pour
-        # diagnostiquer la fuite de nettoyage en amont.
-        enforce_chunk_ceiling(
-            len(chunks),
-            source=data_to_embed.get("url") or data_to_embed.get("type_page", ""),
-        )
-
+        
         try:
             all_embeddings = await self.embed(chunks)
             

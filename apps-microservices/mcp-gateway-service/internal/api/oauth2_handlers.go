@@ -101,8 +101,6 @@ func (h *Handler) createOAuth2Client(w http.ResponseWriter, r *http.Request) {
 		AccessTokenTTL:  ttl,
 		IsActive:        true,
 		CreatedBy:       creatorEmail,
-
-		InjectInstructionsIntoTools: req.InjectInstructionsIntoTools,
 	}
 
 	// Resolve and validate the optional Leexi ownership filter.
@@ -275,8 +273,6 @@ func (h *Handler) createOAuth2Client(w http.ResponseWriter, r *http.Request) {
 		RingoverFilter:        oauth2ClientRingoverFilterToDTO(&client),
 		BDDFilter:             bddDTO,
 		ZohoFilter:            oauth2ClientZohoFilterToDTO(&client),
-
-		InjectInstructionsIntoTools: client.InjectInstructionsIntoTools,
 	})
 }
 
@@ -316,9 +312,6 @@ func (h *Handler) updateOAuth2Client(w http.ResponseWriter, r *http.Request, id 
 	}
 	if req.Description != nil {
 		updates["description"] = *req.Description
-	}
-	if req.InjectInstructionsIntoTools != nil {
-		updates["inject_instructions_into_tools"] = *req.InjectInstructionsIntoTools
 	}
 
 	if len(req.RedirectURIs) > 0 {
@@ -609,7 +602,5 @@ func toOAuth2ClientResponse(c db.OAuth2Client, decryptedSecret string) OAuth2Cli
 		RingoverFilter:        oauth2ClientRingoverFilterToDTO(&c),
 		BDDFilter:             oauth2ClientBDDFilterToDTO(&c),
 		ZohoFilter:            oauth2ClientZohoFilterToDTO(&c),
-
-		InjectInstructionsIntoTools: c.InjectInstructionsIntoTools,
 	}
 }

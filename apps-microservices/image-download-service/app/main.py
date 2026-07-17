@@ -11,11 +11,9 @@ from contextlib import asynccontextmanager
 # Importer les modules locaux
 from image_download_service.messaging.consumer import Consumer
 from image_download_service.messaging.page_image_consumer import PageImageConsumer
-from image_download_service.messaging.logo_consumer import LogoConsumer
 from image_download_service.core.archiver import Archiver
 from image_download_service.routers.albums import router as albums_router
 from image_download_service.routers.pages import router as pages_router
-from image_download_service.routers.logos import router as logos_router
 
 # Configuration du logging uniforme
 logging.basicConfig(
@@ -90,16 +88,6 @@ async def lifespan(app: FastAPI):
         else:
             logger.info("ℹ️  ENABLE_PAGE_IMAGE_CONSUMER=false — PageImageConsumer non démarré.")
 
-        # Consumer logos fournisseur — activé via feature flag ENABLE_LOGO_CONSUMER
-        # (chantier logo fournisseur, Task 2 — miroir ENABLE_PAGE_IMAGE_CONSUMER, OFF par défaut)
-        if os.environ.get("ENABLE_LOGO_CONSUMER", "false").lower() == "true":
-            logger.info("🔄 ENABLE_LOGO_CONSUMER=true — démarrage du LogoConsumer...")
-            app.state.logo_consumer = LogoConsumer(app.state.rabbitmq_connection)
-            app.state.logo_consumer_task = asyncio.create_task(app.state.logo_consumer.start_consuming())
-            logger.info("✅ LogoConsumer démarré en tâche de fond.")
-        else:
-            logger.info("ℹ️  ENABLE_LOGO_CONSUMER=false — LogoConsumer non démarré.")
-
     except Exception as e:
         logger.error(f"❌ Erreur lors du démarrage: {e}")
         # Continue sans RabbitMQ - l'API REST fonctionnera toujours
@@ -134,20 +122,6 @@ async def lifespan(app: FastAPI):
             logger.info("✅ PageImageConsumer arrêté.")
         except Exception as exc:
             logger.error("❌ Erreur lors de l'arrêt du PageImageConsumer: %s", exc, exc_info=True)
-
-    # Arrêt gracieux du LogoConsumer (feature flag) — même pattern que PageImageConsumer :
-    # stop() (annule le consumer-tag côté broker) AVANT task.cancel().
-    if getattr(app.state, 'logo_consumer', None) is not None:
-        try:
-            await app.state.logo_consumer.stop()
-            app.state.logo_consumer_task.cancel()
-            try:
-                await app.state.logo_consumer_task
-            except asyncio.CancelledError:
-                pass
-            logger.info("✅ LogoConsumer arrêté.")
-        except Exception as exc:
-            logger.error("❌ Erreur lors de l'arrêt du LogoConsumer: %s", exc, exc_info=True)
 
     # Fermer la connexion RabbitMQ
     if hasattr(app.state, 'rabbitmq_connection') and app.state.rabbitmq_connection:
@@ -190,10 +164,6 @@ app.include_router(albums_router)
 # runbook ops si le feature flag est désactivé en prod.
 # Brancher le routeur Pages Images (Chantier D — toujours actif, routes stateless)
 app.include_router(pages_router)
-
-# Brancher le routeur Logos Fournisseur (chantier logo fournisseur — toujours actif,
-# miroir pages_router ; POST /logos/enqueue nécessite rabbitmq_connection, GET est stateless)
-app.include_router(logos_router)
 
 # =============================================================================
 # HEALTH

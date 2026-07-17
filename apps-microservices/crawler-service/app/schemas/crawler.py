@@ -22,9 +22,6 @@ class CapacityResponse(BaseModel):
     running_jobs: int
     max_global_jobs: int
     is_full: bool
-    # Read-on-demand disk diagnostics (auto-stash disk-pressure verification).
-    # None only if the field is omitted; the helper itself is fail-open.
-    disk: Optional[dict] = None
 
 class ReindexResponse(BaseModel):
     """Summary of the re-indexing operation."""
@@ -82,16 +79,11 @@ class CrawlRequest(BaseModel):
     bypass_question_mark: Optional[bool] = Field(False, description="Bypass filtering of URLs with '?'", alias="bypassquestionmark")
     bypass_diez: Optional[bool] = Field(False, description="Bypass filtering of URLs with '#'", alias="bypassdiez")
     break_limit: Optional[bool] = Field(True, description="Bypass the 5000 URLs crawl limit.", alias="breaklimit")
-    queue_limit: Optional[int] = Field(None, description="Maximum number of URLs allowed in the request queue before stopping.", alias="queuelimit")
-    bypass_queue: Optional[bool] = Field(False, description="Bypass the queue size limit set by queuelimit.", alias="bypassqueue")
     per_crawl: Optional[int] = Field(0, description="Number of URLs to crawl per job. 0 means unlimited.", example=1000, alias="percrawl")
     per_minute: Optional[int] = Field(100, description="Crawling speed in URLs per minute. 0 means unlimited.", example=100, alias="perminute")
     
     # Camoufox Integration
     camoufox: Optional[bool] = Field(True, description="Use Camoufox stealth browser (default). Set to false to fall back to Playwright multi-browser rotation.")
-
-    # CMS Facet Denylist (QMF-T4)
-    cms: Optional[str] = Field("", description="CMS label detected for the domain (e.g. 'wordpress', 'prestashop', 'shopify'). Best-effort: empty/unknown/null means the crawler applies no CMS facet-param denylist.")
 
 class CrawlResponse(BaseModel):
     message: str
@@ -106,26 +98,6 @@ class ArchiveResponse(BaseModel):
     crawl_id: str
     archive_status: str = Field("pending_upload", description="'pending_upload' = local archive created, awaiting daemon upload to GCS.")
     archive_size_bytes: Optional[int] = Field(None, description="Size of the archive file in bytes.")
-
-class StashResponse(BaseModel):
-    """Response for POST /stash/{crawl_id} — 202 Accepted shape."""
-    crawl_id: str
-    status: str = Field("stashing", description="Always 'stashing' when 202 returned; data is in /app/stash awaiting daemon upload to GCS.")
-    stash_path: str = Field(..., description="Target GCS object path (gs://{bucket}/stash/{id}.tar.gz).")
-    stashed_at: datetime = Field(..., description="ISO 8601 UTC timestamp written to Redis job_data.")
-
-
-class UnstashResponse(BaseModel):
-    """Response for POST /unstash/{crawl_id} — 200 OK shape."""
-    crawl_id: str
-    status: str = Field("unstashed", description="Always 'unstashed' when 200 returned.")
-    restored_to: str = Field(..., description="Local storage path where the archive was extracted.")
-    elapsed_seconds: float = Field(..., description="Total round-trip wall-time (request marker write -> Redis flag clear).")
-    gcs_cleanup_status: Optional[str] = Field(
-        None,
-        description="'cleaned' when the GCS source was deleted within UNSTASH_CLEANUP_GRACE_SECONDS, 'deferred' when the cleanup marker did not arrive in time (an orphan GCS object remains and must be manually cleaned)."
-    )
-
 
 class RetrieveResponse(BaseModel):
     message: str
@@ -164,9 +136,3 @@ class CrawlStatus(BaseModel):
                     "Empty/null for successful crawls. Used by BO reconciliation "
                     "to route to the correct error branch."
     )
-    stashed_at: Optional[str] = Field(None, description="ISO ts when data was moved to GCS stash; null if local.")
-    downloaded_at: Optional[str] = Field(None, description="ISO ts of the last successful /results download (auto-stash grace start).")
-    finished_at: Optional[str] = Field(None, description="ISO ts of the terminal transition (auto-stash safety-timeout start).")
-    size_bytes: Optional[int] = Field(None, description="Estimated archive size in bytes (auto-stash disk-pressure ordering).")
-    queue_total: Optional[int] = Field(None, description="Total URLs enqueued (Crawlee totalRequestCount); running/stopping jobs only, else null.")
-    queue_remaining: Optional[int] = Field(None, description="URLs still pending in the queue (Crawlee pendingRequestCount); running/stopping jobs only, else null.")

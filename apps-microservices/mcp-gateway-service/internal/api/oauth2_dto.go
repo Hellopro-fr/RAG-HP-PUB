@@ -15,10 +15,6 @@ type CreateOAuth2ClientRequest struct {
 	RingoverFilter *RingoverFilterDTO    `json:"ringover_filter,omitempty"` // shares semantics with ScopeToken.RingoverFilter
 	BDDFilter      *BDDFilterDTO         `json:"bdd_filter,omitempty"`      // nil = unrestricted (full BDD access)
 	ZohoFilter     *ZohoFilterDTO        `json:"zoho_filter,omitempty"`
-	// InjectInstructionsIntoTools delivers the client's LLM instructions via
-	// tool descriptions (tools/list) instead of the MCP initialize
-	// `instructions` field — for hosts that ignore the latter (claude.ai web).
-	InjectInstructionsIntoTools bool `json:"inject_instructions_into_tools,omitempty"`
 }
 
 // CreateOAuth2ClientResponse is returned once on creation (includes raw client_secret).
@@ -42,8 +38,6 @@ type CreateOAuth2ClientResponse struct {
 	RingoverFilter        *RingoverFilterDTO `json:"ringover_filter,omitempty"`
 	BDDFilter             *BDDFilterDTO      `json:"bdd_filter,omitempty"`
 	ZohoFilter            *ZohoFilterDTO     `json:"zoho_filter,omitempty"`
-
-	InjectInstructionsIntoTools bool `json:"inject_instructions_into_tools"`
 }
 
 // OAuth2ClientResponse is the standard client response (no raw secret).
@@ -69,8 +63,6 @@ type OAuth2ClientResponse struct {
 	RingoverFilter        *RingoverFilterDTO `json:"ringover_filter,omitempty"`
 	BDDFilter             *BDDFilterDTO      `json:"bdd_filter,omitempty"`
 	ZohoFilter            *ZohoFilterDTO     `json:"zoho_filter,omitempty"`
-
-	InjectInstructionsIntoTools bool `json:"inject_instructions_into_tools"`
 }
 
 // UpdateOAuth2ClientRequest is the body for PUT /api/v1/oauth2/clients/{id}.
@@ -86,6 +78,4 @@ type UpdateOAuth2ClientRequest struct {
 	RingoverFilter *RingoverFilterDTO    `json:"ringover_filter,omitempty"`
 	BDDFilter      *BDDFilterDTO         `json:"bdd_filter,omitempty"`
 	ZohoFilter     *ZohoFilterDTO        `json:"zoho_filter,omitempty"`
-	// Tri-state: nil = unchanged, false/true = set.
-	InjectInstructionsIntoTools *bool `json:"inject_instructions_into_tools,omitempty"`
 }

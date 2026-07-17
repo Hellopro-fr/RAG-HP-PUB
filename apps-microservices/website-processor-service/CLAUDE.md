@@ -13,7 +13,6 @@ Extracts and cleans web page content using Trafilatura/Go-Trafilatura/Boilerpy3 
 
 - **Build**: `docker build -f Dockerfile -t website-processor-service .` (from repo root)
 - **Run**: Docker; requires `RABBITMQ_URL`, Redis connection. Prometheus metrics on port 8530
-- **Tests**: `pytest tests/` (conftest aliases `website_processor_service` -> `app/` to match the Docker copy path)
 
 ## Folder Structure
 
@@ -42,7 +41,6 @@ requirements.txt
 ## Conventions
 
 - Extraction cascade: Trafilatura Python -> Go-Trafilatura -> Boilerpy3 (3 retries each)
-- Deeply nested DOMs: `main.py` raises `sys.setrecursionlimit(20000)`; residual `RecursionError` is classified PERMANENT in the consumer (straight to DLQ, no retry burn) and `_md_safe` in common-utils degrades markdownify failures to empty extraction
 - Headers/footers buffered in Redis, processed as batch via HeaderFooterExtractor
 - Bypass: if page already classified in Milvus, skip template-llm-service
 - Routes dynamically: unclassified pages -> templating; classified -> embedding

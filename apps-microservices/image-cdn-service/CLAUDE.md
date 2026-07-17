@@ -44,13 +44,3 @@ image-cdn-service/
 ## Dependencies on Other Services
 
 - **image-download-service** (provides the `/data/images/` volume with downloaded images).
-
-## Exposition publique
-
-- URL publique (reverse-proxy api.hellopro.eu) : `https://api.hellopro.eu/image_cdn-service/`
-  - `GET /image_cdn-service/health` → `{"status":"ok",...}`
-  - `GET /image_cdn-service/images/{domain}/...` → image statique
-- Le **même** `location /images/` sert les deux flux (un seul volume `/data` partagé) :
-  - **FP** : `/images/{domain}/produit-2|3/{shard}/.../file.jpg`
-  - **NON-FP (Chantier D)** : `/images/{domain}/pages/{s1}/{s2}/page-...jpg` (et `pages/thumbs/...`)
-  Aucune route dédiée : le bloc jpg/png/... sert tout fichier image sous `/data/images/`.

@@ -18,7 +18,6 @@ from tenacity import (
     Retrying,
     stop_after_attempt,
     wait_exponential,
-    wait_fixed,
     retry_if_exception,
 )
 from app.core.credentials import settings
@@ -41,7 +40,7 @@ class LLMProvider:
             self.API_KEY = config.get("api_key", settings.OPENROUTER_API_KEY)
             self.BASE_URL = ChatBaseURL.OPENROUTER
 
-        self.MODEL = config.get("model", "deepseek-v4-pro")
+        self.MODEL = config.get("model", "deepseek-v4-flash")
         self.TEMPERATURE = config.get("temperature", 0.4)
         self.client = OpenAI(api_key=self.API_KEY, base_url=self.BASE_URL)
         self.async_client = AsyncOpenAI(api_key=self.API_KEY, base_url=self.BASE_URL)
@@ -95,20 +94,10 @@ def make_serializable(obj):
     return obj
 
 
-class EmptyResponseError(Exception):
-    """Levée quand le LLM renvoie un contenu vide alors qu'un retour était attendu."""
-    pass
-
-
 def is_retryable_error(exception):
     """
-    Checks if the exception is retryable:
-    - Google GenAI / OpenAI client 503 or 429 errors
-    - EmptyResponseError (LLM a renvoyé un contenu vide)
+    Checks if the exception is a Google GenAI 503 or 429 error.
     """
-    if isinstance(exception, EmptyResponseError):
-        return True
-
     code = getattr(exception, "status_code", None)
 
     if code is None:
@@ -209,91 +198,30 @@ class GeminiProvider:
 
 
 class DeepSeek:
-    """Provider DeepSeek avec retry automatique sur erreurs 503/429 et contenu vide."""
-
-    DEFAULT_MAX_RETRIES = 5
-    RETRY_WAIT_SECONDS = 2
-
-    def __init__(self, temperature=0.1, config=None, max_retries: Optional[int] = None):
+    def __init__(self, temperature=0.1, config=None):
         config = config or {}
         self.API_KEY = config.get("api_key", settings.DEEPSEEK_API_KEY)
         self.BASE_URL = "https://api.deepseek.com"
-        self.MODEL = "deepseek-v4-pro"
+        self.MODEL = "deepseek-v4-flash"
         self.TEMPERATURE = temperature
-        self.max_retries = max_retries if max_retries is not None else self.DEFAULT_MAX_RETRIES
         self.client = OpenAI(api_key=self.API_KEY, base_url=self.BASE_URL)
         self.async_client = AsyncOpenAI(api_key=self.API_KEY, base_url=self.BASE_URL)
 
     def chat(self, message, stream=False):
-        # Mode streaming: pas de retry sur contenu vide (impossible avant itération)
+        response = self.client.chat.completions.create(
+            model=self.MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "Tu es un assistant intelligent et serviable.",
+                },
+                {"role": "user", "content": message},
+            ],
+            temperature=self.TEMPERATURE,
+            stream=stream,
+        )
         if stream:
-            return self.client.chat.completions.create(
-                model=self.MODEL,
-                messages=[
-                    {"role": "system", "content": "Tu es un assistant intelligent et serviable."},
-                    {"role": "user", "content": message},
-                ],
-                temperature=self.TEMPERATURE,
-                stream=True,
-            )
-
-        response = None
-
-        try:
-            retryer = Retrying(
-                stop=stop_after_attempt(self.max_retries),
-                wait=wait_fixed(self.RETRY_WAIT_SECONDS),
-                retry=retry_if_exception(is_retryable_error),
-                reraise=True,
-            )
-
-            for attempt in retryer:
-                with attempt:
-                    if attempt.retry_state.attempt_number > 1:
-                        logger.info(
-                            f"Retry DeepSeek API... Tentative {attempt.retry_state.attempt_number}/{self.max_retries}"
-                        )
-
-                    response = self.client.chat.completions.create(
-                        model=self.MODEL,
-                        messages=[
-                            {"role": "system", "content": "Tu es un assistant intelligent et serviable."},
-                            {"role": "user", "content": message},
-                        ],
-                        temperature=self.TEMPERATURE,
-                    )
-
-                    content = (
-                        response.choices[0].message.content
-                        if response and response.choices
-                        else None
-                    )
-                    if not content or not content.strip():
-                        logger.warning(
-                            f"DeepSeek a renvoyé un contenu vide "
-                            f"(tentative {attempt.retry_state.attempt_number}/{self.max_retries})"
-                        )
-                        raise EmptyResponseError("Réponse DeepSeek vide")
-
-        except EmptyResponseError as e:
-            logger.error(f"DeepSeek: contenu vide après {self.max_retries} tentatives")
-            return {
-                "code": 502,
-                "error": str(e),
-                "content": None,
-                "response": response,
-            }
-
-        except Exception as e:
-            code = getattr(e, "status_code", None) or getattr(e, "code", None) or 500
-            logger.error(f"DeepSeek erreur: {e} (code {code})")
-            return {
-                "code": code,
-                "error": str(e),
-                "content": None,
-                "response": response,
-            }
-
+            return response
         return {"content": response.choices[0].message.content, "response": response}
 
     def set_temperature(self, temperature):
@@ -436,7 +364,7 @@ class HelloProAPIClient:
         
         Args:
             type_ia: 2 pour DeepSeek, 3 pour Gemini
-            model: Nom du modèle (ex: gemini-2.0-flash, deepseek-v4-pro)
+            model: Nom du modèle (ex: gemini-2.0-flash, deepseek-v4-flash)
             input_token: Nombre de tokens d'entrée
             output_token: Nombre de tokens de sortie
             id_process: ID de la catégorie ou du processus

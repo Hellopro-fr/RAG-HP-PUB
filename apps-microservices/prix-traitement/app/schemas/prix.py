@@ -5,8 +5,7 @@ class CaracteristiqueRequest(BaseModel):
     """Requête pour l'extraction des caractéristiques influençant le prix"""
     id_categorie: Union[str, int] = Field(..., description="ID de la catégorie à analyser")
     id_prompt: Optional[str] = Field(None, description="ID du prompt à utiliser (optionnel, utilise la config par défaut)")
-    source: Optional[str] = Field("ia", description='Origine du questionnaire : "ia" (Q1 _eqci / caracteristique_prix_ia) ou "bo" (questionnaire BO _eqcb / caracteristique_prix_bo)')
-
+    
     @field_validator('id_categorie')
     @classmethod
     def convert_to_str(cls, v):
@@ -63,9 +62,8 @@ class QuestionnaireV2Request(BaseModel):
     nom_categorie: str = Field(..., description="Nom de la catégorie cible")
     texte_prompt: str = Field(..., description="Texte à injecter comme {requete_rag} dans le prompt LLM")
     model: Optional[str] = Field(None, description="Modèle LLM à utiliser (remplace le modèle par défaut si fourni)")
-    id_reponse_q1: Optional[str] = Field(None, description="ID de la réponse à la 1re question (IA ou BO)")
-    nom_reponse_q1: Optional[str] = Field(None, description="Nom de la réponse à la 1re question")
-    source: Optional[str] = Field("ia", description='Origine des équivalences/caracs : "ia" (_eqci) ou "bo" (questionnaire BO, _eqcbo). id_reponse_q1 s\'applique aux deux.')
+    id_reponse_q1: Optional[str] = Field(None, description="ID de la réponse Q1")
+    nom_reponse_q1: Optional[str] = Field(None, description="Nom de la réponse Q1")
 
     @field_validator('id_categorie')
     @classmethod

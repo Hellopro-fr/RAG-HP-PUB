@@ -25,8 +25,6 @@ RUN pip install -r requirements.txt
 # Étape 3: Copier le code source
 # On copie le CONTENU du dossier app local directement dans le WORKDIR (/app)
 COPY apps-microservices/product-database-qdrant-service/app/ /app/product_database_qdrant_service
-# Scripts ponctuels (migrations one-off) — lançables via `python /app/scripts/<name>.py`
-COPY apps-microservices/product-database-qdrant-service/scripts/ /app/scripts/
 
 # Étape 4: Définir la commande
 # On peut maintenant exécuter le script directement, les imports fonctionneront grâce au PYTHONPATH.

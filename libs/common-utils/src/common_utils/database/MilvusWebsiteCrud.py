@@ -28,33 +28,6 @@ class ModelConfig:
     dimension: int = 1024
 
 
-# Insertable fields of the fixed 'siteweb_2' schema ('id' is auto_id; dynamic
-# fields are disabled, so any extra key fails the insert with
-# DataNotMatchException). Keep aligned with _get_or_create_collection.
-_INSERT_FIELDS = frozenset(
-    {
-        "url",
-        "embedding",
-        "page_type",
-        "domaine",
-        "categorie",
-        "id_categorie",
-        "fournisseur",
-        "id_fournisseur",
-        "etat",
-        "affichage",
-        "text",
-        "source",
-        "fichier_source",
-        "chunk_id",
-        "chunk_number",
-        "total_chunks",
-        "date_ajout",
-        "date_maj",
-    }
-)
-
-
 class MilvusWebsiteCrud:
     _CONNECTION_ALIAS = "milvus_siteweb"
 
@@ -249,10 +222,6 @@ class MilvusWebsiteCrud:
                 )  # ex: "2025-08-18T14:23:45.123456"
                 data["date_maj"] = None
 
-                # Drop keys outside the fixed schema (e.g. commentaire_si_autre
-                # added by template-llm-service) — they would fail the insert.
-                data = {k: v for k, v in data.items() if k in _INSERT_FIELDS}
-
                 # Sanitize the record to ensure no None values
                 # This is important for Milvus compatibility
                 data = Utils.sanitize_record(data)
@@ -274,9 +243,7 @@ class MilvusWebsiteCrud:
             self.collection = None  # Force reconnection on next call
             logger.error(f"[{model_key}][siteweb] Erreur Milvus lors de l'insertion : {e}", exc_info=True)
             logger.debug(f"Data : {datas}")
-            # repr(MilvusException) has empty args -> unreadable DLQ x-error-reason;
-            # wrap with context (same pattern as MilvusDocumentCrud/MilvusPjCrud).
-            raise RuntimeError(f"Milvus insert siteweb failed: {e}") from e
+            raise
         except Exception as e:
             self.logger.error(
                 f"[{model_key}][siteweb] insertion de batch : {e}", exc_info=True

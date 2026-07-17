@@ -21,21 +21,7 @@ import {
 import { DetectionLangueClient } from "./class/DetectionLangueClient.js";
 import { context } from "./context.js";
 import { recordClassification, maybeCommitDecision, commitSkipDiez, commitBypassDiez } from "./diezDecision.js";
-import { fragmentAwareUniqueKey, stripEmptyFragment } from "./diezKeepFragment.js";
-import { matchesMainSite } from "./isMainSite.js";
-import { applyPerClassStrip, perClassEnabled, stripActionAnchor, actionAnchorStripEnabled } from "./diezClassify.js";
-import { qmConsumptionStrip, shouldSkipDequeued, recordQmCollapsed, skipnavCollapseTarget } from "./qmConsumptionSkip.js";
-import { recordVariant, isOverCap, QM_FACET_ENABLED, QM_FACET_CAP_K } from "./facetCap.js";
-import { isFilterParam } from "./filterOnSeen.js";
-import { baseKeyAbsent } from "./urlBase.js";
-import { recordTier2Sample, maybeCommitTier2, tier2Evidence, maybeDefaultAtCeiling as maybeDefaultDiezAtCeiling } from "./diezTier2.js";
-import { routeDiezOutcome } from "./diezHookGate.js";
-import { shouldTripExternalRedirectBreaker } from "./externalRedirectBreaker.js";
 import { recordQuestionMarkObservation } from "./questionMarkDecision.js";
-import { recordQmTier2Sample, maybeCommitParam, commitToRemoveParam, maybeDefaultAtCeiling, QM_TIER2_TRIGGER } from "./questionMarkTier2.js";
-import { trackQmHashStatsForUrl } from "./qmHashTracker.js";
-import { classifyHttpStatus, pdfDatasetName, isPageClosedError } from "./httpStatusPolicy.js";
-import { shouldTripProxyWall, proxyWallConfig, terminalFailureDetectEnabled } from "./terminalFailure.js";
 import type { PageTimingEntry } from "./timing/types.js";
 
 export const router = createPlaywrightRouter();
@@ -206,11 +192,8 @@ const ALWAYS_REMOVE_PARAMS = [
     "timestamp", "random", "nocache",
 ];
 
-const DIEZ_TIER2_ENABLED = (process.env.DIEZ_TIER2_ENABLED ?? "false").toLowerCase() === "true";
-const QM_TIER2_ENABLED = (process.env.QM_TIER2_ENABLED ?? "false").toLowerCase() === "true";
-
 router.addDefaultHandler(
-    async ({ request, page, enqueueLinks, log, proxyInfo, crawler, response, session }) => {
+    async ({ request, page, enqueueLinks, log, proxyInfo, crawler, response }) => {
         // Shared detect client (Part B). Constructed once in main.ts so the
         // timing sampler observes the SAME p-limit queue (live pendingCount /
         // activeCount). Fail fast if main.ts has not initialised it — a silent
@@ -234,39 +217,8 @@ router.addDefaultHandler(
         let _detectOk: boolean | undefined;
 
         const proxyUrl = proxyInfo?.url || null;
-
-        // Queue-purge (D1): a request flagged skipNavigation on disk had its
-        // page.goto skipped by Crawlee; loadedUrl is undefined. Count it and return
-        // before the loadedUrl use below. Clean handled path (no error machinery).
-        if (request.skipNavigation) {
-            if (context.statsManager) await context.statsManager.increment("purged_skipnav");
-            recordQmCollapsed(request.url, skipnavCollapseTarget(request.url, context.seenBases));
-            return;
-        }
-
-        // loadedUrl is the stored + counted identity; drop a cosmetic empty '#'
-        // (JS/browser may keep a bare hash) so it can't inflate diez or pollute the dataset.
         let url = request.loadedUrl;
-        // Per-class: strip cosmetic anchors from the stored+counted identity; keep spa
-        // routes. Flag off -> unchanged empty-'#' strip only (stripEmptyFragment).
-        if (url) url = perClassEnabled() ? applyPerClassStrip(url) : stripEmptyFragment(url);
-        const diezStripped = !!url && url !== request.loadedUrl; // a '#' was per-class-stripped from the loaded URL
         try {
-
-        // Part C (C2, spec 2026-06-29): re-apply the LIVE query/diez strip to this dequeued
-        // page. If it collapses onto an already-seen base, this queued variant is a duplicate
-        // that the commit-time queue rewrite didn't catch — skip processing (no store, no link
-        // enqueue). The page was fetched once (bounded); Crawlee marks it handled on this return.
-        // Placed INSIDE the try so the early return still runs the L1087 finally (timing
-        // record + per-attempt marker cleanup that must run for EVERY request path).
-        const qmStripped = qmConsumptionStrip(url);
-        if (qmStripped !== url && context.dedupManager) {
-            const known = (await context.dedupManager.isKnownBatch([qmStripped])).has(qmStripped);
-            if (shouldSkipDequeued(url, qmStripped, known)) {
-                recordQmCollapsed(url, qmStripped);
-                return;
-            }
-        }
 
         // Resource Blocking (Images, Fonts, Media, Binaries, etc.)
         // Uses ignoredExtensions as single source of truth for blocked file types
@@ -310,41 +262,9 @@ router.addDefaultHandler(
             || (siteHostname && hostname.includes(siteHostname));
         if (!isInternal) {
             log.warning(`Blocked external redirect: ${url} (Target: ${targetDomain})`);
-            const isHomepageRedirect = matchesMainSite(request.url, site);
             // Set structured error message for "1 seul URL crawlé" case: domain change
-            if (isHomepageRedirect) {
+            if (request.url === site) {
                 context.crawlErrorMessage = "L'URL après la page d'accueil change de domaine";
-            }
-
-            // --- External-Redirect Breaker (update mode only) ---
-            // Off-domain redirects return here BEFORE the circuit-breaker block and
-            // before UpdateChecker, so this guard is the only place that can detect a
-            // relocated domain. Abort + fail (exit 7) instead of wasting a full
-            // re-crawl and reporting a misleading success. See spec 2026-06-09.
-            const cb = context.config?.circuitBreaker;
-            if (context.updateChecker && context.statsManager && cb?.externalRedirectBreakerEnabled) {
-                const external = await context.statsManager.increment("external_redirects");
-
-                // Homepage fast-path: homepage off-domain ⇒ whole site moved.
-                // Abort BEFORE Phase 2 seeds the previous dataset (saves the re-crawl).
-                if (isHomepageRedirect) {
-                    context.stopReason = "domainChanged";
-                    context.fatalExitCode = 7;
-                    await stopCrawler(crawler, "Domain changed: homepage redirects off-domain");
-                    return;
-                }
-
-                // Ratio breaker: most seeded URLs redirect off-domain.
-                const processed = await context.statsManager.getValue("processed");
-                const decision = shouldTripExternalRedirectBreaker(external, processed, cb);
-                if (decision.trip) {
-                    log.warning(`🛑 External-redirect breaker: ${decision.reason}`);
-                    context.stopReason = "domainChanged";
-                    context.crawlErrorMessage = "Toutes les URLs redirigent vers un autre domaine (domaine changé)";
-                    context.fatalExitCode = 7;
-                    await stopCrawler(crawler, `Domain changed: ${decision.reason}`);
-                    return;
-                }
             }
             return;
         }
@@ -358,81 +278,30 @@ router.addDefaultHandler(
         if (response) {
             const contentType = (response.headers()['content-type'] || '').toLowerCase();
             if (contentType && !contentType.includes('text/html') && !contentType.includes('text/plain') && !contentType.includes('application/xhtml')) {
-                // Unified PDF/download accounting (mirrors functions.ts failedRequestHandler):
-                // count under filtered_pdf + record in the pdf-{domain} dataset so inline
-                // (rendered) PDFs are tracked the same as download-triggering ones. This guard
-                // already skips inline non-HTML today, so accounting is independent of SKIP_DOWNLOADS.
-                if (context.statsManager) {
-                    await context.statsManager.increment("filtered_pdf");
-                }
-                const pdfDataset = await Dataset.open(
-                    pdfDatasetName(context.config.crawleeStorageName, targetDomain),
-                );
-                await pdfDataset.pushData({
-                    url,
-                    source: request.userData.source ?? "",
-                    status: response.status(),
-                    content_type: contentType,
-                    timestamp: new Date().toISOString(),
-                });
                 log.warning(`Skipping non-HTML response: ${url} (Content-Type: ${contentType})`);
                 return;
             }
         }
 
-        // HTTP Status Policy — single source of truth.
-        // Reachable for every non-ok status because blockedStatusCodes is now empty
-        // (Crawlee no longer pre-throws) and navigation resolves on 'domcontentloaded'
-        // so response.status() is available even on heavy/slow pages.
-        // Spec: docs/superpowers/specs/2026-06-09-crawler-http-status-retry-policy-design.md
+        // Blocked Status Check
         if (response) {
             const status = response.status();
-            const statusClass = classifyHttpStatus(status);
-            if (statusClass !== "ok") {
-                // Preserve existing bookkeeping: homepage error message + error tracking.
-                if (matchesMainSite(request.url, site)) {
+            if ([401, 403, 429, 404, 410, 423, 502, 500, 503].includes(status)) {
+                log.error(`🚫 BLOCKED: HTTP ${status} on ${url}`);
+                // Set structured error message for "1 seul URL crawlé" case: HTTP error on homepage
+                if (request.url === site) {
                     context.crawlErrorMessage = `Erreur HTTP ${status}`;
                 }
-                // Update-mode classification ONLY for permanent failures here. Transient/
-                // block statuses used to classify (and PushedSet-claim) the URL on the
-                // FIRST failed attempt — a later successful retry then hit 'already_pushed'
-                // and its redirect/confirmed evidence was lost forever (incident 1079-327:
-                // 503 → retry → 301 never recorded). Exhausted transients are classified
-                // once in failedRequestHandler instead.
+                // Delegate error tracking to UpdateChecker in update mode
                 const source = request.userData.source || '';
-                if (statusClass === "permanent") {
-                    if (context.updateChecker && source) {
-                        await context.updateChecker.checkUrl(request.url, request.loadedUrl, source, status, false);
-                    } else if (context.statsManager && request.userData.is_existing) {
-                        await context.statsManager.increment("errors");
-                    }
+                if (context.updateChecker && source) {
+                    await context.updateChecker.checkUrl(request.url, request.loadedUrl, source, status, false);
+                } else if (context.statsManager && request.userData.is_existing) {
+                    // Legacy fallback for non-update mode
+                    await context.statsManager.increment("errors");
                 }
-
-                if (statusClass === "permanent") {
-                    request.noRetry = true;
-                    log.error(`⛔ PERMANENT HTTP ${status} on ${url} — no retry`);
-                } else if (statusClass === "block") {
-                    session?.retire();
-                    log.warning(`🚫 BLOCKED HTTP ${status} on ${url} — retire session, retry`);
-                    context.blockedCount = (context.blockedCount ?? 0) + 1;
-                    if (terminalFailureDetectEnabled() && context.statsManager) {
-                        const processedOk = await context.statsManager.getValue("processed");
-                        // processed counts only requests that passed the status check (blocked ones
-                        // throw before increment("processed") at ~L431), so the ratio denominator is
-                        // total attempts = blocked + processed-ok, matching shouldTripProxyWall's contract.
-                        const wall = shouldTripProxyWall(context.blockedCount, context.blockedCount + processedOk, proxyWallConfig());
-                        if (wall.trip) {
-                            context.stopReason = "proxyBlocked";
-                            context.fatalExitCode = 8;
-                            log.error(`⛔ PROXY WALL — ${wall.reason} — terminating (exit 8)`);
-                            await stopCrawler(crawler, `Proxy wall: ${wall.reason}`);
-                        }
-                    }
-                } else {
-                    log.warning(`↻ TRANSIENT HTTP ${status} on ${url} — retry`);
-                }
-                // Hand off to failedRequestHandler (records the rich error row).
-                throw new Error(`HTTP ${status}`);
+                // Don't process, let failedRequestHandler handle it
+                throw new Error(`BLOCKED: HTTP ${status}`);
             }
         }
 
@@ -463,11 +332,11 @@ router.addDefaultHandler(
                         const errorRate = errors / processed;
                         const redirectRate = redirects / processed;
                         
-                        if (cb.maxErrorRate > 0 && errorRate > cb.maxErrorRate) abortReason = `Error rate too high (${(errorRate*100).toFixed(1)}% > ${(cb.maxErrorRate*100)}%)`;
-                        else if (cb.maxRedirectRate > 0 && redirectRate > cb.maxRedirectRate) abortReason = `Redirect rate too high (${(redirectRate*100).toFixed(1)}% > ${(cb.maxRedirectRate*100)}%)`;
+                        if (errorRate > cb.maxErrorRate) abortReason = `Error rate too high (${(errorRate*100).toFixed(1)}% > ${(cb.maxErrorRate*100)}%)`;
+                        else if (redirectRate > cb.maxRedirectRate) abortReason = `Redirect rate too high (${(redirectRate*100).toFixed(1)}% > ${(cb.maxRedirectRate*100)}%)`;
                         
                         // Check growth relative to previous total
-                        if (cb.maxGrowthRate > 0 && cb.previousTotal > 0 && (newUrls / cb.previousTotal) > cb.maxGrowthRate) {
+                        if (cb.previousTotal > 0 && (newUrls / cb.previousTotal) > cb.maxGrowthRate) {
                             abortReason = `Site growth too fast (> ${(cb.maxGrowthRate*100)}% of previous size)`;
                         }
                     }
@@ -511,30 +380,18 @@ router.addDefaultHandler(
             const isNew = await context.dedupManager.addUrl(url);
             isDoublon = !isNew;
         }
-
-        // Phase-2 audit: a per-class-stripped fragment page that collapsed onto an
-        // already-seen base — a route-loss candidate (its content is never crawled).
-        if (isDoublon && diezStripped && perClassEnabled() && context.diezCollapsed.length < 200) {
-            context.diezCollapsed.push({ collapsed: request.loadedUrl as string, base: url });
-        }
-
+        
         // Removed early increment of "new_urls" here.
         // It is now handled inside the success block (isEnqueuingLinks) to ensure validity.
 
-        // Option A retry-bypass: if Crawlee is retrying this request, run the
-        // full extraction logic again regardless of dedup state. DedupManager
-        // marked the URL as seen on the first (failed) attempt; without this
-        // bypass the retry would short-circuit via the doublon guard and the
-        // seed page would yield zero discovered URLs. PushedSet prevents
-        // duplicate dataset rows across the retry.
-        if (!isDoublon || request.retryCount > 0) {
+        if (!isDoublon) {
             // Redis update handled in dedupManager
             // Local file update is heavy, skipped in V3 logic, keeping minimal or periodic in main.ts
 
             // Cookie consent is now injected pre-navigation in preNavigationHooks (functions.ts)
 
             // --- REDIRECT LOOP CLOSURE (Important Fix) ---
-            // If we ended up at a different URL than requested (redirect), make sure the
+            // If we ended up at a different URL than requested (redirect), make sure the 
             // final URL is also marked as known in Redis to prevent future re-crawling.
             if (context.dedupManager && request.url !== request.loadedUrl) {
                 await context.dedupManager.addUrl(request.loadedUrl);
@@ -552,7 +409,7 @@ router.addDefaultHandler(
                 }
             }
 
-            const isMainSite = matchesMainSite(request.url, site);
+            const isMainSite = request.url === site;
             let frenchDetectionMethod: string | Error;
             let isEnqueuingLinks = false;
             let content = "";
@@ -586,23 +443,15 @@ router.addDefaultHandler(
                         log.error(`Challenge ${challengeService} not resolved for main site ${url}. Aborting crawl.`);
                         let datasetName = context.config.crawleeStorageName ? `error-${context.config.crawleeStorageName}` : `error-${targetDomain}`;
                         let errorDataset = await Dataset.open(datasetName);
-                        // PushedSet guard (fail-open). Truth-table equivalent to functions.ts:1635 inverted form.
-                        if (!context.pushedSet || (await context.pushedSet.tryClaim(request.url))) {
-                            await errorDataset.pushData({
-                                id: request.id,
-                                url: request.url,
-                                errors: [`Challenge page ${challengeService} not resolved after 45s`],
-                                proxy_used: maskProxyUrl(proxyUrl ?? undefined),
-                                status_code: response?.status() || 0,
-                                captcha: challengeService,
-                                // Anti-bot challenge = retryable (fresh session/proxy may pass),
-                                // consistent with the non-permanent-challenge "will retry" path in
-                                // functions.ts. Explicit so a same-id restart re-attempts the homepage
-                                // instead of falling into the legacy missing-class default.
-                                failure_class: "transient",
-                                timestamp: new Date().toISOString()
-                            });
-                        }
+                        await errorDataset.pushData({
+                            id: request.id,
+                            url: request.url,
+                            errors: [`Challenge page ${challengeService} not resolved after 45s`],
+                            proxy_used: maskProxyUrl(proxyUrl ?? undefined),
+                            status_code: response?.status() || 0,
+                            captcha: challengeService,
+                            timestamp: new Date().toISOString()
+                        });
                         context.crawlErrorMessage = `Site protégé par ${challengeService} (challenge non résolu)`;
                         await stopCrawler(crawler, `Challenge ${challengeService} not resolved for main site`);
                         return;
@@ -614,7 +463,6 @@ router.addDefaultHandler(
                     const detectResult = await detectionClient.detect(url, content, {
                         mode: "complete",
                         proxyUrl: proxyUrl ?? undefined,
-                        validateAlternatives: false,
                     });
                     _timing.detectEndAt = Date.now();
                     _detectMethod = detectResult.method;
@@ -849,68 +697,28 @@ router.addDefaultHandler(
                     }
                 }
 
-                // Mirror `?` / `#` counters into StatsManager so they appear in the
-                // webhook payload (`filtered_qm` / `filtered_hash`). See qmHashTracker.ts.
-                trackQmHashStatsForUrl(url, context.statsManager);
-
                 // Track URLs with '?' and '#' for postNavigationHook limit checks
                 if (url.includes('?')) {
                     context.countQuestionMark++;
-                    if (QM_FACET_ENABLED) recordVariant(context.facetVariantCount, url);
-                    // Tier-1 observer (spec 2026-04-17). No-op when observation disabled.
+                    // Tier-1 observer (spec 2026-04-17). Records domain-specific params that survived Tier-0.
+                    // No-op when observation disabled (human CLI flag set).
                     recordQuestionMarkObservation(url);
-
-                    // Phase-2 tier-2 per-param engine (spec 2026-06-16). Off unless QM_TIER2_ENABLED.
-                    if (QM_TIER2_ENABLED && context.questionMarkObservationEnabled && storagePath) {
-                        if (!context.qmTier2.active && context.questionMarkObservations.domainSpecificCount >= QM_TIER2_TRIGGER) {
-                            context.qmTier2.active = true;
-                            console.log(`[questionmark] Tier 2 activated at ${context.questionMarkObservations.domainSpecificCount} domain-specific ? URLs.`);
-                        }
-                        if (context.qmTier2.active && content) {
-                            await recordQmTier2Sample(url, content, context.contentExtractorClient);
-                            for (const p of Array.from(context.qmTier2.tally.keys())) {
-                                if (!context.qmTier2.decided.has(p) && maybeCommitParam(p)) {
-                                    commitToRemoveParam(p, storagePath);
-                                }
-                            }
-                        }
-                        maybeDefaultAtCeiling(storagePath);
-                    }
                 }
                 if (url.includes('#')) {
                     context.countDiez++;
-                    // Tier-1 auto-decision (spec 2026-04-17). No-op once committed.
+                    // Tier-1 auto-decision engine (spec 2026-04-17).
+                    // No-op when context.diezDecisionCommitted is true (persisted decision, CLI flag, or prior commit).
                     recordClassification(url);
                     const outcome = maybeCommitDecision();
-                    const route = routeDiezOutcome(outcome, DIEZ_TIER2_ENABLED);
-
-                    if (route.action === "commit" && storagePath) {
-                        const meta = { source: route.source } as const;
-                        if (route.decision === "skipDiez") commitSkipDiez(storagePath, meta);
-                        else commitBypassDiez(storagePath, meta);
-                    } else if (route.action === "activate") {
-                        if (!context.diezTier2.active) {
-                            context.diezTier2.active = true;
-                            console.log(`[diez] Tier 2 engine activated (tier-1 outcome=${outcome}).`);
-                        }
+                    if (outcome === "skipDiez" && storagePath) {
+                        commitSkipDiez(storagePath);
+                    } else if (outcome === "bypassDiez" && storagePath) {
+                        commitBypassDiez(storagePath);
+                    } else if (outcome === "promoteTier2") {
+                        console.log(`[diez] Tier 2 promotion triggered (phase 1 no-op). Escalation will fire at MAX_SAMPLES.`);
+                    } else if (outcome === "escalate") {
+                        console.log(`[diez] Tier 1 inconclusive at ${context.diezClassification.total} samples — existing limitDiez path will fire.`);
                     }
-
-                    // Tier-2 verification (engine active, not yet committed).
-                    if (DIEZ_TIER2_ENABLED && context.diezTier2.active && !context.diezDecisionCommitted && content) {
-                        await recordTier2Sample(url, content, context.contentExtractorClient);
-                        const t2 = maybeCommitTier2();
-                        if (t2 && storagePath) {
-                            const meta = { tier: 2 as const, source: "tier2" as const, evidence: tier2Evidence() };
-                            if (t2 === "skipDiez") commitSkipDiez(storagePath, meta);
-                            else commitBypassDiez(storagePath, meta);
-                        }
-                    }
-
-                    // Zero-touch floor (mirrors questionMark maybeDefaultAtCeiling): near the
-                    // ceiling with no decision yet, default to bypassDiez + arm the 5000-item
-                    // backstop so the crawl never dies at limitDiez. Runs in BOTH flag modes,
-                    // whatever blocked a decision (tier-2 no comparable pairs, ambiguous-heavy…).
-                    if (storagePath) maybeDefaultDiezAtCeiling(storagePath);
                 }
 
                 await routerDefaultHandler(
@@ -922,19 +730,13 @@ router.addDefaultHandler(
                     title
                 );
 
-                // Queue-purge #2: live-add this page's normalized base to the seen oracle —
-                // `url` is the final stored+counted identity for every page pushed to the
-                // dataset (just above), so the very next discovered link naming the same
-                // base with an extra param is caught even within the same crawl.
-                if (QM_FACET_ENABLED) context.seenBases.add(baseKeyAbsent(url));
-
                 // --- PRE-BATCH DEDUP: Extract links, batch-check Redis, build local Set ---
                 // CRITICAL: transformRequestFunction MUST be synchronous (Crawlee API contract).
                 // An async version causes minimatch to receive a Promise instead of a Request,
                 // crashing with "Cannot read properties of undefined (reading 'split')".
                 let knownUrlsOnPage = new Set<string>();
 
-                if (context.dedupManager && !page.isClosed()) {
+                if (context.dedupManager) {
                     try {
                         // 1. Extract all <a href> links from the page
                         const rawLinks = await page.$$eval('a[href]', (anchors: HTMLAnchorElement[]) =>
@@ -946,15 +748,9 @@ router.addDefaultHandler(
                             knownUrlsOnPage = await context.dedupManager.isKnownBatch(rawLinks);
                         }
                     } catch (e) {
-                        // Non-fatal: proceed without pre-filtering; the handler-level dedup
-                        // (line ~176) still catches duplicates. A torn-down page (a concurrent
-                        // /stop or shutdown closed the pool mid-handler) is benign — log it
-                        // quietly, not as a warning that surfaces in Python as "Erreur crawling".
-                        if (isPageClosedError(String(e))) {
-                            log.debug(`Pre-batch link extraction skipped (page closed): ${e}`);
-                        } else {
-                            console.warn(`Pre-batch link extraction failed: ${e}`);
-                        }
+                        // Non-fatal: if link extraction fails, we proceed without pre-filtering
+                        // The handler-level dedup (line ~176) will still catch duplicates
+                        console.warn(`Pre-batch link extraction failed: ${e}`);
                     }
                 }
 
@@ -968,17 +764,6 @@ router.addDefaultHandler(
                             return false;
                         }
 
-                        // Action-anchor strip (root fix for the #elementor-action
-                        // duplicate-fetch overload). Runs before skip/remove so the
-                        // '#' is gone and fragmentAwareUniqueKey collapses variants.
-                        if (actionAnchorStripEnabled()) {
-                            const strippedAa = stripActionAnchor(request.url);
-                            if (strippedAa !== request.url) {
-                                request.url = strippedAa;
-                                context.actionAnchorsStripped++;
-                            }
-                        }
-
                         // 2. Initial CLEANING of the URL (Moved to TOP)
                         // This ensures we strip parameters BEFORE checking forbidden list
                         const { skipQuestionMark, skipDiez, toKeep, toRemove } = context.config;
@@ -987,18 +772,12 @@ router.addDefaultHandler(
                         // re-instantiation on every discovered link.
 
                         // Strip empty fragment (#) — "page#" and "page" are identical content
-                        request.url = stripEmptyFragment(request.url);
+                        if (request.url.endsWith('#')) {
+                            request.url = request.url.slice(0, -1);
+                        }
 
                         // Always strip the "Always Remove" list first (skipQuestionMark=false: only remove alwaysRemove params)
                         request.url = processUrl(request.url, false, false, { toRemove: ALWAYS_REMOVE_PARAMS });
-
-                        // Per-domain toRemove (tier-2 commits + human --toremove) must apply to EVERY
-                        // discovered link, not only under the skip sledgehammers. Without this a tier-2
-                        // commit ('q' -> toRemove) never strips newly-discovered ?q= links (gate bug,
-                        // spec 2026-06-29 Part A). Mirrors the unconditional ALWAYS_REMOVE_PARAMS call above.
-                        if (toRemove && toRemove.length > 0) {
-                            request.url = processUrl(request.url, false, false, { toRemove });
-                        }
 
                         // Now apply the dynamic config (skipQuestionMark, etc)
                         if (skipQuestionMark || skipDiez) {
@@ -1087,20 +866,6 @@ router.addDefaultHandler(
                             return false;
                         }
 
-                        // Queue-purge #1: facet cap — drop discovered variants once the base is saturated.
-                        if (QM_FACET_ENABLED && isOverCap(context.facetVariantCount, request.url, QM_FACET_CAP_K)) {
-                            logBlocked('facet-cap', request.url);
-                            return false;
-                        }
-
-                        // Queue-purge #2: filter-on-seen-base — drop a discovered variant whose
-                        // param removal yields a base already crawled (structural, no content
-                        // comparison; R1 allowlist protects lang/currency/etc.).
-                        if (QM_FACET_ENABLED && isFilterParam(request.url, context.seenBases)) {
-                            logBlocked('filter-on-seen', request.url);
-                            return false;
-                        }
-
                         // 4. Pre-Crawl Deduplication (SYNCHRONOUS via pre-built Set)
                         // The Set was populated before enqueueLinks by batch-checking Redis.
                         // This avoids the async trap while still leveraging Redis dedup.
@@ -1109,10 +874,6 @@ router.addDefaultHandler(
                         }
 
                         request.userData = { source: 'discovered' };
-                        // Phase-2: pin the dedup identity to the fragment-bearing URL so
-                        // base#a / base#b do not collapse to base. No-op once skipDiez
-                        // has stripped '#' from request.url.
-                        request.uniqueKey = fragmentAwareUniqueKey(request.url);
                         return request;
                     },
                 });
@@ -1137,9 +898,6 @@ router.addDefaultHandler(
                 }
             } else {
                 log.warning(`Le site ${url} n'est pas en Français.`);
-                // Revive the (previously dead) filtered_nonfr counter → the terminal webhook
-                // carries a machine-readable non-French signal that the BO turns into isError='not_french'.
-                if (context.statsManager) await context.statsManager.increment("filtered_nonfr");
 
                 // --- UPDATE MODE: Non-French page = not eligible ---
                 if (context.updateChecker && source) {
@@ -1156,10 +914,7 @@ router.addDefaultHandler(
 
                 if (!content) content = await processPage(page, request.loadedUrl, log);
                 let dataset = await Dataset.open("nfr-" + targetDomain);
-                // PushedSet guard (fail-open). Truth-table equivalent to functions.ts:1635 inverted form.
-                if (!context.pushedSet || (await context.pushedSet.tryClaim(url))) {
-                    await dataset.pushData({ url, content });
-                }
+                await dataset.pushData({ url, content });
             }
         } else {
             console.log(`Doublon url : ${url}`);
@@ -1168,7 +923,7 @@ router.addDefaultHandler(
         // Signal that homepage detection is complete (for update mode two-phase seeding).
         // Must be OUTSIDE the isDoublon check — homepage may be marked as Doublon
         // in update mode (pre-added to DedupManager during Phase 1 seeding).
-        if (matchesMainSite(request.url, site) && context.homepageReady) {
+        if (request.url === site && context.homepageReady) {
             context.homepageReady.resolve();
         }
         } finally {

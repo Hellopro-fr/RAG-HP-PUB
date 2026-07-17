@@ -327,26 +327,6 @@ func (r *Registry) MergedToolsFilteredWithTools(allowed map[string]bool, allowed
 	return tools
 }
 
-// ToolServerIndex maps each prefixed active tool name to its owning server ID,
-// restricted to the allowed set. Used to route per-server instruction rows to
-// the right tool descriptions when tool-description injection is enabled.
-func (r *Registry) ToolServerIndex(allowed map[string]bool) map[string]string {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	idx := make(map[string]string)
-	for _, s := range r.servers {
-		if !allowed[s.ID] {
-			continue
-		}
-		for _, t := range s.Tools {
-			if t.IsActive {
-				idx[PrefixedToolName(s.ToolPrefix, t.Name)] = s.ID
-			}
-		}
-	}
-	return idx
-}
-
 // FindByToolFiltered returns the backend owning the tool (matching prefixed name),
 // only if it's in the allowed set and the tool is active. Also returns the original unprefixed tool name.
 func (r *Registry) FindByToolFiltered(name string, allowed map[string]bool) (*BackendServer, string) {

@@ -2,7 +2,6 @@ import os
 import logging
 import re
 import json
-import socket
 from datetime import datetime
 from typing import Dict, Optional, List
 
@@ -15,32 +14,10 @@ from pydantic import BaseModel
 from app.core.crawler_manager import crawler_manager, CRAWL_RUNNING_COUNT_KEY, CRAWL_JOB_PREFIX, CRAWL_MAX_GLOBAL_KEY
 from common_utils.redis import cache_service
 from app.core.config import settings
-from app.schemas.crawler import CrawlRequest, CrawlResponse, CrawlStatus, StopResponse, IncludeInArchive, CapacityResponse, ReindexResponse, ArchiveResponse, PruneResponse, PendingCallbacksResponse, StashResponse, UnstashResponse
+from app.schemas.crawler import CrawlRequest, CrawlResponse, CrawlStatus, StopResponse, IncludeInArchive, CapacityResponse, ReindexResponse, ArchiveResponse, PruneResponse, PendingCallbacksResponse
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-
-# Deploy identity for GET /version. Stamped once at import (= process start).
-APP_STARTED_AT = datetime.utcnow().isoformat() + "Z"
-
-
-async def _record_downloaded_at(job_info: dict) -> None:
-    """Persist downloaded_at (stream-start) so the auto-stash grace window can
-    start. Re-reads the job from Redis first so a concurrent status/archive
-    write isn't clobbered by the request-start snapshot (mirrors the fresh-read
-    pattern in stash_crawl/unstash_crawl). Skips if the job vanished. Fail-open:
-    a Redis hiccup must never break a download."""
-    try:
-        crawl_id = job_info["crawl_id"]
-        job_key = f"{CRAWL_JOB_PREFIX}{crawl_id}"
-        fresh = await cache_service.get_json(job_key)
-        if fresh is None:
-            return  # job vanished — don't recreate it
-        fresh["downloaded_at"] = datetime.utcnow().isoformat()
-        await cache_service.set_json(job_key, fresh)
-    except Exception as e:
-        logger.warning(f"Failed to record downloaded_at for "
-                       f"'{job_info.get('crawl_id')}': {e}")
 
 
 async def get_job_or_recover(crawl_id: str) -> dict:
@@ -54,14 +31,6 @@ async def get_job_or_recover(crawl_id: str) -> dict:
     job_info = await cache_service.get_json(job_key)
 
     if job_info:
-        # Heal legacy / partial blobs missing crawl_id. Mirrors get_all_statuses
-        # setdefault pattern (commit 508de256). Without this, downstream
-        # get_status() returns None on the malformed-blob guard and the
-        # singular /status/{crawl_id} endpoint's Pydantic response_model
-        # fails with 500 (observed on crawl 6664 — blob had 'id' but not
-        # 'crawl_id', likely written by an older code version or an
-        # external resource-monitor service).
-        job_info.setdefault('crawl_id', crawl_id)
         return job_info
 
     # --- Job not in Redis, attempt recovery from disk ---
@@ -183,39 +152,14 @@ async def get_capacity():
         # If the key is missing, use the configurable fallback from settings.
         max_global = int(max_global_raw) if max_global_raw else settings.DEFAULT_MAX_GLOBAL_CRAWLS
         
-        # Debug field only — must never 503 the admission-critical capacity response.
-        try:
-            disk = {
-                "storage": crawler_manager._get_archives_disk_state(settings.CRAWLER_STORAGE_PATH),
-                "archives": crawler_manager._get_archives_disk_state(settings.ARCHIVES_SHARED_PATH),
-                "stash": crawler_manager._get_archives_disk_state(settings.STASH_SHARED_PATH),
-                "high_water_pct": settings.STASH_DISK_HIGH_WATER_PCT,
-            }
-        except Exception:
-            logger.warning("capacity disk-state collection failed", exc_info=True)
-            disk = None
         return CapacityResponse(
             running_jobs=running_jobs,
             max_global_jobs=max_global,
-            is_full=running_jobs >= max_global,
-            disk=disk,
+            is_full=running_jobs >= max_global
         )
     except Exception as e:
         logger.error(f"Failed to get crawler capacity from Redis: {e}", exc_info=True)
         raise HTTPException(status_code=503, detail="Could not determine crawler service capacity.")
-
-
-@router.get("/version")
-async def version():
-    """Deploy identity: which commit/build is running, on which replica, since
-    when. GIT_COMMIT/BUILD_DATE are baked at image build (Dockerfile ARG->ENV);
-    'unknown' means the image was built without build args."""
-    return {
-        "git_commit": os.environ.get("GIT_COMMIT", "unknown"),
-        "build_date": os.environ.get("BUILD_DATE", "unknown"),
-        "replica": socket.gethostname(),
-        "started_at": APP_STARTED_AT,
-    }
 
 
 @router.post("/start", response_model=CrawlResponse, status_code=status.HTTP_202_ACCEPTED)
@@ -238,20 +182,10 @@ async def start_new_crawl(payload: CrawlRequest):
             "bypassquestionmark": payload.bypass_question_mark,
             "bypassdiez": payload.bypass_diez,
             "breaklimit": payload.break_limit,
-            "queuelimit": payload.queue_limit,
-            "bypassqueue": payload.bypass_queue,
             "percrawl": payload.per_crawl,
             "perminute": payload.per_minute,
             "camoufox": payload.camoufox, # Pass Camoufox flag
-            "cms": payload.cms,
         }
-
-        # limitQueue gate désactivé en mode update (TEMPORAIRE — en attendant le fix du
-        # lien "Continuer" du mail limitQueue en mode update, qui cible le mauvais id).
-        # queuelimit=0 => la garde Node ne s'arme pas (condition queueLimit > 0 fausse)
-        # pour les crawls update. Retirer ce bloc pour réactiver la garde sur les MAJ.
-        if payload.crawl_mode.value == "update":
-            params["queuelimit"] = 0
 
         # Add update specific params
         if payload.previous_crawl_id:
@@ -341,26 +275,12 @@ async def get_all_crawl_statuses(
 async def get_crawl_status(crawl_id: str, job_info: dict = Depends(get_job_or_recover)):
     """
     Gets the detailed status of a specific crawl job. Recovers from storage if missing from Redis.
-
-    Raises 404 when get_status() returns None (malformed blob beyond heal-on-read —
-    e.g. missing storage_path as well as crawl_id). Without this guard, Pydantic
-    response_model validation would surface a 500 on the None response.
     """
-    status_data = await crawler_manager.get_status(job_info)
-    if status_data is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Crawl job '{crawl_id}' state is malformed (missing required fields).",
-        )
-    return status_data
+    return await crawler_manager.get_status(job_info)
 
 @router.get("/results/{crawl_id}")
 async def download_crawl_results(
     include: List[IncludeInArchive] = Query(..., description="Specify which components to include in the archive. Can be provided multiple times (e.g., ?include=dataset&include=request_queues)."),
-    peek: bool = Query(False, description="Investigation read: skip recording "
-                       "downloaded_at (auto-stash grace clock). NOTE: does not "
-                       "prevent inline unstash of stashed crawls — for a fully "
-                       "side-effect-free view use GET /admin/dataset."),
     job_info: dict = Depends(get_job_or_recover)
 ):
     """
@@ -380,11 +300,6 @@ async def download_crawl_results(
                 detail=f"Could not generate results archive for crawl '{crawl_id}'. "
                 f"The crawl data may have been cleaned up after archiving to GCS."
             )
-
-        # Record the consume signal (stream-start) for the auto-stash sweep —
-        # unless this is an investigation peek.
-        if not peek:
-            await _record_downloaded_at(job_info)
 
         if is_temporary:
             # Stream the file and clean up after streaming completes (prevents race with BackgroundTasks)
@@ -407,24 +322,6 @@ async def download_crawl_results(
         logger.error(f"Error generating results for crawl '{job_info.get('crawl_id')}': {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Could not generate results archive.")
 
-@router.get("/html/{crawl_id}")
-async def get_single_html(
-    url: str = Query(..., description="Full URL whose HTML to extract from the crawl dataset."),
-    job_info: dict = Depends(get_job_or_recover)
-):
-    """
-    Returns ONE URL's HTML from a crawl as JSON (not a tar), serving the cold tier
-    transparently: hot local data, a stashed crawl (inline-unstashed from GCS), or an
-    archived crawl (retrieved + extracted from GCS). Lets the PHP side — which has no
-    GCS access — fetch cold-tier HTML over REST. 404 if the URL is not in the crawl.
-    """
-    crawl_id = job_info['crawl_id']
-    content = await crawler_manager.get_single_url_html(job_info, url)
-    if content is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                            detail=f"URL not found in crawl '{crawl_id}'.")
-    return {"url": url, "content": content}
-
 @router.post("/archive/{crawl_id}", response_model=ArchiveResponse)
 async def archive_crawl_to_gcs(crawl_id: str, job_info: dict = Depends(get_job_or_recover)):
     """
@@ -444,43 +341,6 @@ async def archive_crawl_to_gcs(crawl_id: str, job_info: dict = Depends(get_job_o
     except Exception as e:
         logger.error(f"Error archiving crawl '{crawl_id}': {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="An internal error occurred during archiving.")
-
-@router.post("/stash/{crawl_id}", response_model=StashResponse, status_code=status.HTTP_202_ACCEPTED)
-async def stash_crawl_endpoint(crawl_id: str, job_info: dict = Depends(get_job_or_recover)):
-    """
-    Stash a terminal crawl's storage to GCS (gs://{bucket}/stash/) to free local disk.
-    The crawl must be in failed/stopped/finished status and not already stashed/archived.
-    Local data is deleted only AFTER the Redis stashed_at flag is set; the upload daemon
-    handles GCS upload asynchronously. Use POST /unstash/{crawl_id} to restore.
-    """
-    try:
-        result = await crawler_manager.stash_crawl(job_info)
-        return StashResponse(**result)
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error stashing crawl '{crawl_id}': {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="An internal error occurred during stash.")
-
-
-@router.post("/unstash/{crawl_id}", response_model=UnstashResponse)
-async def unstash_crawl_endpoint(crawl_id: str, job_info: dict = Depends(get_job_or_recover)):
-    """
-    Restore a stashed crawl's data from GCS to local storage. Synchronous: waits for
-    daemon download + extract + 2-phase GCS cleanup. Bounded by UNSTASH_TIMEOUT_SECONDS
-    (default 300s). On success, stashed_at is cleared. If the GCS-rm cleanup-done
-    marker does not arrive within the grace window, returns 200 with
-    gcs_cleanup_status='deferred' (orphan GCS object — manual cleanup required).
-    """
-    try:
-        result = await crawler_manager.unstash_crawl(job_info)
-        return UnstashResponse(**result)
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error unstashing crawl '{crawl_id}': {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="An internal error occurred during unstash.")
-
 
 @router.post("/reconcile-jobs")
 async def reconcile_jobs():

@@ -1,6 +1,5 @@
 // Infrastructure layer: Redis repository
 import { createClient, type RedisClientType } from "redis"
-import type { KeyMeta } from "@/lib/domain/cache-entry"
 
 // Singleton pattern with connection-promise guard to prevent race conditions (W1)
 let redisClient: RedisClientType | null = null
@@ -55,32 +54,34 @@ export class RedisCacheRepository {
     return getRedisClient()
   }
 
-  // Single SCAN step (page). cursor 0 starts iteration; returned nextCursor 0 = complete.
-  async scanKeys(cursor: number, match: string, count = 100): Promise<{ keys: string[]; nextCursor: number }> {
-    const client = await this.getClient()
-    const result = await client.scan(cursor, { MATCH: match || "*", COUNT: count })
-    return { keys: result.keys, nextCursor: result.cursor }
-  }
+  // C2: use SCAN instead of KEYS * to avoid blocking the Redis event loop
+  async getAllKeys(): Promise<string[]> {
+    try {
+      const client = await this.getClient()
+      const keys: string[] = []
+      let cursor = 0
 
-  // Per-key metadata WITHOUT reading the value (no GET). Each command degrades independently.
-  async getKeyMeta(key: string): Promise<KeyMeta> {
-    const client = await this.getClient()
-    const [type, ttl, size] = await Promise.all([
-      client.type(key).catch(() => "unknown"),
-      client.ttl(key).catch(() => -1),
-      client.memoryUsage(key).catch(() => 0),
-    ])
-    return {
-      key,
-      type: type || "unknown",
-      ttl: ttl > 0 ? ttl : undefined,
-      size: size || 0,
+      do {
+        const result = await client.scan(cursor, { COUNT: 100 })
+        cursor = result.cursor
+        keys.push(...result.keys)
+      } while (cursor !== 0)
+
+      return keys
+    } catch (error) {
+      console.error("[redis-client] Error fetching keys:", error)
+      throw new Error("Could not fetch keys from Redis.")
     }
   }
 
-  async dbSize(): Promise<number> {
-    const client = await this.getClient()
-    return client.dbSize()
+  async getEntry(key: string): Promise<string | null> {
+    try {
+      const client = await this.getClient()
+      return await client.get(key)
+    } catch (error) {
+      console.error(`[redis-client] Error fetching entry for key "${key}":`, error)
+      return null
+    }
   }
 
   async deleteEntry(key: string): Promise<boolean> {
@@ -102,6 +103,34 @@ export class RedisCacheRepository {
     } catch (error) {
       console.error("[redis-client] Error clearing cache:", error)
       return false
+    }
+  }
+
+  async getSize(key: string): Promise<number> {
+    try {
+      const client = await this.getClient()
+      const size = await client.memoryUsage(key)
+      return size || 0
+    } catch (error) {
+      console.warn(`[redis-client] Could not get memory usage for key "${key}", falling back to string length. Error:`, error)
+      try {
+        const value = await this.getEntry(key)
+        return value ? new Blob([value]).size : 0
+      } catch (fallbackError) {
+        console.error(`[redis-client] Error getting size with fallback for key "${key}":`, fallbackError)
+        return 0
+      }
+    }
+  }
+
+  async getTTL(key: string): Promise<number | null> {
+    try {
+      const client = await this.getClient()
+      const ttl = await client.ttl(key)
+      return ttl > 0 ? ttl : null
+    } catch (error) {
+      console.error(`[redis-client] Error getting TTL for key "${key}":`, error)
+      return null
     }
   }
 }

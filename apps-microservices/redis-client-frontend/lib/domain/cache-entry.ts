@@ -1,8 +1,18 @@
-// Domain: metadata for one Redis key shown in the browser.
-// No `value` — the key browser never displays values (a value inspector is deferred).
-export interface KeyMeta {
+// Domain entity for cache entries
+export interface CacheEntry {
   key: string
-  type: string // Redis TYPE: string | hash | set | zset | list | stream | none | unknown
-  ttl?: number // seconds; undefined = no expiry
-  size: number // bytes (MEMORY USAGE); 0 if unavailable
+  value: string
+  size: number
+  // W6: renamed from createdAt — Redis has no native creation timestamp,
+  // this is the timestamp when the entry was fetched from Redis
+  fetchedAt: Date
+  expiresAt?: Date
+  ttl?: number
+}
+
+// S8: reusable metadata interface
+export interface CacheMetadata {
+  totalKeys: number
+  totalSize: number
+  lastRefreshed: Date
 }

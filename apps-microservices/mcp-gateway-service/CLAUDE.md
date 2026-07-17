@@ -185,15 +185,6 @@ Catalog routes return **503** when `BDD_CATALOG_BASE_URL` / `BDD_CATALOG_TOKEN` 
 - `POST /message?sessionId={id}` — Send JSON-RPC over SSE
 - `POST /mcp` — Streamable HTTP JSON-RPC
 
-**Auth header precedence on MCP transports:**
-1. `X-MCP-Scope-Token: mcp_…` wins outright when present.
-2. Otherwise `Authorization: Bearer <token>` is dispatched by prefix:
-   - Starts with `mcp_` → validated as a `/tokens`-issued scope token (same pipeline as `X-MCP-Scope-Token`). Rejection emits **no** `WWW-Authenticate` header.
-   - Otherwise → validated as an OAuth2 access token (JWT, HS256). Rejection emits `WWW-Authenticate: Bearer error="invalid_token"`.
-3. Neither present → 401 + `WWW-Authenticate: Bearer resource_metadata="…"`.
-
-Scope-token accepts and rejects log an `auth_source=x-mcp-scope-token|bearer` tag; Slack `UnauthorizedEvent` reasons carry the same tag.
-
 ### Template Catalog (`/api/v1/`)
 - `GET /templates` — list available templates (seeded: GA4, GSC) with live instance counts
 - `GET /templates/{slug}` — template detail
@@ -214,9 +205,8 @@ Scope-token accepts and rejects log an `auth_source=x-mcp-scope-token|bearer` ta
 - `POST /api/v1/zoho-imports/{id}/test` — server-side `POST tools/list` probe against the row's upstream URL with decrypted headers, 10s timeout. Returns `{ok, status_code?, latency_ms, error?}`. Logs only the row ID + caller email (never the URL or headers).
 - `GET /api/v1/zoho-imports/{id}/tools` — list the persisted tool catalog for one row. Body: `{tools: [{name, description, input_schema, updated_at}], total}`. Returns 200 (empty list when catalog empty), 404 when the row is missing. Read-only — refresh the catalog via `POST /api/v1/zoho-imports/{id}/discover`.
 
-### Internal Sync (shared-secret auth via `X-Admin-Token`)
+### Runner Sync (internal, shared-secret auth via `X-Admin-Token`)
 - `POST /api/v1/internal/runner/sync` — runner's boot-time pull of desired instances (returns decrypted credentials)
-- `POST /api/v1/internal/users/sync` — account-service-backend pushes its users; gateway creates missing `gateway_users` (role `config-only`, `is_allowed=false`) and returns `{created, skipped}`. Token: `ACCOUNT_INTERNAL_TOKEN`.
 
 ### Other
 - `GET /health` — Health probe
@@ -317,7 +307,6 @@ Connection pooling: max 25 open, 5 idle connections.
   3. Otherwise, 303 to `/sso/login?purpose=oauth2&return_to=<full-authorize-URL>`. The same SSO `client_id`/`client_secret` as the admin UI is reused; the `purpose` query parameter tells `/sso/callback` to skip the admin upsert + `IsAllowed` check + `SSOSession` persistence + `gw_session` cookie, and instead set the `mcp_session` cookie via `internal/auth.SetSession` before redirecting back to the original `/authorize` URL so the consent screen can render.
   `client_credentials` grants are unaffected (they never hit `/authorize`).
 - **LLM instructions** are reusable snippets (title + body) linked to servers. Scope tokens and OAuth2 clients each pick a subset; at MCP `initialize` time, the gateway emits the composed `## <title>\n<body>` blocks (`\n\n`-joined, capped at 8 KiB) into the spec-defined `instructions` field. Picks are validated server-side: every `instruction_id` must share at least one server with the token/client's allowed set. Resolution happens once per scope-cache-miss (60 s TTL); instruction edits additionally invalidate both scope caches for immediate visibility.
-- **Instruction delivery via tool descriptions** (`oauth2_clients.inject_instructions_into_tools`, default `false`): some MCP hosts ignore the `initialize` `instructions` field (claude.ai web does; Claude Code honors it). When the flag is set on an OAuth2 client, the gateway instead appends the composed instruction blocks to tool descriptions in `tools/list` — `general` rows to every tool, `per_server` rows only to the owning server's tools (per-tool suffix capped at 4 KiB) — and omits the `initialize` field so spec-compliant hosts never see the text twice. Exposed as `inject_instructions_into_tools` on the OAuth2 client REST API and as a checkbox in the frontend's "Instructions LLM" section. Scope tokens do not support the flag. Implementation: `gateway.DecorateToolsWithInstructions` + `Registry.ToolServerIndex`.
 - MCP endpoints return 401 + `WWW-Authenticate` header when no auth is provided, triggering Claude.ai's OAuth2 discovery flow.
 - Unit tests in `internal/authserver/*_test.go`, `internal/oauth2/*_test.go`, `internal/repository/*_test.go`, `internal/db/mysql_test.go`.
 
