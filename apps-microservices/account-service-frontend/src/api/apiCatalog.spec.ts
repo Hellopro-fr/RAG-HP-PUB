@@ -37,3 +37,27 @@ describe('apiCatalog API wrapper', () => {
     })
   })
 })
+
+describe('updateEndpoint', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('PUTs to /api/v1/admin/api/{id}/endpoints/{ep_id} with authPolicy', async () => {
+    ;(api as any).mockResolvedValue({ id: 'ep-1', serviceId: 'svc-1', protocol: 'rest', path: '/foo', deprecated: false })
+    await catalog.updateEndpoint('svc-1', 'ep-1', { authPolicy: 'bearer' })
+    expect(api).toHaveBeenCalledWith('/api/v1/admin/api/svc-1/endpoints/ep-1', {
+      method: 'PUT',
+      body: { authPolicy: 'bearer' },
+    })
+  })
+
+  it('sends null authPolicy to clear the override', async () => {
+    ;(api as any).mockResolvedValue({ id: 'ep-1', serviceId: 'svc-1', protocol: 'rest', path: '/foo', deprecated: false })
+    await catalog.updateEndpoint('svc-1', 'ep-1', { authPolicy: null })
+    expect(api).toHaveBeenCalledWith('/api/v1/admin/api/svc-1/endpoints/ep-1', {
+      method: 'PUT',
+      body: { authPolicy: null },
+    })
+  })
+})

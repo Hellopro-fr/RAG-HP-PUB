@@ -29,6 +29,9 @@ The daemons communicate with the crawler service via shared directories (Docker 
 | `crawler-service/crawler_archives/` | `/app/archives` | `ARCHIVES_SHARED_PATH` | Upload staging: service writes `.tar.gz`, daemon uploads to GCS |
 | `crawler-service/crawler_download_requests/` | `/app/gcs-requests` | `DOWNLOAD_REQUESTS_PATH` | Download requests: service writes `.request`, daemon picks up |
 | `crawler-service/crawler_download_results/` | `/app/gcs-downloads` | `DOWNLOAD_RESULTS_PATH` | Download results: daemon writes `.tar.gz` + `.done`, service reads |
+| `crawler-service/crawler_stash/` | `/app/stash` | `STASH_SHARED_PATH` | Stash staging: service writes `.tar.gz`, stash-upload daemon uploads to GCS |
+| `crawler-service/crawler_stash_download_requests/` | `/app/gcs-stash-requests` | `STASH_DOWNLOAD_REQUESTS_PATH` | Stash download requests: service writes `.request`, stash-download daemon picks up |
+| `crawler-service/crawler_stash_download_results/` | `/app/gcs-stash-downloads` | `STASH_DOWNLOAD_RESULTS_PATH` | Stash download results: daemon writes `.tar.gz` + `.done`, service writes `.unstash-confirmed`, daemon writes `.unstash-cleanup-done` |
 
 ### Volume Mounts (docker-compose.yml)
 
@@ -38,11 +41,16 @@ crawler-service:
     - ./crawler_archives:/app/archives
     - ./crawler_download_requests:/app/gcs-requests
     - ./crawler_download_results:/app/gcs-downloads
+    - ./crawler_stash:/app/stash
+    - ./crawler_stash_download_requests:/app/gcs-stash-requests
+    - ./crawler_stash_download_results:/app/gcs-stash-downloads
 ```
 
 ---
 
 ## Upload Daemon (`upload_daemon.sh`)
+
+> **Tip:** Prefer `tools/start-crawler-daemon.sh` over manual screen setup. See § One-shot launcher.
 
 Automatically uploads archived crawl jobs to GCS. The crawler service places `.tar.gz` archives in the shared `crawler_archives/` directory, and this daemon uploads them to `gs://{bucket}/crawls/` then deletes the local file.
 
@@ -112,9 +120,35 @@ screen -S upload_daemon
     systemctl --user enable --now crawler-upload
     ```
 
+### Stash Upload Daemon Variant
+
+The same `tools/upload_daemon.sh` script runs as a second systemd instance for the stash flow:
+
+```ini
+# ~/.config/systemd/user/crawler-upload-stash.service
+[Unit]
+Description=Crawler Stash Upload Daemon
+
+[Service]
+Environment="UPLOAD_WATCH_DIR=%h/workspaces/RAG-HP-PUB/apps-microservices/crawler-service/crawler_stash"
+Environment="UPLOAD_GCS_PREFIX=stash"
+ExecStart=%h/workspaces/RAG-HP-PUB/tools/upload_daemon.sh
+Restart=always
+RestartSec=10
+StandardOutput=append:%h/workspaces/RAG-HP-PUB/logs/upload_daemon_stash.log
+StandardError=append:%h/workspaces/RAG-HP-PUB/logs/upload_daemon_stash.log
+
+[Install]
+WantedBy=default.target
+```
+
+Enable: `systemctl --user enable --now crawler-upload-stash`.
+
 ---
 
 ## Download Daemon (`download_daemon.sh`)
+
+> **Tip:** Prefer `tools/start-crawler-daemon.sh` over manual screen setup. See § One-shot launcher.
 
 Downloads archived crawl data from GCS on demand. When a user requests results for an archived crawl (via `GET /results/{crawl_id}`), the crawler service writes a `.request` file to the shared `crawler_download_requests/` directory. This daemon picks it up, downloads the archive from GCS, and places it in `crawler_download_results/` with a `.done` marker. The service then streams the file to the client and cleans up.
 
@@ -163,6 +197,38 @@ screen -S download_daemon
     systemctl --user enable --now crawler-download
     ```
 
+### Stash Download Daemon Variant
+
+A second instance of `tools/download_daemon.sh` runs for the stash unstash flow, using `DELETE_AFTER_DOWNLOAD=true` to trigger the 2-phase commit cleanup branch:
+
+```ini
+# ~/.config/systemd/user/crawler-download-stash.service
+[Unit]
+Description=Crawler Stash Download Daemon (2-phase commit)
+
+[Service]
+Environment="DOWNLOAD_REQUESTS_PATH=%h/workspaces/RAG-HP-PUB/apps-microservices/crawler-service/crawler_stash_download_requests"
+Environment="DOWNLOAD_RESULTS_PATH=%h/workspaces/RAG-HP-PUB/apps-microservices/crawler-service/crawler_stash_download_results"
+Environment="DOWNLOAD_GCS_PREFIX=stash"
+Environment="DELETE_AFTER_DOWNLOAD=true"
+ExecStart=%h/workspaces/RAG-HP-PUB/tools/download_daemon.sh
+Restart=always
+RestartSec=10
+StandardOutput=append:%h/workspaces/RAG-HP-PUB/logs/download_daemon_stash.log
+StandardError=append:%h/workspaces/RAG-HP-PUB/logs/download_daemon_stash.log
+
+[Install]
+WantedBy=default.target
+```
+
+Enable: `systemctl --user enable --now crawler-download-stash`.
+
+**2-phase commit semantics** (triggered by `POST /stash/{crawl_id}` and `POST /unstash/{crawl_id}` on the crawler service):
+- After the service extracts the downloaded tar.gz, it writes `{crawl_id}.unstash-confirmed`.
+- This daemon polls `.unstash-confirmed`, runs `gcloud storage rm` on the GCS object, and on success writes `{crawl_id}.unstash-cleanup-done`.
+- On `gcloud rm` failure the daemon retains the `.unstash-confirmed` marker for retry on the next iteration + logs a WARNING.
+- The service polls for `.unstash-cleanup-done` within `UNSTASH_CLEANUP_GRACE_SECONDS` (default 30s). Past the grace window, the service returns `gcs_cleanup_status="deferred"` and logs `UNSTASH_GCS_ORPHAN` (grep prefix) in `crawler.log` (no Prometheus counter — operational observability is log-based).
+
 ---
 
 ## Monitoring & Troubleshooting
@@ -200,6 +266,29 @@ If `GET /results/{crawl_id}` returns a 504 timeout for archived crawls, check th
 3. Verify GCS bucket exists and credentials have write permission
 4. Retry manually with `gcloud storage cp` then remove from `dead_letter/`
 
+**Orphan GCS objects (stash flow):**
+If `POST /unstash/{crawl_id}` returns `gcs_cleanup_status="deferred"`, the local data was restored but the GCS source object was not deleted within `UNSTASH_CLEANUP_GRACE_SECONDS`. The service logs `UNSTASH_GCS_ORPHAN crawl_id=… elapsed_seconds=… reason=cleanup_grace_expired gcs_path=…` in `crawler.log`. Grep that prefix to inventory orphans. To investigate:
+1. Check the stash-download daemon is alive (`systemctl --user status crawler-download-stash`)
+2. Look for WARNING messages in `logs/download_daemon_stash.log` about `gcloud rm` failures
+3. List orphans: `gcloud storage ls gs://{bucket}/stash/` and cross-reference with Redis `crawl_job:*` keys that no longer have `stashed_at`
+4. Delete confirmed orphans manually: `gcloud storage rm gs://{bucket}/stash/{crawl_id}.tar.gz`
+
+**Redis restarted without recreating crawler-service:**
+After any Redis restart (e.g. `maxclients` bump, version upgrade, OOM kill), **always recreate the crawler-service replicas** to drop the stale connection pool. Symptoms when skipped: intermittent `redis.exceptions.TimeoutError: Timeout connecting to server` from `cache_service.get_json` and downstream `Heartbeat for '{id}' skipped: job key disappeared from Redis mid-run` warnings. The Python pool's `health_check_interval=30s` (see spec `2026-05-21-redis-connection-leak-fix-design.md`) eventually invalidates dead sockets, but reconnect storms during Redis cold-start can exceed `socket_connect_timeout=5s`. One-line ops fix:
+
+```bash
+docker compose --profile crawling up -d --force-recreate crawler-service
+```
+
+If running multi-replica, rolling-restart one replica at a time to keep capacity:
+
+```bash
+for n in $(docker ps --filter "name=crawler-service-" --format "{{.Names}}"); do
+    docker compose --profile crawling up -d --force-recreate "$n"
+    sleep 10  # let replica drain + reconnect before moving on
+done
+```
+
 ---
 
 ## Automatic Cleanup
@@ -212,3 +301,164 @@ The crawler service automatically cleans up stale files across all shared direct
 - **Manual trigger**: `POST /prune-archives?max_age_hours=24` (or `delete_all=true`)
 
 The `dead_letter/` directory is **never** auto-cleaned — it requires manual investigation.
+
+
+## One-shot launcher: `tools/start-crawler-daemon.sh`
+
+The codebase ships a single interactive script that manages all 4
+daemon variants (archive + stash, upload + download). Use it instead
+of opening 4 manual screen sessions with env vars.
+
+### What it does
+
+For each of the 4 daemons it:
+1. Detects if a screen session with the standard name already exists
+2. Prompts per-daemon:
+   - **Running**: `(s)kip / (r)estart / (q)uit` [default: skip]
+   - **Not running**: `(s)tart / (n)o / (q)uit` [default: no]
+3. On `r` or `s`(tart): launches via `screen -dmS` with env vars baked
+   in + logs to `logs/<screen-name>.log`
+
+### Screen session names
+
+| Daemon | Screen name | Watches | Uploads to / downloads from |
+|---|---|---|---|
+| Archive Upload | `crawler-upload-archive` | `crawler_archives/` | `gs://$BUCKET/crawls/` |
+| Stash Upload | `crawler-upload-stash` | `crawler_stash/` | `gs://$BUCKET/stash/` |
+| Archive Download | `crawler-download-archive` | `crawler_download_requests/` | `gs://$BUCKET/crawls/` |
+| Stash Download | `crawler-download-stash` | `crawler_stash_download_requests/` | `gs://$BUCKET/stash/` + GCS delete after extract |
+
+### Usage
+
+```bash
+cd /home/devhp/RAG-HP-PUB
+bash tools/start-crawler-daemon.sh
+```
+
+Walk through the 4 prompts. Default ENTER is safe
+(skip-when-running, no-when-stopped). Type `q` at any prompt to abort.
+
+### Inspecting / attaching / stopping
+
+```bash
+# List sessions
+screen -ls
+
+# Attach to a specific daemon (Ctrl+A then D to detach)
+screen -r crawler-upload-stash
+
+# Tail a daemon's log without attaching
+tail -f logs/crawler-upload-stash.log
+
+# Stop a specific daemon
+screen -X -S crawler-upload-stash quit
+```
+
+### Prerequisites
+
+The script does NOT pre-create host bind-source dirs. Do that once
+during initial setup (see `## Troubleshooting: 503 BIND_MOUNT_MISSING`
+section below for the `mkdir + sudo chown` block).
+
+
+## Troubleshooting: 503 `BIND_MOUNT_MISSING`
+
+Returned by `POST /stash/{id}` or `POST /unstash/{id}` when one of the
+stash bind-mounts (`/app/stash`, `/app/gcs-stash-requests`,
+`/app/gcs-stash-downloads`) is not a real mount point. Two common causes:
+
+1. **Host directories missing.** Docker creates bind-source dirs as
+   root with no automatic permission for the host user — the upload /
+   download daemons (running as `$USER`) then can't read/write them.
+   See the prerequisite mkdir + chown block below.
+2. **Container started before compose declared the mounts.** The root
+   `docker-compose.yml` had the stash bind-mounts added in commit
+   `545e9e0f` (which superseded the earlier wrong-file edit
+   `14a02524`). Docker-compose only applies new volume declarations
+   at **container creation** — a plain `docker-compose up -d` after
+   editing the file does not bridge them.
+
+**Response body:**
+
+```json
+{
+  "detail": {
+    "error_code": "BIND_MOUNT_MISSING",
+    "path": "/app/stash",
+    "label": "stash upload",
+    "ops_action": "docker-compose --profile crawling up -d --force-recreate crawler-service",
+    "hint": "Container was started before compose mount declaration; recreate required."
+  }
+}
+```
+
+### Fix
+
+```bash
+# 0. Pre-create the 3 host bind-source dirs (compose will mount them in)
+#    and chown them to the host user so the upload/download daemons
+#    (running as $USER, not root) can read/write. Mirrors the existing
+#    archive-flow setup pattern in tools/upload_daemon.sh:30-37.
+mkdir -p apps-microservices/crawler-service/crawler_stash
+mkdir -p apps-microservices/crawler-service/crawler_stash_download_requests
+mkdir -p apps-microservices/crawler-service/crawler_stash_download_results
+sudo chown -R $USER:$USER apps-microservices/crawler-service/crawler_stash
+sudo chown -R $USER:$USER apps-microservices/crawler-service/crawler_stash_download_requests
+sudo chown -R $USER:$USER apps-microservices/crawler-service/crawler_stash_download_results
+
+# 1. Stop the service
+docker-compose --profile crawling stop crawler-service
+
+# 2. Recreate (rebuilds container with the latest compose mounts).
+#    Uses the ROOT docker-compose.yml under the "crawling" profile —
+#    not the previously-existing subdir compose, which was deleted in
+#    commit 5b33a9a1 because it duplicated and confused the deploy.
+docker-compose --profile crawling up -d --force-recreate crawler-service
+
+# 3. Verify all three stash mounts are bridged
+docker inspect $(docker ps -qf name=crawler-service | head -1) \
+  --format='{{range .Mounts}}{{.Destination}} ({{.Type}}){{println}}{{end}}' \
+  | grep -E "stash|gcs-stash"
+```
+
+Expected output:
+
+```
+/app/stash (bind)
+/app/gcs-stash-requests (bind)
+/app/gcs-stash-downloads (bind)
+```
+
+If any line is missing, the recreate did not apply the latest compose
+file. Verify the commit `545e9e0f` (stash mounts in root compose) is
+pulled and re-run.
+
+
+## Recovery: stash tars trapped in pre-fix ephemeral container
+
+If `POST /stash/{id}` returned 202 BEFORE the recreate above, the tar
+lives in the container's overlay filesystem at `/app/stash/{id}.tar.gz`
+instead of on the host bind-mount. Rescue it BEFORE recreating (which
+would destroy the layer):
+
+```bash
+CONTAINER=$(docker ps -qf name=crawler-service | head -1)
+
+# Confirm the tar is in the ephemeral /app/stash
+docker exec "$CONTAINER" ls -la /app/stash/
+
+# Rescue to the host (replace {id} with the actual crawl_id)
+docker cp "$CONTAINER":/app/stash/{id}.tar.gz ./recovered_{id}.tar.gz
+
+# Now recreate the container (Troubleshooting section above)
+
+# After recreate, copy back into the bind-mount source dir
+cp ./recovered_{id}.tar.gz \
+   ./apps-microservices/crawler-service/crawler_stash/{id}.tar.gz
+
+# The upload daemon picks it up within CHECK_INTERVAL (60s). Verify:
+gcloud storage ls "gs://${GCS_BUCKET_NAME}/stash/{id}.tar.gz"
+```
+
+Redis `stashed_at` was set by the original `POST /stash/{id}` call, so
+`POST /unstash/{id}` will succeed once the tar reaches GCS.

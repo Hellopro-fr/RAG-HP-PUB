@@ -1,17 +1,20 @@
 import json
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
+from common_utils.redis import cache_service
 from app.core.domain_fr import DomainCache
 
 
 @pytest.fixture
-def cache_with_mock_redis():
+def cache_with_mock_redis(monkeypatch):
+    """DomainCache reads the shared pool client (cache_service.redis_client)
+    live at each call — mock it at the module attribute, like the other
+    cache_service consumers (image-comparison-service, crawler-service)."""
     cache = DomainCache()
     mock_client = MagicMock()
     mock_client.get = AsyncMock(return_value=None)
     mock_client.setex = AsyncMock()
-    cache._client = mock_client
-    cache._initialized = True
+    monkeypatch.setattr(cache_service, "redis_client", mock_client, raising=False)
     return cache, mock_client
 
 
@@ -52,14 +55,13 @@ class TestRequestedUrlField:
         assert payload["requested_url"] == "https://example.com/some/path"
 
     @pytest.mark.asyncio
-    async def test_old_payload_without_requested_url_reads_back(self):
+    async def test_old_payload_without_requested_url_reads_back(self, monkeypatch):
         """Forward compat: an old entry lacking 'requested_url' should still be readable."""
         cache = DomainCache()
         mock_client = MagicMock()
         old_payload = {"ok": True, "method": "langHtml", "url": "https://example.com/"}
         mock_client.get = AsyncMock(return_value=json.dumps(old_payload))
-        cache._client = mock_client
-        cache._initialized = True
+        monkeypatch.setattr(cache_service, "redis_client", mock_client, raising=False)
 
         loaded = await cache.get("https://example.com/")
         assert loaded == old_payload  # No KeyError; missing field gracefully absent

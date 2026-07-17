@@ -1,0 +1,46 @@
+{
+  "planPath": "docs/superpowers/plans/2026-06-05-no-stash-archived-crawl.md",
+  "tasks": [
+    {
+      "id": 27,
+      "subject": "Task 1: Daemon GCS exists-probe op (C1)",
+      "status": "pending",
+      "description": "**Goal:** download_daemon.sh answers {id}.exists-request with {id}.exists-yes (body \"<size>\\t<create_time>\") or {id}.exists-no via metadata-only `gcloud storage ls -l`.\n\n**Files:** tools/download_daemon.sh, tools/tests/test_download_daemon_exists.sh\n\n```json:metadata\n{\"files\": [\"tools/download_daemon.sh\", \"tools/tests/test_download_daemon_exists.sh\"], \"verifyCommand\": \"bash tools/tests/test_download_daemon_exists.sh\", \"acceptanceCriteria\": [\"exists -> .exists-yes size\\\\tctime\", \"missing/error -> .exists-no\", \"*.request not matched by *.exists-request\"]}\n```"
+    },
+    {
+      "id": 28,
+      "subject": "Task 2: Config + GcsArchiveInfo + _gcs_archive_info (C2)",
+      "status": "pending",
+      "blockedBy": [27],
+      "description": "**Goal:** Crawler-side async probe (.exists-request -> bounded wait -> GcsArchiveInfo); fail-safe exists=False.\n\n**Files:** app/core/config.py, app/core/crawler_manager.py, tests/test_gcs_archive_info.py\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/app/core/config.py\", \"apps-microservices/crawler-service/app/core/crawler_manager.py\", \"apps-microservices/crawler-service/tests/test_gcs_archive_info.py\"], \"verifyCommand\": \"cd apps-microservices/crawler-service && python -m pytest tests/test_gcs_archive_info.py -v\", \"acceptanceCriteria\": [\"exists-yes parsed\", \"exists-no False\", \"timeout False + request cleaned\", \"garbage body -> exists True size/created None\"]}\n```"
+    },
+    {
+      "id": 29,
+      "subject": "Task 3: Decision + local-free helpers",
+      "status": "pending",
+      "blockedBy": [28],
+      "description": "**Goal:** _local_data_mtime, _is_confidently_archived (§6), _free_local_crawl_data; archive_crawl cleanup delegates (DRY).\n\n**Files:** app/core/crawler_manager.py, tests/test_archived_guard_decision.py\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/app/core/crawler_manager.py\", \"apps-microservices/crawler-service/tests/test_archived_guard_decision.py\"], \"verifyCommand\": \"cd apps-microservices/crawler-service && python -m pytest tests/test_archived_guard_decision.py tests/test_archive_mock_e2e.py -v\", \"acceptanceCriteria\": [\"confident only when exists & size>=floor & created_at>=local_mtime\", \"False on absent/truncated/stale/missing-metadata\", \"_free_local keeps logs removes data\", \"archive_crawl unchanged\"]}\n```"
+    },
+    {
+      "id": 30,
+      "subject": "Task 4: Wire guard into _auto_stash_one (C3)",
+      "status": "pending",
+      "blockedBy": [28, 29],
+      "description": "**Goal:** _auto_stash_one consults _is_confidently_archived; confident -> _mark_as_archived + _free_local_crawl_data + skip stash.\n\n**Files:** app/core/crawler_manager.py, tests/test_auto_stash_archived_skip.py\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/app/core/crawler_manager.py\", \"apps-microservices/crawler-service/tests/test_auto_stash_archived_skip.py\"], \"verifyCommand\": \"cd apps-microservices/crawler-service && python -m pytest tests/test_auto_stash_archived_skip.py -v\", \"acceptanceCriteria\": [\"archived -> mark+free, no stash\", \"not archived -> stash, no mark\", \"inflight discarded\"]}\n```"
+    },
+    {
+      "id": 31,
+      "subject": "Task 5: Skip grace clock for archived (C4)",
+      "status": "pending",
+      "description": "**Goal:** _record_downloaded_at skips stamping downloaded_at when status=='archived'.\n\n**Files:** app/router/crawler.py, tests/test_record_downloaded_at_guard.py\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/app/router/crawler.py\", \"apps-microservices/crawler-service/tests/test_record_downloaded_at_guard.py\"], \"verifyCommand\": \"cd apps-microservices/crawler-service && python -m pytest tests/test_record_downloaded_at_guard.py -v\", \"acceptanceCriteria\": [\"archived -> no set_json\", \"finished -> set_json with downloaded_at\", \"vanished -> no write no raise\"]}\n```"
+    },
+    {
+      "id": 32,
+      "subject": "Task 6: Documentation",
+      "status": "pending",
+      "blockedBy": [27, 28, 29, 30, 31],
+      "description": "**Goal:** Document exists-probe markers (tools/CLAUDE.md) + already-archived guard & settings (crawler-service/CLAUDE.md).\n\n**Files:** tools/CLAUDE.md, apps-microservices/crawler-service/CLAUDE.md\n\n```json:metadata\n{\"files\": [\"tools/CLAUDE.md\", \"apps-microservices/crawler-service/CLAUDE.md\"], \"verifyCommand\": \"git diff --stat\", \"acceptanceCriteria\": [\"tools doc: exists markers + fail-safe\", \"crawler doc: §6 decision + 2 settings\"]}\n```"
+    }
+  ],
+  "lastUpdated": "2026-06-05T00:00:00Z"
+}

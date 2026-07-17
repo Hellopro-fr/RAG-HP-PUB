@@ -12,6 +12,7 @@ import { useDbTracking } from '@/hooks/tracking/useDbTracking';
 import { useProcessMatching } from '@/hooks/api/useProcessMatching';
 import { usePriceEstimation } from '@/hooks/api/usePriceEstimation';
 import { hasDisplayablePriceEstimation } from '@/types/prix';
+import { setFunnelContext } from '@/lib/analytics';
 import type { CategoryTokenUrlData as UrlData } from '@/types/category-token';
 
 interface QuestionnaireClientProps {
@@ -28,7 +29,7 @@ export default function QuestionnaireClient({
   initialDdc
 }: QuestionnaireClientProps) {
   const searchParams = useSearchParams();
-  const { setCategoryId, setDynamicAnswer, dynamicAnswers, addUserQuestionAnswer, setDdc, setMatchingTestParams, setAbtestUxLeadVersion } = useFlowStore();
+  const { setCategoryId, setDynamicAnswer, dynamicAnswers, addUserQuestionAnswer, setDdc, setMatchingTestParams, setAbtestUxLeadVersion, abtestUxLeadVersion, setAbtest2, setPageTemplateGtm, setFunnelContextValue, setPageLocationUri } = useFlowStore();
   const { goToSelection, goToSomethingToAdd, goToBudget } = useFlowNavigation();
   const { processMatching } = useProcessMatching();
   const { fetchPriceEstimation } = usePriceEstimation();
@@ -193,6 +194,28 @@ export default function QuestionnaireClient({
         setAbtestUxLeadVersion(urlData.abtest_UX_lead_version);
       }
 
+      // A/B test secondaire (token URL) : stocke dans le store + injecte dans le contexte GTM
+      // pour que tous les events devis_funnel_formulaire le portent.
+      if (typeof urlData.abtest2 === 'string' && urlData.abtest2.length > 0) {
+        setAbtest2(urlData.abtest2);
+        setFunnelContext({ abtest2: urlData.abtest2 });
+      }
+
+      // 3 champs additionnels depuis le token chiffré : injectés dans le contexte GTM
+      // pour que tous les events devis_funnel_formulaire les portent (omis si absent).
+      if (typeof urlData.page_template_gtm === 'string' && urlData.page_template_gtm.length > 0) {
+        setPageTemplateGtm(urlData.page_template_gtm);
+        setFunnelContext({ page_template_gtm: urlData.page_template_gtm });
+      }
+      if (typeof urlData.funnel_context === 'string' && urlData.funnel_context.length > 0) {
+        setFunnelContextValue(urlData.funnel_context);
+        setFunnelContext({ funnel_context: urlData.funnel_context });
+      }
+      if (typeof urlData.page_location_uri === 'string' && urlData.page_location_uri.length > 0) {
+        setPageLocationUri(urlData.page_location_uri);
+        setFunnelContext({ page_location_uri: urlData.page_location_uri });
+      }
+
       // Vérifier que les données sont valides
       if (urlData.id_reponse) {
         // Stocker la réponse Q1 et son équivalence dans le flow store
@@ -231,7 +254,7 @@ export default function QuestionnaireClient({
 
     hasProcessedUrlData.current = true;
     setIsReady(true);
-  }, [isHydrated, initialUrlData, searchParams, dynamicAnswers, setDynamicAnswer, trackDbEvent, initialCategoryId, addUserQuestionAnswer, setAbtestUxLeadVersion]);
+  }, [isHydrated, initialUrlData, searchParams, dynamicAnswers, setDynamicAnswer, trackDbEvent, initialCategoryId, addUserQuestionAnswer, setAbtestUxLeadVersion, setAbtest2, setPageTemplateGtm, setFunnelContextValue, setPageLocationUri]);
 
   // Fin du questionnaire : lancer matching + prix en parallèle et afficher
   // l'étape transparence (email) — le loader ne s'affiche qu'au CTA.

@@ -804,6 +804,7 @@ class RecommendationServiceV2:
         )
 
         scoring_params = v1_service._extract_scoring_params(request)
+        logging.warning("[V2-TIMING] scoring: PASS")
         blocked_val = scoring_params["blocked_val"]
         different_val = scoring_params["different_val"]
 

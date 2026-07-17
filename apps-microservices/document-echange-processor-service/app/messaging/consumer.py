@@ -10,7 +10,7 @@ import gc
 from document_echange_processor_service.messaging.publisher import Publisher  # Importe notre publisher local
 from document_echange_processor_service.core.processor import process_document_data_for_templating # Importe la logique métier
 from common_utils.autres.DLQProperties import DLQProperties
-from common_utils.autres.graceful import get_message_or_stop
+from common_utils.concurrency.graceful import get_message_or_stop
 
 logger = logging.getLogger(__name__)
 

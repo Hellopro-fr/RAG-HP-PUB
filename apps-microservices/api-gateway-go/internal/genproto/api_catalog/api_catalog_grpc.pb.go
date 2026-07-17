@@ -19,14 +19,15 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	ApiCatalog_ListServices_FullMethodName  = "/api_catalog.ApiCatalog/ListServices"
-	ApiCatalog_GetService_FullMethodName    = "/api_catalog.ApiCatalog/GetService"
-	ApiCatalog_ListEndpoints_FullMethodName = "/api_catalog.ApiCatalog/ListEndpoints"
-	ApiCatalog_CreateService_FullMethodName = "/api_catalog.ApiCatalog/CreateService"
-	ApiCatalog_UpdateService_FullMethodName = "/api_catalog.ApiCatalog/UpdateService"
-	ApiCatalog_DeleteService_FullMethodName = "/api_catalog.ApiCatalog/DeleteService"
-	ApiCatalog_RescanAll_FullMethodName     = "/api_catalog.ApiCatalog/RescanAll"
-	ApiCatalog_RescanService_FullMethodName = "/api_catalog.ApiCatalog/RescanService"
+	ApiCatalog_ListServices_FullMethodName   = "/api_catalog.ApiCatalog/ListServices"
+	ApiCatalog_GetService_FullMethodName     = "/api_catalog.ApiCatalog/GetService"
+	ApiCatalog_ListEndpoints_FullMethodName  = "/api_catalog.ApiCatalog/ListEndpoints"
+	ApiCatalog_CreateService_FullMethodName  = "/api_catalog.ApiCatalog/CreateService"
+	ApiCatalog_UpdateService_FullMethodName  = "/api_catalog.ApiCatalog/UpdateService"
+	ApiCatalog_DeleteService_FullMethodName  = "/api_catalog.ApiCatalog/DeleteService"
+	ApiCatalog_UpdateEndpoint_FullMethodName = "/api_catalog.ApiCatalog/UpdateEndpoint"
+	ApiCatalog_RescanAll_FullMethodName      = "/api_catalog.ApiCatalog/RescanAll"
+	ApiCatalog_RescanService_FullMethodName  = "/api_catalog.ApiCatalog/RescanService"
 )
 
 // ApiCatalogClient is the client API for ApiCatalog service.
@@ -39,6 +40,7 @@ type ApiCatalogClient interface {
 	CreateService(ctx context.Context, in *CreateServiceRequest, opts ...grpc.CallOption) (*Service, error)
 	UpdateService(ctx context.Context, in *UpdateServiceRequest, opts ...grpc.CallOption) (*Service, error)
 	DeleteService(ctx context.Context, in *DeleteServiceRequest, opts ...grpc.CallOption) (*DeleteServiceResponse, error)
+	UpdateEndpoint(ctx context.Context, in *UpdateEndpointRequest, opts ...grpc.CallOption) (*Endpoint, error)
 	RescanAll(ctx context.Context, in *RescanAllRequest, opts ...grpc.CallOption) (*RescanReport, error)
 	RescanService(ctx context.Context, in *RescanServiceRequest, opts ...grpc.CallOption) (*RescanReport, error)
 }
@@ -111,6 +113,16 @@ func (c *apiCatalogClient) DeleteService(ctx context.Context, in *DeleteServiceR
 	return out, nil
 }
 
+func (c *apiCatalogClient) UpdateEndpoint(ctx context.Context, in *UpdateEndpointRequest, opts ...grpc.CallOption) (*Endpoint, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Endpoint)
+	err := c.cc.Invoke(ctx, ApiCatalog_UpdateEndpoint_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *apiCatalogClient) RescanAll(ctx context.Context, in *RescanAllRequest, opts ...grpc.CallOption) (*RescanReport, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(RescanReport)
@@ -141,6 +153,7 @@ type ApiCatalogServer interface {
 	CreateService(context.Context, *CreateServiceRequest) (*Service, error)
 	UpdateService(context.Context, *UpdateServiceRequest) (*Service, error)
 	DeleteService(context.Context, *DeleteServiceRequest) (*DeleteServiceResponse, error)
+	UpdateEndpoint(context.Context, *UpdateEndpointRequest) (*Endpoint, error)
 	RescanAll(context.Context, *RescanAllRequest) (*RescanReport, error)
 	RescanService(context.Context, *RescanServiceRequest) (*RescanReport, error)
 	mustEmbedUnimplementedApiCatalogServer()
@@ -170,6 +183,9 @@ func (UnimplementedApiCatalogServer) UpdateService(context.Context, *UpdateServi
 }
 func (UnimplementedApiCatalogServer) DeleteService(context.Context, *DeleteServiceRequest) (*DeleteServiceResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteService not implemented")
+}
+func (UnimplementedApiCatalogServer) UpdateEndpoint(context.Context, *UpdateEndpointRequest) (*Endpoint, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateEndpoint not implemented")
 }
 func (UnimplementedApiCatalogServer) RescanAll(context.Context, *RescanAllRequest) (*RescanReport, error) {
 	return nil, status.Error(codes.Unimplemented, "method RescanAll not implemented")
@@ -306,6 +322,24 @@ func _ApiCatalog_DeleteService_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ApiCatalog_UpdateEndpoint_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateEndpointRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ApiCatalogServer).UpdateEndpoint(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ApiCatalog_UpdateEndpoint_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ApiCatalogServer).UpdateEndpoint(ctx, req.(*UpdateEndpointRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _ApiCatalog_RescanAll_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(RescanAllRequest)
 	if err := dec(in); err != nil {
@@ -372,6 +406,10 @@ var ApiCatalog_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteService",
 			Handler:    _ApiCatalog_DeleteService_Handler,
+		},
+		{
+			MethodName: "UpdateEndpoint",
+			Handler:    _ApiCatalog_UpdateEndpoint_Handler,
 		},
 		{
 			MethodName: "RescanAll",

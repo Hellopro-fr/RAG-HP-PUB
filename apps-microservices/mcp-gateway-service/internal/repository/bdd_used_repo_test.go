@@ -878,3 +878,113 @@ func TestImport_UpsertReplacesFields(t *testing.T) {
 		t.Errorf("fields=%+v want=[sku]", got.Fields)
 	}
 }
+
+func TestSyncFieldTypes_UpdatesOnlyMatchingChangedFields(t *testing.T) {
+	g := setupBDDTestDB(t)
+	repo := NewBDDUsedRepo(g)
+	ctx := context.Background()
+
+	tbl := newTable(1, "products")
+	fields := []db.BDDUsedField{
+		{FieldName: "id", FieldType: ""},       // empty -> filled
+		{FieldName: "name", FieldType: "text"}, // identical -> skipped
+		{FieldName: "price", FieldType: "old"}, // differs -> updated
+		{FieldName: "extra", FieldType: ""},    // absent from map -> untouched
+	}
+	created, err := repo.CreateTable(ctx, tbl, fields)
+	if err != nil {
+		t.Fatalf("CreateTable: %v", err)
+	}
+
+	byName := map[string]FieldTypeSync{
+		"id":    {Type: "int"},
+		"name":  {Type: "text"},
+		"price": {Type: "decimal"},
+		"ghost": {Type: "varchar"}, // not a registered field -> ignored
+	}
+	updated, err := repo.SyncFieldTypes(ctx, created.ID, byName)
+	if err != nil {
+		t.Fatalf("SyncFieldTypes: %v", err)
+	}
+	if updated != 2 {
+		t.Fatalf("updated=%d want=2", updated)
+	}
+
+	got, err := repo.GetTable(ctx, created.ID)
+	if err != nil {
+		t.Fatalf("GetTable: %v", err)
+	}
+	gotTypes := map[string]string{}
+	for _, f := range got.Fields {
+		gotTypes[f.FieldName] = f.FieldType
+	}
+	want := map[string]string{"id": "int", "name": "text", "price": "decimal", "extra": ""}
+	for n, w := range want {
+		if gotTypes[n] != w {
+			t.Errorf("field %q type=%q want=%q", n, gotTypes[n], w)
+		}
+	}
+}
+
+func TestSyncFieldTypes_EmptyMapNoop(t *testing.T) {
+	g := setupBDDTestDB(t)
+	repo := NewBDDUsedRepo(g)
+	ctx := context.Background()
+
+	created, err := repo.CreateTable(ctx, newTable(1, "products"),
+		[]db.BDDUsedField{{FieldName: "id", FieldType: "int"}})
+	if err != nil {
+		t.Fatalf("CreateTable: %v", err)
+	}
+	updated, err := repo.SyncFieldTypes(ctx, created.ID, nil)
+	if err != nil {
+		t.Fatalf("SyncFieldTypes: %v", err)
+	}
+	if updated != 0 {
+		t.Fatalf("updated=%d want=0", updated)
+	}
+}
+
+func TestSyncFieldTypes_FullDefSeedsEmptyDescriptionOnly(t *testing.T) {
+	g := setupBDDTestDB(t)
+	repo := NewBDDUsedRepo(g)
+	ctx := context.Background()
+
+	created, err := repo.CreateTable(ctx, newTable(1, "events"), []db.BDDUsedField{
+		{FieldName: "event_type", FieldType: "", Description: ""},        // empty desc -> seeded
+		{FieldName: "status", FieldType: "", Description: "curated note"}, // kept
+	})
+	if err != nil {
+		t.Fatalf("CreateTable: %v", err)
+	}
+
+	enumDef := "enum('a','b','c')"
+	byName := map[string]FieldTypeSync{
+		"event_type": {Type: "enum", FullDef: enumDef},
+		"status":     {Type: "enum", FullDef: enumDef},
+	}
+	updated, err := repo.SyncFieldTypes(ctx, created.ID, byName)
+	if err != nil {
+		t.Fatalf("SyncFieldTypes: %v", err)
+	}
+	if updated != 2 {
+		t.Fatalf("updated=%d want=2", updated)
+	}
+
+	got, _ := repo.GetTable(ctx, created.ID)
+	desc := map[string]string{}
+	typ := map[string]string{}
+	for _, f := range got.Fields {
+		desc[f.FieldName] = f.Description
+		typ[f.FieldName] = f.FieldType
+	}
+	if typ["event_type"] != "enum" || typ["status"] != "enum" {
+		t.Fatalf("types=%v want both enum", typ)
+	}
+	if desc["event_type"] != enumDef {
+		t.Errorf("event_type desc=%q want=%q", desc["event_type"], enumDef)
+	}
+	if desc["status"] != "curated note" {
+		t.Errorf("status desc=%q want curated note (not clobbered)", desc["status"])
+	}
+}

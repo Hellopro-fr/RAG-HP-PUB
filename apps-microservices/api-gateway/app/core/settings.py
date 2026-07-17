@@ -79,6 +79,7 @@ class Configuration:
     # Add a service here only after understanding its request-duration profile.
     DOWNSTREAM_TIMEOUTS_S: Dict[str, float] = {
         "api-detection-langue-fr-service": 180.0,
+        "extractor-service": 60.0,
     }
 
 

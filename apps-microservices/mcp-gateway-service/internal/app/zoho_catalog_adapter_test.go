@@ -86,7 +86,7 @@ func TestZohoCatalogAdapter_StateForEmail_AdminWithRow(t *testing.T) {
 		imports: repo,
 		users:   &fakeUserFinder{byEmail: map[string]string{"admin@hp.fr": "admin"}},
 	}
-	st := a.StateForEmail(context.Background(), "admin@hp.fr")
+	st := a.StateForEmail(context.Background(), "admin@hp.fr", false)
 
 	if !st.Configured {
 		t.Fatalf("admin with admin row must be Configured")
@@ -104,7 +104,7 @@ func TestZohoCatalogAdapter_StateForEmail_AdminWithoutRow(t *testing.T) {
 		imports: repo,
 		users:   &fakeUserFinder{byEmail: map[string]string{"admin@hp.fr": "admin"}},
 	}
-	st := a.StateForEmail(context.Background(), "admin@hp.fr")
+	st := a.StateForEmail(context.Background(), "admin@hp.fr", false)
 
 	if st.Configured {
 		t.Fatalf("admin without admin row must be Configured=false")
@@ -141,7 +141,7 @@ func TestZohoCatalogAdapter_StateForEmail_NonAdminWithRow(t *testing.T) {
 		imports: repo,
 		users:   &fakeUserFinder{byEmail: map[string]string{"alice@hp.fr": "user"}},
 	}
-	st := a.StateForEmail(context.Background(), "alice@hp.fr")
+	st := a.StateForEmail(context.Background(), "alice@hp.fr", false)
 
 	if !st.Configured {
 		t.Fatalf("non-admin with user row must be Configured=true")
@@ -169,13 +169,44 @@ func TestZohoCatalogAdapter_StateForEmail_NonAdminWithoutRow_NoAdminFallback(t *
 		imports: repo,
 		users:   &fakeUserFinder{byEmail: map[string]string{"bob@hp.fr": "user"}},
 	}
-	st := a.StateForEmail(context.Background(), "bob@hp.fr")
+	st := a.StateForEmail(context.Background(), "bob@hp.fr", false)
 
 	if st.Configured {
 		t.Fatalf("non-admin without user row must NOT fall back to admin row (got Configured=true)")
 	}
 	if len(st.Tools) != 0 {
 		t.Fatalf("non-admin without user row must NOT see admin tools (got %+v)", st.Tools)
+	}
+}
+
+// A non-admin viewer with no per-user row but with adminGranted=true (a
+// server-authorization grant on the Zoho stub) must resolve the admin row —
+// mirroring mcp-zoho-service resolver Branch 2.
+func TestZohoCatalogAdapter_StateForEmail_NonAdminGrantedSeesAdmin(t *testing.T) {
+	gdb := newZohoAdapterTestDB(t)
+	repo := repository.NewZohoImportRepo(gdb)
+
+	admin := &db.ZohoImport{ID: "admin-1", URL: "https://admin", IsAdmin: true, IsActive: true}
+	if err := gdb.Create(admin).Error; err != nil {
+		t.Fatalf("admin: %v", err)
+	}
+	if _, err := repo.ReplaceTools(admin.ID, []db.ZohoImportTool{
+		{Name: "admin_tool", InputSchema: json.RawMessage(`{}`)},
+	}); err != nil {
+		t.Fatalf("admin tools: %v", err)
+	}
+
+	a := &zohoCatalogAdapter{
+		imports: repo,
+		users:   &fakeUserFinder{byEmail: map[string]string{"grihal@hp.fr": "config-only"}},
+	}
+	st := a.StateForEmail(context.Background(), "grihal@hp.fr", true)
+
+	if !st.Configured {
+		t.Fatalf("granted non-admin must resolve admin row (Configured=true)")
+	}
+	if len(st.Tools) != 1 || st.Tools[0].Name != "admin_tool" {
+		t.Fatalf("want admin_tool, got %+v", st.Tools)
 	}
 }
 
@@ -197,7 +228,7 @@ func TestZohoCatalogAdapter_StateForEmail_UnknownUserTreatedAsNonAdmin(t *testin
 		imports: repo,
 		users:   &fakeUserFinder{}, // no users mapped
 	}
-	st := a.StateForEmail(context.Background(), "stranger@hp.fr")
+	st := a.StateForEmail(context.Background(), "stranger@hp.fr", false)
 
 	if st.Configured {
 		t.Fatalf("unknown user must default to non-admin and NOT fall back to admin (got Configured=true)")
@@ -209,7 +240,7 @@ func TestZohoCatalogAdapter_StateForEmail_EmptyEmail(t *testing.T) {
 		imports: repository.NewZohoImportRepo(newZohoAdapterTestDB(t)),
 		users:   &fakeUserFinder{},
 	}
-	if st := a.StateForEmail(context.Background(), ""); st.Configured || len(st.Tools) > 0 {
+	if st := a.StateForEmail(context.Background(), "", false); st.Configured || len(st.Tools) > 0 {
 		t.Fatalf("empty email must return zero state")
 	}
 }
@@ -228,7 +259,7 @@ func TestZohoCatalogAdapter_StateForEmail_RowExistsButNoTools(t *testing.T) {
 		imports: repo,
 		users:   &fakeUserFinder{byEmail: map[string]string{"alice@hp.fr": "user"}},
 	}
-	st := a.StateForEmail(context.Background(), "alice@hp.fr")
+	st := a.StateForEmail(context.Background(), "alice@hp.fr", false)
 
 	if st.Configured {
 		t.Fatalf("row without tools must be Configured=false")

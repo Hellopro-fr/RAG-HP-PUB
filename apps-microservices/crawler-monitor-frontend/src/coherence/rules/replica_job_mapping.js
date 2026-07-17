@@ -1,4 +1,6 @@
 // apps-microservices/crawler-monitor-frontend/src/coherence/rules/replica_job_mapping.js
+import { isReplicaLive } from '../../lib/replicas';
+
 /** @type {import('../types').Rule} */
 const rule = {
   id: 'replica_job_mapping',
@@ -13,7 +15,7 @@ const rule = {
   evaluate: ({ replicas, jobs }) => {
     const violations = [];
     const liveReplicas = Object.values(replicas || {}).filter(
-      (r) => r?.replicaId && Date.now() - (r.timestamp ?? 0) < 30_000,
+      (r) => r?.replicaId && isReplicaLive(r),
     );
     const runningJobIds = new Set(
       (jobs ?? [])

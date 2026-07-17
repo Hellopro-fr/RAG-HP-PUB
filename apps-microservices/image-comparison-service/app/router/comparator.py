@@ -18,7 +18,8 @@ async def start_comparison(request: CompareRequest):
         - Returns 503 Service Unavailable if local capacity is full (triggering Nginx retry).
         - Otherwise, waits for completion and returns result.
     - If `sync` is False:
-        - Always accepts (queues) the job. Returns Job ID.
+        - Returns 503 Service Unavailable if the local async backlog is full (triggering Nginx retry).
+        - Otherwise, queues the job and returns the Job ID.
     """
     job_id = request.job_id or str(uuid.uuid4())
 
@@ -51,6 +52,20 @@ async def start_comparison(request: CompareRequest):
         finally:
             job_manager.release_local_slot()
     else:
+        # Async-submit backpressure: the async path holds a detached task per job with no
+        # semaphore, so without this it would accept jobs unboundedly. Shed load past a backlog
+        # of MAX_CONCURRENT_JOBS * ASYNC_BACKLOG_FACTOR (mirrors the sync 503 -> Nginx failover;
+        # the BO client already treats 503 as transient).
+        backlog_cap = settings.MAX_CONCURRENT_JOBS * settings.ASYNC_BACKLOG_FACTOR
+        if job_manager.local_active_jobs >= backlog_cap:
+            logger.warning(
+                f"Returning 503 (async backlog): local_active={job_manager.local_active_jobs}/{backlog_cap}"
+            )
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Instance backlog full. Please retry (triggers Nginx failover)."
+            )
+
         await job_manager.submit_job_async(job_id, request.images, request.threshold)
         return JobResponse(
             message="Comparison job accepted and started.",

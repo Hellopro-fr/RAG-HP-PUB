@@ -7,10 +7,7 @@ from typing import Optional
 from urllib.parse import urlparse, urljoin
 from bs4 import BeautifulSoup
 
-try:
-    import redis.asyncio as aioredis
-except ImportError:
-    aioredis = None
+from common_utils.redis import cache_service
 
 from app.models.schemas import (
     DetectionMode, DetectionResponse, AlternativeUrl,
@@ -19,6 +16,7 @@ from app.models.schemas import (
 )
 from app.services.language_detector import LanguageDetector
 from app.services.redirect_tracker import RedirectTracker, fetch_html
+from app.core.metrics import VALIDATION_SKIPPED
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -36,6 +34,10 @@ class DomainCache:
     - Échecs transitoires (challenge_page, fetch_empty_content, etc.) → 6 heures
     - Erreurs critiques (fetch_failed, error) → jamais cachées
     - En cas d'indisponibilité Redis, dégrade silencieusement (pas d'exception)
+
+    Client Redis : pool partagé common_utils.redis.cache_service, initialisé
+    par init_redis_pool() dans le lifespan de main.py (lu à chaque appel —
+    None si Redis indisponible au démarrage → cache invisible).
     """
 
     TTL_OK = 30 * 24 * 3600          # 30 jours — résultats définitifs positifs
@@ -53,24 +55,6 @@ class DomainCache:
         'info_vide',                     # URL ou contenu absent
     })
 
-    def __init__(self) -> None:
-        self._client = None
-        self._initialized = False
-        self._init_lock = asyncio.Lock()
-
-    async def _get_client(self):
-        async with self._init_lock:
-            if not self._initialized:
-                self._initialized = True
-                redis_url = settings.REDIS_URL
-                if redis_url and aioredis:
-                    try:
-                        self._client = aioredis.from_url(redis_url, decode_responses=True)
-                        logger.info("Redis cache client créé (connexion au premier appel)")
-                    except Exception as e:
-                        logger.warning(f"Redis cache indisponible : {e}")
-        return self._client
-
     @staticmethod
     def _normalize_domain(url: str) -> Optional[str]:
         try:
@@ -85,7 +69,7 @@ class DomainCache:
         return f"fr_detect:{domain}"
 
     async def get(self, url: str) -> Optional[dict]:
-        client = await self._get_client()
+        client = cache_service.redis_client
         if not client:
             return None
         try:
@@ -116,7 +100,7 @@ class DomainCache:
         so cross-URL cache HITs (different path on the same domain) can
         surface the originating URL via DetectionResponse.analyzed_url.
         """
-        client = await self._get_client()
+        client = cache_service.redis_client
         if not client:
             return
         method = result.get('method', '')
@@ -169,12 +153,14 @@ class DomainFR:
         homepage: str,
         forced_method: Optional[str] = None,
         use_nlp_detection: bool = True,
-        original_homepage: Optional[str] = None
+        original_homepage: Optional[str] = None,
+        validate_alternatives: bool = True,
     ):
         self.homepage = homepage
         self.original_homepage = original_homepage or homepage
         self.forced_method = forced_method
         self.use_nlp_detection = use_nlp_detection
+        self.validate_alternatives = validate_alternatives
         self.tracker = RedirectTracker()
         self.language_detector = LanguageDetector()
     
@@ -881,8 +867,23 @@ class DomainFR:
         except Exception:
             pass
 
-        # Validate candidates via HTTP (parallel, max 3 concurrent)
-        validated_results = await self._validate_alternative_urls(candidates_to_validate)
+        # Validate candidates via HTTP (parallel, max 3 concurrent) — only when enabled.
+        if self.validate_alternatives:
+            validated_results = await self._validate_alternative_urls(candidates_to_validate)
+        else:
+            # Skip-all: no httpx, no browser. Return medium candidates unvalidated.
+            validated_results = [
+                AlternativeUrl(
+                    url=c['url'],
+                    method=c['method'],
+                    reliability='low',
+                    validated=False,
+                    region_priority=self._french_region_priority(c['url'], c.get('hreflang_value', '')),
+                )
+                for c in candidates_to_validate
+            ]
+            if candidates_to_validate:
+                VALIDATION_SKIPPED.inc()
         all_alternatives.extend(validated_results)
 
         # Sort by: 1) reliability (high > medium > low), 2) region priority (France > generic > other)
@@ -1193,7 +1194,7 @@ class DomainFR:
         # Exécute la détection complète (fetch + NLP) sur les meilleures alternatives
         # pour confirmer qu'elles sont réellement en français, pas juste accessibles.
         reliable_alternatives = [a for a in alternatives if a.validated]
-        if reliable_alternatives:
+        if self.validate_alternatives and reliable_alternatives:
             challenge_blocked_count = 0
             challenge_blocked_service = None
             fetch_failed_count = 0

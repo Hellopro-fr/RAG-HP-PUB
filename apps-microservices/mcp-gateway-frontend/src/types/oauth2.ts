@@ -25,6 +25,7 @@ export interface OAuth2Client {
   zoho_filter?: ZohoFilter
   ringover_filter?: RingoverFilter
   bdd_filter?: BDDFilter
+  inject_instructions_into_tools?: boolean
 }
 
 export interface OAuth2ClientListResponse {
@@ -44,6 +45,7 @@ export interface CreateOAuth2ClientRequest {
   zoho_filter?: ZohoFilter
   ringover_filter?: RingoverFilter
   bdd_filter?: BDDFilter
+  inject_instructions_into_tools?: boolean
 }
 
 export interface UpdateOAuth2ClientRequest extends Partial<CreateOAuth2ClientRequest> {}
@@ -59,6 +61,7 @@ export interface AuthorizeInfo {
 export interface AuthorizeServer {
   id: string
   name: string
+  icon?: string
   tools: AuthorizeTool[]
   configured?: boolean
   docs_url?: string

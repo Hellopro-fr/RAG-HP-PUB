@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -76,5 +77,22 @@ func TestLoad_AppliesDefaults(t *testing.T) {
 	}
 	if !cfg.SecureCookie {
 		t.Error("SecureCookie default should be true")
+	}
+}
+
+func TestLoad_MCPGatewayInternalURL(t *testing.T) {
+	t.Setenv("MYSQL_DSN", "u:p@tcp(h:3306)/db")
+	t.Setenv("ENCRYPTION_KEY", strings.Repeat("a", 64))
+	t.Setenv("JWT_SECRET", "s")
+	t.Setenv("ACCOUNT_PUBLIC_URL", "http://x")
+	t.Setenv("MCP_GATEWAY_INTERNAL_URL", "http://mcp-gateway-service:8592/")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	// Trailing slash trimmed.
+	if cfg.MCPGatewayInternalURL != "http://mcp-gateway-service:8592" {
+		t.Errorf("MCPGatewayInternalURL = %q", cfg.MCPGatewayInternalURL)
 	}
 }

@@ -356,9 +356,11 @@ func (h *Handler) handleListServers(w http.ResponseWriter, r *http.Request) {
 	}
 	tag := r.URL.Query().Get("tag")
 
-	// Admins see every server; non-admins are scoped to rows they created
-	// (plus legacy rows with an empty created_by — handled in the repo).
-	servers, err := h.repo.ListAll(isActive, tag, effectiveCreatorFilter(r.Context()))
+	// Admins see every server; non-admins are scoped to rows they created.
+	// Scope-picker callers (token / OAuth2 creation forms) opt into the
+	// full active-server set with `?include_all=true` — see
+	// resolveListServersCreatorFilter for the rationale.
+	servers, err := h.repo.ListAll(isActive, tag, resolveListServersCreatorFilter(r))
 	if err != nil {
 		log.Printf("[api] list servers error: %v", err)
 		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to list servers"})

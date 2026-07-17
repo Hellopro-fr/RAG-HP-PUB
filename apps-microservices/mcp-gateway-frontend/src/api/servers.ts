@@ -15,6 +15,14 @@ export interface ServerListFilters {
   tag?: string
   created_by?: string
   exclude_templates?: boolean
+  /**
+   * Drop the per-caller ownership filter so non-admin users see every active
+   * server. Set this when the list feeds a scope picker (token / OAuth2
+   * creation form) — the secret-bearing fields are already redacted in the
+   * list DTO, so this only widens what the picker can offer, not what the
+   * caller can mutate.
+   */
+  include_all?: boolean
 }
 
 function serializeFilters(filters?: ServerListFilters): Record<string, string> | undefined {

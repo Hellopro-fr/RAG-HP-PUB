@@ -258,7 +258,7 @@ class PrixExtractor:
                 taxe=prix_data.get("taxe") or None,
                 type_transaction=prix_data.get("type_transaction") or None,
                 perimetre=prix_data.get("perimetre") or None,
-                id_fournisseur=str(prix_data.get("id_fournisseur", "")) or None,
+                id_fournisseur=prix_data.get("id_fournisseur") or item_metadata.get("id_fournisseur") or None,
                 fournisseur=prix_data.get("fournisseur") or item_metadata.get("fournisseur") or None,
             )
             return payload

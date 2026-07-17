@@ -80,16 +80,7 @@ func (s *AuthServer) HandleAuthorize(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// Otherwise bounce to Vue login route, preserving every OAuth2 param
-		q := url.Values{}
-		q.Set("response_type", p.ResponseType)
-		q.Set("client_id", p.ClientID)
-		q.Set("redirect_uri", p.RedirectURI)
-		q.Set("code_challenge", p.CodeChallenge)
-		q.Set("code_challenge_method", p.CodeChallengeMethod)
-		if p.State != "" {
-			q.Set("state", p.State)
-		}
-		http.Redirect(w, r, s.deps.LoginPath+"?"+q.Encode(), http.StatusFound)
+		http.Redirect(w, r, s.deps.LoginPath+"?"+loginRedirectParams(p).Encode(), http.StatusFound)
 
 	case http.MethodPost:
 		if r.FormValue("action") != "login" {
@@ -103,11 +94,39 @@ func (s *AuthServer) HandleAuthorize(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// loginRedirectParams rebuilds the OAuth2 query string the Vue login route
+// needs to re-render and re-submit the consent form. Shared by the GET bounce
+// (unauthenticated browser) and the POST failure bounce (redirectLoginErr).
+func loginRedirectParams(p *AuthorizeParams) url.Values {
+	q := url.Values{}
+	q.Set("response_type", p.ResponseType)
+	q.Set("client_id", p.ClientID)
+	q.Set("redirect_uri", p.RedirectURI)
+	q.Set("code_challenge", p.CodeChallenge)
+	q.Set("code_challenge_method", p.CodeChallengeMethod)
+	if p.State != "" {
+		q.Set("state", p.State)
+	}
+	return q
+}
+
+// redirectLoginErr bounces a failed login back to the Vue login page, keeping
+// every OAuth2 param plus a machine-readable error code (the frontend maps it
+// to a French message) and the typed username so only the password is re-entered.
+func (s *AuthServer) redirectLoginErr(w http.ResponseWriter, r *http.Request, p *AuthorizeParams, errCode string) {
+	q := loginRedirectParams(p)
+	if username := r.FormValue("username"); username != "" {
+		q.Set("username", username)
+	}
+	q.Set("error", errCode)
+	http.Redirect(w, r, s.deps.LoginPath+"?"+q.Encode(), http.StatusFound)
+}
+
 func (s *AuthServer) handleLogin(w http.ResponseWriter, r *http.Request, client *db.OAuth2Client, p *AuthorizeParams) {
 	username := r.FormValue("username")
 	password := r.FormValue("password")
 	if username == "" || password == "" {
-		writeOAuthErr(w, http.StatusBadRequest, "invalid_request", "missing credentials")
+		s.redirectLoginErr(w, r, p, "missing_credentials")
 		return
 	}
 	resp, err := auth.AuthenticateHellopro(s.deps.AuthURL, username, password)
@@ -121,7 +140,7 @@ func (s *AuthServer) handleLogin(w http.ResponseWriter, r *http.Request, client 
 		err = nil
 	}
 	if err != nil || !resp.Success {
-		writeOAuthErr(w, http.StatusUnauthorized, "invalid_grant", "invalid credentials")
+		s.redirectLoginErr(w, r, p, "credentials_error")
 		return
 	}
 	u, err := s.deps.UserUpserter.UpsertOnLogin(resp.Email, resp.DisplayName)
@@ -130,11 +149,11 @@ func (s *AuthServer) handleLogin(w http.ResponseWriter, r *http.Request, client 
 		return
 	}
 	if !u.IsAllowed {
-		writeOAuthErr(w, http.StatusForbidden, "access_denied", "user blocked")
+		s.redirectLoginErr(w, r, p, "user_blocked")
 		return
 	}
 	if !s.userMatchesAllowedRoles(u, client) {
-		writeOAuthErr(w, http.StatusForbidden, "access_denied", "role not allowed for this client")
+		s.redirectLoginErr(w, r, p, "role_not_allowed")
 		return
 	}
 	_ = auth.SetSession(w, s.deps.JWTSecret, auth.SessionData{

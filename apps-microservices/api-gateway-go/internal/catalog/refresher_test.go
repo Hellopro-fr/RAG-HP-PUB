@@ -11,20 +11,31 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
 
+	auth_pkg "api-gateway-go/internal/auth"
 	pb "api-gateway-go/internal/genproto/api_catalog"
 )
 
 type stubServer struct {
 	pb.UnimplementedApiCatalogServer
-	calls int32
+	calls             int32
+	listEndpointCalls int32
 }
 
 func (s *stubServer) ListServices(ctx context.Context, _ *pb.ListServicesRequest) (*pb.ListServicesResponse, error) {
 	atomic.AddInt32(&s.calls, 1)
 	return &pb.ListServicesResponse{Items: []*pb.Service{
-		{Name: "foo-service", BaseUrl: "http://foo:8000", Status: pb.Status_ACTIVE},
-		{Name: "bar-service", BaseUrl: "http://bar:8000", Status: pb.Status_DEPRECATED},
+		{Id: "a", Name: "foo-service", BaseUrl: "http://foo:8000", Status: pb.Status_ACTIVE,
+			AuthPolicy: pb.AuthPolicy_BEARER, PublicPaths: []string{"/healthz"}, HasEndpointOverrides: true},
+		{Id: "b", Name: "bar-service", BaseUrl: "http://bar:8000", Status: pb.Status_DEPRECATED},
 	}, Total: 2}, nil
+}
+
+func (s *stubServer) ListEndpoints(ctx context.Context, req *pb.ListEndpointsRequest) (*pb.ListEndpointsResponse, error) {
+	atomic.AddInt32(&s.listEndpointCalls, 1)
+	adminKey := pb.AuthPolicy_ADMIN_KEY
+	return &pb.ListEndpointsResponse{Items: []*pb.Endpoint{
+		{Id: "ep1", ServiceId: "a", Method: "POST", Path: "/admin", AuthPolicy: &adminKey},
+	}}, nil
 }
 
 func startBuf(t *testing.T) (*grpc.ClientConn, *stubServer, func()) {
@@ -92,5 +103,41 @@ func TestRefresher_BootstrapUsesCatalog(t *testing.T) {
 	}
 	if m["/foo-service"] != "http://foo:8000" {
 		t.Fatalf("foo-service missing: %+v", m)
+	}
+}
+
+func TestRefresher_BuildsAuthSnapshot(t *testing.T) {
+	conn, stub, stop := startBuf(t)
+	defer stop()
+	cli := NewClient(conn)
+	r := NewRefresher(cli, time.Hour, nil)
+	routes, src := r.Bootstrap(context.Background(), 2*time.Second)
+	if src != "catalog" {
+		t.Fatalf("source=%q; want catalog", src)
+	}
+	if routes["/foo-service"] != "http://foo:8000" {
+		t.Fatalf("routes missing foo-service: %+v", routes)
+	}
+	_, auth, _ := r.Snapshot()
+	foo, ok := auth["foo-service"]
+	if !ok {
+		t.Fatal("auth snapshot missing foo-service")
+	}
+	if foo.Default != auth_pkg.PolicyBearer {
+		t.Fatalf("default=%v; want PolicyBearer", foo.Default)
+	}
+	if _, ok := foo.PublicPaths["/healthz"]; !ok {
+		t.Fatal("public path /healthz missing")
+	}
+	if foo.EndpointAuth["POST /admin"] != auth_pkg.PolicyAdminKey {
+		t.Fatalf("override=%v; want PolicyAdminKey", foo.EndpointAuth["POST /admin"])
+	}
+	// bar-service is DEPRECATED → filtered, not in snapshot
+	if _, ok := auth["bar-service"]; ok {
+		t.Fatal("deprecated bar-service should be absent")
+	}
+	// only foo has HasEndpointOverrides → exactly 1 ListEndpoints call
+	if got := atomic.LoadInt32(&stub.listEndpointCalls); got != 1 {
+		t.Fatalf("ListEndpoints calls=%d; want 1", got)
 	}
 }

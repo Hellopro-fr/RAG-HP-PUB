@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import importlib
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -20,7 +21,11 @@ import app.gateway_sync  # noqa: E402
 importlib.reload(app.config)
 importlib.reload(app.gateway_sync)
 
-from app.gateway_sync import sync_with_gateway  # noqa: E402
+from app.gateway_sync import (  # noqa: E402
+    reconcile_loop,
+    reconcile_once,
+    sync_with_gateway,
+)
 from app.supervisor import SpawnSpec  # noqa: E402
 
 
@@ -29,6 +34,27 @@ def _make_response(body: dict) -> MagicMock:
     resp.raise_for_status = MagicMock()
     resp.json = MagicMock(return_value=body)
     return resp
+
+
+def _inst(instance_id: str, credentials_hash: str) -> MagicMock:
+    """A stand-in for supervisor.RunningInstance with just the fields
+    reconcile_once reads (instance_id + credentials_hash)."""
+    m = MagicMock()
+    m.instance_id = instance_id
+    m.credentials_hash = credentials_hash
+    return m
+
+
+def _desired(instance_id: str, credentials_hash: str) -> dict:
+    return {
+        "instance_id": instance_id,
+        "template_slug": "ga4",
+        "stdio_command": "echo",
+        "stdio_args": [],
+        "env": {},
+        "credentials_json": "{}",
+        "credentials_hash": credentials_hash,
+    }
 
 
 def _patch_async_client(post_mock: AsyncMock):
@@ -144,3 +170,133 @@ async def test_spawn_failure_is_logged_not_raised(monkeypatch):
         await sync_with_gateway(sup, retries=1)
 
     sup.spawn.assert_awaited_once()
+
+
+# --- reconcile_once: idempotent convergence ------------------------------
+
+
+@pytest.mark.asyncio
+async def test_reconcile_spawns_missing_instance():
+    sup = MagicMock()
+    sup.spawn = AsyncMock()
+    sup.kill = AsyncMock()
+    sup.list = MagicMock(return_value=[])
+
+    post_mock = AsyncMock(
+        return_value=_make_response({"desired_instances": [_desired("it-1", "abc")]})
+    )
+
+    with _patch_async_client(post_mock):
+        ok = await reconcile_once(sup)
+
+    assert ok is True
+    sup.spawn.assert_awaited_once()
+    assert sup.spawn.await_args.args[0].instance_id == "it-1"
+    sup.kill.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_reconcile_leaves_unchanged_instance_untouched():
+    """A running instance whose hash matches the gateway must NOT be respawned
+    — otherwise the periodic loop would restart healthy instances every cycle."""
+    sup = MagicMock()
+    sup.spawn = AsyncMock()
+    sup.kill = AsyncMock()
+    sup.list = MagicMock(return_value=[_inst("it-1", "abc")])
+
+    post_mock = AsyncMock(
+        return_value=_make_response({"desired_instances": [_desired("it-1", "abc")]})
+    )
+
+    with _patch_async_client(post_mock):
+        ok = await reconcile_once(sup)
+
+    assert ok is True
+    sup.spawn.assert_not_called()
+    sup.kill.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_reconcile_respawns_on_hash_change():
+    sup = MagicMock()
+    sup.spawn = AsyncMock()
+    sup.kill = AsyncMock()
+    sup.list = MagicMock(return_value=[_inst("it-1", "OLD")])
+
+    post_mock = AsyncMock(
+        return_value=_make_response({"desired_instances": [_desired("it-1", "NEW")]})
+    )
+
+    with _patch_async_client(post_mock):
+        ok = await reconcile_once(sup)
+
+    assert ok is True
+    sup.spawn.assert_awaited_once()
+    sup.kill.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_reconcile_kills_extras_not_in_desired():
+    sup = MagicMock()
+    sup.spawn = AsyncMock()
+    sup.kill = AsyncMock()
+    sup.list = MagicMock(return_value=[_inst("zombie", "x")])
+
+    post_mock = AsyncMock(return_value=_make_response({"desired_instances": []}))
+
+    with _patch_async_client(post_mock):
+        ok = await reconcile_once(sup)
+
+    assert ok is True
+    sup.kill.assert_awaited_once_with("zombie")
+    sup.spawn.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_reconcile_returns_false_on_network_error():
+    """Gateway unreachable: reconcile_once reports failure (so the loop retries
+    fast) and never mutates local state."""
+    sup = MagicMock()
+    sup.spawn = AsyncMock()
+    sup.kill = AsyncMock()
+    sup.list = MagicMock(return_value=[])
+
+    post_mock = AsyncMock(side_effect=httpx.ConnectError("down"))
+
+    with _patch_async_client(post_mock):
+        ok = await reconcile_once(sup)
+
+    assert ok is False
+    sup.spawn.assert_not_called()
+    sup.kill.assert_not_called()
+
+
+# --- reconcile_loop: boot self-heal + interval selection -----------------
+
+
+@pytest.mark.asyncio
+async def test_reconcile_loop_retries_fast_then_settles(monkeypatch):
+    """First tick is immediate. A failed reconcile sleeps the short retry
+    interval; a successful one sleeps the long interval. This is what stops a
+    boot-time gateway-DNS race from permanently orphaning instances."""
+    results = iter([False, True])
+
+    async def fake_once(_sup):
+        return next(results)
+
+    monkeypatch.setattr("app.gateway_sync.reconcile_once", fake_once)
+
+    sleeps: list[float] = []
+
+    async def fake_sleep(delay):
+        sleeps.append(delay)
+        if len(sleeps) >= 2:
+            raise asyncio.CancelledError
+
+    monkeypatch.setattr("app.gateway_sync.asyncio.sleep", fake_sleep)
+
+    with pytest.raises(asyncio.CancelledError):
+        await reconcile_loop(MagicMock(), ok_interval=300, fail_interval=15)
+
+    # fail → 15s retry, then success → 300s settle.
+    assert sleeps == [15, 300]

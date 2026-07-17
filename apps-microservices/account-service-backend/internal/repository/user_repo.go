@@ -4,8 +4,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/google/uuid"
 	"account-service/internal/db"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -83,4 +83,14 @@ func (r *UserRepo) SetAdmin(email string, admin bool) error {
 
 func (r *UserRepo) SetAllowed(email string, allowed bool) error {
 	return r.g.Model(&db.User{}).Where("email = ?", email).Update("is_allowed", allowed).Error
+}
+
+// ListAllowed returns every user with is_allowed=true, newest first.
+// Used by the bulk MCP sync (blocked users are not pushed to the gateway).
+func (r *UserRepo) ListAllowed() ([]db.User, error) {
+	var users []db.User
+	if err := r.g.Where("is_allowed = ?", true).Order("created_at DESC").Find(&users).Error; err != nil {
+		return nil, err
+	}
+	return users, nil
 }

@@ -1,6 +1,12 @@
 import os
+import sys
 import asyncio
 import logging
+
+# markdownify recurses per DOM level; deep CMS pages (e.g. Liferay) overflow
+# the default limit (1000). Cheap on Python 3.11+ (heap-allocated frames);
+# the internal C-recursion limit is unaffected (_md_safe stays as guard).
+sys.setrecursionlimit(20000)
 
 from common_utils.logging import setup_logging
 setup_logging("website-processor-service")

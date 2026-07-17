@@ -22,13 +22,15 @@ type userFinder interface {
 // zohoCatalogAdapter wraps ZohoImportRepo + UserRepo to satisfy
 // gateway.ZohoUserCatalog.
 //
-// Resolution order:
-//   - role == "admin"  → imports.GetAdmin()
-//   - role != "admin"  → imports.FindUserImportByEmail(email)
+// Resolution order (mirrors mcp-zoho-service routing/resolver.go):
+//   - adminGranted == true (server-auth grant on the Zoho stub) → imports.GetAdmin()
+//   - role == "admin"                                            → imports.GetAdmin()
+//   - otherwise                                                  → imports.FindUserImportByEmail(email)
 //
-// There is no admin-row fallback for non-admin viewers — that was the
-// pre-2026-05-14 behavior that leaked admin tools onto every non-admin
-// consent screen and is now intentionally removed.
+// There is no *implicit* admin-row fallback for non-admin viewers — the
+// blanket pre-2026-05-14 fallback (which leaked admin tools onto every
+// non-admin consent screen) stays removed. The admin row is reachable for a
+// non-admin only via an explicit per-(stub,email) server-authorization grant.
 //
 // On any UserRepo error, the viewer is treated as non-admin (fail-safe:
 // never auto-promote on transient DB errors).
@@ -45,7 +47,7 @@ type zohoCatalogAdapter struct {
 	encryptor *crypto.Encryptor
 }
 
-func (a *zohoCatalogAdapter) StateForEmail(ctx context.Context, email string) gateway.ZohoCatalogState {
+func (a *zohoCatalogAdapter) StateForEmail(ctx context.Context, email string, adminGranted bool) gateway.ZohoCatalogState {
 	if a == nil {
 		log.Printf("[zoho-diag] StateForEmail: adapter is nil — returning empty state")
 		return gateway.ZohoCatalogState{}
@@ -59,10 +61,18 @@ func (a *zohoCatalogAdapter) StateForEmail(ctx context.Context, email string) ga
 		return gateway.ZohoCatalogState{}
 	}
 
-	log.Printf("[zoho-diag] StateForEmail entry email=%q users_finder_wired=%t", email, a.users != nil)
+	log.Printf("[zoho-diag] StateForEmail entry email=%q users_finder_wired=%t admin_granted=%t", email, a.users != nil, adminGranted)
 
+	// A server-authorization grant on the Zoho stub routes the caller to the
+	// admin Zoho row downstream (mcp-zoho-service resolver Branch 2). Mirror
+	// that here so the gateway surfaces the admin catalog for a granted viewer
+	// instead of consulting (and missing) their per-user row. Role-based admin
+	// resolution is the second way to reach the admin row.
 	isAdmin := false
-	if a.users != nil {
+	if adminGranted {
+		isAdmin = true
+		log.Printf("[zoho-diag] StateForEmail email=%q admin_granted=true (server-authorization) — consulting admin zoho row", email)
+	} else if a.users != nil {
 		user, err := a.users.GetByEmail(email)
 		switch {
 		case err != nil:

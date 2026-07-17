@@ -29,7 +29,8 @@
     "@tiptap/extension-image": "^2.27.2",
     "@tiptap/extension-underline": "^2.27.2",
     "@tiptap/extension-text-align": "^2.27.2",
-    "@tiptap/extension-placeholder": "^2.27.2"
+    "@tiptap/extension-placeholder": "^2.27.2",
+    "lucide-vue-next": "^0.460.0"
   },
   "devDependencies": {
     "@types/node": "^22.19.17",

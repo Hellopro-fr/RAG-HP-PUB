@@ -91,8 +91,32 @@
 
       <!-- Row 2: .mcp.json code block (full width) -->
       <div class="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
-        <div class="flex items-center justify-between mb-2">
-          <span class="text-xs font-medium text-gray-600 dark:text-gray-400">.mcp.json</span>
+        <div class="flex items-center justify-between mb-2 gap-2 flex-wrap">
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-medium text-gray-600 dark:text-gray-400">.mcp.json</span>
+            <div class="inline-flex rounded-md overflow-hidden border border-gray-200 dark:border-gray-700 text-[11px]">
+              <button
+                type="button"
+                class="px-2 py-0.5 font-medium transition-colors"
+                :class="authVariant === 'bearer'
+                  ? 'bg-brand-500 text-white'
+                  : 'bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'"
+                @click="authVariant = 'bearer'"
+              >
+                Bearer
+              </button>
+              <button
+                type="button"
+                class="px-2 py-0.5 font-medium transition-colors border-l border-gray-200 dark:border-gray-700"
+                :class="authVariant === 'scope'
+                  ? 'bg-brand-500 text-white'
+                  : 'bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'"
+                @click="authVariant = 'scope'"
+              >
+                X-MCP-Scope-Token
+              </button>
+            </div>
+          </div>
           <div class="flex items-center gap-3">
             <a
               href="/install-guide"
@@ -117,11 +141,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { ScopeToken } from '@/types/token'
 import type { InstallExecutor } from '@/types/install-guide'
 import { useClipboard } from '@/composables/useClipboard'
 import { useServersStore } from '@/stores/servers'
+
+type AuthVariant = 'bearer' | 'scope'
 
 const props = withDefaults(
   defineProps<{ token: ScopeToken; executors?: InstallExecutor[] }>(),
@@ -136,6 +162,19 @@ const emit = defineEmits<{
 
 const clipboard = useClipboard()
 const serversStore = useServersStore()
+
+// Auth header variant: Bearer (Claude.ai / Cursor / standard MCP clients,
+// default) or X-MCP-Scope-Token (legacy, custom-header integrations). The
+// gateway accepts both for /tokens-issued scope tokens.
+const authVariant = ref<AuthVariant>('bearer')
+
+// Swap the auth header line of an already-built .mcp.json string. The
+// gateway routes a `mcp_*` value identically through both headers, so the
+// substitution preserves behaviour and only changes wire shape.
+function applyAuthHeader(json: string, variant: AuthVariant): string {
+  if (variant === 'scope') return json
+  return json.replace(/"X-MCP-Scope-Token:\s*/g, '"Authorization: Bearer ')
+}
 
 const maskedPrefix = computed(() => {
   const prefix = props.token.token_prefix || ''
@@ -228,12 +267,17 @@ const maskedToken = computed(() => {
 })
 
 // Display version uses masked token
-const mcpJsonDisplay = computed(() => buildMcpJsonString(maskedToken.value))
+const mcpJsonDisplay = computed(() =>
+  applyAuthHeader(buildMcpJsonString(maskedToken.value), authVariant.value)
+)
 
 // Copy version uses full token if available, otherwise masked
 function copyMcpJson() {
   const tokenValue = props.token.token || maskedToken.value
-  clipboard.copy(buildMcpJsonString(tokenValue), 'Configuration .mcp.json')
+  clipboard.copy(
+    applyAuthHeader(buildMcpJsonString(tokenValue), authVariant.value),
+    'Configuration .mcp.json'
+  )
 }
 
 function formatDate(dateStr: string): string {

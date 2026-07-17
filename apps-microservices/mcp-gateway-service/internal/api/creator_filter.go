@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"net/http"
 
 	"mcp-gateway/internal/auth"
 )
@@ -16,4 +17,17 @@ func effectiveCreatorFilter(ctx context.Context) string {
 		return ""
 	}
 	return auth.UserEmailFromContext(ctx)
+}
+
+// resolveListServersCreatorFilter is the request-aware variant for
+// GET /api/v1/servers. When `?include_all=true` is set on the URL, the
+// ownership filter is dropped so the caller (typically a scope-picker in
+// the token / OAuth2 creation forms) can see every active server. The DTO
+// already redacts secrets, so widening the read leaks nothing. All other
+// callers fall back to the role-based filter.
+func resolveListServersCreatorFilter(r *http.Request) string {
+	if r.URL.Query().Get("include_all") == "true" {
+		return ""
+	}
+	return effectiveCreatorFilter(r.Context())
 }

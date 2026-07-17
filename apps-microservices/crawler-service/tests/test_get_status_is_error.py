@@ -80,8 +80,18 @@ async def test_get_status_uses_snapshot_path_and_enriches_is_error(tmp_path):
         'start_url': 'https://example.com',
         'start_time': datetime.utcnow(),
         'status': 'finished',  # non-running triggers snapshot branch
+        # Auto-stash metadata (Redis-only; injected into snapshot by get_status).
+        'stashed_at': '2026-06-02T01:00:00',
+        'downloaded_at': '2026-06-02T02:00:00',
+        'finished_at': '2026-06-02T03:00:00',
+        'size_bytes': 4242,
     }
 
     status = await crawler_manager.get_status(job_info)
     assert status is not None
     assert status.is_error == 'limitCrawl'
+    # Fix B: the 4 auto-stash fields also surface on the snapshot path.
+    assert status.stashed_at == '2026-06-02T01:00:00'
+    assert status.downloaded_at == '2026-06-02T02:00:00'
+    assert status.finished_at == '2026-06-02T03:00:00'
+    assert status.size_bytes == 4242

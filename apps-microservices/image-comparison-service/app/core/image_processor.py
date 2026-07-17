@@ -36,6 +36,27 @@ class ImageProcessor:
     }
 
     @staticmethod
+    def flatten_alpha(pil_image: Image.Image) -> Image.Image:
+        """
+        Flattens transparency onto a WHITE background before RGB conversion.
+
+        A bare convert('RGB') drops the alpha channel and exposes the arbitrary
+        colors stored UNDER fully-transparent pixels — encoder-dependent (white
+        in most PNG exports, black in WordPress WebP conversions). The same
+        visual then hashes as "content on white" vs "content on black":
+        real case capsa-container.com .png vs .png.webp -> pHash distance
+        34/64 (score 35) instead of 0/64 (score 100). Compositing on white
+        makes the features encoder-independent.
+        """
+        if pil_image.mode in ("RGBA", "LA", "PA") or (
+            pil_image.mode == "P" and "transparency" in pil_image.info
+        ):
+            rgba = pil_image.convert("RGBA")
+            background = Image.new("RGBA", rgba.size, (255, 255, 255, 255))
+            return Image.alpha_composite(background, rgba).convert("RGB")
+        return pil_image.convert("RGB")
+
+    @staticmethod
     def trim_borders(pil_image: Image.Image) -> Image.Image:
         """
         Removes whitespace/borders from the image (Auto-Crop).
@@ -46,12 +67,17 @@ class ImageProcessor:
             if pil_image.mode != "RGB":
                 pil_image = pil_image.convert("RGB")
             
-            # 2. Invert image (assuming white background becomes black)
-            # This helps getbbox find the "content" (non-black pixels)
-            inverted_image = ImageOps.invert(pil_image)
+            # 2. Background mask with TOLERANCE: near-white pixels (>= 230 in
+            # grayscale) count as background. A strict invert+getbbox treated any
+            # 253/254 pixel sown by lossy re-encoding (JPEG->WebP) as content, so
+            # the SAME visual cropped differently per encoder (real case:
+            # euromag terra-et-mera.jpg vs .jpg.webp -> bbox 305 vs 400 wide ->
+            # pHash distance 34/64 on identical images).
+            gray = pil_image.convert("L")
+            content_mask = gray.point(lambda p: 255 if p < 230 else 0)
             
-            # 3. Get bounding box of non-zero regions
-            bbox = inverted_image.getbbox()
+            # 3. Get bounding box of the actual content
+            bbox = content_mask.getbbox()
             
             if bbox:
                 # 4. Crop to the content
@@ -114,7 +140,7 @@ class ImageProcessor:
                     # Attempt decompression (GZIP/ZLIB)
                     image_data = ImageProcessor._try_decompress(image_data)
                     
-                    pil_image = Image.open(BytesIO(image_data)).convert('RGB')
+                    pil_image = ImageProcessor.flatten_alpha(Image.open(BytesIO(image_data)))
                     
                     # Apply border trimming immediately upon load
                     images[inp.id] = ImageProcessor.trim_borders(pil_image)
@@ -138,7 +164,12 @@ class ImageProcessor:
                 logger.info("Using APIFY_PROXY for image downloads.")
 
             async with httpx.AsyncClient(
-                timeout=30.0,
+                timeout=httpx.Timeout(
+                    connect=settings.IMG_DOWNLOAD_CONNECT_TIMEOUT_S,
+                    read=settings.IMG_DOWNLOAD_READ_TIMEOUT_S,
+                    write=settings.IMG_DOWNLOAD_READ_TIMEOUT_S,
+                    pool=settings.IMG_DOWNLOAD_CONNECT_TIMEOUT_S,
+                ),
                 follow_redirects=True,
                 headers=ImageProcessor.DOWNLOAD_HEADERS,
                 verify=False,
@@ -151,6 +182,10 @@ class ImageProcessor:
                         try:
                             resp = await client.get(str(inp.url))
                             if resp.status_code == 200:
+                                return resp
+                            # 4xx is terminal (404/403 won't change) — don't waste a retry.
+                            if 400 <= resp.status_code < 500:
+                                logger.warning(f"HTTP {resp.status_code} for {inp.id} ({inp.url}) — no retry (4xx)")
                                 return resp
                             if attempt == 0:
                                 await asyncio.sleep(2)
@@ -165,9 +200,11 @@ class ImageProcessor:
                             return e
                     return None  # Should not reach here
 
-                # Execute concurrently with retry
+                # Execute concurrently with retry, each download hard-capped so one
+                # slow/dead URL fails fast (-> failed_images) without gating the others.
                 responses = await asyncio.gather(
-                    *[download_with_retry(inp) for inp in download_tasks],
+                    *[asyncio.wait_for(download_with_retry(inp), settings.IMG_DOWNLOAD_CAP_S)
+                      for inp in download_tasks],
                     return_exceptions=True
                 )
 
@@ -176,6 +213,10 @@ class ImageProcessor:
                     img_id = img_input.id
 
                     if isinstance(response, Exception):
+                        if isinstance(response, asyncio.TimeoutError):
+                            logger.warning(
+                                f"Download cap ({settings.IMG_DOWNLOAD_CAP_S}s) hit for {img_id} ({img_input.url})"
+                            )
                         failed.append(FailedImage(id=img_id, url=img_input.url))
                         continue
 
@@ -189,7 +230,7 @@ class ImageProcessor:
                         # Though httpx usually handles this, double safety doesn't hurt if magic bytes match.
                         image_data = ImageProcessor._try_decompress(response.content)
                         
-                        pil_image = Image.open(BytesIO(image_data)).convert('RGB')
+                        pil_image = ImageProcessor.flatten_alpha(Image.open(BytesIO(image_data)))
                         images[img_id] = ImageProcessor.trim_borders(pil_image)
                     except Exception as e:
                         header_hex = response.content[:10].hex()
@@ -270,32 +311,31 @@ class ImageProcessor:
         return final_score, {"phash": phash_score, "hist": hist_score}
 
     @staticmethod
-    def compare_batch(images: Dict[str, Image.Image], inputs: List[ImageInput]) -> List[Dict]:
-        """
-        Compares images and maps IDs back to URLs if available.
-        """
-        ids = list(images.keys())
+    def extract_features_for(images: Dict[str, Image.Image]) -> Dict[str, Dict]:
+        """Extract features for a map of {id: PIL.Image} (O(N)). Used for the
+        cache-miss images; cached features are merged in by the caller."""
+        return {img_id: ImageProcessor.extract_features(img) for img_id, img in images.items()}
+
+    @staticmethod
+    def compare_features(features_map: Dict[str, Dict], inputs: List[ImageInput]) -> List[Dict]:
+        """Pairwise comparison (O(N^2)) over a ready feature-map (cached + fresh),
+        mapping ids back to URLs. Scoring math is unchanged from compare_batch."""
+        ids = list(features_map.keys())
         n = len(ids)
         if n < 2:
             return []
-            
+
         # Create map for ID -> URL for quick lookup
         url_map = {inp.id: inp.url for inp in inputs}
 
-        # 1. Feature Extraction (O(N))
-        features_map = {}
-        for img_id in ids:
-            features_map[img_id] = ImageProcessor.extract_features(images[img_id])
-            
-        # 2. Comparison Matrix (O(N^2))
         results = []
         for i in range(n):
             for j in range(i + 1, n):
                 id_a = ids[i]
                 id_b = ids[j]
-                
+
                 score, details = ImageProcessor.calculate_similarity(features_map[id_a], features_map[id_b])
-                
+
                 results.append({
                     "image_a_id": id_a,
                     "image_a_url": url_map.get(id_a),
@@ -304,5 +344,16 @@ class ImageProcessor:
                     "score": round(score, 2),
                     "method_details": details
                 })
-                
+
         return results
+
+    @staticmethod
+    def compare_batch(images: Dict[str, Image.Image], inputs: List[ImageInput]) -> List[Dict]:
+        """
+        Compares images and maps IDs back to URLs if available.
+        Thin pipeline: extract features for all images, then compare the map.
+        """
+        if len(images) < 2:
+            return []
+        features_map = ImageProcessor.extract_features_for(images)
+        return ImageProcessor.compare_features(features_map, inputs)

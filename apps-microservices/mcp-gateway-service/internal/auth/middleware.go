@@ -52,8 +52,8 @@ type Config struct {
 	Enabled       bool
 	SecureCookie  bool   // Secure flag on session cookie (true when behind TLS)
 	FallbackUser  string // optional fallback username (env FALLBACK_USER)
-	FallbackPass  string   // optional fallback password (env FALLBACK_PASS)
-	FallbackEmail string   // optional fallback email (env FALLBACK_EMAIL)
+	FallbackPass  string // optional fallback password (env FALLBACK_PASS)
+	FallbackEmail string // optional fallback email (env FALLBACK_EMAIL)
 }
 
 // publicPaths that don't require authentication.
@@ -61,25 +61,26 @@ var publicExact = map[string]bool{
 	"/login":  true,
 	"/logout": true,
 	"/health": true,
-	// Internal machine-to-machine endpoint (X-Admin-Token enforced on handler).
+	// Internal machine-to-machine endpoints (X-Admin-Token enforced on handler).
 	// Kept as exact match to avoid accidentally exempting any future
 	// /api/v1/internal/* endpoint from JWT auth.
 	"/api/v1/internal/runner/sync": true,
+	"/api/v1/internal/users/sync":  true,
 }
 
 var publicPrefixes = []string{
 	"/static",
 	"/favicon",
-	"/sse",          // MCP SSE transport (machine-to-machine)
-	"/mcp",          // MCP streamable HTTP transport (machine-to-machine)
+	"/sse", // MCP SSE transport (machine-to-machine)
+	"/mcp", // MCP streamable HTTP transport (machine-to-machine)
 	"/openapi.json",
-	"/authorize",                  // OAuth2 authorization endpoint
-	"/token",                      // OAuth2 token endpoint
-	"/api/v1/oauth2/authorize",    // OAuth2 authorize API (Vue frontend)
+	"/authorize",               // OAuth2 authorization endpoint
+	"/token",                   // OAuth2 token endpoint
+	"/api/v1/oauth2/authorize", // OAuth2 authorize API (Vue frontend)
 	// "/register" intentionally NOT public — requires admin session to prevent abuse
-	"/.well-known",        // OAuth2 server metadata
-	"/api/v1/public/",     // Public docs endpoints
-	"/uploads/",           // Uploaded static files (icons)
+	"/.well-known",    // OAuth2 server metadata
+	"/api/v1/public/", // Public docs endpoints
+	"/uploads/",       // Uploaded static files (icons)
 }
 
 // Middleware returns an HTTP middleware that enforces authentication.

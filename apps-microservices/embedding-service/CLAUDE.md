@@ -42,7 +42,8 @@ embedding-service/
 - **Queue**: `embedding_queue` (routing key: `data.ready_for_embedding`)
 - **Retry**: `embedding_queue_retry` (30s TTL, max 3 retries)
 - **DLQ**: `embedding_queue_dlq`
-- Prefetch: 10, poison message shield (x-death > 10)
+- Prefetch: env `PREFETCH_COUNT` (default 2), poison message shield (x-death > 10)
+- Per-message timeout: env `PROCESS_TIMEOUT` (default 240s); keep > 2x `GRPC_TIMEOUT` so the gRPC deadline fires first (spec 2026-07-02)
 
 ## Conventions
 

@@ -23,7 +23,7 @@ interface AssuranceStep {
   icon: LucideIcon;
   title: string;
   description: string;
-  stats: AssuranceStat[];
+  stats?: AssuranceStat[];
   live?: boolean;
 }
 
@@ -36,33 +36,20 @@ const STEPS: AssuranceStep[] = [
     number: "01",
     icon: ListChecks,
     title: "On cerne votre besoin",
-    description: "Quelques questions ciblées pour comprendre précisément ce qu'il vous faut.",
-    stats: [
-      { value: "7", label: "questions" },
-      { value: "<1 min", label: "chrono" },
-    ],
+    description: "7 questions rapides pour cibler votre besoin."    
   },
   {
     number: "02",
     icon: Sparkles,
     title: "On scanne tout le marché français",
-    description: "Notre base couvre l'intégralité de l'offre disponible en France, mise à jour en continu.",
-    stats: [
-      { value: "+250", label: "produits référencés" },
-      { value: "45", label: "fournisseurs" },
-      { value: "100%", label: "du marché FR" },
-    ],
+    description: "Toute l'offre française, mise à jour en temps réel.",
     live: true,
   },
   {
     number: "03",
     icon: Target,
     title: "On vous propose le bon match",
-    description: "Une short-list personnalisée et une estimation budgétaire fiable, en quelques secondes.",
-    stats: [
-      { value: "3-5", label: "produits" },
-      { value: "€", label: "budget estimé" },
-    ],
+    description: "Une short-list avec budget estimé, instantanément."
   },
 ];
 
@@ -152,7 +139,7 @@ const AssurancePage = ({ categoryName, onContinue }: AssurancePageProps) => {
                     </p>
 
                     {/* Badges stats — Lovable : rounded-md bg-muted/60 px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-[11px] */}
-                    {step.stats.length > 0 && (
+                    {step.stats && step.stats.length > 0 && (
                       <div className="mt-1.5 sm:mt-2.5 flex flex-wrap gap-1 sm:gap-1.5">
                         {step.stats.map((stat) => (
                           <span
