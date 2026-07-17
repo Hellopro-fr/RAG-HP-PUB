@@ -2,8 +2,25 @@
 dropping an already-dequeued item."""
 
 import asyncio
+import importlib
+import sys
 
-from common_utils.concurrency.graceful import get_message_or_stop
+from common_utils.autres.graceful import get_message_or_stop
+
+
+def test_imports_without_heavy_optional_deps(monkeypatch):
+    """Regression guard: the drain helper must import with only the stdlib.
+
+    It is used by services (document-echange-processor) that do NOT install
+    prometheus_client / pika / redis. It previously lived in
+    common_utils.concurrency, whose __init__ eagerly imports the Milvus guard
+    (prometheus_client) -> the service crashed on startup with ModuleNotFoundError.
+    """
+    for mod in ("prometheus_client", "pika", "redis"):
+        monkeypatch.setitem(sys.modules, mod, None)  # make `import mod` raise
+    monkeypatch.delitem(sys.modules, "common_utils.autres.graceful", raising=False)
+    reloaded = importlib.import_module("common_utils.autres.graceful")
+    assert hasattr(reloaded, "get_message_or_stop")
 
 
 def test_returns_item_when_available():
