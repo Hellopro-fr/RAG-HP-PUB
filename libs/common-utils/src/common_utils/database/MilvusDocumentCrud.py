@@ -355,16 +355,9 @@ class MilvusDocumentCrud:
             raise
 
     async def get_document(self, fichier_source: str) -> Dict[str, Any]:
-        # Build the filter literal manually: embed the real (UTF-8) characters,
-        # escaping only backslash + double-quote. Do NOT interpolate a Python
-        # list — repr() renders non-printable chars (e.g. NBSP U+00A0) as \xNN
-        # escapes that Milvus then decodes back into invalid UTF-8 (code 65535).
-        # to_valid_utf8 first drops unencodable lone surrogates / C0 controls.
-        escaped = (
-            Utils.to_valid_utf8(fichier_source)
-            .replace("\\", "\\\\")
-            .replace('"', '\\"')
-        )
+        # Sanitize to prevent expression injection
+        sanitized = fichier_source.replace("'", "\\'").replace('"', '\\"')
+        list_fichier_source = [sanitized]
         model_config = ModelConfig()
         model_key = model_config.model_id
 
@@ -387,7 +380,7 @@ class MilvusDocumentCrud:
 
             result = await asyncio.to_thread(
                 self.collection.query,
-                expr=f'fichier_source in ["{escaped}"]',
+                expr=f"fichier_source in {list_fichier_source}",
                 output_fields=["id", "text", "date_ajout"],
                 consistency_level="Bounded",
             )

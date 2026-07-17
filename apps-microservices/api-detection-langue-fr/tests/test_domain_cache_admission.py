@@ -5,7 +5,6 @@ poison the domain-keyed cache with a non-answer.
 """
 import pytest
 
-from common_utils.redis import cache_service
 from app.core.domain_fr import DomainCache
 
 
@@ -30,20 +29,10 @@ async def test_set_is_noop_for_admission_rejected(monkeypatch):
         async def setex(self, key, ttl, data):
             calls.append((key, ttl, data))
 
-    monkeypatch.setattr(cache_service, 'redis_client', FakeClient(), raising=False)
+    async def fake_get_client(self):
+        return FakeClient()
 
-    # Control: a cacheable method DOES reach setex through this seam —
-    # guards the test against passing vacuously if the client wiring breaks
-    # (set() early-returns on a None/mis-patched client before the
-    # _NEVER_CACHE_METHODS guard).
-    await cache.set(
-        input_url='https://example.com/path',
-        result_url='https://example.com/path',
-        result={'ok': True, 'method': 'langHtml',
-                'url': 'https://example.com/path'},
-    )
-    assert len(calls) == 1
-    calls.clear()
+    monkeypatch.setattr(DomainCache, '_get_client', fake_get_client)
 
     await cache.set(
         input_url='https://example.com/path',

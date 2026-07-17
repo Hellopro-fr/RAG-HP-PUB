@@ -1,23 +1,34 @@
-// Auth middleware — gates all routes on the signed rcf_session cookie (account-service SSO).
+// C3: Authentication middleware — protects all routes including server actions
+// Requires ADMIN_TOKEN env var. Validates via cookie or Authorization header.
 import { NextResponse, type NextRequest } from "next/server"
-import { readSession, SESSION_COOKIE, appOrigin } from "@hellopro/auth"
 
-export async function middleware(request: NextRequest) {
-  const session = await readSession(request.cookies.get(SESSION_COOKIE)?.value)
-  if (session) {
+export function middleware(request: NextRequest) {
+  const adminToken = process.env.ADMIN_TOKEN
+
+  // If no ADMIN_TOKEN is configured, skip auth (development mode)
+  if (!adminToken) {
     return NextResponse.next()
   }
 
-  // Server actions (POST to same origin) get a 401 instead of a redirect.
+  // Check token from cookie or Authorization header
+  const cookieToken = request.cookies.get("admin_token")?.value
+  const headerToken = request.headers.get("authorization")?.replace("Bearer ", "")
+
+  if (cookieToken === adminToken || headerToken === adminToken) {
+    return NextResponse.next()
+  }
+
+  // For server actions (POST to same origin), return 401
   if (request.method === "POST") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const loginUrl = new URL("/auth/login", appOrigin())
+  // For page requests, redirect to a simple login page
+  const loginUrl = new URL("/login", request.url)
   return NextResponse.redirect(loginUrl)
 }
 
 export const config = {
-  // Protect everything except static assets and the /auth/* routes (login, callback, logout, denied).
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon-.*|apple-icon|auth).*)"],
+  // Protect all routes except static files and the login page
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon-.*|apple-icon|login).*)"],
 }

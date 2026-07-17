@@ -405,35 +405,5 @@ func (r *InstructionRepo) resolveForScope(scopeTable, scopeCol, scopeID string, 
 	for i, r := range rows {
 		out[i] = r.LLMInstructionRow
 	}
-	if err := r.attachRowServers(out); err != nil {
-		return nil, err
-	}
 	return out, nil
-}
-
-// attachRowServers populates the Servers association on the given per_server
-// rows (Scan does not load associations). Callers use the links to route each
-// row to the right tool descriptions when tool-description injection is on.
-func (r *InstructionRepo) attachRowServers(rows []db.LLMInstructionRow) error {
-	var perServerIDs []string
-	for _, row := range rows {
-		if row.Kind == db.LLMInstructionRowKindPerServer {
-			perServerIDs = append(perServerIDs, row.ID)
-		}
-	}
-	if len(perServerIDs) == 0 {
-		return nil
-	}
-	var links []db.LLMInstructionRowServer
-	if err := r.db.Where("row_id IN ?", perServerIDs).Find(&links).Error; err != nil {
-		return err
-	}
-	byRow := make(map[string][]db.LLMInstructionRowServer, len(links))
-	for _, l := range links {
-		byRow[l.RowID] = append(byRow[l.RowID], l)
-	}
-	for i := range rows {
-		rows[i].Servers = byRow[rows[i].ID]
-	}
-	return nil
 }

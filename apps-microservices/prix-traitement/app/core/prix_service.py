@@ -187,7 +187,7 @@ def format_numeric_constraint(constraint: Any, unite: str = "") -> str:
     return f"{constraint}{u}"
 
 
-async def run_identification(id_categorie: str, id_prompt: Optional[str] = None, source: Optional[str] = "ia") -> Dict[str, Any]:
+async def run_identification(id_categorie: str, id_prompt: Optional[str] = None) -> Dict[str, Any]:
     """
     Logique principale d'identification des caractéristiques influençant le prix.
     Conversion de la logique PHP run_identification en Python.
@@ -212,12 +212,7 @@ async def run_identification(id_categorie: str, id_prompt: Optional[str] = None,
     api_client = HelloProAPIClient()
 
     ID_PROCESS = "37"
-
-    # Source du questionnaire : "ia" (Q1 canonical) ou "bo" (questionnaire BO).
-    # Route la lecture/sauvegarde des caracs prix vers la variante BO côté backend.
-    is_bo = (source or "ia").lower() == "bo"
-    carac_field = "caracteristique_bo" if is_bo else "caracteristique"
-
+    
     try:
         # =====================================================================
         # ÉTAPE 0 : Récupérer les données de la catégorie : nom catégorie
@@ -250,11 +245,10 @@ async def run_identification(id_categorie: str, id_prompt: Optional[str] = None,
         # =====================================================================
         logger.info(f"[{id_categorie}] Récupération des données de la catégorie...")
 
-        # Charger les réponses de Question 1 + caractéristiques prix existant.
-        # source=bo → get_caracteristique_prix_bo (info du questionnaire BO).
+        # Charger les réponses de Question 1 + caractéristiques prix existant 
         reponses_q1_carac_prix = await api_client.post(
             "prix",
-            carac_field,
+            "caracteristique",
             "get",
             {"id_categorie": id_categorie}
         )
@@ -414,10 +408,10 @@ async def run_identification(id_categorie: str, id_prompt: Optional[str] = None,
             # --- Dédupliquer ---
             caracteristiques_prix = list(dict.fromkeys(caracteristiques_prix))
             
-            # --- Sauvegarde via API (source=bo → save_caracteristique_prix_bo) ---
+            # --- Sauvegarde via API ---                
             save_result = await api_client.post(
                 "prix",
-                carac_field,
+                "caracteristique",
                 "save",
                 {
                     "id_categorie": id_categorie,
@@ -1125,18 +1119,40 @@ def _trim_chunks_to_token_budget(
 # Pas commerciaux français snappés sur une échelle finie pour rester lisible.
 
 _ECHELLE_COMMERCIALE = [
-    5, 10, 15, 20, 25, 50, 75, 100, 150, 200, 250, 300, 400, 500, 750,
-    1000, 1500, 2000, 2500, 3000, 4000, 5000, 6000, 7500,
-    10000, 15000, 20000, 25000, 30000, 40000, 50000, 75000,
-    100000, 150000, 200000, 250000, 300000, 500000, 750000,
-    1000000, 1500000, 2000000, 2500000, 5000000, 7500000, 10000000,
-    15000000, 25000000, 50000000, 100000000,
+    5, 10, 25, 50, 100, 250, 500,
+    1000, 2500, 5000, 10000, 25000, 50000, 100000,
+    250000, 500000, 1000000, 2500000, 5000000, 10000000,
+    25000000, 50000000, 100000000,
 ]
 
 # Seuils de tuning pour la génération des choix budget.
 # Tous exprimés en ratio du prix moyen de la fourchette LLM.
 _RATIO_LARGEUR_DEGENEREE = 0.05  # si largeur < ratio*moyenne -> fourchette élargie artificiellement
 _RATIO_LARGEUR_ELARGIE   = 0.20  # nouvelle largeur = ratio*moyenne (cas dégénéré)
+_RATIO_PAS_MIN           = 0.10  # plancher du pas commercial = ratio*moyenne
+
+
+def _snap_to_scale(target: float, scale: List[int]) -> int:
+    """Retourne le pas commercial de `scale` le plus proche de `target`."""
+    return min(scale, key=lambda s: abs(s - target))
+
+
+def _next_in_scale(pas: int, scale: List[int]) -> Optional[int]:
+    """Retourne le pas commercial strictement supérieur (None si déjà au maximum)."""
+    for s in scale:
+        if s > pas:
+            return s
+    return None
+
+
+def _previous_in_scale(pas: int, scale: List[int]) -> Optional[int]:
+    """Retourne le pas commercial strictement inférieur (None si déjà au minimum)."""
+    prev: Optional[int] = None
+    for s in scale:
+        if s >= pas:
+            return prev
+        prev = s
+    return prev
 
 
 def _compute_bornes_tranches(min_p: float, max_p: float, pas: int) -> Tuple[int, int, List[Tuple[int, int]]]:
@@ -1157,12 +1173,6 @@ def _compute_bornes_tranches(min_p: float, max_p: float, pas: int) -> Tuple[int,
     tranches: List[Tuple[int, int]] = []
     cur = borne_inf
     while cur < borne_sup:
-        # Garde défensive : un pas très petit relativement à la fourchette
-        # (cas pathologique d'un LLM renvoyant des bornes aberrantes) pourrait
-        # générer des millions de tranches → OOM. _select_best_choice écartera
-        # ce candidat (n > 5) si on retourne une liste vide.
-        if len(tranches) > 100:
-            return borne_inf, borne_sup, []
         tranches.append((cur, cur + pas))
         cur += pas
 
@@ -1172,175 +1182,6 @@ def _compute_bornes_tranches(min_p: float, max_p: float, pas: int) -> Tuple[int,
 def _fmt_price(n: int) -> str:
     """Formate un entier avec espace milliers (ex: 2500 -> '2 500')."""
     return f"{int(n):,}".replace(",", " ")
-
-
-def _palier_strictement_inferieur(v: float) -> Optional[int]:
-    """Plus grand palier de _ECHELLE_COMMERCIALE strictement inférieur à `v`."""
-    for p in reversed(_ECHELLE_COMMERCIALE):
-        if p < v:
-            return p
-    return None
-
-
-def _palier_strictement_superieur(v: float) -> Optional[int]:
-    """Plus petit palier de _ECHELLE_COMMERCIALE strictement supérieur à `v`."""
-    for p in _ECHELLE_COMMERCIALE:
-        if p > v:
-            return p
-    return None
-
-
-def _palier_le_plus_proche(candidates: List[int], target: float) -> int:
-    """Palier le plus proche de `target` (suppose `candidates` non vide)."""
-    return min(candidates, key=lambda p: abs(p - target))
-
-
-def _build_options(
-    bi: int,
-    bornes_intermediaires: List[int],
-    bs: int,
-    devise_str: str,
-) -> List[str]:
-    """
-    Construit la liste finale d'options budget à partir de bornes ordonnées.
-    Forme : ["Moins de bi", "bi – X1", "X1 – X2", ..., "Xn – bs", "Plus de bs",
-             "Je ne sais pas encore"].
-    """
-    options = [f"Moins de {_fmt_price(bi)} {devise_str}"]
-    bornes_complete = [bi, *bornes_intermediaires, bs]
-    for a, b in zip(bornes_complete, bornes_complete[1:]):
-        options.append(f"{_fmt_price(a)} {devise_str} – {_fmt_price(b)} {devise_str}")
-    options.append(f"Plus de {_fmt_price(bs)} {devise_str}")
-    options.append("Je ne sais pas encore")
-    return options
-
-
-def _select_best_choice(
-    min_prix: float,
-    max_prix: float,
-    min_prix_original: float,
-) -> Optional[Tuple[int, int, int, List[Tuple[int, int]]]]:
-    """
-    Sélectionne le meilleur (pas, borne_inf, borne_sup, tranches) parmi tous les
-    pas de _ECHELLE_COMMERCIALE, en suivant les priorités strictes ci-dessous.
-    Retourne None si aucun pas valide trouvé.
-
-    Priorités (par ordre de préférence) :
-      P1 : 3 tranches uniformes, borne_inf > 0 et < min_prix_original (idéal)
-      P2 : 2 tranches uniformes, borne_inf > 0 et < min_prix_original
-      P3 : 3 tranches, borne_inf == 0 et 1ère tranche [0, X] avec X <= min_prix_original
-           (la 1ère sera affichée "Moins de X", sémantique préservée)
-      P4 : 4 tranches uniformes, borne_inf > 0 et < min_prix_original (fallback granularité)
-      P5 : 2 tranches, borne_inf == 0 et 1ère tranche valide pour "Moins de"
-      P6 : last resort - best effort (préférer nb_tranches proche de 3, puis plus grand pas)
-
-    Au sein d'une priorité, on prend le pas le plus grand (tranches plus larges = lisibles).
-    """
-    by_prio: Dict[int, List[Tuple[int, int, int, List[Tuple[int, int]]]]] = {
-        1: [], 2: [], 3: [], 4: [], 5: [], 6: [],
-    }
-
-    for pas in _ECHELLE_COMMERCIALE:
-        bi, bs, tr = _compute_bornes_tranches(min_prix, max_prix, pas)
-        n = len(tr)
-        bi_strict = bi > 0 and bi < min_prix_original
-        # first_b valide pour "Moins de" : la borne sup de la 1ère tranche
-        # doit rester <= min_prix_original (sinon "Moins de X" englobe la fourchette LLM).
-        # Exception : si min_prix_original == 0, on accepte toujours.
-        fb_ok = (n > 0 and tr[0][1] <= min_prix_original) or min_prix_original == 0
-
-        if n == 3 and bi_strict:
-            by_prio[1].append((pas, bi, bs, tr))
-        elif n == 2 and bi_strict:
-            by_prio[2].append((pas, bi, bs, tr))
-        elif n == 3 and bi == 0 and fb_ok:
-            by_prio[3].append((pas, bi, bs, tr))
-        elif n == 4 and bi_strict:
-            by_prio[4].append((pas, bi, bs, tr))
-        elif n == 2 and bi == 0 and fb_ok:
-            by_prio[5].append((pas, bi, bs, tr))
-        elif 2 <= n <= 5:
-            by_prio[6].append((pas, bi, bs, tr))
-
-    # Priorités strictes : on prend le plus grand pas
-    for prio in (1, 2, 3, 4, 5):
-        if by_prio[prio]:
-            return max(by_prio[prio], key=lambda c: c[0])
-
-    # Last resort : préférer nb_tranches proche de 3, puis plus grand pas
-    if by_prio[6]:
-        return min(by_prio[6], key=lambda c: (abs(len(c[3]) - 3), -c[0]))
-
-    return None
-
-
-def _fallback_budget_borne_directe(
-    min_prix: float,
-    max_prix: float,
-    devise_str: str,
-) -> List[str]:
-    """
-    Fallback : aucun pas commercial uniforme ne permet l'optimal attendu
-    (2-3 tranches centrales + "Moins de X < min_prix" + "Plus de Y > max_prix").
-
-    Construit les choix directement à partir des bornes min/max de la fourchette LLM,
-    arrondies à des paliers commerciaux. Le nombre de tranches centrales (2 ou 3)
-    est choisi dynamiquement selon l'espace entre `bi` et `bs` :
-      - 3 tranches si on trouve 2 paliers intermédiaires distincts qui divisent
-        harmonieusement l'écart (cible : 1/3 et 2/3)
-      - 2 tranches sinon
-
-    Garanties :
-      - "Moins de bi" avec bi < min_prix (strict)
-      - "Plus de bs" avec bs > max_prix (strict)
-      - Aucune tranche ne commence à 0
-    """
-    bi = _palier_strictement_inferieur(min_prix) or max(1, int(min_prix * 0.5))
-    bs = _palier_strictement_superieur(max_prix) or int(max_prix * 1.5)
-
-    candidates_between = [p for p in _ECHELLE_COMMERCIALE if bi < p < bs]
-    ecart = bs - bi
-
-    # Tentative 3 tranches : 2 paliers intermédiaires aux tiers (1/3 et 2/3 de l'écart)
-    if len(candidates_between) >= 2:
-        bm1 = _palier_le_plus_proche(candidates_between, bi + ecart / 3.0)
-        bm2 = _palier_le_plus_proche(candidates_between, bi + 2.0 * ecart / 3.0)
-        if bm1 < bm2:
-            return _build_options(bi, [bm1, bm2], bs, devise_str)
-
-    # Sinon 2 tranches : 1 palier intermédiaire proche de la moyenne
-    moyenne = (min_prix + max_prix) / 2.0
-    if candidates_between:
-        bm = _palier_le_plus_proche(candidates_between, moyenne)
-    else:
-        bm = (bi + bs) // 2
-    return _build_options(bi, [bm], bs, devise_str)
-
-
-def _is_optimal_choice(
-    borne_inf: int,
-    tranches: List[Tuple[int, int]],
-    min_prix_original: float,
-) -> bool:
-    """
-    Vérifie que le résultat de _select_best_choice respecte le contrat optimal :
-      - 2-3 tranches centrales (après éventuelle transformation borne_inf=0)
-      - "Moins de X" avec X < min_prix_original (strict, sauf si min_prix_original == 0)
-    """
-    if borne_inf > 0:
-        # Cas direct : "Moins de borne_inf" + tranches centrales
-        if borne_inf >= min_prix_original and min_prix_original > 0:
-            return False
-        nb_centrales = len(tranches)
-    elif borne_inf == 0 and tranches:
-        # Cas transformation : tranches[0]=(0,X) devient "Moins de X"
-        first_b = tranches[0][1]
-        if first_b > min_prix_original and min_prix_original > 0:
-            return False
-        nb_centrales = len(tranches) - 1
-    else:
-        return False
-    return 2 <= nb_centrales <= 3
 
 
 def _normalize_devise(devise: Optional[str]) -> str:
@@ -1394,10 +1235,6 @@ def _generate_budget_choices(
     if min_prix > max_prix:
         min_prix, max_prix = max_prix, min_prix
 
-    # Mémorisé avant tout élargissement : sert plus bas à garantir que
-    # "Moins de X" reste strictement inférieur à la borne basse réelle.
-    min_prix_original = min_prix
-
     moyenne = (min_prix + max_prix) / 2.0
     largeur = max(max_prix - min_prix, 1.0)
 
@@ -1409,33 +1246,50 @@ def _generate_budget_choices(
         min_prix = max(0.0, moyenne - largeur / 2.0)
         max_prix = moyenne + largeur / 2.0
 
+    # Pas cible : max entre "largeur/2" et "_RATIO_PAS_MIN du prix moyen".
+    # → vise 3 tranches centrales tout en garantissant un pas commercial
+    # sensé même quand la fourchette est resserrée par rapport au prix.
+    target_step = max(largeur / 2.0, moyenne * _RATIO_PAS_MIN)
+    pas = _snap_to_scale(target_step, _ECHELLE_COMMERCIALE)
+
+    borne_inf, borne_sup, tranches = _compute_bornes_tranches(min_prix, max_prix, pas)
+
+    # Rebalancing pour rester dans [2, 3] tranches centrales
+    while len(tranches) > 3:
+        next_pas = _next_in_scale(pas, _ECHELLE_COMMERCIALE)
+        if next_pas is None:
+            break
+        pas = next_pas
+        borne_inf, borne_sup, tranches = _compute_bornes_tranches(min_prix, max_prix, pas)
+
+    while len(tranches) < 2:
+        prev_pas = _previous_in_scale(pas, _ECHELLE_COMMERCIALE)
+        if prev_pas is None:
+            break
+        pas = prev_pas
+        borne_inf, borne_sup, tranches = _compute_bornes_tranches(min_prix, max_prix, pas)
+
     devise_str = _normalize_devise(devise)
 
-    # Sélection du meilleur pas commercial via les priorités strictes.
-    choice = _select_best_choice(min_prix, max_prix, min_prix_original)
+    options: List[str] = []
+    # Si borne_inf == 0 et qu'on a au moins 3 tranches, la 1ère tranche [0, X] est
+    # sémantiquement équivalente à "Moins de X" — on l'affiche ainsi pour éviter
+    # le faux signal d'un prix possible à 0 (cas borne_basse > 0 mais < 1 pas).
+    if borne_inf == 0 and len(tranches) >= 3:
+        _, first_b = tranches[0]
+        options.append(f"Moins de {_fmt_price(first_b)} {devise_str}")
+        tranches = tranches[1:]
+    elif borne_inf > 0:
+        options.append(f"Moins de {_fmt_price(borne_inf)} {devise_str}")
+    for a, b in tranches:
+        options.append(f"{_fmt_price(a)} {devise_str} – {_fmt_price(b)} {devise_str}")
+    options.append(f"Plus de {_fmt_price(borne_sup)} {devise_str}")
+    options.append("Je ne sais pas encore")
 
-    # Si aucun candidat OU si le candidat ne respecte pas le contrat optimal
-    # (2-3 tranches centrales + "Moins de X < min_prix"), on bascule sur le fallback
-    # basé directement sur les bornes min/max de la fourchette LLM originale.
-    if choice is None or not _is_optimal_choice(choice[1], choice[3], min_prix_original):
-        return _fallback_budget_borne_directe(min_prix_original, max_prix, devise_str)
-
-    _, borne_inf, borne_sup, tranches = choice
-
-    # Construction des bornes pour _build_options.
-    # Si borne_inf == 0, on transforme la 1ère tranche [0, X] en "Moins de X" :
-    # bi = X (= tranches[0][1]) et on consomme la 1ère tranche.
-    # Sinon, bi = borne_inf et toutes les tranches restent centrales.
-    if borne_inf == 0 and tranches:
-        bi = tranches[0][1]
-        bornes_intermediaires = [t[0] for t in tranches[2:]]
-    else:
-        bi = borne_inf
-        bornes_intermediaires = [t[0] for t in tranches[1:]]
-    return _build_options(bi, bornes_intermediaires, borne_sup, devise_str)
+    return options
 
 
-async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie: str, nom_categorie: str, texte_prompt: Optional[str] = None, model: Optional[str] = None , id_reponse_q1: Optional[str] = None, nom_reponse_q1: Optional[str] = None, source: Optional[str] = "ia") -> Dict[str, Any]:
+async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie: str, nom_categorie: str, texte_prompt: Optional[str] = None, model: Optional[str] = None , id_reponse_q1: Optional[str] = None, nom_reponse_q1: Optional[str] = None) -> Dict[str, Any]:
     """
     Version 2 du questionnaire prix : remplace la recherche RAG par le matching
     via l'endpoint BO matching_prix.php (correspondance équivalences × _cppi).
@@ -1486,7 +1340,6 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
     write_log(tracking_file, f"model: {model or default_model_name} (model_pardefaut={model_pardefaut})")
     write_log(tracking_file, "")
     write_log(tracking_file, f"--- EQUIVALENCES ({len(equivalences)}) ---")
-    write_log(tracking_file, f"source: {source}")
     write_log(tracking_file, f"id_reponse_q1: {id_reponse_q1}")
     write_log(tracking_file, f"nom_reponse_q1: {nom_reponse_q1}")
     write_log(tracking_file, json.dumps(equivalences, ensure_ascii=False, indent=2))
@@ -1501,7 +1354,7 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
         matching_response, prompt_config = await asyncio.gather(
             api_client.post(
                 "matching_prix", "matching", "get",
-                {"id_categorie": id_categorie, "equivalences": equivalences, "id_reponse_q1": id_reponse_q1, "source": source}
+                {"id_categorie": id_categorie, "equivalences": equivalences, "id_reponse_q1": id_reponse_q1}
             ),
             get_prompt_cached(prompt_id)
         )
@@ -1667,7 +1520,7 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
 
         final_prompt = final_prompt.replace("{requete_rag}", requete_rag_value)
         final_prompt = final_prompt.replace("{nom_categorie}", nom_categorie)
-        final_prompt = final_prompt.replace("{nom_reponse_q1}", nom_reponse_q1 or "")
+        final_prompt = final_prompt.replace("{nom_reponse_q1}", nom_reponse_q1)
 
         # `model_pardefaut` / `default_model_name` définis en tête de fonction.
         # Routage : si `model` fourni → détection par préfixe ; sinon → `model_pardefaut`.
@@ -1719,7 +1572,7 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
             final_prompt = final_prompt.replace("{chunks}", all_chunks_text)
             final_prompt = final_prompt.replace("{requete_rag}", requete_rag_value)
             final_prompt = final_prompt.replace("{nom_categorie}", nom_categorie)
-            final_prompt = final_prompt.replace("{nom_reponse_q1}", nom_reponse_q1 or "")
+            final_prompt = final_prompt.replace("{nom_reponse_q1}", nom_reponse_q1)
 
 
             logger.warning(
@@ -1900,8 +1753,7 @@ async def _process_single_category(
     id_categorie: str,
     id_prompt: Optional[str],
     index: int,
-    total: int,
-    source: Optional[str] = "ia"
+    total: int
 ) -> Dict[str, Any]:
     """
     Traite une seule catégorie sous le contrôle du sémaphore.
@@ -1921,8 +1773,7 @@ async def _process_single_category(
         try:
             result = await run_identification(
                 id_categorie=id_categorie,
-                id_prompt=id_prompt,
-                source=source
+                id_prompt=id_prompt
             )
             result["id_categorie"] = id_categorie
             logger.info(f"[LOT {index + 1}/{total}] Fin catégorie {id_categorie}: success={result.get('success')}")
@@ -1980,8 +1831,7 @@ async def run_identification_lot(
             id_categorie=str(cat.get("id_categorie", "")),
             id_prompt=cat.get("id_prompt"),
             index=i,
-            total=total,
-            source=cat.get("source", "ia")
+            total=total
         )
         for i, cat in enumerate(categories)
     ]

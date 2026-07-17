@@ -5,10 +5,6 @@ import { CoherenceProvider } from './CoherenceProvider';
 import { useCoherenceVerdict, useCoherenceSummary } from './hooks';
 import { mkReplica } from './__fixtures__/mocks';
 
-// Constants mirrored from CoherenceProvider to compute timing expectations
-const EVAL_INTERVAL_MS = 5000;
-const HYSTERESIS_MS = 4000;
-
 const mkWrapper = ({ token = 'tok', replicas = {}, seed } = {}) => {
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
@@ -30,22 +26,14 @@ const mkWrapper = ({ token = 'tok', replicas = {}, seed } = {}) => {
 };
 
 describe('CoherenceProvider', () => {
-  it('runs replicas_vs_max_slots and exposes the violation', async () => {
-    vi.useFakeTimers();
+  it('runs replicas_vs_max_slots and exposes the violation', () => {
     const wrapper = mkWrapper({
       replicas: { r1: mkReplica('r1') },
       seed: { capacity: { max_global_jobs: 3, running_jobs: 0 } },
     });
     const { result } = renderHook(() => useCoherenceVerdict('replicas_vs_max_slots'), { wrapper });
-    // Violation not shown yet (hysteresis not met at mount)
-    expect(result.current).toEqual([]);
-    // Advance past first eval tick + hysteresis
-    await act(async () => {
-      vi.advanceTimersByTime(EVAL_INTERVAL_MS + HYSTERESIS_MS + 100);
-    });
     expect(result.current).toHaveLength(1);
     expect(result.current[0].data.phantom).toBe(2);
-    vi.useRealTimers();
   });
 
   it('returns [] when sources have no issues', () => {
@@ -57,8 +45,7 @@ describe('CoherenceProvider', () => {
     expect(result.current).toEqual([]);
   });
 
-  it('ignored rule returns [] even if violated', async () => {
-    vi.useFakeTimers();
+  it('ignored rule returns [] even if violated', () => {
     const wrapper = mkWrapper({
       replicas: { r1: mkReplica('r1') },
       seed: { capacity: { max_global_jobs: 3, running_jobs: 0 } },
@@ -71,10 +58,7 @@ describe('CoherenceProvider', () => {
       },
       { wrapper },
     );
-    // Advance past hysteresis so violation is exposed
-    await act(async () => {
-      vi.advanceTimersByTime(EVAL_INTERVAL_MS + HYSTERESIS_MS + 100);
-    });
+    // Initially violated
     expect(result.current.verdict).toHaveLength(1);
     // Ignore it
     act(() => result.current.summary.setIgnored('replicas_vs_max_slots', true));
@@ -82,7 +66,6 @@ describe('CoherenceProvider', () => {
     // Un-ignore
     act(() => result.current.summary.setIgnored('replicas_vs_max_slots', false));
     expect(result.current.verdict).toHaveLength(1);
-    vi.useRealTimers();
   });
 
   it('renders children without crashing', () => {
@@ -91,55 +74,15 @@ describe('CoherenceProvider', () => {
     expect(container.textContent).toContain('hello');
   });
 
-  it('summary counts violations by severity excluding ignored', async () => {
-    vi.useFakeTimers();
+  it('summary counts violations by severity excluding ignored', () => {
     const wrapper = mkWrapper({
       replicas: { r1: mkReplica('r1') },
       seed: { capacity: { max_global_jobs: 3, running_jobs: 0 } },
     });
     const { result } = renderHook(() => useCoherenceSummary(), { wrapper });
-    // Advance past hysteresis
-    await act(async () => {
-      vi.advanceTimersByTime(EVAL_INTERVAL_MS + HYSTERESIS_MS + 100);
-    });
     expect(result.current.byStatus.warning).toBe(1);
     act(() => result.current.setIgnored('replicas_vs_max_slots', true));
     expect(result.current.byStatus.warning).toBe(0);
-    vi.useRealTimers();
-  });
-
-  it('ne fait pas remonter une violation transitoire (< hysteresis)', async () => {
-    vi.useFakeTimers();
-    const qc = new QueryClient({
-      defaultOptions: { queries: { retry: false, staleTime: Infinity } },
-    });
-    // running_count_parity: capacity.running_jobs=5 vs 2 jobs => diff=3 > 1 => violation
-    qc.setQueryData(['capacity'], { running_jobs: 5 });
-    qc.setQueryData(['jobs'], [
-      { id: 'a', status: 'running' },
-      { id: 'b', status: 'running' },
-    ]);
-
-    const Wrapper = ({ children }) => (
-      <QueryClientProvider client={qc}>
-        <CoherenceProvider token="tok" replicas={{}}>
-          {children}
-        </CoherenceProvider>
-      </QueryClientProvider>
-    );
-
-    const { result } = renderHook(() => useCoherenceVerdict('running_count_parity'), { wrapper: Wrapper });
-
-    // At mount: violation not shown yet (hysteresis not met)
-    expect(result.current).toEqual([]);
-
-    // Advance past first eval + hysteresis => violation now persisted
-    await act(async () => {
-      vi.advanceTimersByTime(EVAL_INTERVAL_MS + HYSTERESIS_MS + 100);
-    });
-    expect(result.current).toHaveLength(1);
-
-    vi.useRealTimers();
   });
 });
 
@@ -155,7 +98,7 @@ describe('CoherenceProvider autoRetry', () => {
       { id: 'a', status: 'running' },
       { id: 'b', status: 'running' },
     ]);
-    // 5 vs 2 => running_count_parity violates (diff=3 > 1 tolerance)
+    // 5 vs 2 → running_count_parity violates (diff=3 > 1 tolerance)
 
     const Wrapper = ({ children }) => (
       <QueryClientProvider client={qc}>
@@ -169,18 +112,11 @@ describe('CoherenceProvider autoRetry', () => {
 
     // At mount: no invalidate yet
     expect(spy).not.toHaveBeenCalled();
-
-    // First: advance past hysteresis so violation becomes visible (triggers auto-retry scheduling)
-    await act(async () => {
-      vi.advanceTimersByTime(EVAL_INTERVAL_MS + HYSTERESIS_MS + 100);
-    });
-
-    // Then advance delayMs (3000ms) for the retry timer to fire
+    // Fast-forward 3000ms (delayMs)
     await act(async () => {
       vi.advanceTimersByTime(3000);
     });
-
-    // Should have called invalidate for capacity AND jobs
+    // Should have called invalidate for capacity AND jobs (running_count_parity.autoRetry.invalidate)
     const calledKeys = spy.mock.calls.map((c) => c[0].queryKey);
     expect(calledKeys).toContainEqual(['capacity']);
     expect(calledKeys).toContainEqual(['jobs']);
@@ -205,9 +141,7 @@ describe('CoherenceProvider autoRetry', () => {
     );
     const { result } = renderHook(() => useCoherenceSummary(), { wrapper: Wrapper });
 
-    // Advance past hysteresis first
-    await act(async () => { vi.advanceTimersByTime(EVAL_INTERVAL_MS + HYSTERESIS_MS + 100); });
-    // Now advance enough for 3 retry cycles (only 2 should run, maxAttempts=2)
+    // Advance enough for 3 tick cycles (only 2 should run, maxAttempts=2)
     await act(async () => { vi.advanceTimersByTime(3000); });
     await act(async () => { vi.advanceTimersByTime(3000); });
     await act(async () => { vi.advanceTimersByTime(3000); });

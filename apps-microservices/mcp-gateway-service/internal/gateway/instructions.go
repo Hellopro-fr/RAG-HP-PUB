@@ -8,9 +8,6 @@ import (
 
 	md "github.com/JohannesKaufmann/html-to-markdown"
 	"github.com/JohannesKaufmann/html-to-markdown/plugin"
-
-	"mcp-gateway/internal/db"
-	"mcp-gateway/internal/mcp"
 )
 
 // htmlTagPattern detects whether a body contains HTML markup. If it doesn't,
@@ -28,13 +25,6 @@ type InstructionView struct {
 	ID    string
 	Title string
 	Body  string
-	// Kind mirrors db.LLMInstructionRow.Kind ("general" | "per_server").
-	// Empty is treated as "general" so pre-upgrade callers keep rendering
-	// everywhere. ServerIDs carries the per_server row's linked servers —
-	// used only by DecorateToolsWithInstructions to route the row to the
-	// owning server's tools.
-	Kind      string
-	ServerIDs []string
 }
 
 // maxInstructionsBytes caps the composed instructions string so a misconfigured
@@ -101,24 +91,6 @@ func HTMLToMarkdown(html string) string {
 // truncation so operators can identify which token / client is generating
 // oversized output.
 func ComposeInstructions(instructions []InstructionView, scopeLabel string) string {
-	out := composeBlocks(instructions)
-	if out == "" {
-		return ""
-	}
-
-	if len(out) > maxInstructionsBytes {
-		log.Printf("[gateway] llm instructions truncated for scope=%q: %d → %d bytes",
-			scopeLabel, len(out), maxInstructionsBytes)
-		out = truncateWithMarker(out, maxInstructionsBytes)
-	}
-
-	return out
-}
-
-// composeBlocks renders instructions as "## <title>\n<body-as-markdown>"
-// blocks joined by "\n\n", without any size cap. Shared by the initialize
-// composer (8 KiB cap) and the tool-description decorator (per-tool cap).
-func composeBlocks(instructions []InstructionView) string {
 	if len(instructions) == 0 {
 		return ""
 	}
@@ -143,81 +115,19 @@ func composeBlocks(instructions []InstructionView) string {
 		return ""
 	}
 
-	return strings.TrimRightFunc(strings.Join(blocks, "\n\n"), func(r rune) bool {
+	out := strings.TrimRightFunc(strings.Join(blocks, "\n\n"), func(r rune) bool {
 		return r == ' ' || r == '\n' || r == '\t' || r == '\r'
 	})
-}
 
-// truncateWithMarker cuts s to at most max bytes, ending with truncationMarker.
-func truncateWithMarker(s string, max int) string {
-	cut := max - len(truncationMarker)
-	if cut < 0 {
-		cut = 0
-	}
-	return s[:cut] + truncationMarker
-}
-
-// maxToolInstructionBytes caps the instruction suffix appended to a single
-// tool description. Tool descriptions are sent for every tool on tools/list,
-// so the budget is tighter than the initialize field's 8 KiB.
-const maxToolInstructionBytes = 4096
-
-// toolInstructionsHeader visually separates the original tool description
-// from the appended instruction blocks.
-const toolInstructionsHeader = "\n\n---\nServer instructions (apply when using this tool):\n\n"
-
-// DecorateToolsWithInstructions appends instruction blocks to tool
-// descriptions for MCP hosts that ignore the initialize `instructions`
-// field. Routing: "general" rows (Kind empty or "general") are appended to
-// EVERY tool; "per_server" rows only to tools owned by one of the row's
-// linked servers, resolved through toolServerIDs (prefixed tool name →
-// server ID). Tools absent from toolServerIDs get only general rows.
-// The appended suffix is capped at maxToolInstructionBytes per tool.
-// The input slice is modified in place and returned.
-func DecorateToolsWithInstructions(tools []mcp.Tool, instructions []InstructionView, toolServerIDs map[string]string, scopeLabel string) []mcp.Tool {
-	if len(tools) == 0 || len(instructions) == 0 {
-		return tools
-	}
-
-	var general []InstructionView
-	perServer := make(map[string][]InstructionView)
-	for _, ins := range instructions {
-		if ins.Kind == db.LLMInstructionRowKindPerServer {
-			for _, sid := range ins.ServerIDs {
-				perServer[sid] = append(perServer[sid], ins)
-			}
-			continue
+	if len(out) > maxInstructionsBytes {
+		log.Printf("[gateway] llm instructions truncated for scope=%q: %d → %d bytes",
+			scopeLabel, len(out), maxInstructionsBytes)
+		cut := maxInstructionsBytes - len(truncationMarker)
+		if cut < 0 {
+			cut = 0
 		}
-		general = append(general, ins)
+		out = out[:cut] + truncationMarker
 	}
 
-	// Pre-compose each distinct suffix once — the general block is shared by
-	// every tool and per-server blocks by every tool of that server.
-	suffixCache := make(map[string]string)
-	suffixFor := func(serverID string) string {
-		if s, ok := suffixCache[serverID]; ok {
-			return s
-		}
-		matching := append(append([]InstructionView{}, general...), perServer[serverID]...)
-		composed := composeBlocks(matching)
-		var suffix string
-		if composed != "" {
-			suffix = toolInstructionsHeader + composed
-			if len(suffix) > maxToolInstructionBytes {
-				log.Printf("[gateway] tool-description instructions truncated for scope=%q server=%q: %d → %d bytes",
-					scopeLabel, serverID, len(suffix), maxToolInstructionBytes)
-				suffix = truncateWithMarker(suffix, maxToolInstructionBytes)
-			}
-		}
-		suffixCache[serverID] = suffix
-		return suffix
-	}
-
-	for i := range tools {
-		// Unknown tools (empty serverID) share the "" cache slot → general rows only.
-		if suffix := suffixFor(toolServerIDs[tools[i].Name]); suffix != "" {
-			tools[i].Description += suffix
-		}
-	}
-	return tools
+	return out
 }

@@ -215,53 +215,5 @@ def test_load_labels_reads_json(tmp_path, monkeypatch):
     assert labels == {0: "Redis Cache", 1: "DLQ Archiver"}
 
 
-def test_main_survives_html_viz_node_cap(tmp_path, monkeypatch):
-    """The retired HTML export must never break the scoped rebuild.
-
-    Upstream graphify.export.to_html raises ValueError past 5000 nodes; the
-    real graph is beyond that for good (HTML viz retired). A rebuild that has
-    already written graph.json/GRAPH_REPORT.md must exit 0, not crash — the
-    crash also fails the CI auto-rebuild job before its commit step.
-    """
-    import graphify.export as gexport
-
-    fake_root = tmp_path / "repo"
-    (fake_root / "libs").mkdir(parents=True)
-    (fake_root / "libs" / "mod.py").write_text("def f():\n    return 1\n")
-
-    graph_dir = tmp_path / "graphify-out"
-    graph_dir.mkdir()
-    graph_json = graph_dir / "graph.json"
-    graph_json.write_text(
-        json.dumps(
-            {
-                "nodes": [{"id": "mod_f", "source_file": "libs/mod.py"}],
-                "links": [],
-            }
-        ),
-        encoding="utf-8",
-    )
-
-    monkeypatch.setattr(rebuild, "REPO_ROOT", fake_root)
-    monkeypatch.setattr(rebuild, "GRAPH_DIR", graph_dir)
-    monkeypatch.setattr(rebuild, "GRAPH_JSON", graph_json)
-    monkeypatch.setattr(rebuild, "MANIFEST_JSON", graph_dir / "manifest.json")
-    monkeypatch.setattr(rebuild, "LABELS_JSON", graph_dir / "labels.json")
-    monkeypatch.setattr(rebuild, "REPORT_MD", graph_dir / "GRAPH_REPORT.md")
-    monkeypatch.setattr(rebuild, "GRAPH_HTML", graph_dir / "graph.html", raising=False)
-    monkeypatch.setattr(rebuild, "NEEDS_UPDATE_FLAG", graph_dir / ".needs_update")
-    monkeypatch.setattr(rebuild, "sys", type("S", (), {"argv": ["prog", "libs/mod.py"]}))
-
-    def _cap_blown(*args, **kwargs):
-        raise ValueError("Graph has 7446 nodes - too large for HTML viz.")
-
-    monkeypatch.setattr(gexport, "to_html", _cap_blown)
-
-    assert rebuild.main() == 0
-    assert (graph_dir / "GRAPH_REPORT.md").exists()
-    rebuilt = json.loads(graph_json.read_text(encoding="utf-8"))
-    assert rebuilt.get("nodes")
-
-
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))

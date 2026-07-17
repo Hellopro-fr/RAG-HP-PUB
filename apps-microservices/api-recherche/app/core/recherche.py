@@ -70,10 +70,6 @@ class LLMClientFactory:
                 deepseek = DeepSeek(config={"api_key": settings.DEEPSEEK_API_KEY})
                 deepseek.set_temperature(temperature)
                 return deepseek
-            elif model_name == "deepseek-v4-pro":
-                deepseek = DeepSeek(config={"api_key": settings.DEEPSEEK_API_KEY, "model": model_name})
-                deepseek.set_temperature(temperature)
-                return deepseek
             else:
                 return LLMClientFactory.get_openai_client(settings.OPENAI_API_KEY)
         else:  # OpenRouter
@@ -88,7 +84,7 @@ class DeepSeek:
         config = config or {}
         self.API_KEY = config.get("api_key", settings.DEEPSEEK_API_KEY)
         self.BASE_URL = "https://api.deepseek.com"
-        self.MODEL = config.get("model", "deepseek-chat")
+        self.MODEL = "deepseek-chat"
         self.TEMPERATURE = 0.4
         self.client = OpenAI(api_key=self.API_KEY, base_url=self.BASE_URL)
 

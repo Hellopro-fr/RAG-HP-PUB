@@ -11,6 +11,6 @@ googleapis-common-protos
 pydantic
 jinja2
 aio_pika
-transformers==5.11.0
+vllm
 prometheus-client
 waitress

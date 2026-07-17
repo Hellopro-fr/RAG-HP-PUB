@@ -303,13 +303,6 @@ type OAuth2Client struct {
 	ZohoFilterMode    string          `gorm:"type:varchar(16);not null;default:'none'" json:"zoho_filter_mode"`
 	ZohoAllowedEmails json.RawMessage `gorm:"type:json" json:"zoho_allowed_emails,omitempty"`
 
-	// InjectInstructionsIntoTools switches instruction delivery for MCP hosts
-	// that ignore the spec's initialize `instructions` field (claude.ai web).
-	// When true, the gateway appends the client's instruction rows to the
-	// matching tool descriptions in tools/list AND omits the initialize
-	// `instructions` field, so hosts that honor both never see the text twice.
-	InjectInstructionsIntoTools bool `gorm:"not null;default:false" json:"inject_instructions_into_tools"`
-
 	// Associations
 	Servers      []OAuth2ClientServer      `gorm:"foreignKey:ClientID;constraint:OnDelete:CASCADE" json:"servers,omitempty"`
 	Tools        []OAuth2ClientTool        `gorm:"foreignKey:ClientID;constraint:OnDelete:CASCADE" json:"tools,omitempty"`

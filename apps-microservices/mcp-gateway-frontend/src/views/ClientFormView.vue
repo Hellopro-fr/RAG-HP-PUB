@@ -194,21 +194,6 @@
             v-model="form.instruction_ids"
             :server-ids="selectedServerIdsForPicker"
           />
-          <label class="mt-4 flex items-start gap-2 cursor-pointer select-none">
-            <input
-              v-model="form.inject_instructions_into_tools"
-              type="checkbox"
-              class="mt-0.5 h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-primary-600 focus:ring-primary-500"
-            />
-            <span class="text-sm text-gray-700 dark:text-gray-300">
-              Injecter les instructions dans les descriptions d'outils
-              <span class="block text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                Pour les clients MCP qui ignorent le champ <code>instructions</code> du handshake
-                (ex&nbsp;: claude.ai web). Les instructions sont ajoutées aux descriptions des outils
-                concernés et retirées de la réponse <code>initialize</code> pour éviter le doublon.
-              </span>
-            </span>
-          </label>
         </div>
 
         <!-- Section 3: Acc\u00e8s Leexi (only when a Leexi server is selected) -->
@@ -511,8 +496,7 @@ const form = reactive({
   ringover_filter: { mode: 'none' } as RingoverFilter,
   bdd_filter: { used_table_ids: [] } as BDDFilter,
   zoho_filter: { mode: 'none' } as ZohoFilter,
-  instruction_ids: [] as string[],
-  inject_instructions_into_tools: false
+  instruction_ids: [] as string[]
 })
 
 const selectedServerIdsForPicker = computed(() => dragDrop.getServerIds())
@@ -603,10 +587,7 @@ const zohoFilterSummary = computed(() => {
 
 onMounted(async () => {
   try {
-    // include_all=true: non-admins must see every active server in the
-    // scope picker, otherwise they cannot grant an OAuth2 client access
-    // to a server they did not personally create.
-    await serversStore.fetchServers({ include_all: true })
+    await serversStore.fetchServers()
   } catch (err) {
     console.error('[ClientFormView] Failed to fetch servers:', err)
   }
@@ -640,7 +621,6 @@ onMounted(async () => {
       if (client.instruction_ids) {
         form.instruction_ids = [...client.instruction_ids]
       }
-      form.inject_instructions_into_tools = client.inject_instructions_into_tools === true
       dragDrop.initWithSelection(
         serversStore.servers,
         client.server_ids,
@@ -690,7 +670,6 @@ async function handleSubmit() {
       server_ids: serverIds,
       server_tools: serverTools.length ? serverTools : undefined,
       instruction_ids: form.instruction_ids.length ? [...form.instruction_ids] : undefined,
-      inject_instructions_into_tools: form.inject_instructions_into_tools,
       access_token_ttl: form.access_token_ttl,
       expires_at: expirationType.value === 'custom' && form.expires_at
         ? new Date(form.expires_at).toISOString()

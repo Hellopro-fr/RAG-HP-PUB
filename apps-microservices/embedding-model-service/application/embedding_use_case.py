@@ -16,7 +16,6 @@ import torch
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from transformers import AutoTokenizer
 from common_utils.metrics.prometheus import measure_processing_time
-from application.chunking import chunk_by_token_window, needs_token_window
 
 TRITON_URL = os.getenv("TRITON_URL", "localhost:8001")
 MODEL_NAME = "camembert-embedding"
@@ -535,25 +534,6 @@ class EmbeddingUseCase:
         """
         if not text:
             return []
-
-        # Garde anti-deadline : RecursiveCharacterTextSplitter avec une length_function
-        # basée sur le tokenizer appelle encode() UNE FOIS PAR CARACTÈRE quand le texte
-        # contient un long segment sans séparateur (blob base64, JS minifié, bruit OCR).
-        # Sur un payload de plusieurs Mo cela dépasse le deadline gRPC -> DEADLINE_EXCEEDED
-        # -> DLQ. Ces payloads passent par un découpage en fenêtres de tokens (un seul encode).
-        if needs_token_window(text):
-            logging.warning(
-                "ChunkText: payload volumineux/sans séparateur (len=%d chars) — "
-                "bascule sur découpage par fenêtre de tokens.",
-                len(text),
-            )
-            return chunk_by_token_window(
-                lambda t: self.tokenizer_pre.encode(t, add_special_tokens=False),
-                lambda ids: self.tokenizer_pre.decode(ids, skip_special_tokens=True),
-                text,
-                chunk_size,
-                chunk_overlap,
-            )
 
         # La fonction de longueur utilise le tokenizer interne au service.
         def hf_length_function(text_to_count: str) -> int:

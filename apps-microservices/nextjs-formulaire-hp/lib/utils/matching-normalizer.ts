@@ -25,45 +25,6 @@ const PLACEHOLDER_IMAGE = '/images/product-placeholder.jpg';
 /** Placeholder pour le nom du fournisseur */
 const PLACEHOLDER_SUPPLIER = 'Fournisseur';
 
-/**
- * Fabrique un Supplier "d'affichage" avec des valeurs neutres par défaut.
- * Centralise la forme du type Supplier pour les usages hors matching
- * (ex. fond d'aperçu TransparenceTableBackground) sans dupliquer tous les
- * champs à la main.
- */
-export function makeDisplaySupplier(opts: {
-  id: string;
-  productName: string;
-  image: string;
-  specs?: ProductSpec[];
-  supplierName?: string;
-  isCertified?: boolean;
-}): Supplier {
-  const supplierName = opts.supplierName ?? PLACEHOLDER_SUPPLIER;
-  const image = opts.image || PLACEHOLDER_IMAGE;
-  return {
-    id: opts.id,
-    productName: opts.productName,
-    supplierName,
-    rating: 0,
-    distance: 0,
-    matchScore: 0,
-    image,
-    images: [image],
-    isRecommended: true,
-    isCertified: opts.isCertified ?? false,
-    matchGaps: [],
-    description: '',
-    specs: opts.specs ?? [],
-    supplier: {
-      name: supplierName,
-      description: '',
-      location: '',
-      responseTime: '',
-    },
-  };
-}
-
 // =============================================================================
 // HELPERS
 // =============================================================================
@@ -193,7 +154,7 @@ function getExpectedValue(
  * Construit les specs d'un produit à partir des critères utilisateur
  * Affiche TOUS les critères demandés, qu'ils soient présents ou non sur le produit
  */
-export function buildProductSpecs(
+function buildProductSpecs(
   matchingCharacteristics: MatchingCharacteristic[],
   characteristicsMap: CharacteristicsMap,
   equivalences: ConsolidatedCharacteristic[]

@@ -9,7 +9,6 @@ from fastapi.responses import JSONResponse
 
 from app.router.crawler import router as CrawlerRouter
 from app.router.migration import router as MigrationRouter  # TODO: Remove after migration complete
-from app.router.admin import router as AdminRouter
 from app.core.crawler_manager import crawler_manager, CRAWL_RUNNING_COUNT_KEY, CRAWL_JOB_PREFIX
 from common_utils.redis.cache_service import init_redis_pool, close_redis_pool
 from app.core.config import settings
@@ -35,20 +34,15 @@ logging.config.dictConfig({
             "formatter": "default",
             "stream": "ext://sys.stdout",
         },
-        "ring": {
-            "class": "app.core.log_buffer.RingBufferHandler",
-            "formatter": "default",
-        },
     },
     "root": {
         "level": "INFO",
-        "handlers": ["console", "ring"],
+        "handlers": ["console"],
     },
     "loggers": {
-        "uvicorn": {"handlers": ["console", "ring"], "level": "INFO", "propagate": False},
-        # No "ring": access lines (BO polls /status) would evict the diagnostic markers.
+        "uvicorn": {"handlers": ["console"], "level": "INFO", "propagate": False},
         "uvicorn.access": {"handlers": ["console"], "level": "INFO", "propagate": False},
-        "uvicorn.error": {"handlers": ["console", "ring"], "level": "INFO", "propagate": False},
+        "uvicorn.error": {"handlers": ["console"], "level": "INFO", "propagate": False},
     },
 })
 logger = logging.getLogger(__name__)
@@ -183,7 +177,6 @@ async def shutdown_event():
 # Include routers WITHOUT prefix. Nginx handles the path stripping.
 app.include_router(CrawlerRouter, tags=["Crawler"])
 app.include_router(MigrationRouter, prefix="/migration", tags=["Migration (Temporary)"])
-app.include_router(AdminRouter)
 
 @app.get("/", tags=["Health Check"])
 def read_root():

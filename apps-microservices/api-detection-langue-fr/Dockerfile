@@ -22,19 +22,6 @@ RUN python -m playwright install --with-deps chromium
 # Télécharger le navigateur Camoufox (stealth Firefox, ~200MB)
 RUN python -m camoufox fetch
 
-# Étape 3b: Installer la lib partagée (Redis pool via cache_service),
-# comme crawler-service / image-comparison-service (contexte de build = racine repo).
-# - APRÈS les couches navigateurs (~350MB) : un changement de la lib partagée
-#   n'invalide pas leur cache de build.
-# - Install ÉDITABLE obligatoire : setup.py utilise find_packages, qui exclut
-#   les sous-packages sans __init__.py (common_utils/redis) d'une install
-#   normale — le wheel n'embarquerait pas cache_service. L'éditable expose
-#   l'arborescence src réelle (même mécanisme que les 40+ autres services).
-# - /opt et non /app : le bind mount dev sur /app (docker-compose) masquerait
-#   /app/libs au runtime.
-COPY libs/common-utils /opt/libs/common-utils
-RUN pip install --no-cache-dir -e /opt/libs/common-utils
-
 # Étape 4: Copier le code source
 COPY apps-microservices/api-detection-langue-fr .
 

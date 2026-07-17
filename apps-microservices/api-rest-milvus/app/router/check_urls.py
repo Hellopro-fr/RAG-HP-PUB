@@ -75,12 +75,6 @@ class HeaderFooterReport(BaseModel):
     by_domain: Dict[str, HeaderFooterStatus]
 
 
-class FoundUrlEntry(BaseModel):
-    """Entrée d'URL trouvée avec son page_type."""
-    url: str
-    page_type: str
-
-
 class CheckUrlsResponse(BaseModel):
     """Modèle de réponse pour la vérification d'URLs."""
     status: str = "success"
@@ -95,10 +89,6 @@ class CheckUrlsResponse(BaseModel):
     statistics: Dict = Field(
         default_factory=dict,
         description="Statistiques de la vérification"
-    )
-    found_urls_by_domain: Optional[Dict[str, List[FoundUrlEntry]]] = Field(
-        default=None,
-        description="URLs trouvées par domaine avec leur page_type (hors header/footer)"
     )
 
 
@@ -140,13 +130,10 @@ async def _check_urls_batch(guard, collection: Collection, urls_to_check: List[s
 
     Retourne:
     - found_urls: Set[str] - URLs originales trouvées (hors header/footer)
-    - found_urls_page_type: Dict[str, str] - mapping URL originale → page_type
     - has_header: bool
     - has_footer: bool
     """
     found_urls: Set[str] = set()
-    found_urls_page_type: Dict[str, str] = {}
-    found_urls_exact: Dict[str, bool] = {}
     has_header = False
     has_footer = False
 
@@ -197,17 +184,6 @@ async def _check_urls_batch(guard, collection: Collection, urls_to_check: List[s
                 if page_type not in ['header', 'footer']:
                     originals = variant_to_originals.get(url_found, set())
                     found_urls.update(originals)
-                    for orig in originals:
-                        is_exact = (url_found == orig)
-                        current = found_urls_page_type.get(orig, "")
-                        current_exact = found_urls_exact.get(orig, False)
-                        # Priorite : le page_type d'un match EXACT (url_found == url demandee)
-                        # prime sur celui d'une variante (ex. /x/=fiche_produit doit gagner
-                        # sur /x=article). On (re)affecte si rien trouve, ou si on obtient un
-                        # match exact alors que la valeur courante venait d'une variante.
-                        if current == "" or (is_exact and not current_exact):
-                            found_urls_page_type[orig] = page_type
-                            found_urls_exact[orig] = is_exact
 
         except Exception as e:
             logger.error(f"Erreur lors de la requête Milvus: {e}")
@@ -215,7 +191,6 @@ async def _check_urls_batch(guard, collection: Collection, urls_to_check: List[s
 
     return {
         "found_urls": found_urls,
-        "found_urls_page_type": found_urls_page_type,
         "has_header": has_header,
         "has_footer": has_footer
     }
@@ -276,7 +251,6 @@ async def check_urls_existence(http_request: Request, request: CheckUrlsRequest)
 
     missing_urls_by_domain: Dict[str, List[str]] = {}
     header_footer_status: Dict[str, HeaderFooterStatus] = {}
-    found_urls_by_domain: Dict[str, List[FoundUrlEntry]] = {}
 
     total_urls_count = sum(len(urls) for urls in request.urls_by_domain.values())
     total_domains = len(request.urls_by_domain)
@@ -317,13 +291,6 @@ async def check_urls_existence(http_request: Request, request: CheckUrlsRequest)
                     has_header=result["has_header"],
                     has_footer=result["has_footer"]
                 )
-
-            # Agréger found_urls_page_type par domaine
-            fpt = result["found_urls_page_type"]
-            if fpt:
-                found_urls_by_domain[domain] = [
-                    FoundUrlEntry(url=u, page_type=pt) for u, pt in fpt.items()
-                ]
 
             processed_urls += len(urls)
 
@@ -366,12 +333,8 @@ async def check_urls_existence(http_request: Request, request: CheckUrlsRequest)
             by_domain=header_footer_status
         )
     
-    # Ajouter found_urls_by_domain si des URLs ont été trouvées
-    if found_urls_by_domain:
-        response_data["found_urls_by_domain"] = found_urls_by_domain
-
     logger.info(f"Vérification terminée en {elapsed_time:.2f}s - {total_found} trouvées, {total_missing} manquantes")
-
+    
     return CheckUrlsResponse(**response_data)
 
 

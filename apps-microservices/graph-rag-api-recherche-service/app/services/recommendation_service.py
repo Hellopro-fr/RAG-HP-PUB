@@ -21,7 +21,6 @@ from app.domain.models import (
 from app.infrastructure.clients import clients
 from app.infrastructure.hellopro_api_client import hellopro_api_client, ETAT_SOCIETE_MAP
 from app.infrastructure.gemini_client import gemini_client
-from app.config import settings
 
 # from app.services.unit_normalizer import unit_normalizer
 
@@ -1181,7 +1180,6 @@ class RecommendationService:
             "max_per_supplier_extended": max_per_supplier_extended,
             "score_step": score_step,
             "diversity_lambda": diversity_lambda,
-            "debug": settings.DEBUG_SCORING,
         }
 
     def _build_cypher_query(

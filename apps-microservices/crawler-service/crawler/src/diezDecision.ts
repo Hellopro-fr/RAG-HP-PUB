@@ -7,9 +7,41 @@
  * See docs/superpowers/specs/2026-04-17-limitdiez-auto-decision-design.md.
  */
 
-import { classifyFragment, isProvenDiezStrip, provenDiezOverrideEnabled, provenOverrideMinCompared } from "./diezClassify.js";
-export { classifyFragment } from "./diezClassify.js";
-export type { Classification } from "./diezClassify.js";
+export type Classification = "anchor" | "spa" | "ambiguous";
+
+/**
+ * Classify a URL fragment (the part after `#`, caller already stripped it).
+ * Pure function — no side effects, no context access.
+ *
+ * Rules applied top-to-bottom, first match wins:
+ *   1. Empty → anchor
+ *   2. Starts with `/` → spa
+ *   3. Contains `/` anywhere → spa
+ *   4. Has `&` + `=` or starts with `?` → spa
+ *   5. HTML id convention (length ≤ 50, ^[a-zA-Z][a-zA-Z_-]*$) → anchor
+ *   6. Short alphanumeric (length ≤ 20, ^[a-zA-Z0-9_-]+$) → anchor
+ *   7. Anything else → ambiguous
+ *
+ * Before matching: URL-decode (decodeURIComponent), then strip one leading `!`.
+ */
+export const classifyFragment = (fragment: string): Classification => {
+    let frag: string;
+    try {
+        frag = decodeURIComponent(fragment);
+    } catch {
+        // Malformed encoding — fall back to raw.
+        frag = fragment;
+    }
+    if (frag.startsWith("!")) frag = frag.slice(1);
+
+    if (frag.length === 0) return "anchor";
+    if (frag.startsWith("/")) return "spa";
+    if (frag.includes("/")) return "spa";
+    if ((frag.includes("&") && frag.includes("=")) || frag.startsWith("?")) return "spa";
+    if (frag.length <= 50 && /^[a-zA-Z][a-zA-Z_-]*$/.test(frag)) return "anchor";
+    if (frag.length <= 20 && /^[a-zA-Z0-9_-]+$/.test(frag)) return "anchor";
+    return "ambiguous";
+};
 
 import { context } from "./context.js";
 
@@ -81,58 +113,6 @@ const _require = createRequire(import.meta.url);
 
 const DECISION_FILE = "_diez_decision.json";
 
-interface DecisionMeta {
-    tier?: 1 | 2;
-    source?: "tier1" | "tier2" | "default";
-    evidence?: { compared: number; matches: number; mismatches: number; unusable: number };
-}
-
-// Last committed source, for getDiezDecisionMode. In-memory; the durable record is _diez_decision.json.
-let _committedSource: "tier1" | "tier2" | "default" = "tier1";
-
-// Tier-2 proof of the committed decision (evidence.compared gates the proven
-// override). In-memory mirror; restored from _diez_decision.json on resume.
-let _committedEvidence: DecisionMeta["evidence"] | null = null;
-
-// One-shot log flags — the strip gate runs on every processUrl call.
-let _overrideArmedLogged = false;
-let _overrideDisarmedLogged = false;
-
-/** The last committed decision source (restored on resume by readPersistedDecision). */
-export const getCommittedSource = (): "tier1" | "tier2" | "default" => _committedSource;
-
-/**
- * Live gate: is a content-proven (tier-2) skipDiez in force? Read by processUrl to
- * override the per-class spa-keep. Correct on resume — readPersistedDecision restores
- * context.config.skipDiez, _committedSource and _committedEvidence. The proof must
- * carry at least DIEZ_PROVEN_OVERRIDE_MIN_COMPARED comparisons (default 3 = the
- * tier-2 commit minimum, i.e. no behavior change until raised).
- */
-export const provenDiezStripActive = (): boolean => {
-    const min = provenOverrideMinCompared();
-    const compared = _committedEvidence ? _committedEvidence.compared : null;
-    const active = isProvenDiezStrip(
-        provenDiezOverrideEnabled(),
-        context.diezDecisionCommitted,
-        context.config.skipDiez,
-        _committedSource,
-        compared,
-        min,
-    );
-    if (active) {
-        if (!_overrideArmedLogged) {
-            _overrideArmedLogged = true;
-            console.log(`[diez] proven-override armed: wholesale '#' strip active (compared=${_committedEvidence?.compared ?? "?"}, matches=${_committedEvidence?.matches ?? "?"}, min=${min})`);
-        }
-    } else if (!_overrideDisarmedLogged && compared !== null && compared < min
-        && provenDiezOverrideEnabled() && context.diezDecisionCommitted
-        && context.config.skipDiez && _committedSource === "tier2") {
-        _overrideDisarmedLogged = true;
-        console.warn(`[diez] proven-override NOT armed: evidence compared=${compared} < DIEZ_PROVEN_OVERRIDE_MIN_COMPARED=${min} — per-class spa-keep stays in force`);
-    }
-    return active;
-};
-
 /**
  * Write the decision marker atomically (tmp → rename) with fsync before rename.
  * Ensures durability on power-loss / OOM-triggered restart.
@@ -140,19 +120,24 @@ export const provenDiezStripActive = (): boolean => {
 const writeDecisionFile = (
     storagePath: string,
     decision: "skipDiez" | "bypassDiez",
-    meta: DecisionMeta = {},
+    tier: 1 | 2
 ): void => {
     const c = context.diezClassification;
     const payload = {
         decision,
-        tier: meta.tier ?? 1,
-        source: meta.source ?? "tier1",
+        tier,
         committedAt: new Date().toISOString(),
-        counts: { anchor: c.anchor, spa: c.spa, ambiguous: c.ambiguous, total: c.total },
-        evidence: meta.evidence ?? null,
+        counts: {
+            anchor: c.anchor,
+            spa: c.spa,
+            ambiguous: c.ambiguous,
+            total: c.total,
+        },
     };
+
     const finalPath = path.join(storagePath, DECISION_FILE);
     const tmpPath = `${finalPath}.tmp`;
+
     fs.writeFileSync(tmpPath, JSON.stringify(payload, null, 2));
     // Open with "r+" (read-write) so fsyncSync has a writable fd on all platforms.
     const fd = fs.openSync(tmpPath, "r+");
@@ -166,22 +151,29 @@ const writeDecisionFile = (
  *
  * Idempotent: no-op when diezDecisionCommitted is already true.
  */
-export const commitSkipDiez = (storagePath: string, meta: DecisionMeta = {}): void => {
+export const commitSkipDiez = (storagePath: string): void => {
     if (context.diezDecisionCommitted) return;
+
     const c = context.diezClassification;
     context.config.skipDiez = true;
     context.diezDecisionCommitted = true;
-    _committedSource = meta.source ?? "tier1";
-    _committedEvidence = meta.evidence ?? null;
-    writeDecisionFile(storagePath, "skipDiez", { tier: meta.tier ?? 1, source: meta.source ?? "tier1", evidence: meta.evidence });
-    console.log(`[diez] Decision: skipDiez (source=${meta.source ?? "tier1"} anchor=${c.anchor} spa=${c.spa} ambiguous=${c.ambiguous} / total=${c.total})`);
+
+    writeDecisionFile(storagePath, "skipDiez", 1);
+
+    console.log(
+        `[diez] Tier 1 decision: skipDiez (anchor=${c.anchor} spa=${c.spa} ambiguous=${c.ambiguous} / total=${c.total})`
+    );
+
     // Rewrite already-queued URLs to strip '#'. Lazy require avoids ESM circular dep at load time.
     try {
         const { parseJsonFiles, getAllRequestQueues } = _require("./functions.js");
         const queueName = context.config.crawleeStorageName;
         const queues: string[] = getAllRequestQueues(queueName);
         if (Array.isArray(queues) && queues.length > 0) {
-            parseJsonFiles(queues, context.config.skipQuestionMark, true, { toKeep: context.config.toKeep, toRemove: context.config.toRemove });
+            parseJsonFiles(queues, context.config.skipQuestionMark, true, {
+                toKeep: context.config.toKeep,
+                toRemove: context.config.toRemove,
+            });
             console.log(`[diez] Rewrote ${queues.length} queued request file(s) to strip '#'.`);
         }
     } catch (e) {
@@ -195,15 +187,18 @@ export const commitSkipDiez = (storagePath: string, meta: DecisionMeta = {}): vo
  *
  * Idempotent: no-op when diezDecisionCommitted is already true.
  */
-export const commitBypassDiez = (storagePath: string, meta: DecisionMeta = {}): void => {
+export const commitBypassDiez = (storagePath: string): void => {
     if (context.diezDecisionCommitted) return;
+
     const c = context.diezClassification;
     context.config.bypassDiez = true;
     context.diezDecisionCommitted = true;
-    _committedSource = meta.source ?? "tier1";
-    _committedEvidence = meta.evidence ?? null;
-    writeDecisionFile(storagePath, "bypassDiez", { tier: meta.tier ?? 1, source: meta.source ?? "tier1", evidence: meta.evidence });
-    console.log(`[diez] Decision: bypassDiez (source=${meta.source ?? "tier1"} anchor=${c.anchor} spa=${c.spa} ambiguous=${c.ambiguous} / total=${c.total})`);
+
+    writeDecisionFile(storagePath, "bypassDiez", 1);
+
+    console.log(
+        `[diez] Tier 1 decision: bypassDiez (anchor=${c.anchor} spa=${c.spa} ambiguous=${c.ambiguous} / total=${c.total})`
+    );
 };
 
 /**
@@ -217,32 +212,18 @@ export const readPersistedDecision = (storagePath: string): boolean => {
 
     try {
         const raw = fs.readFileSync(filePath, "utf-8");
-        const payload = JSON.parse(raw) as { decision?: string; tier?: number; source?: string; evidence?: DecisionMeta["evidence"] };
-        // Restore the committed source so getDiezDecisionMode reports the true mode
-        // (tier2-*/defaulted-*) after an OOM relaunch, not the "tier1" default.
-        // Legacy files (pre-phase-2, no source field) fall back to "tier1".
-        const source: "tier1" | "tier2" | "default" =
-            payload.source === "tier2" || payload.source === "default" ? payload.source : "tier1";
-        // Restore the tier-2 proof so the proven-override min-compared gate works
-        // across resumes. Malformed/absent evidence -> null (gate stays permissive).
-        const evidence = payload.evidence && typeof payload.evidence.compared === "number"
-            ? payload.evidence
-            : null;
+        const payload = JSON.parse(raw) as { decision?: string; tier?: number };
 
         if (payload.decision === "skipDiez") {
             context.config.skipDiez = true;
             context.diezDecisionCommitted = true;
-            _committedSource = source;
-            _committedEvidence = evidence;
-            console.log(`[diez] Loaded persisted decision: skipDiez (tier ${payload.tier ?? "?"}, source ${source})`);
+            console.log(`[diez] Loaded persisted decision: skipDiez (tier ${payload.tier ?? "?"})`);
             return true;
         }
         if (payload.decision === "bypassDiez") {
             context.config.bypassDiez = true;
             context.diezDecisionCommitted = true;
-            _committedSource = source;
-            _committedEvidence = evidence;
-            console.log(`[diez] Loaded persisted decision: bypassDiez (tier ${payload.tier ?? "?"}, source ${source})`);
+            console.log(`[diez] Loaded persisted decision: bypassDiez (tier ${payload.tier ?? "?"})`);
             return true;
         }
 
@@ -273,20 +254,15 @@ export const applyCliFlagGuard = (): void => {
  * Called at crawl end, after isError is finalized.
  *
  * Returns:
- *   "escalated"            — isError === "limitDiez" (Tier 3 fired, today's email path)
- *   "tier1-skipdiez"       — Tier 1 committed skipDiez during the crawl
- *   "tier1-bypassdiez"     — Tier 1 committed bypassDiez during the crawl
- *   "tier2-skipdiez"       — Tier 2 committed skipDiez during the crawl
- *   "tier2-bypassdiez"     — Tier 2 committed bypassDiez during the crawl
- *   "defaulted-bypassdiez" — default fallback committed bypassDiez
- *   "unused"               — crawl completed without needing a decision
+ *   "escalated"       — isError === "limitDiez" (Tier 3 fired, today's email path)
+ *   "tier1-skipdiez"  — Tier 1 committed skipDiez during the crawl
+ *   "tier1-bypassdiez" — Tier 1 committed bypassDiez during the crawl
+ *   "unused"          — crawl completed without needing a tier-1 decision
  */
 export const getDiezDecisionMode = (isError: string | undefined): string => {
     if (isError === "limitDiez") return "escalated";
     if (!context.diezDecisionCommitted) return "unused";
-    const verb = context.config.skipDiez ? "skipdiez" : context.config.bypassDiez ? "bypassdiez" : "unused";
-    if (verb === "unused") return "unused";
-    if (_committedSource === "default") return "defaulted-bypassdiez";
-    if (_committedSource === "tier2") return `tier2-${verb}`;
-    return `tier1-${verb}`;
+    if (context.config.skipDiez) return "tier1-skipdiez";
+    if (context.config.bypassDiez) return "tier1-bypassdiez";
+    return "unused";
 };

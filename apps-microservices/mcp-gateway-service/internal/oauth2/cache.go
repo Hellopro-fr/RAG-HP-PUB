@@ -11,11 +11,6 @@ type CachedInstruction struct {
 	ID    string
 	Title string
 	Body  string
-	// Kind mirrors db.LLMInstructionRow.Kind ("general" | "per_server");
-	// empty is treated as "general". ServerIDs carries the per_server row's
-	// linked servers for tool-description routing.
-	Kind      string
-	ServerIDs []string
 }
 
 // CachedClient holds the resolved scope for an OAuth2 client.
@@ -50,11 +45,6 @@ type CachedClient struct {
 	ZohoFilterMode    string
 	ZohoAllowedEmails []string
 	ZohoCreatorEmail  string
-
-	// InjectInstructionsIntoTools mirrors db.OAuth2Client — when true the
-	// gateway appends instructions to tool descriptions instead of the
-	// initialize `instructions` field.
-	InjectInstructionsIntoTools bool
 }
 
 // Cache provides an in-memory TTL cache for OAuth2 client scope lookups.
