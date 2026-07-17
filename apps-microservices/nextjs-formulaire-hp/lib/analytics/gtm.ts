@@ -222,10 +222,15 @@ let currentStepIndex = 0;
  * Track le début du funnel
  */
 export function trackFunnelStart(context?: FunnelContext) {
-  currentStepIndex = 0;
   if (context) {
-    setFunnelContext(context);
+    setFunnelContext(context); // le contexte reste mis à jour même en cas de dédup
   }
+  // Dédup par session : le remontage de NeedsQuestionnaire (retour depuis
+  // l'étape transparence ou /budget) ne doit ni re-pousser funnel-start ni
+  // remettre le step index à zéro. resetTrackingState() (F5 / nouveau funnel,
+  // via FlowStorageReset) efface la clé hp_viewed_* et ré-arme l'événement.
+  if (!isFirstView('funnel_start')) return;
+  currentStepIndex = 0;
   trackQuoteFunnel(currentStepIndex, 'funnel-start', 'init');
 }
 

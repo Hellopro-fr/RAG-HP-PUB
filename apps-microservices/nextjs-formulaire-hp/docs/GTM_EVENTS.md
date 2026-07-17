@@ -103,7 +103,7 @@ submit-success            ▼
 #### Initialisation
 | step_name | step_type | Description |
 |-----------|-----------|-------------|
-| `funnel-start` | `init` | Début du funnel |
+| `funnel-start` | `init` | Début du funnel. Émis **une seule fois par session** (dédup sessionStorage `hp_viewed_funnel_start`) — le remontage du questionnaire (retour depuis l'étape transparence ou /budget) ne le re-déclenche pas ; un F5/nouveau funnel le ré-arme via `resetTrackingState()` |
 | `assurance` | `init` | Affichage de la page Assurance (avant Q1). Émis uniquement au premier passage (`hasSeenAssurance`) et hors variante A/B `2` |
 | `assurance-complete` | `init` | Clic "Continuer" sur la page Assurance |
 
