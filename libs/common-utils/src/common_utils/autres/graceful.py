@@ -1,4 +1,10 @@
-"""Graceful-drain helper for asyncio queue consumers."""
+"""Graceful-drain helper for asyncio queue consumers.
+
+Lives in ``autres`` (a stdlib-only namespace package) rather than
+``concurrency``: the latter's ``__init__`` eagerly imports the Milvus
+concurrency guard (``prometheus_client``/``redis``), which services like
+document-echange-processor-service do not install.
+"""
 
 import asyncio
 from typing import Any, Optional
