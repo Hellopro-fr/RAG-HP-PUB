@@ -29,7 +29,12 @@ from app.core.inflight_dedup import InflightDedup
 from app.core.metrics import VALIDATION_VERDICTS, HOMEPAGE_FALLBACK_TRIGGERED, ADMISSION_REJECTED, INFLIGHT_REQUESTS
 from app.services.redirect_tracker import fetch_html
 from app.services.language_detector import detect_challenge_page
-from app.services.page_validator import validate as validate_page, ValidationVerdict
+from app.services.page_validator import (
+    validate as validate_page,
+    ValidationVerdict,
+    find_stub_redirect_target,
+    is_transient_http_status,
+)
 from app.services.scraper import ScrapeResult
 
 logger = logging.getLogger(__name__)
@@ -75,6 +80,14 @@ async def _fetch_with_admission(
 
 _inflight_dedup = InflightDedup()
 _INFLIGHT_DEDUP_ENABLED = os.getenv("INFLIGHT_DEDUP_ENABLED", "true").lower() == "true"
+
+# Batch Pass 2 : méthodes transitoires re-tentées séquentiellement.
+# http_error (404 & co.) / soft_404 / redirected_to_home restent définitifs
+# (propriétés de la page, ne changent pas entre Pass 1 et Pass 2).
+_PASS2_RETRYABLE_METHODS = (
+    'fetch_failed', 'challenge_page', 'admission_rejected',
+    'http_error_transient', 'fetch_empty_content',
+)
 
 
 def _normalize_url_for_dedup(url: str) -> str:
@@ -191,6 +204,32 @@ async def _detect_single_url(
                     f"[VALIDATE] {verdict.value} for {url} "
                     f"(status={fetch_result.status_code}, final={final_url})"
                 )
+                verdict_method = verdict.value
+                verdict_ttl = _ttl_from_verdict(verdict.value)
+                if verdict == ValidationVerdict.HTTP_ERROR:
+                    # Un 4xx/5xx dont le corps est une page de challenge est un
+                    # blocage WAF (rejouable via rotation proxy en Pass 2), pas
+                    # une propriété de la page. Sans ce test, un 403 Cloudflare
+                    # devient un http_error définitif caché 7 jours.
+                    # Les verdicts génériques HTTP_xxx_blocked (simple page
+                    # d'erreur au corps mince) sont exclus : un vrai 404 mince
+                    # doit rester http_error définitif.
+                    challenge = detect_challenge_page(fetch_result.html)
+                    if challenge and not challenge.startswith('HTTP_'):
+                        logger.warning(
+                            f"Challenge/block {challenge} "
+                            f"(HTTP {fetch_result.status_code}) pour {effective_url}"
+                        )
+                        return DetectionResponse(
+                            ok=False, url=url, method='challenge_page',
+                            error=_build_challenge_error_msg(challenge),
+                        )
+                    if is_transient_http_status(fetch_result.status_code):
+                        # 401/403/407/408/425/429/5xx : conditions de fetch,
+                        # pas un verdict définitif — retryable Pass 2, TTL 6h
+                        # au lieu de 7 jours.
+                        verdict_method = 'http_error_transient'
+                        verdict_ttl = domain_cache.TTL_TRANSIENT
                 # [5] Homepage fallback
                 homepage = _homepage_of(url)
                 want_fallback = (
@@ -216,8 +255,8 @@ async def _detect_single_url(
                     if not hp_fetch:
                         HOMEPAGE_FALLBACK_TRIGGERED.labels(outcome="network_failure").inc()
                         rejection = DetectionResponse(
-                            ok=False, url=url, method=verdict.value,
-                            error=f"Page invalide ({verdict.value}) — repli homepage a échoué (réseau)",
+                            ok=False, url=url, method=verdict_method,
+                            error=f"Page invalide ({verdict_method}) — repli homepage a échoué (réseau)",
                         )
                         await domain_cache.set(
                             url, url, rejection.model_dump(),
@@ -234,12 +273,12 @@ async def _detect_single_url(
                             f"and homepage {homepage} (verdict={hp_verdict.value})"
                         )
                         rejection = DetectionResponse(
-                            ok=False, url=url, method=verdict.value,
-                            error=f"Page invalide ({verdict.value}) et page d'accueil également invalide ({hp_verdict.value})",
+                            ok=False, url=url, method=verdict_method,
+                            error=f"Page invalide ({verdict_method}) et page d'accueil également invalide ({hp_verdict.value})",
                         )
                         await domain_cache.set(
                             url, url, rejection.model_dump(),
-                            ttl_override=_ttl_from_verdict(verdict.value),
+                            ttl_override=verdict_ttl,
                         )
                         return rejection
 
@@ -272,14 +311,45 @@ async def _detect_single_url(
 
                 # No fallback (disabled, or url == homepage) → cache rejection + return
                 rejection = DetectionResponse(
-                    ok=False, url=url, method=verdict.value,
-                    error=f"Page invalide ({verdict.value})",
+                    ok=False, url=url, method=verdict_method,
+                    error=f"Page invalide ({verdict_method})",
                 )
                 await domain_cache.set(
                     url, url, rejection.model_dump(),
-                    ttl_override=_ttl_from_verdict(verdict.value),
+                    ttl_override=verdict_ttl,
                 )
                 return rejection
+
+    # [3bis] Stub-page hop : page minuscule dont le seul rôle est de pointer
+    # ailleurs (meta-refresh ou lien unique même hôte, ex. « Page has moved —
+    # click here »). Sans ce saut, elle finit en fetch_empty_content alors que
+    # le vrai site est à un clic. Un seul saut, jamais récursif ; en cas
+    # d'échec du fetch cible, on continue avec le contenu stub.
+    stub_target_used: Optional[str] = None
+    if not html_was_provided and settings.STUB_PAGE_HOP_ENABLED:
+        stub_target = find_stub_redirect_target(html_content, effective_url)
+        if stub_target:
+            logger.info(f"[STUB-HOP] {effective_url} → {stub_target}")
+            try:
+                hop_fetch = await _fetch_with_admission(
+                    stub_target, proxy_url, "/api/v1/detect"
+                )
+            except _AdmissionRejected:
+                # Saturation ne doit pas jeter le contenu déjà fetché : on
+                # continue avec le stub plutôt que d'échouer l'item entier.
+                logger.warning(f"[STUB-HOP] admission saturée pour {stub_target} — contenu stub conservé")
+                hop_fetch = None
+            if hop_fetch and validate_page(
+                hop_fetch, requested_url=stub_target
+            ) == ValidationVerdict.VALID:
+                html_content = hop_fetch.html
+                effective_url = hop_fetch.final_url or stub_target
+                stub_target_used = effective_url
+            else:
+                logger.info(
+                    f"[STUB-HOP] échec fetch/validation de {stub_target} — "
+                    f"contenu stub conservé"
+                )
 
     # [4] VALID path (or kill-switch off): existing flow — challenge + DomainFR
     challenge = detect_challenge_page(html_content)
@@ -298,6 +368,9 @@ async def _detect_single_url(
         validate_alternatives=validate_alternatives,
     )
     result = await detector.check_page_if_french(html_content, mode)
+
+    if stub_target_used and not result.analyzed_url:
+        result.analyzed_url = stub_target_used
 
     if not html_was_provided:
         await domain_cache.set(url, effective_url, result.model_dump())
@@ -396,8 +469,16 @@ async def _run_batch_core(
                 progress_cb(processed_count)
             return processed_count
 
-    async def _process_item_core(item: BatchItem) -> DetectionResponse:
-        """Traitement d'un item avec logging batch (délègue la détection à _detect_single_url)."""
+    async def _process_item_core(
+        item: BatchItem,
+        force_refresh_override: Optional[bool] = None,
+    ) -> DetectionResponse:
+        """Traitement d'un item avec logging batch (délègue la détection à _detect_single_url).
+
+        force_refresh_override : le Pass 2 force le bypass du cache en lecture —
+        l'échec transitoire du Pass 1 vient d'y être écrit (TTL 6h) et
+        transformerait le retry en no-op cache HIT.
+        """
         url = item.url
         item_start = time.time()
 
@@ -413,7 +494,11 @@ async def _run_batch_core(
                 proxy_url=opts.proxy_url,
                 mode=detection_mode,
                 use_nlp_detection=opts.use_nlp_detection,
-                force_refresh=opts.force_refresh,
+                force_refresh=(
+                    opts.force_refresh
+                    if force_refresh_override is None
+                    else force_refresh_override
+                ),
                 homepage_fallback=opts.homepage_fallback,
                 validate_alternatives=opts.validate_alternatives,
             )
@@ -500,7 +585,7 @@ async def _run_batch_core(
                 last_result = result
                 if result.ok:
                     return (_with_group(result, group_key), [])
-                if result.method in ('fetch_failed', 'challenge_page', 'admission_rejected'):
+                if result.method in _PASS2_RETRYABLE_METHODS:
                     failed.append(item)
 
             return (_with_group(last_result, group_key), failed)
@@ -528,14 +613,19 @@ async def _run_batch_core(
                 await asyncio.sleep(2)
                 try:
                     async with semaphore:
-                        retry_result = await _process_item_core(item)
+                        retry_result = await asyncio.wait_for(
+                            _process_item_core(item, force_refresh_override=True),
+                            timeout=300,
+                        )
                     if retry_result.ok:
                         group_results[i] = _with_group(retry_result, group_key)
                         logger.info(f"[BATCH][first_match] Pass 2 OK groupe '{group_key}' via {item.url}")
                         break
-                    if retry_result.method not in ('fetch_failed', 'challenge_page', 'admission_rejected'):
+                    if retry_result.method not in _PASS2_RETRYABLE_METHODS:
                         group_results[i] = _with_group(retry_result, group_key)
                         break
+                except asyncio.TimeoutError:
+                    logger.warning(f"[BATCH][first_match] Pass 2 TIMEOUT groupe '{group_key}' {item.url} après 300s")
                 except Exception as e:
                     logger.warning(f"[BATCH][first_match] Pass 2 ERROR groupe '{group_key}' {item.url}: {e}")
 
@@ -576,14 +666,14 @@ async def _run_batch_core(
         f"{total_items - pass1_ok - pass1_fetch_failed - pass1_challenge} autres ({pass1_duration}ms)"
     )
 
-    # Pass 2 : retry séquentiel des fetch_failed et challenge_page
+    # Pass 2 : retry séquentiel des méthodes transitoires
     failed_indices = [
         i for i, r in enumerate(results)
-        if r.method in ('fetch_failed', 'challenge_page', 'admission_rejected')
+        if r.method in _PASS2_RETRYABLE_METHODS
     ]
 
     if failed_indices:
-        logger.info(f"[BATCH] Pass 2: retry sequentiel de {len(failed_indices)} URLs en fetch_failed")
+        logger.info(f"[BATCH] Pass 2: retry sequentiel de {len(failed_indices)} URLs en échec transitoire")
 
         retry_success = 0
         for retry_num, idx in enumerate(failed_indices, 1):
@@ -594,8 +684,13 @@ async def _run_batch_core(
 
             try:
                 async with semaphore:
-                    retry_result = await _process_item_core(item)
-                if retry_result.method not in ('fetch_failed', 'challenge_page', 'admission_rejected'):
+                    # wait_for : sans borne, un retry suspendu bloquerait le
+                    # batch entier (le Pass 1 est borné, le Pass 2 doit l'être).
+                    retry_result = await asyncio.wait_for(
+                        _process_item_core(item, force_refresh_override=True),
+                        timeout=300,
+                    )
+                if retry_result.method not in _PASS2_RETRYABLE_METHODS:
                     results[idx] = retry_result
                     retry_success += 1
                     logger.info(
@@ -605,6 +700,8 @@ async def _run_batch_core(
                 else:
                     logger.warning(f"[BATCH] Retry ECHEC {item.url} ({retry_result.method})")
 
+            except asyncio.TimeoutError:
+                logger.warning(f"[BATCH] Retry TIMEOUT {item.url} après 300s")
             except Exception as e:
                 logger.warning(f"[BATCH] Retry ERROR {item.url}: {e}")
 

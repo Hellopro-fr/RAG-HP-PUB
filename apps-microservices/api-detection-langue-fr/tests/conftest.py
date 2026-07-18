@@ -11,6 +11,15 @@ import pytest
 
 from app.core.config import settings
 
+# langdetect est non déterministe sans seed — avec fastText absent du venv,
+# le fallback langdetect+langid rend les verdicts NLP flaky sur les textes
+# de test (échecs dépendant de l'ordre). Seed fixe = résultats reproductibles.
+try:
+    from langdetect import DetectorFactory
+    DetectorFactory.seed = 0
+except ImportError:
+    pass
+
 
 @pytest.fixture(autouse=True)
 def _no_real_redis(monkeypatch):

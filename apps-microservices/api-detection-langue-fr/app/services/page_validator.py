@@ -14,7 +14,7 @@ import logging
 import re
 from enum import Enum
 from typing import Optional
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse, urlunparse
 
 from bs4 import BeautifulSoup
 
@@ -103,3 +103,102 @@ def _visible_text_length(soup) -> int:
     for tag in soup(["script", "style", "noscript", "head"]):
         tag.decompose()
     return len(soup.get_text(separator=" ", strip=True))
+
+
+# =============================================================================
+# Transient HTTP statuses
+# =============================================================================
+
+# Statuts qui reflètent les conditions du fetch (WAF/auth/rate-limit/incident
+# serveur), pas une propriété de la page. Un retry (rotation proxy) peut
+# passer. 404/410 et les autres 4xx restent définitifs (http_error, TTL 7j).
+TRANSIENT_HTTP_STATUSES = frozenset({401, 403, 407, 408, 425, 429})
+
+
+def is_transient_http_status(status_code: int) -> bool:
+    """True quand l'erreur HTTP vaut un retry (WAF/auth/rate-limit/5xx)."""
+    return status_code in TRANSIENT_HTTP_STATUSES or 500 <= status_code < 600
+
+
+# =============================================================================
+# Stub-page redirect target
+# =============================================================================
+
+# Les stubs sont de tout petits documents ; borne le coût du parse.
+_STUB_MAX_HTML_LEN = 20_000
+
+_META_REFRESH_URL_RE = re.compile(r"url\s*=\s*['\"]?([^'\">;]+)", re.IGNORECASE)
+
+_NON_NAV_HREF_RE = re.compile(r"^(#|mailto:|tel:|javascript:)", re.IGNORECASE)
+
+
+def find_stub_redirect_target(html: str, base_url: str) -> Optional[str]:
+    """Target URL when the page is a tiny stub whose only purpose is to point
+    elsewhere: a meta-refresh, or a lone same-host link ("Page has moved —
+    click here"). Returns None for every other page.
+
+    Guards:
+    - raw HTML larger than _STUB_MAX_HTML_LEN → None (real pages);
+    - visible text >= NLP_MIN_TEXT_LENGTH → None (page has actual content);
+    - anchor signal requires a SINGLE distinct same-host target — parked/for-
+      sale pages are excluded because their lone link is off-host.
+    """
+    if not html or len(html) > _STUB_MAX_HTML_LEN:
+        return None
+
+    try:
+        soup = BeautifulSoup(html, "lxml")
+
+        # Meta refresh — read BEFORE _visible_text_length decomposes <head>.
+        meta_target: Optional[str] = None
+        meta = soup.find(
+            "meta", attrs={"http-equiv": re.compile(r"^refresh$", re.IGNORECASE)}
+        )
+        if meta:
+            m = _META_REFRESH_URL_RE.search(meta.get("content") or "")
+            if m:
+                meta_target = m.group(1).strip()
+
+        anchor_hrefs = [a.get("href", "").strip() for a in soup.find_all("a", href=True)]
+
+        if _visible_text_length(soup) >= settings.NLP_MIN_TEXT_LENGTH:
+            return None
+    except Exception as e:
+        logger.warning(f"[STUB] parse error for {base_url}: {e} — no hop")
+        return None
+
+    def _resolve(href: str) -> Optional[str]:
+        if not href or _NON_NAV_HREF_RE.match(href):
+            return None
+        resolved = urljoin(base_url, href)
+        p = urlparse(resolved)
+        if p.scheme not in ("http", "https") or not p.netloc:
+            return None
+        # Fragment supprimé : même document = pas une cible de hop.
+        return urlunparse((p.scheme, p.netloc, p.path or "/", p.params, p.query, ""))
+
+    base_resolved = _resolve(base_url)
+
+    if meta_target:
+        resolved = _resolve(meta_target)
+        if resolved and resolved != base_resolved:
+            return resolved
+
+    def _same_host(netloc_a: str, netloc_b: str) -> bool:
+        a = netloc_a.lower().removeprefix("www.")
+        b = netloc_b.lower().removeprefix("www.")
+        return a != "" and a == b
+
+    base_netloc = urlparse(base_url).netloc
+    targets = set()
+    for href in anchor_hrefs:
+        resolved = _resolve(href)
+        if not resolved or resolved == base_resolved:
+            continue
+        if not _same_host(urlparse(resolved).netloc, base_netloc):
+            continue
+        targets.add(resolved)
+
+    if len(targets) == 1:
+        return targets.pop()
+    return None

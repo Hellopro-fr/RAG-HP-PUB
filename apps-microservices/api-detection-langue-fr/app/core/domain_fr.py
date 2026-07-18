@@ -51,6 +51,7 @@ class DomainCache:
     _TRANSIENT_METHODS = frozenset({
         'challenge_page',               # Cloudflare/WAF — peut se résoudre
         'fetch_empty_content',           # Contenu vide — proxy ou site down
+        'http_error_transient',          # 401/403/408/429/5xx sans corps challenge — conditions de fetch
         'all_redirections_failed',       # Redirections échouées
         'info_vide',                     # URL ou contenu absent
     })

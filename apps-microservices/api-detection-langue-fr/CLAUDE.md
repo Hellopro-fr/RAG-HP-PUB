@@ -158,15 +158,18 @@ Callers MUST use the shared contract: `libs/common-utils/src/common_utils/detect
 
 ## Invalid Page Rejection & Homepage Fallback
 
-Three new method values surface in `DetectionResponse.method` when the requested page is rejected:
+Method values surfaced in `DetectionResponse.method` when the requested page is rejected:
 
-| Method | Meaning | Cache TTL |
-|---|---|---|
-| `http_error` | Hard 4XX/5XX status | 7 days |
-| `soft_404` | 200 OK but body matches not-found heuristic (title/H1 regex + thin content, or URL path 404 marker) | 6 hours |
-| `redirected_to_home` | Requested non-root path, server redirected to `/` | 7 days |
+| Method | Meaning | Cache TTL | Retryable? |
+|---|---|---|---|
+| `http_error` | Definitive 4XX (404, 410, …) | 7 days | No — definitive |
+| `http_error_transient` | 401/403/407/408/425/429/5xx **without** a challenge body — fetch conditions (WAF/auth/rate-limit/server incident), not a page property | 6 hours | Yes (batch Pass 2) |
+| `soft_404` | 200 OK but body matches not-found heuristic (title/H1 regex + thin content, or URL path 404 marker) | 6 hours | No |
+| `redirected_to_home` | Requested non-root path, server redirected to `/` | 7 days | No |
 
-Callers should treat these as definitive failures (do NOT retry).
+A 4xx/5xx whose **body** is a WAF/challenge page (Cloudflare, DataDome, …) is classified `challenge_page` (retryable), not `http_error` — the raw status check does not win over challenge detection. The generic `HTTP_xxx_blocked` verdict (thin error page) does NOT trigger this reclassification: a real thin 404 stays `http_error`.
+
+Callers should treat `http_error`, `soft_404`, `redirected_to_home` as definitive failures (do NOT retry); `http_error_transient` may be retried later (the 6h cache absorbs immediate re-asks).
 
 When validation rejects, the service tries the domain's homepage once. If the homepage is valid, the request returns `ok=True` with `analyzed_url=<homepage>` set. If the homepage also fails, the original verdict is returned.
 
@@ -186,6 +189,7 @@ When validation rejects, the service tries the domain's homepage once. If the ho
 | `SOFT_404_H1_THIN_THRESHOLD` | `1500` | Visible-text char limit when H1 regex matches. |
 | `INVALID_PAGE_TTL_HARD_S` | `604800` (7d) | Cache TTL for `http_error` + `redirected_to_home`. |
 | `INVALID_PAGE_TTL_SOFT_S` | `21600` (6h) | Cache TTL for `soft_404`. |
+| `STUB_PAGE_HOP_ENABLED` | `true` | One-hop follow of stub pages (meta-refresh or lone same-host link, visible text < `NLP_MIN_TEXT_LENGTH`) instead of rejecting them as `fetch_empty_content`. Never recursive; on hop-fetch failure the stub content flows on. `analyzed_url` discloses the hop target. |
 
 ### Endpoint behavior
 
@@ -196,7 +200,7 @@ When validation rejects, the service tries the domain's homepage once. If the ho
 | `/detect-debug` | Yes (overrides result.ok / result.method / result.error if non-VALID — pipeline trace preserved) | **OFF** (debug shows requested URL's actual pipeline state) |
 | `/check-url` | N/A (no HTML fetch) | N/A |
 
-Batch Pass 2 retry: `fetch_failed`, `challenge_page`, and `admission_rejected` (admission saturation is transient — slot may free in the 2s inter-retry gap). The validator method values (`http_error`, `soft_404`, `redirected_to_home`) are NOT retried — they are domain properties that should not change between Pass 1 and Pass 2.
+Batch Pass 2 retry set (`_PASS2_RETRYABLE_METHODS`): `fetch_failed`, `challenge_page`, `admission_rejected`, `http_error_transient`, `fetch_empty_content`. Pass-2 retries run with `force_refresh=True` (the Pass-1 transient rejection was just cached 6h and would short-circuit the retry via cache HIT) and are bounded by the same 300s per-item `wait_for` as Pass 1. Definitive verdicts (`http_error`, `soft_404`, `redirected_to_home`) are NOT retried — page properties that don't change between passes. `error` (incl. `Timeout global item (300s)`) is deliberately NOT retried either: a timed-out item already consumed 300s of work inside the same saturated batch; the fix for timeouts is throughput (async job API) + caller re-run. Spec: `docs/superpowers/specs/2026-07-18-detection-langue-fr-transient-error-retry-design.md`.
 
 ### Metrics
 

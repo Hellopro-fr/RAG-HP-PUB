@@ -94,3 +94,74 @@ class TestParsingCrashFailOpen:
         s = _scrape(html="", final_url="https://example.com/page", status_code=200)
         # Empty body is not soft-404 by itself; should be VALID (fall through).
         assert validate(s, "https://example.com/page") == ValidationVerdict.VALID
+
+
+class TestIsTransientHttpStatus:
+    def test_transient_statuses(self):
+        from app.services.page_validator import is_transient_http_status
+        for code in (401, 403, 407, 408, 425, 429, 500, 502, 503, 599):
+            assert is_transient_http_status(code) is True, code
+
+    def test_definitive_statuses(self):
+        from app.services.page_validator import is_transient_http_status
+        for code in (400, 404, 410, 451, 200, 301, 0):
+            assert is_transient_http_status(code) is False, code
+
+
+class TestFindStubRedirectTarget:
+    BASE = "https://www.example.fr/"
+
+    def _find(self, html, base=None):
+        from app.services.page_validator import find_stub_redirect_target
+        return find_stub_redirect_target(html, base or self.BASE)
+
+    def test_meta_refresh(self):
+        html = (
+            '<html><head><meta http-equiv="refresh" content="0;url=/accueil.html">'
+            '</head><body>Redirection...</body></html>'
+        )
+        assert self._find(html) == "https://www.example.fr/accueil.html"
+
+    def test_single_same_host_anchor(self):
+        html = '<html><body>Page has moved. <a href="fr.html">Click here...</a></body></html>'
+        assert self._find(html) == "https://www.example.fr/fr.html"
+
+    def test_www_variant_is_same_host(self):
+        html = '<html><body>Moved. <a href="https://example.fr/fr/">ici</a></body></html>'
+        assert self._find(html) == "https://example.fr/fr/"
+
+    def test_two_distinct_anchors_no_target(self):
+        html = (
+            '<html><body><a href="/a.html">a</a> <a href="/b.html">b</a></body></html>'
+        )
+        assert self._find(html) is None
+
+    def test_duplicate_anchors_count_once(self):
+        html = (
+            '<html><body><a href="/fr.html">fr</a> <a href="/fr.html">fr encore</a></body></html>'
+        )
+        assert self._find(html) == "https://www.example.fr/fr.html"
+
+    def test_off_host_anchor_no_target(self):
+        # Parked/for-sale pages: lone link goes off-host.
+        html = '<html><body>Domain for sale <a href="https://registrar.example/buy">buy</a></body></html>'
+        assert self._find(html) is None
+
+    def test_non_nav_hrefs_ignored(self):
+        html = (
+            '<html><body><a href="#top">top</a> <a href="mailto:a@b.fr">mail</a>'
+            ' <a href="tel:+33102030405">tel</a></body></html>'
+        )
+        assert self._find(html) is None
+
+    def test_self_link_no_target(self):
+        html = '<html><body><a href="https://www.example.fr/">home</a></body></html>'
+        assert self._find(html) is None
+
+    def test_rich_page_no_target(self):
+        html = "<html><body>" + "Contenu réel du site. " * 20 + '<a href="/page">lien</a></body></html>'
+        assert self._find(html) is None
+
+    def test_oversized_html_no_target(self):
+        html = "<html><body>" + "x" * 25_000 + '<a href="/fr.html">go</a></body></html>'
+        assert self._find(html) is None

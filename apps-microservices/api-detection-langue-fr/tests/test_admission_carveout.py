@@ -121,8 +121,15 @@ def test_batch_pass2_retries_admission_rejected(monkeypatch):
         return call_count["n"] != 1  # first call refuses, subsequent succeed
 
     async def fake_fetch(url, proxy_url):
+        # >100 chars visibles : un corps trop mince serait classé
+        # fetch_empty_content (transitoire, désormais Pass-2-retryable) et le
+        # verdict admission_rejected du Pass 1 survivrait au lieu d'être promu.
+        fr_text = (
+            "Bienvenue sur notre site. Nous concevons et fabriquons des "
+            "équipements industriels pour les professionnels depuis 1985. "
+        )
         return ScrapeResult(
-            html="<html lang='fr'><body>Bonjour</body></html>",
+            html=f"<html lang='fr'><body>{fr_text * 3}</body></html>",
             final_url=url, status_code=200, content_type="text/html",
         )
 

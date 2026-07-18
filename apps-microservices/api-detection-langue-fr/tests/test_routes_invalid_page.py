@@ -206,7 +206,8 @@ class TestDetectBatchPassesHomepageFallback:
 
     @pytest.mark.asyncio
     async def test_batch_pass2_does_not_retry_invalid_methods(self, client):
-        """Pass 2 retries fetch_failed + challenge_page only — not http_error/soft_404."""
+        """Pass 2 retries the transient set (_PASS2_RETRYABLE_METHODS) only —
+        definitive verdicts like http_error (404) / soft_404 are never retried."""
         scrape = _scrape(status_code=404)
         # If Pass 2 retried, fetch_html would be called > 1 time. Assert it's exactly 1.
         fetch_mock = AsyncMock(return_value=scrape)
@@ -237,6 +238,184 @@ class TestDetectDebugFallbackOff:
         body = r.json()
         assert body["result"]["method"] == "http_error"
         assert fetch_mock.await_count == 1
+
+
+_CLOUDFLARE_CHALLENGE_HTML = (
+    '<html><head><title>Just a moment...</title></head>'
+    '<body><script src="cdn-cgi/challenge-platform/v1/orchestrate/chl_page/v1"></script>'
+    '<input name="cf-turnstile-response" />'
+    '<noindex></body></html>'
+)
+
+
+class TestTransientHttpError:
+    @pytest.mark.asyncio
+    async def test_403_with_challenge_body_is_challenge_page(self, client):
+        """A 403 whose body is a Cloudflare challenge is a WAF block (retryable),
+        not a definitive http_error — validator status check must not win."""
+        scrape = _scrape(
+            html=_CLOUDFLARE_CHALLENGE_HTML,
+            final_url="https://example.com/", status_code=403,
+        )
+        with patch("app.api.routes.domain_cache.get", AsyncMock(return_value=None)), \
+             patch("app.api.routes.domain_cache.set", AsyncMock()) as set_mock, \
+             patch("app.api.routes.fetch_html", AsyncMock(return_value=scrape)):
+            r = client.post("/api/v1/detect", json={"url": "https://example.com/"})
+        body = r.json()
+        assert body["ok"] is False
+        assert body["method"] == "challenge_page"
+        # Same contract as the main-path challenge: not cached at the fetch path.
+        set_mock.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_429_is_http_error_transient_with_short_ttl(self, client):
+        """Rate-limit 429 → http_error_transient, cached TTL_TRANSIENT (6h), not 7d."""
+        from app.core.domain_fr import domain_cache
+        scrape = _scrape(status_code=429, final_url="https://example.com/")
+        set_mock = AsyncMock()
+        with patch("app.api.routes.domain_cache.get", AsyncMock(return_value=None)), \
+             patch("app.api.routes.domain_cache.set", set_mock), \
+             patch("app.api.routes.fetch_html", AsyncMock(return_value=scrape)):
+            r = client.post("/api/v1/detect", json={"url": "https://example.com/"})
+        body = r.json()
+        assert body["ok"] is False
+        assert body["method"] == "http_error_transient"
+        assert set_mock.await_args.kwargs["ttl_override"] == domain_cache.TTL_TRANSIENT
+
+    @pytest.mark.asyncio
+    async def test_404_stays_definitive_http_error(self, client):
+        """404 keeps the 2026-05-05 semantics: http_error, hard TTL."""
+        from app.core.config import settings
+        scrape = _scrape(status_code=404, final_url="https://example.com/")
+        set_mock = AsyncMock()
+        with patch("app.api.routes.domain_cache.get", AsyncMock(return_value=None)), \
+             patch("app.api.routes.domain_cache.set", set_mock), \
+             patch("app.api.routes.fetch_html", AsyncMock(return_value=scrape)):
+            r = client.post("/api/v1/detect", json={"url": "https://example.com/"})
+        body = r.json()
+        assert body["method"] == "http_error"
+        assert set_mock.await_args.kwargs["ttl_override"] == settings.INVALID_PAGE_TTL_HARD_S
+
+    @pytest.mark.asyncio
+    async def test_404_with_thin_error_body_stays_http_error(self, client):
+        """detect_challenge_page's generic HTTP_xxx_blocked verdict (thin error
+        page) must NOT reclassify a real 404 as retryable challenge_page."""
+        scrape = _scrape(
+            html="<html><head><title>404 - Not Found</title></head><body>gone</body></html>",
+            final_url="https://example.com/missing", status_code=404,
+        )
+        with patch("app.api.routes.domain_cache.get", AsyncMock(return_value=None)), \
+             patch("app.api.routes.domain_cache.set", AsyncMock()), \
+             patch("app.api.routes.fetch_html", AsyncMock(return_value=scrape)):
+            r = client.post("/api/v1/detect", json={
+                "url": "https://example.com/missing", "homepage_fallback": False,
+            })
+        assert r.json()["method"] == "http_error"
+
+    @pytest.mark.asyncio
+    async def test_batch_pass2_retries_http_error_transient(self, client):
+        """503 in Pass 1 → recovered FR page in Pass 2."""
+        transient = _scrape(status_code=503, final_url="https://example.fr/")
+        fr_text = (
+            "Bienvenue sur notre site. Nous concevons et fabriquons des "
+            "équipements industriels pour les professionnels depuis 1985. "
+            "Découvrez nos produits et demandez un devis gratuit. "
+        )
+        recovered = _scrape(
+            html='<html lang="fr"><body>' + fr_text * 5 + "</body></html>",
+            final_url="https://example.fr/", status_code=200,
+        )
+        fetch_mock = AsyncMock(side_effect=[transient, recovered])
+        with patch("app.api.routes.domain_cache.get", AsyncMock(return_value=None)), \
+             patch("app.api.routes.domain_cache.set", AsyncMock()), \
+             patch("app.api.routes.fetch_html", fetch_mock), \
+             patch("app.api.routes.asyncio.sleep", AsyncMock()):
+            r = client.post("/api/v1/detect-batch", json={
+                "items": [{"url": "https://example.fr/"}],
+                "max_concurrency": 1,
+            })
+        body = r.json()
+        assert fetch_mock.await_count == 2
+        assert body["results"][0]["ok"] is True
+
+    @pytest.mark.asyncio
+    async def test_batch_pass2_retry_bypasses_cache_read(self, client):
+        """Pass-2 retry must run with force_refresh=True — the Pass-1 transient
+        rejection was just cached (6h) and would short-circuit the retry."""
+        from app.api import routes as routes_mod
+        calls = []
+
+        async def fake_detect(url, **kwargs):
+            calls.append(kwargs.get("force_refresh"))
+            from app.models.schemas import DetectionResponse
+            if len(calls) == 1:
+                return DetectionResponse(ok=False, url=url, method="http_error_transient")
+            return DetectionResponse(ok=True, url=url, method="direct_match")
+
+        with patch.object(routes_mod, "_detect_single_url", fake_detect), \
+             patch("app.api.routes.asyncio.sleep", AsyncMock()):
+            r = client.post("/api/v1/detect-batch", json={
+                "items": [{"url": "https://example.fr/"}],
+                "max_concurrency": 1,
+            })
+        body = r.json()
+        assert body["results"][0]["ok"] is True
+        assert calls == [False, True]  # Pass 1 default, Pass 2 forced
+
+
+class TestStubPageHop:
+    _STUB_HTML = (
+        '<html><head><title>Moved</title></head>'
+        '<body>Page has moved. <a href="/fr.html">Click here...</a></body></html>'
+    )
+    _FR_HTML = (
+        '<html lang="fr"><body>'
+        + (
+            "Bienvenue sur notre site. Nous concevons et fabriquons des "
+            "équipements industriels pour les professionnels depuis 1985. "
+        ) * 5
+        + "</body></html>"
+    )
+
+    @pytest.mark.asyncio
+    async def test_stub_homepage_hops_to_target(self, client):
+        stub = _scrape(html=self._STUB_HTML, final_url="https://www.example.fr/", status_code=200)
+        target = _scrape(html=self._FR_HTML, final_url="https://www.example.fr/fr.html", status_code=200)
+        fetch_mock = AsyncMock(side_effect=[stub, target])
+        with patch("app.api.routes.domain_cache.get", AsyncMock(return_value=None)), \
+             patch("app.api.routes.domain_cache.set", AsyncMock()), \
+             patch("app.api.routes.fetch_html", fetch_mock):
+            r = client.post("/api/v1/detect", json={"url": "https://www.example.fr/"})
+        body = r.json()
+        assert fetch_mock.await_count == 2
+        assert body["ok"] is True
+        assert body["analyzed_url"] == "https://www.example.fr/fr.html"
+
+    @pytest.mark.asyncio
+    async def test_stub_hop_failure_keeps_stub_flow(self, client):
+        """Hop target fetch fails → detection continues on the stub content
+        (ends as fetch_empty_content, which Pass 2 can retry)."""
+        stub = _scrape(html=self._STUB_HTML, final_url="https://www.example.fr/", status_code=200)
+        fetch_mock = AsyncMock(side_effect=[stub, None])
+        with patch("app.api.routes.domain_cache.get", AsyncMock(return_value=None)), \
+             patch("app.api.routes.domain_cache.set", AsyncMock()), \
+             patch("app.api.routes.fetch_html", fetch_mock):
+            r = client.post("/api/v1/detect", json={"url": "https://www.example.fr/"})
+        body = r.json()
+        assert fetch_mock.await_count == 2
+        assert body["method"] == "fetch_empty_content"
+
+    @pytest.mark.asyncio
+    async def test_stub_hop_disabled_by_kill_switch(self, client):
+        stub = _scrape(html=self._STUB_HTML, final_url="https://www.example.fr/", status_code=200)
+        fetch_mock = AsyncMock(return_value=stub)
+        with patch("app.core.config.settings.STUB_PAGE_HOP_ENABLED", False), \
+             patch("app.api.routes.domain_cache.get", AsyncMock(return_value=None)), \
+             patch("app.api.routes.domain_cache.set", AsyncMock()), \
+             patch("app.api.routes.fetch_html", fetch_mock):
+            r = client.post("/api/v1/detect", json={"url": "https://www.example.fr/"})
+        assert fetch_mock.await_count == 1
+        assert r.json()["method"] == "fetch_empty_content"
 
 
 class TestHomepageFallbackChallengePage:
