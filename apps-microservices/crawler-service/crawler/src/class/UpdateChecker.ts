@@ -172,16 +172,24 @@ export class UpdateChecker {
         // ═══════════════════════════════════════════
         if (isHttpError) {
             if (isFromDataset) {
-                // Dataset URL returned an error → it should be removed
                 await this.statsManager.increment("errors");
-                const result: CheckUrlResult = {
-                    action: 'deleted',
-                    url: originalUrl,
-                    source,
-                    reason: `http_error_${httpStatus}`,
-                };
-                await this.writeJsonl(UpdateChecker.DELETED_FILE, result);
-                return result;
+                // A deletion claim requires a server verdict that the resource is
+                // GONE: 404/410 only. 401/403/407/429/5xx/status-0 are blocks or
+                // outages — the page may be alive (incident 1320-402: 63 anti-bot
+                // 403s became 59 false fiche deletions BO-side). Those still count
+                // as errors (health/circuit-breaker unchanged) but emit NO deleted
+                // event; a truly dead URL will 404 on a later MAJ.
+                if (httpStatus === 404 || httpStatus === 410) {
+                    const result: CheckUrlResult = {
+                        action: 'deleted',
+                        url: originalUrl,
+                        source,
+                        reason: `http_error_${httpStatus}`,
+                    };
+                    await this.writeJsonl(UpdateChecker.DELETED_FILE, result);
+                    return result;
+                }
+                return { action: 'ignored', url: originalUrl, source, reason: `unverified_http_error_${httpStatus}` };
             } else {
                 // Non-dataset URL error → just ignore, don't track
                 return { action: 'ignored', url: originalUrl, source, reason: 'non_dataset_error' };
