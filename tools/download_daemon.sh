@@ -116,6 +116,37 @@ if [ "${1:-}" = "--source-functions-only" ]; then
     return 0 2>/dev/null || exit 0
 fi
 
+# inotify fast path (optional). When inotify-tools is installed, the wait between
+# scan cycles wakes early on filesystem activity in the watched dir(s) — a
+# .request / .unstash-confirmed / .move-request is handled in well under a second
+# instead of up to CHECK_INTERVAL later (this latency sits inside the gateway's
+# 180s budget on /results and /archive). The periodic full scan is KEPT as the
+# safety net (events missed during a restart or mid-scan emit no signal). Without
+# inotifywait the behavior is byte-identical to before (plain sleep).
+# NOTE: duplicated in upload_daemon.sh — keep in sync.
+INOTIFY_AVAILABLE=false
+if command -v inotifywait >/dev/null 2>&1; then
+    INOTIFY_AVAILABLE=true
+fi
+
+# wait_next_cycle <timeout_seconds> <dir> [dir...] — sleep-with-early-wake.
+wait_next_cycle() {
+    local timeout="$1"; shift
+    if [ "$INOTIFY_AVAILABLE" = "true" ]; then
+        # Exit codes: 0 = event, 2 = timeout — the only healthy exits; both
+        # proceed to the next scan. ANY other code (1 = missing dir / watch
+        # limit exhausted, 127 = binary gone, ...) falls back to a plain sleep
+        # for this cycle so a broken watch can never busy-loop the daemon.
+        inotifywait -qq -t "$timeout" -e close_write -e moved_to -e create "$@" >/dev/null 2>&1
+        local rc=$?
+        if [ "$rc" -ne 0 ] && [ "$rc" -ne 2 ]; then
+            sleep "$timeout"
+        fi
+    else
+        sleep "$timeout"
+    fi
+}
+
 echo "Starting Download Daemon..."
 echo "Watching requests: $REQUESTS_DIR"
 echo "Writing results:   $RESULTS_DIR"
@@ -182,5 +213,8 @@ while true; do
         process_move_requests
     fi
 
-    sleep $CHECK_INTERVAL
+    # Wait for next cycle. Early wake on: new .request (REQUESTS_DIR), service-written
+    # .unstash-confirmed (RESULTS_DIR), new .move-request (MOVE_REQUESTS_PATH — dir is
+    # mkdir -p'd at startup, watching it while ENABLE_MOVE=false is harmless).
+    wait_next_cycle "$CHECK_INTERVAL" "$REQUESTS_DIR" "$RESULTS_DIR" "$MOVE_REQUESTS_PATH"
 done

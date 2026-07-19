@@ -36,6 +36,35 @@ mkdir -p "$DEAD_LETTER_DIR"
 sudo chown -R $USER:$USER "$ARCHIVES_DIR"
 sudo chown -R $USER:$USER "$DEAD_LETTER_DIR"
 
+# inotify fast path (optional). When inotify-tools is installed, the wait between
+# scan cycles wakes early on filesystem activity in the watched dir(s) — a fresh
+# tar is uploaded in seconds instead of up to CHECK_INTERVAL later. The periodic
+# full scan is KEPT as the safety net (events missed during a restart or mid-scan
+# emit no signal). Without inotifywait the behavior is byte-identical to before
+# (plain sleep). NOTE: duplicated in download_daemon.sh — keep in sync.
+INOTIFY_AVAILABLE=false
+if command -v inotifywait >/dev/null 2>&1; then
+    INOTIFY_AVAILABLE=true
+fi
+
+# wait_next_cycle <timeout_seconds> <dir> [dir...] — sleep-with-early-wake.
+wait_next_cycle() {
+    local timeout="$1"; shift
+    if [ "$INOTIFY_AVAILABLE" = "true" ]; then
+        # Exit codes: 0 = event, 2 = timeout — the only healthy exits; both
+        # proceed to the next scan. ANY other code (1 = missing dir / watch
+        # limit exhausted, 127 = binary gone, ...) falls back to a plain sleep
+        # for this cycle so a broken watch can never busy-loop the daemon.
+        inotifywait -qq -t "$timeout" -e close_write -e moved_to -e create "$@" >/dev/null 2>&1
+        local rc=$?
+        if [ "$rc" -ne 0 ] && [ "$rc" -ne 2 ]; then
+            sleep "$timeout"
+        fi
+    else
+        sleep "$timeout"
+    fi
+}
+
 echo "Starting Upload Daemon..."
 echo "Watching directory: $ARCHIVES_DIR"
 echo "Target Bucket: gs://$BUCKET_NAME/$UPLOAD_GCS_PREFIX/"
@@ -83,6 +112,6 @@ while true; do
         fi
     done
 
-    # Wait for next cycle
-    sleep $CHECK_INTERVAL
+    # Wait for next cycle (early wake on new tars when inotify-tools is present)
+    wait_next_cycle "$CHECK_INTERVAL" "$ARCHIVES_DIR"
 done
