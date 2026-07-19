@@ -120,6 +120,15 @@ class JobManager:
         self._s = settings
         self._job_tasks: dict[str, asyncio.Task] = {}
         self._inflight = 0                          # reserve counter (sync-guarded)
+        # FIFO d'exécution : les jobs soumis attendent qu'un worker les prenne
+        # (JOB_WORKER_CONCURRENCY, défaut 1). Avant : create_task immédiat →
+        # jusqu'à MAX_ACTIVE_JOBS batchs simultanés sur le même pool de
+        # navigateurs → tempêtes de timeouts 300s + admission_rejected.
+        # MAX_ACTIVE_JOBS garde son sens exact (pending+running, _inflight).
+        self._queue: asyncio.Queue = asyncio.Queue()
+        self._queued_ids: set[str] = set()
+        self._workers: list[asyncio.Task] = []
+        self._keeper: Optional[asyncio.Task] = None
 
     async def get_record(self, job_id: str) -> Optional[dict]:
         return await self._store.get(job_id)
@@ -180,13 +189,12 @@ class JobManager:
             homepage_fallback=req.homepage_fallback,
             validate_alternatives=req.validate_alternatives,
         )
-        task = asyncio.create_task(
-            self._run_job(job_id, cjid, list(req.items), req.mode, opts)
-        )
-        self._job_tasks[job_id] = task
-        task.add_done_callback(lambda t, jid=job_id: self._on_done(jid))
+        self._ensure_workers()
+        self._queued_ids.add(job_id)
+        self._queue.put_nowait((job_id, cjid, list(req.items), req.mode, opts))
         ASYNC_JOBS_SUBMITTED.inc()
         ASYNC_JOBS_ACTIVE.set(self._inflight)
+        self._update_queued_gauge()
         return job_id, 202
 
     def _on_done(self, job_id: str) -> None:
@@ -194,6 +202,71 @@ class JobManager:
         self._inflight = max(0, self._inflight - 1)
         from app.core.metrics import ASYNC_JOBS_ACTIVE
         ASYNC_JOBS_ACTIVE.set(self._inflight)
+
+    def _update_queued_gauge(self) -> None:
+        from app.core.metrics import ASYNC_JOBS_QUEUED
+        ASYNC_JOBS_QUEUED.set(len(self._queued_ids))
+
+    def _ensure_workers(self) -> None:
+        """Lazy spawn (première soumission) : évite de créer des tâches au
+        constructeur, appelé hors event loop dans certains tests."""
+        if self._workers:
+            return
+        n = max(1, int(getattr(self._s, "JOB_WORKER_CONCURRENCY", 1)))
+        self._workers = [
+            asyncio.create_task(self._worker_loop(i)) for i in range(n)
+        ]
+        self._keeper = asyncio.create_task(self._queued_keeper_loop())
+
+    async def _worker_loop(self, worker_idx: int) -> None:
+        while True:
+            job_id, cjid, items, mode, opts = await self._queue.get()
+            if job_id not in self._queued_ids:
+                continue  # drainé par shutdown() entre put et pickup
+            self._queued_ids.discard(job_id)
+            self._update_queued_gauge()
+            # Log défensif : une erreur Redis ici ne doit JAMAIS tuer le worker
+            # (worker mort = file gelée sans erreur visible).
+            try:
+                rec = await self._store.get(job_id)
+                queued_s = round(time.time() - rec.get("created_at", time.time()), 1) if rec else 0
+            except Exception:
+                queued_s = -1
+            logger.info(f"[async-jobs] worker#{worker_idx} picked job {job_id} (queued {queued_s}s)")
+            task = asyncio.create_task(self._run_job(job_id, cjid, items, mode, opts))
+            self._job_tasks[job_id] = task
+            task.add_done_callback(lambda t, jid=job_id: self._on_done(jid))
+            # wait() : n'importe ni l'exception du job (gérée dans _run_job) ni
+            # son annulation ; l'annulation du worker lui-même interrompt le wait.
+            await asyncio.wait([task])
+
+    async def _queued_keeper_loop(self) -> None:
+        """Heartbeat des jobs EN FILE : sans lui, un job sain en attente >
+        STALE_THRESHOLD_S serait vu 'stale' par le poll (le BO le croirait
+        mort et re-soumettrait). Un process réellement mort n'a plus de
+        keeper → stale surface normalement après restart."""
+        try:
+            while True:
+                await asyncio.sleep(self._s.HEARTBEAT_INTERVAL_S)
+                for job_id in list(self._queued_ids):
+                    rec = await self._store.get(job_id)
+                    if not rec or rec.get("status") != "pending":
+                        continue
+                    # Re-check APRÈS le get : si le worker a pris le job pendant
+                    # l'await, ne pas réécrire la copie 'pending' périmée
+                    # par-dessus son écriture 'running'. Fenêtre résiduelle
+                    # (réordonnancement réseau pendant le write) : cosmétique —
+                    # le heartbeat du job ré-affirme 'running' au tick suivant
+                    # et les écritures terminales gagnent toujours.
+                    if job_id not in self._queued_ids:
+                        continue
+                    rec["last_activity"] = time.time()
+                    try:
+                        await self._store.write(rec, self._s.JOB_TTL_ACTIVE_S)
+                    except Exception:
+                        pass
+        except asyncio.CancelledError:
+            return
 
     async def _heartbeat(self, job_id: str, progress: dict) -> None:
         try:
@@ -203,6 +276,10 @@ class JobManager:
                 if not rec or rec.get("status") not in ("pending", "running"):
                     return
                 rec["done"] = progress["done"]
+                # Ce heartbeat ne tourne que pendant _run_job : ré-affirmer
+                # 'running' auto-répare une éventuelle écriture 'pending'
+                # périmée du keeper de file (course bénigne, cf. keeper).
+                rec["status"] = "running"
                 rec["last_activity"] = time.time()
                 try:
                     await self._store.write(rec, self._s.JOB_TTL_ACTIVE_S)
@@ -261,13 +338,34 @@ class JobManager:
             ASYNC_JOBS_TERMINAL.labels(status="failed").inc()
 
     async def shutdown(self) -> None:
+        # 1. Stopper keeper + workers d'abord : rien de nouveau ne démarre.
+        infra = [t for t in (self._keeper, *self._workers) if t is not None]
+        for t in infra:
+            t.cancel()
+        if infra:
+            await asyncio.gather(*infra, return_exceptions=True)
+        self._workers = []
+        self._keeper = None
+
+        # 2. Drainer la file : jobs jamais démarrés → failed(service_shutdown)
+        # (contrat fail-fast : le caller re-soumet, cf. spec 2026-06-01).
+        drained_ids = list(self._queued_ids)
+        self._queued_ids.clear()
+        while not self._queue.empty():
+            try:
+                self._queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+        self._update_queued_gauge()
+
+        # 3. Jobs en cours : cancel + marquage (comportement historique).
         job_ids = list(self._job_tasks.keys())
         tasks = list(self._job_tasks.values())
         for t in tasks:
             t.cancel()
         if tasks:
             await asyncio.wait(tasks, timeout=self._s.SHUTDOWN_GRACE_S)
-        for job_id in job_ids:
+        for job_id in (*drained_ids, *job_ids):
             rec = await self._store.get(job_id)
             if rec and rec.get("status") in ("pending", "running"):
                 rec.update({"status": "failed", "error": "service_shutdown",
@@ -276,3 +374,10 @@ class JobManager:
                     await self._store.write(rec, self._s.JOB_RESULT_TTL_S)
                 except Exception:
                     pass
+        # _inflight, deux chemins disjoints : les jobs DÉMARRÉS passent par le
+        # done-callback _on_done (décrément à l'annulation ci-dessus) ; les
+        # jobs DRAINÉS n'ont jamais eu de task → _on_done ne tirera jamais →
+        # décrément manuel ici. Pas de double comptage possible.
+        self._inflight = max(0, self._inflight - len(drained_ids))
+        from app.core.metrics import ASYNC_JOBS_ACTIVE
+        ASYNC_JOBS_ACTIVE.set(self._inflight)

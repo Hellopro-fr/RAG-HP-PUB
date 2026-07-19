@@ -76,6 +76,10 @@ ASYNC_JOBS_ACTIVE = Gauge(
     "detect_async_jobs_active",
     "Currently reserved/in-flight async jobs",
 )
+ASYNC_JOBS_QUEUED = Gauge(
+    "detect_async_jobs_queued",
+    "Async jobs waiting in the FIFO for a worker (subset of active)",
+)
 ASYNC_JOBS_TERMINAL = Counter(
     "detect_async_jobs_terminal_total",
     "Async jobs reaching a terminal status",

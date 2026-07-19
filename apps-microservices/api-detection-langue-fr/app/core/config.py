@@ -72,6 +72,10 @@ class Settings(BaseSettings):
     # Async job API (POST /detect-batch-async + GET poll)
     ASYNC_JOBS_ENABLED: bool = True
     MAX_ACTIVE_JOBS: int = 8
+    # Jobs exécutés SIMULTANÉMENT (file FIFO absorbe le reste jusqu'à
+    # MAX_ACTIVE_JOBS). 1 = sérialisé : chaque job dispose du pool navigateurs
+    # entier au lieu de le partager avec 7 autres (tempêtes de timeouts).
+    JOB_WORKER_CONCURRENCY: int = 1
     JOB_TTL_ACTIVE_S: int = 7200          # 2h — pending/running record TTL (refreshed by heartbeat)
     JOB_RESULT_TTL_S: int = 3600          # 1h — terminal record TTL (BO must poll within this)
     STALE_THRESHOLD_S: int = 120          # no heartbeat beyond this -> poll reports 'stale'

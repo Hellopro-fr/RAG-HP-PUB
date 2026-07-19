@@ -60,18 +60,21 @@ api-detection-langue-fr/
 
 In-process asyncio worker + Redis job store (`app/core/async_jobs.py`), wired via a FastAPI `lifespan` in `main.py` (`app.state.job_manager`). The worker reuses the same `_run_batch_core` as the sync `/detect-batch` (DRY) and the shared prod admission pool — **crawler-service is immune** because it passes `html_content` (bypasses admission).
 
+**Jobs execute from a FIFO queue** (spec `2026-07-19`): submits are enqueued and consumed by `JOB_WORKER_CONCURRENCY` workers (default **1** = serialized — each job gets the whole browser pool instead of sharing it with up to 7 others, which caused the 300s-timeout storms). `MAX_ACTIVE_JOBS` keeps its exact meaning: cap on **pending+running** (503 + Retry-After beyond). A queued job polls as `pending` — a keeper task refreshes its `last_activity` every `HEARTBEAT_INTERVAL_S` so it never falsely derives `stale`; after a crash/restart the keeper is gone and queued records go `stale` normally (fail-fast contract unchanged). Shutdown drains the queue: never-started jobs are marked `failed(service_shutdown)` like running ones.
+
 - **Submit** (`POST /detect-batch-async`, body = `AsyncBatchSubmitRequest`): `202 {job_id, status, total, poll_after_seconds}`. With `client_job_id` set, a re-submit returns the existing job (`200`, atomic `SET NX` idempotency).
 - **Poll** (`GET /detect-batch-async/{job_id}`): `AsyncBatchStatusResponse`. `stale` is computed on read (heartbeat older than `STALE_THRESHOLD_S` → dead worker, e.g. OOM restart).
 - **503 differentiation:** capacity (`MAX_ACTIVE_JOBS` reached) → `Retry-After` header set (`retryable:true`); kill-switch (`ASYNC_JOBS_ENABLED=false`) or Redis-unavailable → **no `Retry-After`** (`retryable:false`). Callers key off the header presence.
 - **Restart = fail-fast:** no resume. Stale/failed jobs are re-enqueued by the caller (BO `domaine_fr_retry`). Graceful shutdown marks running jobs `failed(service_shutdown)`.
 - **Redis required for async** (cache stays optional): if `REDIS_URL` is unset/unreachable, submit returns `503`; sync endpoints are unaffected.
 - **TTL invariant:** `JOB_RESULT_TTL_S < JOB_TTL_ACTIVE_S`; callers must poll within `JOB_RESULT_TTL_S`.
-- Metrics: `detect_async_jobs_submitted_total`, `detect_async_jobs_active`, `detect_async_jobs_terminal_total{status}`, `detect_async_job_duration_seconds`, `detect_async_job_capacity_rejected_total`. Per-item async fetches reuse `ADMISSION_REJECTED{endpoint="/api/v1/detect-batch-async"}`.
+- Metrics: `detect_async_jobs_submitted_total`, `detect_async_jobs_active` (reserved = pending+running), `detect_async_jobs_queued` (FIFO depth), `detect_async_jobs_terminal_total{status}`, `detect_async_job_duration_seconds`, `detect_async_job_capacity_rejected_total`. Per-item async fetches reuse `ADMISSION_REJECTED{endpoint="/api/v1/detect-batch-async"}`.
 
 | Variable | Default | Purpose |
 |---|---|---|
 | `ASYNC_JOBS_ENABLED` | `true` | Kill switch for the async job API (`false` → submit 503, not retryable). |
-| `MAX_ACTIVE_JOBS` | `8` | Max concurrent async jobs (capacity 503 + `Retry-After` beyond this). |
+| `MAX_ACTIVE_JOBS` | `8` | Max **pending+running** async jobs (capacity 503 + `Retry-After` beyond this). |
+| `JOB_WORKER_CONCURRENCY` | `1` | Jobs executing simultaneously; the FIFO queue absorbs the rest up to `MAX_ACTIVE_JOBS`. |
 | `JOB_TTL_ACTIVE_S` | `7200` | TTL of a pending/running job record (refreshed by heartbeat). |
 | `JOB_RESULT_TTL_S` | `3600` | TTL of a terminal job record (poll window). |
 | `STALE_THRESHOLD_S` | `120` | No-heartbeat window after which poll reports `stale`. |
@@ -116,7 +119,8 @@ Under concurrent load the service applies multiple layers of protection.
    - `GET /check-url` → **bypasses admission entirely**. No HTML fetch needed; no slot consumed.
 2. **Debug admission middleware** for `/detect-debug` only — isolated `_debug_admission` controller (`ADMISSION_DEBUG_SLOTS`, default 2) keeps dev traffic from starving production. Returns 503 + `Retry-After` on saturation.
 3. **Inflight URL dedup** coalesces concurrent fetches of the same URL into a single browser launch. The dedup leader acquires the admission slot; followers wait on the leader's future and do NOT acquire their own slot.
-4. **Browser semaphore** caps concurrent Camoufox/Chromium instances at `BROWSER_SEMAPHORE_SIZE` (default 10).
+4. **Browser semaphore** caps concurrent Camoufox/Chromium instances at `BROWSER_SEMAPHORE_SIZE` (default 10; compose deploys 6 after an OOM incident — see docker-compose comment).
+5. **Server-side batch-concurrency clamp** (spec `2026-07-19`): `_run_batch_core` clamps the requested `max_concurrency` to `ADMISSION_MAX_SLOTS` for any batch containing fetch items — a request above the pool size would structurally bounce the excess as `admission_rejected` on every wave. Batches that are 100% `html_content` (crawler-service) are NOT clamped (they never touch admission).
 
 `'admission_rejected'` is in `DomainCache._NEVER_CACHE_METHODS` — service saturation must never be persisted as a domain answer.
 

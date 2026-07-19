@@ -141,6 +141,21 @@ def _with_group(result: DetectionResponse, group_key: str) -> DetectionResponse:
     return DetectionResponse(**{**result.model_dump(), 'group': group_key})
 
 
+def _effective_batch_concurrency(items: list[BatchItem], requested: int) -> int:
+    """Clamp serveur de la concurrence batch au pool d'admission.
+
+    Une concurrence demandée > ADMISSION_MAX_SLOTS garantit des
+    admission_rejected structurels à chaque chunk (ex. BO envoie 10 sur un
+    déploiement à 8 slots). Le serveur connaît sa propre capacité — clamp ici
+    plutôt que dans chaque caller. Les batchs 100% html_content (crawler) ne
+    fetchent jamais → pas d'admission → pas de clamp.
+    """
+    if all(item.html_content is not None for item in items):
+        return requested
+    from main import _prod_admission  # lazy — même pattern que _fetch_with_admission
+    return min(requested, _prod_admission.max_slots)
+
+
 async def _detect_single_url(
     url: str,
     html_content: Optional[str] = None,
@@ -453,10 +468,17 @@ async def _run_batch_core(
     total_items = len(items_to_process)
     start_time = time.time()
 
-    logger.info(f"[BATCH] Debut traitement: {total_items} URLs, concurrence={opts.max_concurrency}, mode={mode}")
+    effective_concurrency = _effective_batch_concurrency(items_to_process, opts.max_concurrency)
+    if effective_concurrency != opts.max_concurrency:
+        logger.info(
+            f"[BATCH] Concurrence clampée {opts.max_concurrency} → {effective_concurrency} "
+            f"(ADMISSION_MAX_SLOTS)"
+        )
+
+    logger.info(f"[BATCH] Debut traitement: {total_items} URLs, concurrence={effective_concurrency}, mode={mode}")
 
     # Sémaphore pour limiter la concurrence
-    semaphore = asyncio.Semaphore(opts.max_concurrency)
+    semaphore = asyncio.Semaphore(effective_concurrency)
     processed_count = 0
     count_lock = asyncio.Lock()
 
@@ -531,7 +553,7 @@ async def _run_batch_core(
     async def process_single(index: int, item: BatchItem) -> DetectionResponse:
         # Stagger plafonné à une « vague » de concurrence (évite 49.5s pour item 99)
         if index > 0:
-            max_stagger = opts.max_concurrency * 0.5
+            max_stagger = effective_concurrency * 0.5
             await asyncio.sleep(min(index * 0.5, max_stagger))
         async with semaphore:
             try:

@@ -536,3 +536,79 @@ async def test_dedup_follower_strict_single_loop(monkeypatch):
     assert hits_delta == 4, (
         f"Expected 4 follower dedup hits; got {hits_delta}"
     )
+
+
+# ─── Server-side concurrency clamp (spec 2026-07-19) ─────────────────────────
+
+class TestEffectiveBatchConcurrency:
+    """_effective_batch_concurrency : clamp serveur au pool d'admission."""
+
+    def _items(self, n, html=None):
+        from app.models.schemas import BatchItem
+        return [BatchItem(url=f"https://s{i}.fr", html_content=html) for i in range(n)]
+
+    def test_fetch_batch_clamped_to_admission_slots(self, monkeypatch):
+        import main
+        from app.core.admission import AdmissionController
+        from app.api import routes
+        monkeypatch.setattr(main, "_prod_admission", AdmissionController(max_slots=8))
+        assert routes._effective_batch_concurrency(self._items(3), 10) == 8
+        assert routes._effective_batch_concurrency(self._items(3), 4) == 4
+
+    def test_html_content_batch_not_clamped(self):
+        from app.api import routes
+        # Batch 100% html_content (crawler) : jamais de fetch → pas de clamp.
+        assert routes._effective_batch_concurrency(
+            self._items(3, html="<html lang='fr'></html>"), 50
+        ) == 50
+
+    def test_mixed_batch_clamped(self, monkeypatch):
+        import main
+        from app.core.admission import AdmissionController
+        from app.api import routes
+        from app.models.schemas import BatchItem
+        monkeypatch.setattr(main, "_prod_admission", AdmissionController(max_slots=8))
+        items = [
+            BatchItem(url="https://a.fr", html_content="<html/>"),
+            BatchItem(url="https://b.fr"),
+        ]
+        assert routes._effective_batch_concurrency(items, 20) == 8
+
+
+def test_batch_no_structural_admission_rejected(monkeypatch):
+    """4 items fetch, admission à 2 slots, concurrence demandée 10 : le clamp
+    serveur aligne la concurrence sur le pool → zéro admission_rejected
+    (avant le clamp, 2 items par vague rebondissaient structurellement)."""
+    import asyncio as _asyncio
+    import main
+    from app.core.admission import AdmissionController
+    from app.services.scraper import ScrapeResult
+
+    monkeypatch.setattr(main, "_prod_admission", AdmissionController(max_slots=2))
+
+    fr_text = (
+        "Bienvenue sur notre site. Nous concevons et fabriquons des "
+        "équipements industriels pour les professionnels depuis 1985. "
+    )
+
+    async def slow_fetch(url, proxy_url):
+        await _asyncio.sleep(0.05)  # chevauchement réel des fetches
+        return ScrapeResult(
+            html=f"<html lang='fr'><body>{fr_text * 3}</body></html>",
+            final_url=url, status_code=200, content_type="text/html",
+        )
+
+    monkeypatch.setattr("app.api.routes.fetch_html", slow_fetch)
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/v1/detect-batch",
+            json={
+                "items": [{"url": f"https://site{i}.fr"} for i in range(4)],
+                "mode": "simple",
+                "max_concurrency": 10,
+            },
+        )
+    assert resp.status_code == 200
+    methods = [r["method"] for r in resp.json()["results"]]
+    assert "admission_rejected" not in methods, f"clamp inopérant: {methods}"
