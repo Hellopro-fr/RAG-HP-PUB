@@ -103,6 +103,16 @@ class Settings(BaseSettings):
     # Cap on crawls stashed per sweep tick (bounds upload-daemon load).
     STASH_MAX_PER_SWEEP: int = 5
 
+    # --- Archived-leftover reclean (reconcile sweep) ---
+    # Kill-switch for re-cleaning storage/ subtrees left under status='archived'
+    # crawls (crash window between mark and cleanup, idempotent-retry/GCS-fallback
+    # archive branches, /html re-extraction, update-mode restore).
+    ARCHIVED_RECLEAN_ENABLED: bool = True
+    # Grace before re-cleaning, so a fresh /html extraction stays browsable.
+    ARCHIVED_RECLEAN_MIN_AGE_SECONDS: int = 86400
+    # Cap on leftovers re-cleaned per reconcile tick (bounds rmtree I/O).
+    ARCHIVED_RECLEAN_MAX_PER_TICK: int = 3
+
     model_config = {
         "env_file": ".env",
         "extra": "ignore",

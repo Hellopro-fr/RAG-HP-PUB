@@ -2596,18 +2596,6 @@ class CrawlerManager:
                                 except OSError:
                                     pass
 
-                    def _cleanup_local_data():
-                        """Free the disk-heavy Crawlee tree (storage/: datasets,
-                        request_queues, key_value_stores). Everything else in the
-                        crawl dir (crawler.log, logs/, *.json sidecars) is small
-                        and kept for investigation — the tar holds a full copy."""
-                        heavy = os.path.join(job_storage_path, 'storage')
-                        if os.path.isdir(heavy):
-                            shutil.rmtree(heavy, ignore_errors=True)
-                            if os.path.exists(heavy):
-                                raise RuntimeError(
-                                    f"storage/ tree only partially removed at '{heavy}' — disk space may not have been freed")
-
                     # Step 1: Create archive
                     final_path, archive_size = await anyio.to_thread.run_sync(_create_archive)
                     logger.info(f"Successfully archived crawl '{crawl_id}' ({archive_size} bytes).")
@@ -2615,9 +2603,11 @@ class CrawlerManager:
                     # Step 2: Mark as archived (must succeed before cleanup)
                     await self._mark_as_archived(crawl_id)
 
-                    # Step 3: Cleanup (safe to fail — data is in the archive)
+                    # Step 3: Cleanup (safe to fail — data is in the archive;
+                    # a failure here is retried by the reconcile sweep,
+                    # _reclean_archived_leftovers)
                     try:
-                        await anyio.to_thread.run_sync(_cleanup_local_data)
+                        await anyio.to_thread.run_sync(self._cleanup_local_data, job_storage_path)
                         logger.info(f"Cleaned up local storage for '{crawl_id}'.")
                     except Exception as e:
                         logger.warning(f"Local cleanup failed for '{crawl_id}' (archive is safe): {e}")
@@ -2640,6 +2630,23 @@ class CrawlerManager:
                         status_code=500, detail=f"Archiving failed: {str(e)}")
         finally:
             await self._release_ownership_lock(archive_lock_key, lock_value)
+
+    @staticmethod
+    def _cleanup_local_data(storage_path: str):
+        """Free the disk-heavy Crawlee tree ({storage_path}/storage/: datasets,
+        request_queues, key_value_stores). Everything else in the crawl dir
+        (crawler.log, logs/, *.json sidecars) is small and kept for
+        investigation — the tar holds a full copy.
+
+        Shared by archive_crawl (post-archive cleanup) and the reconcile
+        sweep's _reclean_archived_leftovers. Raises RuntimeError on partial
+        removal."""
+        heavy = os.path.join(storage_path, 'storage')
+        if os.path.isdir(heavy):
+            shutil.rmtree(heavy, ignore_errors=True)
+            if os.path.exists(heavy):
+                raise RuntimeError(
+                    f"storage/ tree only partially removed at '{heavy}' — disk space may not have been freed")
 
     async def _mark_as_archived(self, crawl_id: str):
         """Updates job status to 'archived' in Redis to prevent double-archiving.
@@ -3640,6 +3647,8 @@ class CrawlerManager:
 
         all_jobs_raw = await pipe.execute()
         auto_stash_pool = []  # collected during scan; dispatched after the loop (auto-stash P2)
+        archived_candidates = []  # status='archived' jobs — leftover storage/ reclean sweep
+        active_prev_ids = set()  # previous_crawl_id of in-flight jobs (update-restore guard)
 
         for i, job_raw in enumerate(all_jobs_raw):
             if not job_raw: continue
@@ -3648,6 +3657,13 @@ class CrawlerManager:
                 job_data = json.loads(job_raw)
                 crawl_id = job_data.get("crawl_id")
                 status = job_data.get("status")
+
+                if status in ("starting", "running", "restarting_oom", "stopping") \
+                        and job_data.get("previous_crawl_id"):
+                    active_prev_ids.add(job_data["previous_crawl_id"])
+
+                if status == "archived":
+                    archived_candidates.append(job_data)
 
                 if settings.AUTO_STASH_ENABLED and \
                         status in ("finished", "failed", "stopped") and not job_data.get("stashed_at"):
@@ -3872,6 +3888,16 @@ class CrawlerManager:
                 self._auto_stash_inflight.add(job_data.get("crawl_id"))
                 asyncio.create_task(self._auto_stash_one(job_data, reason))
 
+        # --- Archived-leftover reclean. archive_crawl marks 'archived' BEFORE
+        # its local cleanup and a cleanup failure is only warned, never retried
+        # (/archive itself 409s on archived). Other producers of multi-GB
+        # storage/ trees under archived crawls: the idempotent-retry and
+        # GCS-fallback branches (mark archived with NO cleanup), GET /html
+        # re-extracting the full tar, update-mode _restore_archived_crawl when
+        # the update never finalizes. This sweep is the retry. ---
+        if settings.ARCHIVED_RECLEAN_ENABLED and archived_candidates:
+            await self._reclean_archived_leftovers(archived_candidates, active_prev_ids)
+
         # Correct the global counter
         counter_value_raw = await cache_service.get_key(CRAWL_RUNNING_COUNT_KEY)
         try:
@@ -3928,6 +3954,58 @@ class CrawlerManager:
                 entry["url"], entry["params"], entry["crawl_id"], entry["webhook_type"]))
             replayed += 1
         return replayed
+
+    async def _reclean_archived_leftovers(self, jobs: list, active_prev_ids: set) -> int:
+        """Re-cleans leftover storage/ subtrees under status='archived' crawls.
+
+        Called once per reconcile tick, leader-only. Skips crawls restored by
+        an in-flight update (their id is in active_prev_ids — cleaning would
+        yank the previous dataset out from under the running crawl) and
+        subtrees younger than ARCHIVED_RECLEAN_MIN_AGE_SECONDS (a fresh /html
+        extraction must stay browsable). Caps ARCHIVED_RECLEAN_MAX_PER_TICK
+        actioned per tick to bound rmtree I/O.
+
+        Deliberately OUT of scope: stashed_at leftovers — an interrupted
+        unstash may have already deleted the GCS stash tar, so re-cleaning
+        those risks data loss; the remediation is a manual unstash/stash
+        round-trip.
+
+        Never raises (reconcile-loop protection). Returns the count actioned.
+        """
+        if not settings.ARCHIVED_RECLEAN_ENABLED:
+            return 0
+        recleaned = 0
+        for job_data in jobs:
+            if recleaned >= settings.ARCHIVED_RECLEAN_MAX_PER_TICK:
+                break
+            try:
+                crawl_id = job_data.get("crawl_id")
+                storage_path = job_data.get("storage_path") or os.path.join(
+                    settings.CRAWLER_STORAGE_PATH, str(crawl_id))
+                subtree = os.path.join(storage_path, "storage")
+                if not os.path.isdir(subtree):
+                    continue
+                if crawl_id in active_prev_ids:
+                    logger.info(
+                        f"Archived-leftover reclean: skipping '{crawl_id}' — an "
+                        f"in-flight update crawl restored it as previous_crawl_id.")
+                    continue
+                try:
+                    age_seconds = time.time() - os.stat(subtree).st_mtime
+                except OSError:
+                    continue
+                if age_seconds < settings.ARCHIVED_RECLEAN_MIN_AGE_SECONDS:
+                    continue
+                logger.info(f"ARCHIVED_LEFTOVER_RECLEAN crawl_id={crawl_id} path={subtree}")
+                try:
+                    await anyio.to_thread.run_sync(self._cleanup_local_data, storage_path)
+                except Exception as e:
+                    logger.warning(f"reclean partial for {crawl_id}: {e}")
+                recleaned += 1
+            except Exception as e:
+                logger.warning(
+                    f"Archived-leftover reclean failed for '{job_data.get('crawl_id')}': {e}")
+        return recleaned
 
     async def cleanup_archives(self, max_age_hours: int, delete_all: bool = False) -> Tuple[int, int, int]:
         """
