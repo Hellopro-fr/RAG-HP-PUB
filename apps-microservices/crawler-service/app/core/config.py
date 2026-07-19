@@ -112,6 +112,12 @@ class Settings(BaseSettings):
     ARCHIVED_RECLEAN_MIN_AGE_SECONDS: int = 86400
     # Cap on leftovers re-cleaned per reconcile tick (bounds rmtree I/O).
     ARCHIVED_RECLEAN_MAX_PER_TICK: int = 3
+    # Host-generated allowlist of crawl_ids whose tar is PROVEN present in GCS
+    # (one id per line, written by tools/verify_archives_in_gcs.sh onto the
+    # archives shared volume — same volume as ARCHIVES_SHARED_PATH). The
+    # container has no GCS access, so this file is the only trusted evidence;
+    # missing/empty file => the sweep deletes NOTHING (fail-closed).
+    ARCHIVED_RECLEAN_VERIFIED_LIST: str = "/app/archives/verified_in_gcs.list"
 
     model_config = {
         "env_file": ".env",

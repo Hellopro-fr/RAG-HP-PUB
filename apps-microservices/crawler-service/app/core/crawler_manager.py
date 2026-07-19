@@ -3958,12 +3958,22 @@ class CrawlerManager:
     async def _reclean_archived_leftovers(self, jobs: list, active_prev_ids: set) -> int:
         """Re-cleans leftover storage/ subtrees under status='archived' crawls.
 
-        Called once per reconcile tick, leader-only. Skips crawls restored by
-        an in-flight update (their id is in active_prev_ids — cleaning would
-        yank the previous dataset out from under the running crawl) and
-        subtrees younger than ARCHIVED_RECLEAN_MIN_AGE_SECONDS (a fresh /html
-        extraction must stay browsable). Caps ARCHIVED_RECLEAN_MAX_PER_TICK
-        actioned per tick to bound rmtree I/O.
+        Called once per reconcile tick, leader-only. Deletion requires BOTH
+        Redis status='archived' AND presence in the host-generated
+        GCS-verified allowlist (ARCHIVED_RECLEAN_VERIFIED_LIST, written by
+        tools/verify_archives_in_gcs.sh). The list is the safety property —
+        the tar is proven present in gs://bucket/crawls/ with a plausible
+        size. Redis alone is NOT trusted: the upload daemon uploads AFTER the
+        status flips, dead-letters exist, and blobs get recreated; the
+        container itself has no GCS access. No list => no deletion at all
+        (fail-closed).
+
+        Also skips crawls restored by an in-flight update (their id is in
+        active_prev_ids — cleaning would yank the previous dataset out from
+        under the running crawl) and subtrees younger than
+        ARCHIVED_RECLEAN_MIN_AGE_SECONDS (a fresh /html extraction must stay
+        browsable). Caps ARCHIVED_RECLEAN_MAX_PER_TICK actioned per tick to
+        bound rmtree I/O.
 
         Deliberately OUT of scope: stashed_at leftovers — an interrupted
         unstash may have already deleted the GCS stash tar, so re-cleaning
@@ -3974,6 +3984,9 @@ class CrawlerManager:
         """
         if not settings.ARCHIVED_RECLEAN_ENABLED:
             return 0
+        verified = self._load_reclean_allowlist()
+        if verified is None:
+            return 0  # fail-closed: no verified-in-GCS list -> no deletion at all
         recleaned = 0
         for job_data in jobs:
             if recleaned >= settings.ARCHIVED_RECLEAN_MAX_PER_TICK:
@@ -3985,6 +3998,8 @@ class CrawlerManager:
                 subtree = os.path.join(storage_path, "storage")
                 if not os.path.isdir(subtree):
                     continue
+                if str(crawl_id) not in verified:
+                    continue  # not GCS-verified — silent skip (candidates may number thousands)
                 if crawl_id in active_prev_ids:
                     logger.info(
                         f"Archived-leftover reclean: skipping '{crawl_id}' — an "
@@ -4006,6 +4021,28 @@ class CrawlerManager:
                 logger.warning(
                     f"Archived-leftover reclean failed for '{job_data.get('crawl_id')}': {e}")
         return recleaned
+
+    def _load_reclean_allowlist(self) -> Optional[set]:
+        """Reads the host-generated GCS-verified crawl-id allowlist.
+
+        One id per line; blank lines and '#' comments ignored. Returns None
+        when the file is missing, unreadable or empty — callers must then
+        delete nothing (fail-closed).
+        """
+        path = settings.ARCHIVED_RECLEAN_VERIFIED_LIST
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                ids = {line.strip() for line in f
+                       if line.strip() and not line.lstrip().startswith("#")}
+        except OSError:
+            ids = set()
+        if not ids:
+            logger.warning(
+                f"Archived-leftover reclean: verification list '{path}' "
+                f"missing/empty — sweep disabled (fail-closed). Generate it "
+                f"host-side with tools/verify_archives_in_gcs.sh")
+            return None
+        return ids
 
     async def cleanup_archives(self, max_age_hours: int, delete_all: bool = False) -> Tuple[int, int, int]:
         """
