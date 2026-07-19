@@ -1,0 +1,22 @@
+{
+  "historique_comparaison_produit": {
+    "database_id": 10,
+    "description": "Journal des comparaisons avant/après du contenu d'un produit lors d'une mise à jour (MAJ / re-crawl) : 1 ligne par (produit, champ comparé). Enregistre l'ancienne et la nouvelle valeur d'un champ (titre, description) et un score de similarité, pour tracer l'évolution du contenu entre deux crawls. Écrit par fonctions_maj_crawling.php. Alimente le suivi de changement (lié à crawl_metrics.taux_changement). Stockée dans HELLOPRO_IA.",
+    "primary_key": "id_historique_comparaison",
+    "default_order_by": "date_ajout DESC",
+    "rows": null,
+    "columns": {
+      "id_historique_comparaison": { "type": "int", "desc": "PK auto-increment de la ligne de comparaison." },
+      "id_produit_scrapping": { "type": "int", "desc": "FK → produit_scrapping_ia.id_produit_scrapping_psi (= scrapping_fiche_produit_ia.id_scrapping_fiche_produit_ia, même espace d'id 1:1) : produit comparé. NOT NULL, indexé." },
+      "type_info": { "type": "varchar(50)", "desc": "Champ produit comparé (NOT NULL, indexé). Valeurs observées : 'titre' (12158) · 'description' (15262)." },
+      "valeur_avant": { "type": "text", "desc": "Valeur du champ AVANT la MAJ (contenu brut, souvent HTML pour la description). NULLable. NB : encodage parfois double/mojibake dans les données héritées." },
+      "valeur_apres": { "type": "text", "desc": "Valeur du champ APRÈS la MAJ (contenu brut, souvent HTML). NULLable." },
+      "similarite": { "type": "int", "desc": "Score de similarité avant/après en pourcentage (0-100 ; observé 0-85, moyenne ~52 pour le titre, ~33 pour la description). Bas = fort changement de contenu. NULLable." },
+      "date_ajout": { "type": "datetime", "desc": "Date d'enregistrement de la comparaison (DEFAULT CURRENT_TIMESTAMP, NOT NULL, indexé). Champ de tri principal." }
+    },
+    "relations": [
+      { "column": "id_produit_scrapping", "references": "produit_scrapping_ia.id_produit_scrapping_psi", "note": "Produit comparé (même id que scrapping_fiche_produit_ia, 1:1)." }
+    ],
+    "notes": "Journal append-only des comparaisons de contenu produit lors d'une MAJ (re-crawl). Écrit par fonctions_maj_crawling.php (HELLOPRO_IA). type_info se limite à titre/description (idx_type_info, cardinalité 2). similarite = pourcentage 0-100 (bas = fort changement) ; à recouper avec crawl_metrics.taux_changement pour l'ampleur globale d'une MAJ. valeur_avant/valeur_apres contiennent du HTML brut."
+  }
+}
