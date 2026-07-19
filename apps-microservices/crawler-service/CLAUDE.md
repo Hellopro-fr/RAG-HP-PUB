@@ -648,6 +648,7 @@ Read-only introspection surface so incidents can be investigated **over the gate
 | `GET /admin/dataset/{crawl_id}?kind=&offset=&limit=&content_chars=` | dataset sampling, newest first, **no side effects** (never unstashes, never stamps `downloaded_at`) |
 | `GET /admin/sidecar/{crawl_id}?name=` | one of 13 whitelisted sidecars (`_callback_payload.json`, `_diez/_questionmark_*`, `_exit_reason.json`, `timing-summary.json`…) |
 | `GET /admin/daemon-state` | GCS daemons liveness/backlog: `.daemon-heartbeat` age per marker dir, pending files, `dead_letter/`, `*.error` contents |
+| `GET /admin/storage-dirs?offset=&limit=&sizes=` | per-crawl `/app/storage` dir inventory + `crawl_job` Redis join (status/stashed_at) — the leftover hunt: `has_storage_subtree` on a stashed/archived crawl = disk the cleanup missed; `sizes=true` = recursive sizes under a 60s budget |
 | `GET /capacity` | now also carries a `disk` block (storage/archives/stash `used_pct` + `high_water_pct`) |
 | `GET /results/{id}?peek=true` | download WITHOUT starting the auto-stash grace clock (still inline-unstashes cold crawls — use `/admin/dataset` for zero side effects) |
 
