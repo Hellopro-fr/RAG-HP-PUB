@@ -443,3 +443,110 @@ async def daemon_state():
     dir) + pending markers + dead-letter contents + *.error texts —
     distinguishes 'daemon dead' vs 'GCS slow' vs 'dead-lettered' in one call."""
     return {name: _describe_dir(path) for name, path in _daemon_dirs().items()}
+
+
+_STORAGE_DIRS_MAX_LIMIT = 500
+# Full recursive sizing of the page stops once this much wall time is spent;
+# the gateway caps requests at 180s — stay far under.
+_STORAGE_DIRS_SIZING_BUDGET_S = 60.0
+
+
+def _dir_size_bytes(path: str) -> int:
+    """Recursive byte size of a tree (regular files only, symlinks not
+    followed). Per-file stat errors are ignored — a vanishing file mid-walk
+    must not kill a visibility endpoint."""
+    total = 0
+    for dirpath, _dirnames, filenames in os.walk(path, followlinks=False):
+        for fname in filenames:
+            try:
+                total += os.stat(os.path.join(dirpath, fname),
+                                 follow_symlinks=False).st_size
+            except OSError:
+                continue
+    return total
+
+
+@router.get("/storage-dirs", dependencies=[Depends(verify_api_key)])
+async def storage_dirs(
+    offset: int = Query(0),
+    limit: int = Query(100),
+    sizes: bool = Query(False),
+):
+    """Per-crawl directory inventory of CRAWLER_STORAGE_PATH (the 384G volume).
+    Lists immediate subdirs (name = crawl_id by convention) with cheap stats,
+    optional recursive sizes (time-budgeted), and each dir's crawl_job Redis
+    status — the leftover hunt: a dir whose Redis blob says stashed/archived
+    but which still holds a storage/ subtree is disk the cleanup missed.
+    Read-only, fail-open: missing root or dead Redis degrade, never 500."""
+    # Clamp instead of 422: operators probing with a huge limit should get a
+    # capped page, not a validation error.
+    offset = max(0, offset)
+    limit = max(1, min(limit, _STORAGE_DIRS_MAX_LIMIT))
+    started = time.monotonic()
+    root = settings.CRAWLER_STORAGE_PATH
+
+    def _response(total, dirs, budget_hit, error=None):
+        body = {"root": root, "total_dirs": total, "offset": offset,
+                "limit": limit, "returned": len(dirs), "sizes": sizes,
+                "sizing_budget_hit": budget_hit,
+                "elapsed_ms": int((time.monotonic() - started) * 1000),
+                "dirs": dirs}
+        if error is not None:
+            body["error"] = error
+        return body
+
+    names = []
+    try:
+        with os.scandir(root) as it:
+            for entry in it:
+                if entry.is_dir(follow_symlinks=False):
+                    names.append(entry.name)
+    except OSError as e:
+        return _response(0, [], False, error=str(e))
+    names.sort()  # stable pagination
+
+    now = time.time()
+    budget_hit = False
+    dirs = []
+    for name in names[offset:offset + limit]:
+        path = os.path.join(root, name)
+        try:
+            mtime_age = int(now - os.stat(path).st_mtime)
+        except OSError:
+            mtime_age = None
+        try:
+            with os.scandir(path) as it:
+                top_entry_count = sum(1 for _ in it)
+        except OSError:
+            top_entry_count = None
+        info = {
+            "name": name,
+            "mtime_age_seconds": mtime_age,
+            # The heavy Crawlee tree; its presence on a stashed/archived crawl
+            # is the leftover signature.
+            "has_storage_subtree": os.path.isdir(os.path.join(path, "storage")),
+            "top_entry_count": top_entry_count,
+        }
+        if sizes:
+            if budget_hit or time.monotonic() - started >= _STORAGE_DIRS_SIZING_BUDGET_S:
+                budget_hit = True
+                info["size_bytes"] = None
+            else:
+                info["size_bytes"] = _dir_size_bytes(path)
+        dirs.append(info)
+
+    # Redis join, fail-open: this endpoint exists precisely for incident
+    # visibility — it must keep answering when Redis does not.
+    try:
+        for d in dirs:
+            blob = await cache_service.get_json(f"crawl_job:{d['name']}")
+            if blob:
+                d["redis"] = {"present": True, "status": blob.get("status"),
+                              "stashed_at": blob.get("stashed_at")}
+            else:
+                d["redis"] = {"present": False, "status": None, "stashed_at": None}
+    except Exception as e:
+        for d in dirs:
+            d["redis"] = {"error": str(e)}
+
+    return _response(len(names), dirs, budget_hit)
