@@ -1,0 +1,46 @@
+{
+  "domaine_identification_prospects": {
+    "database_id": 10,
+    "description": "Machine à états par domaine du pipeline « Identification prospects IA » (classe Identification_prospects_ia) : 1 ligne = 1 domaine candidat en cours de qualification en prospect Hellopro. Chaque domaine traverse 6 phases (vérification B2B → SERP Apify → scrape cheerio → éligibilité ChatGPT → création société/Europages), chaque phase stampée dans une colonne etat_*_dip. Regroupé par run/batch via id_aip_dip. Alimente les tables enfant serp_cheerio_/action_verification_/chatgpt_/reponse_chatgpt_/societe_identification_prospects. Stockée dans HELLOPRO_IA. Suffixe colonnes _dip.",
+    "primary_key": "id_domaine_identification_prospects",
+    "default_order_by": "id_domaine_identification_prospects DESC",
+    "rows": null,
+    "columns": {
+      "id_domaine_identification_prospects": { "type": "int", "desc": "Identifiant unique du domaine prospect (PK, auto-increment). Référencé par les tables enfant via id_dip_* (id_dip_sip, id_dip_scip, id_dip_avp, id_dip_cip, id_dip_rcip)." },
+      "url_dip": { "type": "varchar(255)", "desc": "URL de la page d'accueil soumise (normalisée avec https:// si le schéma manque). NULLable." },
+      "domaine_dip": { "type": "varchar(255)", "desc": "Domaine de base extrait de url_dip (recupere_domaine). CLÉ DE DÉDUP : un domaine déjà présent est sauté (deja_identification_prospect). NULLable." },
+      "etat_verification_dip": { "type": "tinyint", "desc": "Phase 1 — vérification B2B (ChatGPT sur title/meta de la home). Défaut -1. Valeurs émises : -1=non testé · 1=fournisseur B2B (ChatGPT 'oui', ou accepté par défaut si home sans title+meta) · 0=non · 4=scraper a renvoyé un contenu vide. (Le tableau de libellés mentionne aussi 2/3 mais le writer ne les émet pas.)" },
+      "etat_serp_dip": { "type": "tinyint", "desc": "Phase 2 — récupération SERP Apify (découverte des URLs contact/qui-sommes-nous/mentions). Défaut 0. 0=non démarré · 1=fait sans erreur · 2=erreur (curl SERP ou résultat non parsable)." },
+      "etat_cheerio_dip": { "type": "tinyint", "desc": "Phase 3 — scrape maison (Crawlee/cheerio via shell.php) des URLs issues du SERP. Défaut 0. 0=non démarré · 1=fait (branche erreur=2 commentée → en pratique 0/1)." },
+      "eligibilite_dip": { "type": "tinyint", "desc": "VERDICT d'éligibilité prospect (défaut -1), calculé à partir des 4 réponses oui/non de ChatGPT : -1=non évalué · 1=pleinement éligible (4/4 « oui ») · 2=éligible sur le sous-ensemble géographique/région (Q1,2,4 « oui », Q3 non — ATTENTION : c'est un 2e tier éligible plus faible, PAS une erreur ; la société est créée si eligibilite_dip IN (1,2)) · 0=non éligible · 3=échec/JSON non parsable (rare). Piège : le tableau de libellés de la classe dit à tort 2=« Erreur » — se fier au writer, pas au label. Distribution : -1≈20091, 0≈6507, 1≈5588, 2≈1543." },
+      "etat_societe_info_dip": { "type": "tinyint", "desc": "Phase 5 — création de la société IA + liaison Europages/societe_info. Défaut 0. 0=non testé · 1=société créée et liée. (Valeur 5 résiduelle observée = legacy/[non émis par le writer _dip actuel].)" },
+      "id_aip_dip": { "type": "int", "desc": "FK → action_identification_prospects.id_action_identification_prospects (« aip »). NOT NULL, indexé. 1 aip = 1 run/batch du pipeline (porte etat_aip 0=créé/1=en cours/2=terminé et statut_aip 0-6 = phase courante, qui pilote la reprise/le skip). Tous les domaines d'un batch : WHERE id_aip_dip = {id_run}." },
+      "etat_chatgpt_dip": { "type": "tinyint", "desc": "Phase 4 — état de l'appel LLM d'éligibilité (prompt id 48). Défaut 0. 0=non démarré · 1=terminé · 2=erreur API · 3=context_length_exceeded." },
+      "source_dip": { "type": "tinyint", "desc": "Provenance du domaine (tag, ne change pas le routage). Défaut 0. 0='ia' (domaine issu du flux variante/catégorie, fournisseur NON connu du BO) · 1='bo' (domaine déjà présent dans liste_url_bo = fournisseur BO connu)." }
+    },
+    "relations": [
+      { "column": "id_aip_dip", "references": "action_identification_prospects.id_action_identification_prospects", "cardinality": "N:1", "note": "Run/batch du pipeline (statut_aip 0-6 pilote les phases). Créé par gestion_groupe()." },
+      { "column": "id_domaine_identification_prospects", "referenced_by": "societe_identification_prospects.id_dip_sip", "note": "Société identifiée sur ce domaine." },
+      { "column": "id_domaine_identification_prospects", "referenced_by": "serp_cheerio_/action_verification_/chatgpt_/reponse_chatgpt_identification_prospects (id_dip_*)", "note": "Sorties par phase." }
+    ],
+    "notes": "Pipeline par ligne : INSERT (colonnes phase aux défauts) → verification → serp → cheerio → chatgpt+eligibilite → societe_info ; gaté par action_identification_prospects.statut_aip. Twin IA du vieux pipeline BO (action_apify_serp/cheerio/chatgpt en ANNUAIRE_BO) — les scripts BO/script/chatgpt/identification_prospects/* n'écrivent PAS cette table. Writers : classe Identification_prospects_ia (sauvegarde_domaine_bdd + maj_etat_dip pour les transitions) et launcher script_lancer_identification_prospect_ia.php (alimente_domaine_identification_prospects, pré-seed eligibilite_dip=1 si le pré-check BO a déjà qualifié). Lecteurs : etat_situation_societe (UI), dashboard ajax_scrapping_v3.php (éligible = eligibilite_dip=1 ET ligne societe_identification_prospects existe). Pas de DDL versionné. DB = LINK_MYSQLI_HELLOPRO_IA."
+  },
+  "societe_identification_prospects": {
+    "database_id": 10,
+    "description": "Table de liaison du pipeline « Identification prospects IA » : 1 ligne = 1 couple (société IA, domaine prospect). Créée quand un domaine prospect passe l'étape d'éligibilité et qu'une société est créée côté IA et rattachée au domaine source. Sert de marqueur d'ORIGINE distinguant les sociétés « Identification Prospect » des sociétés crawlées manuellement. Stockée dans HELLOPRO_IA. Suffixe colonnes _sip.",
+    "primary_key": "id_societe_identification_prospects",
+    "default_order_by": "id_societe_identification_prospects DESC",
+    "rows": null,
+    "columns": {
+      "id_societe_identification_prospects": { "type": "int", "desc": "Identifiant unique de la ligne (PK, auto-increment)." },
+      "existence_societe_sip": { "type": "tinyint", "desc": "L'entreprise identifiée existait-elle déjà comme société BO ? 1=oui (rattachée à une entreprise BO existante, id_societe_existant_hp) · 0=non (nouvelle entreprise, id_societe_nouveau_hp) · NULL=non renseigné (inserts legacy). Écrit uniquement par l'UPSERT du tableau de bord v2 ; les 2 writers historiques laissent NULL. Distribution : NULL≈4759, 1≈2951, 0≈591." },
+      "id_societe_sip": { "type": "int", "desc": "FK → societe.id_societe (HELLOPRO_IA) : la société IA créée pour le prospect (PAS la société BO). = mysqli_insert_id après INSERT dans societe IA. Le lien vers la société BO passe par assoc_societe_hp (id_societe_ash = id_societe_sip → id_societe_hp_ash). NULLable." },
+      "id_dip_sip": { "type": "int", "desc": "FK → domaine_identification_prospects.id_domaine_identification_prospects : le domaine prospect source. NULLable." }
+    },
+    "relations": [
+      { "column": "id_societe_sip", "references": "societe.id_societe (HELLOPRO_IA)", "cardinality": "N:1", "note": "Société IA du prospect. Pont vers le BO via assoc_societe_hp." },
+      { "column": "id_dip_sip", "references": "domaine_identification_prospects.id_domaine_identification_prospects", "cardinality": "N:1", "note": "Domaine prospect source." }
+    ],
+    "notes": "1 ligne par (société IA, domaine prospect). L'existence d'une ligne (id_dip_sip IS NOT NULL) marque une société d'origine « Identification Prospect » (filtrée dans les listes/fiches société). Writers : classe Identification_prospects_ia (étape europage/société-info, dédup verif_societe_identification_prospects sur id_dip_sip), launcher script_lancer_identification_prospect_ia.php, et l'UPSERT alimenter_depuis_tableau_bord_source_v2.php (seul à écrire existence_societe_sip). Lecteurs : listes/fiches société (origine), tableau de bord, réplication fiche→BO, dashboard éligibilité. Pas de DDL versionné. DB = LINK_MYSQLI_HELLOPRO_IA."
+  }
+}
