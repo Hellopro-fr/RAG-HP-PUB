@@ -1,0 +1,24 @@
+{
+  "planPath": "docs/superpowers/plans/2026-07-22-detection-async-job-hang-hardening.md",
+  "tasks": [
+    {
+      "id": 44,
+      "subject": "Task 1: L1 self-aborting browser teardown + op/launch timeouts (scraper.py)",
+      "status": "pending",
+      "description": "**Goal:** dead-browser teardown can't hang; item self-aborts so caller wait_for(300) lands.\n\n**Files:** app/core/config.py, app/services/scraper.py, tests/test_close_or_abandon.py\n\n```json:metadata\n{\"files\":[\"apps-microservices/api-detection-langue-fr/app/core/config.py\",\"apps-microservices/api-detection-langue-fr/app/services/scraper.py\",\"apps-microservices/api-detection-langue-fr/tests/test_close_or_abandon.py\"],\"verifyCommand\":\"cd apps-microservices/api-detection-langue-fr && pytest tests/test_close_or_abandon.py -v\",\"acceptanceCriteria\":[\"_close_or_abandon abandons hang within timeout\",\"teardown via _close_or_abandon\",\"playwright start()/finally stop() bounded\",\"context.set_default_timeout\",\"both launches bounded\"]}\n```"
+    },
+    {
+      "id": 45,
+      "subject": "Task 2: L2 worker watchdog abandons over-budget jobs (async_jobs.py)",
+      "status": "pending",
+      "description": "**Goal:** worker can't be frozen by one job; over-JOB_MAX_S -> failed(job_timeout)+abandon+proceed.\n\n**Files:** app/core/config.py, app/core/async_jobs.py, tests/test_worker_watchdog.py\n\n```json:metadata\n{\"files\":[\"apps-microservices/api-detection-langue-fr/app/core/config.py\",\"apps-microservices/api-detection-langue-fr/app/core/async_jobs.py\",\"apps-microservices/api-detection-langue-fr/tests/test_worker_watchdog.py\"],\"verifyCommand\":\"cd apps-microservices/api-detection-langue-fr && pytest tests/test_worker_watchdog.py tests/test_async_jobmanager.py -v\",\"acceptanceCriteria\":[\"bounded wait JOB_MAX_S -> abandon+continue\",\"_abandon_job failed+cancel+dec once\",\"no double-decrement guard\",\"queue proceeds\"]}\n```"
+    },
+    {
+      "id": 46,
+      "subject": "Task 3: sub-fixes - bound first_match Pass-1 + clamp done<=total (routes.py)",
+      "status": "pending",
+      "description": "**Goal:** bound last unwrapped await + stop done>total.\n\n**Files:** app/api/routes.py, tests/test_batch_progress_clamp.py\n\n```json:metadata\n{\"files\":[\"apps-microservices/api-detection-langue-fr/app/api/routes.py\",\"apps-microservices/api-detection-langue-fr/tests/test_batch_progress_clamp.py\"],\"verifyCommand\":\"cd apps-microservices/api-detection-langue-fr && pytest tests/test_batch_progress_clamp.py -v\",\"acceptanceCriteria\":[\"first_match Pass-1 wait_for(300)+TimeoutError->error\",\"progress clamped min(processed,total)\",\"done never exceeds total\"]}\n```"
+    }
+  ],
+  "lastUpdated": "2026-07-22"
+}
