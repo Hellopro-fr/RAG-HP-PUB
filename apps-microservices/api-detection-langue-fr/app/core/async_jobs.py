@@ -208,11 +208,19 @@ class JobManager:
         ASYNC_JOBS_ACTIVE.set(self._inflight)
 
     async def _abandon_job(self, job_id: str, task: asyncio.Task) -> None:
-        """Job exceeded JOB_MAX_S. Mark failed, abandon the (possibly uncancellable)
-        task, free the slot, and let the worker proceed. A dead-pipe task may never
-        finish cancelling — we do NOT await it."""
+        """Job exceeded JOB_MAX_S. Free the slot + guard FIRST (no await before this,
+        so a naturally-completing zombie's _on_done can't double-decrement), then
+        best-effort cancel, then mark failed. We do NOT await the (possibly
+        uncancellable) task."""
         from app.core.metrics import ASYNC_JOBS_TERMINAL, ASYNC_JOBS_ACTIVE
+        # --- synchronous, race-free: no await between _worker_loop's wait() and here ---
+        self._abandoned_ids.add(job_id)        # so a later _on_done skips its decrement
+        self._job_tasks.pop(job_id, None)
+        self._inflight = max(0, self._inflight - 1)
+        ASYNC_JOBS_ACTIVE.set(self._inflight)
+        task.cancel()                          # best-effort; cancels a still-cancellable zombie before it can complete
         logger.error(f"[async-jobs] job {job_id} exceeded JOB_MAX_S={getattr(self._s, 'JOB_MAX_S', 1500)}s — failing + abandoning")
+        # --- store I/O after the guard; status gate avoids clobbering a completed result ---
         rec = await self._store.get(job_id) or {"job_id": job_id}
         if rec.get("status") not in ("completed", "failed"):
             rec.update({"status": "failed", "error": "job_timeout",
@@ -222,11 +230,6 @@ class JobManager:
             except Exception:
                 pass
             ASYNC_JOBS_TERMINAL.labels(status="failed").inc()
-        task.cancel()                          # best-effort; may be ignored by a dead-pipe await
-        self._job_tasks.pop(job_id, None)
-        self._abandoned_ids.add(job_id)        # so a late _on_done won't double-decrement
-        self._inflight = max(0, self._inflight - 1)
-        ASYNC_JOBS_ACTIVE.set(self._inflight)
 
     def _update_queued_gauge(self) -> None:
         from app.core.metrics import ASYNC_JOBS_QUEUED
