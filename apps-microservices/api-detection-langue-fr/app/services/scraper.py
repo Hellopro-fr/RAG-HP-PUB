@@ -195,7 +195,7 @@ async def _launch_browser(playwright_instance, playwright_proxy: Optional[dict] 
                     proxy=playwright_proxy,
                     geoip=True,
                 ),
-                timeout=45,
+                timeout=settings.BROWSER_LAUNCH_TIMEOUT_S,
             )
             BROWSER_LAUNCH_DURATION.labels(browser="camoufox").observe(time.monotonic() - t0)
             logger.info("Navigateur Camoufox (stealth Firefox) lancé")
@@ -210,16 +210,19 @@ async def _launch_browser(playwright_instance, playwright_proxy: Optional[dict] 
 
     # Fallback: Playwright Chromium
     t0 = time.monotonic()
-    browser = await playwright_instance.chromium.launch(
-        headless=True,
-        proxy=playwright_proxy,
-        args=[
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-gpu',
-            '--disable-blink-features=AutomationControlled',
-        ],
+    browser = await asyncio.wait_for(
+        playwright_instance.chromium.launch(
+            headless=True,
+            proxy=playwright_proxy,
+            args=[
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-gpu',
+                '--disable-blink-features=AutomationControlled',
+            ],
+        ),
+        timeout=settings.BROWSER_LAUNCH_TIMEOUT_S,
     )
     BROWSER_LAUNCH_DURATION.labels(browser="chromium").observe(time.monotonic() - t0)
     logger.info("Navigateur Playwright Chromium lancé (fallback)")
@@ -280,6 +283,20 @@ async def _inject_cookie_consent(context, url: str) -> None:
         pass
 
 
+async def _close_or_abandon(coro, timeout: float, what: str = "") -> None:
+    """Await a browser teardown coroutine, but ABANDON it if it exceeds `timeout`.
+
+    A close() on a dead browser pipe ignores asyncio cancellation, so wait_for
+    (cancel-then-await) would itself hang. asyncio.wait() returns on timeout
+    WITHOUT cancelling; we simply stop waiting and leave the task detached (its
+    OS process is already gone, so it leaks nothing meaningful). This lets the
+    caller escape `finally` and release its semaphore slot."""
+    t = asyncio.ensure_future(coro)
+    done, _pending = await asyncio.wait({t}, timeout=timeout)
+    if not done:
+        logger.warning(f"scraper teardown abandoned after {timeout}s: {what}")
+
+
 async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) -> Optional[ScrapeResult]:
     """
     Récupère le contenu HTML d'une URL via Playwright avec proxy obligatoire.
@@ -318,7 +335,8 @@ async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) 
         return None
 
     async with _BROWSER_SEMAPHORE:
-        async with async_playwright() as p:
+        p = await async_playwright().start()
+        try:
             browser, is_camoufox = await _launch_browser(p, playwright_proxy)
             context = None
             page = None
@@ -335,6 +353,7 @@ async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) 
                     context_options['user_agent'] = random.choice(_USER_AGENTS)
 
                 context = await browser.new_context(**context_options)
+                context.set_default_timeout(settings.BROWSER_OP_TIMEOUT_S * 1000)
 
                 # Injection cookie de consentement (comme crawler-service)
                 await _inject_cookie_consent(context, url)
@@ -474,18 +493,20 @@ async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) 
                 # on closed pages under concurrent load.
                 if page is not None:
                     try:
-                        await page.unroute_all(behavior='ignoreErrors')
+                        await _close_or_abandon(page.unroute_all(behavior='ignoreErrors'), settings.TEARDOWN_TIMEOUT_S, f"unroute_all {url}")
                     except Exception as unroute_err:
                         logger.debug(f"unroute_all failed for {url}: {unroute_err}")
                 if context is not None:
                     try:
-                        await context.close()
+                        await _close_or_abandon(context.close(), settings.TEARDOWN_TIMEOUT_S, f"context.close {url}")
                     except Exception as ctx_err:
                         logger.debug(f"context.close failed for {url}: {ctx_err}")
                 try:
-                    await browser.close()
+                    await _close_or_abandon(browser.close(), settings.TEARDOWN_TIMEOUT_S, f"browser.close {url}")
                 except Exception as br_err:
                     logger.debug(f"browser.close failed for {url}: {br_err}")
+        finally:
+            await _close_or_abandon(p.stop(), settings.TEARDOWN_TIMEOUT_S, f"playwright.stop {url}")
 
 
 async def scrape_html_with_redirects(
@@ -527,7 +548,8 @@ async def scrape_html_with_redirects(
     is_camoufox = False
     try:
         async with _BROWSER_SEMAPHORE:
-            async with async_playwright() as p:
+            p = await async_playwright().start()
+            try:
                 browser, is_camoufox = await _launch_browser(p, playwright_proxy)
                 context = None
                 page = None
@@ -543,6 +565,7 @@ async def scrape_html_with_redirects(
                         context_options['user_agent'] = random.choice(_USER_AGENTS)
 
                     context = await browser.new_context(**context_options)
+                    context.set_default_timeout(settings.BROWSER_OP_TIMEOUT_S * 1000)
 
                     await _inject_cookie_consent(context, url)
 
@@ -599,18 +622,20 @@ async def scrape_html_with_redirects(
                     # on closed pages under concurrent load.
                     if page is not None:
                         try:
-                            await page.unroute_all(behavior='ignoreErrors')
+                            await _close_or_abandon(page.unroute_all(behavior='ignoreErrors'), settings.TEARDOWN_TIMEOUT_S, f"unroute_all {url}")
                         except Exception as unroute_err:
                             logger.debug(f"unroute_all failed for {url}: {unroute_err}")
                     if context is not None:
                         try:
-                            await context.close()
+                            await _close_or_abandon(context.close(), settings.TEARDOWN_TIMEOUT_S, f"context.close {url}")
                         except Exception as ctx_err:
                             logger.debug(f"context.close failed for {url}: {ctx_err}")
                     try:
-                        await browser.close()
+                        await _close_or_abandon(browser.close(), settings.TEARDOWN_TIMEOUT_S, f"browser.close {url}")
                     except Exception as br_err:
                         logger.debug(f"browser.close failed for {url}: {br_err}")
+            finally:
+                await _close_or_abandon(p.stop(), settings.TEARDOWN_TIMEOUT_S, f"playwright.stop {url}")
 
     except Exception as e:
         logger.error(f"Erreur suivi redirections Playwright pour {url}: {e}")
