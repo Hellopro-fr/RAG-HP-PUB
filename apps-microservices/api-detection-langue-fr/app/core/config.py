@@ -88,6 +88,7 @@ class Settings(BaseSettings):
     TEARDOWN_TIMEOUT_S: int = 10       # bound + abandon on browser/context/page close & playwright.stop
     BROWSER_OP_TIMEOUT_S: int = 30     # context default timeout (new_page/content/route/add_cookies)
     BROWSER_LAUNCH_TIMEOUT_S: int = 45 # wrap Camoufox + Chromium launch
+    JOB_MAX_S: int = 1500  # worker abandons a job exceeding this (< DETECTION_ASYNC_MAX_WAIT_S=1800 caller budget)
 
     class Config:
         env_file = ".env"
