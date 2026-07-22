@@ -59,6 +59,8 @@ class TestScrapeHtmlReturnsScrapeResult:
         mock_pw = MagicMock()
         mock_pw.__aenter__ = AsyncMock(return_value=mock_pw)
         mock_pw.__aexit__ = AsyncMock(return_value=None)
+        mock_pw.start = AsyncMock(return_value=mock_pw)   # await async_playwright().start() -> p
+        mock_pw.stop = AsyncMock(return_value=None)        # await p.stop()
 
         with patch("app.services.scraper.async_playwright", return_value=mock_pw), \
              patch("app.services.scraper._launch_browser",
@@ -101,6 +103,8 @@ class TestScrapeHtmlReturnsScrapeResult:
         mock_pw = MagicMock()
         mock_pw.__aenter__ = AsyncMock(return_value=mock_pw)
         mock_pw.__aexit__ = AsyncMock(return_value=None)
+        mock_pw.start = AsyncMock(return_value=mock_pw)   # await async_playwright().start() -> p
+        mock_pw.stop = AsyncMock(return_value=None)        # await p.stop()
 
         with patch("app.services.scraper.async_playwright", return_value=mock_pw), \
              patch("app.services.scraper._launch_browser",
