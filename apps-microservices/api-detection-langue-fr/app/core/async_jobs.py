@@ -129,6 +129,7 @@ class JobManager:
         self._queued_ids: set[str] = set()
         self._workers: list[asyncio.Task] = []
         self._keeper: Optional[asyncio.Task] = None
+        self._abandoned_ids: set[str] = set()   # jobs decremented by the watchdog (guard _on_done)
 
     async def get_record(self, job_id: str) -> Optional[dict]:
         return await self._store.get(job_id)
@@ -199,9 +200,36 @@ class JobManager:
 
     def _on_done(self, job_id: str) -> None:
         self._job_tasks.pop(job_id, None)
+        if job_id in self._abandoned_ids:
+            self._abandoned_ids.discard(job_id)   # already decremented in _abandon_job
+            return
         self._inflight = max(0, self._inflight - 1)
         from app.core.metrics import ASYNC_JOBS_ACTIVE
         ASYNC_JOBS_ACTIVE.set(self._inflight)
+
+    async def _abandon_job(self, job_id: str, task: asyncio.Task) -> None:
+        """Job exceeded JOB_MAX_S. Free the slot + guard FIRST (no await before this,
+        so a naturally-completing zombie's _on_done can't double-decrement), then
+        best-effort cancel, then mark failed. We do NOT await the (possibly
+        uncancellable) task."""
+        from app.core.metrics import ASYNC_JOBS_TERMINAL, ASYNC_JOBS_ACTIVE
+        # --- synchronous, race-free: no await between _worker_loop's wait() and here ---
+        self._abandoned_ids.add(job_id)        # so a later _on_done skips its decrement
+        self._job_tasks.pop(job_id, None)
+        self._inflight = max(0, self._inflight - 1)
+        ASYNC_JOBS_ACTIVE.set(self._inflight)
+        task.cancel()                          # best-effort; cancels a still-cancellable zombie before it can complete
+        logger.error(f"[async-jobs] job {job_id} exceeded JOB_MAX_S={getattr(self._s, 'JOB_MAX_S', 1500)}s — failing + abandoning")
+        # --- store I/O after the guard; status gate avoids clobbering a completed result ---
+        rec = await self._store.get(job_id) or {"job_id": job_id}
+        if rec.get("status") not in ("completed", "failed"):
+            rec.update({"status": "failed", "error": "job_timeout",
+                        "finished_at": time.time(), "last_activity": time.time()})
+            try:
+                await self._store.write(rec, self._s.JOB_RESULT_TTL_S)
+            except Exception:
+                pass
+            ASYNC_JOBS_TERMINAL.labels(status="failed").inc()
 
     def _update_queued_gauge(self) -> None:
         from app.core.metrics import ASYNC_JOBS_QUEUED
@@ -238,7 +266,9 @@ class JobManager:
             task.add_done_callback(lambda t, jid=job_id: self._on_done(jid))
             # wait() : n'importe ni l'exception du job (gérée dans _run_job) ni
             # son annulation ; l'annulation du worker lui-même interrompt le wait.
-            await asyncio.wait([task])
+            done, _pending = await asyncio.wait({task}, timeout=getattr(self._s, "JOB_MAX_S", 1500))
+            if not done:
+                await self._abandon_job(job_id, task)
 
     async def _queued_keeper_loop(self) -> None:
         """Heartbeat des jobs EN FILE : sans lui, un job sain en attente >

@@ -84,6 +84,12 @@ class Settings(BaseSettings):
     ASYNC_POLL_HINT_MAX_S: int = 30       # upper bound on server poll_after_seconds hint
     SHUTDOWN_GRACE_S: int = 5             # bound on JobManager.shutdown() task drain
 
+    # Browser-op hardening (scraper teardown/launch/op timeouts)
+    TEARDOWN_TIMEOUT_S: int = 10       # bound + abandon on browser/context/page close & playwright.stop
+    BROWSER_OP_TIMEOUT_S: int = 30     # context default timeout (new_page/content/route/add_cookies)
+    BROWSER_LAUNCH_TIMEOUT_S: int = 45 # wrap Camoufox + Chromium launch
+    JOB_MAX_S: int = 1500  # worker abandons a job exceeding this (< DETECTION_ASYNC_MAX_WAIT_S=1800 caller budget)
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

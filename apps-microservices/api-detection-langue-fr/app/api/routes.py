@@ -488,7 +488,7 @@ async def _run_batch_core(
         async with count_lock:
             processed_count += 1
             if progress_cb is not None:
-                progress_cb(processed_count)
+                progress_cb(min(processed_count, total_items))   # done must never exceed total
             return processed_count
 
     async def _process_item_core(
@@ -602,8 +602,13 @@ async def _run_batch_core(
             last_result: Optional[DetectionResponse] = None
 
             for item in group_items:
-                async with semaphore:
-                    result = await _process_item_core(item)
+                try:
+                    async with semaphore:
+                        result = await asyncio.wait_for(_process_item_core(item), timeout=300)
+                except asyncio.TimeoutError:
+                    result = DetectionResponse(
+                        ok=False, url=item.url, method='error',
+                        error='Timeout global item (300s)')
                 last_result = result
                 if result.ok:
                     return (_with_group(result, group_key), [])
