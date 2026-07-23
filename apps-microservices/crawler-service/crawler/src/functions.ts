@@ -1305,6 +1305,20 @@ export async function* loadDatasetUrlsGenerator(previousId: string, domain: stri
                 }
             }
         }
+
+        // Also yield URLs collapsed away by the canonical content-dedup pass, so
+        // the update baseline still recognizes every original variant (no churn).
+        const collapsedFile = path.join(datasetPath, "__collapsed_urls.json");
+        if (fs.existsSync(collapsedFile)) {
+            try {
+                const collapsed = JSON.parse(await fs.promises.readFile(collapsedFile, "utf-8"));
+                if (Array.isArray(collapsed)) {
+                    for (const u of collapsed) if (typeof u === "string") yield u;
+                }
+            } catch (e) {
+                console.warn(`Error reading collapsed-urls sidecar: ${e}`);
+            }
+        }
     } catch (e) {
         console.error(`Error iterating dataset directory: ${e}`);
     }
