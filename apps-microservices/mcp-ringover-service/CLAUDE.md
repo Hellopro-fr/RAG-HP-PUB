@@ -57,7 +57,7 @@ Active tools (registered in `registry.go`):
 | Tool | Ringover API Endpoint | Description |
 |------|----------------------|-------------|
 | `list_calls_by_date` | `GET /calls` (`POST /calls` under scope) | List calls within a date range |
-| `search_calls` | `GET /calls` (`POST /calls` under scope) | Filter calls by type / phone / user |
+| `search_calls` | `POST /calls` (`filter: ADVANCED`) when a phone number or user scope is present, else `GET /calls` | Filter calls by type / phone / user / date range |
 | `get_call_details` | `GET /calls/{callId}` + `GET /transcriptions/{callId}` | Call details, enriched with its transcription |
 
 `get_call_details` returns `{ "call": <raw /calls/{id}>, "transcription": { "data": <…> } | { "error": "…" } }`.
@@ -71,6 +71,14 @@ Deactivated tools (commented out in `registry.go`): `get_calls` (superseded by t
 (Admin/Supervisor/User) and return an opaque `403` otherwise. They live at `GET /empower/...` on the `/v2` base
 (NOT `/public/empower/...`; the channel→calluuid conversion is **GET**, not POST — verified live against the
 public API 2026-06-02). For transcription use the team-gated `GET /transcriptions/{call_id}` instead.
+
+`search_calls` filters by phone number via `POST /calls` with `filter:"ADVANCED"` and
+`advanced.ext_numbers` + `advanced.int_numbers` (the same normalized number matched on both
+sides — external party and internal Ringover line, in a single request). `GET /calls` has **no**
+phone/user filter, so it is used only when neither a phone number nor a user scope is supplied.
+Numbers are normalized to E.164-without-`+` (default country code `RINGOVER_DEFAULT_COUNTRY_CODE`,
+`33`); an unrecognizable value is ignored. `search_calls` also accepts optional `start_date` /
+`end_date`; the range defaults to the last 15 days (Ringover caps each request at a 15-day range).
 
 ## MCP Endpoints
 
@@ -119,6 +127,7 @@ non-gateway callers). A header parsed to zero valid IDs is treated as
 | `MCP_SERVICE_VERSION` | 0.1.0 | Service version |
 | `RINGOVER_API_KEY` | — | Ringover API key (required) |
 | `RINGOVER_API_BASE_URL` | `https://public-api.ringover.com/v2` | Ringover API base URL |
+| `RINGOVER_DEFAULT_COUNTRY_CODE` | 33 | Country code prepended to national-format phone numbers in `search_calls` (digits only, e.g. `33` for France). |
 | `MCP_RINGOVER_ADMIN_TOKEN` | — | Shared secret enabling `/admin/*` endpoints. When empty the endpoints are disabled. |
 
 ## Prerequisites
