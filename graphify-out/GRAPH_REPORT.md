@@ -1,12 +1,12 @@
-# Graph Report - .  (2026-07-20)
+# Graph Report - .  (2026-07-23)
 
 ## Corpus Check
 - 0 files · ~99,999 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 8285 nodes · 18316 edges · 215 communities detected
-- Extraction: 65% EXTRACTED · 35% INFERRED · 0% AMBIGUOUS · INFERRED: 6461 edges (avg confidence: 0.6)
+- 8361 nodes · 18523 edges · 216 communities detected
+- Extraction: 65% EXTRACTED · 35% INFERRED · 0% AMBIGUOUS · INFERRED: 6536 edges (avg confidence: 0.6)
 - Token cost: 0 input · 0 output
 
 ## Community Hubs (Navigation)
@@ -225,6 +225,7 @@
 - [[_COMMUNITY_Crawler Robots Bypass (docs)|Crawler Robots Bypass (docs)]]
 - [[_COMMUNITY_Crawler Camoufox Browser (docs)|Crawler Camoufox Browser (docs)]]
 - [[_COMMUNITY_Crawler DiezQM Phase-2 (docs)|Crawler Diez/QM Phase-2 (docs)]]
+- [[_COMMUNITY_Detection Scraper|Detection Scraper]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `CrawlerManager` - 414 edges
@@ -351,7 +352,7 @@ Nodes (63): GuardConfig, GuardMetrics, Prometheus metrics for MilvusConcurrencyG
 
 ### Community 24 - "Crawler Stash-Lock & Redis Design (docs)"
 Cohesion: 0.05
-Nodes (56): Configuration de l'application, Settings, BaseSettings, env_or(), env_or_opt(), Config, Settings, Config (+48 more)
+Nodes (57): Configuration de l'application, Settings, BaseSettings, env_or(), env_or_opt(), Config, Settings, Config (+49 more)
 
 ### Community 95 - "Community 95"
 Cohesion: 1.0
@@ -422,8 +423,8 @@ Cohesion: 0.01
 Nodes (310): Initializes the Redis connection pool.     Connects to Redis using the URL from, Atomically sets a key only if it does not already exist (SET NX).     Returns T, Sets a raw value for a key., Gets the raw string value of a key., Atomically increments a key's value by 1., Atomically decrements a key's value by 1.      WARNING: This function can driv, Gets the raw string value of a key., Atomically deletes a key only if its JSON 'status' is 'failed' or 'finished'. (+302 more)
 
 ### Community 16 - "Detection Async Job Store"
-Cohesion: 0.03
-Nodes (129): Closes the Redis connection pool., reconcile_running_jobs_count(), scheduled_archive_cleanup(), validation_exception_handler(), startup_event(), shutdown_event(), read_root(), Periodically checks the actual number of 'running' jobs in Redis and corrects (+121 more)
+Cohesion: 0.02
+Nodes (148): Closes the Redis connection pool., reconcile_running_jobs_count(), scheduled_archive_cleanup(), validation_exception_handler(), startup_event(), shutdown_event(), read_root(), Periodically checks the actual number of 'running' jobs in Redis and corrects (+140 more)
 
 ### Community 3 - "CrawlerManager Retry & Capacity Tests"
 Cohesion: 0.01
@@ -431,7 +432,7 @@ Nodes (499): Sets a dictionary for a key, serializing it to JSON., CrawlerManage
 
 ### Community 1 - "Crawler Service API Schemas"
 Cohesion: 0.01
-Nodes (802): Gets a dictionary for a key, deserializing it from JSON., Deletes a key from Redis., Gets all keys matching a given prefix using SCAN., _count_files_in_dir(), _map_error_to_message(), Safely counts files in a directory, excluding Crawlee metadata., Read isError from _callback_payload.json in the crawl storage dir.     Returns, Flatten a dict/list payload into a list of (key, value) tuples using     PHP-st (+794 more)
+Nodes (803): Gets a dictionary for a key, deserializing it from JSON., Deletes a key from Redis., Gets all keys matching a given prefix using SCAN., _count_files_in_dir(), _map_error_to_message(), Safely counts files in a directory, excluding Crawlee metadata., Read isError from _callback_payload.json in the crawl storage dir.     Returns, Flatten a dict/list payload into a list of (key, value) tuples using     PHP-st (+795 more)
 
 ### Community 53 - "Redis Lua Scripts Tests"
 Cohesion: 0.22
@@ -543,7 +544,7 @@ Nodes (16): Archive Pre-flight Disk Space Check (2026-04-18), Rationale: Diagnos
 
 ### Community 0 - "Crawler Engine Core (main/functions)"
 Cohesion: 0.0
-Nodes (505): verify_api_key(), Verifies the API key if API_KEY is configured in settings.     If API_KEY is not, resetContextState(), makeTmpStorage(), classifyFragment(), recordClassification(), maybeCommitDecision(), writeDecisionFile() (+497 more)
+Nodes (511): verify_api_key(), Verifies the API key if API_KEY is configured in settings.     If API_KEY is not, resetContextState(), makeTmpStorage(), classifyFragment(), recordClassification(), maybeCommitDecision(), writeDecisionFile() (+503 more)
 
 ### Community 5 - "Crawler Reconcile & Archive Cleanup"
 Cohesion: 0.01
@@ -583,7 +584,7 @@ Nodes (85): account-service SSO, account-service-backend, account-service-fronte
 
 ### Community 4 - "Detection Langue FR Core"
 Cohesion: 0.01
-Nodes (545): _normalize_url_for_dedup(), _homepage_of(), _is_homepage(), _ttl_from_verdict(), _build_challenge_error_msg(), _with_group(), _detect_single_url(), detect_french() (+537 more)
+Nodes (556): _normalize_url_for_dedup(), _homepage_of(), _is_homepage(), _ttl_from_verdict(), _build_challenge_error_msg(), _with_group(), _detect_single_url(), detect_french() (+548 more)
 
 ### Community 27 - "Detection Admission Control"
 Cohesion: 0.08
@@ -607,7 +608,7 @@ Nodes (1): Normalise l'encodage du contenu HTML en UTF-8.          Reproduit le 
 
 ### Community 13 - "Detection FR Scrape & Validate"
 Cohesion: 0.02
-Nodes (109): ValidationVerdict, validate(), _is_redirect_to_home(), _detect_soft_404(), _visible_text_length(), Pure page validator for api-detection-langue-fr.  Classifies a ScrapeResult ag, Classify a ScrapeResult against the requested URL.      Order of checks:, Lightweight visible-text length for the thin-content threshold. (+101 more)
+Nodes (123): ValidationVerdict, validate(), _is_redirect_to_home(), _detect_soft_404(), _visible_text_length(), Pure page validator for api-detection-langue-fr.  Classifies a ScrapeResult ag, Classify a ScrapeResult against the requested URL.      Order of checks:, Lightweight visible-text length for the thin-content threshold. (+115 more)
 
 ### Community 147 - "Community 147"
 Cohesion: 1.0
@@ -822,8 +823,8 @@ Cohesion: 1.0
 Nodes (1): Deferred: server-side BackgroundTasks migration of stash_crawl
 
 ### Community 61 - "Crawler Admin Endpoints"
-Cohesion: 0.07
-Nodes (39): _count_by(), _project_sample(), _pool_stats(), redis_debug(), Admin/operator endpoints. Authenticated. Not user-facing., Whitelist sampled client fields so future redis-py additions cannot     silently, Operator-only snapshot of this replica's Redis pool + global CLIENT LIST.     Se, _count_by() (+31 more)
+Cohesion: 0.06
+Nodes (42): _count_by(), _project_sample(), _pool_stats(), redis_debug(), Admin/operator endpoints. Authenticated. Not user-facing., Whitelist sampled client fields so future redis-py additions cannot     silently, Operator-only snapshot of this replica's Redis pool + global CLIENT LIST.     Se, _count_by() (+34 more)
 
 ### Community 50 - "Crawler Update Checker"
 Cohesion: 0.33
@@ -1153,8 +1154,12 @@ Nodes (1): crawler-service Camoufox stealth default browser
 Cohesion: 1.0
 Nodes (2): crawler-service Phase-2 limitDiez (zero-touch skipDiez/bypassDiez), crawler-service Phase-2 limitQuestionMark (zero-touch param toRemove)
 
+### Community 255 - "Detection Scraper"
+Cohesion: 1.0
+Nodes (1): A mid-fetch exception still triggers context.close and browser.close (try/finall
+
 ## Knowledge Gaps
-- **2751 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+2746 more)
+- **2768 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+2763 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **Thin community `Community 110`** (1 nodes): `Creates a dictionary of headers for a DLQ message, compatible with both pika and`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -1398,16 +1403,18 @@ Nodes (2): crawler-service Phase-2 limitDiez (zero-touch skipDiez/bypassDiez), c
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Crawler Diez/QM Phase-2 (docs)`** (2 nodes): `crawler-service Phase-2 limitDiez (zero-touch skipDiez/bypassDiez)`, `crawler-service Phase-2 limitQuestionMark (zero-touch param toRemove)`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Detection Scraper`** (1 nodes): `A mid-fetch exception still triggers context.close and browser.close (try/finall`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `CrawlerManager` connect `CrawlerManager Retry & Capacity Tests` to `Crawler Service API Schemas`, `CrawlerManager Core + DLQ`, `Detection Langue FR Core`, `Crawler Reconcile & Archive Cleanup`, `Crawler Stash / Unstash`, `Detection Async Job Store`, `Crawler Stash-Lock & Redis Design (docs)`?**
-  _High betweenness centrality (0.119) - this node is a cross-community bridge._
-- **Why does `cache_service.py (Redis lock helper)` connect `Crawler Cache & Detection Client` to `Detection Async Job Store`, `Crawler Service API Schemas`, `CrawlerManager Retry & Capacity Tests`?**
-  _High betweenness centrality (0.056) - this node is a cross-community bridge._
+  _High betweenness centrality (0.118) - this node is a cross-community bridge._
 - **Why does `cleanDatasetFragments()` connect `Crawler Engine Core (main/functions)` to `Detection Async Job Store`, `Crawler Service API Schemas`?**
-  _High betweenness centrality (0.056) - this node is a cross-community bridge._
+  _High betweenness centrality (0.060) - this node is a cross-community bridge._
+- **Why does `cache_service.py (Redis lock helper)` connect `Crawler Cache & Detection Client` to `Detection Async Job Store`, `Crawler Service API Schemas`, `CrawlerManager Retry & Capacity Tests`?**
+  _High betweenness centrality (0.055) - this node is a cross-community bridge._
 - **Are the 337 inferred relationships involving `CrawlerManager` (e.g. with `CrawlStatus` and `IncludeInArchive`) actually correct?**
   _`CrawlerManager` has 337 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 313 inferred relationships involving `ReindexResponse` (e.g. with `CrawlerManager` and `.reindex_storage()`) actually correct?**
