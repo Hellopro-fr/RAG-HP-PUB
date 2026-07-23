@@ -110,3 +110,34 @@ export const writeDiezAudit = (
         return { collapsedTotal: 0 };
     }
 };
+
+type CanonRow = { collapsed: string; base: string };
+
+/**
+ * Read-merge-write {storagePath}/_canonical_dedup_audit.json. Route-loss
+ * candidates from the canonical ?param/# content-dedup pass. Skips the write
+ * when there are no candidates. Fail-open.
+ */
+export const writeCanonicalDedupAudit = (
+    storagePath: string,
+    current: { collapsed: CanonRow[]; removed: number; rewritten: number },
+): { collapsedTotal: number } => {
+    try {
+        const file = path.join(storagePath, "_canonical_dedup_audit.json");
+        const existing = readExisting(file);
+        const collapsed = mergeCollapsed<CanonRow>(
+            Array.isArray(existing?.collapsed_candidates) ? existing.collapsed_candidates : [],
+            current.collapsed,
+        );
+        if (collapsed.length === 0) return { collapsedTotal: 0 };
+        fs.writeFileSync(file, JSON.stringify({
+            collapsed_candidates: collapsed,
+            removed: (existing?.removed || 0) + current.removed,
+            rewritten: (existing?.rewritten || 0) + current.rewritten,
+        }, null, 2));
+        return { collapsedTotal: collapsed.length };
+    } catch (e) {
+        console.error("Canonical dedup audit sidecar write failed:", e);
+        return { collapsedTotal: 0 };
+    }
+};

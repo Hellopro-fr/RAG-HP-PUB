@@ -56,7 +56,8 @@ import { QUEUE_PURGE_ENABLED } from "./staleVariantSkip.js";
 import { flagStaleVariantsOnDisk } from "./queuePurge.js";
 import { baseKeyAbsent } from "./urlBase.js";
 import { QM_FACET_ENABLED } from "./facetCap.js";
-import { writeQmAudit, writeDiezAudit } from "./auditSidecars.js";
+import { writeQmAudit, writeDiezAudit, writeCanonicalDedupAudit } from "./auditSidecars.js";
+import { canonicalDedupEnabled } from "./canonicalBase.js";
 import { isFilterParam } from "./filterOnSeen.js";
 import { facetParamsForCms } from "./cmsFacetLists.js";
 import { hasIgnoredExtensionForSeed } from "./seedExtensionFilter.js";
@@ -1392,6 +1393,22 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
             collapsed: context.diezCollapsed,
             contentCollision: context.diezContentCollision,
         });
+    }
+
+    // Canonical ?param/# dedup route-loss audit (flag-gated). Local cast so we
+    // don't couple to context.diezContentCollision's declared type.
+    const cc = context.diezContentCollision as
+        | { collapsedPairs?: { collapsed: string; base: string }[]; removed?: number; rewritten?: number }
+        | null | undefined;
+    if (storagePath && canonicalDedupEnabled() && cc?.collapsedPairs?.length) {
+        const a = writeCanonicalDedupAudit(storagePath, {
+            collapsed: cc.collapsedPairs,
+            removed: cc.removed ?? 0,
+            rewritten: cc.rewritten ?? 0,
+        });
+        if (a.collapsedTotal > 0) {
+            console.warn(`[canonical-dedup] ${a.collapsedTotal} ?param/# route-loss candidate(s) collapsed onto a base — see _canonical_dedup_audit.json (re-crawl to confirm).`);
+        }
     }
 
     // 4. Persist Data (Critical Step)
