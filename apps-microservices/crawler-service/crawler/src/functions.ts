@@ -45,7 +45,7 @@ import { shouldStopForDiez } from "./diezLimitStop.js";
 import { shouldStopForQuestionMark } from "./qmLimitStop.js";
 import { applyPerClassStrip, perClassEnabled, fingerprint } from "./diezClassify.js";
 import { normalizeHtml } from "./htmlNormalize.js";
-import { stripFragment, canonicalGroupKey, queryParamCount, canonicalDedupEnabled } from "./canonicalBase.js";
+import { canonicalGroupKey, queryParamCount, canonicalDedupEnabled } from "./canonicalBase.js";
 import { provenDiezStripActive } from "./diezDecision.js";
 import { StaleVariantSkip, QUEUE_PURGE_ENABLED, STALE_VARIANT_SKIP_MARKER } from "./staleVariantSkip.js";
 import { qmConsumptionStrip, shouldSkipDequeued, recordQmCollapsed } from "./qmConsumptionSkip.js";
@@ -1959,7 +1959,10 @@ export const cleanDatasetFragments = (
             // sub-partition each group by normalized-HTML fingerprint, keep one row per
             // (base,content) cell preferring the barest URL (fewest query params). Covers
             // '#'-fragment AND '?param' facet/tracking variants; pagination is never merged
-            // (canonicalGroupKey keeps PAGINATION_PARAMS as part of the key).
+            // (canonicalGroupKey keeps PAGINATION_PARAMS as part of the key). The survivor's
+            // URL is NEVER rewritten/fabricated (avoids SPA hash-route collisions, e.g. a bare
+            // '/app' colliding with a collapsed '/app#/products'); a bare-base row, when it
+            // exists, already wins the fewest-param sort.
             type CanonEntry = { file: string; url: string; fp: string };
             const canonGroups = new Map<string, CanonEntry[]>();
             for (const f of files) {
@@ -1967,10 +1970,12 @@ export const cleanDatasetFragments = (
                 let row: { url?: string; content?: string };
                 try { row = JSON.parse(fs.readFileSync(full, "utf-8")); } catch { continue; }
                 if (!row.url) continue;
+                const normalized = normalizeHtml(row.content ?? "");
+                if (!normalized) continue; // empty/near-empty capture → never collapse (loss-proof)
                 const key = canonicalGroupKey(row.url);
-                const fp = fingerprint(normalizeHtml(row.content ?? ""));
+                const fp = fingerprint(normalized);
                 const arr = canonGroups.get(key) ?? [];
-                arr.push({ file: full, url: stripFragment(row.url), fp });
+                arr.push({ file: full, url: row.url, fp }); // ORIGINAL url — never fabricate/strip (avoids SPA route collision)
                 canonGroups.set(key, arr);
             }
             const collapsedUrls: string[] = [];
@@ -1983,16 +1988,12 @@ export const cleanDatasetFragments = (
                 }
                 for (const cell of byFp.values()) {
                     if (cell.length < 2) { collisionsKept += cell.length; continue; } // lone row → no collision evidence → keep as-is
+                    // survivor: fewest query params, then lexicographic. Bare-base rows win → no rewrite/fabrication needed.
                     cell.sort((a, b) => {
                         const ca = queryParamCount(a.url), cb = queryParamCount(b.url);
                         return ca !== cb ? ca - cb : (a.url < b.url ? -1 : a.url > b.url ? 1 : 0);
                     });
                     const keep = cell[0];
-                    // Re-read the survivor row (not held in the Map) to bound memory on large crawls.
-                    try {
-                        const row = JSON.parse(fs.readFileSync(keep.file, "utf-8"));
-                        if (row.url !== keep.url) { row.url = keep.url; fs.writeFileSync(keep.file, JSON.stringify(row)); rewritten++; }
-                    } catch { /* best-effort */ }
                     for (const e of cell.slice(1)) {
                         try { fs.unlinkSync(e.file); removed++; } catch { /* best-effort */ }
                         collapsedUrls.push(e.url);

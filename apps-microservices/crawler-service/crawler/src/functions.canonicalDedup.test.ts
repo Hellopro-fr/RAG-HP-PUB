@@ -77,3 +77,37 @@ test("flag OFF: only #-fragment identical siblings collapse (legacy behavior)", 
   });
   delete process.env.DIEZ_PERCLASS_ENABLED;
 });
+
+test("flag ON: SPA hash routes — distinct root preserved, dup route collapsed, no duplicate-url survivors", () => {
+  process.env.DIEZ_PERCLASS_ENABLED = "true";
+  process.env.DATASET_CANONICAL_DEDUP_ENABLED = "true";
+  withDataset("ex.tld", [
+    { url: "https://ex.tld/app", content: "<body><h1>Home dashboard</h1></body>" },
+    { url: "https://ex.tld/app#/products", content: "<body><h1>Product catalog</h1></body>" },
+    { url: "https://ex.tld/app#/products?sort=asc", content: "<body><h1>Product catalog</h1></body>" },
+  ], () => {
+    const res = cleanDatasetFragments(["ex.tld"]);
+    const urls = listUrls("ex.tld");
+    assert.equal(res.removed, 1);
+    assert.ok(urls.includes("https://ex.tld/app"));
+    assert.ok(urls.includes("https://ex.tld/app#/products"));
+    assert.equal(new Set(urls).size, urls.length); // no duplicate-url survivors
+  });
+  delete process.env.DATASET_CANONICAL_DEDUP_ENABLED;
+  delete process.env.DIEZ_PERCLASS_ENABLED;
+});
+
+test("flag ON: empty/whitespace content never collapses (loss-proof)", () => {
+  process.env.DIEZ_PERCLASS_ENABLED = "true";
+  process.env.DATASET_CANONICAL_DEDUP_ENABLED = "true";
+  withDataset("ex.tld", [
+    { url: "https://ex.tld/a?x=1", content: "" },
+    { url: "https://ex.tld/a?y=2", content: "   " },
+  ], () => {
+    const res = cleanDatasetFragments(["ex.tld"]);
+    assert.equal(res.removed, 0);
+    assert.equal(listUrls("ex.tld").length, 2);
+  });
+  delete process.env.DATASET_CANONICAL_DEDUP_ENABLED;
+  delete process.env.DIEZ_PERCLASS_ENABLED;
+});
