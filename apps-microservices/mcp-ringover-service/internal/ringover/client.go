@@ -113,9 +113,12 @@ func (c *Client) GetTranscriptionByCallID(ctx context.Context, callID string) (j
 }
 
 // AdvancedCallsFilter holds the advanced sub-filter accepted by POST /calls.
-// Only the fields we currently use are modelled.
+// Only the fields we currently use are modelled. Number fields are E.164
+// without '+', as integers (Ringover's contract), so int64 is required.
 type AdvancedCallsFilter struct {
-	Users []int `json:"users,omitempty"`
+	Users      []int   `json:"users,omitempty"`
+	ExtNumbers []int64 `json:"ext_numbers,omitempty"`
+	IntNumbers []int64 `json:"int_numbers,omitempty"`
 }
 
 // PostCallsRequest is the JSON body accepted by POST /calls.
@@ -160,21 +163,22 @@ func (c *Client) ListCallsByDate(ctx context.Context, startDate, endDate string,
 	return c.doGet(ctx, "/calls?"+q.Encode())
 }
 
-// SearchCalls retrieves calls matching optional filters.
-// callType: Ringover call_type filter — "ANSWERED", "MISSED", "OUT", or "VOICEMAIL" (empty = all).
-// phoneNumber: filter by caller/callee number (empty = no filter).
-// userID: filter by Ringover user ID (empty = all users).
-func (c *Client) SearchCalls(ctx context.Context, callType, phoneNumber, userID string, limitCount int) (json.RawMessage, error) {
+// SearchCalls retrieves calls matching optional GET /calls filters.
+// callType: "ANSWERED", "MISSED", "OUT", or "VOICEMAIL" (empty = all).
+// startDate, endDate: ISO 8601 or "YYYY-MM-DD" (empty = Ringover default,
+// last 15 days). GET /calls has no phone-number or user filter — those go
+// through PostCalls with filter="ADVANCED".
+func (c *Client) SearchCalls(ctx context.Context, callType, startDate, endDate string, limitCount int) (json.RawMessage, error) {
 	q := url.Values{}
 	q.Set("limit_count", strconv.Itoa(limitCount))
 	if callType != "" {
 		q.Set("call_type", callType)
 	}
-	if phoneNumber != "" {
-		q.Set("from_number", phoneNumber)
+	if startDate != "" {
+		q.Set("start_date", normalizeDate(startDate, false))
 	}
-	if userID != "" {
-		q.Set("user_id", userID)
+	if endDate != "" {
+		q.Set("end_date", normalizeDate(endDate, true))
 	}
 	return c.doGet(ctx, "/calls?"+q.Encode())
 }
