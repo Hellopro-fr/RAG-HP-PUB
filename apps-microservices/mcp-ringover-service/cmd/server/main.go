@@ -28,7 +28,8 @@ func main() {
 	ringoverClient := ringover.NewClient(cfg.RingoverAPIBaseURL, cfg.RingoverAPIKey)
 
 	clients := &tools.Clients{
-		Ringover: ringoverClient,
+		Ringover:           ringoverClient,
+		DefaultCountryCode: cfg.DefaultCountryCode,
 	}
 
 	// Set up MCP tool registry and handler.
