@@ -44,6 +44,8 @@ import {
 import { shouldStopForDiez } from "./diezLimitStop.js";
 import { shouldStopForQuestionMark } from "./qmLimitStop.js";
 import { applyPerClassStrip, perClassEnabled, fingerprint } from "./diezClassify.js";
+import { normalizeHtml } from "./htmlNormalize.js";
+import { stripFragment, canonicalGroupKey, queryParamCount, canonicalDedupEnabled } from "./canonicalBase.js";
 import { provenDiezStripActive } from "./diezDecision.js";
 import { StaleVariantSkip, QUEUE_PURGE_ENABLED, STALE_VARIANT_SKIP_MARKER } from "./staleVariantSkip.js";
 import { qmConsumptionStrip, shouldSkipDequeued, recordQmCollapsed } from "./qmConsumptionSkip.js";
@@ -1926,9 +1928,11 @@ export const getAllRequestQueues = (queueName: string): string[] => {
  */
 export const cleanDatasetFragments = (
     datasetNames: string[],
-): { rewritten: number; removed: number; collisionsKept: number } => {
+): { rewritten: number; removed: number; collisionsKept: number; collapsedPairs: { collapsed: string; base: string }[] } => {
     let rewritten = 0, removed = 0, collisionsKept = 0;
+    const collapsedPairs: { collapsed: string; base: string }[] = [];
     const perClass = perClassEnabled();
+    const canonical = canonicalDedupEnabled();
     for (const name of datasetNames) {
         const dir = `storage/datasets/${name}`;
         if (!fs.existsSync(dir)) continue;
@@ -1946,6 +1950,58 @@ export const cleanDatasetFragments = (
                 if (seen.has(cleaned)) { try { fs.unlinkSync(full); removed++; } catch { /* best-effort */ } continue; }
                 seen.add(cleaned);
                 if (cleaned !== row.url) { (row as any).url = cleaned; try { fs.writeFileSync(full, JSON.stringify(row)); rewritten++; } catch { /* best-effort */ } }
+            }
+            continue;
+        }
+
+        if (canonical) {
+            // Canonical content-dedup: group by canonicalGroupKey (origin+path+pagination-only),
+            // sub-partition each group by normalized-HTML fingerprint, keep one row per
+            // (base,content) cell preferring the barest URL (fewest query params). Covers
+            // '#'-fragment AND '?param' facet/tracking variants; pagination is never merged
+            // (canonicalGroupKey keeps PAGINATION_PARAMS as part of the key).
+            type CanonEntry = { file: string; url: string; fp: string };
+            const canonGroups = new Map<string, CanonEntry[]>();
+            for (const f of files) {
+                const full = `${dir}/${f}`;
+                let row: { url?: string; content?: string };
+                try { row = JSON.parse(fs.readFileSync(full, "utf-8")); } catch { continue; }
+                if (!row.url) continue;
+                const key = canonicalGroupKey(row.url);
+                const fp = fingerprint(normalizeHtml(row.content ?? ""));
+                const arr = canonGroups.get(key) ?? [];
+                arr.push({ file: full, url: stripFragment(row.url), fp });
+                canonGroups.set(key, arr);
+            }
+            const collapsedUrls: string[] = [];
+            for (const entries of canonGroups.values()) {
+                const byFp = new Map<string, CanonEntry[]>();
+                for (const e of entries) {
+                    const cell = byFp.get(e.fp) ?? [];
+                    cell.push(e);
+                    byFp.set(e.fp, cell);
+                }
+                for (const cell of byFp.values()) {
+                    if (cell.length < 2) { collisionsKept += cell.length; continue; } // lone row → no collision evidence → keep as-is
+                    cell.sort((a, b) => {
+                        const ca = queryParamCount(a.url), cb = queryParamCount(b.url);
+                        return ca !== cb ? ca - cb : (a.url < b.url ? -1 : a.url > b.url ? 1 : 0);
+                    });
+                    const keep = cell[0];
+                    // Re-read the survivor row (not held in the Map) to bound memory on large crawls.
+                    try {
+                        const row = JSON.parse(fs.readFileSync(keep.file, "utf-8"));
+                        if (row.url !== keep.url) { row.url = keep.url; fs.writeFileSync(keep.file, JSON.stringify(row)); rewritten++; }
+                    } catch { /* best-effort */ }
+                    for (const e of cell.slice(1)) {
+                        try { fs.unlinkSync(e.file); removed++; } catch { /* best-effort */ }
+                        collapsedUrls.push(e.url);
+                        collapsedPairs.push({ collapsed: e.url, base: keep.url });
+                    }
+                }
+            }
+            if (collapsedUrls.length > 0) {
+                try { fs.writeFileSync(`${dir}/__collapsed_urls.json`, JSON.stringify(collapsedUrls)); } catch { /* best-effort */ }
             }
             continue;
         }
@@ -1981,8 +2037,8 @@ export const cleanDatasetFragments = (
             }
         }
     }
-    console.log(`[diez] Dataset cleanup (perClass=${perClass}): rewrote ${rewritten}, removed ${removed}, kept ${collisionsKept} distinct-route row(s).`);
-    return { rewritten, removed, collisionsKept };
+    console.log(`[diez] Dataset cleanup (perClass=${perClass}, canonical=${canonical}): rewrote ${rewritten}, removed ${removed}, kept ${collisionsKept} distinct-route row(s).`);
+    return { rewritten, removed, collisionsKept, collapsedPairs };
 };
 
 /**
