@@ -154,9 +154,13 @@ export function SiteHeader({ categories = [] }: SiteHeaderProps) {
             </a>
           </div>
 
-          {/* ── Dropdown menu catégories ── */}
-          {menuOpen && categories.length > 0 && (
-            <div className="border-t border-border bg-background shadow-lg">
+          {/* ── Dropdown menu catégories ──
+              SEO (P1.3) : les liens catégories (→ pages rubrique) doivent être dans le HTML rendu
+              serveur pour être crawlés par Google. On ne les monte donc PLUS au clic : ils sont
+              TOUJOURS dans le DOM, on bascule seulement la VISIBILITÉ via CSS (hidden/block) selon
+              menuOpen. (Google suit les liens en display:none ; l'UX d'ouverture reste identique.) */}
+          {categories.length > 0 && (
+            <div className={`border-t border-border bg-background shadow-lg ${menuOpen ? 'block' : 'hidden'}`}>
               <div className="mx-auto max-w-[1400px] px-4 py-4 lg:px-6">
 
 
