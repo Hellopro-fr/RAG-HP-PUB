@@ -28,17 +28,6 @@ function parseTaille(taille?: string): { width?: number; height?: number } {
   return w > 0 && h > 0 ? { width: w, height: h } : {};
 }
 
-function slugify(text: string): string {
-  return text
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/[^a-z0-9\s-]/g, '')
-    .trim()
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-');
-}
-
 function tableToHtml(table: string[][]): string {
   if (!table.length) return '';
   const [headerRow, ...dataRows] = table;
@@ -296,7 +285,10 @@ function transformBloc(phpBloc: PhpBloc): ConseilBlock | null {
         ...base,
         type: 'h2',
         data: {
-          id: slugify(c.titre),
+          // Ancre = ordre_bloc_pcbf (réplique l'ancien template PHP : <h2 id="<ordre>">) — P1.1.
+          // Numérique, identique à l'ancre indexée par Google tant que les blocs n'ont pas été
+          // réordonnés en BO. `ordre` reste aussi la source du tri des blocs.
+          id: String(phpBloc.ordre),
           title: c.titre,
           ...(c.texte ? { intro: c.texte } : {}),
         },
