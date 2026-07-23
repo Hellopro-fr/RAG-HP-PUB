@@ -2,8 +2,11 @@ package ringover
 
 import (
 	"context"
+	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -94,5 +97,60 @@ func TestGetCallMoments_GetsEmpowerCallMoments(t *testing.T) {
 	}
 	if want := "/empower/call/abc-123/moments"; *path != want {
 		t.Errorf("path = %s, want %s", *path, want)
+	}
+}
+
+func TestPostCalls_MarshalsAdvancedNumbers(t *testing.T) {
+	var gotBody []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotBody, _ = io.ReadAll(r.Body)
+		w.Write([]byte(`{"call_list":[]}`))
+	}))
+	t.Cleanup(srv.Close)
+	c := NewClient(srv.URL, "key")
+
+	_, err := c.PostCalls(context.Background(), PostCallsRequest{
+		Filter: "ADVANCED",
+		Advanced: &AdvancedCallsFilter{
+			ExtNumbers: []int64{33611352493},
+			IntNumbers: []int64{33611352493},
+		},
+	})
+	if err != nil {
+		t.Fatalf("PostCalls: %v", err)
+	}
+	var req map[string]any
+	if err := json.Unmarshal(gotBody, &req); err != nil {
+		t.Fatalf("body not JSON: %v (%s)", err, gotBody)
+	}
+	adv, ok := req["advanced"].(map[string]any)
+	if !ok {
+		t.Fatalf("no advanced object: %s", gotBody)
+	}
+	if adv["ext_numbers"] == nil || adv["int_numbers"] == nil {
+		t.Errorf("expected ext_numbers and int_numbers, got %s", gotBody)
+	}
+}
+
+func TestSearchCalls_BuildsGetQueryWithDates(t *testing.T) {
+	var gotMethod, gotQuery string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotQuery = r.URL.RawQuery
+		w.Write([]byte(`{"call_list":[]}`))
+	}))
+	t.Cleanup(srv.Close)
+	c := NewClient(srv.URL, "key")
+
+	if _, err := c.SearchCalls(context.Background(), "ANSWERED", "2026-07-01", "2026-07-10", 20); err != nil {
+		t.Fatalf("SearchCalls: %v", err)
+	}
+	if gotMethod != http.MethodGet {
+		t.Errorf("method = %s, want GET", gotMethod)
+	}
+	for _, want := range []string{"call_type=ANSWERED", "start_date=", "end_date=", "limit_count=20"} {
+		if !strings.Contains(gotQuery, want) {
+			t.Errorf("query %q missing %q", gotQuery, want)
+		}
 	}
 }
