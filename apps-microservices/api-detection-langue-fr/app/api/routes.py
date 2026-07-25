@@ -895,7 +895,8 @@ async def detect_french_debug(request: DetectionRequest) -> DebugDetectionRespon
             html_content, request.mode, fetched_by=fetched_by,
             include_full_content=request.include_full_content,
             redirected_from=redirected_from,
-            challenge_detected=challenge
+            challenge_detected=challenge,
+            http_status=fetch_result.status_code if fetch_result else None
         )
 
         # [VALIDATE] Run page validator in debug mode — no fallback, just override result fields.
@@ -907,9 +908,19 @@ async def detect_french_debug(request: DetectionRequest) -> DebugDetectionRespon
                     f"[DEBUG][VALIDATE] {verdict.value} for {request.url} "
                     f"(status={fetch_result.status_code}, final={fetch_result.final_url})"
                 )
+                # Miroir de la reclassification prod de /detect (challenge gagne
+                # sur le statut brut, statuts transitoires → http_error_transient).
+                # Sans ce miroir, debug affiche 'http_error' là où prod répond
+                # 'challenge_page'/'http_error_transient' — divergence fantôme.
+                verdict_method = verdict.value
+                if verdict == ValidationVerdict.HTTP_ERROR:
+                    if challenge and not challenge.startswith('HTTP_'):
+                        verdict_method = 'challenge_page'
+                    elif is_transient_http_status(fetch_result.status_code):
+                        verdict_method = 'http_error_transient'
                 debug_response.result.ok = False
-                debug_response.result.method = verdict.value
-                debug_response.result.error = f"Page invalide ({verdict.value})"
+                debug_response.result.method = verdict_method
+                debug_response.result.error = f"Page invalide ({verdict_method})"
 
         return debug_response
 

@@ -90,11 +90,11 @@ Spec: `docs/superpowers/specs/2026-06-01-detection-langue-fr-async-job-api-desig
 1. **Cache Redis** — Lookup by normalized domain. TTL: 30d (ok=true), 7d (ok=false definitive), 6h (transient failures). Bypass via `force_refresh=true`.
 2. **Fetch HTML** — Playwright headless via Apify proxy. 3 retries (auto rotation) + fallback URL variants (http/https, www/sans-www).
 3. **Page validation** — Classifies the fetched page: `valid` / `http_error` (4XX/5XX) / `soft_404` (200 OK + body looks like "page not found") / `redirected_to_home` (deep path 302'd to root). Invalid → optional one-hop homepage fallback.
-4. **Challenge detection** — Identifies Cloudflare, DataDome, Squid, Imperva, HTTP 4XX/5XX error pages.
+4. **Challenge detection** — Identifies Cloudflare, DataDome, Squid, Imperva, Rescaled WAF, generic JS proof-of-work "Bot check" gates, HTTP 4XX/5XX error pages. The scraper polls up to 45s for auto-resolving challenges; on resolution the `ScrapeResult.status_code` is forced to 200 (the initial goto's 401/403 is stale after the post-solve navigation).
 5. **URL analysis** — TLD `.fr` (strong signal), `/fr/` path, `lang=fr` query, `fr.` subdomain.
 6. **HTML tags** — `<html lang>`, `<meta og:locale>`, `<meta name=LANGUAGE>`, `<meta http-equiv=content-language>`.
-7. **NLP** — fastText primary → langdetect+langid cross-check when uncertain. Cookie consent banners stripped before analysis.
-8. **Alternative links** — hreflang, data-lang, data-gt-lang, `/fr/` links, option tags. Sorted by reliability (high/medium/low), validated via HTTP.
+7. **NLP** — fastText primary → langdetect+langid cross-check when uncertain. Cookie consent banners stripped before analysis. `clean_html_to_text` has a noscript-repair fallback: if the cleaned text is < `NLP_MIN_TEXT_LENGTH` on a > 20KB page (symptom of an unclosed nested `<noscript>` swallowing the body — LiteSpeed Cache wrapping GTM's noscript, cf. outilbox.fr), it re-cleans once with noscript *unwrapped* instead of decomposed.
+8. **Alternative links** — hreflang, data-lang, data-gt-lang, `/fr/` links, option tags, plus a last-resort lang-substitution probe (zero-candidate pages only: declared lang token in self-referencing canonical/hreflang URLs substituted with `fr`, e.g. `/home-page-it` → `/home-page-fr`; method `lang_substitution`). Sorted by reliability (high/medium/low), validated via HTTP. A candidate whose redirect chain lands on a DIFFERENT page that turns out to be the page under analysis is rejected as a dead switcher link (no wasted 120s Case-6 fetch); cookie switchers (`/?lang=fr` → 302 back to same host+path) are exempt — they are judged on content. `Check_nok_v2` (Case 9) deliberately keeps `alternative_urls` empty: crawler `routes.ts` + BO `not_french_signal.php` treat "ok=false + non-empty alternatives" as a distinct signal from not_french; diagnosis lives in `/detect-debug`'s `debug.alternatives`.
 9. **Decision matrix** — 9 cases combining URL/HTML/NLP signals with confidence scores.
 
 ## Conventions
@@ -201,7 +201,7 @@ When validation rejects, the service tries the domain's homepage once. If the ho
 |---|---|---|
 | `/detect` | Yes | Yes (default ON) |
 | `/detect-batch` (all modes) | Yes | Yes (default ON, per item) |
-| `/detect-debug` | Yes (overrides result.ok / result.method / result.error if non-VALID — pipeline trace preserved) | **OFF** (debug shows requested URL's actual pipeline state) |
+| `/detect-debug` | Yes (overrides result.ok / result.method / result.error if non-VALID — pipeline trace preserved; mirrors the prod challenge-wins/transient reclass so debug reports `challenge_page`/`http_error_transient` like `/detect` would; `debug.fetch.status_code` records the raw HTTP status) | **OFF** (debug shows requested URL's actual pipeline state) |
 | `/check-url` | N/A (no HTML fetch) | N/A |
 
 Batch Pass 2 retry set (`_PASS2_RETRYABLE_METHODS`): `fetch_failed`, `challenge_page`, `admission_rejected`, `http_error_transient`, `fetch_empty_content`. Pass-2 retries run with `force_refresh=True` (the Pass-1 transient rejection was just cached 6h and would short-circuit the retry via cache HIT) and are bounded by the same 300s per-item `wait_for` as Pass 1. Definitive verdicts (`http_error`, `soft_404`, `redirected_to_home`) are NOT retried — page properties that don't change between passes. `error` (incl. `Timeout global item (300s)`) is deliberately NOT retried either: a timed-out item already consumed 300s of work inside the same saturated batch; the fix for timeouts is throughput (async job API) + caller re-run. Spec: `docs/superpowers/specs/2026-07-18-detection-langue-fr-transient-error-retry-design.md`.

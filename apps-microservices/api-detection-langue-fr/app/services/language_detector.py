@@ -100,6 +100,32 @@ def detect_challenge_page(html: str) -> Optional[str]:
     if imperva_count >= 2:
         return 'Imperva'
 
+    # --- Rescaled WAF (interstitiel proof-of-work auto-résolvant) ---
+    # Page "Verifying your browser" servie en HTTP 403 ; un Web Worker résout
+    # le challenge PoW puis window.location.replace recharge la vraie page.
+    # Les 3 marqueurs sont exclusifs à l'interstitiel (chemin verify + préfixe
+    # d'événement + titre) — 2 sur 3 requis pour éviter une page qui les cite.
+    rescaled_indicators = [
+        '/.well-known/rescaled-waf/',
+        'rescaled-waf:challenge-',
+        '<title>rescaled waf',
+    ]
+    if sum(1 for p in rescaled_indicators if p in html_lower) >= 2:
+        return 'Rescaled_WAF'
+
+    # --- Bot check générique JS proof-of-work (auto-hébergé, style ALTCHA) ---
+    # Titre "Bot check" + une confirmation PoW. Vendor-neutral : ces gates
+    # sont auto-hébergés (crypto-js inline, endpoints ?create_challenge).
+    if '<title>bot check</title>' in html_lower:
+        pow_confirmations = [
+            '?create_challenge',
+            'your request is being verified',
+            'javascript is needed to access this site',
+            'brix/crypto-js',
+        ]
+        if sum(1 for p in pow_confirmations if p in html_lower) >= 1:
+            return 'JS_PoW_bot_check'
+
     # --- Squid Proxy Error Pages ---
     # Détecte les pages d'erreur Squid (proxy cache) retournées quand le site cible
     # est inaccessible (ERR_CONNECT_FAIL, ERR_DNS_FAIL, etc.). Ces pages sont souvent
@@ -359,6 +385,12 @@ class LanguageDetector:
         'source', 'track', 'canvas', 'embed', 'template'
     ]
 
+    # Taille HTML au-delà de laquelle un texte visible < NLP_MIN_TEXT_LENGTH
+    # trahit un <noscript> mal fermé qui avale le body (et non une vraie page
+    # mince) — déclenche le re-nettoyage avec noscript unwrap. Aligné sur
+    # _STUB_MAX_HTML_LEN (page_validator).
+    _NOSCRIPT_REPAIR_MIN_HTML_LEN = 20_000
+
     @staticmethod
     def _normalize_encoding(html: str) -> str:
         """
@@ -431,6 +463,31 @@ class LanguageDetector:
 
         # Étape 5 : Post-traitement (équivalent PHP : preg_replace('/\s+/', ' ', ...) + trim)
         text = re.sub(r'\s+', ' ', text).strip()
+
+        # Étape 5bis : réparation noscript. Un <noscript> mal fermé (ex: LiteSpeed
+        # Cache enveloppant le <noscript> GTM dans un second <noscript> — cas
+        # outilbox.fr) fait avaler tout le body par le parseur : le decompose()
+        # de l'étape 2 supprime alors 99% du texte visible. Une vraie page ne
+        # peut pas avoir <100 chars visibles dans >20KB de HTML → re-nettoyage
+        # unique avec noscript DÉBALLÉ (unwrap) au lieu de supprimé. Ne se
+        # déclenche que sur des pages qui échoueraient de toute façon ; le seuil
+        # 20KB protège les pages réellement minces (leur boilerplate noscript
+        # "enable JavaScript" ne doit pas alimenter le NLP).
+        if len(text) < settings.NLP_MIN_TEXT_LENGTH and len(html) > self._NOSCRIPT_REPAIR_MIN_HTML_LEN:
+            soup = BeautifulSoup(html, 'lxml')
+            for element in soup([e for e in self._NON_VISIBLE_ELEMENTS if e != 'noscript']):
+                element.decompose()
+            for el in soup.find_all('noscript'):
+                el.unwrap()
+            self._remove_cookie_consent_elements(soup)
+            repaired = re.sub(r'\s+', ' ', soup.get_text(separator=' ', strip=True)).strip()
+            # Plancher d'acceptation : un vrai body avalé libère des milliers
+            # de chars (outilbox: 11k) ; un noscript boilerplate « enable
+            # JavaScript » bien formé en libère ~100-200. Sans ce plancher,
+            # une page mince >20KB verrait son boilerplate EN alimenter le NLP
+            # et transformer un échec transient en verdict définitif erroné.
+            if len(repaired) >= settings.NLP_MIN_TEXT_LENGTH * 5:
+                text = repaired
 
         # Vérifier longueur minimale
         if len(text) < settings.NLP_MIN_TEXT_LENGTH:

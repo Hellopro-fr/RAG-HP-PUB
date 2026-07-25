@@ -405,6 +405,8 @@ class DomainFR:
                 proxy=settings.APIFY_PROXY
             ) as client:
                 response = await client.get(url)
+                if self._redirects_to_analyzed_page(url, str(response.url)):
+                    return False
                 if response.status_code == 200:
                     content_type = response.headers.get('content-type', '')
                     if 'text/html' in content_type or 'application/xhtml' in content_type:
@@ -419,12 +421,50 @@ class DomainFR:
             if effective_proxy:
                 result = await scrape_html(url, proxy=effective_proxy)
                 if result:
+                    if self._redirects_to_analyzed_page(url, result.final_url):
+                        return False
                     content = result.html
                     if content and len(content) > 100:
                         return True
         except Exception:
             pass
 
+        return False
+
+    def _redirects_to_analyzed_page(self, candidate_url: str, final_url: Optional[str]) -> bool:
+        """
+        Vrai si une candidate alternative redirige vers la page en cours
+        d'analyse (lien switcher mort — ex: WPML metaga.fr → 301 → metaga.es,
+        la page analysée). La valider déclencherait un fetch navigateur Case 6
+        de 120s garanti inutile : le contenu est celui déjà jugé non français.
+        """
+        if not final_url or self._compare_without_scheme(candidate_url, final_url):
+            return False  # pas de redirection — l'URL se juge sur son contenu
+        # Switcher à cookie : /?lang=fr → Set-Cookie + 302 vers / (la query
+        # tombe mais la session porte le cookie). Même hôte + même path que la
+        # cible finale = même emplacement, pas un renvoi ailleurs — le fetch
+        # Case 6 (qui rejoue le cookie) doit juger le contenu.
+        cand = urlparse(candidate_url)
+        fin = urlparse(final_url)
+        if (
+            (cand.hostname or '').lower() == (fin.hostname or '').lower()
+            and (cand.path or '/').rstrip('/') == (fin.path or '/').rstrip('/')
+        ):
+            return False
+        if self._compare_without_scheme(final_url, self.homepage):
+            logger.debug(
+                f"Alternative rejetée (redirige vers la page analysée): "
+                f"{candidate_url} → {final_url}"
+            )
+            return True
+        if self.original_homepage and self._compare_without_scheme(
+            final_url, self.original_homepage
+        ):
+            logger.debug(
+                f"Alternative rejetée (redirige vers la homepage d'origine): "
+                f"{candidate_url} → {final_url}"
+            )
+            return True
         return False
 
     async def _validate_alternative_urls(
@@ -629,6 +669,75 @@ class DomainFR:
 
         # Defaut : generique
         return 1
+
+    def _synthesize_lang_substitution_urls(self, content: str) -> list[str]:
+        """
+        Dernier recours quand la page ne référence aucune URL française :
+        substitue le code langue déclaré (<html lang>, hreflang) par 'fr' dans
+        les URLs auto-référentes (canonical, hreflang) dont le path contient ce
+        code en token isolé. Ex: /home-page-it -> /home-page-fr.
+
+        Retourne au plus 2 URLs même hôte. Aucune validation ici : les
+        candidates passent par la validation HTTP puis la confirmation NLP de
+        la boucle Case 6 — une mauvaise supposition ne peut pas rendre ok=true.
+        """
+        try:
+            soup = BeautifulSoup(content, 'lxml')
+        except Exception:
+            return []
+
+        homepage_host = (urlparse(self.homepage).hostname or '').lower()
+
+        # Codes langue déclarés (hors fr) : <html lang> + hreflang des <link>
+        lang_codes: set[str] = set()
+        html_tag = soup.find('html')
+        if html_tag:
+            lang_attr = (html_tag.get('lang') or '').strip().lower()
+            if lang_attr:
+                lang_codes.add(re.split(r'[-_]', lang_attr)[0])
+
+        # URLs auto-référentes (canonical + alternate, même hôte)
+        self_urls: list[str] = []
+        for link in soup.find_all('link'):
+            rels = [r.lower() for r in (link.get('rel') or [])]
+            href = link.get('href')
+            if not href or ('canonical' not in rels and 'alternate' not in rels):
+                continue
+            hreflang_val = (link.get('hreflang') or '').strip().lower()
+            if hreflang_val:
+                lang_codes.add(re.split(r'[-_]', hreflang_val)[0])
+            resolved = self.resolve_url(self.homepage, href)
+            if resolved and (urlparse(resolved).hostname or '').lower() == homepage_host:
+                if resolved not in self_urls:
+                    self_urls.append(resolved)
+
+        lang_codes.discard('fr')
+        lang_codes = {c for c in lang_codes if re.fullmatch(r'[a-z]{2}', c)}
+        if not lang_codes or not self_urls:
+            return []
+
+        synthesized: list[str] = []
+        for self_url in self_urls:
+            parsed = urlparse(self_url)
+            path = parsed.path or '/'
+            for code in lang_codes:
+                # Token isolé : 'it' matche /home-page-it ou /it/ mais pas /item.
+                # Une candidate PAR occurrence (pas de sub global : /it/it-support
+                # doit donner /fr/it-support et /it/fr-support, jamais
+                # /fr/fr-support). Casse du token respectée (/IT/ → /FR/).
+                token = re.compile(
+                    rf'(?<![a-z]){re.escape(code)}(?![a-z])', re.IGNORECASE
+                )
+                for m in token.finditer(path):
+                    repl = 'FR' if m.group().isupper() else 'fr'
+                    new_path = path[:m.start()] + repl + path[m.end():]
+                    synth = parsed._replace(path=new_path).geturl()
+                    if synth not in synthesized and not self._is_self_url(synth):
+                        synthesized.append(synth)
+            if len(synthesized) >= 2:
+                break
+
+        return synthesized[:2]
 
     async def detect_alternative_languages(self, content: str) -> list[AlternativeUrl]:
         """
@@ -867,6 +976,17 @@ class DomainFR:
 
         except Exception:
             pass
+
+        # 7. Sonde par substitution de code langue (dernier recours, zéro candidat).
+        # Certains sites ont une version FR réelle jamais référencée par la page
+        # (hreflang cassé, pas de switcher — ex: siderosengineering.com déclare
+        # uniquement hreflang="it" auto-référent alors que /home-page-fr existe).
+        # On substitue le code langue déclaré par 'fr' dans les URLs auto-référentes
+        # (canonical/hreflang) ; la validation HTTP ci-dessous + la confirmation NLP
+        # de la boucle Case 6 rejettent les mauvaises suppositions.
+        if not all_alternatives and not candidates_to_validate:
+            for synth_url in self._synthesize_lang_substitution_urls(content):
+                _queue_candidate(synth_url, synth_url, 'lang_substitution')
 
         # Validate candidates via HTTP (parallel, max 3 concurrent) — only when enabled.
         if self.validate_alternatives:
@@ -1348,7 +1468,12 @@ class DomainFR:
             except Exception as e:
                 logger.warning(f"Erreur signal lexical: {e}")
         
-        # Cas 9 : Aucun indicateur français trouvé
+        # Cas 9 : Aucun indicateur français trouvé.
+        # NB: alternative_urls reste volontairement vide ici — le crawler
+        # (routes.ts) et le BO (not_french_signal.php) traitent « ok=false +
+        # alternatives non vides » comme un signal distinct de not_french ;
+        # exposer les candidates trouvées-puis-rejetées casserait cette chaîne.
+        # Le diagnostic passe par /detect-debug (debug.alternatives).
         return DetectionResponse(
             ok=False,
             url=url,
@@ -1362,7 +1487,8 @@ class DomainFR:
         fetched_by: str = 'api',
         include_full_content: bool = False,
         redirected_from: Optional[str] = None,
-        challenge_detected: Optional[str] = None
+        challenge_detected: Optional[str] = None,
+        http_status: Optional[int] = None
     ) -> DebugDetectionResponse:
         """
         Version debug de check_page_if_french qui collecte les informations
@@ -1388,7 +1514,8 @@ class DomainFR:
             raw_html_preview=(content[:500] if content else ''),
             raw_html_full=content if (include_full_content and content) else None,
             redirected_from=redirected_from,
-            challenge_detected=challenge_detected
+            challenge_detected=challenge_detected,
+            status_code=http_status
         )
 
         # --- Debug: Cleaning info ---
@@ -1538,7 +1665,22 @@ class DomainFR:
 
         reliable_alts = [a for a in alternatives if a.validated]
         if reliable_alts:
-            return f"Case 6: Alternative French URL found ({reliable_alts[0].method})"
+            # « found » seulement si la boucle Case 6 a réellement confirmé une
+            # alternative (method='alternative_...'). Sinon la détection a
+            # tenté puis rejeté chaque candidate (ex: metaga.fr → contenu ES)
+            # et le résultat est un Case 9 — le dire, au lieu d'afficher un
+            # Case 6 « trouvé » contredisant result.ok=false.
+            if method.startswith('alternative_'):
+                return f"Case 6: Alternative French URL found ({reliable_alts[0].method})"
+            if method == 'Check_nok_v2':
+                return (
+                    f"Case 6 attempted: {len(reliable_alts)} validated "
+                    "alternative(s), none confirmed French → Case 9"
+                )
+            return (
+                f"Case 6 attempted: {len(reliable_alts)} validated "
+                f"alternative(s), none confirmed French (result: {method})"
+            )
 
         if nlp_available and (html_indicates_french or url_indicates_french):
             return "Case 7: NLP does not confirm despite HTML/URL indicators"
