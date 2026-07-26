@@ -36,6 +36,25 @@ export const queryParamCount = (url: string): number => {
   try { return [...new URL(url).searchParams].length; } catch { return Infinity; }
 };
 
+/**
+ * Read the __collapsed_urls.json sidecar in either shape: the current
+ * {collapsedUrl: survivorUrl} map, or the legacy string array (survivor unknown
+ * → ""). Anything else → empty map. Keys are always the collapsed URLs, so
+ * Object.keys() is the update-baseline list and values feed survivor-aware
+ * consumers (BO rename/doublon path).
+ */
+export const parseCollapsedSidecar = (raw: unknown): Record<string, string> => {
+  const out: Record<string, string> = {};
+  if (Array.isArray(raw)) {
+    for (const u of raw) if (typeof u === "string" && u) out[u] = "";
+  } else if (raw && typeof raw === "object") {
+    for (const [collapsed, survivor] of Object.entries(raw as Record<string, unknown>)) {
+      if (collapsed) out[collapsed] = typeof survivor === "string" ? survivor : "";
+    }
+  }
+  return out;
+};
+
 /** Feature flag: extend content-collision pass to ?param canonical dedup. Default off. */
 export const canonicalDedupEnabled = (): boolean =>
   (process.env.DATASET_CANONICAL_DEDUP_ENABLED ?? "false").toLowerCase() === "true";

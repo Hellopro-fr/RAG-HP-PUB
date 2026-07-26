@@ -22,7 +22,7 @@ test("yields row urls + collapsed-sidecar urls, skips __ files", async () => {
     fs.writeFileSync(path.join(dsDir, "0.json"), JSON.stringify({ url: "https://ex.tld/p" }));
     fs.writeFileSync(path.join(dsDir, "1.json"), JSON.stringify({ url: "https://ex.tld/q" }));
     fs.writeFileSync(path.join(dsDir, "__collapsed_urls.json"),
-      JSON.stringify(["https://ex.tld/p?utm=1", "https://ex.tld/p?sid=2"]));
+      JSON.stringify({ "https://ex.tld/p?utm=1": "https://ex.tld/p", "https://ex.tld/p?sid=2": "https://ex.tld/p" }));
     process.chdir(cwd);
     const urls = await collect(loadDatasetUrlsGenerator("prev", "ex.tld"));
     assert.deepEqual(urls, [

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { stripFragment, canonicalGroupKey, queryParamCount, canonicalDedupEnabled } from "./canonicalBase.js";
+import { stripFragment, canonicalGroupKey, queryParamCount, canonicalDedupEnabled, parseCollapsedSidecar } from "./canonicalBase.js";
 
 test("stripFragment removes #...", () => {
   assert.equal(stripFragment("https://x.tld/p?a=1#sec"), "https://x.tld/p?a=1");
@@ -26,6 +26,15 @@ test("parse-fail fallbacks", () => {
   assert.equal(stripFragment("not a url#x"), "not a url");
   assert.equal(canonicalGroupKey("not a url"), "not a url");
   assert.equal(queryParamCount("not a url"), Infinity);
+});
+
+test("parseCollapsedSidecar accepts map, legacy array, junk", () => {
+  assert.deepEqual(parseCollapsedSidecar({ "https://x.tld/p?a=1": "https://x.tld/p" }),
+    { "https://x.tld/p?a=1": "https://x.tld/p" });
+  assert.deepEqual(parseCollapsedSidecar(["https://x.tld/p?a=1"]), { "https://x.tld/p?a=1": "" });
+  assert.deepEqual(parseCollapsedSidecar({ "https://x.tld/p?a=1": 42 }), { "https://x.tld/p?a=1": "" });
+  assert.deepEqual(parseCollapsedSidecar(null), {});
+  assert.deepEqual(parseCollapsedSidecar("nope"), {});
 });
 
 test("flag default off, reads env true", () => {

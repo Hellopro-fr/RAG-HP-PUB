@@ -37,7 +37,10 @@ test("flag ON: facet variants with identical content collapse to bare base", () 
     assert.deepEqual(listUrls("ex.tld"), ["https://ex.tld/p"]);
     assert.equal(res.removed, 2);
     const collapsed = JSON.parse(fs.readFileSync("storage/datasets/ex.tld/__collapsed_urls.json", "utf-8"));
-    assert.deepEqual(collapsed.sort(), ["https://ex.tld/p?sid=42", "https://ex.tld/p?utm_source=g"]);
+    assert.deepEqual(collapsed, {
+      "https://ex.tld/p?sid=42": "https://ex.tld/p",
+      "https://ex.tld/p?utm_source=g": "https://ex.tld/p",
+    });
     assert.equal(res.collapsedPairs.length, 2);
   });
   delete process.env.DATASET_CANONICAL_DEDUP_ENABLED;
@@ -112,7 +115,8 @@ test("flag ON: second pass merges sidecar (crash-relaunch keeps pass-1 collapsed
       JSON.stringify({ url: "https://ex.tld/p?sid=2", content: "<body>same</body>" }));
     cleanDatasetFragments(["ex.tld"]);
     const collapsed = JSON.parse(fs.readFileSync("storage/datasets/ex.tld/__collapsed_urls.json", "utf-8"));
-    assert.deepEqual(collapsed.sort(), ["https://ex.tld/p?sid=2", "https://ex.tld/p?utm=1"]);
+    assert.deepEqual(Object.keys(collapsed).sort(), ["https://ex.tld/p?sid=2", "https://ex.tld/p?utm=1"]);
+    assert.equal(collapsed["https://ex.tld/p?utm=1"], "https://ex.tld/p"); // pass-1 survivor kept
   });
   delete process.env.DATASET_CANONICAL_DEDUP_ENABLED;
   delete process.env.DIEZ_PERCLASS_ENABLED;

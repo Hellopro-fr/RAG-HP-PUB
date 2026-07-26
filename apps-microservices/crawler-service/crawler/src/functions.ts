@@ -45,7 +45,7 @@ import { shouldStopForDiez } from "./diezLimitStop.js";
 import { shouldStopForQuestionMark } from "./qmLimitStop.js";
 import { applyPerClassStrip, perClassEnabled, fingerprint } from "./diezClassify.js";
 import { normalizeHtml } from "./htmlNormalize.js";
-import { canonicalGroupKey, queryParamCount, canonicalDedupEnabled } from "./canonicalBase.js";
+import { canonicalGroupKey, queryParamCount, canonicalDedupEnabled, parseCollapsedSidecar } from "./canonicalBase.js";
 import { provenDiezStripActive } from "./diezDecision.js";
 import { StaleVariantSkip, QUEUE_PURGE_ENABLED, STALE_VARIANT_SKIP_MARKER } from "./staleVariantSkip.js";
 import { qmConsumptionStrip, shouldSkipDequeued, recordQmCollapsed } from "./qmConsumptionSkip.js";
@@ -1311,10 +1311,8 @@ export async function* loadDatasetUrlsGenerator(previousId: string, domain: stri
         const collapsedFile = path.join(datasetPath, "__collapsed_urls.json");
         if (fs.existsSync(collapsedFile)) {
             try {
-                const collapsed = JSON.parse(await fs.promises.readFile(collapsedFile, "utf-8"));
-                if (Array.isArray(collapsed)) {
-                    for (const u of collapsed) if (typeof u === "string") yield u;
-                }
+                const collapsed = parseCollapsedSidecar(JSON.parse(await fs.promises.readFile(collapsedFile, "utf-8")));
+                for (const u of Object.keys(collapsed)) yield u;
             } catch (e) {
                 console.warn(`Error reading collapsed-urls sidecar: ${e}`);
             }
@@ -1995,7 +1993,7 @@ export const cleanDatasetFragments = (
                 arr.push({ file: full, url: row.url, fp }); // ORIGINAL url — never fabricate/strip (avoids SPA route collision)
                 canonGroups.set(key, arr);
             }
-            const collapsedUrls: string[] = [];
+            const collapsedMap: Record<string, string> = {}; // collapsed URL → survivor URL
             for (const entries of canonGroups.values()) {
                 const byFp = new Map<string, CanonEntry[]>();
                 for (const e of entries) {
@@ -2015,23 +2013,25 @@ export const cleanDatasetFragments = (
                     const keep = cell[0];
                     for (const e of cell.slice(1)) {
                         try { fs.unlinkSync(e.file); removed++; } catch { /* best-effort */ }
-                        collapsedUrls.push(e.url);
+                        collapsedMap[e.url] = keep.url;
                         collapsedPairs.push({ collapsed: e.url, base: keep.url });
                     }
                 }
             }
-            if (collapsedUrls.length > 0) {
+            if (Object.keys(collapsedMap).length > 0) {
+                // {collapsed: survivor} map — keys are the update baseline (no churn), values
+                // let the BO route a collapsed fiche through its rename/doublon path instead
+                // of leaving it alive with stale content.
                 // Merge with any earlier pass (crash-after-dedup relaunch): rows deleted in
                 // pass 1 exist only in its sidecar — overwriting would drop them from the
                 // next update's baseline and re-report them as new_urls.
                 const sidecarFile = `${dir}/__collapsed_urls.json`;
                 try {
-                    let existing: string[] = [];
+                    let existing: Record<string, string> = {};
                     try {
-                        const prev = JSON.parse(fs.readFileSync(sidecarFile, "utf-8"));
-                        if (Array.isArray(prev)) existing = prev.filter((u) => typeof u === "string");
+                        existing = parseCollapsedSidecar(JSON.parse(fs.readFileSync(sidecarFile, "utf-8")));
                     } catch { /* absent/corrupt → start fresh */ }
-                    fs.writeFileSync(sidecarFile, JSON.stringify([...new Set([...existing, ...collapsedUrls])]));
+                    fs.writeFileSync(sidecarFile, JSON.stringify({ ...existing, ...collapsedMap }));
                 } catch { /* best-effort */ }
             }
             continue;
