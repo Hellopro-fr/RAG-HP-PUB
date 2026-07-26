@@ -1355,9 +1355,6 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         console.error("Failed to save stats:", e);
     }
 
-    // Build the per-domain URL->filename index for the SFPI HTML store (hot tier). Fail-open.
-    buildHtmlIndex(storagePath, domain);
-
     // Final Update Report for Update Mode
     if (crawlMode === 'update') {
         try {
@@ -1384,6 +1381,8 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         } catch (e) {
             console.error("Dataset fragment cleanup failed:", e);
         }
+    } else if (reason === 'COMPLETED' && canonicalDedupEnabled()) {
+        console.warn("[canonical-dedup] DATASET_CANONICAL_DEDUP_ENABLED=true but dataset cleanup did not run (needs DIEZ_PERCLASS_ENABLED=true).");
     }
 
     // Re-write the diez audit now that content_collision is populated (the early
@@ -1410,6 +1409,11 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
             console.warn(`[canonical-dedup] ${a.collapsedTotal} ?param/# route-loss candidate(s) collapsed onto a base — see _canonical_dedup_audit.json (re-crawl to confirm).`);
         }
     }
+
+    // Build the per-domain URL->filename index for the SFPI HTML store (hot tier). Fail-open.
+    // AFTER the dataset cleanup: indexing before it left dangling entries for every
+    // dedup-collapsed row file.
+    buildHtmlIndex(storagePath, domain);
 
     // 4. Persist Data (Critical Step)
     // 1. Persist URLs from Redis to disk (streaming)

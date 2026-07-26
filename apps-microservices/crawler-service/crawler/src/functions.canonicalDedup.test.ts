@@ -56,6 +56,8 @@ test("flag ON: distinct-content facets kept; pagination never merged", () => {
     const res = cleanDatasetFragments(["ex.tld"]);
     assert.equal(listUrls("ex.tld").length, 4);
     assert.equal(res.removed, 0);
+    // red/blue = distinct routes kept in a variant group; lone pagination rows not counted
+    assert.equal(res.collisionsKept, 2);
   });
   delete process.env.DATASET_CANONICAL_DEDUP_ENABLED;
   delete process.env.DIEZ_PERCLASS_ENABLED;
@@ -92,6 +94,25 @@ test("flag ON: SPA hash routes — distinct root preserved, dup route collapsed,
     assert.ok(urls.includes("https://ex.tld/app"));
     assert.ok(urls.includes("https://ex.tld/app#/products"));
     assert.equal(new Set(urls).size, urls.length); // no duplicate-url survivors
+  });
+  delete process.env.DATASET_CANONICAL_DEDUP_ENABLED;
+  delete process.env.DIEZ_PERCLASS_ENABLED;
+});
+
+test("flag ON: second pass merges sidecar (crash-relaunch keeps pass-1 collapsed urls)", () => {
+  process.env.DIEZ_PERCLASS_ENABLED = "true";
+  process.env.DATASET_CANONICAL_DEDUP_ENABLED = "true";
+  withDataset("ex.tld", [
+    { url: "https://ex.tld/p", content: "<body>same</body>" },
+    { url: "https://ex.tld/p?utm=1", content: "<body>same</body>" },
+  ], () => {
+    cleanDatasetFragments(["ex.tld"]);
+    // pass 2: a new variant appears (resumed crawl); pass-1 sidecar must survive
+    fs.writeFileSync(path.join("storage", "datasets", "ex.tld", "9.json"),
+      JSON.stringify({ url: "https://ex.tld/p?sid=2", content: "<body>same</body>" }));
+    cleanDatasetFragments(["ex.tld"]);
+    const collapsed = JSON.parse(fs.readFileSync("storage/datasets/ex.tld/__collapsed_urls.json", "utf-8"));
+    assert.deepEqual(collapsed.sort(), ["https://ex.tld/p?sid=2", "https://ex.tld/p?utm=1"]);
   });
   delete process.env.DATASET_CANONICAL_DEDUP_ENABLED;
   delete process.env.DIEZ_PERCLASS_ENABLED;

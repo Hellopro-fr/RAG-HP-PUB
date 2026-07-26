@@ -1947,6 +1947,9 @@ export const cleanDatasetFragments = (
     const collapsedPairs: { collapsed: string; base: string }[] = [];
     const perClass = perClassEnabled();
     const canonical = canonicalDedupEnabled();
+    if (canonical && !perClass) {
+        console.warn("[canonical-dedup] DATASET_CANONICAL_DEDUP_ENABLED=true is INERT without DIEZ_PERCLASS_ENABLED=true — legacy cleanup runs instead.");
+    }
     for (const name of datasetNames) {
         const dir = `storage/datasets/${name}`;
         if (!fs.existsSync(dir)) continue;
@@ -2001,7 +2004,9 @@ export const cleanDatasetFragments = (
                     byFp.set(e.fp, cell);
                 }
                 for (const cell of byFp.values()) {
-                    if (cell.length < 2) { collisionsKept += cell.length; continue; } // lone row → no collision evidence → keep as-is
+                    // lone row → no collision evidence → keep as-is; count it only when its
+                    // group HAS variants (distinct-route kept), like the legacy branch below.
+                    if (cell.length < 2) { if (entries.length >= 2) collisionsKept += cell.length; continue; }
                     // survivor: fewest query params, then lexicographic. Bare-base rows win → no rewrite/fabrication needed.
                     cell.sort((a, b) => {
                         const ca = queryParamCount(a.url), cb = queryParamCount(b.url);
@@ -2016,7 +2021,18 @@ export const cleanDatasetFragments = (
                 }
             }
             if (collapsedUrls.length > 0) {
-                try { fs.writeFileSync(`${dir}/__collapsed_urls.json`, JSON.stringify(collapsedUrls)); } catch { /* best-effort */ }
+                // Merge with any earlier pass (crash-after-dedup relaunch): rows deleted in
+                // pass 1 exist only in its sidecar — overwriting would drop them from the
+                // next update's baseline and re-report them as new_urls.
+                const sidecarFile = `${dir}/__collapsed_urls.json`;
+                try {
+                    let existing: string[] = [];
+                    try {
+                        const prev = JSON.parse(fs.readFileSync(sidecarFile, "utf-8"));
+                        if (Array.isArray(prev)) existing = prev.filter((u) => typeof u === "string");
+                    } catch { /* absent/corrupt → start fresh */ }
+                    fs.writeFileSync(sidecarFile, JSON.stringify([...new Set([...existing, ...collapsedUrls])]));
+                } catch { /* best-effort */ }
             }
             continue;
         }
@@ -2052,7 +2068,7 @@ export const cleanDatasetFragments = (
             }
         }
     }
-    console.log(`[diez] Dataset cleanup (perClass=${perClass}, canonical=${canonical}): rewrote ${rewritten}, removed ${removed}, kept ${collisionsKept} distinct-route row(s).`);
+    console.log(`[diez] Dataset cleanup (perClass=${perClass}, canonical=${perClass && canonical}): rewrote ${rewritten}, removed ${removed}, kept ${collisionsKept} distinct-route row(s).`);
     return { rewritten, removed, collisionsKept, collapsedPairs };
 };
 
