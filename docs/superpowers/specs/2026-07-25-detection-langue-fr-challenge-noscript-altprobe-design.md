@@ -10,7 +10,7 @@ investigation with live probes + adversarial verification of each root cause.
 | ID | Domain | Really FR? | Verdict today | Root cause |
 |---|---|---|---|---|
 | 5672 | outilbox.fr | YES | `fetch_empty_content` | LiteSpeed lazy-loader nests GTM's `<noscript>` inside a second `<noscript>`; outer never closes; every parser puts 99% of the body inside noscript; cleaner decomposes noscript → 16 visible chars |
-| 5789 | metaga.fr | NO (correct) | `Check_nok_v2` | metaga.fr 301→metaga.es; WPML switcher advertises a dead FR URL; debug trace mislabels the run "Case 6" and 120s browser fetch wasted on a self-redirecting candidate |
+| 5789 | metaga.fr | **YES** (corrected 2026-07-26 — user challenge verified) | `Check_nok_v2` | Only the metaga.fr ROOT 301s to metaga.es (misconfigured apex redirect); inner paths serve a full French site (`/contact/` → 200 `lang=fr-FR`, complete `page-sitemap.xml`). Every prober (curl variants, Camoufox, user's own Chrome click) entered via the root and concluded "no FR". WPML switcher links to the dead root; debug trace mislabeled the run "Case 6" |
 | 5166 | probst-handling.com | blocked | `http_error` 7d | ALTCHA-style "Bot check" JS proof-of-work served HTTP 401 on every path; pattern unknown to `detect_challenge_page` |
 | 5184 | siderosengineering.com | YES (`/home-page-fr` live, `lang=fr`) | `Check_nok_v2` | Italian homepage advertises zero FR URLs (hreflang declares only self-referencing `it`); scanner is purely extractive |
 | 5856 | lagff.com | blocked (La GFF = Générale Frigorifique France, Shopware shop) | `http_error` 7d | rescaled-waf PoW interstitial (HTTP 403); pattern unknown; scraper's existing 45s challenge-resolution poll never engaged |
@@ -65,6 +65,18 @@ the reverse). **Review hardening:** one candidate per token occurrence (`/it/it-
   found-then-rejected alternatives would silently flip `not_french` → `insufficientData` in the BO
   pipeline (and `script_launch_crawl_csv.php` would re-check already-rejected candidates). Case 9
   keeps `alternative_urls` empty; diagnosis uses `/detect-debug`'s `debug.alternatives`.
+
+### 5bis. Dead-switcher sitemap rescue (`app/core/domain_fr.py`, 2026-07-26 follow-up)
+The metaga.fr re-check proved the "dead" switcher root can hide a LIVE French site on inner paths
+(apex-only redirect misconfiguration). `_validate_single_url_status` now distinguishes
+`'self_redirect'` from `'invalid'` (and skips the pointless Playwright Phase-2 on self-redirects);
+on `self_redirect`, `_sitemap_rescue_url` reads the candidate's sitemap (`/sitemap_index.xml` then
+`/wp-sitemap.xml`, one level of index descent preferring `page`-sitemaps) and substitutes the first
+same-host non-root inner page as the candidate (method suffix `_sitemap`, medium reliability). The
+Case-6 loop then fetches the INNER page and confirms via HTML-lang/NLP. Live-verified:
+`https://metaga.fr/` → rescue `https://metaga.fr/blog/` → validates, `lang=fr-FR` → `ok=true`.
+Cost: ≤3 extra httpx GETs only on the dead-switcher path, which previously burned a guaranteed
+120s browser fetch.
 
 ### 6. Debug trace honesty (`app/models/schemas.py` + `app/api/routes.py`)
 - `DebugFetchInfo.status_code: Optional[int]` populated from the fetch result (both blocked domains

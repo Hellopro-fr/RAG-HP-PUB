@@ -388,6 +388,10 @@ class DomainFR:
         return bool(re.match(r'^[a-z]{2}([-_][a-z]{2,4})?$', first_segment, re.IGNORECASE))
 
     async def _validate_single_url(self, url: str) -> bool:
+        """Validates that a URL is reachable and serves HTML content."""
+        return await self._validate_single_url_status(url) == 'valid'
+
+    async def _validate_single_url_status(self, url: str) -> str:
         """
         Validates that a URL is reachable and serves HTML content.
 
@@ -395,6 +399,11 @@ class DomainFR:
         1. httpx (rapide, léger) — suffisant pour la plupart des sites
         2. Playwright (fallback) — pour les sites avec protection anti-bot
            qui bloquent les requêtes httpx mais acceptent les navigateurs
+
+        Returns:
+            'valid' | 'self_redirect' (la candidate redirige vers la page
+            analysée — switcher mort, cause distinguée pour permettre le
+            sauvetage sitemap) | 'invalid'
         """
         # Phase 1 : validation rapide via httpx
         try:
@@ -406,11 +415,13 @@ class DomainFR:
             ) as client:
                 response = await client.get(url)
                 if self._redirects_to_analyzed_page(url, str(response.url)):
-                    return False
+                    # Définitif (la racine renvoie ailleurs) — inutile de
+                    # retenter au navigateur, même redirection serveur.
+                    return 'self_redirect'
                 if response.status_code == 200:
                     content_type = response.headers.get('content-type', '')
                     if 'text/html' in content_type or 'application/xhtml' in content_type:
-                        return True
+                        return 'valid'
         except Exception:
             pass
 
@@ -422,14 +433,90 @@ class DomainFR:
                 result = await scrape_html(url, proxy=effective_proxy)
                 if result:
                     if self._redirects_to_analyzed_page(url, result.final_url):
-                        return False
+                        return 'self_redirect'
                     content = result.html
                     if content and len(content) > 100:
-                        return True
+                        return 'valid'
         except Exception:
             pass
 
-        return False
+        return 'invalid'
+
+    _SITEMAP_PATHS = ('/sitemap_index.xml', '/wp-sitemap.xml')  # Yoast puis WP core
+
+    async def _sitemap_rescue_url(self, candidate_url: str) -> Optional[str]:
+        """
+        Sauvetage « switcher mort » : quand la RACINE d'une candidate redirige
+        vers la page analysée, le site peut quand même servir son contenu sur
+        les paths internes (metaga.fr : / → 301 metaga.es, mais /contact/ →
+        200 lang=fr — redirection apex mal configurée, contenu FR bien réel).
+        On lit le sitemap de la candidate et on retourne la première page
+        interne même hôte — la validation HTTP + la confirmation NLP Case 6
+        jugent ensuite son contenu.
+        """
+        parsed = urlparse(candidate_url)
+        host = (parsed.hostname or '').lower().removeprefix('www.')
+        if not host:
+            return None
+        origin = f"{parsed.scheme or 'https'}://{parsed.netloc}"
+
+        loc_re = re.compile(r'<loc>\s*([^<\s]+)\s*</loc>')
+
+        def _first_inner_page(locs: list[str]) -> Optional[str]:
+            for loc in locs:
+                p = urlparse(loc)
+                # Tolérance www : le sitemap de metaga.fr pourrait lister
+                # www.metaga.fr — même site.
+                if (p.hostname or '').lower().removeprefix('www.') != host:
+                    continue
+                if (p.path or '/').rstrip('/') in ('', '/'):
+                    continue  # la racine est précisément ce qui redirige
+                if 'trashed' in p.path:
+                    continue
+                return loc
+            return None
+
+        try:
+            async with httpx.AsyncClient(
+                timeout=10,
+                follow_redirects=True,
+                verify=False,
+                proxy=settings.APIFY_PROXY
+            ) as client:
+                for path in self._SITEMAP_PATHS:
+                    try:
+                        response = await client.get(origin + path)
+                    except Exception:
+                        continue
+                    if response.status_code != 200:
+                        continue
+                    # Borne mémoire : 2MB de XML ≈ dizaines de milliers de
+                    # <loc> — largement assez pour trouver UNE page interne.
+                    body = response.text[:2_000_000]
+                    locs = loc_re.findall(body)
+                    if not locs:
+                        continue
+                    # Index de sitemaps ? Descendre d'UN niveau (préférer le
+                    # sitemap des pages, plus textuel que posts/produits).
+                    if '<sitemapindex' in body:
+                        children = sorted(locs, key=lambda u: 'page' not in u)
+                        try:
+                            child_resp = await client.get(children[0])
+                        except Exception:
+                            continue
+                        if child_resp.status_code != 200:
+                            continue
+                        locs = loc_re.findall(child_resp.text[:2_000_000])
+                    rescue = _first_inner_page(locs)
+                    if rescue:
+                        logger.info(
+                            f"Sauvetage sitemap: {candidate_url} (racine morte) "
+                            f"→ {rescue}"
+                        )
+                        return rescue
+        except Exception:
+            pass
+        return None
 
     def _redirects_to_analyzed_page(self, candidate_url: str, final_url: Optional[str]) -> bool:
         """
@@ -499,7 +586,8 @@ class DomainFR:
 
             async with semaphore:
                 # First attempt: validate the resolved URL
-                if await self._validate_single_url(resolved_url):
+                status = await self._validate_single_url_status(resolved_url)
+                if status == 'valid':
                     return AlternativeUrl(
                         url=resolved_url,
                         method=candidate['method'],
@@ -507,6 +595,23 @@ class DomainFR:
                         validated=True,
                         region_priority=priority
                     )
+
+                # Switcher mort (racine redirigeant vers la page analysée) :
+                # le contenu peut vivre sur les paths internes (metaga.fr).
+                # Une page interne trouvée via sitemap REMPLACE la candidate —
+                # c'est elle que la boucle Case 6 fetchera et confirmera NLP.
+                if status == 'self_redirect':
+                    rescue_url = await self._sitemap_rescue_url(resolved_url)
+                    if rescue_url and await self._validate_single_url(rescue_url):
+                        return AlternativeUrl(
+                            url=rescue_url,
+                            method=candidate['method'] + '_sitemap',
+                            reliability='medium',
+                            validated=True,
+                            region_priority=self._french_region_priority(
+                                rescue_url, hreflang_val
+                            )
+                        )
 
                 # Retry with / prepended (PHP needEditUrl behavior)
                 if (

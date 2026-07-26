@@ -316,3 +316,165 @@ class TestValidateSingleUrlSelfRedirect:
         client = self._client_mock("https://example.com/")
         with patch("app.core.domain_fr.httpx.AsyncClient", return_value=client):
             assert await d._validate_single_url("https://example.com/?lang=fr") is True
+
+
+SITEMAP_INDEX_XML = """<?xml version="1.0"?>
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<sitemap><loc>https://metaga.fr/post-sitemap.xml</loc></sitemap>
+<sitemap><loc>https://metaga.fr/page-sitemap.xml</loc></sitemap>
+</sitemapindex>"""
+
+PAGE_SITEMAP_XML = """<?xml version="1.0"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<url><loc>https://metaga.fr/</loc></url>
+<url><loc>https://metaga.fr/home__trashed/</loc></url>
+<url><loc>https://metaga.fr/contact/</loc></url>
+<url><loc>https://metaga.fr/a-propos-de-nous/</loc></url>
+</urlset>"""
+
+
+def _routed_client(routes):
+    """httpx.AsyncClient mock whose get(url) is routed by exact URL.
+    routes: {url: (status_code, body)} — unknown URLs get 404."""
+    async def get(url, **kw):
+        status, body = routes.get(str(url), (404, ""))
+        resp = MagicMock()
+        resp.status_code = status
+        resp.text = body
+        resp.headers = {"content-type": "text/html"}
+        resp.url = str(url)
+        return resp
+
+    client = MagicMock()
+    client.get = AsyncMock(side_effect=get)
+    client.__aenter__ = AsyncMock(return_value=client)
+    client.__aexit__ = AsyncMock(return_value=None)
+    return client
+
+
+class TestSitemapRescue:
+    """Dead-switcher rescue: candidate root redirects to the analyzed page but
+    the site serves its content on inner paths (metaga.fr real-world case)."""
+
+    @pytest.mark.asyncio
+    async def test_rescue_finds_first_inner_page_via_index(self):
+        d = DomainFR(homepage="https://metaga.es/")
+        client = _routed_client({
+            "https://metaga.fr/sitemap_index.xml": (200, SITEMAP_INDEX_XML),
+            "https://metaga.fr/page-sitemap.xml": (200, PAGE_SITEMAP_XML),
+        })
+        with patch("app.core.domain_fr.httpx.AsyncClient", return_value=client):
+            rescue = await d._sitemap_rescue_url("https://metaga.fr/")
+        # root and __trashed skipped; page-sitemap preferred over post-sitemap
+        assert rescue == "https://metaga.fr/contact/"
+
+    @pytest.mark.asyncio
+    async def test_rescue_none_when_no_sitemap(self):
+        d = DomainFR(homepage="https://metaga.es/")
+        with patch("app.core.domain_fr.httpx.AsyncClient", return_value=_routed_client({})):
+            assert await d._sitemap_rescue_url("https://metaga.fr/") is None
+
+    @pytest.mark.asyncio
+    async def test_rescue_ignores_cross_host_locs(self):
+        xml = ('<urlset><url><loc>https://other.example/page/</loc></url>'
+               '<url><loc>https://metaga.fr/</loc></url></urlset>')
+        d = DomainFR(homepage="https://metaga.es/")
+        client = _routed_client({"https://metaga.fr/sitemap_index.xml": (200, xml)})
+        with patch("app.core.domain_fr.httpx.AsyncClient", return_value=client):
+            assert await d._sitemap_rescue_url("https://metaga.fr/") is None
+
+    @pytest.mark.asyncio
+    async def test_dead_switcher_candidate_replaced_by_rescued_page(self):
+        # Wiring: self_redirect status → sitemap rescue → rescued URL becomes
+        # the validated alternative the Case-6 loop will fetch.
+        d = DomainFR(homepage="https://metaga.es/")
+        with patch.object(d, "_validate_single_url_status",
+                          new=AsyncMock(return_value="self_redirect")), \
+             patch.object(d, "_sitemap_rescue_url",
+                          new=AsyncMock(return_value="https://metaga.fr/contact/")), \
+             patch.object(d, "_validate_single_url", new=AsyncMock(return_value=True)):
+            results = await d._validate_alternative_urls([{
+                "url": "https://metaga.fr/",
+                "raw_href": "https://metaga.fr/",
+                "method": "domain_fr_link",
+                "reliability": "medium",
+            }])
+        assert len(results) == 1
+        alt = results[0]
+        assert alt.validated is True
+        assert alt.url == "https://metaga.fr/contact/"
+        assert alt.method == "domain_fr_link_sitemap"
+
+    @pytest.mark.asyncio
+    async def test_rescue_tolerates_www_mismatch_in_locs(self):
+        xml = ('<urlset><url><loc>https://www.metaga.fr/</loc></url>'
+               '<url><loc>https://www.metaga.fr/contact/</loc></url></urlset>')
+        d = DomainFR(homepage="https://metaga.es/")
+        client = _routed_client({"https://metaga.fr/sitemap_index.xml": (200, xml)})
+        with patch("app.core.domain_fr.httpx.AsyncClient", return_value=client):
+            assert await d._sitemap_rescue_url("https://metaga.fr/") == \
+                "https://www.metaga.fr/contact/"
+
+    @pytest.mark.asyncio
+    async def test_end_to_end_rescue_through_routed_http(self):
+        """Integration (no internal mocks): root self-redirects via routed
+        httpx, sitemap serves, inner page validates — rescued AlternativeUrl
+        comes out of _validate_alternative_urls."""
+        routes = {
+            "https://metaga.fr/sitemap_index.xml": (200, SITEMAP_INDEX_XML),
+            "https://metaga.fr/page-sitemap.xml": (200, PAGE_SITEMAP_XML),
+            "https://metaga.fr/contact/": (200, "<html lang='fr-FR'></html>"),
+        }
+
+        async def get(url, **kw):
+            url = str(url)
+            if url == "https://metaga.fr/":
+                resp = MagicMock()
+                resp.status_code = 200
+                resp.headers = {"content-type": "text/html"}
+                resp.url = "https://metaga.es/"  # 301 root -> analyzed page
+                resp.text = ""
+                return resp
+            status, body = routes.get(url, (404, ""))
+            resp = MagicMock()
+            resp.status_code = status
+            resp.text = body
+            resp.headers = {"content-type": "text/html"}
+            resp.url = url
+            return resp
+
+        client = MagicMock()
+        client.get = AsyncMock(side_effect=get)
+        client.__aenter__ = AsyncMock(return_value=client)
+        client.__aexit__ = AsyncMock(return_value=None)
+
+        d = DomainFR(homepage="https://metaga.es/")
+        with patch("app.core.domain_fr.httpx.AsyncClient", return_value=client), \
+             patch("app.services.scraper.scrape_html", new=AsyncMock()) as scrape_spy:
+            results = await d._validate_alternative_urls([{
+                "url": "https://metaga.fr/",
+                "raw_href": "https://metaga.fr/",
+                "method": "domain_fr_link",
+                "reliability": "medium",
+            }])
+        alt = results[0]
+        assert alt.validated is True
+        assert alt.url == "https://metaga.fr/contact/"
+        assert alt.method == "domain_fr_link_sitemap"
+        scrape_spy.assert_not_awaited()  # self_redirect skips the browser fallback
+
+    @pytest.mark.asyncio
+    async def test_plain_invalid_candidate_skips_rescue(self):
+        d = DomainFR(homepage="https://metaga.es/")
+        rescue_spy = AsyncMock(return_value=None)
+        with patch.object(d, "_validate_single_url_status",
+                          new=AsyncMock(return_value="invalid")), \
+             patch.object(d, "_sitemap_rescue_url", new=rescue_spy):
+            results = await d._validate_alternative_urls([{
+                "url": "https://dead.example/",
+                "raw_href": "https://dead.example/",
+                "method": "domain_fr_link",
+                "reliability": "medium",
+            }])
+        rescue_spy.assert_not_awaited()
+        assert results[0].validated is False
