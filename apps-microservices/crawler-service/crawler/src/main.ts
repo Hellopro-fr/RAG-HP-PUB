@@ -1397,16 +1397,27 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
     // Canonical ?param/# dedup route-loss audit (flag-gated). Local cast so we
     // don't couple to context.diezContentCollision's declared type.
     const cc = context.diezContentCollision as
-        | { collapsedPairs?: { collapsed: string; base: string }[]; removed?: number; rewritten?: number }
+        | {
+            collapsedPairs?: { collapsed: string; base: string }[]; removed?: number; rewritten?: number;
+            refusedCells?: number; abortedDatasets?: string[];
+        }
         | null | undefined;
-    if (storagePath && canonicalDedupEnabled() && cc?.collapsedPairs?.length) {
+    // Refusals/aborts carry no collapsed pairs, so they must be part of the write
+    // condition — a guard that trips silently teaches the operator nothing.
+    if (storagePath && canonicalDedupEnabled()
+        && (cc?.collapsedPairs?.length || cc?.refusedCells || cc?.abortedDatasets?.length)) {
         const a = writeCanonicalDedupAudit(storagePath, {
-            collapsed: cc.collapsedPairs,
+            collapsed: cc.collapsedPairs ?? [],
             removed: cc.removed ?? 0,
             rewritten: cc.rewritten ?? 0,
+            refusedCells: cc.refusedCells ?? 0,
+            abortedDatasets: cc.abortedDatasets ?? [],
         });
         if (a.collapsedTotal > 0) {
             console.warn(`[canonical-dedup] ${a.collapsedTotal} ?param/# route-loss candidate(s) collapsed onto a base — see _canonical_dedup_audit.json (re-crawl to confirm).`);
+        }
+        if (cc.refusedCells || cc.abortedDatasets?.length) {
+            console.warn(`[canonical-dedup] volume guards tripped: ${cc.refusedCells ?? 0} oversized cell(s) refused, dataset(s) aborted: ${(cc.abortedDatasets ?? []).join(", ") || "none"} — see _canonical_dedup_audit.json.`);
         }
     }
 

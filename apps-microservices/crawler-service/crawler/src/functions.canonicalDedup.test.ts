@@ -122,6 +122,62 @@ test("flag ON: second pass merges sidecar (crash-relaunch keeps pass-1 collapsed
   delete process.env.DIEZ_PERCLASS_ENABLED;
 });
 
+test("guard: oversized identical-content cell refused (wall/shell artefact)", () => {
+  process.env.DIEZ_PERCLASS_ENABLED = "true";
+  process.env.DATASET_CANONICAL_DEDUP_ENABLED = "true";
+  // 6 sibling ?id= products all rendering the same HTML = capture artefact, not 6 dupes.
+  const rows = Array.from({ length: 6 }, (_, i) => ({
+    url: `https://ex.tld/p.php?id=${i + 1}`, content: "<body>Veuillez accepter les cookies</body>",
+  }));
+  withDataset("ex.tld", rows, () => {
+    const res = cleanDatasetFragments(["ex.tld"]);
+    assert.equal(res.removed, 0);
+    assert.equal(res.refusedCells, 1);
+    assert.equal(listUrls("ex.tld").length, 6); // every real product kept
+    assert.ok(!fs.existsSync("storage/datasets/ex.tld/__collapsed_urls.json"));
+  });
+  delete process.env.DATASET_CANONICAL_DEDUP_ENABLED;
+  delete process.env.DIEZ_PERCLASS_ENABLED;
+});
+
+test("guard: dataset aborted over the pct cap; nothing deleted", () => {
+  process.env.DIEZ_PERCLASS_ENABLED = "true";
+  process.env.DATASET_CANONICAL_DEDUP_ENABLED = "true";
+  // 20 bases x 3 identical siblings (cell of 3 = under maxCell) → 40/60 = 66% > 30%.
+  const rows = [];
+  for (let b = 0; b < 20; b++) {
+    rows.push({ url: `https://ex.tld/c${b}`, content: `<body>base ${b}</body>` });
+    rows.push({ url: `https://ex.tld/c${b}?utm=1`, content: `<body>base ${b}</body>` });
+    rows.push({ url: `https://ex.tld/c${b}?sid=2`, content: `<body>base ${b}</body>` });
+  }
+  withDataset("ex.tld", rows, () => {
+    const res = cleanDatasetFragments(["ex.tld"]);
+    assert.equal(res.removed, 0);
+    assert.deepEqual(res.abortedDatasets, ["ex.tld"]);
+    assert.equal(listUrls("ex.tld").length, 60);
+    assert.ok(!fs.existsSync("storage/datasets/ex.tld/__collapsed_urls.json"));
+  });
+  delete process.env.DATASET_CANONICAL_DEDUP_ENABLED;
+  delete process.env.DIEZ_PERCLASS_ENABLED;
+});
+
+test("guard: pct cap not applied below the min-rows sample", () => {
+  process.env.DIEZ_PERCLASS_ENABLED = "true";
+  process.env.DATASET_CANONICAL_DEDUP_ENABLED = "true";
+  // 3 rows, 2 collapse = 66% — meaningless as a percentage, must still collapse.
+  withDataset("ex.tld", [
+    { url: "https://ex.tld/p", content: "<body>same</body>" },
+    { url: "https://ex.tld/p?utm=1", content: "<body>same</body>" },
+    { url: "https://ex.tld/p?sid=2", content: "<body>same</body>" },
+  ], () => {
+    const res = cleanDatasetFragments(["ex.tld"]);
+    assert.equal(res.removed, 2);
+    assert.deepEqual(res.abortedDatasets, []);
+  });
+  delete process.env.DATASET_CANONICAL_DEDUP_ENABLED;
+  delete process.env.DIEZ_PERCLASS_ENABLED;
+});
+
 test("flag ON: empty/whitespace content never collapses (loss-proof)", () => {
   process.env.DIEZ_PERCLASS_ENABLED = "true";
   process.env.DATASET_CANONICAL_DEDUP_ENABLED = "true";

@@ -45,7 +45,7 @@ import { shouldStopForDiez } from "./diezLimitStop.js";
 import { shouldStopForQuestionMark } from "./qmLimitStop.js";
 import { applyPerClassStrip, perClassEnabled, fingerprint } from "./diezClassify.js";
 import { normalizeHtml } from "./htmlNormalize.js";
-import { canonicalGroupKey, queryParamCount, canonicalDedupEnabled, parseCollapsedSidecar } from "./canonicalBase.js";
+import { canonicalGroupKey, queryParamCount, canonicalDedupEnabled, parseCollapsedSidecar, canonicalDedupLimits } from "./canonicalBase.js";
 import { provenDiezStripActive } from "./diezDecision.js";
 import { StaleVariantSkip, QUEUE_PURGE_ENABLED, STALE_VARIANT_SKIP_MARKER } from "./staleVariantSkip.js";
 import { qmConsumptionStrip, shouldSkipDequeued, recordQmCollapsed } from "./qmConsumptionSkip.js";
@@ -1940,11 +1940,13 @@ export const getAllRequestQueues = (queueName: string): string[] => {
  */
 export const cleanDatasetFragments = (
     datasetNames: string[],
-): { rewritten: number; removed: number; collisionsKept: number; collapsedPairs: { collapsed: string; base: string }[] } => {
-    let rewritten = 0, removed = 0, collisionsKept = 0;
+): { rewritten: number; removed: number; collisionsKept: number; collapsedPairs: { collapsed: string; base: string }[]; refusedCells: number; abortedDatasets: string[] } => {
+    let rewritten = 0, removed = 0, collisionsKept = 0, refusedCells = 0;
     const collapsedPairs: { collapsed: string; base: string }[] = [];
+    const abortedDatasets: string[] = [];
     const perClass = perClassEnabled();
     const canonical = canonicalDedupEnabled();
+    const { maxCell, maxPct, minRowsForPct } = canonicalDedupLimits();
     if (canonical && !perClass) {
         console.warn("[canonical-dedup] DATASET_CANONICAL_DEDUP_ENABLED=true is INERT without DIEZ_PERCLASS_ENABLED=true — legacy cleanup runs instead.");
     }
@@ -1993,7 +1995,10 @@ export const cleanDatasetFragments = (
                 arr.push({ file: full, url: row.url, fp }); // ORIGINAL url — never fabricate/strip (avoids SPA route collision)
                 canonGroups.set(key, arr);
             }
-            const collapsedMap: Record<string, string> = {}; // collapsed URL → survivor URL
+            // PLAN the collapses, apply them only after the volume guards below: an
+            // unlink cannot be undone, so nothing is deleted before the whole dataset
+            // has been judged.
+            const plan: { file: string; url: string; survivor: string }[] = [];
             for (const entries of canonGroups.values()) {
                 const byFp = new Map<string, CanonEntry[]>();
                 for (const e of entries) {
@@ -2005,18 +2010,35 @@ export const cleanDatasetFragments = (
                     // lone row → no collision evidence → keep as-is; count it only when its
                     // group HAS variants (distinct-route kept), like the legacy branch below.
                     if (cell.length < 2) { if (entries.length >= 2) collisionsKept += cell.length; continue; }
+                    if (cell.length > maxCell) {
+                        // Too many identical-content siblings to be a tracking-param family →
+                        // treat as a capture artefact (wall / interstitial / unhydrated shell).
+                        refusedCells++;
+                        collisionsKept += cell.length;
+                        continue;
+                    }
                     // survivor: fewest query params, then lexicographic. Bare-base rows win → no rewrite/fabrication needed.
                     cell.sort((a, b) => {
                         const ca = queryParamCount(a.url), cb = queryParamCount(b.url);
                         return ca !== cb ? ca - cb : (a.url < b.url ? -1 : a.url > b.url ? 1 : 0);
                     });
                     const keep = cell[0];
-                    for (const e of cell.slice(1)) {
-                        try { fs.unlinkSync(e.file); removed++; } catch { /* best-effort */ }
-                        collapsedMap[e.url] = keep.url;
-                        collapsedPairs.push({ collapsed: e.url, base: keep.url });
-                    }
+                    for (const e of cell.slice(1)) plan.push({ file: e.file, url: e.url, survivor: keep.url });
                 }
+            }
+
+            const planShare = files.length > 0 ? plan.length / files.length : 0;
+            if (files.length >= minRowsForPct && planShare > maxPct) {
+                abortedDatasets.push(name);
+                console.warn(`[canonical-dedup] ABORTED on '${name}': ${plan.length}/${files.length} rows (${(planShare * 100).toFixed(1)}%) would collapse, over the ${(maxPct * 100).toFixed(0)}% cap — nothing deleted, no sidecar written. Suspect a wall/interstitial or unhydrated capture.`);
+                continue;
+            }
+
+            const collapsedMap: Record<string, string> = {}; // collapsed URL → survivor URL
+            for (const p of plan) {
+                try { fs.unlinkSync(p.file); removed++; } catch { /* best-effort */ }
+                collapsedMap[p.url] = p.survivor;
+                collapsedPairs.push({ collapsed: p.url, base: p.survivor });
             }
             if (Object.keys(collapsedMap).length > 0) {
                 // {collapsed: survivor} map — keys are the update baseline (no churn), values
@@ -2068,8 +2090,8 @@ export const cleanDatasetFragments = (
             }
         }
     }
-    console.log(`[diez] Dataset cleanup (perClass=${perClass}, canonical=${perClass && canonical}): rewrote ${rewritten}, removed ${removed}, kept ${collisionsKept} distinct-route row(s).`);
-    return { rewritten, removed, collisionsKept, collapsedPairs };
+    console.log(`[diez] Dataset cleanup (perClass=${perClass}, canonical=${perClass && canonical}): rewrote ${rewritten}, removed ${removed}, kept ${collisionsKept} distinct-route row(s), refused ${refusedCells} oversized cell(s), aborted ${abortedDatasets.length} dataset(s).`);
+    return { rewritten, removed, collisionsKept, collapsedPairs, refusedCells, abortedDatasets };
 };
 
 /**

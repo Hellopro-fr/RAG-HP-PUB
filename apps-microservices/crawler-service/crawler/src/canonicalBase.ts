@@ -58,3 +58,23 @@ export const parseCollapsedSidecar = (raw: unknown): Record<string, string> => {
 /** Feature flag: extend content-collision pass to ?param canonical dedup. Default off. */
 export const canonicalDedupEnabled = (): boolean =>
   (process.env.DATASET_CANONICAL_DEDUP_ENABLED ?? "false").toLowerCase() === "true";
+
+const positiveEnv = (name: string, fallback: number): number => {
+  const v = Number(process.env[name]);
+  return Number.isFinite(v) && v > 0 ? v : fallback; // garbage env must never disable a safety guard
+};
+
+/**
+ * Volume guards for the collapse pass — a wrong collapse DELETES a real product.
+ * - maxCell: max members in one (base, content) cell. N identical-content URLs under
+ *   one canonical base is far more likely a consent/anti-bot wall or a pre-hydration
+ *   SPA shell than N tracking variants; real ?utm/?sid/# families are small.
+ * - maxPct + minRowsForPct: blast-radius backstop on the whole dataset. Percentages are
+ *   meaningless on tiny datasets (3 rows with 1 dupe = 33%), so it only applies from
+ *   minRowsForPct rows up — same min-sample logic as the update circuit breaker.
+ */
+export const canonicalDedupLimits = (): { maxCell: number; maxPct: number; minRowsForPct: number } => ({
+  maxCell: positiveEnv("DATASET_CANONICAL_DEDUP_MAX_CELL", 5),
+  maxPct: positiveEnv("DATASET_CANONICAL_DEDUP_MAX_PCT", 0.3),
+  minRowsForPct: positiveEnv("DATASET_CANONICAL_DEDUP_MIN_ROWS", 50),
+});

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { stripFragment, canonicalGroupKey, queryParamCount, canonicalDedupEnabled, parseCollapsedSidecar } from "./canonicalBase.js";
+import { stripFragment, canonicalGroupKey, queryParamCount, canonicalDedupEnabled, parseCollapsedSidecar, canonicalDedupLimits } from "./canonicalBase.js";
 
 test("stripFragment removes #...", () => {
   assert.equal(stripFragment("https://x.tld/p?a=1#sec"), "https://x.tld/p?a=1");
@@ -26,6 +26,19 @@ test("parse-fail fallbacks", () => {
   assert.equal(stripFragment("not a url#x"), "not a url");
   assert.equal(canonicalGroupKey("not a url"), "not a url");
   assert.equal(queryParamCount("not a url"), Infinity);
+});
+
+test("limits: defaults, env override, garbage env cannot disable a guard", () => {
+  delete process.env.DATASET_CANONICAL_DEDUP_MAX_CELL;
+  delete process.env.DATASET_CANONICAL_DEDUP_MAX_PCT;
+  assert.deepEqual(canonicalDedupLimits(), { maxCell: 5, maxPct: 0.3, minRowsForPct: 50 });
+  process.env.DATASET_CANONICAL_DEDUP_MAX_CELL = "3";
+  assert.equal(canonicalDedupLimits().maxCell, 3);
+  process.env.DATASET_CANONICAL_DEDUP_MAX_CELL = "abc";
+  assert.equal(canonicalDedupLimits().maxCell, 5); // falls back, never NaN
+  process.env.DATASET_CANONICAL_DEDUP_MAX_CELL = "0";
+  assert.equal(canonicalDedupLimits().maxCell, 5); // 0 would refuse everything
+  delete process.env.DATASET_CANONICAL_DEDUP_MAX_CELL;
 });
 
 test("parseCollapsedSidecar accepts map, legacy array, junk", () => {
