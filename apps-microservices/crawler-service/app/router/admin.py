@@ -297,7 +297,8 @@ async def dataset_sample(
     entries = []
     with os.scandir(dataset_dir) as it:
         for entry in it:
-            if not entry.name.endswith(".json") or entry.name == "html_index.json":
+            if (not entry.name.endswith(".json") or entry.name == "html_index.json"
+                    or entry.name.startswith("__")):  # __metadata__/__collapsed_urls sidecars, not rows
                 continue
             try:
                 st = entry.stat()

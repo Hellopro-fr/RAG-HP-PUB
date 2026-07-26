@@ -108,8 +108,9 @@ def _count_files_in_dir(path: str) -> int:
     try:
         count = 0
         for name in os.listdir(path):
-            # Exclude Crawlee metadata files
-            if name.startswith('__') and name.endswith('__.json'):
+            # Exclude Crawlee metadata (__metadata__.json) and dedup sidecars
+            # (__collapsed_urls.json) — not crawled pages.
+            if name.startswith('__'):
                 continue
             if os.path.isfile(os.path.join(path, name)):
                 count += 1
