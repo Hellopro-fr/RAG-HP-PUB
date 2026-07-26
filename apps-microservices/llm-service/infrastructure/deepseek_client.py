@@ -2,7 +2,7 @@ import os
 from openai import AsyncOpenAI
 import re
 
-MODEL_NAME = os.getenv("DEEPSEEK_MODEL_NAME", "deepseek-chat")
+MODEL_NAME = os.getenv("DEEPSEEK_MODEL_NAME", "deepseek-v4-flash")
 class DeepSeekClient:
     def __init__(self):
         self.client = AsyncOpenAI(
@@ -19,15 +19,20 @@ class DeepSeekClient:
         **kwargs,
     ) -> dict:
         try:
-            model_name_deepseek = os.getenv("DEEPSEEK_MODEL_NAME", "deepseek-chat")
-            if enable_thinking:
-                model_name_deepseek = "deepseek-reasoner"
+            model_name_deepseek = os.getenv("DEEPSEEK_MODEL_NAME", "deepseek-v4-flash")
 
             request_payload = {
                 "model": model_name_deepseek,
                 "messages": message_history,
                 "temperature": temperature,
                 "max_tokens": max_tokens,
+                # DeepSeek V4 (deepseek-chat/deepseek-reasoner retirés le
+                # 2026-07-24) : le thinking est un paramètre de requête, activé
+                # PAR DÉFAUT — il faut le désactiver explicitement pour garder
+                # le comportement/coût de l'ancien deepseek-chat.
+                "extra_body": {
+                    "thinking": {"type": "enabled" if enable_thinking else "disabled"}
+                },
             }
 
             # if kwargs.get("options"):
@@ -67,6 +72,9 @@ class DeepSeekClient:
                 "temperature": temperature,
                 "max_tokens": max_tokens,
                 "stream": True,
+                # Flux : thinking toujours désactivé — ce chemin n'a jamais servi
+                # le reasoner, et le parseur de deltas ne lit pas reasoning_content.
+                "extra_body": {"thinking": {"type": "disabled"}},
             }
 
             # if kwargs.get("options"):

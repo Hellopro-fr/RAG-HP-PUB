@@ -599,10 +599,13 @@ class ProductClassifier:
 
             response = await asyncio.to_thread(
                 deepseek_client.chat.completions.create,
-                model="deepseek-chat",
+                model="deepseek-v4-flash",
                 messages=[{"role": "user", "content": prompt}],
                 temperature=temperature,
-                max_tokens=500
+                max_tokens=500,
+                # V4 : thinking activé par défaut — désactiver pour garder le
+                # comportement deepseek-chat (coût + budget max_tokens=500)
+                extra_body={"thinking": {"type": "disabled"}}
             )
 
             # Gérer le cas où DeepSeek retourne des lignes vides sous forte charge
@@ -1241,10 +1244,13 @@ Score = 0  (catégorie qui se rapproche au mieux du produit mais nécessite une 
                 # Exécuter l'appel synchrone dans un thread pour ne pas bloquer
                 response = await asyncio.to_thread(
                     self.deepseek_client.chat.completions.create,
-                    model="deepseek-chat",
+                    model="deepseek-v4-flash",
                     messages=messages,
                     temperature=temperature,
-                    response_format={"type": "json_object"}
+                    response_format={"type": "json_object"},
+                    # V4 : thinking activé par défaut — désactiver, sinon
+                    # temperature est ignorée (déterminisme temp=0 requis)
+                    extra_body={"thinking": {"type": "disabled"}}
                 )
 
                 # Vérifier si la réponse est valide (gérer les lignes vides sous forte charge)
