@@ -134,6 +134,16 @@ class JobManager:
     async def get_record(self, job_id: str) -> Optional[dict]:
         return await self._store.get(job_id)
 
+    async def _index_target_reusable(self, job_id: str) -> bool:
+        """Un index d'idempotence n'est re-servi que si son job est encore
+        vivant (pending/running non-stale) ou 'completed' (résultat
+        récupérable). failed / stale / record expiré → non réutilisable."""
+        rec = await self._store.get(job_id)
+        if not rec:
+            return False
+        status = poll_status(rec, time.time(), self._s.STALE_THRESHOLD_S)
+        return status in ("pending", "running", "completed")
+
     async def submit(self, req) -> tuple[str, int]:
         """Returns (job_id, http_status). http_status is 202 (new) or 200 (existing)."""
         if not self._s.ASYNC_JOBS_ENABLED:
@@ -149,8 +159,15 @@ class JobManager:
             claimed = await self._store.claim_index(cjid, job_id, self._s.JOB_TTL_ACTIVE_S)
             if not claimed:
                 existing = await self._store.get_index(cjid)
-                if existing:
+                if existing and await self._index_target_reusable(existing):
                     return existing, 200
+                # Job failed/stale/disparu : le contrat fail-fast dit « le
+                # caller re-soumet » — la re-soumission doit créer un NOUVEAU
+                # job, pas re-servir le cadavre pendant l'heure de TTL d'index
+                # (incident BO 2026-07-26 : relance du même script → poll d'un
+                # job failed → arrêt). 'completed' reste servi tel quel
+                # (idempotence de récupération du résultat).
+                await self._store.delete_index(cjid)
                 claimed = await self._store.claim_index(cjid, job_id, self._s.JOB_TTL_ACTIVE_S)
                 if not claimed:
                     existing = await self._store.get_index(cjid)

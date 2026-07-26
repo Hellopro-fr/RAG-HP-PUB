@@ -111,3 +111,12 @@ failed, both were swallowed. Poll reads used other connections and stayed health
 
 Degraded behavior if all retries fail is unchanged by design (record freezes → poll derives
 `stale` → BO fail-fast re-submits) but is now observable in the service logs.
+
+**Follow-up (same day):** the BO re-launch after the incident polled the FAILED job and stopped —
+the pct script's `client_job_id` was deterministic (`sha1(chunk urls)`) and the idempotency index
+served the dead job for its remaining 1h TTL. Two-sided fix: (1) service — `submit` re-serves an
+indexed job only while it is `pending`/`running` (non-stale) or `completed`; a `failed`/stale/
+expired target releases the index and a NEW job starts (fail-fast: "caller re-submits" must
+actually create a job); (2) BO pct script — `client_job_id` now includes a per-run nonce
+(idempotence covers accidental re-submits within one call, never links two launches — also avoids
+`--force-refresh` runs silently receiving 1h-old `completed` results).

@@ -225,6 +225,62 @@ async def test_shutdown_marks_queued_job_failed():
     assert jm._inflight == 0
 
 
+@pytest.mark.asyncio
+async def test_resubmit_after_failed_creates_new_job():
+    """Incident BO 2026-07-26 : client_job_id déterministe + job failed →
+    la re-soumission re-servait le cadavre pendant 1h d'index TTL. La
+    re-soumission d'un cjid dont le job est failed doit créer un NOUVEAU job."""
+    calls = {"n": 0}
+
+    async def fail_then_ok(items, mode, opts, cb):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("boom")
+        return await _instant_runner(items, mode, opts, cb)
+
+    jm = JobManager(JobStore(client=FakeRedis()), fail_then_ok, _settings())
+    id1, code1 = await jm.submit(_req(["https://a.fr"], client_job_id="K"))
+    assert code1 == 202
+    rec1 = await _wait_terminal(jm, id1)
+    assert rec1["status"] == "failed"
+
+    id2, code2 = await jm.submit(_req(["https://a.fr"], client_job_id="K"))
+    assert code2 == 202 and id2 != id1
+    rec2 = await _wait_terminal(jm, id2)
+    assert rec2["status"] == "completed"
+    await jm.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_resubmit_after_completed_returns_same_job():
+    """Idempotence de récupération du résultat : cjid d'un job completed
+    re-soumis dans la fenêtre RESULT_TTL → même job, 200."""
+    jm = JobManager(JobStore(client=FakeRedis()), _instant_runner, _settings())
+    id1, _ = await jm.submit(_req(["https://a.fr"], client_job_id="K"))
+    await _wait_terminal(jm, id1)
+    id2, code2 = await jm.submit(_req(["https://a.fr"], client_job_id="K"))
+    assert (id2, code2) == (id1, 200)
+    await jm.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_resubmit_on_stale_record_creates_new_job():
+    """Index pointant vers un record running au heartbeat gelé (stale dérivé)
+    → re-soumission = nouveau job (le job gelé est mort, cf. fail-fast)."""
+    store = JobStore(client=FakeRedis())
+    jm = JobManager(store, _instant_runner, _settings())
+    old = time.time() - 1000
+    await store.write({"job_id": "dead1", "status": "running",
+                       "created_at": old, "last_activity": old}, 7200)
+    await store.claim_index("K", "dead1", 7200)
+
+    job_id, code = await jm.submit(_req(["https://a.fr"], client_job_id="K"))
+    assert code == 202 and job_id != "dead1"
+    rec = await _wait_terminal(jm, job_id)
+    assert rec["status"] == "completed"
+    await jm.shutdown()
+
+
 class _FlakyTerminalStore(JobStore):
     """Fait échouer les N premières écritures TERMINALES (status completed/
     failed) — reproduit le job 9597267b : batch fini, écriture du résultat
