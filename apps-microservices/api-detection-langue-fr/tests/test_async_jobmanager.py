@@ -223,3 +223,72 @@ async def test_shutdown_marks_queued_job_failed():
     assert rec_r["status"] == "failed" and rec_r["error"] == "service_shutdown"
     # Les réservations drainées sont libérées (pas de fuite de capacité).
     assert jm._inflight == 0
+
+
+class _FlakyTerminalStore(JobStore):
+    """Fait échouer les N premières écritures TERMINALES (status completed/
+    failed) — reproduit le job 9597267b : batch fini, écriture du résultat
+    perdue, record bloqué 'running'."""
+
+    def __init__(self, client, fail_n: int):
+        super().__init__(client=client)
+        self.fail_left = fail_n
+        self.terminal_attempts = 0
+
+    async def write(self, record, ttl):
+        if record.get("status") in ("completed", "failed"):
+            self.terminal_attempts += 1
+            if self.fail_left > 0:
+                self.fail_left -= 1
+                raise ConnectionError("terminal write boom")
+        await super().write(record, ttl)
+
+
+@pytest.mark.asyncio
+async def test_terminal_write_retried_until_success():
+    """2 échecs d'écriture terminale → le retry aboutit, le job finit
+    'completed' avec ses résultats (avant : record bloqué 'running')."""
+    store = _FlakyTerminalStore(FakeRedis(), fail_n=2)
+    jm = JobManager(store, _instant_runner, _settings())
+    job_id, _ = await jm.submit(_req(["https://a.fr"]))
+    rec = await _wait_terminal(jm, job_id, timeout=8.0)
+    assert rec["status"] == "completed"
+    assert rec["results"] is not None and len(rec["results"]) == 1
+    assert store.terminal_attempts == 3
+    await jm.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_terminal_write_lost_is_loud(caplog):
+    """Écriture terminale définitivement perdue : plus de `except: pass`
+    silencieux — un logger.error nomme le job et l'état résiduel."""
+    import logging as _logging
+    store = _FlakyTerminalStore(FakeRedis(), fail_n=99)
+    jm = JobManager(store, _instant_runner, _settings())
+    def _lost_logged():
+        return any("écriture terminale PERDUE" in r.message for r in caplog.records)
+
+    with caplog.at_level(_logging.ERROR, logger="app.core.async_jobs"):
+        job_id, _ = await jm.submit(_req(["https://a.fr"]))
+        deadline = time.monotonic() + 8.0
+        while not _lost_logged() and time.monotonic() < deadline:
+            await asyncio.sleep(0.05)
+    assert store.terminal_attempts >= 3
+    rec = await jm.get_record(job_id)
+    assert rec["status"] == "running"   # dégradé documenté → 'stale' au poll
+    assert _lost_logged()
+    await jm.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_stops_cooperatively_without_cancel():
+    """Le heartbeat s'arrête via l'Event (fin propre de sa commande Redis en
+    cours), PAS par annulation — hb.cancel() mi-commande pouvait empoisonner
+    la connexion du pool réutilisée par l'écriture terminale."""
+    jm = JobManager(JobStore(client=FakeRedis()), _instant_runner, _settings())
+    stop = asyncio.Event()
+    hb = asyncio.create_task(jm._heartbeat("nonexistent", {"done": 0}, stop))
+    await asyncio.sleep(0.05)
+    stop.set()
+    await asyncio.wait_for(hb, timeout=2.0)
+    assert hb.cancelled() is False

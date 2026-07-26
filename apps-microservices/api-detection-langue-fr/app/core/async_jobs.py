@@ -298,10 +298,16 @@ class JobManager:
         except asyncio.CancelledError:
             return
 
-    async def _heartbeat(self, job_id: str, progress: dict) -> None:
+    async def _heartbeat(self, job_id: str, progress: dict, stop: asyncio.Event) -> None:
         try:
             while True:
-                await asyncio.sleep(self._s.HEARTBEAT_INTERVAL_S)
+                try:
+                    await asyncio.wait_for(
+                        stop.wait(), timeout=self._s.HEARTBEAT_INTERVAL_S
+                    )
+                    return  # arrêt coopératif — jamais interrompu mi-commande Redis
+                except asyncio.TimeoutError:
+                    pass  # tick normal
                 rec = await self._store.get(job_id)
                 if not rec or rec.get("status") not in ("pending", "running"):
                     return
@@ -318,6 +324,49 @@ class JobManager:
         except asyncio.CancelledError:
             return
 
+    async def _stop_heartbeat(self, hb: asyncio.Task, stop: asyncio.Event) -> None:
+        """Arrêt coopératif du heartbeat. hb.cancel() pouvait tomber au milieu
+        d'une commande Redis et laisser la connexion du pool avec une réponse
+        en attente — les get/write TERMINAUX suivants réutilisaient cette
+        connexion et échouaient en silence, laissant le record bloqué
+        'running' (job 9597267b, 2026-07-26 : batch fini 5/5 OK, résultat
+        perdu). L'Event laisse le tick en cours finir sa commande proprement."""
+        stop.set()
+        try:
+            # Borne : un tick complet = attente (INTERVAL) + get + write
+            # (2 × socket timeout Redis 10s par défaut).
+            await asyncio.wait_for(hb, timeout=self._s.HEARTBEAT_INTERVAL_S + 25)
+        except asyncio.TimeoutError:
+            hb.cancel()
+            await asyncio.gather(hb, return_exceptions=True)
+
+    async def _write_terminal(self, rec: dict, cjid: Optional[str]) -> bool:
+        """Écriture du record terminal = tout le travail du batch. Retentée
+        avec backoff : la perdre en silence (ancien `except: pass`) laissait
+        un job pourtant réussi bloqué 'running' → 'stale' au poll → le BO
+        jetait le batch entier."""
+        last_err: Optional[Exception] = None
+        for attempt in range(1, 4):
+            try:
+                await self._store.write(rec, self._s.JOB_RESULT_TTL_S)
+                if cjid:
+                    await self._store.refresh_index_ttl(cjid, self._s.JOB_RESULT_TTL_S)
+                return True
+            except Exception as e:
+                last_err = e
+                logger.warning(
+                    f"[async-jobs] écriture terminale {rec.get('job_id')} "
+                    f"tentative {attempt}/3 échouée: {e}"
+                )
+                if attempt < 3:
+                    await asyncio.sleep(0.5 * attempt)
+        logger.error(
+            f"[async-jobs] écriture terminale PERDUE pour {rec.get('job_id')} "
+            f"(status={rec.get('status')}): {last_err} — le record restera sur "
+            f"sa dernière copie heartbeat jusqu'à stale/TTL"
+        )
+        return False
+
     async def _run_job(self, job_id, cjid, items, mode, opts) -> None:
         from app.core.metrics import ASYNC_JOBS_TERMINAL, ASYNC_JOB_DURATION
         progress = {"done": 0}
@@ -329,13 +378,13 @@ class JobManager:
         except Exception:
             pass
 
-        hb = asyncio.create_task(self._heartbeat(job_id, progress))
+        stop_hb = asyncio.Event()
+        hb = asyncio.create_task(self._heartbeat(job_id, progress, stop_hb))
         try:
             results, counts = await self._batch_runner(
                 items, mode, opts, lambda done: progress.__setitem__("done", done)
             )
-            hb.cancel()
-            await asyncio.gather(hb, return_exceptions=True)
+            await self._stop_heartbeat(hb, stop_hb)
             rec = await self._store.get(job_id) or rec
             rec.update({
                 "status": "completed", "done": len(results),
@@ -345,27 +394,25 @@ class JobManager:
                 "results": [r.model_dump() for r in results],
                 "finished_at": time.time(), "last_activity": time.time(),
             })
-            await self._store.write(rec, self._s.JOB_RESULT_TTL_S)
-            if cjid:
-                await self._store.refresh_index_ttl(cjid, self._s.JOB_RESULT_TTL_S)
+            await self._write_terminal(rec, cjid)
             ASYNC_JOBS_TERMINAL.labels(status="completed").inc()
             ASYNC_JOB_DURATION.observe(time.time() - started)
+            logger.info(
+                f"[async-jobs] job {job_id} completed: {counts.success_count} ok, "
+                f"{counts.failed_count} non-FR, {counts.error_count} err "
+                f"({round(time.time() - started, 1)}s)"
+            )
         except asyncio.CancelledError:
-            hb.cancel()
+            hb.cancel()   # teardown rapide — process en train de mourir
             raise                                   # shutdown() owns the record write
         except Exception as e:
-            hb.cancel()
-            await asyncio.gather(hb, return_exceptions=True)
+            await self._stop_heartbeat(hb, stop_hb)
             rec = await self._store.get(job_id) or rec
             rec.update({"status": "failed", "error": str(e),
                         "finished_at": time.time(), "last_activity": time.time()})
-            try:
-                await self._store.write(rec, self._s.JOB_RESULT_TTL_S)
-                if cjid:
-                    await self._store.refresh_index_ttl(cjid, self._s.JOB_RESULT_TTL_S)
-            except Exception:
-                pass
+            await self._write_terminal(rec, cjid)
             ASYNC_JOBS_TERMINAL.labels(status="failed").inc()
+            logger.error(f"[async-jobs] job {job_id} failed: {e}")
 
     async def shutdown(self) -> None:
         # 1. Stopper keeper + workers d'abord : rien de nouveau ne démarre.
