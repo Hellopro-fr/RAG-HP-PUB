@@ -34,7 +34,7 @@ export function TableauHtmlBlock({ data }: TableauHtmlBlockProps) {
           {row.map((cell, ci) => (
             <td
               key={ci}
-              className={`px-4 py-3 align-top text-foreground text-pretty${ci === 0 ? ' font-semibold' : ''}`}
+              className={`conseil-td${ci === 0 ? ' font-semibold' : ''}`}
               dangerouslySetInnerHTML={{ __html: cell }}
             />
           ))}
@@ -55,7 +55,7 @@ export function TableauHtmlBlock({ data }: TableauHtmlBlockProps) {
                 {cleanHeaders.map((h, i) => (
                   <th
                     key={i}
-                    className="px-4 py-3 font-semibold text-pretty"
+                    className="conseil-th text-pretty"
                     dangerouslySetInnerHTML={{ __html: h }}
                   />
                 ))}
@@ -77,7 +77,7 @@ export function TableauHtmlBlock({ data }: TableauHtmlBlockProps) {
             {cleanHeaders.map((h, i) => (
               <th
                 key={i}
-                className="px-4 py-3 font-semibold whitespace-nowrap"
+                className="conseil-th whitespace-nowrap"
                 dangerouslySetInnerHTML={{ __html: h }}
               />
             ))}
@@ -120,11 +120,11 @@ export function TableauHtmlBlock({ data }: TableauHtmlBlockProps) {
                 {row.slice(1).map((cell, ci) => (
                   <tr key={ci} className={ci % 2 === 0 ? 'bg-card' : 'bg-muted/30'}>
                     <td
-                      className="px-3 py-2 font-medium text-muted-foreground whitespace-nowrap"
+                      className="conseil-card-th"
                       dangerouslySetInnerHTML={{ __html: cleanHeaders[ci + 1] ?? '' }}
                     />
                     <td
-                      className="px-3 py-2 text-foreground whitespace-nowrap"
+                      className="conseil-card-td"
                       dangerouslySetInnerHTML={{ __html: cell }}
                     />
                   </tr>

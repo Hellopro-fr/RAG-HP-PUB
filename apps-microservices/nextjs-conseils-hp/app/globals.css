@@ -99,4 +99,17 @@
       [&_em]:italic [&_i]:italic
       [&_a]:text-primary [&_a]:underline [&_a:hover]:text-primary/80;
   }
+
+  /* Cellules de table conseil (TableauHtmlBlock) — factorise les classes de cellule
+     répétées. TableauHtmlBlock est un Server Component → ces classes sont présentes
+     ×2 (SSR + payload RSC), donc le gain brut est doublé. CSS identique via @apply. */
+  .conseil-td { @apply px-4 py-3 align-top text-foreground text-pretty; }
+  .conseil-th { @apply px-4 py-3 font-semibold; }
+  .conseil-card-th { @apply px-3 py-2 font-medium text-muted-foreground whitespace-nowrap; }
+  .conseil-card-td { @apply px-3 py-2 text-foreground whitespace-nowrap; }
+
+  /* Méga-menu catégories (SiteHeader) — lien + pastille d'icône répétés par catégorie.
+     `.cat-link` n'inclut PAS `group` (marqueur non @apply-able) : garder `group` sur l'élément. */
+  .cat-link { @apply flex items-center gap-3 rounded-md px-3 py-2 text-sm text-foreground hover:bg-primary-soft hover:text-primary; }
+  .cat-icon { @apply flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary-soft text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground; }
 }
