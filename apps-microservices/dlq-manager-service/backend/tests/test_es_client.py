@@ -89,3 +89,49 @@ class TestBuildQuerySearchRouting:
         """None search_term must not add any clause to bool.must."""
         query = client._build_query(filters={}, search_term=None)
         assert query["bool"]["must"] == []
+
+
+class TestBuildQueryMultiClauseRegression:
+    """
+    Regression tests for the 2026-07-28 incident: an auto-archive rule meant for the
+    benign "Aucun contenu extrait pour footer/header via None" messages also matched
+    ValueError('Le contenu extrait est vide ou invalide ...') — a real total-extraction
+    failure — and archived it. Two independent defects made that possible.
+    """
+
+    RULE_UNQUOTED = ("error_reason:Aucun contenu extrait pour footer via None"
+                     " OR error_reason:Aucun contenu extrait pour header via None")
+    RULE_QUOTED = ('error_reason:"Aucun contenu extrait pour footer via None"'
+                   ' OR error_reason:"Aucun contenu extrait pour header via None"')
+
+    def test_two_quoted_phrases_must_not_collapse_into_one_match_phrase(self, client):
+        """
+        Defect 1: the greedy `.+` swallowed ' OR error_reason:' into the phrase, producing a
+        match_phrase that matches nothing. A multi-clause expression belongs to query_string.
+        """
+        query = client._build_query(filters={}, search_term=self.RULE_QUOTED)
+        clause = query["bool"]["must"][0]
+        assert "match_phrase" not in clause, f"multi-clause collapsed into match_phrase: {clause}"
+        assert "query_string" in clause
+        assert clause["query_string"]["query"] == self.RULE_QUOTED
+
+    def test_advanced_branch_uses_and_as_default_operator(self, client):
+        """
+        Defect 2: in Lucene the field qualifier binds to the FIRST term only, so an unquoted
+        rule degrades into free terms across `fields`. With the ES default (OR) a single common
+        word matched. AND forces every term to be present.
+        """
+        query = client._build_query(filters={}, search_term=self.RULE_UNQUOTED)
+        clause = query["bool"]["must"][0]
+        assert "query_string" in clause
+        assert clause["query_string"]["default_operator"] == "AND"
+
+    def test_quoted_phrase_may_contain_the_other_quote_type(self, client):
+        """The narrowed char class must not break a phrase quoting the other delimiter."""
+        query = client._build_query(
+            filters={},
+            search_term="error_reason:'ValueError(\"Le contenu extrait est vide\")'",
+        )
+        clause = query["bool"]["must"][0]
+        assert "match_phrase" in clause, f"Expected match_phrase, got: {clause}"
+        assert clause["match_phrase"]["error_reason"] == 'ValueError("Le contenu extrait est vide")'
