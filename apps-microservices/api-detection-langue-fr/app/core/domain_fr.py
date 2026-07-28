@@ -1779,7 +1779,10 @@ class DomainFR:
                 # plus bas dans cette fonction.
                 if method == 'nlp_override_tld_fr':
                     return "Case 2a: TLD .fr but NLP strongly contradicts"
-            return "Case 2b: TLD .fr trusted (NLP soft/skipped/weak disagree)"
+                # sinon : ne rien renvoyer ici — l'identification du cas 6/7
+                # plus bas (déjà en place) décrit correctement l'issue réelle.
+            else:
+                return "Case 2b: TLD .fr trusted (NLP soft/skipped/weak disagree)"
 
         if url_indicates_french and nlp_soft_french:
             return "Case 3: Moderate URL signal + NLP soft French"
