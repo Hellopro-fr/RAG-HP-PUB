@@ -7,8 +7,7 @@ from aio_pika.abc import AbstractIncomingMessage
 
 from common_utils.autres.DLQPropertiesAsync import DLQPropertiesAsync as DLQProperties
 from app.core.credentials import settings
-from app.messaging.publisher import Publisher
-from app.core.list_caracteristiques_generator import ListCaracteristiquesGenerator
+from app.core.caracterisation_produit import CaracterisationProduitGenerator
 from app.core.api_client import HelloProAPIClient
 from app.schemas.question_caracteristique import RequestProcessus
 
@@ -19,11 +18,18 @@ MAX_RETRIES = 3
 RETRY_TTL_MS = 30000
 
 
-class Consumer:
-    """Async Consumer en mode streaming pour le service QC-generation-caracteristiques (step 3)."""
+class ConsumerBO:
+    """Async Consumer de la caractérisation produit BO (indépendant du step 7).
 
-    def __init__(self, publisher: Publisher):
-        self.publisher = publisher
+    Caractérise les produits BO (source produit_front) et écrit dans les tables
+    dédiées (_cpb / _cvpb / _hcpb). Contrairement au consumer step 7 :
+    - écoute sa propre routing key (qc.caracterisation_bo.start),
+    - NE PUBLIE RIEN vers un service aval (pas de publisher).
+
+    IMPORTANT: la déduplication par catégorie est locale au réplica (set in-memory).
+    """
+
+    def __init__(self):
         self.connection = None
         self.channel = None
         self.queue = None
@@ -33,8 +39,8 @@ class Consumer:
         self._categories_lock = asyncio.Lock()
 
         self.exchange_name = 'qc_pipeline_exchange'
-        self.routing_key = 'qc.step3.start'
-        self.queue_name = 'qc_caracteristiques_queue'
+        self.routing_key = 'qc.caracterisation_bo.start'
+        self.queue_name = 'qc_caracterisation_bo_queue'
         self.retry_exchange = 'qc_retry_exchange'
         self.retry_queue_name = f'{self.queue_name}_retry'
         self.dead_letter_exchange = 'qc_dead_letter_exchange'
@@ -45,9 +51,8 @@ class Consumer:
         self.connection = await aio_pika.connect_robust(settings.RABBITMQ_URL)
         self.channel = await self.connection.channel()
         await self.channel.set_qos(prefetch_count=settings.MAX_CONCURRENCY)
-        await self.publisher.setup(self.channel)
         await self._setup_infrastructure()
-        logger.info("✅ QC-Caracteristiques Consumer initialized (streaming mode)")
+        logger.info("✅ QC-Caracterisation-BO Consumer initialized (streaming mode)")
 
     async def _setup_infrastructure(self):
         dlq_exchange = await self.channel.declare_exchange(self.dead_letter_exchange, aio_pika.ExchangeType.TOPIC, durable=True)
@@ -59,7 +64,7 @@ class Consumer:
         await retry_queue.bind(retry_exchange, routing_key=self.routing_key)
         main_exchange = await self.channel.declare_exchange(self.exchange_name, aio_pika.ExchangeType.TOPIC, durable=True)
         self.queue = await self.channel.declare_queue(self.queue_name, durable=True,
-            arguments={"x-dead-letter-exchange": self.retry_exchange, "x-dead-letter-routing-key": self.routing_key})
+            arguments={"x-dead-letter-exchange": self.retry_exchange, "x-dead-letter-routing-key": self.routing_key, "x-consumer-timeout": 7200000})
         await self.queue.bind(main_exchange, routing_key=self.routing_key)
 
     def _get_retry_count(self, message: AbstractIncomingMessage) -> int:
@@ -86,67 +91,72 @@ class Consumer:
     async def _release_category(self, cat_id: str):
         async with self._categories_lock:
             self._processing_categories.discard(cat_id)
-            logger.debug(f"[CAT-{cat_id}] Catégorie libérée")
+            logger.debug(f"[CAT-{cat_id}] Catégorie BO libérée du set local")
 
     async def process_message(self, message: AbstractIncomingMessage):
+        """Traite un message BO : caractérise les produits BO et ACK (aucune publication aval)."""
         async with message.process(ignore_processed=True):
             id_categorie = None
             category_locked = False
-            
+
             try:
                 data = json.loads(message.body.decode())
                 id_categorie = data.get('id_categorie')
+                source = data.get('source', 'bo')
                 is_reset = data.get('is_reset', False)
-                source = data.get('source', '')
 
                 if not id_categorie:
                     raise ValueError("id_categorie manquant dans le message.")
-                
+
                 if await self._is_duplicate_category(str(id_categorie)):
-                    logger.warning(f"[CAT-{id_categorie}] ⚠️ Catégorie déjà en cours - ignoré")
+                    logger.warning(f"[CAT-{id_categorie}] ⚠️ Catégorie BO déjà en cours sur ce réplica - message ignoré")
                     await message.ack()
                     return
-                
+
                 category_locked = True
-                logger.info(f"[CAT-{id_categorie}] 📥 Début traitement")
-                
-                request = RequestProcessus(id_categorie=id_categorie, is_reset=is_reset, source=source)
+                logger.info(f"[CAT-{id_categorie}] 📥 Début caractérisation produit BO (source={source})")
+
+                request = RequestProcessus(id_categorie=id_categorie, is_reset=is_reset)
                 api_client = HelloProAPIClient()
-                generator = ListCaracteristiquesGenerator(api_client)
-                
+                generator = CaracterisationProduitGenerator(api_client)
+
                 try:
-                    result = await generator.generate_all_caracteristiques(request)
+                    result = await generator.generate_all_caracterisations_bo(request)
                     if generator.tracking_file:
-                        logger.info(f"[CAT-{id_categorie}] 📁 Tracking: {generator.tracking_file}")
+                        logger.info(f"[CAT-{id_categorie}] 📁 Tracking BO: {generator.tracking_file}")
                 finally:
                     await generator.close()
-                
-                output_message = {'id_categorie': id_categorie, 'is_reset': is_reset, 'step': 4, 'previous_step': 'caracteristiques', 'status': result.status}
-                await self.publisher.publish_message(output_message)
+
                 await message.ack()
-                logger.info(f"[CAT-{id_categorie}] ✅ Terminé")
-                
+                logger.info(f"[CAT-{id_categorie}] ✅ Caractérisation produit BO terminée ({result.total_processed} traité(s))")
+
             except (json.JSONDecodeError, ValueError) as e:
                 cat_prefix = f"[CAT-{id_categorie}] " if id_categorie else ""
-                logger.error(f"{cat_prefix}❌ Erreur permanente: {e}")
-                headers = DLQProperties.create_dlq_headers(e, "qc-generation-caracteristiques", 0, message)
-                await self.channel.default_exchange.publish(aio_pika.Message(body=message.body, headers=headers, delivery_mode=aio_pika.DeliveryMode.PERSISTENT), routing_key=self.dead_letter_queue_name)
+                logger.error(f"{cat_prefix}❌ Erreur permanente (parsing) BO: {e}")
+                headers = DLQProperties.create_dlq_headers(e, "qc-caracterisation-bo", 0, message)
+                await self.channel.default_exchange.publish(
+                    aio_pika.Message(body=message.body, headers=headers, delivery_mode=aio_pika.DeliveryMode.PERSISTENT),
+                    routing_key=self.dead_letter_queue_name
+                )
                 await message.ack()
-                
+
             except Exception as e:
                 cat_prefix = f"[CAT-{id_categorie}] " if id_categorie else ""
                 retry_count = self._get_retry_count(message)
-                logger.error(f"{cat_prefix}❌ Exception: {e}")
-                
+                logger.error(f"{cat_prefix}❌ Exception BO: {e}")
+
                 if self._is_transient_error(e) and retry_count < MAX_RETRIES:
-                    logger.warning(f"{cat_prefix}⚠️ Erreur transitoire (essai {retry_count + 1}), retry")
+                    logger.warning(f"{cat_prefix}⚠️ Erreur transitoire BO (essai {retry_count + 1}/{MAX_RETRIES}), retry prévu")
                     await message.nack(requeue=False)
                 else:
-                    logger.error(f"{cat_prefix}❌ Échec définitif après {retry_count + 1} tentative(s)")
-                    headers = DLQProperties.create_dlq_headers(e, "qc-generation-caracteristiques", retry_count, message)
-                    await self.channel.default_exchange.publish(aio_pika.Message(body=message.body, headers=headers, delivery_mode=aio_pika.DeliveryMode.PERSISTENT), routing_key=self.dead_letter_queue_name)
+                    logger.error(f"{cat_prefix}❌ Échec définitif BO après {retry_count + 1} tentative(s)")
+                    headers = DLQProperties.create_dlq_headers(e, "qc-caracterisation-bo", retry_count, message)
+                    await self.channel.default_exchange.publish(
+                        aio_pika.Message(body=message.body, headers=headers, delivery_mode=aio_pika.DeliveryMode.PERSISTENT),
+                        routing_key=self.dead_letter_queue_name
+                    )
                     await message.ack()
-                    
+
             finally:
                 if category_locked and id_categorie:
                     await self._release_category(str(id_categorie))
@@ -162,16 +172,16 @@ class Consumer:
 
     async def start_consuming(self):
         await self.connect()
-        logger.info(f"👂 QC-Caracteristiques: En attente sur {self.queue_name} (streaming)")
+        logger.info(f"👂 QC-Caracterisation-BO: En attente sur {self.queue_name} (streaming)")
         logger.info(f"🚀 Configuration: max_concurrency={settings.MAX_CONCURRENCY}")
         async with self.queue.iterator() as queue_iter:
             async for message in queue_iter:
                 asyncio.create_task(self._process_with_semaphore(message))
-                logger.info(f"📨 Message reçu - Tâches: {len(self._active_tasks)}/{settings.MAX_CONCURRENCY}")
+                logger.info(f"📨 Message BO reçu - Tâches actives: {len(self._active_tasks)}/{settings.MAX_CONCURRENCY}")
 
     async def close(self):
         if self._active_tasks:
-            logger.info(f"⏳ Attente de {len(self._active_tasks)} tâches...")
+            logger.info(f"⏳ Attente de {len(self._active_tasks)} tâches BO en cours...")
             await asyncio.gather(*self._active_tasks, return_exceptions=True)
         if self.connection:
             await self.connection.close()

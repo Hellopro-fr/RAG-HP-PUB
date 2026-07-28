@@ -399,7 +399,7 @@ class ListCaracteristiquesGenerator:
             "caracteristique",
             "process",
             "get",
-            {"id_categorie": id_categorie, "etape": self.ETAPE}
+            {"id_categorie": id_categorie, "etape": self.ETAPE, "source": request.source}
         ) or {}
         
         # verification si on peut commencer le processus
