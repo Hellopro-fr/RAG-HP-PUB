@@ -83,3 +83,20 @@
     -moz-osx-font-smoothing: grayscale;
   }
 }
+
+@layer components {
+  /* Typographie WYSIWYG des blocs texte (TextBlock).
+     Factorise la chaîne d'utilitaires répétée ~16×/page (~408 car. chacune) :
+     réduit le poids brut du HTML (SSR + payload RSC self.__next_f) sans changer
+     le CSS généré. @apply → sortie identique aux classes inline d'origine. */
+  .rich-text {
+    @apply text-base leading-relaxed text-foreground/90
+      [&_p]:mb-3 [&_p:last-child]:mb-0
+      [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:space-y-1 [&_ul]:mb-3
+      [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:space-y-1 [&_ol]:mb-3
+      [&_li]:mb-1
+      [&_strong]:font-bold [&_b]:font-bold
+      [&_em]:italic [&_i]:italic
+      [&_a]:text-primary [&_a]:underline [&_a:hover]:text-primary/80;
+  }
+}

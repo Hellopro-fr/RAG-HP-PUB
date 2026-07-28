@@ -1,6 +1,6 @@
 import { Lightbulb, Wallet, BookOpen, ArrowRight } from 'lucide-react';
 import type { LienInterne, ConseilAssocie } from '@/types/conseils';
-import { CitedProductsCarousel } from './CitedProductsCarousel';
+import { CitedProductsCarousel } from './lazyBlocks';
 
 interface CrossellProps {
   liensIntexts?: LienInterne[];

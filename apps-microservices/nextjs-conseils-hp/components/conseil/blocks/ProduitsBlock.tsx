@@ -4,7 +4,7 @@ import Image from 'next/image';
 import { useRef, useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { ProduitsBlockData, ProductItem } from '@/types/blocks/produits';
-import { IframeProduitModal } from '@/components/conseil/IframeProduitModal';
+import { IframeProduitModal } from '@/components/conseil/lazyModals';
 import { pushEecAddDevis } from '@/lib/analytics/gtm';
 
 const PAGE_SIZE = 6;

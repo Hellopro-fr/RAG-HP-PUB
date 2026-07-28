@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react';
 import { Star, Check, ArrowRight } from 'lucide-react';
 import type { QuoteFormBlockData } from '@/types/blocks/quote-form';
 import type { AoFormQuestion } from '@/types/conseils';
-import { IframeFormModal } from '@/components/conseil/IframeFormModal';
+import { IframeFormModal } from '@/components/conseil/lazyModals';
 import { AoChoixGrid } from '@/components/conseil/AoChoixGrid';
 import { useAoQuoteForm } from '@/hooks/useAoQuoteForm';
 import { pushQuoteFormFunnel } from '@/lib/analytics/gtm';
