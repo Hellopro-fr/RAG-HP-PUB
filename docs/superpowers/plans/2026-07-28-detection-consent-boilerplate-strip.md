@@ -138,14 +138,15 @@ Replace that tail with:
             '[data-nosnippet]',
             # Filets si un vendeur n'expose pas data-nosnippet :
             '[class*="cli-modal"]', '[id*="cliSettingsPopup"]',
-            # CookieYes : `cky-` en substring attraperait `sticky-header` /
-            # `sticky-nav` (vrai contenu, souvent la nav française). L'id est un
-            # token unique -> préfixe exact ; pour les classes, on cible les
-            # conteneurs réels du plugin.
+            # CookieYes : test par token de classe au lieu de substring (évite sticky-*).
             '[id^="cky-"]',
-            '[class*="cky-consent"]', '[class*="cky-modal"]',
-            '[class*="cky-overlay"]', '[class*="cky-notice"]',
         ]
+        # ... après la boucle de sélecteurs :
+        def _has_cky_class(css_class) -> bool:
+            tokens = css_class if isinstance(css_class, list) else (css_class or '').split()
+            return any(t.startswith('cky-') for t in tokens)
+        for el in soup.find_all(class_=_has_cky_class):
+            el.decompose()
 ```
 
 - [ ] **Step 4: Run test to verify it passes**

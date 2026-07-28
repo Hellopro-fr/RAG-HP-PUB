@@ -381,14 +381,13 @@ class LanguageDetector:
             # Filets si un vendeur n'expose pas data-nosnippet :
             '[class*="cli-modal"]', '[id*="cliSettingsPopup"]',
             # CookieYes : `cky-` en substring attraperait `sticky-header` /
-            # `sticky-nav` (vrai contenu, souvent la nav française). L'id est un
-            # token unique -> préfixe exact ; pour les classes, on cible les
-            # conteneurs réels du plugin.
+            # `sticky-nav` / `sticky-modal` (vrai contenu, souvent la nav
+            # française) — `sticky-` finit par `cky-`. L'id est un token unique
+            # -> préfixe exact ici ; les CLASSES sont traitées après la boucle,
+            # token par token (CSS ne sait pas préfixer un token de classe).
             '[id^="cky-"]',
-            '[class*="cky-consent"]', '[class*="cky-modal"]',
-            '[class*="cky-overlay"]', '[class*="cky-notice"]',
         ]
-        
+
         for selector in cookie_consent_selectors:
             try:
                 for el in soup.select(selector):
@@ -396,7 +395,19 @@ class LanguageDetector:
             except Exception:
                 # En cas de sélecteur invalide, on continue
                 pass
-    
+
+        # CookieYes, classes : un token de classe commençant par `cky-`.
+        # Test token par token — `[class*="cky-"]` attraperait `sticky-*`, et
+        # `[class^=...]` ne matcherait que si c'est la PREMIÈRE classe.
+        def _has_cky_class(css_class) -> bool:
+            if not css_class:
+                return False
+            tokens = css_class if isinstance(css_class, list) else css_class.split()
+            return any(t.startswith('cky-') for t in tokens)
+
+        for el in soup.find_all(class_=_has_cky_class):
+            el.decompose()
+
     # Éléments HTML non visibles à supprimer lors du nettoyage
     _NON_VISIBLE_ELEMENTS = [
         'head', 'script', 'style', 'meta', 'link', 'noscript',
