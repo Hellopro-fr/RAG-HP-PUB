@@ -121,8 +121,12 @@ class Consumer:
                 finally:
                     await generator.close()
                 
-                output_message = {'id_categorie': id_categorie, 'is_reset': is_reset, 'step': 5, 'previous_step': 'valeurs', 'status': result.status}
-                await self.publisher.publish_message(output_message)
+                # Source BO : le jeu de caractéristiques s'arrête au step 4 -> pas d'enrichissement (step 5).
+                if (source or '').lower() == 'bo':
+                    logger.info(f"[CAT-{id_categorie}] ⏹️ Source BO : arrêt au step 4, pas de publication vers step 5")
+                else:
+                    output_message = {'id_categorie': id_categorie, 'is_reset': is_reset, 'step': 5, 'previous_step': 'valeurs', 'status': result.status}
+                    await self.publisher.publish_message(output_message)
                 await message.ack()
                 logger.info(f"[CAT-{id_categorie}] ✅ Terminé")
                 
