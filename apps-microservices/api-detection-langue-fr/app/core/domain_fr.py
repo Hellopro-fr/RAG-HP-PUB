@@ -1287,7 +1287,12 @@ class DomainFR:
         alternatives = []
         if mode == DetectionMode.COMPLETE:
             alternatives = await self.detect_alternative_languages(content)
-        
+
+        # Filtre pur (aucune I/O) remonté ici : le cas 2a en a besoin pour
+        # savoir s'il existe une alternative à examiner avant de rejeter.
+        # Le cas 6 (plus bas) réutilise la même variable.
+        reliable_alternatives = [a for a in alternatives if a.validated]
+
         # ====================================================================
         # LOGIQUE DE DÉCISION FINALE
         # ====================================================================
@@ -1314,67 +1319,79 @@ class DomainFR:
             # Sous-cas 2a : NLP contredit fortement (>0.9 confiance dans une autre langue)
             # → Rare mais possible (ex: site .fr en anglais)
             if nlp_strongly_contradicts:
-                logger.info(
-                    f"TLD .fr mais NLP détecte {nlp_lang} avec confiance {nlp_confidence:.3f} — rejet"
-                )
-                return DetectionResponse(
-                    ok=False,
-                    url=url,
-                    method='nlp_override_tld_fr',
-                    confidence=nlp_confidence,
-                    alternative_urls=alternatives,
-                    error=f"TLD .fr mais contenu détecté comme {nlp_lang} ({nlp_confidence:.0%})"
-                )
-            
-            # Sous-cas 2b : NLP soft-confirme, ou NLP indisponible, ou NLP faiblement contredit
-            # → Le TLD .fr est un signal suffisamment fort pour valider
-
-            # Guard : si NLP est indisponible PARCE QUE le contenu est vide/trop court,
-            # c'est un signe que le site est inaccessible (502, erreur proxy, etc.).
-            # Ne PAS faire confiance au TLD dans ce cas.
-            if not nlp_available:
-                try:
-                    soup_check = BeautifulSoup(content, 'lxml')
-                    for el in soup_check(['script', 'style', 'meta', 'link', 'noscript']):
-                        el.decompose()
-                    visible_text = soup_check.get_text(separator=' ', strip=True)
-                except Exception:
-                    visible_text = ''
-
-                if len(visible_text) < settings.NLP_MIN_TEXT_LENGTH:
+                # …mais si la page DÉCLARE une version française validée, ne pas
+                # trancher ici : laisser le cas 6 (plus bas) récupérer cette
+                # alternative et décider sur SON contenu. Sans ce garde-fou, un
+                # site .fr à accueil anglais + /fr/ validé était rejeté alors
+                # qu'il a bien une version française (cas réel sumca.fr).
+                # Si validate_alternatives est off, le cas 6 est sauté : on garde
+                # le rejet immédiat et son message plus clair.
+                if not (self.validate_alternatives and reliable_alternatives):
+                    logger.info(
+                        f"TLD .fr mais NLP détecte {nlp_lang} avec confiance {nlp_confidence:.3f} — rejet"
+                    )
                     return DetectionResponse(
                         ok=False,
                         url=url,
-                        method='fetch_empty_content',
+                        method='nlp_override_tld_fr',
+                        confidence=nlp_confidence,
                         alternative_urls=alternatives,
-                        error=f"TLD .fr mais contenu insuffisant ({len(visible_text)} caractères) — site probablement inaccessible"
+                        error=f"TLD .fr mais contenu détecté comme {nlp_lang} ({nlp_confidence:.0%})"
                     )
-
-            methods = [url_method]
-            if html_indicates_french:
-                methods.append(html_method)
-
-            if nlp_soft_french:
-                methods.append('nlp_soft_confirmed')
-                confidence = nlp_confidence
-            elif not nlp_available:
-                methods.append('nlp_skipped')
-                confidence = 0.7
-            elif nlp_contradicts_french:
-                methods.append(f'nlp_weak_disagree_{nlp_lang}')
-                confidence = 0.6
+                logger.info(
+                    f"TLD .fr mais NLP détecte {nlp_lang} ({nlp_confidence:.3f}) — "
+                    f"{len(reliable_alternatives)} alternative(s) validée(s) à vérifier (cas 6)"
+                )
             else:
-                methods.append('tld_trusted')
-                confidence = 0.8
-            
-            return DetectionResponse(
-                ok=True,
-                url=url,
-                method='+'.join(methods),
-                confidence=confidence,
-                alternative_urls=alternatives
-            )
-        
+                # Sous-cas 2b : NLP soft-confirme, ou NLP indisponible, ou NLP faiblement contredit
+                # → Le TLD .fr est un signal suffisamment fort pour valider
+
+                # Guard : si NLP est indisponible PARCE QUE le contenu est vide/trop court,
+                # c'est un signe que le site est inaccessible (502, erreur proxy, etc.).
+                # Ne PAS faire confiance au TLD dans ce cas.
+                if not nlp_available:
+                    try:
+                        soup_check = BeautifulSoup(content, 'lxml')
+                        for el in soup_check(['script', 'style', 'meta', 'link', 'noscript']):
+                            el.decompose()
+                        visible_text = soup_check.get_text(separator=' ', strip=True)
+                    except Exception:
+                        visible_text = ''
+
+                    if len(visible_text) < settings.NLP_MIN_TEXT_LENGTH:
+                        return DetectionResponse(
+                            ok=False,
+                            url=url,
+                            method='fetch_empty_content',
+                            alternative_urls=alternatives,
+                            error=f"TLD .fr mais contenu insuffisant ({len(visible_text)} caractères) — site probablement inaccessible"
+                        )
+
+                methods = [url_method]
+                if html_indicates_french:
+                    methods.append(html_method)
+
+                if nlp_soft_french:
+                    methods.append('nlp_soft_confirmed')
+                    confidence = nlp_confidence
+                elif not nlp_available:
+                    methods.append('nlp_skipped')
+                    confidence = 0.7
+                elif nlp_contradicts_french:
+                    methods.append(f'nlp_weak_disagree_{nlp_lang}')
+                    confidence = 0.6
+                else:
+                    methods.append('tld_trusted')
+                    confidence = 0.8
+
+                return DetectionResponse(
+                    ok=True,
+                    url=url,
+                    method='+'.join(methods),
+                    confidence=confidence,
+                    alternative_urls=alternatives
+                )
+
         # Cas 3 : Signal URL modéré (/fr/, lang=fr, sous-domaine) + NLP soft FR
         if url_indicates_french and nlp_soft_french:
             methods = [url_method, 'nlp_soft_confirmed']
@@ -1419,7 +1436,6 @@ class DomainFR:
         # Cas 6 : Liens alternatifs français validés/trusted trouvés
         # Exécute la détection complète (fetch + NLP) sur les meilleures alternatives
         # pour confirmer qu'elles sont réellement en français, pas juste accessibles.
-        reliable_alternatives = [a for a in alternatives if a.validated]
         if self.validate_alternatives and reliable_alternatives:
             challenge_blocked_count = 0
             challenge_blocked_service = None
