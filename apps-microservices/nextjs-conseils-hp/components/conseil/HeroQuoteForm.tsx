@@ -3,7 +3,7 @@
 import { useEffect, useRef } from 'react';
 import { ShieldCheck, Star, Check, ArrowRight } from 'lucide-react';
 import type { AoFormQuestion } from '@/types/conseils';
-import { IframeFormModal } from './IframeFormModal';
+import { IframeFormModal } from './lazyModals';
 import { useAoQuoteForm } from '@/hooks/useAoQuoteForm';
 import { AoChoixGrid } from './AoChoixGrid';
 import { pushQuoteFormFunnel } from '@/lib/analytics/gtm';

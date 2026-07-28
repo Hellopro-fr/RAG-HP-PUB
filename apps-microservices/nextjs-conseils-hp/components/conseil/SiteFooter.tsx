@@ -1,6 +1,6 @@
 import Image from 'next/image';
 import { MapPin } from 'lucide-react';
-import { ScrollToTopButton } from './ScrollToTopButton';
+import { ScrollToTopButton } from './lazyBlocks';
 
 interface FooterLink {
   label: string;

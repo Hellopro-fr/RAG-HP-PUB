@@ -7,15 +7,17 @@ import { HeroQuoteForm } from './HeroQuoteForm';
 import { Sidebar } from './Sidebar';
 import { AuthorBlock } from './AuthorBlock';
 import { Crossell } from './Crossell';
-import { Suppliers } from './Suppliers';
+import {
+  Suppliers,
+  StickyCtaBar,
+  FaqBlock,
+  BrochureBlock,
+  QuoteFormBlock,
+} from './lazyBlocks';
 import { BlockRenderer } from './BlockRenderer';
-import { BrochureBlock } from './blocks/BrochureBlock';
-import { FaqBlock } from './blocks/FaqBlock';
-import { QuoteFormBlock } from './blocks/QuoteFormBlock';
 import type { FaqBlockData } from '@/types/blocks/faq';
 import { extractTOC } from '@/lib/blocks/extractTOC';
 import type { ConseilPage } from '@/types/conseils';
-import { StickyCtaBar } from './StickyCtaBar';
 import type { ResumeBlockData } from '@/types/blocks/resume';
 import type { ProduitsBlockData } from '@/types/blocks/produits';
 

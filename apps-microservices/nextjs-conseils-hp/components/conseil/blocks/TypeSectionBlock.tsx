@@ -1,5 +1,3 @@
-'use client';
-
 import Image from 'next/image';
 import { ArrowRight } from 'lucide-react';
 import type { TypeSectionBlockData } from '@/types/blocks/type-section';

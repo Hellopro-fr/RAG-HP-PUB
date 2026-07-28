@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Search, User, Menu, ChevronDown, ChevronRight, X } from 'lucide-react';
-import { SearchModal } from './SearchModal';
+import { SearchModal } from './lazyModals';
 import { getCategoryIcon } from '@/lib/categoryIcons';
 
 interface Category {
