@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from app.messaging.consumer import Consumer
+from app.messaging.consumer_bo import ConsumerBO
 from app.messaging.publisher import Publisher
 
 logging.basicConfig(
@@ -11,22 +12,35 @@ logging.basicConfig(
 
 
 async def main():
-    """Main entry point for the QC-caracterisation service."""
+    """Main entry point for the QC-caracterisation service.
+
+    Lance deux consumers indépendants en parallèle :
+    - Consumer (step 7 canonical) : qc.step7.start -> produits scrapés (_cpi)
+    - ConsumerBO (caractérisation produit BO) : qc.caracterisation_bo.start -> produits BO (_cpb), aucune publication
+    """
     logging.info("=" * 60)
     logging.info("🚀 Démarrage du service QC-CARACTERISATION (async)")
     logging.info("=" * 60)
 
     publisher = Publisher()
     consumer = Consumer(publisher)
+    consumer_bo = ConsumerBO()
 
     try:
-        await consumer.start_consuming()
+        await asyncio.gather(
+            consumer.start_consuming(),
+            consumer_bo.start_consuming(),
+        )
     except asyncio.CancelledError:
         logging.info("🛑 Task cancelled")
     except Exception as e:
         logging.error(f"❌ Unexpected error: {e}", exc_info=True)
     finally:
-        await consumer.close()
+        await asyncio.gather(
+            consumer.close(),
+            consumer_bo.close(),
+            return_exceptions=True,
+        )
         logging.info("✅ Shutdown complete")
 
 

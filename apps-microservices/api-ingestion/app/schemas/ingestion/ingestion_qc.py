@@ -17,6 +17,8 @@ class QCServiceStep(str, Enum):
     CARACTERISATION_PRIX = "caracterisation_prix"
     # Façade équivalence sur questionnaire BO (étape 14) — terminal, pas de step 7
     EQUIVALENCE_BO = "equivalence_bo"
+    # Caractérisation produit BO (étape 15) — routing distinct
+    CARACTERISATION_BO = "caracterisation_bo"
 
 
 # Mapping des services vers leurs routing keys
@@ -30,6 +32,7 @@ QC_ROUTING_KEYS = {
     QCServiceStep.CARACTERISATION: "qc.step7.start",
     QCServiceStep.CARACTERISATION_PRIX: "prix.caracterisation.start",
     QCServiceStep.EQUIVALENCE_BO: "qc.equivalence_bo.start",
+    QCServiceStep.CARACTERISATION_BO: "qc.caracterisation_bo.start",
 }
 
 # Exchange distinct pour la caractérisation prix (indépendante du pipeline QC)
@@ -62,6 +65,13 @@ class QCIngestionRequest(BaseModel):
             description="Le service QC vers lequel publier le message. Par défaut: question1 (step 1).",
         ),
     ] = QCServiceStep.GENERATION_QUESTION1
+    source: Annotated[
+        Optional[str],
+        Field(
+            title="Source",
+            description="Source optionnelle transmise au consumer (ex: 'bo' pour la génération / caractérisation BO).",
+        ),
+    ] = None
 
 
 class QCIngestionBatchRequest(BaseModel):
@@ -88,6 +98,13 @@ class QCIngestionBatchRequest(BaseModel):
             description="Le service QC vers lequel publier les messages.",
         ),
     ] = QCServiceStep.GENERATION_QUESTION1
+    source: Annotated[
+        Optional[str],
+        Field(
+            title="Source",
+            description="Source optionnelle transmise au consumer (ex: 'bo').",
+        ),
+    ] = None
 
 
 class QCIngestionResponse(BaseModel):
