@@ -122,6 +122,8 @@ class Consumer:
                     await generator.close()
                 
                 output_message = {'id_categorie': id_categorie, 'is_reset': is_reset, 'step': 4, 'previous_step': 'caracteristiques', 'status': result.status}
+                if source:
+                    output_message['source'] = source
                 await self.publisher.publish_message(output_message)
                 await message.ack()
                 logger.info(f"[CAT-{id_categorie}] ✅ Terminé")
