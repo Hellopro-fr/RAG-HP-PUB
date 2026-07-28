@@ -53,9 +53,12 @@ Append to the existing `cookie_consent_selectors` list in `_remove_cookie_consen
 # règle couvre tous les vendeurs, au lieu d'une liste par plugin.
 '[data-nosnippet]',
 # Filets pour un vendeur qui n'exposerait pas data-nosnippet :
-# modale WebToffee (cli-modal / cliSettingsPopup) et CookieYes (cky-*).
+# modale WebToffee (cli-modal / cliSettingsPopup) et CookieYes (id/class anchored
+# pour éviter sticky-* comme faux positif).
 '[class*="cli-modal"]', '[id*="cliSettingsPopup"]',
-'[class*="cky-"]', '[id*="cky-"]',
+'[id^="cky-"]',
+'[class*="cky-consent"]', '[class*="cky-modal"]',
+'[class*="cky-overlay"]', '[class*="cky-notice"]',
 ```
 
 **Deliberately NOT stripped:** `[aria-hidden="true"]` — carousel/slider clones are marked `aria-hidden` and hold real content (evidence above). A test asserts this stays.

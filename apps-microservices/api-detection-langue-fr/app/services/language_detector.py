@@ -380,7 +380,13 @@ class LanguageDetector:
             '[data-nosnippet]',
             # Filets si un vendeur n'expose pas data-nosnippet :
             '[class*="cli-modal"]', '[id*="cliSettingsPopup"]',
-            '[class*="cky-"]', '[id*="cky-"]',
+            # CookieYes : `cky-` en substring attraperait `sticky-header` /
+            # `sticky-nav` (vrai contenu, souvent la nav française). L'id est un
+            # token unique -> préfixe exact ; pour les classes, on cible les
+            # conteneurs réels du plugin.
+            '[id^="cky-"]',
+            '[class*="cky-consent"]', '[class*="cky-modal"]',
+            '[class*="cky-overlay"]', '[class*="cky-notice"]',
         ]
         
         for selector in cookie_consent_selectors:

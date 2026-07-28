@@ -30,7 +30,7 @@
 **Acceptance Criteria:**
 - [ ] Text inside a `data-nosnippet` element is absent from `clean_html_to_text` output
 - [ ] Text inside `.cli-modal` / `#cliSettingsPopup` is absent (WebToffee, even without `data-nosnippet`)
-- [ ] Text inside a `cky-*` class/id element is absent (CookieYes)
+- [ ] Text inside a CookieYes container (`#cky-*`, `.cky-consent*`) is absent, while `sticky-*` content survives
 - [ ] Ordinary French body text is still present
 - [ ] Text inside an `aria-hidden="true"` element is **still present** (regression guard for the rejected variant)
 - [ ] Existing suite unaffected
@@ -77,6 +77,10 @@ HTML = """
   <div class="slick-slide" aria-hidden="true">
     WEMUSTKEEP_SLIDER Merci a l equipe pour la reactivite et la qualite du travail.
   </div>
+
+  <div class="sticky-header" id="sticky-nav">
+    WEMUSTKEEP_STICKY Accueil Nos produits Contact
+  </div>
 </body></html>
 """
 
@@ -97,6 +101,9 @@ def test_consent_boilerplate_stripped_but_hidden_slider_kept():
     # (slick-slide) portent du vrai contenu — cf. sumca.fr, 1288 caractères de
     # témoignages. Ce garde-fou verrouille le refus de l'option écartée.
     assert "WEMUSTKEEP_SLIDER" in text
+    # `cky-` en substring attraperait `sticky-header`/`sticky-nav` : la nav
+    # collante est du vrai contenu et doit survivre.
+    assert "WEMUSTKEEP_STICKY" in text
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -131,7 +138,13 @@ Replace that tail with:
             '[data-nosnippet]',
             # Filets si un vendeur n'expose pas data-nosnippet :
             '[class*="cli-modal"]', '[id*="cliSettingsPopup"]',
-            '[class*="cky-"]', '[id*="cky-"]',
+            # CookieYes : `cky-` en substring attraperait `sticky-header` /
+            # `sticky-nav` (vrai contenu, souvent la nav française). L'id est un
+            # token unique -> préfixe exact ; pour les classes, on cible les
+            # conteneurs réels du plugin.
+            '[id^="cky-"]',
+            '[class*="cky-consent"]', '[class*="cky-modal"]',
+            '[class*="cky-overlay"]', '[class*="cky-notice"]',
         ]
 ```
 

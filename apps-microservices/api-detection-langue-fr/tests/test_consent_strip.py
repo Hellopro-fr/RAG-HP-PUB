@@ -31,6 +31,10 @@ HTML = """
   <div class="slick-slide" aria-hidden="true">
     WEMUSTKEEP_SLIDER Merci a l equipe pour la reactivite et la qualite du travail.
   </div>
+
+  <div class="sticky-header" id="sticky-nav">
+    WEMUSTKEEP_STICKY Accueil Nos produits Contact
+  </div>
 </body></html>
 """
 
@@ -51,3 +55,6 @@ def test_consent_boilerplate_stripped_but_hidden_slider_kept():
     # (slick-slide) portent du vrai contenu — cf. sumca.fr, 1288 caractères de
     # témoignages. Ce garde-fou verrouille le refus de l'option écartée.
     assert "WEMUSTKEEP_SLIDER" in text
+    # `cky-` en substring attraperait `sticky-header`/`sticky-nav` : la nav
+    # collante est du vrai contenu et doit survivre.
+    assert "WEMUSTKEEP_STICKY" in text
