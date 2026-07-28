@@ -97,7 +97,8 @@ class Consumer:
                 data = json.loads(message.body.decode())
                 id_categorie = data.get('id_categorie')
                 is_reset = data.get('is_reset', False)
-                
+                source = data.get('source', '')
+
                 if not id_categorie:
                     raise ValueError("id_categorie manquant dans le message.")
                 
@@ -109,7 +110,7 @@ class Consumer:
                 category_locked = True
                 logger.info(f"[CAT-{id_categorie}] 📥 Début traitement")
                 
-                request = RequestProcessus(id_categorie=id_categorie, is_reset=is_reset)
+                request = RequestProcessus(id_categorie=id_categorie, is_reset=is_reset, source=source)
                 api_client = HelloProAPIClient()
                 generator = InfoCaracteristiquesGenerator(api_client)
                 

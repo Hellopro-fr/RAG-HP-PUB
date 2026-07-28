@@ -93,6 +93,8 @@ async def publish_to_qc_service(
         "id_categorie": payload.id_categorie,
         "is_reset": payload.is_reset,
     }
+    if payload.source:
+        message_data["source"] = payload.source
 
     success = publish_message(
         channel=channel,
@@ -209,6 +211,8 @@ async def publish_batch_to_qc_service(
                         "id_categorie": cat_id,
                         "is_reset": payload.is_reset,
                     }
+                    if payload.source:
+                        message_data["source"] = payload.source
 
                     try:
                         success = publish_message(

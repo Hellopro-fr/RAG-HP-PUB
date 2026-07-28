@@ -25,6 +25,7 @@ class RequestProcessus(BaseModel):
     """Requête pour lancer le processus de génération"""
     id_categorie: str = Field(..., description="ID de la catégorie")
     is_reset: bool = Field(default=False, description="Indique si on reset les questions")
+    source: str = Field(default="", description="Source: 'bo' pour la génération jeu produit BO (bypass questions 1-2)")
 
 class PromptConfig(BaseModel):
     """Configuration d'un prompt"""

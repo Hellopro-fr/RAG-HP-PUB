@@ -34,6 +34,7 @@ class CaracterisationProduitGenerator:
     DEEPSEEK_MODEL = "deepseek-v4-pro"
     
     ETAPE = "7"
+    ETAPE_BO = "15"  # Caractérisation produit BO (indépendant du step 7)
 
     # ID process
     ID_PROCESS = "30"
@@ -659,7 +660,8 @@ class CaracterisationProduitGenerator:
         nom_rubrique: str,
         description_categorie: str,
         caracteristiques_for_llm: List[Dict[str, Any]],
-        jeu_carac_dict: Dict[Any, Dict]
+        jeu_carac_dict: Dict[Any, Dict],
+        field_produit: str = "produit"
     ) -> bool:
         """
         Traite un seul produit (caractérisation + repasse + vérification + sauvegarde).
@@ -751,7 +753,7 @@ class CaracterisationProduitGenerator:
                 # Sauvegarder le résultat
                 res_carac_produit = await self.api_client.post(
                     "caracterisation",
-                    "produit",
+                    field_produit,
                     "save",
                     {
                         "id_categorie": id_categorie,
@@ -1048,6 +1050,188 @@ class CaracterisationProduitGenerator:
             status="completed"
         )
     
+    async def generate_all_caracterisations_bo(
+        self,
+        request: RequestProcessus
+    ) -> CaracterisationProduitResult:
+        """
+        Caractérisation des produits BO (source produit_front) — INDÉPENDANTE du step 7.
+        Étape PSI 15 (ETAPE_BO). Endpoints dédiés produits_bo / produit_bo
+        (tables _cpb / _cvpb / _hcpb). Aucune publication aval.
+        """
+        id_categorie = request.id_categorie
+
+        # Infos catégorie
+        category_info = await self.api_client.post(
+            "category", "info", "get", {"id_categorie": id_categorie}
+        )
+        if not category_info:
+            await self.api_client.post(
+                "caracterisation", "mail", "error",
+                {"id_categorie": id_categorie, "etape": self.ETAPE_BO,
+                 "error_message": f"Catégorie {id_categorie} non trouvée", "tracking_file": self.tracking_file}
+            )
+            raise ValueError(f"Catégorie {id_categorie} non trouvée")
+
+        nom_rubrique = category_info.get("nom_rubrique", "")
+        description_categorie = category_info.get("description", "")
+
+        self.tracking_file = utils.get_tracking_filepath(id_categorie, prefix="caracterisation_bo")
+
+        if utils.check_stopper(id_categorie):
+            self._log("ARRÊT MANUEL DÉTECTÉ")
+            await self.api_client.post(
+                "caracterisation", "mail", "error",
+                {"id_categorie": id_categorie, "etape": self.ETAPE_BO,
+                 "error_message": "Le processus a été arrêté manuellement", "tracking_file": self.tracking_file}
+            )
+            raise Exception("Processus arrêté manuellement")
+
+        self._log("=" * 50)
+        self._log("Caractérisation des produits BO via LLM")
+        self._log(f"Rubrique: {id_categorie} - {nom_rubrique}")
+        self._log(f"Requête: {request}")
+        self._log("=" * 50)
+
+        await self._load_prompts(id_categorie)
+
+        # Process (étape 15, source=bo)
+        process_data = await self.api_client.post(
+            "caracterisation", "process", "get",
+            {"id_categorie": id_categorie, "etape": self.ETAPE_BO, "source": "bo"}
+        ) or {}
+
+        can_start = process_data.get("can_start", False)
+        if not can_start:
+            self._log("Processus BO peut pas commencer (jeu de caractéristique manquant ?)")
+            await self.api_client.post(
+                "caracterisation", "mail", "error",
+                {"id_categorie": id_categorie, "etape": self.ETAPE_BO,
+                 "error_message": "Processus BO peut pas commencer", "tracking_file": self.tracking_file}
+            )
+            raise Exception("Processus BO peut pas commencer")
+
+        if request.is_reset:
+            self._log("RESET DU PROCESSUS BO")
+            await self.api_client.post(
+                "caracterisation", "process", "reset",
+                {"id_categorie": id_categorie, "etape": self.ETAPE_BO, "source": "bo"}
+            )
+            process_data = {}
+
+        # Jeu de caractéristiques (référentiel commun)
+        jeu_caracteristique = await self.api_client.post(
+            "caracteristique", "final", "get", {"id_categorie": id_categorie}
+        )
+        if not jeu_caracteristique:
+            raise Exception("Jeu de caractéristiques non trouvé")
+
+        caracteristiques_cleaned = self._clean_caracteristiques_for_prompt(jeu_caracteristique)
+        caracteristiques_for_llm = caracteristiques_cleaned
+        jeu_carac_dict = {carac.get('id_caracteristique'): carac for carac in caracteristiques_cleaned}
+
+        # Produits BO à caractériser (source produit_front)
+        produits = await self.api_client.post(
+            "caracterisation", "produits_bo", "get",
+            {"id_categorie": id_categorie, "source": "bo"}
+        )
+        if not produits:
+            self._log("Aucun produit BO à caractériser")
+            return CaracterisationProduitResult(
+                id_categorie=id_categorie, nom_rubrique=nom_rubrique,
+                total_processed=0, status="completed"
+            )
+
+        self._log(f"Produits BO à traiter: {len(produits)}")
+
+        processed_count = 0
+        error_count = 0
+        if "done" not in process_data:
+            process_data["done"] = []
+
+        produits_to_process = []
+        for produit in produits:
+            id_produit = str(produit.get("id_produit", ""))
+            if not id_produit:
+                continue
+            if id_produit in process_data["done"]:
+                continue
+            produits_to_process.append(produit)
+
+        self._log(f"Produits BO restants à traiter: {len(produits_to_process)}")
+
+        semaphore = asyncio.Semaphore(BATCH_SIZE)
+
+        for batch_start in range(0, len(produits_to_process), BATCH_SIZE):
+            if utils.check_stopper(id_categorie):
+                raise Exception("Processus arrêté manuellement")
+
+            batch = produits_to_process[batch_start:batch_start + BATCH_SIZE]
+            batch_num = (batch_start // BATCH_SIZE) + 1
+            total_batches = (len(produits_to_process) + BATCH_SIZE - 1) // BATCH_SIZE
+            self._log(f"\n{'='*30} BATCH BO {batch_num}/{total_batches} ({len(batch)} produits) {'='*30}")
+
+            tasks = [
+                self._process_single_product(
+                    semaphore=semaphore,
+                    produit=produit,
+                    id_categorie=id_categorie,
+                    nom_rubrique=nom_rubrique,
+                    description_categorie=description_categorie,
+                    caracteristiques_for_llm=caracteristiques_for_llm,
+                    jeu_carac_dict=jeu_carac_dict,
+                    field_produit="produit_bo"
+                )
+                for produit in batch
+            ]
+
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            batch_processed = 0
+            batch_errors = []
+            for produit, result in zip(batch, results):
+                id_produit = str(produit.get("id_produit", ""))
+                if isinstance(result, Exception):
+                    error_count += 1
+                    batch_errors.append((id_produit, result))
+                    self._log(f"[CAT-{id_categorie}] ❌ Produit BO {id_produit} en erreur: {str(result)}")
+                else:
+                    process_data["done"].append(id_produit)
+                    processed_count += 1
+                    batch_processed += 1
+
+            self._log(f"Batch BO {batch_num} terminé: {batch_processed} OK, {len(batch_errors)} erreurs")
+
+            await self.api_client.post(
+                "caracterisation", "process", "update",
+                {"id_categorie": id_categorie, "etape": self.ETAPE_BO, "source": "bo", "process_data": process_data}
+            )
+
+            if batch_errors:
+                error_summary = "; ".join([f"Produit {eid}: {str(err)}" for eid, err in batch_errors])
+                await self.api_client.post(
+                    "caracterisation", "mail", "error",
+                    {"id_categorie": id_categorie, "etape": self.ETAPE_BO,
+                     "error_message": error_summary, "tracking_file": self.tracking_file}
+                )
+                raise Exception(f"ERREUR batch BO {batch_num}: {error_summary}")
+
+        self._log("\n" + "=" * 50)
+        self._log("CARACTÉRISATION BO TERMINÉE")
+        self._log(f"Total traité: {processed_count}")
+        self._log("=" * 50)
+
+        await self.api_client.post(
+            "caracterisation", "mail", "success",
+            {"id_categorie": id_categorie, "etape": self.ETAPE_BO,
+             "tracking_file": self.tracking_file, "total_processed": processed_count}
+        )
+
+        return CaracterisationProduitResult(
+            id_categorie=id_categorie, nom_rubrique=nom_rubrique,
+            total_processed=processed_count, status="completed"
+        )
+
     async def close(self):
         """Ferme les connexions"""
         await self.api_client.close()
