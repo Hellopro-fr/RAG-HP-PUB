@@ -368,6 +368,19 @@ class LanguageDetector:
             '[class*="eupopup"]', '[id*="eupopup"]',
             '[class*="cookie-law"]', '[id*="cookie-law"]',
             '[class*="cookielaw"]', '[id*="cookielaw"]',
+            # data-nosnippet : directive standard « pas du contenu de page » que
+            # les CMP posent sur le bandeau ET la modale de réglages. Une seule
+            # règle agnostique du vendeur, au lieu d'un sélecteur par plugin.
+            # Cas pesage88.com : la modale WebToffee (cli-modal) échappait à
+            # tous les sélecteurs class/id et pesait 75% du texte de la page,
+            # basculant fastText sur `en`. Mesuré sur 3 pages : 0 faux positif
+            # (là où ce n'est pas du consentement, c'est un mount JS vide).
+            # NB : `aria-hidden="true"` a été ÉCARTÉ — les clones de carrousel
+            # (slick-slide) le portent et contiennent du vrai contenu.
+            '[data-nosnippet]',
+            # Filets si un vendeur n'expose pas data-nosnippet :
+            '[class*="cli-modal"]', '[id*="cliSettingsPopup"]',
+            '[class*="cky-"]', '[id*="cky-"]',
         ]
         
         for selector in cookie_consent_selectors:
