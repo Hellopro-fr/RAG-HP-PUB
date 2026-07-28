@@ -1,0 +1,112 @@
+# Design — soft-French NLP corroborated by the lexical signal
+
+**Date:** 2026-07-28
+**Status:** Approved (design), pending implementation plan
+**Service:** `apps-microservices/api-detection-langue-fr` (Python 3.10). RAG-HP-PUB `features/poc`.
+**Deploy:** `git push` + **Docker rebuild on VM**. No BO, no migration, no new env var, no threshold change.
+
+## Problem
+
+A plainly French site is reported non-French, and it flaps across the confidence boundary between runs.
+
+Live `/detect-debug` on DSPI id **5582 · amt-lavage.com** (`http://amt-lavage.com`):
+
+| signal | value |
+|---|---|
+| content | unmistakably French — *"Notre site internet est actuellement en travaux"*, *"Expert des systèmes de lavage auto & laveries automatiques"*, *"Siège Social 385 rue François Rabelais ZI Port L'Ardoise 30290 Laudun-L'Ardoise"*, *"Téléphone 04 66 82 55 62"*, `commercial@amt-lavage.fr` |
+| `url_check` | `no_match` — `.com`, no `/fr/`, no `lang=fr` |
+| `html_tags` | `lang="en-US"` → `is_french: false` (WordPress theme default, factually wrong) |
+| `nlp` | **`lang=fr`, confidence 0.723** vs `NLP_MIN_CONFIDENCE=0.75` → `soft_french: true`, `confirms_french: false`, `contradicts_french: false` |
+| `french_signal` | **0.577** |
+| alternatives | none |
+| verdict | `ok=false`, `method=Check_nok_v2`, `Case 9: No French indicators found` |
+
+`domaine_francais.est_valide_df = 1` from an earlier run — the site has already been judged French once, so it is **flapping across the 0.75 boundary**, 0.027 short.
+
+Re-baselined after the consent-strip fix (`178619bc`): cleaned text unchanged at 1109 chars, `french_signal` unchanged at 0.577 — this defect is independent of that change.
+
+### Root cause
+
+`soft_french` is only ever accepted when something else corroborates it, and for this shape nothing can:
+
+- **Case 3** (`domain_fr.py:1396`) needs `url_indicates_french` — `.com`, so no.
+- **Case 4** (`:1410`) needs `html_indicates_french` — `lang="en-US"`, so no.
+- **Case 7** (`:1556`) needs `html_indicates_french or url_indicates_french` — neither, so it doesn't even produce its clearer message.
+- **`Cas 8`** (`:1565-1590`) *is* the lexical-corroboration path (`french_signal > 0.3` → `ok=true`), and control does reach it — but it is gated **`if not nlp_available:`**, so a page whose NLP *is* available and softly says `fr` is turned away.
+
+The verdict then falls to Case 9, whose label *"No French indicators found"* is factually false: `nlp.lang` is `fr`, `soft_french` is true, and the lexical signal is 0.577.
+
+## Design
+
+Widen `Cas 8`'s gate from *"NLP unavailable"* to *"NLP unavailable **or** NLP says `fr` below threshold"*. The lexical signal **corroborates** the NLP; it never overrides it.
+
+```python
+        if not nlp_available or nlp_soft_french:
+```
+
+Inside the block:
+- **Reuse the already-computed signal.** `french_signal` is returned in `nlp_result['details']` by both NLP paths, so read `(nlp_result.get('details') or {}).get('french_signal')` first and only fall back to the existing BeautifulSoup recompute when it is absent (i.e. the NLP-unavailable case). This is cheaper (no second parse of a possibly-100KB page) **and** more accurate: the `details` value was computed on `clean_html_to_text` output — consent-stripped, exactly the text fastText scored — whereas the recompute uses a cruder strip that does **not** remove cookie banners.
+- **Distinguish the outcome.** `method='nlp_soft_confirmed+french_lexical_signal'` when arriving via `nlp_soft_french`, keeping `method='french_lexical_signal'` for the NLP-unavailable path. Both tokens already exist in the service's method vocabulary, so no new value is introduced for consumers.
+- **Confidence** = the NLP's own `nlp_confidence` (~0.72) on the soft path, matching Cases 3/4; the NLP-unavailable path keeps `round(min(0.7, french_signal), 3)`.
+- **Threshold unchanged** at `french_signal > 0.3`, and `NLP_MIN_CONFIDENCE` is **not** touched.
+
+Preserve the existing `len(visible_text) >= 50` behaviour on the recompute branch: when the text is too short, no signal is produced and no rescue happens.
+
+### Why this placement, and why corroboration is required
+
+`Cas 8` sits **last**, after Cases 1-7 have all declined, so widening it cannot preempt any existing case — the fall-through order does the safety work. Inserting a new case earlier in the matrix would, for example, let a soft-FR page with a validated FR alternative return `ok=true` on its own homepage instead of confirming the alternative (Case 6).
+
+**`french_signal` is not safe alone.** It is `(exclusive×2 + shared×0.5) / words × 10` (`language_detector.py:288-317`). The shared set (`le, la, les, de, des, un, que, si, au, aux…`) overlaps heavily with Spanish and Italian, so a Spanish page can plausibly reach 0.5-0.6 on shared words alone — the same band as amt-lavage's 0.577. The codebase already carries that scar: in the langdetect path the French bonus threshold was *"relevé à 0.5"* with its weight cut to 0.3 because it over-fired (`:589-592`). Requiring `nlp_lang == 'fr'` is what makes 0.3 safe here, and it honours `Cas 8`'s existing comment verbatim — *"si le NLP a détecté une AUTRE langue, le signal lexical ne doit JAMAIS outrepasser le NLP"*. A contradicting NLP still never reaches this branch.
+
+### Mandatory sub-fix — the decision label would otherwise lie
+
+`_identify_decision_case:1818` gates the Case-8 label on `not nlp_available and 'french_lexical_signal' in method`. With the widened gate, the soft path returns `ok=true` with a `french_lexical_signal` method **while NLP is available**, so that check fails and control falls to `:1821` `"Case 9: No French indicators found"` — a label directly contradicting `result.ok=true`. This is the same bug class just fixed for Case 2a, and the function already documents a prior instance of it. Two changes:
+
+```python
+        if 'french_lexical_signal' in method:
+            if nlp_soft_french:
+                return "Case 8b: NLP soft French corroborated by lexical signal"
+            return "Case 8: Last resort — French lexical signal (NLP unavailable)"
+
+        if nlp_soft_french:
+            return (
+                "Case 9: NLP soft French but no corroboration "
+                "(no URL/HTML signal, lexical signal <= 0.3)"
+            )
+        return "Case 9: No French indicators found"
+```
+
+`nlp_soft_french` is already a parameter of that function.
+
+### Behaviour change
+
+| Case | Before | After |
+|---|---|---|
+| NLP soft `fr`, no URL/HTML signal, `french_signal > 0.3` (amt-lavage: 0.577) | `ok=false` `Check_nok_v2`, "Case 9: No French indicators found" | **`ok=true`**, `method=nlp_soft_confirmed+french_lexical_signal`, confidence ≈ NLP's, "Case 8b" |
+| NLP soft `fr`, no URL/HTML signal, `french_signal <= 0.3` | `ok=false` `Check_nok_v2` | `ok=false` `Check_nok_v2`, honest label ("soft French but no corroboration") |
+| NLP contradicts (any confidence) | unchanged — never enters the branch | unchanged |
+| NLP unavailable, `french_signal > 0.3` | `ok=true` `french_lexical_signal` | unchanged (same method, same confidence) |
+| NLP soft `fr` **with** URL or HTML signal | already `ok=true` at Case 3/4 | unchanged (never reaches Cas 8) |
+| NLP confirms `fr` (≥ 0.75) | already `ok=true` at Case 1 | unchanged |
+
+**Accepted risk:** `0.3` becomes load-bearing for a new population (soft-FR pages). A Romance-language page that fastText softly mislabels `fr` **and** scores 0.3-0.5 lexically would now pass. Requiring fastText's `fr` is the mitigation, and the returned confidence stays ~0.72 so downstream sees a deliberately weaker verdict.
+
+## Out of scope
+
+- **`lang="en-US"` as a weak negative signal.** Wrong on 2 of the 3 sampled sites (WordPress theme default). Down-weighting a default `en-US` against a deliberate `fr-FR` is a separate, broader change.
+- **`NLP_MIN_CONFIDENCE` (0.75).** Deliberately untouched: it is global, and moving it only relocates the flapping boundary.
+- **The NLP-unavailable recompute not stripping cookie banners.** Pre-existing wrinkle, now documented in the code comment; the soft path avoids it by reading the cleaned-text value.
+- Any change to Cases 1-7 or to the Case-6 alternative loop.
+
+## Verification
+
+- **Unit tests** (`tests/test_soft_french_lexical.py`), no network, stubbing the NLP result as the existing tests do:
+  1. soft `fr` (0.723) + `french_signal` 0.577 + `.com` + `lang="en-US"` → `ok=True`, `method == 'nlp_soft_confirmed+french_lexical_signal'`, confidence ≈ 0.723.
+  2. soft `fr` + `french_signal` 0.20 → `ok=False`, `method == 'Check_nok_v2'` (below the floor, unchanged).
+  3. NLP contradicts (`en` 0.95) + high `french_signal` 0.9 → `ok=False` (the lexical signal must never override a contradicting NLP — this is the regression guard for the safety argument).
+  4. NLP unavailable + `french_signal` 0.577 → `ok=True`, `method == 'french_lexical_signal'` (pre-existing path unchanged).
+  5. Decision labels via `check_page_if_french_debug`: case 1 → `Case 8b: …`; case 2 → `Case 9: NLP soft French but no corroboration …`; case 4 → `Case 8: Last resort …`.
+- Existing suite green. Baseline on this machine is `274 passed, 7 failed` — the 7 pre-existing `tests/test_domain_fr.py` failures (fastText `.bin` absent locally, `ScrapeResult` tuple-unpack drift, and a missing-`await` bug in `test_detect_hreflang`/`test_detect_data_lang`), plus a pre-existing `tests/test_api.py` collection error. All verified byte-identical on unchanged code.
+- **Post-deploy:** `/detect-debug` on `http://amt-lavage.com` → expect `ok=true`, `method` containing `french_lexical_signal`, `decision` = `Case 8b: …`. `/detect-debug` bypasses the Redis cache; the stale `nok` otherwise persists 7 days, so use `force_refresh=true` on `/detect` to refresh the cached verdict and let the BO see it.
+
+Raw pre-change capture for comparison: `scratchpad/dd_5582_amt.json`.
