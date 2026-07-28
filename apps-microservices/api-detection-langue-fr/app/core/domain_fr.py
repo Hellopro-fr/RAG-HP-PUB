@@ -1772,7 +1772,13 @@ class DomainFR:
 
         if is_strong_url:
             if nlp_strongly_contradicts:
-                return "Case 2a: TLD .fr but NLP strongly contradicts"
+                # Le cas 2a ne tranche plus systématiquement : s'il a laissé
+                # passer vers le cas 6 (alternative validée), c'est ce cas-là
+                # qu'il faut annoncer — sinon `debug.decision` contredirait
+                # `result.ok`. Même classe de bug que le garde-fou Check_nok_v2
+                # plus bas dans cette fonction.
+                if method == 'nlp_override_tld_fr':
+                    return "Case 2a: TLD .fr but NLP strongly contradicts"
             return "Case 2b: TLD .fr trusted (NLP soft/skipped/weak disagree)"
 
         if url_indicates_french and nlp_soft_french:

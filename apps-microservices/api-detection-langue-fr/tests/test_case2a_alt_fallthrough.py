@@ -106,6 +106,7 @@ async def test_lying_alt_is_rejected(monkeypatch):
     res = await d.check_page_if_french(HOME_HTML, DetectionMode.COMPLETE)
 
     assert res.ok is False
+    assert res.method == "nlp_not_confirmed"   # Case 7 ⇒ le cas 6 a bien tourné et rejeté l'alternative
 
 
 @pytest.mark.asyncio
