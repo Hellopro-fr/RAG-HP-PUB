@@ -83,3 +83,33 @@
     -moz-osx-font-smoothing: grayscale;
   }
 }
+
+@layer components {
+  /* Typographie WYSIWYG des blocs texte (TextBlock).
+     Factorise la chaîne d'utilitaires répétée ~16×/page (~408 car. chacune) :
+     réduit le poids brut du HTML (SSR + payload RSC self.__next_f) sans changer
+     le CSS généré. @apply → sortie identique aux classes inline d'origine. */
+  .rich-text {
+    @apply text-base leading-relaxed text-foreground/90
+      [&_p]:mb-3 [&_p:last-child]:mb-0
+      [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:space-y-1 [&_ul]:mb-3
+      [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:space-y-1 [&_ol]:mb-3
+      [&_li]:mb-1
+      [&_strong]:font-bold [&_b]:font-bold
+      [&_em]:italic [&_i]:italic
+      [&_a]:text-primary [&_a]:underline [&_a:hover]:text-primary/80;
+  }
+
+  /* Cellules de table conseil (TableauHtmlBlock) — factorise les classes de cellule
+     répétées. TableauHtmlBlock est un Server Component → ces classes sont présentes
+     ×2 (SSR + payload RSC), donc le gain brut est doublé. CSS identique via @apply. */
+  .conseil-td { @apply px-4 py-3 align-top text-foreground text-pretty; }
+  .conseil-th { @apply px-4 py-3 font-semibold; }
+  .conseil-card-th { @apply px-3 py-2 font-medium text-muted-foreground whitespace-nowrap; }
+  .conseil-card-td { @apply px-3 py-2 text-foreground whitespace-nowrap; }
+
+  /* Méga-menu catégories (SiteHeader) — lien + pastille d'icône répétés par catégorie.
+     `.cat-link` n'inclut PAS `group` (marqueur non @apply-able) : garder `group` sur l'élément. */
+  .cat-link { @apply flex items-center gap-3 rounded-md px-3 py-2 text-sm text-foreground hover:bg-primary-soft hover:text-primary; }
+  .cat-icon { @apply flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary-soft text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground; }
+}

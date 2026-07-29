@@ -462,7 +462,7 @@ class InfoCaracteristiquesGenerator:
             "caracteristique",
             "process",
             "get",
-            {"id_categorie": id_categorie, "etape": self.ETAPE}
+            {"id_categorie": id_categorie, "etape": self.ETAPE, "source": request.source}
         ) or {}
         
         # verification si on peut commencer le processus
@@ -549,6 +549,12 @@ class InfoCaracteristiquesGenerator:
                 )
                 raise Exception("Processus arrêté manuellement")
             
+            # Caractéristique « État du matériel » : valeurs fixes (Neuf/Occasion/Location),
+            # ne pas générer de valeurs via LLM
+            if int(info_caracteristique.get('est_etat_materiel', 0) or 0) == 1:
+                self._log("Caractéristique « État du matériel » ignorée (valeurs fixes)")
+                continue
+
             valeurs_data = await self.generate_valeurs_caracteristique(
                 id_categorie,
                 nom_rubrique,

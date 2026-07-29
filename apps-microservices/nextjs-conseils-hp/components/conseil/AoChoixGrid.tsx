@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 import { Check } from 'lucide-react';
 import type { AoFormQuestion, AoChoix } from '@/types/conseils';
 
@@ -62,8 +63,7 @@ export function AoChoixGrid({ question, onChoixClick, onAutreChange }: AoChoixGr
             {!(hasTypeInput && isActive) && (
               hasImage ? (
                 <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full bg-muted ring-1 ring-border">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={c.image} alt={c.label} className="h-full w-full object-cover" />
+                  <Image src={c.image!} alt={c.label} width={64} height={64} className="h-full w-full object-cover" />
                 </div>
               ) : (
                 <div className={`flex h-16 w-16 items-center justify-center rounded-full border-2 transition ${

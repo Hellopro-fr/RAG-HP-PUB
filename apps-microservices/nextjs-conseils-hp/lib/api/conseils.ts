@@ -177,7 +177,10 @@ export async function fetchConseilPage(id: number): Promise<ConseilFetchResult> 
       hero: {
         ...base.hero,
         title: raw.titre,
-        ...(raw.premier_bloc_texte ? { subtitle: raw.premier_bloc_texte as string } : {}),
+        // `subtitle` volontairement NON peuplé depuis `premier_bloc_texte` :
+        // le Hero (composant client) n'affiche jamais `subtitle`, mais y placer ce
+        // texte (~10 Ko) le sérialisait dans le payload RSC de CHAQUE page pour rien
+        // (copie fantôme de l'article dans le flight). Voir Hero.tsx (aucun usage de subtitle).
         ...(estimation ? { estimation } : {}),
       },
       blocks,

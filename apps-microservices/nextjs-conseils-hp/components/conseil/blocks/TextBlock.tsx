@@ -25,14 +25,7 @@ export function TextBlock({ data }: TextBlockProps) {
       )}
 
       <div
-        className="text-base leading-relaxed text-foreground/90
-          [&_p]:mb-3 [&_p:last-child]:mb-0
-          [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:space-y-1 [&_ul]:mb-3
-          [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:space-y-1 [&_ol]:mb-3
-          [&_li]:mb-1
-          [&_strong]:font-bold [&_b]:font-bold
-          [&_em]:italic [&_i]:italic
-          [&_a]:text-primary [&_a]:underline [&_a:hover]:text-primary/80"
+        className="rich-text"
         dangerouslySetInnerHTML={{ __html: data.html }}
       />
 
