@@ -1562,28 +1562,76 @@ class DomainFR:
                 error=f"Indicateurs trouvés ({html_method or url_method}) mais NLP détecte: {nlp_lang or 'N/A'}"
             )
         
-        # Cas 8 : Dernier recours — signal lexical français
-        # Uniquement si NLP n'est pas disponible (texte trop court, modèle absent).
-        # Si NLP a détecté une autre langue, le signal lexical ne doit JAMAIS
-        # outrepasser le NLP — sinon des sites allemands/espagnols/etc. avec
-        # quelques mots français (navigation, footer) seraient faussement détectés.
-        if not nlp_available:
+        # Cas 8 : Dernier recours — signal lexical français. Deux situations :
+        #   - NLP indisponible (texte trop court, modèle absent) ;
+        #   - NLP dit `fr` mais SOUS le seuil (soft) et aucun indicateur URL/HTML
+        #     n'a pu le corroborer (cas amt-lavage.com : .com donc pas de signal
+        #     URL, lang="en-US" erroné donc pas de signal HTML, fastText fr 0.723
+        #     < 0.75, signal lexical 0.577 → tombait en cas 9).
+        # Le signal lexical CORROBORE, il n'outrepasse JAMAIS le NLP — mais
+        # `nlp_soft_french` seul ne le garantit PAS : si le NLP a détecté une
+        # AUTRE langue avec une faible confiance, le cross-check :1257-1272
+        # remplace `nlp_result` par le verdict langdetect+langid, dont
+        # l'élection `fr` peut avoir été DÉCIDÉE par le signal lexical
+        # lui-même (language_detector.py:589-592 ajoute french_signal * 0.3
+        # au panier `fr` dès que le signal > 0.5) — lire ensuite ce même
+        # nombre comme corroboration serait circulaire. Et le seuil lexical
+        # 0.3 ne filtre pas les langues romanes : prose espagnole mesurée à
+        # 0.990 sans un seul mot exclusivement français, contre 0.000 pour
+        # l'anglais. Le rattrapage soft-FR exige donc DEUX garde-fous
+        # (revue finale 2026-07-29), calculés dans `soft_from_fasttext` :
+        #  1. la décision `fr` doit venir de fastText (jamais du substitut
+        #     langdetect+langid) — fastText ne laisse jamais le signal
+        #     lexical changer le label (language_detector.py:693-698 :
+        #     bonus de confiance uniquement, jamais de changement de langue) ;
+        #  2. la confiance doit atteindre NLP_SOFT_MIN_CONFIDENCE, sinon un
+        #     simple argmax `fr` à 0.18 serait rattrapé.
+        # Ce cas est le DERNIER de la matrice : l'élargir ne peut préempter aucun
+        # autre cas.
+        soft_from_fasttext = (
+            nlp_soft_french
+            and (nlp_result or {}).get('method') == 'nlp_detection_fasttext'
+            and nlp_confidence >= settings.NLP_SOFT_MIN_CONFIDENCE
+        )
+        if not nlp_available or soft_from_fasttext:
             try:
-                soup_check = BeautifulSoup(content, 'lxml')
-                for el in soup_check(['script', 'style', 'meta', 'link', 'noscript']):
-                    el.decompose()
-                visible_text = soup_check.get_text(separator=' ', strip=True)
+                # Réutiliser le signal déjà calculé par le NLP : il porte sur le
+                # texte nettoyé (bannières de consentement retirées) que fastText
+                # a réellement analysé, alors que le recalcul ci-dessous utilise
+                # un décapage plus grossier. Repli uniquement si absent.
+                french_signal = None
+                if nlp_result:
+                    french_signal = (nlp_result.get('details') or {}).get('french_signal')
 
-                if len(visible_text) >= 50:
-                    french_signal = self.language_detector._compute_french_signal(visible_text)
+                if french_signal is None:
+                    soup_check = BeautifulSoup(content, 'lxml')
+                    for el in soup_check(['script', 'style', 'meta', 'link', 'noscript']):
+                        el.decompose()
+                    visible_text = soup_check.get_text(separator=' ', strip=True)
+
+                    if len(visible_text) >= 50:
+                        french_signal = self.language_detector._compute_french_signal(visible_text)
+
+                if french_signal is not None:
                     logger.debug(f"Lexical French signal (last resort): {french_signal:.3f}")
 
                     if french_signal > 0.3:
+                        if nlp_soft_french:
+                            method = 'nlp_soft_confirmed+french_lexical_signal'
+                            confidence = nlp_confidence
+                        else:
+                            method = 'french_lexical_signal'
+                            confidence = round(min(0.7, french_signal), 3)
+
+                        logger.info(
+                            f"Signal lexical français {french_signal:.3f} retenu "
+                            f"({method})"
+                        )
                         return DetectionResponse(
                             ok=True,
                             url=url,
-                            method='french_lexical_signal',
-                            confidence=round(min(0.7, french_signal), 3),
+                            method=method,
+                            confidence=confidence,
                             alternative_urls=alternatives
                         )
             except Exception as e:
@@ -1815,7 +1863,18 @@ class DomainFR:
         if nlp_available and (html_indicates_french or url_indicates_french):
             return "Case 7: NLP does not confirm despite HTML/URL indicators"
 
-        if not nlp_available and 'french_lexical_signal' in method:
+        if 'french_lexical_signal' in method:
+            # Le cas 8 accepte désormais aussi un NLP `fr` sous le seuil corroboré
+            # par le signal lexical : sans ce branchement, ce résultat ok=true
+            # serait étiqueté « Case 9: No French indicators found ».
+            if nlp_soft_french:
+                return "Case 8b: NLP soft French corroborated by lexical signal"
             return "Case 8: Last resort — French lexical signal (NLP unavailable)"
+
+        if nlp_soft_french:
+            return (
+                "Case 9: NLP soft French but no corroboration "
+                "(no URL/HTML signal, no lexical corroboration)"
+            )
 
         return "Case 9: No French indicators found"
