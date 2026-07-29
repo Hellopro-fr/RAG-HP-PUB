@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     
     # NLP Detection
     NLP_MIN_CONFIDENCE: float = 0.75  # Réduit de 0.85 pour accepter le FR avec termes techniques EN
+    NLP_SOFT_MIN_CONFIDENCE: float = 0.5  # Plancher du rattrapage soft-FR (cas 8b) : sous ce seuil, l'argmax `fr` ne vaut pas rattrapage
     NLP_MIN_TEXT_LENGTH: int = 100  # Réduit de 200 pour accepter les pages minimalistes
     
     # Batch Processing

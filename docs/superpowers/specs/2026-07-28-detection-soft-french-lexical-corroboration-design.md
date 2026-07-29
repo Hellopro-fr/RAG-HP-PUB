@@ -3,7 +3,9 @@
 **Date:** 2026-07-28
 **Status:** Approved (design), pending implementation plan
 **Service:** `apps-microservices/api-detection-langue-fr` (Python 3.10). RAG-HP-PUB `features/poc`.
-**Deploy:** `git push` + **Docker rebuild on VM**. No BO, no migration, no new env var, no threshold change.
+**Deploy:** `git push` + **Docker rebuild on VM**. No BO, no migration, no threshold change to `NLP_MIN_CONFIDENCE`.
+
+**Correction (2026-07-29, final whole-branch review):** the original text of this spec said "no new env var" — false after the fix wave below. The review found the safety argument broken in two independent places (see "Why this placement" and "Accepted risk"); the fix adds a second setting, `NLP_SOFT_MIN_CONFIDENCE` (default `0.5`), and a `method`-origin guard. See "The two guards" and "Rollback" further down.
 
 ## Problem
 
@@ -56,7 +58,11 @@ Preserve the existing `len(visible_text) >= 50` behaviour on the recompute branc
 
 `Cas 8` sits **last**, after Cases 1-7 have all declined, so widening it cannot preempt any existing case — the fall-through order does the safety work. Inserting a new case earlier in the matrix would, for example, let a soft-FR page with a validated FR alternative return `ok=true` on its own homepage instead of confirming the alternative (Case 6).
 
-**`french_signal` is not safe alone.** It is `(exclusive×2 + shared×0.5) / words × 10` (`language_detector.py:288-317`). The shared set (`le, la, les, de, des, un, que, si, au, aux…`) overlaps heavily with Spanish and Italian, so a Spanish page can plausibly reach 0.5-0.6 on shared words alone — the same band as amt-lavage's 0.577. The codebase already carries that scar: in the langdetect path the French bonus threshold was *"relevé à 0.5"* with its weight cut to 0.3 because it over-fired (`:589-592`). Requiring `nlp_lang == 'fr'` is what makes 0.3 safe here, and it honours `Cas 8`'s existing comment verbatim — *"si le NLP a détecté une AUTRE langue, le signal lexical ne doit JAMAIS outrepasser le NLP"*. A contradicting NLP still never reaches this branch.
+**`french_signal` is not safe alone.** It is `(exclusive×2 + shared×0.5) / words × 10` (`language_detector.py:288-317`). The shared set (`le, la, les, de, des, un, que, si, au, aux…`) overlaps heavily with Spanish and Italian. **Measured** (2026-07-29 review), not estimated: Spanish industrial prose **0.990** with ZERO exclusive-French words (19 shared hits on `de`/`la`/`le`/`un`), Spanish e-commerce **0.679**, Portuguese **0.407**, Italian **0.275**, English **0.000**, the target French page **1.000**. So `> 0.3` screens English but barely screens Spanish/Portuguese — worse than the original "0.5-0.6" estimate in this section, which undersold the exposure.
+
+**Correction (2026-07-29 review) — `nlp_soft_french` does NOT guarantee the `fr` decision came from fastText.** The original text here claimed *"Requiring `nlp_lang == 'fr'` is what makes 0.3 safe here"* and *"A contradicting NLP still never reaches this branch"* — both false. At `domain_fr.py:1257-1272`, when fastText returns a non-`fr` label below 0.75, the langdetect+langid secondary detector runs and `nlp_result = secondary_result` replaces it **wholesale**; `nlp_lang`/`nlp_confidence`/`nlp_soft_french` are then computed from that substitute. The substitute's `fr` verdict can be **caused by `french_signal` itself**: `language_detector.py:589-592` adds `french_signal * 0.3` to the `fr` bucket whenever `french_signal > 0.5`. The widened `Cas 8` branch then reads that same number back out of `nlp_result['details']` and treats it as independent corroboration — circular. Concrete flip: langdetect `fr` (weight 0.4) vs langid `es` (weight 0.6) → without the bonus `fr`=0.4 loses to `es`=0.6; with it `fr`=0.697 wins at confidence 0.537 → soft French → would have been rescued. By contrast fastText (`language_detector.py:693-698`) sets `final_lang = main_lang` unconditionally and lets `french_signal` adjust only the confidence — a fastText label can never be moved by the lexical signal.
+
+**The fix — two guards, not one.** `Cas 8`'s gate now requires `soft_from_fasttext` = `nlp_soft_french AND nlp_result['method'] == 'nlp_detection_fasttext' AND nlp_confidence >= NLP_SOFT_MIN_CONFIDENCE` (see "The two guards" below), instead of `nlp_soft_french` alone. `Cas 8`'s own comment in the code has been corrected to state this — no residual code comment still claims the single-check story.
 
 ### Mandatory sub-fix — the decision label would otherwise lie
 
@@ -78,6 +84,8 @@ Preserve the existing `len(visible_text) >= 50` behaviour on the recompute branc
 
 `nlp_soft_french` is already a parameter of that function.
 
+**Correction (2026-07-29 review):** after the two guards above, a soft-FR rejection can now happen for three distinct reasons — no lexical corroboration (`french_signal <= 0.3`), the `fr` label came from the langdetect+langid substitute, or the confidence was under `NLP_SOFT_MIN_CONFIDENCE`. The Case-9 parenthetical shown here (`"lexical signal <= 0.3"`) asserted a cause that may not be the real one; it was generalized to `"(no URL/HTML signal, no lexical corroboration)"`, true in all three cases.
+
 ### Behaviour change
 
 | Case | Before | After |
@@ -89,7 +97,26 @@ Preserve the existing `len(visible_text) >= 50` behaviour on the recompute branc
 | NLP soft `fr` **with** URL or HTML signal | already `ok=true` at Case 3/4 | unchanged (never reaches Cas 8) |
 | NLP confirms `fr` (≥ 0.75) | already `ok=true` at Case 1 | unchanged |
 
-**Accepted risk:** `0.3` becomes load-bearing for a new population (soft-FR pages). A Romance-language page that fastText softly mislabels `fr` **and** scores 0.3-0.5 lexically would now pass. Requiring fastText's `fr` is the mitigation, and the returned confidence stays ~0.72 so downstream sees a deliberately weaker verdict.
+**Accepted risk:** `0.3` becomes load-bearing for a new population (soft-FR pages). A Romance-language page that fastText genuinely (not via the langdetect+langid substitute — see the correction above and "The two guards" below) labels `fr` **and** scores 0.3-0.5 lexically would now pass.
+
+**Correction (2026-07-29 review) — the confidence-based mitigation was false.** The original text claimed *"the returned confidence stays ~0.72 so downstream sees a deliberately weaker verdict"* — verified false: there are **zero** reads of `confidence` anywhere under `apps-microservices/crawler-service/`, and the only `['confidence']` reads in the BO are Google-reviews matching (unrelated). An 8b verdict is exactly as authoritative downstream as a fastText-0.99 one; no consumer treats it as weaker. The real mitigation is the two guards below, not the confidence value.
+
+**Residual risk after both guards:** a Romance-language page where fastText itself (not the substitute) genuinely mislabels `fr` at ≥ `NLP_SOFT_MIN_CONFIDENCE` (0.5) **and** independently scores `french_signal > 0.3` can still pass. This is strictly narrower than before the fix wave (the circular-substitution path and the no-floor path are both closed), but it is not zero. No test population of real fastText `fr` mislabels on non-French Romance content was available to bound this further; treated as an accepted residual, not a defect to fix in this wave.
+
+### The two guards (2026-07-29 fix wave)
+
+`Cas 8`'s gate is `if not nlp_available or soft_from_fasttext:`, where:
+
+```python
+soft_from_fasttext = (
+    nlp_soft_french
+    and (nlp_result or {}).get('method') == 'nlp_detection_fasttext'
+    and nlp_confidence >= settings.NLP_SOFT_MIN_CONFIDENCE
+)
+```
+
+1. **`method == 'nlp_detection_fasttext'`** — the `fr` decision must come from fastText itself, never from the langdetect+langid substitute installed by the `:1257-1272` cross-check. Closes the circularity described above.
+2. **`nlp_confidence >= NLP_SOFT_MIN_CONFIDENCE`** — new setting, default **`0.5`**, in `app/core/config.py` next to `NLP_MIN_CONFIDENCE`. Without it a bare fastText argmax `fr` at 0.18 would pass (the `:1257` cross-check only fires when the label is non-`fr`, so it never catches a low-confidence `fr`).
 
 ## Out of scope
 
@@ -110,3 +137,11 @@ Preserve the existing `len(visible_text) >= 50` behaviour on the recompute branc
 - **Post-deploy:** `/detect-debug` on `http://amt-lavage.com` → expect `ok=true`, `method` containing `french_lexical_signal`, `decision` = `Case 8b: …`. `/detect-debug` bypasses the Redis cache; the stale `nok` otherwise persists 7 days, so use `force_refresh=true` on `/detect` to refresh the cached verdict and let the BO see it.
 
 Raw pre-change capture for comparison: `scratchpad/dd_5582_amt.json`.
+
+### Rollback (added 2026-07-29 fix wave)
+
+There is no feature flag on this branch, and an `ok=true` verdict is cached **30 days** (`TTL_OK`, `app/core/domain_fr.py:43` and `:126`) and writes `est_valide_df=1` — a wrong rescue is sticky, not self-healing. Recipe if a bad soft-FR rescue reaches prod:
+
+1. Redeploy the previous image (before this fix wave, or before the original `d5c896a1` widening, depending on how far back the bad rescue traces).
+2. Purge the `fr_detect:*` Redis entries whose cached `method` contains `nlp_soft_confirmed+french_lexical_signal` (the only method token this feature introduces — a plain `Check_nok_v2`/`nlp_confirmed`/etc. entry was never touched by it).
+3. Reset the matching `est_valide_df` rows in the BO back to their pre-rescue value (0, or whatever the last legitimate verdict was) so a stale `1` doesn't outlive the purged cache.
