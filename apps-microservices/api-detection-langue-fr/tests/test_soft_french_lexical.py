@@ -27,9 +27,15 @@ def _detector():
     return DomainFR(homepage=URL, use_nlp_detection=True)
 
 
-def _stub_nlp(detector, monkeypatch, lang, confidence, french_signal):
+def _stub_nlp(detector, monkeypatch, lang, confidence, french_signal, recompute_signal=None):
     """Force le résultat NLP ET le french_signal exposé dans `details`.
-    `lang=None` simule un NLP indisponible."""
+    `lang=None` simule un NLP indisponible.
+
+    `recompute_signal` isole le chemin `_compute_french_signal` (recalcul,
+    décapage grossier) du chemin `details['french_signal']` (valeur déjà
+    calculée par le NLP sur texte consent-strippé) : sans ce paramètre, les
+    deux valent la même valeur dans chaque test et aucune assertion ne peut
+    distinguer laquelle des deux sources a réellement été lue par le code."""
     result = None
     if lang is not None:
         result = {
@@ -51,19 +57,27 @@ def _stub_nlp(detector, monkeypatch, lang, confidence, french_signal):
     monkeypatch.setattr(
         detector.language_detector, "detect_from_text_content", fake_secondary
     )
-    # Chemin NLP indisponible : le recalcul lexical doit trouver la valeur voulue.
+    # Chemin NLP indisponible : le recalcul lexical doit trouver la valeur voulue
+    # (recompute_signal par défaut = None => renvoie french_signal, comportement
+    # inchangé). Chemin NLP soft : les appelants passent recompute_signal=0.0
+    # pour que leurs tests ne passent QUE si `details` est bien lu en premier.
     monkeypatch.setattr(
         detector.language_detector,
         "_compute_french_signal",
-        lambda text: french_signal,
+        lambda text: (french_signal if recompute_signal is None else recompute_signal),
     )
 
 
 @pytest.mark.asyncio
 async def test_soft_french_corroborated_is_accepted(monkeypatch):
-    """amt-lavage : fr 0.723 + signal 0.577 => accepté via le cas 8 élargi."""
+    """amt-lavage : fr 0.723 + signal 0.577 => accepté via le cas 8 élargi.
+    recompute_signal=0.0 : si le code recalculait au lieu de lire `details`,
+    0.0 <= 0.3 rejetterait => ce test ne passe que si `details` est bien lu."""
     d = _detector()
-    _stub_nlp(d, monkeypatch, lang="fr", confidence=0.723, french_signal=0.577)
+    _stub_nlp(
+        d, monkeypatch, lang="fr", confidence=0.723, french_signal=0.577,
+        recompute_signal=0.0,
+    )
 
     res = await d.check_page_if_french(HTML, DetectionMode.COMPLETE)
 
@@ -76,7 +90,10 @@ async def test_soft_french_corroborated_is_accepted(monkeypatch):
 async def test_soft_french_below_floor_still_rejected(monkeypatch):
     """Signal lexical <= 0.3 : pas de corroboration, comportement inchangé."""
     d = _detector()
-    _stub_nlp(d, monkeypatch, lang="fr", confidence=0.723, french_signal=0.20)
+    _stub_nlp(
+        d, monkeypatch, lang="fr", confidence=0.723, french_signal=0.20,
+        recompute_signal=0.0,
+    )
 
     res = await d.check_page_if_french(HTML, DetectionMode.COMPLETE)
 
@@ -96,6 +113,9 @@ async def test_contradicting_nlp_is_never_overridden(monkeypatch):
     res = await d.check_page_if_french(HTML, DetectionMode.COMPLETE)
 
     assert res.ok is False
+    # Pin the path: rejection must come from Case 8 declining (guard holds),
+    # not from some unrelated earlier case coincidentally also saying no.
+    assert res.method == "Check_nok_v2"
 
 
 @pytest.mark.asyncio
@@ -114,7 +134,10 @@ async def test_nlp_unavailable_path_unchanged(monkeypatch):
 @pytest.mark.asyncio
 async def test_decision_label_soft_corroborated(monkeypatch):
     d = _detector()
-    _stub_nlp(d, monkeypatch, lang="fr", confidence=0.723, french_signal=0.577)
+    _stub_nlp(
+        d, monkeypatch, lang="fr", confidence=0.723, french_signal=0.577,
+        recompute_signal=0.0,
+    )
 
     dbg = await d.check_page_if_french_debug(HTML, DetectionMode.COMPLETE)
 
@@ -125,7 +148,10 @@ async def test_decision_label_soft_corroborated(monkeypatch):
 @pytest.mark.asyncio
 async def test_decision_label_soft_uncorroborated(monkeypatch):
     d = _detector()
-    _stub_nlp(d, monkeypatch, lang="fr", confidence=0.723, french_signal=0.20)
+    _stub_nlp(
+        d, monkeypatch, lang="fr", confidence=0.723, french_signal=0.20,
+        recompute_signal=0.0,
+    )
 
     dbg = await d.check_page_if_french_debug(HTML, DetectionMode.COMPLETE)
 
@@ -142,3 +168,16 @@ async def test_decision_label_nlp_unavailable(monkeypatch):
 
     assert dbg.result.ok is True
     assert dbg.debug.decision.startswith("Case 8:")
+
+
+@pytest.mark.asyncio
+async def test_short_text_no_rescue_when_nlp_unavailable(monkeypatch):
+    """AC : `len(visible_text) >= 50` doit empêcher toute tentative de secours
+    sur un texte trop court, même NLP indisponible (chemin recalcul)."""
+    d = _detector()
+    short_html = "<html><body><p>Trop court ici</p></body></html>"
+    _stub_nlp(d, monkeypatch, lang=None, confidence=0.0, french_signal=0.9)
+
+    res = await d.check_page_if_french(short_html, DetectionMode.COMPLETE)
+
+    assert res.ok is False
