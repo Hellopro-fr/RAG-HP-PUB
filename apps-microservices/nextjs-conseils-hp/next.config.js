@@ -31,6 +31,17 @@ const nextConfig = {
 
   async rewrites() {
     return [
+      // ⚠️ ORDRE SIGNIFICATIF : le premier match gagne. La règle HUB doit rester
+      // AVANT la règle conseils, sinon /…-projet.html tomberait sur [slugWithId]
+      // qui exige un suffixe -<digits> et redirigerait vers la 404 HelloPro.
+      //
+      // HUB : /<slug>-<id>-projet.html → /hub/<slug>-<id>
+      // Namespace `-projet.html` neuf (aucune page HelloPro existante) → pas de
+      // collision possible avec les slugs conseils. L'URL publique reste inchangée
+      // (rewrite interne, pas de redirect). L'id est la clé de lecture des données
+      // dans data/hub/, parsé côté TS par parseHubSlug().
+      { source: '/:hubSlug([^/]+)-projet\\.html', destination: '/hub/:hubSlug' },
+
       // /slug-123.html → /slug-123 : route les URLs .html vers le segment
       // dynamique [slugWithId] SANS middleware. Préserve l'ISR / le full route
       // cache, contrairement à NextResponse.rewrite() en middleware qui force

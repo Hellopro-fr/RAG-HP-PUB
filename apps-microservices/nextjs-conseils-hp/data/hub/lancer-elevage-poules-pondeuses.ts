@@ -1,0 +1,771 @@
+import type { HubPage } from '@/types/hub';
+
+/**
+ * Page HUB 1000 — « Lancer un élevage de poules pondeuses ».
+ * URL : /lancer-elevage-poules-pondeuses-1000-projet.html
+ *
+ * Contenu repris du prototype Lovable (`Project Navigator/src/routes/index.tsx`),
+ * verbatim, en ne conservant QUE les sections réellement montées par `ProjectHub`.
+ * Les ~22 composants morts du prototype ne sont pas portés.
+ *
+ * IMAGES — les 25 emplacements sont pourvus.
+ *
+ * Règle : un emplacement sans visuel livré n'a **pas** de champ `image` — pas de
+ * chemin inventé, pas d'image approximative. Les composants dégradent proprement.
+ * `registry.test.ts` vérifie les deux sens : toute image déclarée existe sur le
+ * disque, et aucun fichier du dossier n'est laissé sans référence.
+ */
+const SLUG = 'lancer-elevage-poules-pondeuses';
+const IMG = `/images/hub/${SLUG}`;
+const CONSEILS = 'https://conseils.hellopro.fr';
+
+/**
+ * Vignette d'article, nommée par l'id de la page conseil.
+ *
+ * Les fichiers source (`Projet HUB/images compressées`) portent le H1 en nom :
+ * espaces, virgules, apostrophes typographiques et accents. Inexploitable dans
+ * une URL. On les renomme donc par id au moment de la copie dans `/public` —
+ * court, stable, et insensible à une retouche de titre.
+ */
+const articleImage = (id: number, alt: string) => ({
+  src: `${IMG}/articles/${id}.jpg`,
+  alt,
+});
+
+/** URL publique d'un article conseil. */
+const conseilUrl = (slug: string, id: number) => `${CONSEILS}/${slug}-${id}.html`;
+
+export const lancerElevagePoulesPondeuses: HubPage = {
+  id: 1000,
+  slug: SLUG,
+
+  meta: {
+    title: 'Lancer son élevage de poules pondeuses — Hellopro',
+    description:
+      "Hellopro accompagne les porteurs de projets agricoles de l'idée à la mise en production : budget, bâtiment, équipements, conformité et fournisseurs.",
+    // Vignette de partage social. Sans elle, `openGraph.images` sortait vide.
+    ogImage: `${IMG}/hero-poules.jpg`,
+  },
+
+  // 1er = Accueil, dernier = titre de page (convention GtmFooterScripts :
+  // les items intermédiaires alimentent category1..5).
+  // ⚠️ Les 2 items de catégorie n'ont volontairement PAS de href : les URLs de
+  // rubrique cibles ne sont pas encore arrêtées. Ils servent au tracking GTM
+  // (category1 / category5) ; le JSON-LD BreadcrumbList n'inclut que les items
+  // réellement adressables (cf. app/@head/hub/[hubSlug]/page.tsx).
+  breadcrumb: [
+    { label: 'Accueil', href: 'https://www.hellopro.fr/' },
+    { label: 'Agriculture' },
+    { label: 'Élevage avicole' },
+    { label: 'Lancer son élevage de poules pondeuses' },
+  ],
+
+  hero: {
+    badge: 'Accompagnement gratuit',
+    titleParts: [
+      { text: 'Lancez votre élevage de ' },
+      { text: 'poules pondeuses', accent: true },
+      { text: ' en toute sérénité' },
+    ],
+    subtitle:
+      'Recevez en moins de 2 minutes une estimation de budget, les équipements nécessaires et les étapes clés de votre projet.',
+    background: { src: `${IMG}/hero-poules.jpg`, alt: 'Élevage de poules pondeuses' },
+    features: [
+      { icon: 'users', title: 'Besoin qualifié', desc: 'Compréhension précise de votre projet' },
+      {
+        icon: 'phone',
+        title: 'Appel avec un conseiller',
+        desc: 'Conseils personnalisés et recommandations',
+      },
+      {
+        icon: 'route',
+        title: 'Mise en relation progressive',
+        desc: 'Fournisseurs adaptés à chaque étape',
+      },
+    ],
+    trust: {
+      rating: '4.3/5 de satisfaction',
+      suppliers: '+15 000 fournisseurs certifiés',
+    },
+  },
+
+  // Les 8 ancres du sommaire sticky. ⚠️ Ne plus changer ces id une fois indexés.
+  nav: [
+    { id: 'intro-hub', label: 'Découvrir', icon: 'search' },
+    { id: 'bloc-budget', label: 'Budget & financement', icon: 'wallet' },
+    { id: 'bloc-dimensionnement', label: 'Dimensionnement', icon: 'ruler' },
+    { id: 'bloc-reglementation', label: 'Réglementation', icon: 'file-text' },
+    { id: 'bloc-equipements', label: 'Équipements', icon: 'wrench' },
+    { id: 'guide-gratuit', label: 'Guide gratuit', icon: 'download' },
+    { id: 'faq', label: 'FAQ', icon: 'help' },
+    { id: 'cta-final', label: 'Être accompagné', icon: 'mail' },
+  ],
+
+  valueProps: {
+    title: 'Ce que vous gagnez pour votre projet',
+    subtitle: 'Un accompagnement complet, 100% gratuit et sans engagement.',
+    closing: 'Faites-vous accompagner à chaque étape de votre projet',
+    items: [
+      {
+        tag: 'Accompagnement 360°',
+        title: 'Un projet mieux cadré',
+        desc: 'Une vision claire des priorités, des étapes et des choix structurants pour avancer avec méthode.',
+        icon: 'compass',
+        accent: 'primary',
+      },
+      {
+        tag: 'Devis gratuit',
+        title: 'Un premier budget estimatif',
+        desc: "Une première enveloppe réaliste pour cadrer votre besoin, vos postes d'investissement et vos arbitrages.",
+        icon: 'wallet',
+        accent: 'cta',
+      },
+      {
+        tag: 'Conseils personnalisés',
+        title: 'Un conseiller qui vous guide',
+        desc: 'Des recommandations concrètes pour éviter les erreurs de dimensionnement et sécuriser les prochaines étapes.',
+        icon: 'user-check',
+        accent: 'primary',
+      },
+      {
+        tag: 'Mise en relation ciblée',
+        title: 'Les bonnes solutions au bon moment',
+        desc: "Des interlocuteurs et solutions adaptés à votre niveau d'avancement, sans perte de temps ni mauvais aiguillage.",
+        icon: 'handshake',
+        accent: 'cta',
+      },
+    ],
+  },
+
+  thematiques: [
+    {
+      id: 'bloc-budget',
+      tag: 'Budget & financement',
+      tagIcon: 'piggy-bank',
+      layout: 'overlay-left',
+      overlay: {
+        title: 'Quel budget prévoir pour créer un élevage de poules pondeuses professionnel ?',
+        image: articleImage(
+          5297,
+          'Quel budget prévoir pour créer un élevage de poules pondeuses professionnel ?'
+        ),
+        // Paliers alignés sur l'edito budget (`edito-budget`), qui fait référence.
+        // Les deux sont visibles sur la même page : toute divergence se voit.
+        intro:
+          "Le budget pour créer un élevage de poules pondeuses varie de 30 000 € à 1,5 million d'euros selon la taille du troupeau.",
+        bullets: [
+          '500 à 1 500 pondeuses : 30 000 à 100 000 €',
+          '3 000 à 10 000 pondeuses : 150 000 à 550 000 €',
+          '20 000 à 25 000 pondeuses : 1 000 000 à 1 500 000 €',
+        ],
+        ctaLabel: 'Lire la suite',
+        href: conseilUrl(
+          'quel-budget-prevoir-pour-creer-un-elevage-de-poules-pondeuses-professionnel',
+          5297
+        ),
+      },
+      cards: [
+        {
+          icon: 'home',
+          title: 'Comment financer un bâtiment avicole pour poules pondeuses ?',
+          descriptionHtml:
+            'Le financement combine <strong>apport personnel</strong>, <strong>prêt bancaire agricole</strong> et aides régionales <strong>FEADER/PCAE</strong>, pouvant couvrir <strong>30 à 40 % des dépenses</strong>.',
+          linkLabel: "Lire l'article",
+          href: conseilUrl('comment-financer-un-batiment-avicole-pour-poules-pondeuses', 5270),
+        },
+        {
+          icon: 'hand-coins',
+          title: 'Quelles aides et subventions pour créer un élevage de poules pondeuses ?',
+          descriptionHtml:
+            "Le projet peut bénéficier de la <strong>DJA</strong>, des subventions régionales <strong>FEADER/PCAE</strong>, de l'aide <strong>PAC aux jeunes agriculteurs</strong> pendant 5 ans.",
+          linkLabel: "Lire l'article",
+          href: conseilUrl(
+            'quelles-aides-et-subventions-pour-creer-un-elevage-de-poules-pondeuses',
+            5291
+          ),
+        },
+      ],
+      guideButtonLabel: 'Télécharger le guide complet',
+    },
+    {
+      id: 'bloc-dimensionnement',
+      tag: 'Dimensionnement du projet',
+      tagIcon: 'ruler',
+      layout: 'overlay-right',
+      overlay: {
+        title: 'Quelle surface prévoir pour un élevage de poules pondeuses professionnel ?',
+        image: articleImage(
+          5287,
+          'Quelle surface prévoir pour un élevage de poules pondeuses professionnel ?'
+        ),
+        intro:
+          "La surface d'un élevage de poules pondeuses est calculée selon le <strong>nombre de poules</strong>, le <strong>mode d'élevage</strong> et le parcours extérieur.",
+        bullets: [
+          "Jusqu'à <strong>9 poules par m² de surface utilisable</strong> pour un élevage en plein air",
+          "Jusqu'à <strong>6 poules par m² en bâtiment</strong> en agriculture biologique",
+          'Au moins <strong>4 m² de parcours extérieur par poule</strong>',
+        ],
+        ctaLabel: "Lire l'article",
+        href: conseilUrl(
+          'quelle-surface-prevoir-pour-un-elevage-de-poules-pondeuses-professionnel',
+          5287
+        ),
+      },
+      cards: [
+        {
+          icon: 'home',
+          title:
+            'Bâtiment fixe ou poulailler mobile : quelle solution choisir pour des poules pondeuses ?',
+          description:
+            "Identifiez la solution la plus adaptée à votre élevage de poules pondeuses selon le budget, la mobilité et les contraintes d'exploitation.",
+          linkLabel: "Lire l'article",
+          href: conseilUrl(
+            'batiment-fixe-ou-poulailler-mobile-quelle-solution-choisir-pour-des-poules-pondeuses',
+            5309
+          ),
+        },
+        {
+          icon: 'calculator',
+          title:
+            'Bâtiment avicole neuf, rénovation ou poulailler mobile : quel investissement choisir ?',
+          description:
+            "Comparez les coûts, les contraintes et le niveau d'équipement de chaque solution pour votre élevage de poules pondeuses.",
+          linkLabel: "Lire l'article",
+          href: conseilUrl(
+            'batiment-avicole-neuf-renovation-ou-poulailler-mobile-quel-investissement-choisir',
+            5285
+          ),
+        },
+        {
+          icon: 'file-text',
+          title: 'Lancer son élevage de poules pondeuses : guide complet',
+          description:
+            'Découvrez les étapes, le budget, les équipements et les démarches à prévoir pour créer un élevage de poules pondeuses viable et conforme.',
+          linkLabel: "Lire l'article",
+          href: conseilUrl('lancer-son-elevage-de-poules-pondeuses-guide-complet', 5137),
+        },
+      ],
+      guideButtonLabel: 'Télécharger le guide complet',
+    },
+    {
+      id: 'bloc-reglementation',
+      tag: 'Réglementation & démarches',
+      tagIcon: 'scale',
+      layout: 'grid',
+      intro:
+        'Anticipez les obligations administratives pour sécuriser votre projet et éviter les erreurs dès le départ.',
+      cards: [
+        {
+          title:
+            'Réglementation poules pondeuses : les équipements à prévoir pour être conforme',
+          image: articleImage(
+            5298,
+            'Réglementation poules pondeuses : les équipements à prévoir pour être conforme'
+          ),
+          href: conseilUrl(
+            'reglementation-poules-pondeuses-les-equipements-a-prevoir-pour-etre-conforme',
+            5298
+          ),
+        },
+        {
+          title:
+            'Permis, déclaration préalable ou rénovation : quelles autorisations pour un bâtiment avicole ?',
+          image: articleImage(
+            5271,
+            'Permis, déclaration préalable ou rénovation : quelles autorisations pour un bâtiment avicole ?'
+          ),
+          href: conseilUrl(
+            'permis-declaration-prealable-ou-renovation-quelles-autorisations-pour-un-batiment-avicole',
+            5271
+          ),
+        },
+        {
+          title: 'Quelles démarches administratives pour créer un élevage de poules pondeuses ?',
+          image: articleImage(
+            5286,
+            'Quelles démarches administratives pour créer un élevage de poules pondeuses ?'
+          ),
+          href: conseilUrl(
+            'quelles-demarches-administratives-pour-creer-un-elevage-de-poules-pondeuses',
+            5286
+          ),
+        },
+      ],
+    },
+    {
+      id: 'bloc-equipements',
+      tag: 'Équipements',
+      tagIcon: 'wrench',
+      layout: 'carousel',
+      intro:
+        "Comparez les équipements indispensables grâce à notre catalogue de plus d'1 million de produits pour vous aider à structurer votre projet.",
+      cards: [
+        {
+          title:
+            'Liste des 24 équipements à prévoir pour lancer un atelier de poules pondeuses',
+          image: articleImage(
+            5289,
+            'Liste des 24 équipements à prévoir pour lancer un atelier de poules pondeuses'
+          ),
+          href: conseilUrl(
+            'liste-des-24-equipements-a-prevoir-pour-lancer-un-atelier-de-poules-pondeuses',
+            5289
+          ),
+        },
+        {
+          title:
+            "Abreuvoirs, lignes pipettes, traitement de l'eau : que prévoir pour un élevage pondeuses ?",
+          image: articleImage(
+            5312,
+            "Abreuvoirs, lignes pipettes, traitement de l'eau : que prévoir pour un élevage pondeuses ?"
+          ),
+          href: conseilUrl(
+            'abreuvoirs-lignes-pipettes-traitement-de-l-eau-que-prevoir-pour-un-elevage-pondeuses',
+            5312
+          ),
+        },
+        {
+          title: 'Clôtures et protection du parcours : comment sécuriser un élevage plein air ?',
+          image: articleImage(
+            5311,
+            'Clôtures et protection du parcours : comment sécuriser un élevage plein air ?'
+          ),
+          href: conseilUrl(
+            'clotures-et-protection-du-parcours-comment-securiser-un-elevage-plein-air',
+            5311
+          ),
+        },
+        {
+          title:
+            "Silo, mangeoires, distribution automatique : comment organiser l'alimentation des pondeuses ?",
+          image: articleImage(
+            5310,
+            "Silo, mangeoires, distribution automatique : comment organiser l'alimentation des pondeuses ?"
+          ),
+          href: conseilUrl(
+            'silo-mangeoires-distribution-automatique-comment-organiser-l-alimentation-des-pondeuses',
+            5310
+          ),
+        },
+        {
+          title: 'Ventilation et éclairage en bâtiment pondeuses : quels équipements choisir ?',
+          image: articleImage(
+            5308,
+            'Ventilation et éclairage en bâtiment pondeuses : quels équipements choisir ?'
+          ),
+          href: conseilUrl(
+            'ventilation-et-eclairage-en-batiment-pondeuses-quels-equipements-choisir',
+            5308
+          ),
+        },
+        {
+          title: 'Sas sanitaire et biosécurité : comment équiper un élevage de poules pondeuses ?',
+          image: articleImage(
+            5295,
+            'Sas sanitaire et biosécurité : comment équiper un élevage de poules pondeuses ?'
+          ),
+          href: conseilUrl(
+            'sas-sanitaire-et-biosecurite-comment-equiper-un-elevage-de-poules-pondeuses',
+            5295
+          ),
+        },
+        {
+          title: 'Comment dimensionner les pondoirs pour un élevage de poules pondeuses ?',
+          image: articleImage(
+            5272,
+            'Comment dimensionner les pondoirs pour un élevage de poules pondeuses ?'
+          ),
+          href: conseilUrl(
+            'comment-dimensionner-les-pondoirs-pour-un-elevage-de-poules-pondeuses',
+            5272
+          ),
+        },
+      ],
+    },
+  ],
+
+  accompagnementBanner: {
+    tag: 'Accompagnement gratuit',
+    title: 'Faites-vous accompagner pour lancer votre élevage de poules pondeuses',
+    text: "Bénéficiez d'un échange qualifié pour cadrer votre besoin, valider vos priorités et avancer avec les bons interlocuteurs.",
+    ctaLabel: 'Être accompagné gratuitement',
+    // Position d'origine du prototype : entre dimensionnement et réglementation.
+    afterThematiqueId: 'bloc-dimensionnement',
+    image: {
+      src: `${IMG}/cta-accompagnement-gratuit.jpg`,
+      alt: 'Accompagnement gratuit par un expert avicole',
+    },
+  },
+
+  guideCta: {
+    tag: 'Guide gratuit',
+    title: 'Téléchargez votre guide de démarrage',
+    text: 'Tous les repères essentiels pour cadrer votre budget, choisir vos équipements, comprendre la réglementation et avancer sereinement.',
+    ctaLabel: 'Télécharger mon guide',
+    image: {
+      src: `${IMG}/guide-livre.webp`,
+      alt: 'Guide complet — Lancer votre élevage de poules pondeuses',
+    },
+  },
+
+  // Le prototype déclarait 20 items puis n'en affichait que 3 (filtre sur le tag
+  // « Exploitation »). On ne porte que les 3 réellement rendus — les 17 autres
+  // étaient des données inertes. À élargir si le besoin est confirmé (plan §2.6).
+  ressources: {
+    title: 'Nos ressources pour lancer votre élevage de poules pondeuses',
+    subtitle:
+      'Guides, conseils pratiques et ressources expertes pour vous aider à structurer votre projet.',
+    items: [
+      {
+        tag: 'Exploitation',
+        title:
+          "Vente d'œufs : quelles obligations pour marquer, conditionner et commercialiser sa production ?",
+        image: articleImage(
+          5296,
+          "Vente d'œufs : quelles obligations pour marquer, conditionner et commercialiser sa production ?"
+        ),
+        href: conseilUrl(
+          'vente-d-ufs-quelles-obligations-pour-marquer-conditionner-et-commercialiser-sa-production',
+          5296
+        ),
+      },
+      {
+        tag: 'Exploitation',
+        title: "Vente directe d'œufs : quel matériel prévoir pour stocker, emballer et vendre ?",
+        image: articleImage(
+          5290,
+          "Vente directe d'œufs : quel matériel prévoir pour stocker, emballer et vendre ?"
+        ),
+        href: conseilUrl(
+          'vente-de-oeufs-quelles-obligations-pour-marquer-conditionner-et-commercialiser-sa-production',
+          5290
+        ),
+      },
+      {
+        tag: 'Exploitation',
+        title:
+          'Gestion des fientes et nettoyage du bâtiment avicole : quels équipements prévoir ?',
+        image: articleImage(
+          5306,
+          'Gestion des fientes et nettoyage du bâtiment avicole : quels équipements prévoir ?'
+        ),
+        href: conseilUrl(
+          'gestion-des-fientes-et-nettoyage-du-batiment-avicole-quels-equipements-prevoir',
+          5306
+        ),
+      },
+    ],
+  },
+
+  grandesEtapes: {
+    title: "Explorez les grandes étapes de votre projet d'élevage",
+    items: [
+      {
+        label: 'Budgets & financement',
+        href: '#bloc-budget',
+        image: { src: `${IMG}/etapes/budget-financement.jpg`, alt: 'Budgets & financement' },
+      },
+      {
+        label: 'Dimensionnement du projet',
+        href: '#bloc-dimensionnement',
+        image: { src: `${IMG}/etapes/dimensionnement.jpg`, alt: 'Dimensionnement du projet' },
+      },
+      {
+        label: 'Équipements',
+        href: '#bloc-equipements',
+        image: { src: `${IMG}/etapes/equipements.jpg`, alt: 'Équipements' },
+      },
+      {
+        label: 'Réglementation & démarches',
+        href: '#bloc-reglementation',
+        image: {
+          src: `${IMG}/etapes/reglementation.jpg`,
+          alt: 'Réglementation & démarches',
+        },
+      },
+      // Pas de href dans le prototype → tuile non cliquable.
+      {
+        label: 'Exploitation',
+        image: { src: `${IMG}/etapes/exploitation.jpg`, alt: 'Exploitation' },
+      },
+    ],
+  },
+
+  editos: [
+    {
+      id: 'edito-pourquoi',
+      title: "Pourquoi lancer un élevage de poules pondeuses aujourd'hui ?",
+      bodyHtml:
+        "<p>Le marché français de l'œuf connaît une croissance soutenue. En 2025, la production nationale a atteint environ <strong>15,9 milliards d'œufs</strong>, en hausse de 0,8 % sur un an. Dans le même temps, la consommation a établi un nouveau record avec <strong>237 œufs par habitant</strong>, soit une progression de la demande nationale de 5 %. La France reste le premier producteur d'œufs de l'Union européenne, mais sa production ne couvre plus totalement ses besoins : le taux d'auto-approvisionnement est passé de 99,4 % en 2024 à 95,8 % en 2025.</p>" +
+        "<p>Cette situation ouvre des perspectives pour de nouveaux projets, à condition de sécuriser les débouchés avant d'investir. Les œufs issus d'élevages alternatifs occupent une place croissante : fin 2025, ils concerneraient 77 % des poules pondeuses françaises, dont 32 % en plein air, 26 % au sol, 13 % en bio et 6 % en Label Rouge.</p>",
+      items: [
+        '<strong>Production indicative :</strong> Entre 250 et 320 œufs par poule et par cycle annuel courant',
+        '<strong>Production de 500 poules :</strong> Environ 125 000 à 160 000 œufs par an',
+        '<strong>Prix en gros :</strong> Environ 0,17 à 0,19 € par œuf selon les cotations et les calibres',
+        '<strong>Prix avec valorisation en circuit court ou par intermédiaire :</strong> Environ 0,26 à 0,30 € par œuf dans les références disponibles',
+        "<strong>Chiffre d'affaires brut pour 500 poules :</strong> Environ 21 000 à 48 000 € par an selon le volume commercialisable et le circuit de vente",
+      ],
+    },
+    {
+      id: 'edito-budget',
+      title: 'Quel budget prévoir pour créer un élevage de poules pondeuses ?',
+      intro:
+        "Le <strong>budget pour créer un élevage de poules pondeuses</strong> va de 30 000 à 1,5 millions d'euros selon la capacité du bâtiment, le mode d'élevage, le niveau d'automatisation et des installations déjà présentes sur l'exploitation.",
+      items: [
+        '<strong>Élevage de 500 à 1 500 pondeuses :</strong> Entre 30 000 et 100 000 €',
+        '<strong>Élevage de 3 000 à 10 000 pondeuses :</strong> Entre 150 000 et 550 000 €',
+        '<strong>Élevage de 20 000 à 25 000 pondeuses :</strong> Entre 1 000 000 et 1 500 000 €',
+      ],
+      note: "À noter : Le poulailler représente en moyenne <strong>40 à 60 % du budget global</strong>. Le foncier, le besoin en fonds de roulement et plusieurs mois d'alimentation doivent être budgétés séparément.",
+    },
+    {
+      id: 'edito-modele',
+      title: "Quel modèle d'élevage choisir pour maximiser la performance ?",
+      intro:
+        "Le choix du modèle d'élevage détermine directement la rentabilité, les contraintes réglementaires et les investissements de départ.",
+      bodyHtml:
+        '<ul>' +
+        '<li><strong>Élevage intensif</strong> : densité élevée, coûts maîtrisés, forte productivité mais prix de vente bas et contraintes de bien-être animal renforcées.</li>' +
+        "<li><strong>Élevage au sol</strong> : bon équilibre entre productivité et coût d'installation, adapté aux exploitations souhaitant sortir du système cage.</li>" +
+        '<li><strong>Élevage plein air</strong> : densité réduite, valorisation supérieure des œufs, investissement plus important en foncier et bâtiment.</li>' +
+        '<li><strong>Élevage biologique</strong> : cahier des charges strict, coûts de production élevés mais prix de vente parmi les plus valorisés du marché.</li>' +
+        '</ul>',
+    },
+    {
+      id: 'edito-accompagnement',
+      title: "Pourquoi se faire accompagner dans son projet d'élevage ?",
+      intro:
+        "Un projet d'élevage de poules pondeuses mobilise de nombreuses expertises : dimensionnement, réglementation, équipements, financement. Un accompagnement adapté permet de :",
+      items: [
+        'Sécuriser les investissements initiaux',
+        'Éviter les erreurs de dimensionnement',
+        'Optimiser la rentabilité dès les premières phases d’exploitation',
+      ],
+    },
+  ],
+
+  howItWorks: {
+    title: 'Comment ça marche ?',
+    // Position d'origine du prototype : entre edito-budget et edito-modele.
+    afterEditoId: 'edito-budget',
+    steps: [
+      {
+        icon: 'pencil',
+        title: 'Vous décrivez votre projet',
+        desc: "Remplissez le formulaire en quelques minutes pour nous parler de votre projet d'élevage.",
+      },
+      {
+        icon: 'search-check',
+        title: 'Nous qualifions votre besoin',
+        desc: 'Nos experts analysent vos réponses et préparent des recommandations personnalisées.',
+      },
+      {
+        icon: 'phone-call',
+        title: 'Un expert vous contacte',
+        desc: 'Un expert avicole vous appelle pour comprendre vos enjeux et affiner les solutions.',
+      },
+      {
+        icon: 'users-group',
+        title: 'Nous vous mettons en relation',
+        desc: 'Vous êtes mis en relation avec des fournisseurs sélectionnés, au bon moment de votre projet.',
+      },
+    ],
+  },
+
+  accompagnement: {
+    title: 'Un accompagnement humain, simple et efficace',
+    text: 'Nous prenons le temps de comprendre votre projet pour vous mettre en relation avec les bons fournisseurs, au bon moment. Notre objectif : des solutions pertinentes et un projet qui réussit.',
+    image: { src: `${IMG}/accompagnement-expert.jpg`, alt: 'Échange avec un expert Hellopro' },
+    points: [
+      "Accompagnement d'un expert avicole",
+      'Solutions adaptées à votre projet',
+      'Mise en relation progressive et ciblée',
+      'Service 100% gratuit et sans engagement',
+    ],
+  },
+
+  finalCta: {
+    badge: '🎁 100% Gratuit & sans engagement',
+    titleParts: [
+      { text: 'Recevez gratuitement votre ' },
+      { text: 'guide et plan projet', accent: true },
+      { text: ' pour lancer votre élevage de poules pondeuses' },
+    ],
+    text: 'Un plan projet personnalisé et des conseils pratiques pour structurer votre élevage, étape par étape, et maximiser vos chances de réussite.',
+    items: [
+      { icon: 'clipboard', label: 'Plan projet personnalisé' },
+      { icon: 'users-group', label: "Conseils d'expert et retours terrain" },
+      { icon: 'shield', label: 'Contenu fiable et à jour' },
+    ],
+    ctaLabel: 'Recevoir mon guide gratuit',
+    reassurance: 'Vos informations sont sécurisées et ne seront jamais partagées.',
+    image: {
+      src: `${IMG}/guide-livre.webp`,
+      alt: 'Guide complet — Lancer votre élevage de poules pondeuses',
+    },
+  },
+
+  faq: {
+    title: 'FAQ',
+    items: [
+      {
+        q: "Comment Hellopro m'accompagne dans mon projet ?",
+        a: 'Hellopro analyse votre besoin, vous met en relation avec un expert du secteur, puis vous oriente progressivement vers les fournisseurs adaptés à votre projet.',
+      },
+      {
+        q: 'Est-ce que je suis accompagné par un expert ?',
+        a: 'Oui. Un expert Hellopro prend contact avec vous après la qualification de votre projet afin de comprendre vos besoins et vous guider dans les prochaines étapes.',
+      },
+      {
+        q: 'Comment sont sélectionnés les fournisseurs ?',
+        a: "Les fournisseurs sont sélectionnés en fonction de votre projet, de vos contraintes et des échanges réalisés avec l'expert Hellopro lors de la phase de qualification.",
+      },
+      {
+        q: 'Est-ce que je contacte directement les fournisseurs ?',
+        a: "Non immédiatement. Hellopro organise d'abord une phase de qualification et d'accompagnement afin de vous orienter vers les interlocuteurs les plus adaptés.",
+      },
+      {
+        q: 'Que se passe-t-il après avoir rempli le formulaire ?',
+        a: 'Votre projet est analysé par Hellopro, un expert vous contacte pour affiner votre besoin, puis vous êtes progressivement mis en relation avec des fournisseurs adaptés.',
+      },
+      {
+        q: 'Est-ce que le service Hellopro est gratuit ?',
+        a: "Oui, l'accompagnement Hellopro est entièrement gratuit pour les porteurs de projet.",
+      },
+      {
+        q: 'Est-ce que je peux avancer sans être rappelé par un expert ?',
+        a: "Oui, mais l'accompagnement permet d'obtenir des réponses plus rapides et des mises en relation mieux adaptées à votre projet.",
+      },
+      {
+        q: 'Pourquoi passer par Hellopro plutôt que contacter directement un fournisseur ?',
+        a: 'Hellopro vous aide à structurer votre projet, éviter les erreurs de choix et accéder plus rapidement aux bons interlocuteurs selon votre besoin réel.',
+      },
+    ],
+  },
+
+  stickyCtaLabel: 'Obtenir mon kit projet',
+
+  /* ------------------------------------------------------------------ POC ---
+     Les 3 formulaires ci-dessous sont portés en UI seule : aucune soumission
+     n'est transmise (décision du 28/07/2026). Aucun lead n'est donc collecté.
+     -------------------------------------------------------------------------- */
+
+  assistant: {
+    cardTitle: 'Recevez votre plan projet personnalisé',
+    ctaLabel: "Démarrer l'étude du projet",
+    reassurance: 'Un guide de démarrage vous sera envoyé immédiatement après validation.',
+    steps: [
+      {
+        id: 'avancement',
+        label: "Où en êtes-vous aujourd'hui dans votre projet d'élevage ?",
+        multi: false,
+        options: [
+          'Je découvre le projet',
+          'Je veux concrétiser mon idée',
+          'Mon projet est déjà en cours',
+          "J'ai déjà une exploitation",
+          'Autre situation',
+        ],
+        illustrations: ['search-check', 'lightbulb', 'activity', 'factory', 'more'],
+      },
+      {
+        id: 'taille',
+        label: 'Quelle taille imaginez-vous pour votre projet avicole ?',
+        multi: false,
+        options: [
+          'Moins de 100 poules',
+          'Entre 100 et 500 poules',
+          'Entre 500 et 1000 poules',
+          'Plus de 1000 poules',
+          "Je ne sais pas encore, j'ai besoin d'être conseillé",
+        ],
+      },
+      {
+        id: 'sujets',
+        label: 'Sur quels sujets souhaitez-vous être accompagné ?',
+        multi: true,
+        options: [
+          'Accompagnement global',
+          'Dimensionnement du projet',
+          "Choix du bâtiment et implantation de l'élevage",
+          'Achat matériel et équipements',
+          'Réglementation et démarches administratives',
+          'Aides, subventions et financement',
+          'Mise en marché et vente des œufs',
+        ],
+      },
+    ],
+    contact: {
+      badge: 'Dernière étape',
+      label: 'À quelle adresse e-mail souhaitez-vous recevoir votre plan de projet ?',
+      helper: 'Nous vous envoyons un plan personnalisé avec les prochaines étapes concrètes.',
+      emailPlaceholder: 'votre.email@entreprise.fr',
+      submitLabel: 'Recevoir mon plan projet',
+    },
+    success: {
+      title: 'Votre projet est bien enregistré !',
+      subtitle:
+        'Votre plan projet personnalisé est en préparation. Vous le recevrez par e-mail dans quelques instants.',
+      nextStepsTitle: 'La suite du parcours',
+      nextSteps: [
+        { icon: 'clipboard-check', title: 'Plan en préparation' },
+        { icon: 'mailbox', title: 'Réception par e-mail' },
+        { icon: 'headphones', title: 'Accompagnement personnalisé' },
+      ],
+      ctaLabel: 'Je découvre mon projet',
+      helpLine: "Besoin d'aide ? Notre équipe reste disponible pour vous accompagner.",
+    },
+  },
+
+  guideDialog: {
+    badge: 'Télécharger le guide complet',
+    titleParts: [
+      { text: 'Recevez le ' },
+      { text: 'guide complet', accent: true },
+      { text: ' pour lancer votre élevage de ' },
+      { text: 'poules pondeuses', accent: true },
+    ],
+    fields: {
+      name: 'Nom ou raison sociale',
+      email: 'Adresse e-mail',
+      phone: 'Téléphone',
+      postalCode: 'Code postal',
+    },
+    consentLabel:
+      'En indiquant votre adresse e-mail, vous acceptez, en échange de ce document, de recevoir notre lettre d’informations. Vous pouvez à tout moment utiliser le lien de désabonnement.',
+    submitLabel: 'Télécharger le guide complet',
+    trust: ['Un guide pratique et détaillé', '100% gratuit et sans engagement'],
+    success: {
+      title: 'Votre guide arrive !',
+      text: 'Nous l’envoyons à',
+      closeLabel: 'Fermer',
+    },
+  },
+
+  leadPopup: {
+    badge: '🎁 Guide 100% gratuit + contenus exclusifs',
+    title: 'Lancez votre élevage de poules pondeuses',
+    scriptLine: 'avec un guide complet',
+    text: "Un guide complet pour structurer votre projet de A à Z : étapes clés, équipements indispensables, budget estimatif et points de vigilance d'un marché en forte demande en France.",
+    emailPlaceholder: 'Votre adresse e-mail',
+    submitLabel: 'Recevoir mon guide gratuit',
+    reassurance: 'Gratuit, sans engagement et utilisable immédiatement.',
+    items: [
+      { icon: 'book-open', label: 'Guide complet offert' },
+      { icon: 'file-text', label: '+20 contenus pratiques inclus' },
+      { icon: 'mail', label: 'Accès immédiat par e-mail' },
+    ],
+    successMessage: 'Merci ! Votre guide arrive dans quelques instants par e-mail.',
+    circleBadgeLines: ['100%', 'Gratuit'],
+    // Visuel du livret — même asset que le CTA guide.
+    image: {
+      src: `${IMG}/guide-livre.webp`,
+      alt: 'Guide complet — Lancer votre élevage de poules pondeuses',
+    },
+    bannerImage: {
+      src: `${IMG}/hero-section-pop-up.jpg`,
+      alt: 'Élevage de poules pondeuses',
+    },
+    triggerSectionId: 'bloc-reglementation',
+  },
+};

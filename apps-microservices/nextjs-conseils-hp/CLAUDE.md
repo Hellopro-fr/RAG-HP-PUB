@@ -447,6 +447,23 @@ Tailwind 4 génère automatiquement les classes `bg-primary`, `text-primary-fore
 
 ### 7.2 Classes Tailwind autorisées
 
+### 7.1bis ⚠️ `max-w-2xl` vaut 1400px dans ce projet — ne pas l'utiliser
+
+`globals.css` définit `--container-2xl: 1400px` pour la largeur de page. En
+Tailwind 4, les utilitaires `max-w-*` lisent le **même namespace `--container-*`**
+que `--container-2xl`. Conséquence : `max-w-2xl` ne vaut pas 42rem (672px) comme
+dans la doc Tailwind, mais **1400px**.
+
+Symptômes déjà rencontrés : une pop-up `max-w-2xl` large de 1400px, avec un champ
+e-mail en `flex-1` étiré sur toute la largeur et des éléments centrés qui semblent
+flotter dans le vide.
+
+**Règle** : pour une largeur de lecture, écrire la valeur explicitement —
+`max-w-[42rem]`. Les autres échelons (`max-w-sm/md/lg/xl/3xl/7xl`) ne sont pas
+redéfinis et se comportent normalement ; seul `2xl` est piégé.
+
+### 7.2 Classes Tailwind autorisées
+
 | Token | Usage |
 |---|---|
 | `bg-background` / `text-foreground` | Fond et texte principal |
@@ -576,14 +593,129 @@ Exemples :
 - `fix(blocks): correct image aspect ratio / corrige le ratio des images`
 - `refactor(api): extract conseils fetcher / extrait le fetcher conseils`
 
-Scopes valides pour ce service : `conseils`, `blocks`, `api`, `hero`, `sidebar`, `infra`, `tests`, `docs`.
+Scopes valides pour ce service : `conseils`, `blocks`, `api`, `hero`, `sidebar`, `infra`, `tests`, `docs`, `hub`.
+
+---
+
+## 11bis. Template HUB « projet » (2e template du service)
+
+Le service héberge un **second template**, indépendant des pages conseils : les
+pages HUB « projet », sur le même sous-domaine.
+
+| Élément | Valeur |
+|---|---|
+| URL publique | `https://conseils.hellopro.fr/<slug>-<id>-projet.html` |
+| Route interne | `app/hub/[hubSlug]/page.tsx` |
+| Rendu | Prérendu au build via `generateStaticParams`, puis `revalidate = 86400`. Pas `force-static` : il gèle les `fetch`, ce qui figerait les rubriques du méga-menu (voir §11bis.1) |
+| Source de contenu | **`data/hub/*.ts`** — statique. Les projets HUB **ne sont pas en base SQL** : pas de BFF, pas de transformer, pas de token API |
+| Modèle de données | `types/hub.ts` → `HubPage`, à **slots nommés** (pas de `BlockRenderer`) |
+| Registry | `data/hub/index.ts`, indexé par l'**id numérique de l'URL** |
+| JSON-LD | `app/@head/hub/[hubSlug]/page.tsx` — `Article` + `BreadcrumbList` + `FAQPage` |
+| Pages | 1000 poules pondeuses, 1001 food truck, 1002 laverie automatique |
+
+### 11bis.1 Routing — le piège à connaître
+
+`app/[slugWithId]/` est un segment dynamique **à la racine** du sous-domaine et
+exige un suffixe `-<digits>`. Une URL en `-projet.html` y tomberait et partirait
+en `redirect(hellopro.fr/404.php)`. On **ne peut pas** ajouter un second segment
+dynamique frère (l'App Router refuse deux slugs au même niveau).
+
+D'où un **rewrite dédié**, qui doit rester **AVANT** la règle conseils dans
+`next.config.js` (premier match gagnant) :
+
+```js
+{ source: '/:hubSlug([^/]+)-projet\\.html', destination: '/hub/:hubSlug' },
+```
+
+Le namespace `-projet.html` est neuf côté HelloPro → aucune collision possible
+avec les slugs conseils. L'URL publique reste inchangée (rewrite interne).
+Le découpage `slug` / `id` est fait en TS par `parseHubSlug()` (exportée et testée).
+
+### 11bis.2 Règles des fichiers de données
+
+1. **Aucun JSX, aucun composant importé.** Les icônes passent par un nom
+   (`HubIconName`) résolu par `lib/hub/icons.ts`. Sinon un fichier de contenu
+   devient un fichier React, illisible pour un non-dev.
+2. **Aucun `import` d'image.** Chemins string sous `public/images/hub/<slug>/`,
+   avec `width`/`height` obligatoires (CLS + `next/image` en Server Component).
+3. **Ajouter une page = créer `data/hub/<slug>.ts` + l'enregistrer dans le registry.**
+   Si ça oblige à toucher un composant, c'est le modèle de données qu'il faut
+   revoir, pas le template. `__tests__/data/hub/registry.test.ts` boucle sur
+   `listHubPages()` : toute nouvelle page est contrôlée automatiquement.
+
+### 11bis.3 Transverses
+
+Les pages HUB réutilisent `SiteHeader`, `SiteFooter`, `GtmFooterScripts`,
+`ScrollToTopButton` de `components/conseil/`. On ne reprend **ni le header ni le
+footer** du prototype Lovable.
+
+`GtmFooterScripts` accepte une prop optionnelle **`pageTemplate`** (défaut
+`'conseils'`) : les pages HUB passent `'hub'` pour être isolables dans GA4.
+
+### 11bis.4 Composants
+
+```
+components/hub/
+  HubTemplate.tsx        orchestrateur (Server)
+  primitives.tsx         HubSection, CategoryTag, HubIcon, HubTitle, CheckBullet
+  HubHero.tsx            image priority (LCP), h1, features — slot `formSlot`
+  ValueProps.tsx         'use client' — rotation décorative, 4 descriptions TOUJOURS rendues
+  ThematiqueBloc.tsx     la brique réutilisable — layouts overlay-left/right, grid, carousel
+  Banners.tsx            AccompagnementBanner + GuideCta (même gabarit)
+  RessourcesGrid.tsx / GrandesEtapes.tsx / EditoSection.tsx
+  HowItWorks.tsx / AccompagnementSplit.tsx / FinalCta.tsx
+  AssistantForm.tsx      'use client' — étape 1 inline dans le hero, suite en dialog
+  GuideDownloadDialog.tsx / LeadPopup.tsx / StickyCta.tsx   'use client' — surcouches
+  triggers.tsx           'use client' — GuideButton / AssistantButton
+components/ui/dialog.tsx  primitive Radix (écrite à la main, pas via la CLI shadcn)
+lib/hub/sanitize.ts       allowlist stricte, zéro attribut conservé
+lib/hub/icons.ts          nom → composant lucide
+```
+
+**Règle de frontière client.** Les sections restent des Server Components ; les
+boutons qui ouvrent un dialog sont isolés dans `triggers.tsx`. Seul le bouton est
+hydraté, pas la section. Un Server Component ne pouvant pas passer de callback à
+un enfant client, les dialogs sont joints par **événement window** :
+`hp:open-assistant-dialog` et `hp:open-guide-dialog`. Les surcouches sont montées
+**une seule fois** par `HubTemplate`.
+
+**Deux invariants SEO à ne pas casser :**
+- Le carrousel équipements est en **scroll-snap CSS**, sans JS : les 7 cartes sont
+  dans le HTML initial. Ne pas le remplacer par embla ou équivalent.
+- `ValueProps` rend **toujours** les 4 descriptions ; la rotation ne change que
+  l'accent visuel. Ne jamais revenir à un `max-h-0` qui sort le texte du rendu utile.
+
+`HubSectionNav` rend de vraies ancres `<a href="#id">` en SSR (8 liens internes
+crawlables) ; le JS n'ajoute que le surlignage et le défilement doux. `matchMedia`
+et `IntersectionObserver` sont appelés en optionnel — absents de jsdom.
+
+### 11bis.5 État (POC)
+
+Objectif : valider la rentabilité du workflow, pas livrer une V1.
+
+- Intégration **terminée** : toutes les sections du prototype sont portées.
+- Les 3 formulaires (`AssistantForm`, `LeadPopup`, `GuideDownloadDialog`) sont
+  portés en **UI mock** — aucune soumission transmise, **aucun lead collecté**.
+  Le POC n'est donc mesurable qu'en trafic et comportement, pas en conversion.
+  Plan de tracking à définir avant industrialisation.
+  ⚠️ Trois tests vérifient explicitement l'**absence d'appel réseau** à la
+  soumission (`AssistantForm.test`, `GuideDownloadDialog.test`). Ils devront être
+  RÉÉCRITS au branchement réel — c'est le signal voulu à ce moment-là.
+- Les articles ne sont pas encore reliés : les liens « Lire l'article » / « En
+  savoir plus » ouvrent le questionnaire au lieu d'exposer des liens morts. À
+  remplacer par les vraies URLs conseils quand elles seront connues.
+- **`public/images/hub/` n'existe pas encore** : les ~30 chemins d'images des
+  données ne résolvent rien (assets Lovable à exporter). N'empêche pas le build.
+- Contenu : une contradiction chiffrée subsiste sur le budget « 500 poules »
+  entre le bloc budget et l'edito budget — à trancher.
 
 ---
 
 ## 12. Sécurité
 
 - ❌ **Jamais** de secrets dans le code (cf. `.claude/rules/security.md` et le hook `secret-scanner.py`).
-- ❌ **Jamais** de `dangerouslySetInnerHTML` non sandboxé. Pour le `tableau-html`, utiliser DOMPurify côté serveur.
+- ❌ **Jamais** de `dangerouslySetInnerHTML` non sandboxé.
+- ⚠️ **NE PAS importer `isomorphic-dompurify`.** Le paquet est déclaré dans `package.json` mais importé par **aucun** fichier — et il ne peut pas l'être : il embarque jsdom, dont webpack casse la résolution de `browser/default-stylesheet.css` (réécriture de `__dirname`). Symptôme au `docker build` : `ENOENT: /app/browser/default-stylesheet.css` pendant « Collecting page data », build en échec. C'est la raison pour laquelle **tous** les sanitizers du service sont écrits à la main : `lib/hub/sanitize.ts`, `FaqBlock`, `TableauHtmlBlock`, `EstimationContent`, `Suppliers`, `ConseilTemplate`. Modèle à suivre : allowlist de balises + reconstruction de la balise depuis son seul nom (donc **zéro attribut conservé**, aucun vecteur `href`/`src`/`on*`).
 - ✅ Toutes les routes API valident leurs inputs avec Zod.
 - ✅ CORS désactivé par défaut sur les routes API internes.
 - ✅ Les uploads d'images (si besoin) passent par le backend, pas direct depuis le front.
@@ -842,6 +974,16 @@ npx shadcn@latest add <component>
 | **2026-05-22** | **URL pattern `<slug>-<id>.html`** parsé en runtime, ID = clé de fetch API | Hérité de l'ancien site PHP. Catch-all `[slugWithId]/page.tsx` qui regex-parse le suffixe `-<digits>.html`. Slug non canonique → 301 vers slug canonique (Phase 8) |
 | **2026-05-22** | **Catalogue final 23 blocs Next.js** (Lot A = 11, Lot B = 12) | Issu de l'audit des 3 templates Lovable nettoyés. Voir §17 et `outputs/audit-templates-lovable.md` |
 | **2026-05-22** | **Branche scaffold renommée `features/template-conseils-service`** | Plus claire pour un binôme arrivant en cours de projet |
+| **2026-07-28** | **2e template dans le service : HUB « projet »** (`/<slug>-<id>-projet.html`) | Même sous-domaine, mais contenu statique et composition figée → ne rentre pas dans le pattern BlockRenderer des conseils. Voir §11bis |
+| **2026-07-28** | **Rewrite `-projet.html` → `/hub/:hubSlug`, placé AVANT la règle conseils** | `[slugWithId]` est à la racine et exige `-<digits>` : sans rewrite, toute URL HUB partait en 404. Impossible d'ajouter un segment dynamique frère (App Router). Namespace `-projet` neuf → zéro collision |
+| **2026-07-28** | **Données HUB statiques (`data/hub/`), pas d'API pour le contenu** | Les projets HUB n'existent pas en base SQL. Pages prérendues au build |
+| **2026-07-29** | **`revalidate = 86400` au lieu de `force-static`** | Les rubriques du méga-menu sont lues en direct depuis `mega-menu.php` (même source que www.hellopro.fr). `force-static` force le cache des `fetch` et annule la revalidation : le menu aurait été gelé au build |
+| **2026-07-29** | **Aucune dimension d'image dans le modèle** (`HubImage` = `{src, alt}`) | Toutes les images sont rendues en `fill` dans une boîte de taille imposée. Des `width`/`height` saisis à la main ont produit trois ratios faux, invisibles au typecheck comme au build |
+| **2026-07-28** | **Modèle HubPage à slots nommés, pas de BlockRenderer** | Les 3 pages partagent un template figé ; seul le contenu varie. Une liste de blocs ordonnée n'apporterait rien et rendrait les fichiers de contenu illisibles |
+| **2026-07-28** | **Icônes par nom (`lib/hub/icons.ts`), images par chemin string** | Garde `data/hub/*.ts` éditable sans connaître React. Même approche que `lib/categoryIcons.tsx` |
+| **2026-07-28** | **`GtmFooterScripts` reçoit `pageTemplate?` (défaut `'conseils'`)** | Isole les pages HUB des conseils dans GA4. Changement additif : aucun appelant existant impacté |
+| **2026-07-28** | **Formulaires HUB en UI mock pour le POC** | Objectif = valider la rentabilité du workflow. Conséquence assumée : aucun lead collecté, POC mesurable en trafic seulement |
+| **2026-07-28** | **Les 22 composants morts du prototype Lovable ne sont pas portés** | `KitProjet`, `ValueProps`, `ProjectSteps`, `AccompagnementCta` et 18 autres étaient définis mais jamais montés par `ProjectHub` |
 
 ### Décisions en attente (à arbitrer avec le binôme avant code)
 

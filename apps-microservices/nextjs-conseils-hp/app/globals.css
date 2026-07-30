@@ -70,6 +70,24 @@
 
   /* === Conteneur === */
   --container-2xl: 1400px;
+
+  /* === Surfaces (template HUB) ===
+     Fonds de section alternés. Valeurs reprises du prototype Lovable pour que
+     le rendu HUB soit conforme à la maquette. N'affectent aucune page conseil
+     (aucune n'utilise bg-surface / bg-surface-muted à ce jour). */
+  --color-surface: oklch(0.985 0.005 260);
+  --color-surface-muted: oklch(0.97 0.008 260);
+
+  /* Bleu marine profond des bandeaux de conversion HUB. Distinct de `primary`
+     (bleu vif HelloPro) : sur un aplat plein écran, primary écrase le CTA orange. */
+  --color-navy-deep: hsl(225 80% 22%);
+
+  /* === Ombres (template HUB) ===
+     Le namespace --shadow-* de Tailwind 4 génère les utilitaires
+     `shadow-elegant` et `shadow-cta`. Teintées depuis primary/cta pour rester
+     synchronisées si la palette évolue. */
+  --shadow-elegant: 0 10px 40px -12px color-mix(in oklab, var(--color-primary) 22%, transparent);
+  --shadow-cta: 0 8px 24px -8px color-mix(in oklab, var(--color-cta) 45%, transparent);
 }
 
 @layer base {
