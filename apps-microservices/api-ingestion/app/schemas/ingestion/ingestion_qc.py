@@ -19,6 +19,8 @@ class QCServiceStep(str, Enum):
     EQUIVALENCE_BO = "equivalence_bo"
     # Caractérisation produit BO (étape 15) — routing distinct
     CARACTERISATION_BO = "caracterisation_bo"
+    # Extraction marque / référence par produit (étape 16) — terminal, pas de step aval
+    FABRICANT_REFERENCE = "fabricant_reference"
 
 
 # Mapping des services vers leurs routing keys
@@ -33,6 +35,7 @@ QC_ROUTING_KEYS = {
     QCServiceStep.CARACTERISATION_PRIX: "prix.caracterisation.start",
     QCServiceStep.EQUIVALENCE_BO: "qc.equivalence_bo.start",
     QCServiceStep.CARACTERISATION_BO: "qc.caracterisation_bo.start",
+    QCServiceStep.FABRICANT_REFERENCE: "qc.fabricant_reference.start",
 }
 
 # Exchange distinct pour la caractérisation prix (indépendante du pipeline QC)
