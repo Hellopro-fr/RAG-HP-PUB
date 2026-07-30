@@ -332,6 +332,9 @@ async def list_qc_services():
                 "equivalence": "Calcul des équivalences",
                 "caracterisation": "Caractérisation des produits",
                 "caracterisation_prix": "Caractérisation des prix Milvus (hors pipeline QC 1-7)",
+                "equivalence_bo": "Équivalence sur questionnaire BO (étape 14)",
+                "caracterisation_bo": "Caractérisation des produits BO (étape 15)",
+                "fabricant_reference": "Extraction marque / référence par produit (étape 16)",
             }.get(service.value, ""),
         })
 
