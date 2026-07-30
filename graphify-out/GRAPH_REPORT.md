@@ -1,12 +1,12 @@
-# Graph Report - .  (2026-07-27)
+# Graph Report - .  (2026-07-30)
 
 ## Corpus Check
 - 0 files · ~99,999 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 8688 nodes · 19243 edges · 233 communities detected
-- Extraction: 65% EXTRACTED · 35% INFERRED · 0% AMBIGUOUS · INFERRED: 6737 edges (avg confidence: 0.6)
+- 8856 nodes · 19630 edges · 233 communities detected
+- Extraction: 65% EXTRACTED · 35% INFERRED · 0% AMBIGUOUS · INFERRED: 6830 edges (avg confidence: 0.61)
 - Token cost: 0 input · 0 output
 
 ## Community Hubs (Navigation)
@@ -249,9 +249,9 @@
 2. `ReindexResponse` - 319 edges
 3. `CrawlStatus` - 319 edges
 4. `IncludeInArchive` - 318 edges
-5. `DomainFR` - 222 edges
+5. `DomainFR` - 244 edges
 6. `DetectionMode` - 184 edges
-7. `LanguageDetector` - 120 edges
+7. `LanguageDetector` - 146 edges
 8. `DetectionResponse` - 101 edges
 9. `CrawlerManager` - 100 edges
 10. `DebugAlternativesInfo` - 95 edges
@@ -265,8 +265,8 @@
   docs/superpowers/specs/2026-06-18-shared-auth-lib-design.md → libs\auth\python\hellopro_auth\oauth.py
 - `Node/Python parity contract (env convention, PKCE S256, claims, TTL)` --semantically_similar_to--> `Signed rcf_session JWT (HS256, SESSION_SECRET). Parity with libs/auth/node sessi`  [INFERRED] [semantically similar]
   docs/superpowers/specs/2026-06-18-shared-auth-lib-design.md → libs\auth\python\hellopro_auth\session.py
-- `cache_service.py (Redis lock helper)` --semantically_similar_to--> `Redis State and Counters`  [INFERRED] [semantically similar]
-  libs/common-utils/cache_service.py → apps-microservices/crawler-service/CLAUDE.md
+- `Soft-French lexical rescue (widened Cas 8)` --semantically_similar_to--> `test_soft_french_fr_tld_still_accepted()`  [INFERRED] [semantically similar]
+  docs/superpowers/specs/2026-07-28-detection-soft-french-lexical-corroboration-design.md → apps-microservices\api-detection-langue-fr\tests\test_case2a_alt_fallthrough.py
 
 ## Hyperedges (group relationships)
 - **Stash to Archive GCS Move Flow** — crawler_claude_move_stash_to_archive, download_daemon_process_move_requests, download_daemon_env_enable_move, download_daemon_env_move_source_prefix, download_daemon_env_move_target_prefix, download_daemon_marker_move, crawler_claude_auto_stash [EXTRACTED 0.90]
@@ -360,16 +360,16 @@ Cohesion: 0.32
 Nodes (6): InputJSON, OutputJSON, main(), extractContent(), outputError(), ApiDoc
 
 ### Community 9 - "Detection FR Response Models"
-Cohesion: 0.04
-Nodes (164): BaseModel, InsertDevisRequest, InsertEchangeRequest, InsertProduitRequest, InsertWebsiteRequest, _normalize_url_for_dedup(), _homepage_of(), _is_homepage() (+156 more)
+Cohesion: 0.03
+Nodes (185): BaseModel, InsertDevisRequest, InsertEchangeRequest, InsertProduitRequest, InsertWebsiteRequest, _normalize_url_for_dedup(), _homepage_of(), _is_homepage() (+177 more)
 
 ### Community 19 - "Milvus Concurrency Guard"
 Cohesion: 0.05
 Nodes (63): GuardConfig, GuardMetrics, Prometheus metrics for MilvusConcurrencyGuard.      Uses module-level singleto, Record a successful slot acquisition., Record a slot release., Record an acquire timeout., Set the configuration gauges (typically called once at startup)., Set fallback mode indicator (1 = Redis unavailable, 0 = normal). (+55 more)
 
 ### Community 24 - "Crawler Stash-Lock & Redis Design (docs)"
-Cohesion: 0.05
-Nodes (57): Configuration de l'application, Settings, BaseSettings, env_or(), env_or_opt(), Config, Settings, Config (+49 more)
+Cohesion: 0.04
+Nodes (62): Configuration de l'application, Settings, BaseSettings, env_or(), env_or_opt(), Config, Settings, Config (+54 more)
 
 ### Community 95 - "Community 95"
 Cohesion: 1.0
@@ -601,7 +601,7 @@ Nodes (85): account-service SSO, account-service-backend, account-service-fronte
 
 ### Community 4 - "Detection Langue FR Core"
 Cohesion: 0.01
-Nodes (697): _normalize_url_for_dedup(), _homepage_of(), _is_homepage(), _ttl_from_verdict(), _build_challenge_error_msg(), _with_group(), _detect_single_url(), detect_french() (+689 more)
+Nodes (835): _normalize_url_for_dedup(), _homepage_of(), _is_homepage(), _ttl_from_verdict(), _build_challenge_error_msg(), _with_group(), _detect_single_url(), detect_french() (+827 more)
 
 ### Community 27 - "Detection Admission Control"
 Cohesion: 0.08
@@ -1244,13 +1244,15 @@ Cohesion: 0.67
 Nodes (3): Prometheus Observability (validation verdicts, homepage fallback, async job counters), INFLIGHT_REQUESTS Gauge Semantic Shift + ADMISSION_REJECTED Label Cardinality Change, Why INFLIGHT_REQUESTS reads lower after the carve-out: cache HITs, html_content bypass calls and dedup followers no longer contribute — a panel-description change, not a data-integrity problem
 
 ## Ambiguous Edges - Review These
+- `Settings` → `Out of scope: amt-lavage.com soft_french 0.723 vs NLP_MIN_CONFIDENCE 0.75, lang=en-US as a weak negative, Case 6 internals, the validate_alternatives contract`  [AMBIGUOUS]
+  docs/superpowers/specs/2026-07-28-detection-case2a-hreflang-alt-design.md · relation: references
 - `._validate_alternative_urls()` → `One Challenge Detector, Three Consumers (45s poll / detect reclass / Case-6 guard)`  [AMBIGUOUS]
   docs/superpowers/specs/2026-07-25-detection-langue-fr-challenge-noscript-altprobe-design.md · relation: references
 - `._abandon_job()` → `Terminal-Write Loss Incident (job 9597267b: 5/5 OK, record stuck running/success_count=0)`  [AMBIGUOUS]
   docs/superpowers/specs/2026-07-19-detection-langue-fr-job-queue-concurrency-clamp-design.md · relation: conceptually_related_to
 
 ## Knowledge Gaps
-- **2908 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+2903 more)
+- **2921 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+2916 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **Thin community `Community 110`** (1 nodes): `Creates a dictionary of headers for a DLQ message, compatible with both pika and`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -1532,17 +1534,17 @@ Nodes (3): Prometheus Observability (validation verdicts, homepage fallback, asy
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
+- **What is the exact relationship between `Settings` and `Out of scope: amt-lavage.com soft_french 0.723 vs NLP_MIN_CONFIDENCE 0.75, lang=en-US as a weak negative, Case 6 internals, the validate_alternatives contract`?**
+  _Edge tagged AMBIGUOUS (relation: references) - confidence is low._
 - **What is the exact relationship between `._validate_alternative_urls()` and `One Challenge Detector, Three Consumers (45s poll / detect reclass / Case-6 guard)`?**
   _Edge tagged AMBIGUOUS (relation: references) - confidence is low._
 - **What is the exact relationship between `._abandon_job()` and `Terminal-Write Loss Incident (job 9597267b: 5/5 OK, record stuck running/success_count=0)`?**
   _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
 - **Why does `CrawlerManager` connect `CrawlerManager Retry & Capacity Tests` to `Crawler Service API Schemas`, `CrawlerManager Core + DLQ`, `Detection Langue FR Core`, `Crawler Reconcile & Archive Cleanup`, `Crawler Stash / Unstash`, `Detection Async Job Store`, `Crawler Stash-Lock & Redis Design (docs)`?**
-  _High betweenness centrality (0.116) - this node is a cross-community bridge._
+  _High betweenness centrality (0.106) - this node is a cross-community bridge._
 - **Why does `cleanDatasetFragments()` connect `Crawler Engine Core (main/functions)` to `Detection Async Job Store`, `Crawler Service API Schemas`, `Detection Langue FR Core`?**
-  _High betweenness centrality (0.070) - this node is a cross-community bridge._
+  _High betweenness centrality (0.072) - this node is a cross-community bridge._
 - **Why does `cache_service.py (Redis lock helper)` connect `Crawler Cache & Detection Client` to `Detection Async Job Store`, `Crawler Service API Schemas`, `CrawlerManager Retry & Capacity Tests`?**
   _High betweenness centrality (0.054) - this node is a cross-community bridge._
 - **Are the 337 inferred relationships involving `CrawlerManager` (e.g. with `CrawlStatus` and `IncludeInArchive`) actually correct?**
   _`CrawlerManager` has 337 INFERRED edges - model-reasoned connections that need verification._
-- **Are the 313 inferred relationships involving `ReindexResponse` (e.g. with `CrawlerManager` and `.reindex_storage()`) actually correct?**
-  _`ReindexResponse` has 313 INFERRED edges - model-reasoned connections that need verification._
