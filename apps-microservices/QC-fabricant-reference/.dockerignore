@@ -1,0 +1,6 @@
+.venv/
+.git/
+Dockerfile
+__pycache__/
+tests/
+.pytest_cache/

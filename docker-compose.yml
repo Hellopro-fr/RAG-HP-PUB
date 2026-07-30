@@ -2107,6 +2107,24 @@ services:
       - services-net
     logging: *logging_defaults
 
+  qc-fabricant-reference:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/QC-fabricant-reference/Dockerfile
+    profiles: ["qc-service"]
+    restart: unless-stopped
+    environment:
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      HP_TOKEN: ${HP_TOKEN}
+    volumes:
+      - /mnt/data/docker/images/generation-question-caracteristiques/qc-fabricant-reference:/app/tracking
+    deploy:
+      replicas: 1
+    networks:
+      - services-net
+    logging: *logging_defaults
+
   # =====================================================================
   # PIPELINE EXTRACTION PRIX
   # Lancez avec: docker-compose --profile prix-service up -d
