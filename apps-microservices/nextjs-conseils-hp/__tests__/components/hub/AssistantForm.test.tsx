@@ -85,6 +85,26 @@ describe('AssistantForm', () => {
       });
       fireEvent.click(screen.getByRole('button', { name: new RegExp(short.contact.submitLabel, 'i') }));
 
+      // Étape coordonnées : on renseigne les 4 champs requis.
+      await waitFor(() => {
+        expect(screen.getByLabelText(short.coordinates.fields.name)).toBeDefined();
+      });
+      fireEvent.change(screen.getByLabelText(short.coordinates.fields.name), {
+        target: { value: 'Erick Dupont' },
+      });
+      fireEvent.change(screen.getByLabelText(short.coordinates.fields.phone), {
+        target: { value: '0600000000' },
+      });
+      fireEvent.change(screen.getByLabelText(short.coordinates.fields.postalCode), {
+        target: { value: '75001' },
+      });
+      fireEvent.change(screen.getByLabelText(short.coordinates.fields.address), {
+        target: { value: '10 rue de la Paix, Paris' },
+      });
+      fireEvent.click(
+        screen.getByRole('button', { name: new RegExp(short.coordinates.submitLabel, 'i') })
+      );
+
       await waitFor(() => {
         expect(screen.getByText(short.success.title)).toBeDefined();
       });
@@ -109,5 +129,51 @@ describe('AssistantForm', () => {
     expect(
       screen.getByRole('button', { name: new RegExp(short.contact.submitLabel, 'i') })
     ).toBeDisabled();
+  });
+
+  it('affiche l’étape coordonnées après l’e-mail et garde l’envoi désactivé tant qu’un champ manque', async () => {
+    const short = { ...data, steps: [data.steps[0]] };
+    render(<AssistantForm data={short} />);
+    fireEvent.click(screen.getByText(short.steps[0].options[0]));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(short.contact.label)).toBeDefined();
+    });
+    fireEvent.change(screen.getByLabelText(short.contact.label), {
+      target: { value: 'erick@hellopro.fr' },
+    });
+    fireEvent.click(
+      screen.getByRole('button', { name: new RegExp(short.contact.submitLabel, 'i') })
+    );
+
+    // Les 4 champs coordonnées sont présents, dont l'adresse « Adresse et ville ».
+    await waitFor(() => {
+      expect(screen.getByLabelText(short.coordinates.fields.name)).toBeDefined();
+    });
+    expect(screen.getByLabelText(short.coordinates.fields.phone)).toBeDefined();
+    expect(screen.getByLabelText(short.coordinates.fields.postalCode)).toBeDefined();
+    expect(screen.getByLabelText(short.coordinates.fields.address)).toBeDefined();
+
+    const submit = screen.getByRole('button', {
+      name: new RegExp(short.coordinates.submitLabel, 'i'),
+    });
+    // Bouton désactivé tant que tous les champs ne sont pas remplis.
+    expect(submit).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText(short.coordinates.fields.name), {
+      target: { value: 'Erick Dupont' },
+    });
+    fireEvent.change(screen.getByLabelText(short.coordinates.fields.phone), {
+      target: { value: '0600000000' },
+    });
+    fireEvent.change(screen.getByLabelText(short.coordinates.fields.postalCode), {
+      target: { value: '75001' },
+    });
+    expect(submit).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText(short.coordinates.fields.address), {
+      target: { value: '10 rue de la Paix, Paris' },
+    });
+    expect(submit).toBeEnabled();
   });
 });

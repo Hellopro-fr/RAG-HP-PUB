@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ArrowRight, Check, Mail, ShieldCheck } from 'lucide-react';
+import { ArrowRight, Check, Home, Mail, MapPin, Phone, ShieldCheck, User } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -43,18 +43,28 @@ export function AssistantForm({ data }: { data: HubAssistant }) {
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
   const [email, setEmail] = useState('');
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [postalCode, setPostalCode] = useState('');
+  const [address, setAddress] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [forceOpen, setForceOpen] = useState(false);
 
-  const totalSteps = data.steps.length + 1;
+  // Flux : questionnaire (0..N-1) → e-mail (N) → coordonnées (N+1) → succès.
+  const totalSteps = data.steps.length + 2;
   const isContact = step === data.steps.length;
-  const current = isContact ? null : data.steps[step];
+  const isCoordinates = step === data.steps.length + 1;
+  const current = step < data.steps.length ? data.steps[step] : null;
   const progressPct = ((step + (submitted ? 1 : 0)) / totalSteps) * 100;
 
   const reset = () => {
     setStep(0);
     setAnswers({});
     setEmail('');
+    setName('');
+    setPhone('');
+    setPostalCode('');
+    setAddress('');
     setSubmitted(false);
     setForceOpen(false);
   };
@@ -100,6 +110,11 @@ export function AssistantForm({ data }: { data: HubAssistant }) {
   const inlineAnswered = Boolean(answers[inlineStep?.id ?? '']);
   const modalOpen = forceOpen || step > 0 || submitted;
   const emailValid = EMAIL_RE.test(email);
+  const coordinatesValid =
+    name.trim() !== '' &&
+    phone.trim() !== '' &&
+    postalCode.trim() !== '' &&
+    address.trim() !== '';
 
   return (
     <>
@@ -183,8 +198,8 @@ export function AssistantForm({ data }: { data: HubAssistant }) {
                 onSubmit={(event) => {
                   event.preventDefault();
                   if (!emailValid) return;
-                  // POC : rien n'est transmis.
-                  setSubmitted(true);
+                  // Avance vers l'étape coordonnées (aucune donnée transmise — POC).
+                  setStep((s) => s + 1);
                 }}
               >
                 <span className="inline-flex w-fit items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-primary">
@@ -214,6 +229,77 @@ export function AssistantForm({ data }: { data: HubAssistant }) {
                   className="inline-flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-cta text-sm font-bold text-cta-foreground shadow-cta transition hover:bg-cta-hover disabled:opacity-50"
                 >
                   {data.contact.submitLabel}
+                  <ArrowRight className="h-4 w-4" />
+                </button>
+                <p className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+                  <ShieldCheck className="h-3.5 w-3.5 text-primary" />
+                  100% gratuit, sans engagement
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setStep((s) => Math.max(0, s - 1))}
+                  className="text-xs font-medium text-muted-foreground hover:text-foreground"
+                >
+                  ← Retour
+                </button>
+              </form>
+            ) : isCoordinates ? (
+              <form
+                className="space-y-4"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  if (!coordinatesValid) return;
+                  // POC : rien n'est transmis.
+                  setSubmitted(true);
+                }}
+              >
+                <span className="inline-flex w-fit items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-primary">
+                  {data.coordinates.badge}
+                </span>
+                <div>
+                  <p className="text-base font-bold text-foreground">{data.coordinates.label}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{data.coordinates.helper}</p>
+                </div>
+                <div className="space-y-3">
+                  <CoordinateField
+                    id="hub-assistant-name"
+                    icon={<User className="h-4 w-4" />}
+                    label={data.coordinates.fields.name}
+                    value={name}
+                    onChange={setName}
+                    type="text"
+                  />
+                  <CoordinateField
+                    id="hub-assistant-phone"
+                    icon={<Phone className="h-4 w-4" />}
+                    label={data.coordinates.fields.phone}
+                    value={phone}
+                    onChange={setPhone}
+                    type="tel"
+                  />
+                  <CoordinateField
+                    id="hub-assistant-postal"
+                    icon={<MapPin className="h-4 w-4" />}
+                    label={data.coordinates.fields.postalCode}
+                    value={postalCode}
+                    onChange={setPostalCode}
+                    type="text"
+                  />
+                  <CoordinateField
+                    id="hub-assistant-address"
+                    icon={<Home className="h-4 w-4" />}
+                    label={data.coordinates.fields.address}
+                    value={address}
+                    onChange={setAddress}
+                    type="text"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={!coordinatesValid}
+                  className="inline-flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-cta text-sm font-bold text-cta-foreground shadow-cta transition hover:bg-cta-hover disabled:opacity-50"
+                >
+                  {data.coordinates.submitLabel}
                   <ArrowRight className="h-4 w-4" />
                 </button>
                 <p className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
@@ -314,6 +400,45 @@ function OptionButton({
         {selected && <span className="h-2.5 w-2.5 rounded-full bg-cta" />}
       </span>
     </button>
+  );
+}
+
+/**
+ * Champ de l'étape coordonnées. Calqué sur l'input e-mail (même arrondi, même
+ * focus orange) pour rester dans le langage visuel du questionnaire. Le libellé
+ * sert de placeholder ET d'`aria-label` (pas de label visible dans la maquette).
+ */
+function CoordinateField({
+  id,
+  icon,
+  label,
+  value,
+  onChange,
+  type,
+}: {
+  id: string;
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  type: string;
+}) {
+  return (
+    <div className="relative">
+      <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground">
+        {icon}
+      </span>
+      <input
+        id={id}
+        type={type}
+        required
+        aria-label={label}
+        placeholder={label}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-12 w-full rounded-xl border border-border bg-surface pl-11 pr-4 text-sm outline-none focus:border-cta focus:ring-2 focus:ring-cta/20"
+      />
+    </div>
   );
 }
 
