@@ -80,6 +80,18 @@ def test_html_index_excluded_and_pagination(app_and_storage):
     assert body["returned"] == 2
 
 
+def test_dunder_sidecars_excluded(app_and_storage):
+    app, storage = app_and_storage
+    _mk_dataset(storage, "example.com", [
+        ("a.json", {"url": "https://example.com/1", "content": "x"}),
+        ("__collapsed_urls.json", ["https://example.com/1?utm=1"]),
+        ("__metadata__.json", {"itemCount": 2}),
+    ])
+    body = TestClient(app).get("/admin/dataset/9").json()
+    assert body["total_records"] == 1
+    assert body["records"][0]["url"] == "https://example.com/1"
+
+
 def test_kind_update_serves_jsonl_lines(app_and_storage):
     app, storage = app_and_storage
     d = storage / "storage" / "datasets" / "update-example.com"

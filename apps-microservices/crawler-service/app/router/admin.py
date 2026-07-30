@@ -190,7 +190,7 @@ _ENV_WHITELIST_PREFIXES = (
     "DIEZ_", "QM_", "TIMING_", "DETECTION_", "NAVIGATION_", "RECOVER_",
     "PROGRESS_", "REDIS_LOSS", "REDIS_MAX", "REDIS_SOCKET", "REDIS_HEALTH",
     "NODE_OPTIONS", "MAX_CONCURRENT", "DEFAULT_MAX_GLOBAL", "AUTO_STASH",
-    "STASH_", "QUEUE_", "CONTENT_EXTRACTOR",
+    "STASH_", "QUEUE_", "CONTENT_EXTRACTOR", "DATASET_",
 )
 # Compose env vars deliberately NOT exposed by /admin/config. Add here ONLY
 # with a justification comment; anything diagnostic belongs in the whitelist.
@@ -297,7 +297,8 @@ async def dataset_sample(
     entries = []
     with os.scandir(dataset_dir) as it:
         for entry in it:
-            if not entry.name.endswith(".json") or entry.name == "html_index.json":
+            if (not entry.name.endswith(".json") or entry.name == "html_index.json"
+                    or entry.name.startswith("__")):  # __metadata__/__collapsed_urls sidecars, not rows
                 continue
             try:
                 st = entry.stat()
@@ -341,6 +342,7 @@ _SIDECAR_WHITELIST = frozenset({
     "_diez_decision.json", "_diez_audit.json",
     "_questionmark_decision.json", "_questionmark_observations.json",
     "_questionmark_audit.json",
+    "_canonical_dedup_audit.json",
 })
 
 

@@ -85,3 +85,38 @@ Used for the batch semaphore and the stagger cap. With compose's `ADMISSION_MAX_
 ## Rollout
 
 Ship enabled (no flag: queueing at worker-concurrency 1 is strictly safer than the 8-wide stampede; `JOB_WORKER_CONCURRENCY` is the tuning knob and `MAX_ACTIVE_JOBS` the rollback-ish lever). Redeploy service; no compose change required. Measure: `detect_async_jobs_queued`, `Timeout global item` rate, `admission_rejected` rate on the next multi-run BO day.
+
+## Addendum 2026-07-26 — terminal-write loss (job `9597267b`, post-mortem)
+
+**Incident:** a 5-item batch finished 15.8s with 5/5 OK (`[BATCH] Termine`), yet the job record
+stayed `running` / `done=5` / `success_count=0` / `results=null` — the BO polled until stale and
+discarded the (successful) run. The record content was exactly the heartbeat's last copy: the
+terminal write never landed, and the old failure path was `try: write … except: pass` — fully
+silent, no log, no retry, and the worker's watchdog can't help (the task finished "normally").
+
+**Mechanism (prime suspect):** `hb.cancel()` fired while the heartbeat was awaiting a Redis
+command; a cancelled in-flight command can leave the pooled connection with a pending unread
+response, and the terminal `get`+`write` immediately reused that connection (LIFO pool) — both
+failed, both were swallowed. Poll reads used other connections and stayed healthy.
+
+**Fix (same commit):**
+1. Cooperative heartbeat stop — `asyncio.Event` + bounded await instead of `cancel()`: the
+   in-flight Redis command completes cleanly before the terminal sequence starts. (`cancel()` is
+   kept only on the `CancelledError`/shutdown path, where the process is dying anyway.)
+2. `_write_terminal`: terminal record writes (completed AND failed) are retried 3× with backoff;
+   each failure logs a warning, definitive loss logs `écriture terminale PERDUE` at ERROR level —
+   the silent `except: pass` is gone.
+3. Completion/failure log lines (`[async-jobs] job X completed: …`) — the success path previously
+   logged nothing, which made this incident diagnosable only from the BO side.
+
+Degraded behavior if all retries fail is unchanged by design (record freezes → poll derives
+`stale` → BO fail-fast re-submits) but is now observable in the service logs.
+
+**Follow-up (same day):** the BO re-launch after the incident polled the FAILED job and stopped —
+the pct script's `client_job_id` was deterministic (`sha1(chunk urls)`) and the idempotency index
+served the dead job for its remaining 1h TTL. Two-sided fix: (1) service — `submit` re-serves an
+indexed job only while it is `pending`/`running` (non-stale) or `completed`; a `failed`/stale/
+expired target releases the index and a NEW job starts (fail-fast: "caller re-submits" must
+actually create a job); (2) BO pct script — `client_job_id` now includes a per-run nonce
+(idempotence covers accidental re-submits within one call, never links two launches — also avoids
+`--force-refresh` runs silently receiving 1h-old `completed` results).

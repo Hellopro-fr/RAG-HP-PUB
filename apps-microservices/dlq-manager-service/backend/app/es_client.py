@@ -405,22 +405,42 @@ class ElasticsearchClient:
         query = {"bool": {"must": [], "must_not": []}}
         
         if search_term:
-            # Detect quoted field:value pattern like error_reason:'...' or error_reason:"..."
-            field_value_match = re.match(r'^(\w+):[\'"](.+)[\'"]$', search_term, re.DOTALL)
+            # Detect a SINGLE quoted field:value pattern like error_reason:'...' or error_reason:"..."
+            #
+            # The value char class is the quote type NOT used as delimiter, so a phrase may
+            # legitimately contain the other quote (error_reason:'Exception("OSError")').
+            # Combined with the $ anchor this makes the pattern structurally unable to span
+            # two quoted segments — which is the fix for an incident (2026-07-28) where an
+            # auto-archive rule silently archived genuine failures: the old greedy `.+` with
+            # re.DOTALL matched 'error_reason:"A" OR error_reason:"B"' as ONE field_value,
+            # capturing 'A" OR error_reason:"B' as the phrase → a match_phrase matching nothing.
+            # A multi-clause expression must reach query_string, which handles OR natively.
+            field_value_match = re.match(r'^(\w+):(?:\'([^\']+)\'|"([^"]+)")$', search_term)
+
             if field_value_match:
                 field_name = field_value_match.group(1)
-                field_value = field_value_match.group(2)
+                field_value = field_value_match.group(2) or field_value_match.group(3)
                 query["bool"]["must"].append({
                     "match_phrase": {
                         field_name: field_value
                     }
                 })
-            elif any(char in search_term for char in [':', '*', '?']):
-                # Advanced query_string syntax (unquoted field:value, wildcards, etc.)
+            elif any(char in search_term for char in [':', '*', '?', '"', "'"]):
+                # Advanced query_string syntax (field:value, wildcards, quoted phrases, booleans).
+                #
+                # default_operator=AND is REQUIRED, not cosmetic. In Lucene syntax the field
+                # qualifier binds to the FIRST term only: 'error_reason:Aucun contenu extrait'
+                # means error_reason:Aucun, then 'contenu' and 'extrait' as free terms across
+                # `fields`. With the ES default (OR) any single common word matched, so a rule
+                # meant for "Aucun contenu extrait pour footer via None" also matched
+                # "Le contenu extrait est vide ou invalide apres tous les essais" — a real
+                # extraction failure archived as benign. AND forces every term to be present,
+                # which contains the damage when a rule is written unquoted.
                 query["bool"]["must"].append({
                     "query_string": {
                         "query": search_term,
                         "fields": ["error_reason", "original_payload.*", "service_name"],
+                        "default_operator": "AND",
                         "lenient": True
                     }
                 })

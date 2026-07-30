@@ -49,8 +49,15 @@ class OpenAIClient(BaseLLMClient):
         return response.choices[0].message.content
 
 class DeepSeekClient(OpenAIClient):
-    def __init__(self, api_key: str, model: str = "deepseek-chat"):
+    def __init__(self, api_key: str, model: str = "deepseek-v4-flash"):
         super().__init__(api_key=api_key, model=model, base_url="https://api.deepseek.com")
+
+    async def generate(self, prompt: str, temperature: float = 0.0, max_tokens: int = 4096, **kwargs) -> str:
+        # DeepSeek V4 enables thinking by default (deepseek-chat, the
+        # non-thinking alias, was retired 2026-07-24). Keep the old behavior
+        # unless the caller explicitly opts in via extra_body.
+        kwargs.setdefault("extra_body", {"thinking": {"type": "disabled"}})
+        return await super().generate(prompt, temperature=temperature, max_tokens=max_tokens, **kwargs)
 
 class GeminiClient(BaseLLMClient):
     def __init__(self, api_key: str, model: str):

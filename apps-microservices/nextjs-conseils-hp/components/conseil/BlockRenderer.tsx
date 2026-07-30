@@ -4,7 +4,7 @@ import { H3Block } from './blocks/H3Block';
 import { TextBlock } from './blocks/TextBlock';
 import { ProsConsBlock } from './blocks/ProsConsBlock';
 import { CTABlock } from './blocks/CTABlock';
-import { FaqBlock } from './blocks/FaqBlock';
+import { FaqBlock, ProduitsBlock, BrochureBlock, QuoteFormBlock } from './lazyBlocks';
 import { TableauPrixBlock } from './blocks/TableauPrixBlock';
 import { TableauHtmlBlock } from './blocks/TableauHtmlBlock';
 import { EstimationPrixBlock } from './blocks/EstimationPrixBlock';
@@ -12,10 +12,7 @@ import { ImageBlock } from './blocks/ImageBlock';
 import { TexteImageBlock } from './blocks/TexteImageBlock';
 import { ImageImageBlock } from './blocks/ImageImageBlock';
 import { TypeSectionBlock } from './blocks/TypeSectionBlock';
-import { BrochureBlock } from './blocks/BrochureBlock';
-import { QuoteFormBlock } from './blocks/QuoteFormBlock';
 import { VideoBlock } from './blocks/VideoBlock';
-import { ProduitsBlock } from './blocks/ProduitsBlock';
 
 import type { H2BlockData } from '@/types/blocks/h2';
 import type { H3BlockData } from '@/types/blocks/h3';
@@ -106,8 +103,17 @@ export function BlockRenderer({ block, formulaire_ao, infoRubrique }: BlockRende
     case 'video':
       return <VideoBlock data={block.data as unknown as VideoBlockData} />;
 
-    case 'produits':
-      return <ProduitsBlock data={block.data as unknown as ProduitsBlockData} />;
+    case 'produits': {
+      // Cap au nombre réellement affiché (PAGE_SIZE = 6 dans ProduitsBlock) AVANT la
+      // frontière client : au-delà de 6, les produits ne sont jamais rendus (le carrousel
+      // fait défiler les 6 mêmes cartes) mais seraient sérialisés dans le payload RSC.
+      const produitsData = block.data as unknown as ProduitsBlockData;
+      const capped =
+        produitsData.produits && produitsData.produits.length > 6
+          ? { ...produitsData, produits: produitsData.produits.slice(0, 6) }
+          : produitsData;
+      return <ProduitsBlock data={capped} />;
+    }
 
     default: {
       const exhaustive: never = block.type;

@@ -223,3 +223,128 @@ async def test_shutdown_marks_queued_job_failed():
     assert rec_r["status"] == "failed" and rec_r["error"] == "service_shutdown"
     # Les réservations drainées sont libérées (pas de fuite de capacité).
     assert jm._inflight == 0
+
+
+@pytest.mark.asyncio
+async def test_resubmit_after_failed_creates_new_job():
+    """Incident BO 2026-07-26 : client_job_id déterministe + job failed →
+    la re-soumission re-servait le cadavre pendant 1h d'index TTL. La
+    re-soumission d'un cjid dont le job est failed doit créer un NOUVEAU job."""
+    calls = {"n": 0}
+
+    async def fail_then_ok(items, mode, opts, cb):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("boom")
+        return await _instant_runner(items, mode, opts, cb)
+
+    jm = JobManager(JobStore(client=FakeRedis()), fail_then_ok, _settings())
+    id1, code1 = await jm.submit(_req(["https://a.fr"], client_job_id="K"))
+    assert code1 == 202
+    rec1 = await _wait_terminal(jm, id1)
+    assert rec1["status"] == "failed"
+
+    id2, code2 = await jm.submit(_req(["https://a.fr"], client_job_id="K"))
+    assert code2 == 202 and id2 != id1
+    rec2 = await _wait_terminal(jm, id2)
+    assert rec2["status"] == "completed"
+    await jm.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_resubmit_after_completed_returns_same_job():
+    """Idempotence de récupération du résultat : cjid d'un job completed
+    re-soumis dans la fenêtre RESULT_TTL → même job, 200."""
+    jm = JobManager(JobStore(client=FakeRedis()), _instant_runner, _settings())
+    id1, _ = await jm.submit(_req(["https://a.fr"], client_job_id="K"))
+    await _wait_terminal(jm, id1)
+    id2, code2 = await jm.submit(_req(["https://a.fr"], client_job_id="K"))
+    assert (id2, code2) == (id1, 200)
+    await jm.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_resubmit_on_stale_record_creates_new_job():
+    """Index pointant vers un record running au heartbeat gelé (stale dérivé)
+    → re-soumission = nouveau job (le job gelé est mort, cf. fail-fast)."""
+    store = JobStore(client=FakeRedis())
+    jm = JobManager(store, _instant_runner, _settings())
+    old = time.time() - 1000
+    await store.write({"job_id": "dead1", "status": "running",
+                       "created_at": old, "last_activity": old}, 7200)
+    await store.claim_index("K", "dead1", 7200)
+
+    job_id, code = await jm.submit(_req(["https://a.fr"], client_job_id="K"))
+    assert code == 202 and job_id != "dead1"
+    rec = await _wait_terminal(jm, job_id)
+    assert rec["status"] == "completed"
+    await jm.shutdown()
+
+
+class _FlakyTerminalStore(JobStore):
+    """Fait échouer les N premières écritures TERMINALES (status completed/
+    failed) — reproduit le job 9597267b : batch fini, écriture du résultat
+    perdue, record bloqué 'running'."""
+
+    def __init__(self, client, fail_n: int):
+        super().__init__(client=client)
+        self.fail_left = fail_n
+        self.terminal_attempts = 0
+
+    async def write(self, record, ttl):
+        if record.get("status") in ("completed", "failed"):
+            self.terminal_attempts += 1
+            if self.fail_left > 0:
+                self.fail_left -= 1
+                raise ConnectionError("terminal write boom")
+        await super().write(record, ttl)
+
+
+@pytest.mark.asyncio
+async def test_terminal_write_retried_until_success():
+    """2 échecs d'écriture terminale → le retry aboutit, le job finit
+    'completed' avec ses résultats (avant : record bloqué 'running')."""
+    store = _FlakyTerminalStore(FakeRedis(), fail_n=2)
+    jm = JobManager(store, _instant_runner, _settings())
+    job_id, _ = await jm.submit(_req(["https://a.fr"]))
+    rec = await _wait_terminal(jm, job_id, timeout=8.0)
+    assert rec["status"] == "completed"
+    assert rec["results"] is not None and len(rec["results"]) == 1
+    assert store.terminal_attempts == 3
+    await jm.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_terminal_write_lost_is_loud(caplog):
+    """Écriture terminale définitivement perdue : plus de `except: pass`
+    silencieux — un logger.error nomme le job et l'état résiduel."""
+    import logging as _logging
+    store = _FlakyTerminalStore(FakeRedis(), fail_n=99)
+    jm = JobManager(store, _instant_runner, _settings())
+    def _lost_logged():
+        return any("écriture terminale PERDUE" in r.message for r in caplog.records)
+
+    with caplog.at_level(_logging.ERROR, logger="app.core.async_jobs"):
+        job_id, _ = await jm.submit(_req(["https://a.fr"]))
+        deadline = time.monotonic() + 8.0
+        while not _lost_logged() and time.monotonic() < deadline:
+            await asyncio.sleep(0.05)
+    assert store.terminal_attempts >= 3
+    rec = await jm.get_record(job_id)
+    assert rec["status"] == "running"   # dégradé documenté → 'stale' au poll
+    assert _lost_logged()
+    await jm.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_stops_cooperatively_without_cancel():
+    """Le heartbeat s'arrête via l'Event (fin propre de sa commande Redis en
+    cours), PAS par annulation — hb.cancel() mi-commande pouvait empoisonner
+    la connexion du pool réutilisée par l'écriture terminale."""
+    jm = JobManager(JobStore(client=FakeRedis()), _instant_runner, _settings())
+    stop = asyncio.Event()
+    hb = asyncio.create_task(jm._heartbeat("nonexistent", {"done": 0}, stop))
+    await asyncio.sleep(0.05)
+    stop.set()
+    await asyncio.wait_for(hb, timeout=2.0)
+    assert hb.cancelled() is False

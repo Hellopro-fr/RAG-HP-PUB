@@ -110,3 +110,48 @@ export const writeDiezAudit = (
         return { collapsedTotal: 0 };
     }
 };
+
+type CanonRow = { collapsed: string; base: string };
+
+/**
+ * Read-merge-write {storagePath}/_canonical_dedup_audit.json. Route-loss
+ * candidates from the canonical ?param/# content-dedup pass, plus what the volume
+ * guards REFUSED to collapse (oversized cells) or aborted (whole datasets) — a
+ * refusal means that domain would have lost products, so it must not stay silent.
+ * Skips the write only when there is nothing at all to report. Fail-open.
+ */
+export const writeCanonicalDedupAudit = (
+    storagePath: string,
+    current: {
+        collapsed: CanonRow[]; removed: number; rewritten: number;
+        refusedCells?: number; abortedDatasets?: string[];
+    },
+): { collapsedTotal: number } => {
+    try {
+        const file = path.join(storagePath, "_canonical_dedup_audit.json");
+        const existing = readExisting(file);
+        const collapsed = mergeCollapsed<CanonRow>(
+            Array.isArray(existing?.collapsed_candidates) ? existing.collapsed_candidates : [],
+            current.collapsed,
+        );
+        const refusedCells = (existing?.refused_cells || 0) + (current.refusedCells || 0);
+        const abortedDatasets = [...new Set([
+            ...(Array.isArray(existing?.aborted_datasets) ? existing.aborted_datasets : []),
+            ...(current.abortedDatasets || []),
+        ])];
+        if (collapsed.length === 0 && refusedCells === 0 && abortedDatasets.length === 0) {
+            return { collapsedTotal: 0 };
+        }
+        fs.writeFileSync(file, JSON.stringify({
+            collapsed_candidates: collapsed,
+            removed: (existing?.removed || 0) + current.removed,
+            rewritten: (existing?.rewritten || 0) + current.rewritten,
+            refused_cells: refusedCells,
+            aborted_datasets: abortedDatasets,
+        }, null, 2));
+        return { collapsedTotal: collapsed.length };
+    } catch (e) {
+        console.error("Canonical dedup audit sidecar write failed:", e);
+        return { collapsedTotal: 0 };
+    }
+};

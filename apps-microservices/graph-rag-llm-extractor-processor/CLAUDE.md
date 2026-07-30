@@ -29,7 +29,7 @@ app/
 ```
 
 ## Conventions
-- Default LLM provider: DeepSeek (`deepseek-chat`)
+- Default LLM provider: DeepSeek (`deepseek-v4-flash`; env `DEEPSEEK_MODEL` — note: different var name than the `DEEPSEEK_MODEL_NAME` used by llm-service)
 - Supports 4 providers: DeepSeek, OpenAI, Gemini, Anthropic
 - Concurrency: `MAX_CONCURRENCY=10` parallel LLM requests
 - Prompt templates in `core/prompts.py`

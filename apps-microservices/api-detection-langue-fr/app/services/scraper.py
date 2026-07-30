@@ -408,6 +408,7 @@ async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) 
                 # en attendant que le challenge se résolve (redirection ou remplacement DOM).
                 # Utilise un polling loop plutôt que wait_for_function car les challenges
                 # Cloudflare font souvent une navigation complète (qui détruit le contexte JS).
+                challenge_resolved = False
                 if content:
                     challenge_service = _detect_challenge_page(content)
                     if challenge_service:
@@ -419,7 +420,6 @@ async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) 
                         poll_start = _time.time()
                         poll_timeout = 45  # secondes
                         poll_interval = 3  # secondes
-                        challenge_resolved = False
 
                         while (_time.time() - poll_start) < poll_timeout:
                             await page.wait_for_timeout(poll_interval * 1000)
@@ -475,7 +475,13 @@ async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) 
                     else:
                         logger.info(f"Scraping réussi pour {url} ({len(content)} caractères)")
                     content_type = response.headers.get('content-type', '') if response else ''
-                    status_code = response.status if response else 0
+                    # `response` vient du goto INITIAL : après résolution d'un
+                    # challenge (navigation window.location.replace), son status
+                    # 401/403 est périmé — le garder ferait rejeter la vraie
+                    # page en HTTP_ERROR par validate_page malgré un contenu
+                    # sain. challenge_resolved n'est vrai que si le body est
+                    # passé de challenge → non-challenge.
+                    status_code = 200 if challenge_resolved else (response.status if response else 0)
                     headers = dict(response.headers) if response else {}
                     return ScrapeResult(
                         html=content,

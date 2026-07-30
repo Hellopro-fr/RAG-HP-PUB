@@ -214,6 +214,7 @@ class DebugFetchInfo(BaseModel):
     raw_html_full: Optional[str] = Field(default=None, description="Contenu HTML complet (uniquement si include_full_content=true)")
     redirected_from: Optional[str] = Field(default=None, description="URL d'origine avant redirection (null si pas de redirection)")
     challenge_detected: Optional[str] = Field(default=None, description="Service de protection anti-bot detecte (Cloudflare, DataDome, etc.) ou null si contenu reel")
+    status_code: Optional[int] = Field(default=None, description="Statut HTTP du fetch (normalise a 200 si un challenge anti-bot a ete resolu dans le navigateur ; null si html_content fourni dans la requete)")
 
 class DebugCleaningInfo(BaseModel):
     """Informations sur le nettoyage du contenu"""

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Search, User, Menu, ChevronDown, ChevronRight, X } from 'lucide-react';
-import { SearchModal } from './SearchModal';
+import { SearchModal } from './lazyModals';
 import { getCategoryIcon } from '@/lib/categoryIcons';
 
 interface Category {
@@ -186,9 +186,9 @@ export function SiteHeader({ categories = [] }: SiteHeaderProps) {
                         <a
                           href={cat.url}
                           onClick={() => setMenuOpen(false)}
-                          className="group flex items-center gap-3 rounded-md px-3 py-2 text-sm text-foreground hover:bg-primary-soft hover:text-primary"
+                          className="group cat-link"
                         >
-                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary-soft text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+                          <span className="cat-icon">
                             <Icon className="h-[18px] w-[18px]" strokeWidth={1.75} />
                           </span>
                           <span className="min-w-0 flex-1">{cat.nom}</span>

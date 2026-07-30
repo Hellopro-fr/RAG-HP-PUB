@@ -70,7 +70,7 @@ class LLMClientFactory:
                 deepseek = DeepSeek(config={"api_key": settings.DEEPSEEK_API_KEY})
                 deepseek.set_temperature(temperature)
                 return deepseek
-            elif model_name == "deepseek-v4-pro":
+            elif model_name in ("deepseek-v4-pro", "deepseek-v4-flash"):
                 deepseek = DeepSeek(config={"api_key": settings.DEEPSEEK_API_KEY, "model": model_name})
                 deepseek.set_temperature(temperature)
                 return deepseek
@@ -88,7 +88,7 @@ class DeepSeek:
         config = config or {}
         self.API_KEY = config.get("api_key", settings.DEEPSEEK_API_KEY)
         self.BASE_URL = "https://api.deepseek.com"
-        self.MODEL = config.get("model", "deepseek-chat")
+        self.MODEL = config.get("model", "deepseek-v4-flash")
         self.TEMPERATURE = 0.4
         self.client = OpenAI(api_key=self.API_KEY, base_url=self.BASE_URL)
 
@@ -104,6 +104,9 @@ class DeepSeek:
             ],
             temperature=self.TEMPERATURE,
             stream=stream,
+            # V4 : thinking activé par défaut — désactiver pour garder le
+            # comportement deepseek-chat (temperature sinon ignorée)
+            extra_body={"thinking": {"type": "disabled"}},
         )
         if stream:
             return response

@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     M_PARAMS: str
     EF_PARAMS: str
     MODEL_NAME: str = "Qwen/Qwen3-14B"
-    DEEPSEEK_MODEL_NAME: str = "deepseek-chat"
+    DEEPSEEK_MODEL_NAME: str = "deepseek-v4-flash"
     DEEPSEEK_API_URL: str = "https://api.deepseek.com/v1"
     LLM_PROVIDER: str = "deepseek"
 

@@ -1,60 +1,13 @@
-'use client';
-
-import { useState } from 'react';
 import Image from 'next/image';
-import { ArrowRight } from 'lucide-react';
 import type { TexteImageBlockData } from '@/types/blocks/texte-image';
-import { IframeFormModal } from '@/components/conseil/IframeFormModal';
-import { IframeProduitModal } from '@/components/conseil/IframeProduitModal';
 import { EstimationBox } from './EstimationBox';
+import { TexteImageCta } from './TexteImageCta';
 
 interface TexteImageBlockProps {
   data: TexteImageBlockData;
 }
 
-/** demande_info.php → TOUJOURS IframeFormModal. */
-function parseDemandeInfo(url: string): { idRubrique: string; extraParams: Record<string, string> } | null {
-  try {
-    if (!url.includes('demande_info.php')) return null;
-    const parsed = new URL(url, 'https://www.hellopro.fr');
-    const idRubrique = parsed.searchParams.get('f');
-    if (!idRubrique) return null;
-    const extraParams: Record<string, string> = {};
-    parsed.searchParams.forEach((value, key) => {
-      if (key !== 'f') extraParams[key] = value;
-    });
-    return { idRubrique, extraParams };
-  } catch {
-    return null;
-  }
-}
-
-/** contact_info.php → TOUJOURS IframeProduitModal, id_produit peut être absent. */
-function parseContactInfo(url: string): { idProduit: string; srcInteg: 0 | 1; extraParams: Record<string, string> } | null {
-  try {
-    if (!url.includes('contact_info.php')) return null;
-    const parsed = new URL(url, 'https://www.hellopro.fr');
-    const idProduit = parsed.searchParams.get('id_produit') ?? '';
-    const srcInteg: 0 | 1 = parsed.searchParams.get('src_integ') === '1' ? 1 : 0;
-    const extraParams: Record<string, string> = {};
-    parsed.searchParams.forEach((value, key) => {
-      if (key !== 'id_produit' && key !== 'src_integ') extraParams[key] = value;
-    });
-    return { idProduit, srcInteg, extraParams };
-  } catch {
-    return null;
-  }
-}
-
 export function TexteImageBlock({ data }: TexteImageBlockProps) {
-  const [groupeeModalOpen, setGroupeeModalOpen] = useState(false);
-  const [produitModalOpen, setProduitModalOpen] = useState(false);
-
-  const demandeInfo  = data.ctaUrl ? parseDemandeInfo(data.ctaUrl) : null;
-  const contactInfo  = data.ctaUrl ? parseContactInfo(data.ctaUrl) : null;
-  const isDemandeInfo = demandeInfo !== null;
-  const isContactInfo = contactInfo !== null;
-
   // Blocs 4 & 5 : dimensions naturelles sans +9px (min-height commenté côté PHP)
   const hasDims = data.image.width !== undefined && data.image.height !== undefined;
   const w = data.image.width ?? 600;
@@ -93,38 +46,6 @@ export function TexteImageBlock({ data }: TexteImageBlockProps) {
     </figure>
   );
 
-  const ctaButton = isDemandeInfo ? (
-    <button
-      type="button"
-      onClick={() => setGroupeeModalOpen(true)}
-      className="mt-2 inline-flex cursor-pointer items-center gap-2 self-start rounded-md bg-cta px-5 py-2.5 text-sm font-bold uppercase tracking-wide text-cta-foreground hover:bg-cta-hover"
-    >
-      {data.ctaLabel} <ArrowRight className="h-4 w-4" />
-    </button>
-  ) : isContactInfo ? (
-    <button
-      type="button"
-      onClick={() => setProduitModalOpen(true)}
-      className="mt-2 inline-flex cursor-pointer items-center gap-2 self-start rounded-md bg-cta px-5 py-2.5 text-sm font-bold uppercase tracking-wide text-cta-foreground hover:bg-cta-hover"
-    >
-      {data.ctaLabel} <ArrowRight className="h-4 w-4" />
-    </button>
-  ) : data.ctaUrl ? (
-    <a
-      href={data.ctaUrl}
-      className="mt-2 inline-flex items-center gap-2 self-start rounded-md bg-cta px-5 py-2.5 text-sm font-bold uppercase tracking-wide text-cta-foreground hover:bg-cta-hover"
-    >
-      {data.ctaLabel} <ArrowRight className="h-4 w-4" />
-    </a>
-  ) : (
-    <button
-      type="button"
-      className="mt-2 inline-flex cursor-pointer items-center gap-2 self-start rounded-md bg-cta px-5 py-2.5 text-sm font-bold uppercase tracking-wide text-cta-foreground hover:bg-cta-hover"
-    >
-      {data.ctaLabel} <ArrowRight className="h-4 w-4" />
-    </button>
-  );
-
   const textCol = (
     <div className="flex min-w-0 flex-col gap-3">
       {data.estimate && (
@@ -145,7 +66,7 @@ export function TexteImageBlock({ data }: TexteImageBlockProps) {
           [&_a]:text-primary [&_a]:underline [&_a:hover]:text-primary/80"
         dangerouslySetInnerHTML={{ __html: data.html }}
       />
-      {data.ctaLabel && ctaButton}
+      {data.ctaLabel && <TexteImageCta ctaUrl={data.ctaUrl} ctaLabel={data.ctaLabel} />}
     </div>
   );
 
@@ -155,37 +76,12 @@ export function TexteImageBlock({ data }: TexteImageBlockProps) {
     : 'md:grid-cols-[3fr_2fr]';
 
   return (
-    <>
-      <div className={`my-8 grid gap-8 md:items-start ${gridCols}`}>
-        {data.imagePosition === 'left' ? (
-          <>{imageCol}{textCol}</>
-        ) : (
-          <>{textCol}{imageCol}</>
-        )}
-      </div>
-
-      {/* Modal demande groupée */}
-      {isDemandeInfo && demandeInfo && (
-        <IframeFormModal
-          idRubrique={demandeInfo.idRubrique}
-          category=""
-          extraParams={Object.keys(demandeInfo.extraParams).length > 0 ? demandeInfo.extraParams : undefined}
-          startFromStep1
-          open={groupeeModalOpen}
-          onClose={() => setGroupeeModalOpen(false)}
-        />
+    <div className={`my-8 grid gap-8 md:items-start ${gridCols}`}>
+      {data.imagePosition === 'left' ? (
+        <>{imageCol}{textCol}</>
+      ) : (
+        <>{textCol}{imageCol}</>
       )}
-
-      {/* Modal demande sur produit */}
-      {isContactInfo && contactInfo && (
-        <IframeProduitModal
-          idProduit={contactInfo.idProduit}
-          srcInteg={contactInfo.srcInteg}
-          extraParams={Object.keys(contactInfo.extraParams).length > 0 ? contactInfo.extraParams : undefined}
-          open={produitModalOpen}
-          onClose={() => setProduitModalOpen(false)}
-        />
-      )}
-    </>
+    </div>
   );
 }

@@ -240,6 +240,51 @@ class TestDetectDebugFallbackOff:
         assert fetch_mock.await_count == 1
 
 
+_RESCALED_WAF_HTML = (
+    '<html><head><title>rescaled WAF · Verifying Browser</title>'
+    '<script id="challenge_data">{"verifyURL":"/.well-known/rescaled-waf/verify"}</script>'
+    '<script>dispatchEvent(new Event("rescaled-waf:challenge-started"))</script>'
+    '</head><body>Verifying your browser.</body></html>'
+)
+
+
+class TestDetectDebugTraceHonesty:
+    """/detect-debug must record the raw HTTP status and mirror the prod
+    challenge-wins / transient reclassification (spec 2026-07-25)."""
+
+    @pytest.mark.asyncio
+    async def test_debug_records_status_and_challenge_page(self, client):
+        # lagff.com case: 403 + WAF interstitial body → prod says challenge_page;
+        # debug must agree and expose the 403 in the trace.
+        scrape = _scrape(html=_RESCALED_WAF_HTML, status_code=403,
+                         final_url="https://example.com/")
+        with patch("app.api.routes.fetch_html", AsyncMock(return_value=scrape)):
+            r = client.post("/api/v1/detect-debug", json={"url": "https://example.com/"})
+        body = r.json()
+        assert body["debug"]["fetch"]["status_code"] == 403
+        assert body["debug"]["fetch"]["challenge_detected"] == "Rescaled_WAF"
+        assert body["result"]["method"] == "challenge_page"
+
+    @pytest.mark.asyncio
+    async def test_debug_transient_status_reclassified(self, client):
+        # 403 with a plain (non-challenge) body → http_error_transient, like prod.
+        scrape = _scrape(status_code=403)
+        with patch("app.api.routes.fetch_html", AsyncMock(return_value=scrape)):
+            r = client.post("/api/v1/detect-debug", json={"url": "https://example.com/"})
+        body = r.json()
+        assert body["debug"]["fetch"]["status_code"] == 403
+        assert body["result"]["method"] == "http_error_transient"
+
+    @pytest.mark.asyncio
+    async def test_debug_status_none_when_html_provided(self, client):
+        r = client.post("/api/v1/detect-debug", json={
+            "url": "https://example.com/",
+            "html_content": '<html lang="fr"><body>' + "Bonjour à tous. " * 20 + "</body></html>",
+        })
+        body = r.json()
+        assert body["debug"]["fetch"]["status_code"] is None
+
+
 _CLOUDFLARE_CHALLENGE_HTML = (
     '<html><head><title>Just a moment...</title></head>'
     '<body><script src="cdn-cgi/challenge-platform/v1/orchestrate/chl_page/v1"></script>'

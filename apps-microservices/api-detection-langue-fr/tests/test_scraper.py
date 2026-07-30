@@ -187,3 +187,90 @@ class TestRouteHandlerCleanup:
 
         assert closed["context"] is True
         assert closed["browser"] is True
+
+
+class TestChallengeResolvedStatus:
+    """After a challenge resolves (post-PoW navigation), ScrapeResult.status_code
+    must not keep the interstitial's 4xx from the initial goto response."""
+
+    _CHALLENGE_HTML = (
+        '<html><head><title>rescaled WAF · Verifying Browser</title>'
+        '<script id="challenge_data">{"verifyURL":"/.well-known/rescaled-waf/verify"}</script>'
+        '<script>dispatchEvent(new Event("rescaled-waf:challenge-started"))</script>'
+        '</head><body>Verifying your browser.</body></html>'
+    )
+    _REAL_HTML = "<html><body>" + "Vraie page française. " * 30 + "</body></html>"
+
+    def _mock_stack(self, mock_page):
+        mock_context = MagicMock()
+        mock_context.new_page = AsyncMock(return_value=mock_page)
+        mock_context.add_cookies = AsyncMock()
+        mock_context.close = AsyncMock()
+
+        mock_browser = MagicMock()
+        mock_browser.new_context = AsyncMock(return_value=mock_context)
+        mock_browser.close = AsyncMock()
+
+        mock_pw = MagicMock()
+        mock_pw.__aenter__ = AsyncMock(return_value=mock_pw)
+        mock_pw.__aexit__ = AsyncMock(return_value=None)
+        mock_pw.start = AsyncMock(return_value=mock_pw)
+        mock_pw.stop = AsyncMock(return_value=None)
+        return mock_browser, mock_pw
+
+    def _mock_page(self, response_status, content_side_effect):
+        mock_response = MagicMock()
+        mock_response.status = response_status
+        mock_response.headers = {"content-type": "text/html"}
+
+        mock_page = MagicMock()
+        mock_page.route = AsyncMock()
+        mock_page.on = MagicMock()
+        mock_page.goto = AsyncMock(return_value=mock_response)
+        mock_page.wait_for_load_state = AsyncMock()
+        mock_page.wait_for_timeout = AsyncMock()
+        mock_page.content = AsyncMock(side_effect=content_side_effect)
+        mock_page.url = "https://example.com/"
+        mock_page.unroute_all = AsyncMock()
+        return mock_page
+
+    @pytest.mark.asyncio
+    async def test_status_forced_200_when_challenge_resolves(self):
+        from app.services import scraper
+
+        contents = iter([self._CHALLENGE_HTML])  # initial read -> challenge
+
+        async def content_side_effect():
+            return next(contents, self._REAL_HTML)  # poll + re-reads -> real page
+
+        mock_page = self._mock_page(403, content_side_effect)
+        mock_browser, mock_pw = self._mock_stack(mock_page)
+
+        with patch.object(scraper, "_launch_browser", AsyncMock(return_value=(mock_browser, True))), \
+             patch.object(scraper, "async_playwright", return_value=mock_pw):
+            result = await scraper.scrape_html(
+                "https://example.com", proxy="http://u:p@proxy:8000"
+            )
+
+        assert result is not None
+        assert "Vraie page" in result.html
+        assert result.status_code == 200  # not the stale 403 from the interstitial
+
+    @pytest.mark.asyncio
+    async def test_status_kept_when_no_challenge(self):
+        from app.services import scraper
+
+        async def content_side_effect():
+            return self._REAL_HTML
+
+        mock_page = self._mock_page(200, content_side_effect)
+        mock_browser, mock_pw = self._mock_stack(mock_page)
+
+        with patch.object(scraper, "_launch_browser", AsyncMock(return_value=(mock_browser, True))), \
+             patch.object(scraper, "async_playwright", return_value=mock_pw):
+            result = await scraper.scrape_html(
+                "https://example.com", proxy="http://u:p@proxy:8000"
+            )
+
+        assert result is not None
+        assert result.status_code == 200

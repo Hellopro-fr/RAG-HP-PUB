@@ -4,7 +4,7 @@ import { useRef, useState, useEffect } from 'react';
 import Image from 'next/image';
 import { Building2, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { Supplier } from '@/types/conseils';
-import { IframeProduitModal } from '@/components/conseil/IframeProduitModal';
+import { IframeProduitModal } from '@/components/conseil/lazyModals';
 
 const FALLBACK_DESC = 'Fournisseur référencé sur HelloPro — demandez votre devis gratuitement.';
 

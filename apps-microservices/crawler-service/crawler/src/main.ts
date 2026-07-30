@@ -56,7 +56,8 @@ import { QUEUE_PURGE_ENABLED } from "./staleVariantSkip.js";
 import { flagStaleVariantsOnDisk } from "./queuePurge.js";
 import { baseKeyAbsent } from "./urlBase.js";
 import { QM_FACET_ENABLED } from "./facetCap.js";
-import { writeQmAudit, writeDiezAudit } from "./auditSidecars.js";
+import { writeQmAudit, writeDiezAudit, writeCanonicalDedupAudit } from "./auditSidecars.js";
+import { canonicalDedupEnabled } from "./canonicalBase.js";
 import { isFilterParam } from "./filterOnSeen.js";
 import { facetParamsForCms } from "./cmsFacetLists.js";
 import { hasIgnoredExtensionForSeed } from "./seedExtensionFilter.js";
@@ -1354,9 +1355,6 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         console.error("Failed to save stats:", e);
     }
 
-    // Build the per-domain URL->filename index for the SFPI HTML store (hot tier). Fail-open.
-    buildHtmlIndex(storagePath, domain);
-
     // Final Update Report for Update Mode
     if (crawlMode === 'update') {
         try {
@@ -1383,6 +1381,8 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         } catch (e) {
             console.error("Dataset fragment cleanup failed:", e);
         }
+    } else if (reason === 'COMPLETED' && canonicalDedupEnabled()) {
+        console.warn("[canonical-dedup] DATASET_CANONICAL_DEDUP_ENABLED=true but dataset cleanup did not run (needs DIEZ_PERCLASS_ENABLED=true).");
     }
 
     // Re-write the diez audit now that content_collision is populated (the early
@@ -1393,6 +1393,38 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
             contentCollision: context.diezContentCollision,
         });
     }
+
+    // Canonical ?param/# dedup route-loss audit (flag-gated). Local cast so we
+    // don't couple to context.diezContentCollision's declared type.
+    const cc = context.diezContentCollision as
+        | {
+            collapsedPairs?: { collapsed: string; base: string }[]; removed?: number; rewritten?: number;
+            refusedCells?: number; abortedDatasets?: string[];
+        }
+        | null | undefined;
+    // Refusals/aborts carry no collapsed pairs, so they must be part of the write
+    // condition — a guard that trips silently teaches the operator nothing.
+    if (storagePath && canonicalDedupEnabled()
+        && (cc?.collapsedPairs?.length || cc?.refusedCells || cc?.abortedDatasets?.length)) {
+        const a = writeCanonicalDedupAudit(storagePath, {
+            collapsed: cc.collapsedPairs ?? [],
+            removed: cc.removed ?? 0,
+            rewritten: cc.rewritten ?? 0,
+            refusedCells: cc.refusedCells ?? 0,
+            abortedDatasets: cc.abortedDatasets ?? [],
+        });
+        if (a.collapsedTotal > 0) {
+            console.warn(`[canonical-dedup] ${a.collapsedTotal} ?param/# route-loss candidate(s) collapsed onto a base — see _canonical_dedup_audit.json (re-crawl to confirm).`);
+        }
+        if (cc.refusedCells || cc.abortedDatasets?.length) {
+            console.warn(`[canonical-dedup] volume guards tripped: ${cc.refusedCells ?? 0} oversized cell(s) refused, dataset(s) aborted: ${(cc.abortedDatasets ?? []).join(", ") || "none"} — see _canonical_dedup_audit.json.`);
+        }
+    }
+
+    // Build the per-domain URL->filename index for the SFPI HTML store (hot tier). Fail-open.
+    // AFTER the dataset cleanup: indexing before it left dangling entries for every
+    // dedup-collapsed row file.
+    buildHtmlIndex(storagePath, domain);
 
     // 4. Persist Data (Critical Step)
     // 1. Persist URLs from Redis to disk (streaming)
