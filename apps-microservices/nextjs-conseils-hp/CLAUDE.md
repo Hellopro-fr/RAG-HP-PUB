@@ -752,9 +752,16 @@ Events spécifiques conseils à prévoir :
 
 | Environnement | Branche | URL |
 |---|---|---|
-| Dev | `features/conseils-*` | `localhost:3000` (root) |
-| Staging | `develop` | `https://staging-conseils.hellopro.fr` |
-| Production | `main` | `https://conseils.hellopro.fr` |
+| Dev | branche de travail (`features/<sujet>`) | `localhost:3000` (root) |
+| Intégration | **`features/poc`** | — |
+| Production | ⚠️ à confirmer | `https://conseils.hellopro.fr` |
+
+⚠️ **`features/poc` est la branche d'intégration du monorepo**, pas `develop`.
+C'est d'elle qu'on part pour créer une branche de travail, et c'est elle que
+ciblent les PR. Les mentions de `develop` et `main` qui figuraient ici décrivaient
+un modèle qui n'a pas été retenu — elles ont fait perdre du temps au moins une
+fois. Ce qui reste à documenter : vers quoi `features/poc` est promue pour arriver
+en production, et s'il existe un environnement de préproduction.
 
 Pipeline CI/CD : aligné avec `nextjs-formulaire-hp` (voir `.github/workflows/`).
 
@@ -767,7 +774,7 @@ Dockerfile : multi-stage Alpine, output standalone (cf. §6).
 ### 16.1 Règles d'or
 
 1. **Une branche = un dev = un scope.** Jamais 2 personnes sur la même branche.
-2. **PR obligatoire** pour merge sur `develop`. Reviewer = l'autre dev.
+2. **PR obligatoire** pour merge sur `features/poc`. Reviewer = l'autre dev.
 3. **Découpage par responsabilité, pas par fichier.** Voir tableau §16.3.
 4. **Standup async quotidien** : ce qui a été fait / ce qui sera fait / fichiers à risque.
 5. **Avant de toucher un fichier partagé** (BlockRenderer, types/, design tokens) : pinger l'autre.
@@ -776,12 +783,24 @@ Dockerfile : multi-stage Alpine, output standalone (cf. §6).
 ### 16.2 Workflow git
 
 ```
-main                                ← prod
-develop                             ← intégration continue (PRs mergent ici)
-  features/template-conseils-service  ← scaffold initial (Erick, PR ouverte)
-  features/conseils-fondations        (Erick — Lot A : Header/Footer/Sidebar/RichText/H2/Hero/InlineCTA/ProsCons/FAQ/AuthorBlock/PriceTable)
-  features/conseils-riches            (Partenaire — Lot B : TypeSection/QuoteFormBlock/Brochure/Crossell/Suppliers/RulesTable/HeroSuppliersCarousel/ManufacturerCard/NextStepCTA/DownloadDossier/CitedProducts/GoFurther)
+features/poc                        ← branche d'INTÉGRATION du monorepo (les PR mergent ici)
+  features/hub-projet                 (Erick — template HUB « projet »)
+  features/template-conseils-service  ← scaffold initial conseils
+  features/conseils-fondations        (Erick — Lot A, cf. §16.3)
+  features/conseils-riches            (Partenaire — Lot B, cf. §16.3)
 ```
+
+**Règle de travail** : partir de `features/poc`, et la merger dans sa branche
+**avant chaque push** — le monorepo héberge plusieurs services, les autres équipes
+y poussent en parallèle.
+
+```bash
+git checkout features/poc && git pull origin features/poc
+git checkout features/<sujet> && git merge features/poc
+```
+
+Un merge de `features/poc` dans sa branche est donc NORMAL et attendu : le diff de
+la PR contre `features/poc` ne contient que le travail de la branche.
 
 ### 16.3 Découpage du travail (post-audit Lovable 2026-05-22)
 
@@ -979,6 +998,7 @@ npx shadcn@latest add <component>
 | **2026-07-28** | **Données HUB statiques (`data/hub/`), pas d'API pour le contenu** | Les projets HUB n'existent pas en base SQL. Pages prérendues au build |
 | **2026-07-29** | **`revalidate = 86400` au lieu de `force-static`** | Les rubriques du méga-menu sont lues en direct depuis `mega-menu.php` (même source que www.hellopro.fr). `force-static` force le cache des `fetch` et annule la revalidation : le menu aurait été gelé au build |
 | **2026-07-29** | **Aucune dimension d'image dans le modèle** (`HubImage` = `{src, alt}`) | Toutes les images sont rendues en `fill` dans une boîte de taille imposée. Des `width`/`height` saisis à la main ont produit trois ratios faux, invisibles au typecheck comme au build |
+| **2026-07-29** | **Correction doc : la branche d'intégration est `features/poc`** | §15 et §16.2 décrivaient `develop`/`main`, un modèle non retenu. La doc périmée a provoqué une fausse alerte sur un merge parfaitement légitime |
 | **2026-07-28** | **Modèle HubPage à slots nommés, pas de BlockRenderer** | Les 3 pages partagent un template figé ; seul le contenu varie. Une liste de blocs ordonnée n'apporterait rien et rendrait les fichiers de contenu illisibles |
 | **2026-07-28** | **Icônes par nom (`lib/hub/icons.ts`), images par chemin string** | Garde `data/hub/*.ts` éditable sans connaître React. Même approche que `lib/categoryIcons.tsx` |
 | **2026-07-28** | **`GtmFooterScripts` reçoit `pageTemplate?` (défaut `'conseils'`)** | Isole les pages HUB des conseils dans GA4. Changement additif : aucun appelant existant impacté |
