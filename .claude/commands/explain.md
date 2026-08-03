@@ -1,3 +1,8 @@
+---
+description: Explique un fichier ou un bloc de code précis, en conversation, sans rien modifier
+argument-hint: <fichier ou bloc>
+allowed-tools: Read, Grep, Glob
+---
 # /explain — Code Explanation
 
 Explain a **single file or code block** the user references. Use `/understand` instead for multi-file content or broad codebase comprehension.
