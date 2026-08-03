@@ -62,16 +62,16 @@ WHITELIST = [
 
 # Level 2: Critical path protection — block
 CRITICAL_PATHS = [
-    r'\b(rm|mv)\s+[^;|&]*\.claude/',                      # .claude/ directory
-    r'\b(rm|mv)\s+[^;|&]*\.git/',                         # .git directory
-    r'\b(rm|mv)\s+[^;|&]*\.env($|\s)',                    # .env files
-    r'\b(rm|mv)\s+[^;|&]*docker-compose\.yml',            # compose file
-    r'\b(rm|mv)\s+[^;|&]*Cargo\.toml',                    # Rust manifest
-    r'\b(rm|mv)\s+[^;|&]*requirements\.txt',              # Python deps
-    r'\b(rm|mv)\s+[^;|&]*package\.json',                  # Node.js manifest
-    r'\b(rm|mv)\s+[^;|&]*package-lock\.json',             # Node.js lockfile
-    r'\b(rm|mv)\s+[^;|&]*protos/',                        # Proto definitions
-    r'\b(rm|mv)\s+[^;|&]*libs/common-utils/',             # Shared Python lib
+    r'\b(rm|mv|rmdir|del|Remove-Item|Move-Item)\s+[^;|&]*\.claude/',                      # .claude/ directory
+    r'\b(rm|mv|rmdir|del|Remove-Item|Move-Item)\s+[^;|&]*\.git/',                         # .git directory
+    r'\b(rm|mv|rmdir|del|Remove-Item|Move-Item)\s+[^;|&]*\.env($|\s)',                    # .env files
+    r'\b(rm|mv|rmdir|del|Remove-Item|Move-Item)\s+[^;|&]*docker-compose\.yml',            # compose file
+    r'\b(rm|mv|rmdir|del|Remove-Item|Move-Item)\s+[^;|&]*Cargo\.toml',                    # Rust manifest
+    r'\b(rm|mv|rmdir|del|Remove-Item|Move-Item)\s+[^;|&]*requirements\.txt',              # Python deps
+    r'\b(rm|mv|rmdir|del|Remove-Item|Move-Item)\s+[^;|&]*package\.json',                  # Node.js manifest
+    r'\b(rm|mv|rmdir|del|Remove-Item|Move-Item)\s+[^;|&]*package-lock\.json',             # Node.js lockfile
+    r'\b(rm|mv|rmdir|del|Remove-Item|Move-Item)\s+[^;|&]*protos/',                        # Proto definitions
+    r'\b(rm|mv|rmdir|del|Remove-Item|Move-Item)\s+[^;|&]*libs/common-utils/',             # Shared Python lib
 ]
 
 # Level 3: Suspicious — warn only

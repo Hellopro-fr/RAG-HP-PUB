@@ -58,20 +58,33 @@ esac
 # infra by design), we skip paths anchored on common folder names used in
 # this DevHellopro workspace layout.
 #
-# Patterns are case-sensitive substring globs, and must name the SIBLING repos —
-# never a shared parent folder.
+# A repo's gate governs THAT repo only.
 #
-# TRAP, fixed 2026-08-03: this list used to carry `*Hellopro*`, meant to cover
-# `Hellopro-fr/`. But this clone lives under `D:/DevHellopro/Workspaces/...`, so
-# every absolute path matched it — and Write/Edit always pass absolute paths.
-# The hook was therefore inert on its own repo since that pattern was added,
-# while still looking active. Verified: same file, relative path -> exit 2,
-# absolute path -> exit 0.
+# When a session opened on another repo adds this one with /permissions, this
+# hook still fires on our files — CLAUDE_PROJECT_DIR stays bound to the session's
+# root repo. Symmetrically, our gate would fire on THEIR files. Each repo has its
+# own test policy; do not impose ours. This replaces the hand-maintained sibling
+# list (`*Marketplace*`, `*meps-app*`), which went stale at every new neighbour.
 #
-# If your clone uses different folder names, add a pattern for the sibling repo
-# itself (`*/my-other-repo/*`), not for the directory that contains them all.
+# TRAP this fixes for good, found 2026-08-03: the list used to carry `*Hellopro*`
+# to cover `Hellopro-fr/`. But this clone lives under `D:/DevHellopro/...`, so
+# EVERY absolute path matched — and Write/Edit always pass absolute paths. The
+# hook had been inert on its own repo ever since, while still looking active.
+#
+# Both sides are lower-cased and slash-normalised: Windows sends backslashes and
+# either drive case.
+if [ -n "$CLAUDE_PROJECT_DIR" ]; then
+    PROJ_N=$(echo "$CLAUDE_PROJECT_DIR" | tr '\\' '/' | tr '[:upper:]' '[:lower:]')
+    FILE_N=$(echo "$FILE_PATH" | tr '\\' '/' | tr '[:upper:]' '[:lower:]')
+    case "$FILE_N" in
+        "$PROJ_N"/*) ;;
+        *) exit 0 ;;
+    esac
+fi
+
+# Skip known non-testable paths inside this repo
 case "$FILE_PATH" in
-    *migrations*|*schemas*|*.claude*|*protos/*|*docs/*|*hooks/*|*Marketplace*|*meps-app*) exit 0 ;;
+    *migrations*|*schemas*|*.claude*|*protos/*|*docs/*|*hooks/*) exit 0 ;;
 esac
 
 # Search for a corresponding test file

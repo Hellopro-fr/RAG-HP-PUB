@@ -91,6 +91,12 @@ CASES = [
     ("docker compose -f docker-compose.yml config", "allow"),
     # --- critical paths of THIS repo ---
     ("rm .claude/rules/security.md", "critical_path"),
+    # PowerShell is the primary shell here: its verbs must be covered too.
+    # Found 2026-08-03 while purging a plugin cache — bash `rm` was refused,
+    # `Remove-Item` on the same path went straight through.
+    ("Remove-Item -Recurse -Force .claude/hooks", "critical_path"),
+    ("Move-Item protos/catalog.proto ailleurs.proto", "critical_path"),
+    ("Remove-Item libs/common-utils/src/foo.py", "critical_path"),
     # prose containing "form"/"confirm"/"platform" must not trip the rule:
     # without a word boundary, the "rm" inside those words matched
     ("echo 'the most common form -- see .claude/settings.json'", "allow"),

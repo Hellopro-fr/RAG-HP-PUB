@@ -7,6 +7,7 @@ its own repo while it still looked active. Any change to the skip list must keep
 
 Run: python test_tdd_gate.py   -> PASS/FAIL per case, exit 1 on any failure.
 """
+import atexit
 import json
 import os
 import shutil
@@ -51,7 +52,11 @@ def run(file_path, strict=False):
     return proc.returncode, proc.stdout
 
 
-tmp = tempfile.mkdtemp(prefix="tdd_gate_")
+# Fixtures must live INSIDE the repo: the gate now exits early on anything
+# outside CLAUDE_PROJECT_DIR, so a fixture in the system temp dir would be
+# skipped and the test would prove nothing.
+tmp = tempfile.mkdtemp(prefix="tdd_gate_", dir=REPO)
+atexit.register(shutil.rmtree, tmp, True)
 covered = os.path.join(tmp, "facetCap.ts")
 open(covered, "w").close()
 open(os.path.join(tmp, "facetCap.test.ts"), "w").close()
@@ -67,9 +72,11 @@ CASES = [
     # a co-located test satisfies the gate in both modes
     (covered, True, ALLOW, False),
     (covered, False, ALLOW, False),
-    # sibling repos keep their own conventions
+    # a sibling repo keeps its own policy: outside CLAUDE_PROJECT_DIR, we abstain
     (os.path.join(REPO.replace("Workspaces\\RAG-HP-PUB", "Marketplace"),
                   "BO", "fonctions", "fonctions_hellopro.php"), True, ALLOW, False),
+    # ...including a sibling file that WOULD be gated if it were ours
+    (r"D:\DevHellopro\Marketplace\FRONT\fonctions\nouveau.php", True, ALLOW, False),
     # non-production files are never gated
     (os.path.join(REPO, "CLAUDE.md"), True, ALLOW, False),
     (os.path.join(REPO, "docker-compose.yml"), True, ALLOW, False),
