@@ -4,21 +4,24 @@ RAG (Retrieval-Augmented Generation) platform for HelloPro — 90+ microservices
 
 ## Service Map
 
+Motifs, pas comptes : `ls apps-microservices/ | wc -l` donne le nombre du jour (99 au 2026-08-03).
+Les compteurs qui figuraient ici — 17 graph-rag, 7 qdrant, 6 processors, 8 QC, 6 prix — etaient faux sur 5 lignes sur 7 : ils ne sont pas re-derives quand un service est ajoute, et ce fichier est injecte a chaque requete.
+
 | Category | Services | Language/Framework | Local? |
 |---|---|---|---|
 | Graph-RAG Core | `graph-rag-api-recherche-rust-service` | Rust / Actix-web / Neo4j | Remote (GPU) |
-| Graph-RAG Python | `graph-rag-*` (17 services) | Python / FastAPI / gRPC | Remote |
-| Qdrant Databases | `*-database-qdrant-service` (7) | Python / FastAPI / Qdrant | Remote |
-| Qdrant Processors | `*-processor-service` (6) | Python / FastAPI / RabbitMQ | Remote |
-| API Services | `api-*`, `content-extractor-api-service` (17) | Python / FastAPI | Remote |
-| QC Services | `QC-*` (8 services) | Python / FastAPI | Remote |
-| Prix Services | `prix-*` (6 services) | Python / FastAPI | Remote |
+| Graph-RAG Python | `graph-rag-*` | Python / FastAPI / gRPC | Remote |
+| Qdrant Databases | `*-database-qdrant-service` | Python / FastAPI / Qdrant | Remote |
+| Qdrant Processors | `*-processor-service` | Python / FastAPI / RabbitMQ | Remote |
+| API Services | `api-*`, `content-extractor-api-service` | Python / FastAPI | Remote |
+| QC Services | `QC-*` | Python / FastAPI | Remote |
+| Prix Services | `prix-*` | Python / FastAPI | Remote |
 | ML/LLM Services | `llm-service`, `embedding-*`, `reranking-*` | Python / FastAPI / Triton | Remote (GPU) |
 | Frontends | `api-chatbot-html-service`, `nextjs-formulaire-hp`, etc. | Next.js / React / Vite | Local OK |
 | MCP Template Runner | `mcp-google-templates-runner` | Python / FastAPI / asyncio | Local OK |
 | MCP Zoho Proxy | `mcp-zoho-service` | Go / net/http | Remote |
 | Crawlers | `crawler-service`, `crawler-monitor-*` | Node.js / Crawlee / Express | Local OK |
-| Image Services | `image-*` (3 services) | Python / FastAPI | Remote |
+| Image Services | `image-*` | Python / FastAPI | Remote |
 | Infrastructure | `tools/`, `model-optimizer/`, `protos/` | Python / Protobuf | Local (tools) |
 | Libraries | `libs/common-utils`, `libs/rust-common-utils` | Python / Rust | Local |
 
@@ -86,6 +89,7 @@ Most Python/Rust microservices run on a remote server with GPU and network acces
 ## Per-Service Instructions
 
 **Avant de modifier un fichier sous `apps-microservices/<service>/` ou `libs/<lib>/`, lis d'abord le `CLAUDE.md` de ce service ou de cette lib.**
+**Et s'il contredit ce que tu lis dans le code, corrige-le dans le meme commit.** Mesure du 2026-08-03 : sur 98 CLAUDE.md de service, 39 ont plus de 30 jours de retard sur le dernier commit de leur propre service, 10 plus de 120 jours (tous du lot initial du 2026-03-25, jamais retouches). Un rafraichissement de masse en reproduirait 39 qui repourriraient ensemble : la correction se fait a la touche, par celui qui constate l'ecart.
 Ils ne sont PAS importes ici : un `@import` avec glob ne s'expanse pas — verifie le 2026-08-03 par sonde, un marqueur present uniquement dans `apps-microservices/*/CLAUDE.md` n'etait pas visible du modele, alors que les imports litteraux ci-dessous l'etaient. Et les importer tous couterait 8 599 lignes a chaque requete pour 101 fichiers dont un seul sert a la fois.
 
 @tools/CLAUDE.md
@@ -94,7 +98,8 @@ Ils ne sont PAS importes ici : un `@import` avec glob ne s'expanse pas — verif
 
 ## graphify
 
-This project has a **unified graphify knowledge graph** at `graphify-out/` covering libs + protos + tools + model-optimizer + docs + any merged-in services (crawler-service today; more added via `/graphify <service> --update`). ~8 850 nodes, ~19 600 edges (re-derived 2026-08-03 from `graphify-out/graph.json` — re-measure before quoting, it grows on every rebuild), with explicit cross-service edges (e.g. `crawler_capacity_counter --uses--> cache_service.py`).
+This project has a **unified graphify knowledge graph** at `graphify-out/` covering libs + tools + model-optimizer + docs + the services merged in so far — **3 of the 99** at 2026-08-03: `crawler-service` (2421 nodes), `api-detection-langue-fr` (871), `graph-rag-api-recherche-rust-service` (168). More are added one at a time via `/graphify <service> --update`.
+Before widening much: the observed ratio is ~13.5 nodes per source file at ~1.5 KB per node, and 2402 of the 2659 source files are still outside the graph — full coverage would land around 35 000 nodes and ~53 MB **per revision**, against 14 MB today. Cost in git is currently a non-issue (all of `graphify-out/` packs to 10.3 MB, 6.6% of the repo, because successive revisions delta extremely well); the thing to re-check after each widening is that delta efficiency, not the raw size. Note also that `graph.html` was already retired at graphify's 5000-node render ceiling — at 8856 nodes you are past it, and a full sweep goes 4x further. ~8 850 nodes, ~19 600 edges (re-derived 2026-08-03 from `graphify-out/graph.json` — re-measure before quoting, it grows on every rebuild), with explicit cross-service edges (e.g. `crawler_capacity_counter --uses--> cache_service.py`).
 
 Rules:
 - Before answering architecture or codebase questions, read `graphify-out/GRAPH_REPORT.md` for god nodes, community structure, and suggested questions.
