@@ -49,8 +49,8 @@ Claude Code charge automatiquement plusieurs couches de configuration au demarra
 Le projet RAG-HP-PUB dispose de :
 - **2 agents** : `doc-writer`, `test-writer`
 - **13 commandes** : `/commit-msg`, `/explain`, `/understand`, `/new-feature-claude-md`, `/new-service-claude-md`, `/update-claude-md`, `/pre-push`, `/investigate`, `/audit-feature`, `/architecture-review`, `/dependency-mapper`, `/secrets-scanner`, `/test-coverage`
-- **14 fichiers de regles** : `code-modification.md`, `commit-messages.md`, `security.md`, `language.md`, `impact-awareness.md`, `docker-security.md`, `config-freshness.md`, `formatting.md`, `refactoring.md`, `stack-detection.md`, `critical-thinking.md`, `auto-simplify.md`, `auto-documentation.md`, `frontend-design-guidelines.md`
-- **4 skills** : `/fastapi-service-scaffold`, `/rabbitmq-consumer-scaffold`, `/proto-sync`, et les skills `superpowers-extended-cc`
+- **8 fichiers de regles** : `code-modification.md`, `critical-thinking.md`, `docker-security.md`, `formatting.md`, `impact-awareness.md`, `refactoring.md`, `security.md`, `stack-detection.md`
+- **5 skills** : `/fastapi-service-scaffold`, `/rabbitmq-consumer-scaffold`, `/proto-sync`, `docker-expert`, `document-mechanism`
 - **6 hooks** : `secret-scanner`, `dangerous-command-blocker`, `conventional-commits`, `tdd-gate`, `auto-review-gate`, `scope-guard`
 - **Un systeme de CLAUDE.md** par service pour donner le contexte local a Claude
 
@@ -141,7 +141,7 @@ Lancez Claude Code et posez la question :
 Quels agents, commandes et regles as-tu charges pour ce projet ?
 ```
 
-Claude doit repondre avec la liste de nos 2 agents, 13 commandes, 14 fichiers de regles et 4 skills. Si un element manque, verifiez que le fichier existe dans `.claude/` et que sa syntaxe YAML front matter est correcte.
+Claude doit repondre avec la liste de nos 2 agents, 13 commandes, 8 fichiers de regles et 5 skills. Si un element manque, verifiez que le fichier existe dans `.claude/` et que sa syntaxe YAML front matter est correcte.
 
 ---
 
@@ -399,7 +399,7 @@ Les agents sont des sous-instances de Claude specialisees pour une tache. Ils ut
 
 ---
 
-## 5. Les regles (.claude/rules/) — 14 regles actives
+## 5. Les regles (.claude/rules/) — 8 regles actives
 
 ### 5.1 `code-modification.md` -- Protocole de modification de code
 
@@ -415,19 +415,7 @@ Chaque bloc de code est precede du chemin complet du fichier. Pour les modificat
 
 > **Chemin :** `.claude/rules/code-modification.md`
 
-### 5.2 `commit-messages.md` -- Protocole de messages de commit
-
-Impose le format **Conventional Commits** bilingue (EN/FR) :
-
-- Generation automatique apres toute modification de fichier
-- Generation manuelle via `/commit-msg`
-- Types : `feat:`, `fix:`, `refactor:`, `docs:`, `chore:`, `test:`
-- Scope limite aux changements de la reponse en cours
-- Ligne de sujet < 72 caracteres
-
-> **Chemin :** `.claude/rules/commit-messages.md`
-
-### 5.3 `security.md` -- Regles de securite
+### 5.2 `security.md` -- Regles de securite
 
 Impose les bonnes pratiques de securite pour tout le code du projet :
 
@@ -439,19 +427,7 @@ Impose les bonnes pratiques de securite pour tout le code du projet :
 
 > **Chemin :** `.claude/rules/security.md`
 
-### 5.4 `language.md` -- Regles de langue
-
-Definit le comportement linguistique de Claude Code :
-
-1. **Langue de reponse** -- Claude repond dans la meme langue que l'utilisateur (francais si l'utilisateur ecrit en francais, anglais si en anglais)
-2. **Identifiants de code** -- Toujours en anglais, quelle que soit la langue de conversation
-3. **Commentaires de code** -- Suivent la langue de conversation (commentaires en francais pour les utilisateurs francophones)
-4. **Messages de commit** -- Toujours generes dans les DEUX langues (EN + FR)
-5. **Fichiers CLAUDE.md** -- Rediges en anglais pour une meilleure adherence aux instructions
-
-> **Chemin :** `.claude/rules/language.md`
-
-### 5.5 `impact-awareness.md` -- Analyse des compromis et du rayon d'impact
+### 5.3 `impact-awareness.md` -- Analyse des compromis et du rayon d'impact
 
 Impose l'analyse des compromis AVANT toute modification de code :
 
@@ -461,7 +437,7 @@ Impose l'analyse des compromis AVANT toute modification de code :
 
 > **Chemin :** `.claude/rules/impact-awareness.md`
 
-### 5.6 `docker-security.md` -- Regles de securite Docker
+### 5.4 `docker-security.md` -- Regles de securite Docker
 
 Impose les bonnes pratiques Docker pour tous les Dockerfile et docker-compose.yml :
 
@@ -472,17 +448,7 @@ Impose les bonnes pratiques Docker pour tous les Dockerfile et docker-compose.ym
 
 > **Chemin :** `.claude/rules/docker-security.md`
 
-### 5.7 `config-freshness.md` -- Fraicheur de la configuration
-
-Assure que Claude Code travaille toujours avec la derniere version de la configuration `.claude/`, meme en milieu de conversation :
-
-1. Relire les fichiers agent/commande avant de les invoquer
-2. Apres creation ou modification d'un fichier `.claude/`, le traiter comme immediatement actif
-3. En cas de conflit entre une version en contexte et le fichier sur disque, le fichier sur disque gagne
-
-> **Chemin :** `.claude/rules/config-freshness.md`
-
-### 5.8 `formatting.md` -- Conventions de formatage du code
+### 5.5 `formatting.md` -- Conventions de formatage du code
 
 Aucun formateur projet n'est impose pour le moment. Cette regle definit les conventions que Claude doit suivre :
 
@@ -493,7 +459,7 @@ Aucun formateur projet n'est impose pour le moment. Cette regle definit les conv
 
 > **Chemin :** `.claude/rules/formatting.md`
 
-### 5.9 `refactoring.md` -- Regles de refactoring
+### 5.6 `refactoring.md` -- Regles de refactoring
 
 Gouverne quand et comment refactorer en toute securite :
 
@@ -503,34 +469,6 @@ Gouverne quand et comment refactorer en toute securite :
 4. **Cibles connues** : centralisation du logging (75 services), duplication de config (45 services), standardisation de structure (15 services)
 
 > **Chemin :** `.claude/rules/refactoring.md`
-
-### 5.10 `auto-simplify.md`
-
-**Objectif :** Declenche automatiquement un pass de simplification apres chaque implementation.
-
-Apres chaque ecriture ou modification de code, Claude revoit les changements pour reduire la complexite inutile, le code redondant, ameliorer la clarte des noms, eliminer les sur-abstractions et les commentaires evidents. Cela se fait automatiquement — pas besoin de demander.
-
-**Contrainte cle :** Ne change jamais le comportement — ameliore seulement la facon dont le code est ecrit. Prefere la clarte a la concision.
-
-> **Chemin :** `.claude/rules/auto-simplify.md`
-
-### 5.11 `auto-documentation.md`
-
-**Objectif :** Recupere automatiquement la documentation a jour des librairies externes.
-
-Quand vous implementez du code utilisant FastAPI, Pydantic, Crawlee, Milvus, RabbitMQ ou d'autres librairies externes, Claude utilise le plugin context7 pour recuperer la documentation courante avant d'ecrire le code. Se declenche aussi pendant le brainstorming lors des choix techniques.
-
-**Exceptions :** Code interne (utiliser la recherche dans le codebase), stdlib Python, librairies deja verifiees dans la session.
-
-> **Chemin :** `.claude/rules/auto-documentation.md`
-
-### 5.12 `frontend-design-guidelines.md`
-
-**Objectif :** Principes de design appliques lors de la construction de composants UI ou d'applications web.
-
-Guide Claude vers un design distinctif et intentionnel plutot que vers une esthetique IA generique. Couvre la typographie, les couleurs, les animations, la mise en page et les details. Principe cle : « Le maximalisme audacieux et le minimalisme raffine fonctionnent tous les deux — la cle est l'intentionnalite, pas l'intensite. »
-
-> **Chemin :** `.claude/rules/frontend-design-guidelines.md`
 
 ### Comment les regles sont chargees
 
@@ -994,7 +932,7 @@ Les hooks sont des scripts automatises qui s'executent sur des evenements specif
 
 ### Plugin Superpowers
 
-Le projet a le plugin `superpowers` installe au niveau projet. Il fournit 14 skills qui imposent un workflow de developpement structure : brainstorming avant le code, redaction de plans, TDD, orchestration de sous-agents, et verification avant toute declaration de completion.
+Le plugin actif est `superpowers-extended-cc` (portee utilisateur). Il fournit un ensemble de skills qui imposent un workflow de developpement structure : brainstorming avant le code, redaction de plans, TDD, orchestration de sous-agents, et verification avant toute declaration de completion.
 
 **Quand utiliser superpowers vs. les commandes du projet :**
 
@@ -1057,7 +995,7 @@ Suivez ces etapes dans l'ordre lors de votre arrivee sur le projet :
 - [ ] **2.** Cloner le repo : `git clone git@github.com:<org>/RAG-HP-PUB.git`
 - [ ] **3.** Creer votre fichier `~/.claude/CLAUDE.md` personnel (voir section 2)
 - [ ] **4.** Creer votre fichier `~/.claude/primer.md` initial (voir section 2)
-- [ ] **5.** Lancer `claude` depuis la racine du repo et verifier le chargement : `Quels agents, commandes et regles as-tu charges ?` (attendu : 2 agents, 13 commandes, 14 regles, 4 skills)
+- [ ] **5.** Lancer `claude` depuis la racine du repo et verifier le chargement : `Quels agents, commandes et regles as-tu charges ?` (attendu : 2 agents, 13 commandes, 8 regles, 5 skills)
 - [ ] **6.** Lire le CLAUDE.md racine du projet pour comprendre l'architecture globale
 - [ ] **7.** Identifier les services sur lesquels vous allez travailler et lire leurs CLAUDE.md respectifs : `cat apps-microservices/<service>/CLAUDE.md`
 - [ ] **8.** Faire un premier exercice avec `/explain` sur un fichier du service assigne
@@ -1101,19 +1039,13 @@ Suivez ces etapes dans l'ordre lors de votre arrivee sur le projet :
 | Fichier | Chemin | Effet |
 |---------|--------|-------|
 | `code-modification.md` | `.claude/rules/` | Impose le protocole de patch minimal |
-| `commit-messages.md` | `.claude/rules/` | Impose les Conventional Commits bilingues |
 | `security.md` | `.claude/rules/` | Interdit les secrets/URLs en dur, impose Pydantic BaseSettings, CORS interne vs public |
-| `language.md` | `.claude/rules/` | Reponse dans la langue de l'utilisateur, commits bilingues |
 | `impact-awareness.md` | `.claude/rules/` | Analyse des compromis, vision globale, rayon d'impact sur composants partages |
 | `docker-security.md` | `.claude/rules/` | Images epinglees, pas de root, healthchecks, pas de secrets dans ENV |
-| `config-freshness.md` | `.claude/rules/` | Relire la config `.claude/` en cours de session avant utilisation |
 | `formatting.md` | `.claude/rules/` | Style par stack — reference stack-detection.md, avec fallback pour stacks inconnus |
 | `refactoring.md` | `.claude/rules/` | Quand/comment refactorer, regles de scope, cibles de duplication connues |
 | `stack-detection.md` | `.claude/rules/` | Source unique pour la detection de stack. Toutes les regles dependantes du stack referencent ce fichier. |
 | `critical-thinking.md` | `.claude/rules/` | Anti-sycophancy, detection des angles morts, evidence vs opinion, defense ou concession |
-| `auto-simplify.md` | `.claude/rules/` | Pass de simplification automatique apres chaque implementation |
-| `auto-documentation.md` | `.claude/rules/` | Recupere automatiquement la doc a jour des librairies externes via context7 |
-| `frontend-design-guidelines.md` | `.claude/rules/` | Principes de design intentionnel pour les composants UI |
 
 ### Raccourcis et seuils
 
