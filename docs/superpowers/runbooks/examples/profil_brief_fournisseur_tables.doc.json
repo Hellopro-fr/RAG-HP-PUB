@@ -1,0 +1,96 @@
+{
+  "fournisseur_profil_sp": {
+    "database_id": 1,
+    "description": "Cache du profil d'entreprise d'un fournisseur, généré par LLM sur son site crawlé : 1 ligne par domaine. Étape 2 du pipeline de profilage fournisseur (script_profil_fournisseur.php) : un appel RAG (Milvus siteweb_2, prompt 107, deepseek temp 0.2) renvoie un JSON de profil, stocké verbatim dans json_source_sp et aplati dans les colonnes texte. Cache read-through : la présence d'une ligne court-circuite l'appel LLM ; seul reset=1 supprime (backup CSV avant). Alimente le brief injecté dans les prompts de matching (108/109). Stockée dans ANNUAIRE_BO (edgb2b), PAS dans HELLOPRO_IA. Suffixe colonnes _sp.",
+    "primary_key": "id_sp",
+    "default_order_by": "date_generation_sp DESC",
+    "rows": null,
+    "columns": {
+      "id_sp": { "type": "int", "desc": "Identifiant unique de la ligne (PK, auto-increment). Surrogate, jamais référencé ailleurs." },
+      "domaine_sp": { "type": "varchar(255)", "desc": "Domaine du fournisseur (host nu, https:// et www. retirés). CLÉ LOGIQUE : 1 ligne par domaine (681/681 distincts), mais NON contraint (pas d'index sur cette colonne, INSERT sans ON DUPLICATE) → doublons silencieux possibles. FK souple vers domaine_scrapping_produit_ia.domaine_dspi (HELLOPRO_IA) / societe_url. NOT NULL." },
+      "type_entreprise_sp": { "type": "varchar(255)", "desc": "Type d'entreprise, TEXTE LIBRE du LLM (pas un enum) : vocabulaire de base Fabricant / Distributeur / Prestataire, mais 23 variantes non normalisées observées (combinaisons avec '/', ' et ', ', ' + 2 formulations libres). Top : Fabricant 239 · Distributeur 112 · Distributeur (revendeur) 88 · 'Non renseigné' 73 · Prestataire 56. 'Installateur' n'est PAS un type de 1er rang (1 seule occurrence composée). NULLable." },
+      "lieux_fabrication_sp": { "type": "text", "desc": "Lieux de fabrication (scalaire LLM brut, aplati depuis json_source_sp). NULLable." },
+      "marques_distribuees_sp": { "type": "text", "desc": "Marques distribuées, champ LLM re-encodé en JSON (json_encode) : peut être un tableau JSON OU une chaîne JSON entre guillemets (ex. \"Non renseigné\") selon la forme renvoyée par le LLM — un consommateur doit gérer les deux. NULLable." },
+      "chiffres_cles_sp": { "type": "text", "desc": "Chiffres clés, champ LLM re-encodé en JSON — en pratique un objet (ex. numéro RC, office RC). NULLable." },
+      "cibles_commerciales_sp": { "type": "text", "desc": "Cibles commerciales, champ LLM re-encodé en JSON (généralement un tableau). NULLable." },
+      "positionnement_marche_sp": { "type": "text", "desc": "Positionnement marché (scalaire LLM brut). NULLable." },
+      "resume_activite_100_mots_sp": { "type": "text", "desc": "Résumé d'activité en ~100 mots (scalaire LLM brut). NULLable." },
+      "sav_maintenance_sp": { "type": "text", "desc": "SAV et maintenance proposés (scalaire LLM brut). NULLable." },
+      "politique_livraison_sp": { "type": "text", "desc": "Politique de livraison (scalaire LLM brut). NULLable." },
+      "normes_certifications_sp": { "type": "text", "desc": "Normes et certifications, champ LLM re-encodé en JSON. NULLable." },
+      "installation_produits_sp": { "type": "text", "desc": "Installation des produits (scalaire LLM brut). NULLable." },
+      "mode_distribution_sp": { "type": "text", "desc": "Mode de distribution (scalaire LLM brut). NULLable." },
+      "clients_reference_sp": { "type": "text", "desc": "Clients de référence (scalaire LLM brut). NULLable." },
+      "engagements_rse_sp": { "type": "text", "desc": "Engagements RSE (scalaire LLM brut). NULLable." },
+      "projets_realises_sp": { "type": "text", "desc": "Projets réalisés (scalaire LLM brut). NULLable." },
+      "json_source_sp": { "type": "json", "desc": "Réponse JSON du LLM, ré-encodée verbatim — LE payload réel et la clé du cache. NOT NULL. PIÈGE : c'est la SEULE colonne relue par le pipeline (verif_profil_base ne sélectionne que celle-ci et rehydrate tout depuis elle) ; les 15 colonnes aplaties ci-dessus sont WRITE-ONLY (inspection humaine/SQL uniquement). Ne contient ni les URLs sources ni les chunks RAG." },
+      "date_generation_sp": { "type": "datetime", "desc": "Date de génération (NOW() à l'insert, jamais mise à jour). Fuseau Europe/Paris. Données du 2025-11-06 au 2026-02-20 — pipeline DORMANT depuis." }
+    },
+    "relations": [
+      { "column": "domaine_sp", "references": "domaine_scrapping_produit_ia.domaine_dspi (HELLOPRO_IA) / fournisseur_classification_ia.domaine_cia", "cardinality": "1:1 par convention", "note": "FK souple cross-base, aucune contrainte, aucun index sur domaine_sp." },
+      { "column": "domaine_sp", "referenced_by": "societe_profil_zone_geo.domaine_sp", "note": "Zones géographiques du même fournisseur (sous-ensemble strict : 14 domaines profilés sans ligne géo)." }
+    ],
+    "notes": "Généré par script_profil_fournisseur.php (BO/script/rag/fournisseur/profil_societe/, wrapper .sh, arg --profil_zone_geo_only ; aucun cron ni UI dans le repo) : RAG search-service sur Milvus siteweb_2 (page_type contact/home/footer/header/faq/Presentation-societe/Savoir_faire/…), prompt 107 lu en base (action_prompt_chatgpt), LLM deepseek temp 0.2, top_k 70, reranker bge-reranker-v2-m3. Aval : profil + zones géo + brief caractéristiques → fichier BRIEF_{domaine}_{categorie}.json → placeholder {brief} des prompts 108 (Q0) et 109 (Qn). Aucun lecteur UI/front/fiche société. Pas de DDL versionné. DB = LINK_MYSQLI_ANNUAIRE_BO. Réserves : historisation de coût id_process 22 étiquetée au mauvais modèle (défaut gpt-4o au lieu de deepseek) ; texte stocké potentiellement en mojibake (UTF-8 lu en latin1) — à vérifier avant tout rendu."
+  },
+  "societe_profil_zone_geo": {
+    "database_id": 1,
+    "description": "Zones géographiques desservies par un fournisseur, extraites par le même appel LLM/RAG que le profil (prompt 105) : 1 ligne par couple (domaine, type, valeur) — multi-valué, ~3,2 lignes par domaine. Le LLM renvoie des codes ISO (pays alpha-2, régions FR-XXX) que PHP traduit en identifiants internes via deux tables de correspondance codées en dur. La présence d'au moins une ligne sert de drapeau de cache. Stockée dans ANNUAIRE_BO (edgb2b). Suffixe colonnes _sp.",
+    "primary_key": "id_sp",
+    "default_order_by": "date_insertion_sp DESC",
+    "rows": null,
+    "columns": {
+      "id_sp": { "type": "int", "desc": "Identifiant unique de la ligne (PK, auto-increment)." },
+      "domaine_sp": { "type": "varchar(255)", "desc": "Domaine du fournisseur (host nu), même clé que fournisseur_profil_sp.domaine_sp. Non indexé. NOT NULL. ~667 domaines distincts." },
+      "type_sp": { "type": "tinyint", "desc": "Discriminant du référentiel, exactement 2 valeurs : 1 = pays d'activité (1897 lignes) · 2 = région française (220 lignes, posé seulement quand l'activité est limitée à certaines régions au lieu de toute la France). NOT NULL. Détermine la table cible de valeur_sp." },
+      "valeur_sp": { "type": "int", "desc": "Identifiant interne de la zone, référentiel POLYMORPHE selon type_sp : type 1 → pays.id_pays (ex. France 625 occurrences, Espagne, Allemagne, Belgique, Italie, Suisse, Royaume-Uni, Luxembourg=343) · type 2 → region.id_region (1=Grand Est, 2=Nouvelle-Aquitaine, 3=Auvergne-Rhône-Alpes, 4=Normandie, 5=Bourgogne-Franche-Comté, 6=Bretagne, 7=Centre-Val de Loire, 8=Corse, 9=Île-de-France, 10=Occitanie, 11=Hauts-de-France, 12=Pays de la Loire, 13=PACA ; les DOM 14-18 ne sont jamais insérés car exprimés en PAYS). NOT NULL. PIÈGES : valeur_sp=0 n'est PAS un 'inconnu' mais un résidu corrompu (10 lignes, bug d'un ancien script sans garde isset) ; 13 lignes de type 1 ont une valeur (465-474) ABSENTE de pays (map étendue au-delà du référentiel) → tout INNER JOIN pays les perd silencieusement." },
+      "date_insertion_sp": { "type": "datetime", "desc": "Date d'insertion (NOW()). Fuseau Europe/Paris. NULLable." }
+    },
+    "relations": [
+      { "column": "valeur_sp", "references": "pays.id_pays (si type_sp=1)", "cardinality": "N:1", "note": "Référentiel pays (ANNUAIRE_BO). 13 valeurs 465-474 dangling (absentes de pays)." },
+      { "column": "valeur_sp", "references": "region.id_region (si type_sp=2)", "cardinality": "N:1", "note": "Régions françaises. Table region hors whitelist MCP : correspondance issue des commentaires de la map code, non vérifiée par jointure live." },
+      { "column": "domaine_sp", "references": "fournisseur_profil_sp.domaine_sp", "cardinality": "N:1", "note": "Même domaine que le profil ; sous-ensemble strict (aucune ligne géo sans profil)." }
+    ],
+    "notes": "Écrit par insert_zone_geo() dans script_profil_fournisseur.php (« LOGIQUE MÉTIER 3 ») : prompt 105, Milvus siteweb_2 (page_type contact/footer/header/home/listing_produit/fiche_produit/Page_local/references_clients/…), requête « installation, distribution, livraison, capacité logistique, périmètre d'intervention », deepseek temp 0.2. Le LLM renvoie pays_activite (ISO alpha-2) et regions_france (ISO 3166-2) ; PHP mappe vers id_pays / id_region et n'insère rien si le code est inconnu (log 'Pays non trouvé en BDD'). Relu et re-transformé en codes ISO pour le brief (prompts 108/109). Pas d'unicité : 80 lignes exactement dupliquées sur (domaine, type, valeur). Aucun lecteur UI/front. Supprimé seulement sur reset=1 (backup CSV). Pas de DDL versionné. DB = LINK_MYSQLI_ANNUAIRE_BO."
+  },
+  "societe_brief_caracteristique": {
+    "database_id": 1,
+    "description": "Cache du « brief caractéristiques produit » par couple (domaine fournisseur, rubrique feuille BO) : 1 ligne = 1 réponse markdown longue générée par LLM décrivant ce que le fournisseur vend réellement dans cette catégorie (7 sections : types vendus, caractéristiques techniques couvertes/absentes, cibles clients, usages, positionnement, arguments différenciateurs, prestations). Étape 4 du pipeline de profilage fournisseur ; sert de clé d'idempotence de la passe catégorie (ligne présente = pas d'appel LLM). Son texte alimente les prompts de matching 108/109. Stockée dans ANNUAIRE_BO (edgb2b). Suffixe colonnes _sbc.",
+    "primary_key": "id_sbc",
+    "default_order_by": "id_sbc DESC",
+    "rows": null,
+    "columns": {
+      "id_sbc": { "type": "bigint", "desc": "Identifiant unique de la ligne (PK, auto-increment). Surrogate technique : jamais lu ni écrit par le code, rien ne le référence (la table de matching se clé sur domaine+rubrique+réponse)." },
+      "domaine_sbc": { "type": "varchar(255)", "desc": "Domaine du fournisseur (host nu). FK souple (sans contrainte) vers fournisseur_classification_ia.domaine_cia (score_cia=1) ou domaine_scrapping_produit_ia.domaine_dspi (HELLOPRO_IA). NOT NULL. ~240 domaines distincts = ceux passant les gates d'éligibilité amont." },
+      "id_rubrique_sbc": { "type": "int", "desc": "FK logique → rubrique.id_rubrique (ANNUAIRE_BO), niveau FEUILLE (le fil d'Ariane exige id_secteur + id_rubrique_niveau_1). Alimenté depuis fournisseur_classification_ia.id_rubrique_cia ou produit_scrapping_ia.id_categorie_psi. NOT NULL. ~1003 rubriques distinctes (celles ayant une ligne questionnaire_llm)." },
+      "caracteristique": { "type": "text", "desc": "Brief markdown FR du LLM, stocké JSON-ENCODÉ : c'est json_encode d'une CHAÎNE, donc la valeur porte des guillemets englobants et des échappements \\n / \\\" — jamais json_decodé en lecture. Une réponse LLM vide donne littéralement la valeur '\"\"' (5 lignes). Structure en 7 sections définie par le prompt 106 (stocké en base, pas dans le repo). NULLable." },
+      "id_caracteristique_sbc": { "type": "int", "desc": "VESTIGIALE (défaut 0) : aucun writer ne renseigne cette colonne (2321/2321 à 0 = défaut MySQL), et le lecteur live filtre en dur id_caracteristique_sbc=0 (« brief général »). Intention abandonnée : variante de brief par caractéristique, où l'id aurait été un index positionnel 1..N dans le fichier JSON de la longue liste de caractéristiques — pas l'id d'une table. Ne pas s'appuyer dessus." }
+    },
+    "relations": [
+      { "column": "id_rubrique_sbc", "references": "rubrique.id_rubrique (ANNUAIRE_BO, feuille)", "cardinality": "N:1", "note": "Rubrique BO ciblée. Libellé via nom_rubrique_francais." },
+      { "column": "domaine_sbc", "references": "fournisseur_classification_ia.domaine_cia / domaine_scrapping_produit_ia.domaine_dspi", "cardinality": "N:1", "note": "FK souple cross-base." },
+      { "column": "domaine_sbc", "referenced_by": "societe_brief_caracteristique_matching.domaine_sbcm", "note": "Verdicts de matching prévus sur le même couple domaine+rubrique (table jamais alimentée)." }
+    ],
+    "notes": "Écrit par script_profil_fournisseur.php (« LOGIQUE MÉTIER 4 », INSERT de 3 colonnes seulement ; jamais d'UPDATE — un rafraîchissement = DELETE + INSERT sur reset=1, backup CSV avant). Génération : prompt 106 (placeholders jeu_de_caracteristique / fil_d_ariane / categorie), LLM gemini-3-pro-preview (thinking_level low, temp 0.1), RAG Milvus siteweb_2 (page_type footer/header/home/landing/listing_produit/fiche_produit/Presentation-societe/Savoir_faire) PLUS produits_3 (source=SITEWEB, id_fournisseur) si le domaine résout vers un fournisseur BO. Aval : fichier BRIEF_{domaine}_{categorie}.json puis placeholder {brief} des prompts 108 (Q0) et 109 (Qn), envoyés à deepseek-chat. Aucun lecteur API/front. Pas de DDL versionné. DB = LINK_MYSQLI_ANNUAIRE_BO. Réserve connue : le chemin cache-miss met le markdown BRUT en mémoire alors que le cache-hit relit la valeur JSON-encodée — le brief envoyé aux prompts diffère donc entre le 1er run et les suivants (échappements parasites)."
+  },
+  "societe_brief_caracteristique_matching": {
+    "database_id": 1,
+    "description": "Verdicts de couverture prévus de l'étape de matching fournisseur (Qn) : 1 ligne = 1 couple (domaine fournisseur, rubrique feuille, réponse de questionnaire couverte) avec le niveau de couverture d'une caractéristique. ATTENTION : table SCHEMA-ONLY, JAMAIS ALIMENTÉE — aucun code du dépôt n'y insère (le seul INSERT existant est commenté dans un prototype et ne pouvait pas s'exécuter) ; le pipeline live écrit les verdicts Qn dans des fichiers couvre_ou_pas_{domaine}_{categorie}.json et ne fait sur cette table que des DELETE, des backups CSV et des COUNT(*) de garde. Stockée dans ANNUAIRE_BO (edgb2b). Suffixe colonnes _sbcm.",
+    "primary_key": "id_societe_brief_caracteristique_matching",
+    "default_order_by": "id_societe_brief_caracteristique_matching DESC",
+    "rows": null,
+    "columns": {
+      "id_societe_brief_caracteristique_matching": { "type": "int", "desc": "Identifiant unique de la ligne (PK, auto-increment). Surrogate, jamais référencé." },
+      "domaine_sbcm": { "type": "varchar(255)", "desc": "Domaine du fournisseur (host nu), même clé que societe_brief_caracteristique.domaine_sbc. NOT NULL. Clé du DELETE de début de branche." },
+      "id_rubrique_sbcm": { "type": "int", "desc": "FK logique → rubrique.id_rubrique (ANNUAIRE_BO, feuille), même rubrique que le brief. NULLable." },
+      "id_reponse_sbcm": { "type": "int", "desc": "FK logique → reponse_questionnaire_llm.id_reponse_questionnaire_llm (ANNUAIRE_BO) : la réponse de la 1ʳᵉ question (Q0) que le LLM a jugée couverte par le fournisseur. NB : ce n'est PAS reponses_question_ia — le questionnaire utilisé ici est le couple questionnaire_llm / reponse_questionnaire_llm. NULLable." },
+      "id_caracteristique_sbcm": { "type": "int", "desc": "Identifiant de caractéristique renvoyé par le LLM dans le contrat JSON Qn (défaut 0). PAS une FK vers caracteristiques_ia ni aucune table : index positionnel 1..N dans le fichier JSON de la longue liste de caractéristiques de la réponse — donc dénué de sens hors de cette version de fichier (point faible probable de l'abandon). NULLable." },
+      "couverture_sbcm": { "type": "tinyint", "desc": "Niveau de couverture, TRI-VALUÉ (pas un booléen), défaut 0 : 0 = aucune information (le LLM a renvoyé vide) · 1 = le fournisseur couvre · 2 = le fournisseur ne couvre pas. Sémantique reconstituée depuis l'INSERT commenté et la règle à 3 issues du prompt Qn. NULLable." }
+    },
+    "relations": [
+      { "column": "domaine_sbcm", "references": "societe_brief_caracteristique.domaine_sbc", "cardinality": "N:1", "note": "Même domaine fournisseur que le brief." },
+      { "column": "id_rubrique_sbcm", "references": "rubrique.id_rubrique (ANNUAIRE_BO, feuille)", "cardinality": "N:1" },
+      { "column": "id_reponse_sbcm", "references": "reponse_questionnaire_llm.id_reponse_questionnaire_llm (ANNUAIRE_BO)", "cardinality": "N:1", "note": "Réponse Q0 couverte. PAS reponses_question_ia." }
+    ],
+    "notes": "TABLE VIDE ET SANS WRITER LIVE — fonctionnalité jamais terminée. Le seul INSERT du dépôt est commenté dans le prototype generate_brief_v2.php et référence des variables jamais affectées (il n'aurait pas pu tourner) ; aucun consommateur des fichiers couvre_ou_pas_*.json n'existe non plus, donc rien ne l'alimente hors bande. Ce qui touche la table en live : DELETE du triplet (domaine, rubrique, réponse) en début de branche, backup/delete sur reset=1, et COUNT(*) de garde. CONSÉQUENCE : le mode --matching_only se gate sur une table définitivement vide (le skip ne se déclenche jamais) et reset=1 produit des backups CSV vides. Incohérence de grain relevée : la boucle commentée itérait sur les valeurs possibles d'une caractéristique mais n'insérait aucun id de valeur — soit une colonne manque au schéma, soit la boucle était fausse. Pas de spec/plan dédié dans docs/superpowers/. Pas de DDL versionné. DB = LINK_MYSQLI_ANNUAIRE_BO."
+  }
+}
