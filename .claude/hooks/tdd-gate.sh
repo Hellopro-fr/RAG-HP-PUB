@@ -1,5 +1,14 @@
 #!/bin/bash
-# PreToolUse hook: block production code edits if no corresponding test file exists.
+# PreToolUse hook: WARN when production code is edited with no corresponding test.
+#
+# Advisory by default — it injects a reminder into the model's context and lets
+# the edit through. Rationale, measured 2026-08-03 on a 60-file sample of real
+# production files: re-arming it as a hard block refused 33% of them. A gate that
+# refuses one edit in three gets disabled within the week (that is exactly what
+# happened in the sibling repo: two successive "Exclusion" commits).
+#
+# To make it blocking once coverage is higher: set TDD_GATE_STRICT=1.
+#
 # Adapted from claude-code-templates/tdd-gate for RAG-HP-PUB.
 
 INPUT=$(cat)
@@ -49,16 +58,20 @@ esac
 # infra by design), we skip paths anchored on common folder names used in
 # this DevHellopro workspace layout.
 #
-# Patterns are case-sensitive substring globs. Adapt to your own clone:
-#   - `*Marketplace*`  matches any path crossing a folder literally named
-#     `Marketplace` (default repo name in this org).
-#   - `*Hellopro*`     matches any path crossing a folder containing the
-#     literal substring `Hellopro` (covers `DevHellopro/`, `Hellopro-fr/`,
-#     and any repo with that brand prefix).
-# If your clone uses different folder names (e.g. `marketplace-hp/`,
-# `~/repos/hp-bo/`), add a pattern here matching your local layout.
+# Patterns are case-sensitive substring globs, and must name the SIBLING repos —
+# never a shared parent folder.
+#
+# TRAP, fixed 2026-08-03: this list used to carry `*Hellopro*`, meant to cover
+# `Hellopro-fr/`. But this clone lives under `D:/DevHellopro/Workspaces/...`, so
+# every absolute path matched it — and Write/Edit always pass absolute paths.
+# The hook was therefore inert on its own repo since that pattern was added,
+# while still looking active. Verified: same file, relative path -> exit 2,
+# absolute path -> exit 0.
+#
+# If your clone uses different folder names, add a pattern for the sibling repo
+# itself (`*/my-other-repo/*`), not for the directory that contains them all.
 case "$FILE_PATH" in
-    *migrations*|*schemas*|*.claude*|*protos/*|*docs/*|*hooks/*|*Marketplace*|*Hellopro*) exit 0 ;;
+    *migrations*|*schemas*|*.claude*|*protos/*|*docs/*|*hooks/*|*Marketplace*|*meps-app*) exit 0 ;;
 esac
 
 # Search for a corresponding test file
@@ -77,17 +90,26 @@ for TEST_DIR in "$DIRNAME" "$DIRNAME/tests" "$DIRNAME/../tests" "$DIRNAME/../tes
     fi
 done
 
-# If not found locally, search project-wide (limited depth)
+# If not found locally, search the SERVICE the file belongs to — not the whole
+# monorepo. A test named foo_test.go in service A must not excuse foo.go in
+# service B.
 if [ "$FOUND" -eq 0 ]; then
-    RESULT=$(find "$CLAUDE_PROJECT_DIR" -maxdepth 6 \( -name "test_${STEM}.*" -o -name "${STEM}_test.*" -o -name "${STEM}.test.*" -o -name "${STEM}.spec.*" \) -not -path "*node_modules*" -not -path "*.venv*" -print -quit 2>/dev/null)
+    SERVICE_ROOT=$(echo "$DIRNAME" | sed -E 's#^(.*/(apps-microservices|libs)/[^/]+)/.*#\1#')
+    [ -d "$SERVICE_ROOT" ] || SERVICE_ROOT="$DIRNAME"
+    RESULT=$(find "$SERVICE_ROOT" -maxdepth 6 \( -name "test_${STEM}.*" -o -name "${STEM}_test.*" -o -name "${STEM}.test.*" -o -name "${STEM}.spec.*" \) -not -path "*node_modules*" -not -path "*.venv*" -print -quit 2>/dev/null)
     if [ -n "$RESULT" ]; then
         FOUND=1
     fi
 fi
 
 if [ "$FOUND" -eq 0 ]; then
-    echo "⚠️ TDD Gate: No test file found for '$BASENAME'. Write a test first, or use @test-writer to generate one." >&2
-    exit 2
+    MSG="TDD Gate: no test found for '$BASENAME'. Conventions: Go -> ${STEM}_test.go beside the file; Python -> tests/test_${STEM}.py; crawler-service -> src/${STEM}.test.ts (node:test); other TS/Vue -> ${STEM}.spec.ts (vitest). The test-writer agent can draft one."
+    if [ -n "$TDD_GATE_STRICT" ]; then
+        echo "⚠️ $MSG" >&2
+        exit 2
+    fi
+    # Advisory: reach the model without refusing the edit.
+    printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"%s"}}\n' "$MSG"
 fi
 
 exit 0
