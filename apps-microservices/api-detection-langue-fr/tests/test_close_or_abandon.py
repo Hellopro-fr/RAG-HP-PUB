@@ -1,6 +1,7 @@
 import asyncio
+import gc
 import pytest
-from app.services.scraper import _close_or_abandon
+from app.services.scraper import _close_or_abandon, _drain_orphan_exception
 
 
 @pytest.mark.asyncio
@@ -33,8 +34,6 @@ async def test_returns_when_coro_completes():
 # asyncio.wait() does NOT retrieve results. Without draining, a teardown that
 # fails (TargetClosedError on an already-dead browser) makes asyncio log
 # "Task exception was never retrieved" — the flood reported in prod.
-
-import gc
 
 
 class _HandlerSpy:
@@ -111,7 +110,7 @@ async def test_abandoned_task_still_warns(caplog):
 
 
 @pytest.mark.asyncio
-async def test_cancelled_task_does_not_raise(caplog):
+async def test_cancelled_task_does_not_raise():
     """A cancelled teardown must not turn into a CancelledError from the
     drain path — t.exception() raises on a cancelled task."""
     async def slow():
@@ -119,7 +118,8 @@ async def test_cancelled_task_does_not_raise(caplog):
 
     t = asyncio.ensure_future(slow())
     t.cancel()
-    # Feed the already-cancelled task through the same drain callback the
-    # abandoned path installs.
-    from app.services.scraper import _drain_orphan_exception
+    # Let the loop actually run the cancellation through so `t` is genuinely
+    # CANCELLED (not just cancel-requested) before feeding it through the same
+    # drain callback the abandoned/caller-cancelled paths install.
+    await asyncio.sleep(0)
     _drain_orphan_exception(t)  # must not raise

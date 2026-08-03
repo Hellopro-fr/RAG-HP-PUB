@@ -5,6 +5,7 @@ import random
 import time
 import uuid
 from dataclasses import dataclass, field
+from functools import partial
 from typing import Optional
 from urllib.parse import urlparse
 
@@ -283,21 +284,20 @@ async def _inject_cookie_consent(context, url: str) -> None:
         pass
 
 
-def _drain_orphan_exception(fut: "asyncio.Future") -> None:
-    """Read an abandoned teardown's exception once it finally completes.
+def _drain_orphan_exception(fut: asyncio.Future, what: str = "") -> None:
+    """Read a teardown task's exception once it completes, whichever path got there.
 
     Without this, asyncio logs "Task exception was never retrieved" when the
-    orphan is garbage-collected — the log flood observed in prod on 2026-08-03.
+    task is garbage-collected — the log flood observed in prod on 2026-08-03.
     A cancelled task must be skipped: `.exception()` re-raises CancelledError.
-    A not-yet-done future must also be skipped: `.exception()` raises
-    InvalidStateError until the future is FINISHED (e.g. `.cancel()` was just
-    requested but the loop hasn't run the cancellation through yet).
+    Attached as a done-callback so it also covers the caller-cancelled path
+    (see `_close_or_abandon`), not just the abandoned-after-timeout one.
     """
-    if not fut.done() or fut.cancelled():
+    if fut.cancelled():
         return
     exc = fut.exception()
     if exc is not None:
-        logger.debug(f"abandoned teardown finished with: {exc!r}")
+        logger.debug(f"teardown failed ({what}): {exc!r}")
 
 
 async def _close_or_abandon(coro, timeout: float, what: str = "") -> None:
@@ -309,19 +309,17 @@ async def _close_or_abandon(coro, timeout: float, what: str = "") -> None:
     OS process is already gone, so it leaks nothing meaningful). This lets the
     caller escape `finally` and release its semaphore slot.
 
-    Either way the exception is DRAINED — asyncio.wait() does not retrieve
-    results, so a teardown that fails fast (TargetClosedError on an already
-    dead browser) would otherwise be reported as never retrieved."""
+    The drain callback is attached BEFORE the await, so all three ways this
+    can end are covered: fast failure (done before timeout, exception read via
+    the callback), abandoned (task keeps running after we stop waiting, callback
+    fires whenever it eventually settles), and caller-cancelled (a CancelledError
+    delivered to us while suspended in asyncio.wait propagates out immediately,
+    but the callback is already attached to `t` and still fires later)."""
     t = asyncio.ensure_future(coro)
+    t.add_done_callback(partial(_drain_orphan_exception, what=what))
     done, _pending = await asyncio.wait({t}, timeout=timeout)
-    if done:
-        if not t.cancelled():
-            exc = t.exception()
-            if exc is not None:
-                logger.debug(f"teardown failed ({what}): {exc!r}")
-        return
-    logger.warning(f"scraper teardown abandoned after {timeout}s: {what}")
-    t.add_done_callback(_drain_orphan_exception)
+    if not done:
+        logger.warning(f"scraper teardown abandoned after {timeout}s: {what}")
 
 
 async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) -> Optional[ScrapeResult]:
