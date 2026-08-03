@@ -44,6 +44,12 @@ future: <Task ... coro=<BrowserContext.close() ...> exception=TargetClosedError(
 
 `redirect_tracker.py` uses `_VARIANT_ELIGIBLE_ERRORS` (`:245-247`) only to `break` out of the retry loop early. After the loop, `:262` calls `_generate_url_variants(url)` with no reference to *why* Phase 1 failed. So a plain navigation timeout — which http/https and www toggling cannot possibly fix — still triggers up to 4 more full browser launches.
 
+**Engine mismatch found while planning — changes the shape of the fix.** `_VARIANT_ELIGIBLE_ERRORS` (`:13-17`) holds only **Chromium** codes (`ERR_NAME_NOT_RESOLVED`, `ERR_CERT_DATE_INVALID`, `ERR_SSL_PROTOCOL_ERROR`), but `CAMOUFOX_ENABLED: bool = True` (`config.py:30`) and `CAMOUFOX` appears **nowhere in `docker-compose.yml`**, so the default holds and the service runs **Camoufox (stealth Firefox)**. Firefox emits Gecko errors (`NS_ERROR_UNKNOWN_HOST`, `SEC_ERROR_*`, `SSL_ERROR_*`) — and `grep` finds zero `NS_ERROR` / `SEC_ERROR` / `net::ERR` tokens anywhere in `app/`.
+
+Two consequences:
+- **The `break` at `:245-247` is already dead code** on the deployed engine. Pre-existing latent bug, recorded below as parked — not introduced here, and not fixed here.
+- **An allowlist gate would inherit that deadness** and skip Phase 2 for *every* Firefox failure, silently deleting URL-variant rescue altogether. The gate must therefore key on what a failure *is*, not on a per-engine error-code allowlist.
+
 Cost of one hopeless domain:
 
 | phase | launches | cost each | subtotal |
@@ -82,32 +88,47 @@ Same defect class as the one fixed in `inflight_dedup.py` this session (`b491766
 
 Three changes, all in `app/services/`. Ordered by value: the first removes the flood's *trigger*, the third removes the flood's *logging*.
 
-### 1. Gate Phase 2 on the failure class — `redirect_tracker.py`
+### 1. Skip Phase 2 for the failure classes variants cannot fix — `redirect_tracker.py`
+
+A **denylist**, not an allowlist, precisely because of the engine mismatch above: this keys on Playwright's own wording, which is identical on Firefox and Chromium, instead of on per-engine error codes.
+
+Next to the existing tuples (`:13-27`):
+
+```python
+# Échecs qu'un changement de variante d'URL ne peut PAS réparer.
+# Basculer http/https ou www/sans-www ne rend pas un site lent plus rapide,
+# et ne remplit pas une page vide. Formulations stables sur les deux moteurs
+# (Camoufox/Firefox comme Chromium) — contrairement à _VARIANT_ELIGIBLE_ERRORS
+# qui ne contient que des codes Chromium et ne matche donc jamais en prod.
+_VARIANT_POINTLESS_ERRORS = (
+    'Timeout',                     # « Timeout 30000ms exceeded » — Playwright, les 2 moteurs
+    'Contenu vide ou trop court',  # posé à :234
+)
+```
 
 Before `variants = _generate_url_variants(url)` (`:262`):
 
 ```python
-    # Les variantes n'existent que pour les mauvaises configurations DNS/SSL
-    # (ERR_NAME_NOT_RESOLVED sur www, certificat invalide sur https…). Sur un
-    # timeout de navigation ou un contenu vide, basculer http/https et www ne
-    # change rien : c'était jusqu'ici 4 lancements de navigateur pour rien, ce
-    # qui poussait le coût d'un domaine injoignable à ~320s, au-delà du
-    # plafond de 300s par item — l'item était alors annulé en vol, ce qui
-    # orphelinait les futures et produisait le flood asyncio.
-    variant_eligible = last_error and any(
-        err in last_error for err in _VARIANT_ELIGIBLE_ERRORS
+    # Un domaine injoignable coûtait 3 tentatives (~140s) PUIS 4 variantes
+    # (~180s) = ~320s, au-delà du plafond de 300s par item : l'item était
+    # annulé en vol, et cette annulation orphelinait les futures à l'origine
+    # du flood asyncio. Les variantes ne pouvaient rien y changer.
+    variant_pointless = last_error and any(
+        tok in last_error for tok in _VARIANT_POINTLESS_ERRORS
     )
-    if not variant_eligible:
+    if variant_pointless:
         logger.warning(
             f"[VARIANTES] ignorées pour {url} — "
-            f"échec non éligible aux variantes: {last_error}"
+            f"échec non réparable par une variante: {last_error}"
         )
         return None
 ```
 
-The strictest of the three gates considered, chosen deliberately. The `break` path at `:245-247` is unaffected: it breaks *because* `last_error` is variant-eligible, so the new gate passes for exactly those cases.
+Every other failure — DNS, SSL, connection refused, challenge — still gets its variants, so no existing rescue path is removed.
 
-**Accepted loss:** a site reachable only on the www-toggled host that *times out* rather than failing DNS resolution is no longer rescued. Judged acceptable — a timeout on the apex is far more often a slow or dead site than a www misconfiguration, and the 4 wasted launches are paid on every hopeless domain to buy that rare rescue.
+**Accepted loss:** a site whose apex *times out* but whose `www`/`http` variant would have answered is no longer rescued. Judged acceptable: a timeout is far more often a slow or dead site than a variant-fixable misconfiguration, and today every hopeless domain pays 4 wasted launches to buy that rare rescue.
+
+**Parked, pre-existing, NOT fixed here:** `_VARIANT_ELIGIBLE_ERRORS` is Chromium-only, so the `break` at `:245-247` never fires on Camoufox — a DNS failure burns all 3 retries instead of short-circuiting to Phase 2. Fixing it means asserting exact Gecko token strings, which cannot be verified on this machine (no browser). Deferred rather than guessed: a wrong token would silently re-disable the path, which is the exact failure mode just caught. Verify against a real Camoufox DNS failure first.
 
 ### 2. Liveness-guard the teardown — `scraper.py` (both scrape functions)
 
@@ -162,8 +183,9 @@ The six dead `except Exception` handlers around the call sites become redundant 
 | Situation | Before | After |
 |---|---|---|
 | Domain fails Phase 1 with a nav timeout | 4 extra browser launches, ~320 s total, item cancelled at 300 s, flood | Phase 2 skipped, ~140 s, item returns a real verdict |
-| Domain fails Phase 1 with DNS/SSL error | variants tried | unchanged — variants tried |
-| Phase 1 returns empty/short content | variants tried | Phase 2 skipped (`last_error` not eligible) |
+| Phase 1 returns empty/short content | variants tried | Phase 2 skipped |
+| Domain fails Phase 1 with DNS/SSL error | variants tried (after all 3 retries, since the `break` is dead on Camoufox) | unchanged — variants still tried |
+| Domain fails Phase 1 with connection-refused / challenge / other | variants tried | unchanged — variants still tried |
 | Teardown on an already-dead target | 3 ops attempted, up to 30 s burned, `TargetClosedError` unretrieved ×3 + Playwright internal future | ops skipped, no wait, no flood |
 | Teardown on a live target | unchanged | unchanged |
 | Teardown genuinely hangs | abandoned after 10 s, exception later unretrieved | abandoned after 10 s, exception drained by callback |
@@ -187,9 +209,10 @@ Unit tests (`tests/test_teardown_and_variants.py`), no network:
 1. `_close_or_abandon` with a coroutine that raises immediately → returns normally, and a custom `loop.set_exception_handler` records **no** call after a GC cycle (this is the actual regression guard for the reported symptom).
 2. `_close_or_abandon` with a coroutine that hangs past the timeout, then fails → the warning is logged, and the loop exception handler is still never called once the orphan completes.
 3. `_close_or_abandon` with a coroutine that succeeds → no warning, no debug.
-4. Phase-2 gate: `scrape_html` monkeypatched to raise a navigation timeout → asserted called exactly **3** times (not 7), and the `[VARIANTES] ignorées` warning emitted.
-5. Phase-2 gate: `scrape_html` monkeypatched to raise `ERR_NAME_NOT_RESOLVED` → variants still attempted (guard against over-gating).
-6. Liveness guard: a page stub whose `is_closed()` returns `True` → `unroute_all` never awaited; a browser stub whose `is_connected()` returns `False` → neither close awaited.
+4. Phase-2 gate: `scrape_html` monkeypatched to raise `TimeoutError("Timeout 30000ms exceeded")` → asserted called exactly **3** times (`HTTP_MAX_RETRIES = 3`), not 7, and the `[VARIANTES] ignorées` warning emitted.
+5. Phase-2 gate, over-gating guard: `scrape_html` monkeypatched to raise a **Gecko** DNS error (`NS_ERROR_UNKNOWN_HOST`) → variants **still attempted** (call count > 3). This is the regression guard for the engine mismatch: it fails if anyone reintroduces an allowlist keyed on Chromium codes.
+6. Phase-2 gate: `scrape_html` returning `None` (empty/short content) → variants skipped.
+7. Liveness guard: a page stub whose `is_closed()` returns `True` → `unroute_all` never awaited; a browser stub whose `is_connected()` returns `False` → neither close awaited.
 
 Baseline on this machine is `287 passed, 7 failed` (the 7 pre-existing `tests/test_domain_fr.py` failures — no local fastText model, a `ScrapeResult` tuple-unpack drift, a missing `await` in two alternative-language tests) plus a pre-existing `tests/test_api.py` collection error.
 
