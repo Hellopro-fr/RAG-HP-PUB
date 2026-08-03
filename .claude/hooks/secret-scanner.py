@@ -91,7 +91,10 @@ _CONN_HOST_RE = re.compile(
 )
 
 
-_TEMPLATE_PLACEHOLDER_RE = re.compile(r'\$\{[A-Z_][A-Z0-9_]*\}')
+# Case-insensitive: some generated artefacts carry a lowercased copy of a line
+# (e.g. graphify's norm_label), turning ${REDIS_SECRET} into ${redis_secret}.
+# Still requires an actual ${VAR} placeholder, so no literal credential passes.
+_TEMPLATE_PLACEHOLDER_RE = re.compile(r'\$\{[A-Za-z_][A-Za-z0-9_]*\}')
 
 
 def is_benign_default(line, finding_name):
