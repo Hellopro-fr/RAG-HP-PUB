@@ -55,7 +55,7 @@ Claude Code reads these files at session start and follows them as instructions.
 **13 commands:** `/commit-msg`, `/explain`, `/understand`, `/new-feature-claude-md`, `/new-service-claude-md`, `/update-claude-md`, `/pre-push`, `/investigate`, `/audit-feature`, `/dependency-mapper`, `/secrets-scanner`, `/test-coverage`, `/architecture-review`
 **8 rules:** `code-modification.md`, `critical-thinking.md`, `docker-security.md`, `formatting.md`, `impact-awareness.md`, `refactoring.md`, `security.md`, `stack-detection.md`
 **5 skills:** `/fastapi-service-scaffold`, `/rabbitmq-consumer-scaffold`, `/proto-sync`, `docker-expert`, `document-mechanism`
-**6 hooks:** `secret-scanner`, `dangerous-command-blocker`, `conventional-commits`, `tdd-gate`, `auto-review-gate`, `scope-guard`
+**5 hooks:** `secret-scanner`, `dangerous-command-blocker`, `conventional-commits`, `tdd-gate` (advisory), `nextjs-formulaire-prepush-build`
 
 ---
 
@@ -898,9 +898,8 @@ Hooks are automated scripts that run on specific events. They execute externally
 | `secret-scanner.py` | Before `git commit`/`git add` | Blocking | Scans staged files for hardcoded secrets (API keys, passwords, connection strings). Blocks on critical/high findings. |
 | `dangerous-command-blocker.py` | Before any Bash command | Blocking | Blocks catastrophic commands (rm -rf /, dd) and commands targeting critical paths (.claude/, .git/, libs/). |
 | `conventional-commits.py` | Before `git commit` | Blocking | Validates commit message follows Conventional Commits format (feat/fix/refactor/docs/chore/test). |
-| `tdd-gate.sh` | Before Edit/Write | Blocking | Blocks production code edits if no corresponding test file exists. Encourages TDD. |
-| `auto-review-gate.sh` | Session stop | Non-blocking | Lists modified files and prompts for CLAUDE.md refresh and self-review. Delegates scope checking to scope-guard. |
-| `scope-guard.sh` | Session stop (via auto-review-gate) | Non-blocking | Warns if modified files fall outside the declared spec scope. |
+| `tdd-gate.sh` | Before Edit/Write | Advisory | Warns when production code is edited with no matching test, and names the convention for that stack. Set `TDD_GATE_STRICT=1` to make it blocking. |
+| `nextjs-formulaire-prepush-build.sh` | Before `git push` | Non-blocking | Builds `nextjs-formulaire-hp` before a push; fails open when `node_modules` is absent locally. |
 
 **How to add a new hook:** Edit `.claude/settings.json` and add entries under the `hooks` key. See [Claude Code documentation](https://docs.anthropic.com/en/docs/claude-code) for the full hook API (PreToolUse, PostToolUse, Stop, etc.).
 

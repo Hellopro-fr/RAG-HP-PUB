@@ -67,10 +67,8 @@ SOURCE_PATH = "<path-to-RAG-HP-PUB>"
 - `secret-scanner.py` — PreToolUse (Bash): block commits containing hardcoded secrets (60+ regex patterns)
 - `dangerous-command-blocker.py` — PreToolUse (Bash): block catastrophic commands, protect critical paths
 - `conventional-commits.py` — PreToolUse (Bash): validate commit messages follow Conventional Commits format
-- `tdd-gate.sh` — PreToolUse (Edit/Write): block production code edits if no corresponding test file exists
-- `scope-guard.sh` — Stop: warn if files modified outside declared spec scope
+- `tdd-gate.sh` — PreToolUse (Edit/Write): warn when production code is edited with no matching test (advisory; `TDD_GATE_STRICT=1` makes it blocking)
 - (inline) force-push-blocker — PreToolUse (Bash): block `git push --force` and `-f`
-- (inline) format-python — PostToolUse (Edit): auto-format Python files after edits (black/ruff)
 - (inline) auto-review — Stop (prompt): check CLAUDE.md freshness + self-review modified code
 
 **Settings** (`$SOURCE_PATH/.claude/settings.json`):

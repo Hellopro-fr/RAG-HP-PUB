@@ -51,7 +51,7 @@ Le projet RAG-HP-PUB dispose de :
 - **13 commandes** : `/commit-msg`, `/explain`, `/understand`, `/new-feature-claude-md`, `/new-service-claude-md`, `/update-claude-md`, `/pre-push`, `/investigate`, `/audit-feature`, `/architecture-review`, `/dependency-mapper`, `/secrets-scanner`, `/test-coverage`
 - **8 fichiers de regles** : `code-modification.md`, `critical-thinking.md`, `docker-security.md`, `formatting.md`, `impact-awareness.md`, `refactoring.md`, `security.md`, `stack-detection.md`
 - **5 skills** : `/fastapi-service-scaffold`, `/rabbitmq-consumer-scaffold`, `/proto-sync`, `docker-expert`, `document-mechanism`
-- **6 hooks** : `secret-scanner`, `dangerous-command-blocker`, `conventional-commits`, `tdd-gate`, `auto-review-gate`, `scope-guard`
+- **5 hooks** : `secret-scanner`, `dangerous-command-blocker`, `conventional-commits`, `tdd-gate` (consultatif), `nextjs-formulaire-prepush-build`
 - **Un systeme de CLAUDE.md** par service pour donner le contexte local a Claude
 
 ---
@@ -924,9 +924,8 @@ Les hooks sont des scripts automatises qui s'executent sur des evenements specif
 | `secret-scanner.py` | Avant `git commit`/`git add` | Bloquant | Scanne les fichiers stages pour les secrets codes en dur (cles API, mots de passe). Bloque si critique/eleve. |
 | `dangerous-command-blocker.py` | Avant toute commande Bash | Bloquant | Bloque les commandes catastrophiques (rm -rf /, dd) et les commandes ciblant les chemins critiques (.claude/, .git/, libs/). |
 | `conventional-commits.py` | Avant `git commit` | Bloquant | Valide que le message de commit suit le format Conventional Commits (feat/fix/refactor/docs/chore/test). |
-| `tdd-gate.sh` | Avant Edit/Write | Bloquant | Bloque les modifications de code production si aucun fichier de test correspondant n'existe. |
-| `auto-review-gate.sh` | Fin de session | Non-bloquant | Liste les fichiers modifies et invite a verifier si CLAUDE.md doit etre mis a jour. Delegue le scope check. |
-| `scope-guard.sh` | Fin de session (via auto-review-gate) | Non-bloquant | Avertit si des fichiers modifies sont hors du perimetre declare dans la spec. |
+| `tdd-gate.sh` | Avant Edit/Write | Consultatif | Avertit quand du code de production est edite sans test correspondant, et nomme la convention du stack concerne. `TDD_GATE_STRICT=1` le rend bloquant. |
+| `nextjs-formulaire-prepush-build.sh` | Avant `git push` | Non-bloquant | Construit `nextjs-formulaire-hp` avant un push ; fail-open si `node_modules` est absent en local. |
 
 **Comment ajouter un nouveau hook :** Editez `.claude/settings.json` et ajoutez des entrees sous la cle `hooks`. Types disponibles : `PreToolUse`, `PostToolUse`, `Stop`, `command`, `prompt`, `agent`.
 
