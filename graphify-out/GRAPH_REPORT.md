@@ -1,12 +1,12 @@
-# Graph Report - .  (2026-07-30)
+# Graph Report - .  (2026-08-03)
 
 ## Corpus Check
 - 0 files · ~99,999 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 8856 nodes · 19630 edges · 233 communities detected
-- Extraction: 65% EXTRACTED · 35% INFERRED · 0% AMBIGUOUS · INFERRED: 6830 edges (avg confidence: 0.61)
+- 9033 nodes · 20118 edges · 233 communities detected
+- Extraction: 66% EXTRACTED · 34% INFERRED · 0% AMBIGUOUS · INFERRED: 6907 edges (avg confidence: 0.61)
 - Token cost: 0 input · 0 output
 
 ## Community Hubs (Navigation)
@@ -385,7 +385,7 @@ Nodes (1): Shared threading lock for pymilvus connection management.  All Milvus
 
 ### Community 12 - "gRPC Service Clients (proto stubs)"
 Cohesion: 0.02
-Nodes (123): Config, Embedding, _clean_text(), Ajoute une ligne avec le temps d’exécution dans temps_embedding.log, Délègue le chunking au microservice d'embedding., get_embeddings(), get_embedding(), tokenize() (+115 more)
+Nodes (124): Config, Embedding, _clean_text(), Ajoute une ligne avec le temps d’exécution dans temps_embedding.log, Délègue le chunking au microservice d'embedding., get_embeddings(), get_embedding(), tokenize() (+116 more)
 
 ### Community 118 - "Community 118"
 Cohesion: 1.0
@@ -437,7 +437,7 @@ Nodes (2): RabbitMQConnection, Crée une connexion RabbitMQ avec un nombre limit
 
 ### Community 6 - "Crawler Cache & Detection Client"
 Cohesion: 0.01
-Nodes (310): Initializes the Redis connection pool.     Connects to Redis using the URL from, Atomically sets a key only if it does not already exist (SET NX).     Returns T, Sets a raw value for a key., Gets the raw string value of a key., Atomically increments a key's value by 1., Atomically decrements a key's value by 1.      WARNING: This function can driv, Gets the raw string value of a key., Atomically deletes a key only if its JSON 'status' is 'failed' or 'finished'. (+302 more)
+Nodes (343): Initializes the Redis connection pool.     Connects to Redis using the URL from, Atomically sets a key only if it does not already exist (SET NX).     Returns T, Sets a raw value for a key., Gets the raw string value of a key., Atomically increments a key's value by 1., Atomically decrements a key's value by 1.      WARNING: This function can driv, Gets the raw string value of a key., Atomically deletes a key only if its JSON 'status' is 'failed' or 'finished'. (+335 more)
 
 ### Community 16 - "Detection Async Job Store"
 Cohesion: 0.02
@@ -480,8 +480,8 @@ Cohesion: 0.29
 Nodes (7): model-optimizer (ONNX export), export_embedding_to_onnx.py, export_reranker_to_onnx.py, dangvantuan/sentence-camembert-large, BAAI/bge-reranker-v2-m3, NVIDIA Triton Inference Server, model-optimizer/requirements.txt
 
 ### Community 41 - "Claude Code Audit (docs)"
-Cohesion: 0.16
-Nodes (17): Claude Code Audit Report 2026-03-25, security.md rule (proposed), test-writer agent (proposed), security-auditor agent (proposed), rabbitmq-reviewer agent (proposed), /pre-push command (proposed), 47.5/100 maturity score rationale, prix-traitement port discrepancy (8595 vs 8591) (+9 more)
+Cohesion: 0.05
+Nodes (92): Claude Code Audit Report 2026-03-25, security.md rule (proposed), test-writer agent (proposed), security-auditor agent (proposed), rabbitmq-reviewer agent (proposed), /pre-push command (proposed), 47.5/100 maturity score rationale, prix-traitement port discrepancy (8595 vs 8591) (+84 more)
 
 ### Community 15 - "Stash Crawls Batch Tool"
 Cohesion: 0.03
@@ -508,8 +508,8 @@ Cohesion: 0.67
 Nodes (3): DLQ Manager UX Improvements Plan, match_phrase Routing for Quoted Field:Value, Rule Match Viewer + Dynamic Service List
 
 ### Community 97 - "Community 97"
-Cohesion: 1.0
-Nodes (2): Claude Config Optimization Plan, 20-25% Token Consumption Reduction
+Cohesion: 0.5
+Nodes (4): Claude Config Optimization Plan, 20-25% Token Consumption Reduction, Rationale: rules trimmed from 14 to 8, cutting injected context from 731 to 492 lines per request, Rationale: CLAUDE.md files are injected on every request, so an 80-line ceiling keeps them scannable and cheap; overflow belongs in .claude/rules/
 
 ### Community 54 - "Crawler Capacity & Reconcile (docs)"
 Cohesion: 0.22
@@ -561,7 +561,7 @@ Nodes (16): Archive Pre-flight Disk Space Check (2026-04-18), Rationale: Diagnos
 
 ### Community 0 - "Crawler Engine Core (main/functions)"
 Cohesion: 0.0
-Nodes (514): verify_api_key(), Verifies the API key if API_KEY is configured in settings.     If API_KEY is not, resetContextState(), makeTmpStorage(), classifyFragment(), recordClassification(), maybeCommitDecision(), writeDecisionFile() (+506 more)
+Nodes (555): verify_api_key(), Verifies the API key if API_KEY is configured in settings.     If API_KEY is not, resetContextState(), makeTmpStorage(), classifyFragment(), recordClassification(), maybeCommitDecision(), writeDecisionFile() (+547 more)
 
 ### Community 5 - "Crawler Reconcile & Archive Cleanup"
 Cohesion: 0.01
@@ -584,8 +584,8 @@ Cohesion: 0.15
 Nodes (13): DetectionClient, Shared HTTP client enforcing the api-detection-langue-fr call contract.  Contr, HTTP client wrapper for api-detection-langue-fr enforcing the caller contract., _isolate_env(), TestDetectionClientBasic, test_detect_success(), test_retries_on_503_honoring_retry_after(), test_exhausts_retries_and_raises() (+5 more)
 
 ### Community 69 - "Graphify Guide (docs)"
-Cohesion: 0.4
-Nodes (4): Scoped post-commit hook vs upstream unscoped hook, graphify services-policy.yml (graphed/not_graphed registry), graphify CI workflows (auto-rebuild + coverage-check), graphify team guide (scoped hook, slash commands, edge honesty tags)
+Cohesion: 0.09
+Nodes (24): Scoped post-commit hook vs upstream unscoped hook, graphify services-policy.yml (graphed/not_graphed registry), graphify CI workflows (auto-rebuild + coverage-check), graphify team guide (scoped hook, slash commands, edge honesty tags), How to add a hook: entries under the 'hooks' key of .claude/settings.json, FR-only: explicit hook event types list (PreToolUse, PostToolUse, Stop, command, prompt, agent), Phase 2 - analyze the target repository (structure, stack, existing config, CI, Docker, tests), Hooks inventory: 5 configured hooks with trigger, type and role (+16 more)
 
 ### Community 30 - "Crawler Timing Aggregator"
 Cohesion: 0.12
@@ -601,7 +601,7 @@ Nodes (85): account-service SSO, account-service-backend, account-service-fronte
 
 ### Community 4 - "Detection Langue FR Core"
 Cohesion: 0.01
-Nodes (835): _normalize_url_for_dedup(), _homepage_of(), _is_homepage(), _ttl_from_verdict(), _build_challenge_error_msg(), _with_group(), _detect_single_url(), detect_french() (+827 more)
+Nodes (838): _normalize_url_for_dedup(), _homepage_of(), _is_homepage(), _ttl_from_verdict(), _build_challenge_error_msg(), _with_group(), _detect_single_url(), detect_french() (+830 more)
 
 ### Community 27 - "Detection Admission Control"
 Cohesion: 0.08
@@ -765,7 +765,7 @@ Nodes (7): test_download_requests_path_matches_compose_bind_target(), test_downl
 
 ### Community 14 - "GCS Upload / Download Daemons"
 Cohesion: 0.02
-Nodes (122): crawler-service CLAUDE.md, Crawler Daemon Guide, tools CLAUDE.md, upload_daemon.sh, download_daemon.sh, gcs_archive_audit.py, dlq_archiver.py, dlq_requeuer.py (+114 more)
+Nodes (124): crawler-service CLAUDE.md, Crawler Daemon Guide, tools CLAUDE.md, upload_daemon.sh, download_daemon.sh, gcs_archive_audit.py, dlq_archiver.py, dlq_requeuer.py (+116 more)
 
 ### Community 178 - "Exit code 3 OOM_RELAUNCH contract (u"
 Cohesion: 1.0
@@ -1244,15 +1244,37 @@ Cohesion: 0.67
 Nodes (3): Prometheus Observability (validation verdicts, homepage fallback, async job counters), INFLIGHT_REQUESTS Gauge Semantic Shift + ADMISSION_REJECTED Label Cardinality Change, Why INFLIGHT_REQUESTS reads lower after the carve-out: cache HITs, html_content bypass calls and dedup followers no longer contribute — a panel-description change, not a data-integrity problem
 
 ## Ambiguous Edges - Review These
+- `security-auditor agent (proposed)` → `Removed agents @code-reviewer and @debugger, superseded by superpowers skills`  [AMBIGUOUS]
+  docs/claude-code-team-guide-en.md · relation: conceptually_related_to
+- `rabbitmq-reviewer agent (proposed)` → `Removed agents @code-reviewer and @debugger, superseded by superpowers skills`  [AMBIGUOUS]
+  docs/claude-code-team-guide-en.md · relation: conceptually_related_to
+- `prix-traitement port discrepancy (8595 vs 8591)` → `Known gaps table (no test/lint commands, no .env templates, no port registry)`  [AMBIGUOUS]
+  docs/claude-code-team-guide-en.md · relation: conceptually_related_to
+- `Audit Staging README` → `Known gaps table (no test/lint commands, no .env templates, no port registry)`  [AMBIGUOUS]
+  docs/claude-code-team-guide-en.md · relation: conceptually_related_to
+- `prix-traitement port fix note` → `Known gaps table (no test/lint commands, no .env templates, no port registry)`  [AMBIGUOUS]
+  docs/claude-code-team-guide-en.md · relation: conceptually_related_to
 - `Settings` → `Out of scope: amt-lavage.com soft_french 0.723 vs NLP_MIN_CONFIDENCE 0.75, lang=en-US as a weak negative, Case 6 internals, the validate_alternatives contract`  [AMBIGUOUS]
   docs/superpowers/specs/2026-07-28-detection-case2a-hreflang-alt-design.md · relation: references
+- `graphify services-policy.yml (graphed/not_graphed registry)` → `Phase 2 - analyze the target repository (structure, stack, existing config, CI, Docker, tests)`  [AMBIGUOUS]
+  docs/claude-config-migration-prompt.md · relation: conceptually_related_to
+- `graphify CI workflows (auto-rebuild + coverage-check)` → `Known gaps table (no test/lint commands, no .env templates, no port registry)`  [AMBIGUOUS]
+  docs/claude-code-team-guide-en.md · relation: conceptually_related_to
 - `._validate_alternative_urls()` → `One Challenge Detector, Three Consumers (45s poll / detect reclass / Case-6 guard)`  [AMBIGUOUS]
   docs/superpowers/specs/2026-07-25-detection-langue-fr-challenge-noscript-altprobe-design.md · relation: references
+- `graphify team guide (scoped hook, slash commands, edge honesty tags)` → `Layered Claude Code memory system (root CLAUDE.md, rules, agents, commands, service CLAUDE.md, personal, primer)`  [AMBIGUOUS]
+  docs/claude-code-team-guide-en.md · relation: conceptually_related_to
 - `._abandon_job()` → `Terminal-Write Loss Incident (job 9597267b: 5/5 OK, record stuck running/success_count=0)`  [AMBIGUOUS]
   docs/superpowers/specs/2026-07-19-detection-langue-fr-job-queue-concurrency-clamp-design.md · relation: conceptually_related_to
+- `Rule code-modification.md - surgical edit protocol (read first, minimal diff, preserve formatting/comments, verify after)` → `Git conventions: branch naming, bilingual Conventional Commits, PR rules`  [AMBIGUOUS]
+  docs/claude-code-team-guide-en.md · relation: conceptually_related_to
+- `Rule docker-security.md - pinned images, no root, healthchecks, no secrets in ENV` → `Known gaps table (no test/lint commands, no .env templates, no port registry)`  [AMBIGUOUS]
+  docs/claude-code-team-guide-en.md · relation: conceptually_related_to
+- `Pipe mode: single prompt piped to claude for one-offs and CI` → `Sub-agent exploration to keep the main context clean`  [AMBIGUOUS]
+  docs/claude-code-team-guide-en.md · relation: conceptually_related_to
 
 ## Knowledge Gaps
-- **2921 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+2916 more)
+- **2916 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+2911 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **Thin community `Community 110`** (1 nodes): `Creates a dictionary of headers for a DLQ message, compatible with both pika and`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -1281,8 +1303,6 @@ Nodes (3): Prometheus Observability (validation verdicts, homepage fallback, asy
 - **Thin community `Stale-Variant Skip Hook`** (3 nodes): `export_embedding_to_onnx.py`, `export_embedding_model()`, `Charge le modèle d'embedding, exporte le module Transformer sous-jacent en ONNX,`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 86`** (3 nodes): `export_reranker_to_onnx.py`, `export_reranker_model()`, `Charge le modèle de reranking, l'exporte au format ONNX,     et génère le fichie`
-  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 97`** (2 nodes): `Claude Config Optimization Plan`, `20-25% Token Consumption Reduction`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 129`** (1 nodes): `ignoreHTTPSErrors in Camoufox/Chromium`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -1534,17 +1554,17 @@ Nodes (3): Prometheus Observability (validation verdicts, homepage fallback, asy
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
+- **What is the exact relationship between `security-auditor agent (proposed)` and `Removed agents @code-reviewer and @debugger, superseded by superpowers skills`?**
+  _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
+- **What is the exact relationship between `rabbitmq-reviewer agent (proposed)` and `Removed agents @code-reviewer and @debugger, superseded by superpowers skills`?**
+  _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
+- **What is the exact relationship between `prix-traitement port discrepancy (8595 vs 8591)` and `Known gaps table (no test/lint commands, no .env templates, no port registry)`?**
+  _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
+- **What is the exact relationship between `Audit Staging README` and `Known gaps table (no test/lint commands, no .env templates, no port registry)`?**
+  _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
+- **What is the exact relationship between `prix-traitement port fix note` and `Known gaps table (no test/lint commands, no .env templates, no port registry)`?**
+  _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
 - **What is the exact relationship between `Settings` and `Out of scope: amt-lavage.com soft_french 0.723 vs NLP_MIN_CONFIDENCE 0.75, lang=en-US as a weak negative, Case 6 internals, the validate_alternatives contract`?**
   _Edge tagged AMBIGUOUS (relation: references) - confidence is low._
-- **What is the exact relationship between `._validate_alternative_urls()` and `One Challenge Detector, Three Consumers (45s poll / detect reclass / Case-6 guard)`?**
-  _Edge tagged AMBIGUOUS (relation: references) - confidence is low._
-- **What is the exact relationship between `._abandon_job()` and `Terminal-Write Loss Incident (job 9597267b: 5/5 OK, record stuck running/success_count=0)`?**
+- **What is the exact relationship between `graphify services-policy.yml (graphed/not_graphed registry)` and `Phase 2 - analyze the target repository (structure, stack, existing config, CI, Docker, tests)`?**
   _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
-- **Why does `CrawlerManager` connect `CrawlerManager Retry & Capacity Tests` to `Crawler Service API Schemas`, `CrawlerManager Core + DLQ`, `Detection Langue FR Core`, `Crawler Reconcile & Archive Cleanup`, `Crawler Stash / Unstash`, `Detection Async Job Store`, `Crawler Stash-Lock & Redis Design (docs)`?**
-  _High betweenness centrality (0.106) - this node is a cross-community bridge._
-- **Why does `cleanDatasetFragments()` connect `Crawler Engine Core (main/functions)` to `Detection Async Job Store`, `Crawler Service API Schemas`, `Detection Langue FR Core`?**
-  _High betweenness centrality (0.072) - this node is a cross-community bridge._
-- **Why does `cache_service.py (Redis lock helper)` connect `Crawler Cache & Detection Client` to `Detection Async Job Store`, `Crawler Service API Schemas`, `CrawlerManager Retry & Capacity Tests`?**
-  _High betweenness centrality (0.054) - this node is a cross-community bridge._
-- **Are the 337 inferred relationships involving `CrawlerManager` (e.g. with `CrawlStatus` and `IncludeInArchive`) actually correct?**
-  _`CrawlerManager` has 337 INFERRED edges - model-reasoned connections that need verification._
