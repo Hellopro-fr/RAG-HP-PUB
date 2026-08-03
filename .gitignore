@@ -116,6 +116,11 @@ local/*
 !requirements-test.txt
 !pytest.ini
 
+# ...sauf celui de la RACINE : les dépendances appartiennent à un service, pas au
+# monorepo. La barre initiale ancre la règle à la racine, elle ne touche donc
+# aucun des 80 requirements.txt de service que la négation ci-dessus protège.
+/requirements.txt
+
 # Environnement virtuel de python
 .venv
 
