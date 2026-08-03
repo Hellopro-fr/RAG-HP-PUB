@@ -69,7 +69,7 @@ CASES = [
     ("rm protos/catalog.proto", "critical_path"),
     ("rm libs/common-utils/src/foo.py", "critical_path"),
     # ...but a recoverable removal is whitelisted
-    ("git rm .claude/rules/language.md", "allow"),
+    ("git rm .claude/rules/security.md", "allow"),
     ("git rm -r protos/legacy/", "allow"),
     # --- literal blocks are data, not commands ---
     ("git commit -m 'fix: the rm -rf / regex was too broad'", "allow"),

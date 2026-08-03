@@ -47,135 +47,14 @@ docs/                 # Project documentation
 - **Containerization**: Every service has a Dockerfile; root `docker-compose.yml` orchestrates infra.
 - **Type checking**: `cargo check` for Rust. No Python type checker enforced yet (ruff or mypy recommended — team decision pending).
 - **CI/CD**: GitHub Actions — `ci_services_*.yml` (lint/test), `cd_build_push_*.yml` (Docker build+push).
-- **Commit messages**: Conventional Commits, bilingual EN/FR (see `.claude/rules/commit-messages.md`).
+- **Commit messages**: Conventional Commits, bilingual EN/FR — enforced by the `conventional-commits.py` PreToolUse hook.
+- **Language**: reply in the language of the current message. Identifiers, file names, log messages and error codes always in English. Code comments and docstrings: **English** — that is the existing convention across the Python and TS services.
 
-## PHP front Ecritel — workflow
+## PHP front Ecritel
 
-**Règle stricte : on ne crée PAS de Pull Request pour les fichiers PHP front Ecritel.**
-Le développeur (rravelonarisoa@hellopro.fr) uploade ces fichiers manuellement via FTP sur le serveur Ecritel. Les PRs sur ces fichiers polluent l'historique git sans valeur ajoutée (pas de CI, pas de déploiement automatique, fichier non tracké en prod).
-
-### Fichiers concernés (PHP front Ecritel)
-
-| Chemin local repo | Statut git | Workflow |
-|---|---|---|
-| `site/hellopro_fr/*.php` | non tracké | Upload FTP manuel |
-| `site/annuaire_hp/fonctions/*.php` | non tracké | Upload FTP manuel |
-| `site/moteur_recherche/*.php` (search_ajax.php, etc.) | non tracké | Upload FTP manuel |
-| `site/design_system/js/*.js` | non tracké | Upload FTP manuel |
-| `site/fichiers_communs_bo_front/**/*.json` | non tracké | Upload FTP manuel |
-| `site/script/**/*.php` (crons) | tracké git | PR OK (déployé via script.hellopro.fr) |
-| `site/moteur_recherche/*.md` (docs/specs) | tracké git | PR OK (mémoire technique) |
-
-### Procédure correcte pour modifier un fichier Ecritel
-
-1. **Modifier le fichier local** dans le repo (édition directe)
-2. **NE PAS créer de PR** sur le fichier `.php` lui-même
-3. **Créer un doc `.md`** dans `site/moteur_recherche/` (ex: `FIX_XXX_YYYY-MM-DD.md`) qui contient :
-   - Le diff appliqué (en bloc markdown)
-   - Le contexte / motivation
-   - Les tests post-deploy
-4. **PR avec uniquement le `.md`** (spec / review-only)
-5. **Upload manuel FTP** du `.php` modifié vers Ecritel par le développeur
-6. **Test sur prod** + validation
-
-### Exemple
-
-- ❌ Ne pas faire : PR contenant `site/hellopro_fr/moteur_recherche.php` ajouté/modifié
-- ✅ Faire : PR contenant `site/moteur_recherche/BASCULE_DEFAULT_HYBRID_2026-05-22.md` (doc avec diff), upload manuel du `.php`
-
-## Claude Code Configuration
-
-### Rules (`.claude/rules/`)
-
-| Rule | Purpose |
-|------|---------|
-| `code-modification.md` | Surgical edit protocol: read first, minimal diff, preserve formatting, verify after |
-| `commit-messages.md` | Bilingual Conventional Commits, scope to current response, < 72 chars |
-| `language.md` | Respond in user's language, bilingual commits, English code identifiers |
-| `security.md` | No hardcoded secrets/URLs, Pydantic BaseSettings, CORS (internal vs public), JWT, input validation, all infra connection strings |
-| `impact-awareness.md` | Trade-off analysis, bigger-picture context, blast radius check on shared components before any modification |
-| `docker-security.md` | Pinned base images, no root, healthchecks, no secrets in ENV, `.dockerignore`, `--no-cache-dir` |
-| `config-freshness.md` | Re-read `.claude/` files mid-conversation before using agents/commands |
-| `formatting.md` | Code style conventions per stack — references `stack-detection.md`, with unknown stack fallback |
-| `refactoring.md` | When/how to refactor safely: scope rules, shared component protocol, known duplication targets |
-| `stack-detection.md` | Single source of truth for detecting a service's stack from file indicators. All stack-dependent rules reference this. Unknown stack protocol included. |
-| `critical-thinking.md` | Anti-sycophancy, blind spot detection, evidence-based pushback, uncertainty transparency, anti-rationalization |
-| `lessons-learned.md` | Self-improving error-avoidance: when/how Claude saves a lesson, dedup rule, per-file-type category routing. Consumed by the inject-lessons hook. |
-
-### Agents (`.claude/agents/`)
-
-| Agent | Purpose | Tools |
-|-------|---------|-------|
-| `code-reviewer` | SOLID/DRY/KISS, security, performance, error handling, impact awareness. Exhaustive single-pass (multi-pass internally). | Read, Glob, Grep |
-| `security-reviewer` | Deep SOURCE-CODE security audit — OWASP Top 10, auth/authz, injection, LLM/RAG-specific risks (prompt injection, data exfil, model supply chain), crypto, Docker/IaC, CI workflows. Read-only. | Read, Glob, Grep |
-| `cybersecurity-auditor` | EXTERNAL web audit against a URL (DAST-style, non-intrusive). Runs inside a **Kali Docker container** (`tools/cyber-audit/`) with `--cap-drop=ALL`. HTTP headers, TLS, cookies, CORS, DNS (SPF/DMARC/DKIM/CAA/DNSSEC), well-known paths, TCP connect scan. Invoked via `/cyber-audit <url>` after authorization. | Bash, Read, Grep, WebFetch |
-| `debugger` | Root cause analysis → structured fix plan with trade-offs and blast radius → apply after confirmation. | Read, Bash, Glob, Grep |
-| `doc-writer` | Add file-level, function-level, and inline documentation. English docstrings only. Code-immutable. | Read, Write, Edit, Glob, Grep |
-| `test-writer` | Stack-agnostic test generation: auto-detects Python (pytest), Rust (cargo test), Node.js (Jest/Vitest), or asks for unknown stacks. | Read, Write, Edit, Glob, Grep |
-
-### Commands (`.claude/commands/`)
-
-| Command | Purpose |
-|---------|---------|
-| `/commit-msg` | Generate bilingual commit message (EN/FR) |
-| `/explain` | Explain a single file or code block (no modifications) |
-| `/understand` | Absorb and summarize multiple files or broad topics |
-| `/plan` | Interactive planning with step list and optional file table |
-| `/pre-push` | Pre-push verification: syntax, tests, review, summary table |
-| `/new-service-claude-md` | Generate CLAUDE.md for a new service + update root |
-| `/new-feature-claude-md` | Update service CLAUDE.md after a feature addition |
-| `/update-claude-md` | Propose surgical CLAUDE.md updates (mistake prevention, project change, rescan) |
-| `/investigate` | Evidence-based statement verification: CONFIRMED / PARTIALLY TRUE / FALSE / INCONCLUSIVE |
-| `/audit-feature` | End-to-end feature audit tracing the pipeline across services |
-| `/review-task` | Tech Lead review: combined state + diff analysis, verdict APPROVED / CHANGES REQUESTED / BLOCKED |
-| `/secrets-scanner` | Full codebase scan for hardcoded secrets, API keys, passwords, connection strings |
-| `/test-coverage` | Test coverage report across all services (well-tested / minimal / none) |
-| `/dependency-mapper` | Map cross-service dependencies: imports, gRPC, RabbitMQ, HTTP calls |
-| `/architecture-review` | Architecture-level review: coupling, cohesion, scalability, observability |
-| `/cyber-audit <url>` | External web security audit of a URL. Runs the Kali container in `tools/cyber-audit/` (DAST, non-intrusive): TLS, headers, cookies, CORS, DNS, well-known paths, top-20 TCP ports. Requires authorization confirmation. |
-
-### Skills (`.claude/skills/`)
-
-| Skill | Purpose |
-|-------|---------|
-| `/fastapi-service-scaffold <name> <desc>` | Scaffold a new FastAPI service with all conventions |
-| `/rabbitmq-consumer-scaffold <name> <collection>` | Scaffold a new RabbitMQ processor with consumer, DLQ, metrics |
-| `/proto-sync [proto-file]` | Regenerate Python gRPC stubs from protos/ and check for breaking changes |
-| `docker-expert` | Docker troubleshooting, optimization, and security for 90+ Dockerfiles |
-
-### Hooks (`settings.json`)
-
-| Event | Hook | Purpose |
-|-------|------|---------|
-| `PreToolUse` (Bash) | `secret-scanner.py` | Block commits containing hardcoded secrets (60+ patterns) |
-| `PreToolUse` (Bash) | `dangerous-command-blocker.py` | Block catastrophic commands (rm -rf /, dd, mkfs) and protect critical paths |
-| `PreToolUse` (Bash) | force-push-blocker (inline) | Block `git push --force` and `git push -f` |
-| `PreToolUse` (Bash) | `conventional-commits.py` | Validate commit messages follow Conventional Commits format |
-| `PreToolUse` (Edit/Write) | `tdd-gate.sh` | Block production code edits if no corresponding test file exists |
-| `PreToolUse` (Edit/Write/MultiEdit/NotebookEdit) | `inject-lessons.py` | Inject category-matched prior lessons before each code edit. Silent no-op when no lessons file exists. |
-| `PostToolUse` (Edit) | format-python (inline) | Auto-format Python files after edits (black/ruff, graceful fallback) |
-| `Stop` | auto-review (prompt) | Check if CLAUDE.md needs updating + self-review modified code |
-| `Stop` | `scope-guard.sh` | Warn if files modified outside declared spec scope |
-
-### Plugins
-
-| Plugin | Source | Purpose |
-|--------|--------|---------|
-| `superpowers` | `claude-plugins-official` | Structured development workflow: brainstorming, plan writing, TDD, subagent orchestration, verification-before-completion |
-
-**Superpowers vs. project commands — when to use which:**
-
-| Task | Use project command | Use superpowers skill |
-|------|--------------------|-----------------------|
-| Plan a task | `/plan` (lightweight, quick) | `writing-plans` (heavyweight, multi-step spec with review) |
-| Debug an error | `@debugger` (structured fix plan) | `systematic-debugging` (exhaustive hypothesis testing) |
-| Review code | `@code-reviewer` (7-dimension single-pass) | `requesting-code-review` (formal review with verification gates) |
-| Write tests | `@test-writer` (stack-agnostic generation) | `test-driven-development` (strict red-green-refactor TDD) |
-| Execute a plan | Direct implementation | `executing-plans` (subagent delegation with checkpoints) |
-
-**Rule of thumb:** Use project commands for focused, day-to-day tasks. Use superpowers skills for complex, multi-step work that benefits from structured gates and verification.
-
-**Note:** Project commands already integrate key superpowers principles (verification evidence, no-placeholder plans, root-cause-first debugging, TDD integration, anti-rationalization checks). You get the best of both by default when using project commands.
+Ces fichiers ne passent PAS par une Pull Request : upload FTP manuel sur Ecritel.
+Procedure complete, liste des chemins concernes et exceptions : `site/CLAUDE.md`
+(charge automatiquement des que tu ouvres un fichier sous `site/`).
 
 ## Constraints
 
@@ -206,15 +85,16 @@ Most Python/Rust microservices run on a remote server with GPU and network acces
 
 ## Per-Service Instructions
 
-@apps-microservices/*/CLAUDE.md
-@libs/*/CLAUDE.md
+**Avant de modifier un fichier sous `apps-microservices/<service>/` ou `libs/<lib>/`, lis d'abord le `CLAUDE.md` de ce service ou de cette lib.**
+Ils ne sont PAS importes ici : un `@import` avec glob ne s'expanse pas (verifie par sonde — un marqueur present uniquement dans `apps-microservices/*/CLAUDE.md` n'arrive jamais dans le prompt, alors que les imports litteraux ci-dessous, eux, arrivent). Les importer tous couterait 8 599 lignes a chaque requete pour 101 fichiers dont un seul est pertinent a la fois.
+
 @tools/CLAUDE.md
 @model-optimizer/CLAUDE.md
 @protos/CLAUDE.md
 
 ## graphify
 
-This project has a **unified graphify knowledge graph** at `graphify-out/` covering libs + protos + tools + model-optimizer + docs + any merged-in services (crawler-service today; more added via `/graphify <service> --update`). 1700 nodes, ~3150 edges, 86 communities, with explicit cross-service edges (e.g. `crawler_capacity_counter --uses--> cache_service.py`).
+This project has a **unified graphify knowledge graph** at `graphify-out/` covering libs + protos + tools + model-optimizer + docs + any merged-in services (crawler-service today; more added via `/graphify <service> --update`). ~8 850 nodes, ~19 600 edges (re-derived 2026-08-03 from `graphify-out/graph.json` — re-measure before quoting, it grows on every rebuild), with explicit cross-service edges (e.g. `crawler_capacity_counter --uses--> cache_service.py`).
 
 Rules:
 - Before answering architecture or codebase questions, read `graphify-out/GRAPH_REPORT.md` for god nodes, community structure, and suggested questions.
