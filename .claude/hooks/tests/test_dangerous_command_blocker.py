@@ -91,6 +91,10 @@ CASES = [
     ("docker compose -f docker-compose.yml config", "allow"),
     # --- critical paths of THIS repo ---
     ("rm .claude/rules/security.md", "critical_path"),
+    # prose containing "form"/"confirm"/"platform" must not trip the rule:
+    # without a word boundary, the "rm" inside those words matched
+    ("echo 'the most common form -- see .claude/settings.json'", "allow"),
+    ("grep -rn 'platform' .claude/rules/", "allow"),
     ("rm protos/catalog.proto", "critical_path"),
     ("rm libs/common-utils/src/foo.py", "critical_path"),
     # ...but a recoverable removal is whitelisted
