@@ -633,10 +633,22 @@ export const lancerElevagePoulesPondeuses: HubPage = {
       },
     ],
     contact: {
-      badge: 'Dernière étape',
+      badge: 'Presque terminé',
       label: 'À quelle adresse e-mail souhaitez-vous recevoir votre plan de projet ?',
       helper: 'Nous vous envoyons un plan personnalisé avec les prochaines étapes concrètes.',
       emailPlaceholder: 'votre.email@entreprise.fr',
+      submitLabel: 'Continuer',
+    },
+    coordinates: {
+      badge: 'Dernière étape',
+      label: 'Vos coordonnées',
+      helper: 'Pour vous transmettre votre plan projet personnalisé et vous accompagner.',
+      fields: {
+        name: 'Nom et prénom',
+        phone: 'Téléphone',
+        postalCode: 'Code postal',
+        address: 'Adresse et ville',
+      },
       submitLabel: 'Recevoir mon plan projet',
     },
     success: {

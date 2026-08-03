@@ -327,6 +327,23 @@ export interface HubAssistant {
     emailPlaceholder: string;
     submitLabel: string;
   };
+  /**
+   * Étape « coordonnées » insérée entre l'e-mail et l'écran de succès.
+   * L'e-mail est déjà saisi à l'étape précédente : il n'est pas repris ici.
+   * Tous les champs sont requis pour activer l'envoi (⚠️ POC — rien n'est transmis).
+   */
+  coordinates: {
+    badge: string;
+    label: string;
+    helper: string;
+    fields: {
+      name: string;
+      phone: string;
+      postalCode: string;
+      address: string;
+    };
+    submitLabel: string;
+  };
   success: {
     title: string;
     subtitle: string;
