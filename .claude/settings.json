@@ -9,7 +9,9 @@
       "Read(./.env)",
       "Read(./.env.*)",
       "Read(./secrets/**)",
-      "Read(./config/credentials.json)"
+      "Read(./config/credentials.json)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)"
     ]
   },
   "env": {
@@ -29,16 +31,6 @@
           {
             "type": "command",
             "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/dangerous-command-blocker.py"
-          },
-          {
-            "type": "command",
-            "if": "Bash(git push *--force*)",
-            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Force push is blocked. Use a regular push or ask the user for explicit permission.\"}}'"
-          },
-          {
-            "type": "command",
-            "if": "Bash(git push *-f*)",
-            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Force push (-f) is blocked. Use a regular push or ask the user for explicit permission.\"}}'"
           },
           {
             "type": "command",
