@@ -47,8 +47,8 @@ docs/                 # Project documentation
 - **Containerization**: Every service has a Dockerfile; root `docker-compose.yml` orchestrates infra.
 - **Type checking**: `cargo check` for Rust. No Python type checker enforced yet (ruff or mypy recommended — team decision pending).
 - **CI/CD**: GitHub Actions — `ci_services_*.yml` (lint/test), `cd_build_push_*.yml` (Docker build+push).
-- **Commit messages**: Conventional Commits, bilingual EN/FR — enforced by the `conventional-commits.py` PreToolUse hook.
-- **Language**: reply in the language of the current message. Identifiers, file names, log messages and error codes always in English. Code comments and docstrings: **English** — that is the existing convention across the Python and TS services.
+- **Commit messages**: Conventional Commits, bilingual EN/FR. The `conventional-commits.py` PreToolUse hook checks the Conventional *prefix* on the first line only — the bilingual body, the subject length and the scoping are conventions, not machine-enforced. `/commit-msg` writes a message that respects all of them.
+- **Language**: reply in the language of the current message. Identifiers, file names, log messages and error codes always in English. Code comments and docstrings are **mixed FR/EN across this repo** (measured: Python is an even split, TS/Vue leans EN) — follow the file you are editing, never retranslate existing comments.
 
 ## PHP front Ecritel
 
@@ -86,7 +86,7 @@ Most Python/Rust microservices run on a remote server with GPU and network acces
 ## Per-Service Instructions
 
 **Avant de modifier un fichier sous `apps-microservices/<service>/` ou `libs/<lib>/`, lis d'abord le `CLAUDE.md` de ce service ou de cette lib.**
-Ils ne sont PAS importes ici : un `@import` avec glob ne s'expanse pas (verifie par sonde — un marqueur present uniquement dans `apps-microservices/*/CLAUDE.md` n'arrive jamais dans le prompt, alors que les imports litteraux ci-dessous, eux, arrivent). Les importer tous couterait 8 599 lignes a chaque requete pour 101 fichiers dont un seul est pertinent a la fois.
+Ils ne sont PAS importes ici : un `@import` avec glob ne s'expanse pas — verifie le 2026-08-03 par sonde, un marqueur present uniquement dans `apps-microservices/*/CLAUDE.md` n'etait pas visible du modele, alors que les imports litteraux ci-dessous l'etaient. Et les importer tous couterait 8 599 lignes a chaque requete pour 101 fichiers dont un seul sert a la fois.
 
 @tools/CLAUDE.md
 @model-optimizer/CLAUDE.md

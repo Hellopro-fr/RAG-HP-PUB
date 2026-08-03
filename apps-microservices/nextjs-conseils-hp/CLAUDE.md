@@ -3,7 +3,7 @@
 > **Service Next.js 15 du monorepo RAG-HP-PUB** (conteneur Docker isolé)
 > Remplacement progressif des pages conseils PHP actuelles (`conseils.hellopro.fr`) par un nouveau template moderne, hébergé sur GCP, monté en reverse proxy sur le **sous-domaine** `conseils.hellopro.fr/<slug>-<id>.html`. Les URLs existantes restent strictement identiques (préservation totale du SEO).
 >
-> ⚠️ **Lire intégralement ce fichier au début de CHAQUE session Claude Code** avant d'écrire du code (rule `.claude/rules/config-freshness.md`).
+> ⚠️ **Lire intégralement ce fichier au début de CHAQUE session Claude Code** avant d'écrire du code.
 
 ---
 
@@ -567,7 +567,7 @@ export function TextBlock(props: any) { ... }
 
 ### 11.4 Commits — Conventional Commits bilingues
 
-Voir `.claude/rules/commit-messages.md` du repo racine.
+Voir la section « Commit messages » du `CLAUDE.md` racine, ou lancer `/commit-msg`.
 
 Format : `<type>(<scope>): <description EN> / <description FR>`
 

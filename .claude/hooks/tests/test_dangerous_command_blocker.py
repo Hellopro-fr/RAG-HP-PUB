@@ -21,18 +21,20 @@ SPEC.loader.exec_module(blocker)
 
 def decide(command):
     """Mirror main()'s decision order without touching stdin/stdout."""
-    command = blocker.strip_literal_blocks(command)
+    command = blocker.strip_commit_message(command)
     for pattern in blocker.CATASTROPHIC:
         if re.search(pattern, command, re.IGNORECASE):
             return "catastrophic"
     for pattern in blocker.FORCE_PUSH:
-        if re.search(pattern, command, re.IGNORECASE):
-            return "force_push"
+        for fragment in blocker.fragments(command):
+            if re.search(pattern, fragment, re.IGNORECASE):
+                return "force_push"
     for pattern in blocker.CRITICAL_PATHS:
-        if re.search(pattern, command, re.IGNORECASE):
-            if any(re.search(wp, command, re.IGNORECASE) for wp in blocker.WHITELIST):
-                return "allow"
-            return "critical_path"
+        for fragment in blocker.fragments(command):
+            if re.search(pattern, fragment, re.IGNORECASE):
+                if any(re.search(wp, fragment, re.IGNORECASE) for wp in blocker.WHITELIST):
+                    continue
+                return "critical_path"
     return "allow"
 
 
@@ -50,6 +52,19 @@ CASES = [
     ("rm --recursive --force /", "catastrophic"),
     ("rm -rf ~", "catastrophic"),
     ("mkfs.ext4 /dev/sda1", "catastrophic"),
+    # system directories: anchoring on the bare slash alone let all of these
+    # through once — that regression is what these cases exist to catch
+    ("rm -rf /etc", "catastrophic"),
+    ("rm -rf /usr", "catastrophic"),
+    ("rm -rf /var/", "catastrophic"),
+    ("rm -rf /root", "catastrophic"),
+    ("rm -rf /home/*", "catastrophic"),
+    ("rm -rf //", "catastrophic"),
+    ("rm -rf ~/.ssh", "catastrophic"),
+    ("rm -rf ~/.aws/", "catastrophic"),
+    # ...while a real path that merely starts with a system-looking segment is fine
+    ("rm -rf /var/tmp/mybuild", "allow"),
+    ("rm -rf /home/rindra/projects/foo/dist", "allow"),
     ("Remove-Item -Recurse -Force C:/", "catastrophic"),
     ("rd /s /q C:", "catastrophic"),
     # --- force push, anchored on "git push" ---
@@ -60,6 +75,16 @@ CASES = [
     ("git push", "allow"),
     # a branch whose name contains -f must not trip the guard
     ("git push origin fix-flaky-test", "allow"),
+    ("git -C /d/DevHellopro/Workspaces/RAG-HP-PUB push --force", "force_push"),
+    ("git push origin +features/poc", "force_push"),
+    # a command that only MENTIONS the string must not be refused
+    ("grep -rn 'git push --force' docs/", "allow"),
+    ("echo 'never run git push -f on shared branches'", "allow"),
+    # --- a quoted-delimiter heredoc EXECUTES: it must stay scanned ---
+    ("bash <<'EOF'\nrm -rf /etc\nEOF", "catastrophic"),
+    ("sh <<'SCRIPT'\nmkfs.ext4 /dev/sda\nSCRIPT", "catastrophic"),
+    # ...but the same heredoc feeding a commit message is data
+    ("git commit -m \"$(cat <<'EOF'\nfix: reword the rm -rf / note\nEOF\n)\"", "allow"),
     # --- commands with substitutions must not be denied (the `if` fail-open) ---
     ("echo $i", "allow"),
     ("for f in a b; do echo \"$f\"; done", "allow"),
@@ -71,6 +96,10 @@ CASES = [
     # ...but a recoverable removal is whitelisted
     ("git rm .claude/rules/security.md", "allow"),
     ("git rm -r protos/legacy/", "allow"),
+    # ...but a whitelisted fragment must not excuse the NEXT command
+    ("git rm README.md && rm -rf .claude/", "critical_path"),
+    ("git rm foo && rm -rf protos/", "critical_path"),
+    ("echo ok; git rm a; rm libs/common-utils/x.py", "critical_path"),
     # --- literal blocks are data, not commands ---
     ("git commit -m 'fix: the rm -rf / regex was too broad'", "allow"),
     ("git commit -m @'\nfix: mkfs pattern reworded\n'@", "allow"),
