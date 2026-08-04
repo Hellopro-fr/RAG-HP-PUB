@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers-extended-cc:subagent-driven-development (recommended) or superpowers-extended-cc:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Stop the asyncio "exception was never retrieved" flood, and stop a hopeless domain costing ~320 s (which overruns the 300 s per-item ceiling and causes the cancellation that produces the flood).
+**Goal:** Stop the asyncio "exception was never retrieved" flood, and stop a hopeless domain costing up to ~275 s (close to the 300 s per-item ceiling — the observed cancellation implies the real per-launch cost runs above the ~45 s estimate behind that figure — and the cancellation is what causes the flood).
 
 **Architecture:** Three independent changes in `app/services/`. `_close_or_abandon` gains exception draining. The duplicated teardown block in both scrape functions is extracted into one liveness-aware helper. `redirect_tracker.fetch_html` gains a denylist gate so URL variants are skipped for failure classes they cannot fix.
 
@@ -442,7 +442,7 @@ Bilingual EN-then-FR message via the Write tool + `git commit --file=<path>`. EN
 
 ### Task 3: skip URL variants for failures they cannot fix
 
-**Goal:** A domain that fails Phase 1 with a navigation timeout or empty content no longer buys 4 more browser launches, bringing the worst case from ~320 s to ~140 s — under the 300 s per-item ceiling, so the item returns a real verdict instead of being cancelled.
+**Goal:** A domain that fails Phase 1 with a navigation timeout or empty content no longer buys up to 3 more browser launches, bringing the worst case from ~275 s to ~140 s against the 300 s per-item ceiling (275 s already sat under it on the ~45 s/launch estimate, so the cancellation actually observed implies the real per-launch cost runs higher). This halves the worst case — it does not guarantee the ceiling is never reached: `_launch_browser` can still burn ~45 s on the Camoufox `wait_for` and another ~45 s on the Chromium fallback per attempt, so under a launch-timeout storm the item can still be cancelled at 300 s instead of returning a real verdict (see "Parked, deliberately not in this plan").
 
 **Files:**
 - Modify: `apps-microservices/api-detection-langue-fr/app/services/redirect_tracker.py` (new tuple near `:13-27`; gate before `:262`)
@@ -467,9 +467,9 @@ Create `tests/test_variant_gate.py`:
 ```python
 """Phase-2 URL variants are skipped for failures they cannot fix (2026-08-03).
 
-A hopeless domain cost 3 retries (~140s) PLUS 4 variants (~180s) = ~320s,
-overrunning the 300s per-item ceiling in _run_batch_core. The item was then
-cancelled in flight, and that cancellation orphaned the futures behind the
+A hopeless domain cost 3 retries (~140s) PLUS up to 3 variants (~135s) =
+~275s, close to the 300s per-item ceiling in _run_batch_core. The item could
+be cancelled in flight, and that cancellation orphaned the futures behind the
 asyncio flood.
 
 The gate is a DENYLIST on purpose: _VARIANT_ELIGIBLE_ERRORS holds only
@@ -606,10 +606,10 @@ _VARIANT_POINTLESS_ERRORS = (
 In `fetch_html`, immediately before `variants = _generate_url_variants(url)` (`:262`):
 
 ```python
-    # Un domaine injoignable coûtait 3 tentatives (~140s) PUIS 4 variantes
-    # (~180s) = ~320s, au-delà du plafond de 300s par item : l'item était
-    # annulé en vol, et cette annulation orphelinait les futures à l'origine
-    # du flood asyncio du 2026-08-03. Les variantes n'y changeaient rien.
+    # Un domaine injoignable coûtait 3 tentatives (~140s) PUIS jusqu'à 3
+    # variantes (~135s) = ~275s, proche du plafond de 300s par item : l'item
+    # pouvait être annulé en vol, et cette annulation orphelinait les futures
+    # à l'origine du flood asyncio du 2026-08-03. Les variantes n'y changeaient rien.
     variant_pointless = last_error and any(
         tok in last_error for tok in _VARIANT_POINTLESS_ERRORS
     )
@@ -658,10 +658,12 @@ On the next `domaine_fr_retry` batch, in the container log:
 - `[VARIANTES] ignorées` lines present
 - **no** `Task exception was never retrieved` / `Future exception was never retrieved`
 - `docker stats` PIDs lower than 876 — a secondary confirmation that the count tracks in-flight launches rather than leakage
+- `Timeout global item (300s)` should go to zero — if it doesn't, the residual path noted below (`_launch_browser` still burning ~90 s/attempt on launch timeouts) is live
+- `Timeout lancement Camoufox (45s), fallback vers Chromium` — its frequency tells the operator whether to schedule the wall-clock-deadline work below
 
 ## Parked, deliberately not in this plan
 
 - **`_VARIANT_ELIGIBLE_ERRORS` is Chromium-only**, so the `break` at `redirect_tracker.py:245-247` is dead on Camoufox: a DNS failure burns all 3 retries instead of short-circuiting to Phase 2. Fixing it means asserting exact Gecko token strings, unverifiable without a browser on this machine — and a wrong token silently re-disables the path, the exact failure already caught once. Verify against a real Camoufox DNS failure first.
-- **A wall-clock deadline inside `fetch_html`** — Task 3 already brings the worst case to ~140 s against a 300 s budget; a deadline is insurance against a future cascade addition, not a fix for anything observed.
+- **A wall-clock deadline inside `fetch_html`** — not insurance against a hypothetical future cascade: it is the residual path by which this incident can recur. `_launch_browser` can burn ~45 s on the Camoufox `wait_for` then another ~45 s on the Chromium fallback (~90 s/attempt before navigation starts), so three attempts plus the 2 s/4 s sleeps ≈ 280 s, and the browser-semaphore wait is charged to the same 300 s item budget (`ADMISSION_MAX_SLOTS=8` exceeds `BROWSER_SEMAPHORE_SIZE=6`, so two admitted items always queue). Under a launch-timeout storm — the incident's own condition — items can still be cancelled at 300 s. Task 3 brings the worst case to ~140 s against a 300 s budget; kept out of scope for this plan, but that is the plain reason.
 - **The duplicated `WARNING`/`ERROR` log lines** (`INFO` lines are not duplicated → likely a second handler at WARNING+ level alongside `main.py:22`'s `basicConfig`). Cosmetic, doubles flood volume, separate investigation.
 - **`ADMISSION_MAX_SLOTS=8` exceeding `BROWSER_SEMAPHORE_SIZE=6`** — two admitted requests always queue on the browser semaphore. Harmless; not touched.
