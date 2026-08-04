@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import { ArrowRight, Download, Mail, MapPin, ShieldCheck, User } from 'lucide-react';
 import {
@@ -12,6 +12,9 @@ import {
 } from '@/components/ui/dialog';
 import { HubIcon } from './primitives';
 import { PhoneField } from './PhoneField';
+import { Confetti } from './Confetti';
+import { useAutoDownload } from '@/lib/hub/useAutoDownload';
+import { getRememberedEmail, rememberEmail } from '@/lib/hub/leadEmailCookie';
 import { isValidPhone } from '@/lib/hub/validation';
 import type { HubAssistant } from '@/types/hub';
 
@@ -59,14 +62,26 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
   const [dialCode, setDialCode] = useState('33');
   const [submitted, setSubmitted] = useState(false);
   const [forceOpen, setForceOpen] = useState(false);
+  // Fermeture en cours : garde le contenu (Success) affiché pendant l'animation
+  // de sortie du dialog, puis on réinitialise. Sans ça, le reset synchrone fait
+  // apparaître le questionnaire dans le dialog qui se ferme.
+  const [closing, setClosing] = useState(false);
   // Verrou anti double-soumission (§11) + message d'erreur technique (§7/§9).
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  // Garde : ne déclenche qu'UNE fois l'auto-envoi « e-mail mémorisé » par parcours.
+  const autoSentRef = useRef(false);
+  // Visiteur reconnu : capturé UNE SEULE fois après le montage (pas lu à chaque
+  // render). Sinon l'écriture du cookie à la soumission ferait clignoter le
+  // remerciement pendant que la requête est en vol.
+  const [recognized, setRecognized] = useState(false);
 
   // Flux : questionnaire (0..N-1) → e-mail (N) → coordonnées (N+1) → succès.
   const totalSteps = data.steps.length + 2;
   const isContact = step === data.steps.length;
   const isCoordinates = step === data.steps.length + 1;
+  // Visiteur reconnu à l'étape e-mail → on affiche le remerciement (APPEL 1 en fond).
+  const skipEmailStep = isContact && recognized;
   const current = step < data.steps.length ? data.steps[step] : null;
   // 100% au succès quel que soit le chemin (e-mail reconnu = 1 seul appel).
   const progressPct = submitted ? 100 : (step / totalSteps) * 100;
@@ -86,6 +101,7 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
     setForceOpen(false);
     setSubmitting(false);
     setErrorMsg('');
+    autoSentRef.current = false;
   };
 
   /**
@@ -94,7 +110,7 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
    * cochés. On omet les questions sans réponse. `coordonnees` n'est joint qu'à
    * l'appel 2. `referer` = URL réelle du visiteur, tronquée à 500 (§10).
    */
-  const buildPayload = (withCoordinates: boolean) => {
+  const buildPayload = (withCoordinates: boolean, emailOverride?: string) => {
     const reponses = data.steps
       .map((s) => {
         const value = answers[s.id];
@@ -106,7 +122,7 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
     const referer = typeof window !== 'undefined' ? window.location.href.slice(0, 500) : '';
 
     return {
-      email,
+      email: emailOverride ?? email,
       id_page_hub: idPageHub,
       referer,
       reponses,
@@ -132,7 +148,7 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
    * 200 / `statut:"coordonnees_requises"` → passe à l'étape coordonnées.
    * Tout le reste → message technique générique, bouton réactivé (§7/§9).
    */
-  const send = async (withCoordinates: boolean) => {
+  const send = async (withCoordinates: boolean, emailOverride?: string) => {
     if (submitting) return;
     setSubmitting(true);
     setErrorMsg('');
@@ -140,7 +156,7 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
       const res = await fetch('/api/demande', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(buildPayload(withCoordinates)),
+        body: JSON.stringify(buildPayload(withCoordinates, emailOverride)),
       });
       let corps: { statut?: string } | null = null;
       try {
@@ -150,6 +166,8 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
       }
 
       if (res.status === 201 || corps?.statut === 'enregistre') {
+        // Mémorise l'e-mail seulement après un enregistrement réel (201).
+        rememberEmail(emailOverride ?? email);
         setSubmitted(true); // succès : le bouton disparaît, on ne réactive pas.
         return;
       }
@@ -171,11 +189,29 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
   useEffect(() => {
     const handler = () => {
       reset();
+      setClosing(false); // annule une fermeture en cours si on rouvre aussitôt
       setForceOpen(true);
     };
     window.addEventListener(ASSISTANT_DIALOG_EVENT, handler);
     return () => window.removeEventListener(ASSISTANT_DIALOG_EVENT, handler);
   }, []);
+
+  // Lit le cookie UNE fois après le montage (client-only, pas de mismatch SSR).
+  useEffect(() => {
+    setRecognized(getRememberedEmail() !== '');
+  }, []);
+
+  // Visiteur reconnu : dès que les réponses sont finies (étape e-mail atteinte),
+  // on lance l'APPEL 1 en arrière-plan. Le remerciement est déjà affiché par
+  // `skipEmailStep` — aucune étape e-mail, aucune transition.
+  useEffect(() => {
+    if (!isContact || !recognized || autoSentRef.current || submitting || submitted) return;
+    autoSentRef.current = true;
+    const remembered = getRememberedEmail();
+    setEmail(remembered);
+    void send(false, remembered);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isContact, recognized, submitting, submitted]);
 
   const isSelected = (id: string, option: string) => {
     const value = answers[id];
@@ -207,7 +243,7 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
 
   const inlineStep = data.steps[0];
   const inlineAnswered = Boolean(answers[inlineStep?.id ?? '']);
-  const modalOpen = forceOpen || step > 0 || submitted;
+  const modalOpen = (forceOpen || step > 0 || submitted) && !closing;
   const emailValid = EMAIL_RE.test(email);
   const coordinatesValid =
     nom.trim() !== '' &&
@@ -270,9 +306,16 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
       <Dialog
         open={modalOpen}
         onOpenChange={(open) => {
-          // La croix ferme entièrement le questionnaire et revient à l'état
-          // initial, plutôt que de reculer d'une étape.
-          if (!open) reset();
+          // La croix ferme entièrement le questionnaire. On ferme d'abord (le
+          // contenu reste stable pendant l'animation de sortie) puis on
+          // réinitialise après l'animation → pas de flash du questionnaire.
+          if (!open) {
+            setClosing(true);
+            window.setTimeout(() => {
+              reset();
+              setClosing(false);
+            }, 250);
+          }
         }}
       >
         <DialogContent className="max-w-lg p-0">
@@ -283,7 +326,7 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
             </DialogDescription>
           </DialogHeader>
 
-          <div className="px-6 pt-3 sm:px-8">
+          <div className="pl-6 pr-14 pt-5 sm:pl-8">
             <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
               <div
                 className="h-full rounded-full bg-cta transition-all duration-500"
@@ -293,7 +336,8 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
           </div>
 
           <div className="px-6 py-4 sm:px-8">
-            {submitted ? (
+            {submitted || skipEmailStep ? (
+              // Visiteur reconnu : remerciement DIRECT (optimiste), pas d'étape vide.
               <Success data={data} />
             ) : isContact ? (
               <form
@@ -600,8 +644,11 @@ function CoordinateField({
  */
 function Success({ data }: { data: HubAssistant }) {
   const { success } = data;
+  // Téléchargement auto du guide dès l'affichage de l'écran de remerciement.
+  useAutoDownload(success.fileUrl);
   return (
-    <div className="text-center">
+    <div className="relative text-center">
+      <Confetti />
       <h3 className="text-xl font-bold text-foreground sm:text-2xl">{success.title}</h3>
 
       <div className="relative mx-auto mt-5 h-56 w-40">
@@ -621,9 +668,9 @@ function Success({ data }: { data: HubAssistant }) {
       <a
         href={success.fileUrl ?? '#'}
         download
-        className="mt-6 inline-flex h-14 w-full items-center justify-center gap-3 rounded-xl border-2 border-cta text-xl font-bold text-cta transition hover:bg-cta/5"
+        className="mt-6 inline-flex h-10 items-center justify-center gap-2 rounded-lg px-4 text-sm font-medium text-muted-foreground transition hover:text-cta"
       >
-        <Download className="h-5 w-5" />
+        <Download className="h-4 w-4" />
         {success.downloadLabel}
       </a>
     </div>

@@ -3,6 +3,8 @@
 import Image from 'next/image';
 import { ArrowRight, Download, MapPin, ShieldCheck, User } from 'lucide-react';
 import { PhoneField } from './PhoneField';
+import { Confetti } from './Confetti';
+import { useAutoDownload } from '@/lib/hub/useAutoDownload';
 import type { HubGuideDialog } from '@/types/hub';
 import type { GuideLead } from '@/lib/hub/useGuideLead';
 
@@ -72,7 +74,7 @@ export function CoordinatesStep({
       <span className="inline-flex w-fit items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-primary">
         {guide.coordinatesBadge}
       </span>
-      <div className="mt-3">
+      <div className="mt-2">
         <h2 className="text-xl font-bold leading-tight text-foreground sm:text-2xl">
           {guide.coordinatesTitle}
         </h2>
@@ -85,7 +87,7 @@ export function CoordinatesStep({
           if (!lead.coordinatesValid || lead.submitting) return;
           void lead.send(true);
         }}
-        className="mt-3 space-y-3"
+        className="mt-2 space-y-2"
         noValidate
       >
         {/* Civilité — encart avec libellé + options (facultative). */}
@@ -191,8 +193,11 @@ export function CoordinatesStep({
 
 /** Étape finale : remerciement + couverture du guide + bouton de téléchargement. */
 export function DownloadStep({ download }: { download: HubGuideDialog['download'] }) {
+  // Téléchargement auto dès l'affichage de l'écran de remerciement.
+  useAutoDownload(download.fileUrl);
   return (
-    <div className="text-center">
+    <div className="relative text-center">
+      <Confetti />
       <h2 className="text-xl font-bold text-foreground sm:text-2xl">{download.title}</h2>
       {download.subtitle && (
         <p className="mt-1 text-sm text-muted-foreground">{download.subtitle}</p>
@@ -215,9 +220,9 @@ export function DownloadStep({ download }: { download: HubGuideDialog['download'
       <a
         href={download.fileUrl ?? '#'}
         download
-        className="mt-6 inline-flex h-14 w-full items-center justify-center gap-3 rounded-xl border-2 border-cta text-xl font-bold text-cta transition hover:bg-cta/5"
+        className="mt-6 inline-flex h-10 items-center justify-center gap-2 rounded-lg px-4 text-sm font-medium text-muted-foreground transition hover:text-cta"
       >
-        <Download className="h-5 w-5" />
+        <Download className="h-4 w-4" />
         {download.buttonLabel}
       </a>
     </div>

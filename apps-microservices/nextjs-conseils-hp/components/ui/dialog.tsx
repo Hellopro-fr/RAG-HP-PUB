@@ -45,6 +45,10 @@ function DialogContent({
     <DialogPortal>
       <DialogOverlay />
       <DialogPrimitive.Content
+        // Un clic à l'extérieur NE FERME PAS le dialog (formulaires lead : éviter
+        // la perte de saisie). La croix et la touche Échap restent actives.
+        // Un consommateur peut réactiver la fermeture en passant sa propre prop.
+        onPointerDownOutside={(event) => event.preventDefault()}
         className={cn(
           'fixed left-1/2 top-1/2 z-50 w-[calc(100vw-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2',
           'max-h-[calc(100vh-2rem)] overflow-y-auto rounded-2xl border border-border bg-card shadow-elegant',

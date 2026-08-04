@@ -74,6 +74,7 @@ export function PhoneField({
       disableDialCodeAndPrefix
       showDisabledDialCodeAndPrefix
       style={PHONE_CSS_VARS}
+      placeholder={ariaLabel}
       inputProps={{ 'aria-label': ariaLabel }}
       // UNE seule boîte : la bordure/arrondi/fond sont sur le conteneur ; le
       // sélecteur pays et l'input sont transparents et sans bordure interne (pas

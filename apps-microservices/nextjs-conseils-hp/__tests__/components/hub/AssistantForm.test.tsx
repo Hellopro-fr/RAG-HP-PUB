@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { AssistantForm, openAssistantDialog } from '@/components/hub/AssistantForm';
 import { listHubPages } from '@/data/hub';
+import { rememberEmail } from '@/lib/hub/leadEmailCookie';
 
 // PhoneField encapsule react-international-phone (+ son CSS) : on le mocke par un
 // input simple qui remonte toujours le pays « France » / indicatif « 33 ».
@@ -55,6 +56,9 @@ function renderShort(fetchResponses: MockResponse[] = [{ status: 200, body: {} }
 
 afterEach(() => {
   vi.restoreAllMocks();
+  // rememberEmail() pose un cookie que jsdom conserve entre tests : on le purge
+  // pour ne pas déclencher le raccourci « e-mail mémorisé » du test suivant.
+  document.cookie = 'hub_lead_email=; path=/; max-age=0';
 });
 
 describe('AssistantForm', () => {
@@ -217,6 +221,24 @@ describe('AssistantForm', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     // Aucun champ coordonnées n'a été présenté.
     expect(screen.queryByLabelText(short.coordinates.fields.name)).toBeNull();
+  });
+
+  /**
+   * E-mail mémorisé (cookie) : dès les réponses finies, on saute l'étape e-mail
+   * et on lance l'APPEL 1 → 201 → remerciement direct.
+   */
+  it('saute l’étape e-mail si un e-mail est mémorisé', async () => {
+    rememberEmail('connu@exemple.fr');
+    const { short, fetchMock } = renderShort([
+      { status: 201, body: { statut: 'enregistre', id_demande: 5, contact_connu: 1 } },
+    ]);
+
+    await waitFor(() => expect(screen.getByText(short.success.title)).toBeDefined());
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    expect(body.email).toBe('connu@exemple.fr');
+    // L'étape e-mail n'est jamais affichée.
+    expect(screen.queryByLabelText(short.contact.label)).toBeNull();
   });
 
   it('bloque l’étape coordonnées si le téléphone est invalide', async () => {

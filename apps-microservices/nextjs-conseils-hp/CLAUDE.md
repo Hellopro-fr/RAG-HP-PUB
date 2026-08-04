@@ -734,6 +734,16 @@ Objectif : valider la rentabilité du workflow, pas livrer une V1.
   (ex. 1000 → 2000), distinct du projet pour séparer les leads en stats.
   La route `/api/demande` rend `reponses`/`adresse` optionnels et déclare
   `civilite`/`pays`. `fileUrl` du PDF encore à `'#'` (asset à livrer).
+- **E-mail mémorisé (visiteur reconnu)** : à l'APPEL 1, l'e-mail est écrit dans un
+  cookie 30 j (`lib/hub/leadEmailCookie.ts`, `hub_lead_email`). Tant qu'il existe
+  et vaut un e-mail valide : ouvrir le dialog guide déclenche l'APPEL 1 **direct**
+  (saute l'étape e-mail) ; côté questionnaire projet, une fois les réponses finies
+  l'étape e-mail est **sautée** et l'APPEL 1 part directement → 201 → remerciement.
+  ⚠️ RGPD : ce cookie contient l'e-mail et est renvoyé à chaque requête du
+  sous-domaine — `localStorage` serait une alternative si la transmission pose problème.
+- **Téléchargement auto** : `lib/hub/useAutoDownload.ts` déclenche le download à
+  l'affichage de l'écran de remerciement (guide, pop-up, projet). **No-op tant que
+  `fileUrl = '#'`** ; cross-origin nécessitera `Content-Disposition: attachment`.
 - **`LeadPopup` est branché** (2026-07-31) sur le **même parcours guide** que
   `GuideDownloadDialog` (même `id_page_hub` = `guideIdPageHub(page.id)`, mêmes leads).
   Son écran e-mail garde son design riche (bandeau, livre, pastille) ; le bouton

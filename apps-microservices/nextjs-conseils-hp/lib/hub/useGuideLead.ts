@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from 'react';
 import { isValidPhone } from './validation';
+import { rememberEmail } from './leadEmailCookie';
 
 /**
  * Flux commun aux deux points d'entrée « guide » (dialog `GuideDownloadDialog`
@@ -56,15 +57,20 @@ export function useGuideLead(idPageHub: number) {
     setErrorMsg('');
   }, []);
 
-  /** Un seul appel en vol à la fois (§5). withCoordinates=false → APPEL 1. */
-  const send = async (withCoordinates: boolean) => {
+  /**
+   * Un seul appel en vol à la fois (§5). withCoordinates=false → APPEL 1.
+   * `emailOverride` permet d'envoyer directement l'e-mail mémorisé (cookie) sans
+   * attendre la mise à jour de l'état.
+   */
+  const send = async (withCoordinates: boolean, emailOverride?: string) => {
     if (submitting) return;
+    const emailToUse = emailOverride ?? email;
     setSubmitting(true);
     setErrorMsg('');
     try {
       const referer = typeof window !== 'undefined' ? window.location.href.slice(0, 500) : '';
       const payload = {
-        email,
+        email: emailToUse,
         id_page_hub: idPageHub,
         referer,
         ...(withCoordinates
@@ -92,6 +98,10 @@ export function useGuideLead(idPageHub: number) {
       }
 
       if (res.status === 201 || corps?.statut === 'enregistre') {
+        // Mémorise l'e-mail UNIQUEMENT après un enregistrement réel (201) : un
+        // 200 (coordonnées requises, rien écrit) ne doit pas « reconnaître » le
+        // visiteur au prochain passage.
+        rememberEmail(emailToUse);
         setPhase('download');
         setSubmitting(false);
         return;

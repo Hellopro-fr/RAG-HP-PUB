@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
-import { Download, ShieldCheck } from 'lucide-react';
+import { ArrowRight, ShieldCheck } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dialog';
 import { CoordinatesStep, DownloadStep } from './GuideSteps';
 import { useGuideLead } from '@/lib/hub/useGuideLead';
+import { getRememberedEmail } from '@/lib/hub/leadEmailCookie';
 import type { HubLeadPopup, HubGuideDialog } from '@/types/hub';
 
 /**
@@ -68,11 +69,20 @@ export function LeadPopup({
       } catch {
         /* stockage indisponible : la pop-up réapparaîtra au rechargement */
       }
+      // Visiteur reconnu (cookie) → remerciement DIRECT (optimiste, pas d'étape
+      // vide) : le petit modal s'ouvre sur le téléchargement, APPEL 1 en fond.
+      const remembered = getRememberedEmail();
+      if (remembered) {
+        lead.setEmail(remembered);
+        lead.setPhase('download');
+        void lead.send(false, remembered);
+      }
       window.removeEventListener('scroll', onScroll);
     };
 
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.triggerSectionId]);
 
   const emailValid = EMAIL_RE.test(lead.email);
@@ -185,10 +195,12 @@ export function LeadPopup({
               <button
                 type="submit"
                 disabled={!emailValid || lead.submitting}
-                className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-cta px-5 text-sm font-bold uppercase text-cta-foreground shadow-cta transition hover:bg-cta-hover disabled:opacity-50"
+                // `min-w` conserve une largeur stable (proche de l'ancien libellé)
+                // malgré le texte court, ce qui resserre aussi le champ e-mail voisin.
+                className="inline-flex h-12 min-w-[12rem] items-center justify-center gap-2 rounded-lg bg-cta px-5 text-sm font-bold uppercase text-cta-foreground shadow-cta transition hover:bg-cta-hover disabled:opacity-50"
               >
-                <Download className="h-4 w-4" />
                 {data.submitLabel}
+                <ArrowRight className="h-4 w-4" />
               </button>
             </form>
             {lead.errorMsg && (
@@ -219,7 +231,7 @@ export function LeadPopup({
           </DialogHeader>
 
           {/* Barre de progression : coordonnées (66%) et remerciement (100%). */}
-          <div className="px-6 pt-3 sm:px-8">
+          <div className="pl-6 pr-14 pt-4 sm:pl-8">
             <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
               <div
                 className="h-full rounded-full bg-cta transition-all duration-500"
@@ -228,7 +240,7 @@ export function LeadPopup({
             </div>
           </div>
 
-          <div className="px-6 py-5 sm:px-8">
+          <div className="px-6 py-4 sm:px-8">
             {lead.phase === 'coordinates' ? (
               <CoordinatesStep
                 guide={guide}

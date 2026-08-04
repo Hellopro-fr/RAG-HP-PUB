@@ -671,7 +671,8 @@ export const lancerElevagePoulesPondeuses: HubPage = {
         alt: 'Guide complet — Lancer votre élevage de poules pondeuses',
       },
       downloadLabel: 'Télécharger à nouveau le guide',
-      fileUrl: '#',
+      // PDF de test (même origine → téléchargement forcé OK). À remplacer par l'URL réelle.
+      fileUrl: '/seo_masterclass_detailed.pdf',
     },
   },
 
@@ -708,8 +709,8 @@ export const lancerElevagePoulesPondeuses: HubPage = {
         alt: 'Guide complet — Lancer votre élevage de poules pondeuses',
       },
       buttonLabel: 'Télécharger à nouveau le guide',
-      // Design-only : PDF réel à brancher plus tard.
-      fileUrl: '#',
+      // PDF de test (même origine → téléchargement forcé OK). À remplacer par l'URL réelle.
+      fileUrl: '/seo_masterclass_detailed.pdf',
     },
   },
 
@@ -719,8 +720,8 @@ export const lancerElevagePoulesPondeuses: HubPage = {
     scriptLine: 'avec un guide complet',
     text: "Un guide complet pour structurer votre projet de A à Z : étapes clés, équipements indispensables, budget estimatif et points de vigilance d'un marché en forte demande en France.",
     emailPlaceholder: 'Votre adresse e-mail',
-    submitLabel: 'Recevoir mon guide gratuit',
-    reassurance: 'Gratuit, sans engagement et utilisable immédiatement.',
+    submitLabel: 'Continuer',
+    reassurance: '100% gratuit, sans engagement',
     successMessage: 'Merci ! Votre guide arrive dans quelques instants par e-mail.',
     circleBadgeLines: ['100%', 'Gratuit'],
     // Visuel du livret — même asset que le CTA guide.
