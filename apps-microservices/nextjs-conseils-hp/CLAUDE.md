@@ -703,13 +703,58 @@ et `IntersectionObserver` sont appelés en optionnel — absents de jsdom.
 Objectif : valider la rentabilité du workflow, pas livrer une V1.
 
 - Intégration **terminée** : toutes les sections du prototype sont portées.
-- Les 3 formulaires (`AssistantForm`, `LeadPopup`, `GuideDownloadDialog`) sont
-  portés en **UI mock** — aucune soumission transmise, **aucun lead collecté**.
-  Le POC n'est donc mesurable qu'en trafic et comportement, pas en conversion.
-  Plan de tracking à définir avant industrialisation.
-  ⚠️ Trois tests vérifient explicitement l'**absence d'appel réseau** à la
-  soumission (`AssistantForm.test`, `GuideDownloadDialog.test`). Ils devront être
-  RÉÉCRITS au branchement réel — c'est le signal voulu à ce moment-là.
+- **`AssistantForm` est branché** (2026-07-31) sur `POST /api/demande` (route
+  proxy → `page_conseil.php`, Bearer `CONSEILS_API_TOKEN` gardé côté serveur).
+  Parcours à 2 appels (spec `spec_hub/hub_formulaire.txt`) : e-mail → APPEL 1
+  (201 e-mail reconnu → remerciement direct ; 200 → étape coordonnées) →
+  APPEL 2 → 201. Route : validation Zod, limites de longueur (§10 spec), parse
+  tolérant + 502 sur réponse non-JSON (erreur SQL), fallback dev sans token
+  (200/201 simulés). Front : verrou anti double-clic, `referer` tronqué à 500,
+  libellés de questions/réponses envoyés tels quels. Étape coordonnées :
+  **Civilité** (radios Monsieur/Madame, facultative), **Nom + Prénom** (reliés par
+  « _ » → `nom_prenom = "Nom_Prénom"`, re-séparables dans le BO), **Téléphone
+  international** via
+  `components/hub/PhoneField.tsx` (`react-international-phone`, indicateur pays),
+  **Code postal**. Le **pays** choisi dans l'indicateur est envoyé dans
+  `coordonnees.pays`. `PhoneField` est mocké dans les tests (isole
+  la lib + son CSS) — pense à `npm install react-international-phone`.
+  ⚠️ **2 colonnes serveur à créer** : `coordonnees.civilite` et `coordonnees.pays`
+  (déclarées dans le Zod de la route pour ne pas être supprimées ; le serveur les
+  ignore tant que les colonnes n'existent pas). `nom_prenom`/`telephone`/
+  `code_postal`/`adresse` tombent sur des colonnes existantes.
+- **`GuideDownloadDialog` est branché** (2026-07-31) sur le **même** `POST /api/demande`
+  que le projet (un seul endpoint HP sert les deux formulaires, spec
+  `spec_hub/hub_guide.txt`). Parcours : e-mail → APPEL 1
+  (201 reconnu → téléchargement ; 200 → coordonnées) → APPEL 2 → 201 →
+  écran de téléchargement (visuel + bouton). Spécificités guide : **pas de
+  `reponses`** ; l'étape coordonnées reprend le **même design que le projet**
+  (civilité, Prénom + Nom → `nom_prenom` relié par « _ », téléphone `PhoneField`
+  avec indicateur pays → `pays`, code postal ; pas d'adresse). `id_page_hub`
+  **dérivé** de l'id de la page via `guideIdPageHub(page.id)` = `page.id + 1000`
+  (ex. 1000 → 2000), distinct du projet pour séparer les leads en stats.
+  La route `/api/demande` rend `reponses`/`adresse` optionnels et déclare
+  `civilite`/`pays`. `fileUrl` du PDF encore à `'#'` (asset à livrer).
+- **E-mail mémorisé (visiteur reconnu)** : à l'APPEL 1, l'e-mail est écrit dans un
+  cookie 30 j (`lib/hub/leadEmailCookie.ts`, `hub_lead_email`). Tant qu'il existe
+  et vaut un e-mail valide : ouvrir le dialog guide déclenche l'APPEL 1 **direct**
+  (saute l'étape e-mail) ; côté questionnaire projet, une fois les réponses finies
+  l'étape e-mail est **sautée** et l'APPEL 1 part directement → 201 → remerciement.
+  ⚠️ RGPD : ce cookie contient l'e-mail et est renvoyé à chaque requête du
+  sous-domaine — `localStorage` serait une alternative si la transmission pose problème.
+- **Téléchargement auto** : `lib/hub/useAutoDownload.ts` déclenche le download à
+  l'affichage de l'écran de remerciement (guide, pop-up, projet). **No-op tant que
+  `fileUrl = '#'`** ; cross-origin nécessitera `Content-Disposition: attachment`.
+- **`LeadPopup` est branché** (2026-07-31) sur le **même parcours guide** que
+  `GuideDownloadDialog` (même `id_page_hub` = `guideIdPageHub(page.id)`, mêmes leads).
+  Son écran e-mail garde son design riche (bandeau, livre, pastille) ; le bouton
+  est grisé tant que l'e-mail n'est pas valide, puis APPEL 1 → 201 (reconnu)
+  téléchargement / 200 → coordonnées → APPEL 2 → téléchargement.
+- **Flux guide factorisé** : la logique 2 appels vit dans le hook
+  `lib/hub/useGuideLead.ts` ; les étapes coordonnées + téléchargement sont les
+  composants partagés `components/hub/GuideSteps.tsx` (`Field`, `CoordinatesStep`,
+  `DownloadStep`), utilisés par `GuideDownloadDialog` **et** `LeadPopup`. Seul
+  l'écran e-mail diffère entre les deux (label + champ pour le dialog, design riche
+  bandeau/livre pour la pop-up ; plus de consentement).
 - Les articles ne sont pas encore reliés : les liens « Lire l'article » / « En
   savoir plus » ouvrent le questionnaire au lieu d'exposer des liens morts. À
   remplacer par les vraies URLs conseils quand elles seront connues.

@@ -31,3 +31,18 @@ export function getHubPage(id: number): HubPage | null {
 export function listHubPages(): HubPage[] {
   return Object.values(HUB_PAGES);
 }
+
+/**
+ * Décalage d'`id_page_hub` des leads « guide » par rapport aux leads « projet ».
+ * La spec guide §5 impose un id DISTINCT de celui du projet (= id de la page) :
+ * c'est le seul moyen de séparer les deux types de leads dans les stats.
+ */
+export const GUIDE_LEAD_ID_OFFSET = 1000;
+
+/**
+ * `id_page_hub` des leads « guide » d'une page, dérivé de son id réel
+ * (ex. page 1000 → guide 2000). Toujours distinct de l'id projet.
+ */
+export function guideIdPageHub(pageId: number): number {
+  return pageId + GUIDE_LEAD_ID_OFFSET;
+}

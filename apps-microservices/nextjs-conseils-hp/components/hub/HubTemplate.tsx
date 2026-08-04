@@ -4,6 +4,7 @@ import { GtmFooterScripts } from '@/components/conseil/GtmFooterScripts';
 import { FaqBlock } from '@/components/conseil/blocks/FaqBlock';
 import { HUB_SECTION_IDS } from '@/lib/hub/anchors';
 import type { HeaderCategory } from '@/data/site/header-categories';
+import { guideIdPageHub } from '@/data/hub';
 import { HubHero } from './HubHero';
 import { AssistantForm } from './AssistantForm';
 import { HubSectionNav } from './HubSectionNav';
@@ -91,7 +92,7 @@ export function HubTemplate({ page, headerCategories = [] }: HubTemplateProps) {
       <SiteHeader categories={headerCategories} />
 
       <main>
-        <HubHero data={page.hero} formSlot={<AssistantForm data={page.assistant} />} />
+        <HubHero data={page.hero} formSlot={<AssistantForm data={page.assistant} idPageHub={page.id} />} />
         <HubSectionNav items={page.nav} />
         <ValueProps data={page.valueProps} />
 
@@ -141,8 +142,12 @@ export function HubTemplate({ page, headerCategories = [] }: HubTemplateProps) {
       {/* Surcouches : montées une seule fois, pilotées par événement window.
           Les dialogs ne rendent rien tant qu'ils sont fermés (Radix Portal). */}
       <StickyCta label={page.stickyCtaLabel} />
-      <GuideDownloadDialog data={page.guideDialog} />
-      <LeadPopup data={page.leadPopup} />
+      <GuideDownloadDialog data={page.guideDialog} idPageHub={guideIdPageHub(page.id)} />
+      <LeadPopup
+        data={page.leadPopup}
+        guide={page.guideDialog}
+        idPageHub={guideIdPageHub(page.id)}
+      />
     </div>
   );
 }

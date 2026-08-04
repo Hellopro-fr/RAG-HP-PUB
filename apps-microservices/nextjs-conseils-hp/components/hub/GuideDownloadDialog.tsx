@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ArrowRight, BookOpen, CheckCircle2, Download, FileText, Mail, MapPin, Phone, User } from 'lucide-react';
+import { ArrowRight, BookOpen, FileText, Mail } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -10,14 +10,22 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { HubTitle } from './primitives';
+import { CoordinatesStep, DownloadStep } from './GuideSteps';
+import { useGuideLead } from '@/lib/hub/useGuideLead';
+import { getRememberedEmail } from '@/lib/hub/leadEmailCookie';
 import type { HubGuideDialog } from '@/types/hub';
 
 /**
  * Dialog de téléchargement du guide — ouvert par tous les boutons « guide » de
  * la page via l'événement window `hp:open-guide-dialog`.
  *
- * ⚠️ POC : aucune donnée transmise. Les 4 champs et le consentement sont validés
- * côté client puis jetés (cf. CLAUDE.md §11bis.4).
+ * Parcours (spec `spec_hub/hub_guide.txt`), même endpoint `/api/demande` que le
+ * projet, flux partagé via `useGuideLead` (voir aussi `LeadPopup`) :
+ *   1. e-mail (+ consentement) → APPEL 1 → 201 (reconnu) `download` / 200 `coordinates`
+ *   2. coordonnées (nom, téléphone, code postal) → APPEL 2 → 201 → `download`
+ *
+ * `id_page_hub` = prop `idPageHub` (dérivée de l'id de la page, distincte du
+ * projet — cf. `guideIdPageHub`). Le consentement reste purement front (non transmis).
  */
 const GUIDE_DIALOG_EVENT = 'hp:open-guide-dialog';
 
@@ -29,38 +37,48 @@ export function openGuideDialog() {
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export function GuideDownloadDialog({ data }: { data: HubGuideDialog }) {
+export function GuideDownloadDialog({
+  data,
+  idPageHub,
+}: {
+  data: HubGuideDialog;
+  idPageHub: number;
+}) {
   const [open, setOpen] = useState(false);
-  const [phase, setPhase] = useState<'form' | 'success'>('form');
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
-  const [postalCode, setPostalCode] = useState('');
-  const [accepted, setAccepted] = useState(false);
   const [emailError, setEmailError] = useState('');
-  const [consentError, setConsentError] = useState('');
+  const lead = useGuideLead(idPageHub);
+  const { reset } = lead;
 
   useEffect(() => {
     const handler = () => {
-      setPhase('form');
+      // Réinitialise le parcours à chaque ouverture.
+      reset();
       setEmailError('');
-      setConsentError('');
       setOpen(true);
+      // Visiteur reconnu (e-mail mémorisé 30j) → on affiche DIRECTEMENT le
+      // remerciement (optimiste, aucune étape vide) et l'APPEL 1 part en fond.
+      const remembered = getRememberedEmail();
+      if (remembered) {
+        lead.setEmail(remembered);
+        lead.setPhase('download');
+        void lead.send(false, remembered);
+      }
     };
     window.addEventListener(GUIDE_DIALOG_EVENT, handler);
     return () => window.removeEventListener(GUIDE_DIALOG_EVENT, handler);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reset]);
 
-  const submit = (event: React.FormEvent) => {
+  const submitEmail = (event: React.FormEvent) => {
     event.preventDefault();
-    const validEmail = EMAIL_RE.test(email);
-    setEmailError(validEmail ? '' : 'Veuillez saisir une adresse e-mail valide.');
-    setConsentError(
-      accepted ? '' : 'Veuillez accepter de recevoir la lettre d’informations.'
-    );
-    if (!validEmail || !accepted) return;
-    // POC : rien n'est transmis.
-    setPhase('success');
+    if (!EMAIL_RE.test(lead.email)) {
+      setEmailError('Veuillez saisir une adresse e-mail valide.');
+      return;
+    }
+    setEmailError('');
+    if (lead.submitting) return;
+    // APPEL 1 — sans coordonnées.
+    void lead.send(false);
   };
 
   return (
@@ -68,82 +86,65 @@ export function GuideDownloadDialog({ data }: { data: HubGuideDialog }) {
       <DialogContent className="max-w-md">
         <DialogHeader className="sr-only">
           <DialogTitle>{data.badge}</DialogTitle>
-          <DialogDescription>
-            Recevez gratuitement le guide complet par e-mail.
-          </DialogDescription>
+          <DialogDescription>Recevez gratuitement le guide complet.</DialogDescription>
         </DialogHeader>
 
-        <div className="px-6 py-7 sm:px-8">
-          {phase === 'form' ? (
+        {/* Barre de progression sur les étapes coordonnées (66%) et remerciement (100%). */}
+        {lead.phase !== 'email' && (
+          <div className="pl-6 pr-14 pt-5 sm:pl-8">
+            <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full rounded-full bg-cta transition-all duration-500"
+                style={{ width: lead.phase === 'download' ? '100%' : '66%' }}
+              />
+            </div>
+          </div>
+        )}
+
+        <div className="px-6 py-5 sm:px-8">
+          {lead.phase === 'email' && (
             <>
               <h2 className="mx-auto mb-6 max-w-sm px-6 text-center text-xl font-bold leading-snug text-foreground sm:text-2xl">
                 <HubTitle parts={data.titleParts} />
               </h2>
 
-              <form onSubmit={submit} className="space-y-3" noValidate>
-                <Field
-                  id="guide-name"
-                  icon={<User className="h-4 w-4" />}
-                  label={data.fields.name}
-                  value={name}
-                  onChange={setName}
-                  type="text"
-                />
-                <Field
-                  id="guide-email"
-                  icon={<Mail className="h-4 w-4" />}
-                  label={data.fields.email}
-                  value={email}
-                  onChange={setEmail}
-                  type="email"
-                />
+              <form onSubmit={submitEmail} className="space-y-3" noValidate>
+                <div>
+                  <label htmlFor="guide-email" className="block text-sm font-bold text-foreground">
+                    {data.fields.email}
+                  </label>
+                  <div className="relative mt-2">
+                    <Mail className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <input
+                      id="guide-email"
+                      type="email"
+                      required
+                      value={lead.email}
+                      onChange={(event) => lead.setEmail(event.target.value)}
+                      placeholder={data.emailPlaceholder}
+                      className="h-12 w-full rounded-xl border border-border bg-card pl-11 pr-4 text-sm outline-none focus:border-cta focus:ring-2 focus:ring-cta/20"
+                    />
+                  </div>
+                </div>
                 {emailError && (
                   <p role="alert" className="text-xs font-medium text-destructive">
                     {emailError}
                   </p>
                 )}
-                <Field
-                  id="guide-phone"
-                  icon={<Phone className="h-4 w-4" />}
-                  label={data.fields.phone}
-                  value={phone}
-                  onChange={setPhone}
-                  type="tel"
-                />
-                <Field
-                  id="guide-postal"
-                  icon={<MapPin className="h-4 w-4" />}
-                  label={data.fields.postalCode}
-                  value={postalCode}
-                  onChange={setPostalCode}
-                  type="text"
-                />
-
-                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-card p-3 transition hover:border-cta/30">
-                  <input
-                    type="checkbox"
-                    checked={accepted}
-                    onChange={(event) => setAccepted(event.target.checked)}
-                    className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--color-cta)]"
-                  />
-                  <span className="text-xs leading-snug text-muted-foreground">
-                    {data.consentLabel}
-                  </span>
-                </label>
-                {consentError && (
-                  <p role="alert" className="text-xs font-medium text-destructive">
-                    {consentError}
-                  </p>
-                )}
 
                 <button
                   type="submit"
-                  className="inline-flex h-14 w-full items-center justify-center gap-3 rounded-xl bg-cta text-sm font-bold text-cta-foreground shadow-cta transition hover:bg-cta-hover"
+                  disabled={lead.submitting}
+                  className="inline-flex h-14 w-full items-center justify-center gap-3 rounded-xl bg-cta text-base font-bold text-cta-foreground shadow-cta transition hover:bg-cta-hover disabled:opacity-50"
                 >
-                  <Download className="h-5 w-5" />
-                  {data.submitLabel}
+                  {data.emailSubmitLabel}
                   <ArrowRight className="h-4 w-4" />
                 </button>
+                {lead.errorMsg && (
+                  <p role="alert" className="text-xs font-medium text-destructive">
+                    {lead.errorMsg}
+                  </p>
+                )}
 
                 {data.trust.length > 0 && (
                   <ul className="mt-3 flex items-center rounded-xl bg-primary/5 p-3">
@@ -166,65 +167,20 @@ export function GuideDownloadDialog({ data }: { data: HubGuideDialog }) {
                 )}
               </form>
             </>
-          ) : (
-            <div className="py-4 text-center">
-              <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-success/10">
-                <CheckCircle2 className="h-7 w-7 text-success" />
-              </span>
-              <h2 className="mt-3 text-lg font-bold text-foreground">{data.success.title}</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {data.success.text} <span className="font-semibold text-foreground">{email}</span>.
-              </p>
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                className="mt-5 inline-flex h-11 items-center justify-center rounded-lg bg-cta px-5 text-sm font-bold text-cta-foreground shadow-cta transition hover:bg-cta-hover"
-              >
-                {data.success.closeLabel}
-              </button>
-            </div>
           )}
+
+          {lead.phase === 'coordinates' && (
+            <CoordinatesStep
+              guide={data}
+              lead={lead}
+              idPrefix="guide"
+              onBack={() => lead.setPhase('email')}
+            />
+          )}
+
+          {lead.phase === 'download' && <DownloadStep download={data.download} />}
         </div>
       </DialogContent>
     </Dialog>
-  );
-}
-
-/**
- * Champ de saisie. Le libellé sert de placeholder ET de `aria-label` : la maquette
- * n'a pas de labels visibles, mais un champ sans nom accessible est inutilisable
- * au lecteur d'écran.
- */
-function Field({
-  id,
-  icon,
-  label,
-  value,
-  onChange,
-  type,
-}: {
-  id: string;
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  type: string;
-}) {
-  return (
-    <div className="relative">
-      <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground">
-        {icon}
-      </span>
-      <input
-        id={id}
-        type={type}
-        required
-        aria-label={label}
-        placeholder={label}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="h-12 w-full rounded-xl border border-border bg-card pl-11 pr-4 text-sm outline-none focus:border-cta focus:ring-2 focus:ring-cta/20"
-      />
-    </div>
   );
 }
