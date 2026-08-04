@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ArrowRight, Check, Home, Mail, MapPin, Phone, ShieldCheck, User } from 'lucide-react';
+import Image from 'next/image';
+import { ArrowRight, Download, Mail, MapPin, ShieldCheck, User } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -10,15 +11,18 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { HubIcon } from './primitives';
+import { PhoneField } from './PhoneField';
+import { isValidPhone } from '@/lib/hub/validation';
 import type { HubAssistant } from '@/types/hub';
 
 /**
  * Questionnaire du hero — « Recevez votre plan projet personnalisé ».
  *
- * ⚠️ POC : ce formulaire n'envoie RIEN. Aucun `fetch`, aucun lead collecté
- * (décision du 28/07/2026, cf. CLAUDE.md §11bis.4). Les réponses vivent en état
- * React et sont perdues à la fermeture. Le branchement réel — iframe formulaire
- * HP ou route API — reste à arbitrer.
+ * Branché sur `POST /api/demande` (spec `spec_hub/hub_formulaire.txt`) : parcours
+ * questionnaire → e-mail (APPEL 1) → coordonnées (APPEL 2) → succès. L'étape
+ * coordonnées collecte : civilité, Nom + Prénom (fusionnés en `nom_prenom`
+ * relié par « _ »), Téléphone (indicateur pays), Code postal.
+ * Le pays choisi est envoyé dans `coordonnees.pays` (colonne serveur à créer).
  *
  * Architecture reprise du prototype : l'étape 1 est rendue INLINE dans le hero
  * (elle doit être visible sans clic, c'est l'accroche), les étapes suivantes,
@@ -39,34 +43,129 @@ export function openAssistantDialog() {
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export function AssistantForm({ data }: { data: HubAssistant }) {
+export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageHub: number }) {
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
   const [email, setEmail] = useState('');
-  const [name, setName] = useState('');
+  const [civilite, setCivilite] = useState('');
+  const [nom, setNom] = useState('');
+  const [prenom, setPrenom] = useState('');
   const [phone, setPhone] = useState('');
   const [postalCode, setPostalCode] = useState('');
-  const [address, setAddress] = useState('');
+  // Pays choisi dans l'indicateur téléphone (envoyé + stocké côté serveur).
+  const [pays, setPays] = useState('France');
+  // `dialCode` sert à distinguer « numéro national saisi » de « juste l'indicatif »
+  // pour l'erreur de longueur.
+  const [dialCode, setDialCode] = useState('33');
   const [submitted, setSubmitted] = useState(false);
   const [forceOpen, setForceOpen] = useState(false);
+  // Verrou anti double-soumission (§11) + message d'erreur technique (§7/§9).
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
   // Flux : questionnaire (0..N-1) → e-mail (N) → coordonnées (N+1) → succès.
   const totalSteps = data.steps.length + 2;
   const isContact = step === data.steps.length;
   const isCoordinates = step === data.steps.length + 1;
   const current = step < data.steps.length ? data.steps[step] : null;
-  const progressPct = ((step + (submitted ? 1 : 0)) / totalSteps) * 100;
+  // 100% au succès quel que soit le chemin (e-mail reconnu = 1 seul appel).
+  const progressPct = submitted ? 100 : (step / totalSteps) * 100;
 
   const reset = () => {
     setStep(0);
     setAnswers({});
     setEmail('');
-    setName('');
+    setCivilite('');
+    setNom('');
+    setPrenom('');
     setPhone('');
     setPostalCode('');
-    setAddress('');
+    setPays('France');
+    setDialCode('33');
     setSubmitted(false);
     setForceOpen(false);
+    setSubmitting(false);
+    setErrorMsg('');
+  };
+
+  /**
+   * Construit le payload attendu par `/api/demande` (spec §6). Les libellés font
+   * foi (§4) : la question = `step.label`, les réponses = les libellés de choix
+   * cochés. On omet les questions sans réponse. `coordonnees` n'est joint qu'à
+   * l'appel 2. `referer` = URL réelle du visiteur, tronquée à 500 (§10).
+   */
+  const buildPayload = (withCoordinates: boolean) => {
+    const reponses = data.steps
+      .map((s) => {
+        const value = answers[s.id];
+        const list = Array.isArray(value) ? value : value ? [value] : [];
+        return { question: s.label, reponses: list };
+      })
+      .filter((r) => r.reponses.length > 0);
+
+    const referer = typeof window !== 'undefined' ? window.location.href.slice(0, 500) : '';
+
+    return {
+      email,
+      id_page_hub: idPageHub,
+      referer,
+      reponses,
+      ...(withCoordinates
+        ? {
+            coordonnees: {
+              // `civilite` : nouveau champ, colonne serveur à venir (ignoré d'ici là).
+              civilite,
+              // Nom et Prénom reliés par « _ » pour être re-séparables dans le BO.
+              nom_prenom: `${nom.trim()}_${prenom.trim()}`,
+              telephone: phone,
+              code_postal: postalCode,
+              pays, // pays choisi dans l'indicateur téléphone
+            },
+          }
+        : {}),
+    };
+  };
+
+  /**
+   * Envoie un appel à `/api/demande`. Un seul appel en vol à la fois (§11).
+   * 201 / `statut:"enregistre"` → succès (bouton jamais réactivé).
+   * 200 / `statut:"coordonnees_requises"` → passe à l'étape coordonnées.
+   * Tout le reste → message technique générique, bouton réactivé (§7/§9).
+   */
+  const send = async (withCoordinates: boolean) => {
+    if (submitting) return;
+    setSubmitting(true);
+    setErrorMsg('');
+    try {
+      const res = await fetch('/api/demande', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(buildPayload(withCoordinates)),
+      });
+      let corps: { statut?: string } | null = null;
+      try {
+        corps = await res.json();
+      } catch {
+        corps = null;
+      }
+
+      if (res.status === 201 || corps?.statut === 'enregistre') {
+        setSubmitted(true); // succès : le bouton disparaît, on ne réactive pas.
+        return;
+      }
+      if (res.status === 200 && corps?.statut === 'coordonnees_requises') {
+        setStep((s) => s + 1);
+        setSubmitting(false);
+        return;
+      }
+      console.error('[AssistantForm] réponse inattendue', res.status, corps);
+      setErrorMsg('Une erreur technique est survenue. Merci de réessayer.');
+      setSubmitting(false);
+    } catch (err) {
+      console.error('[AssistantForm] échec réseau', err);
+      setErrorMsg('Une erreur technique est survenue. Merci de réessayer.');
+      setSubmitting(false);
+    }
   };
 
   useEffect(() => {
@@ -111,10 +210,14 @@ export function AssistantForm({ data }: { data: HubAssistant }) {
   const modalOpen = forceOpen || step > 0 || submitted;
   const emailValid = EMAIL_RE.test(email);
   const coordinatesValid =
-    name.trim() !== '' &&
-    phone.trim() !== '' &&
-    postalCode.trim() !== '' &&
-    address.trim() !== '';
+    nom.trim() !== '' &&
+    prenom.trim() !== '' &&
+    isValidPhone(phone) &&
+    postalCode.trim() !== '';
+  // Nombre de chiffres saisis, hors indicatif : distingue « juste l'indicatif »
+  // (pas d'erreur) d'un « numéro national trop court » (erreur).
+  const digitsOf = (s: string) => (s.match(/\d/g) ?? []).length;
+  const phoneError = digitsOf(phone) > digitsOf(dialCode) && !isValidPhone(phone);
 
   return (
     <>
@@ -172,7 +275,7 @@ export function AssistantForm({ data }: { data: HubAssistant }) {
           if (!open) reset();
         }}
       >
-        <DialogContent className="max-w-xl p-0">
+        <DialogContent className="max-w-lg p-0">
           <DialogHeader className="sr-only">
             <DialogTitle>{data.cardTitle}</DialogTitle>
             <DialogDescription>
@@ -180,7 +283,7 @@ export function AssistantForm({ data }: { data: HubAssistant }) {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="px-6 pt-6 sm:px-8">
+          <div className="px-6 pt-3 sm:px-8">
             <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
               <div
                 className="h-full rounded-full bg-cta transition-all duration-500"
@@ -189,17 +292,17 @@ export function AssistantForm({ data }: { data: HubAssistant }) {
             </div>
           </div>
 
-          <div className="px-6 py-6 sm:px-8">
+          <div className="px-6 py-4 sm:px-8">
             {submitted ? (
-              <Success data={data} onRestart={reset} />
+              <Success data={data} />
             ) : isContact ? (
               <form
                 className="space-y-4"
                 onSubmit={(event) => {
                   event.preventDefault();
-                  if (!emailValid) return;
-                  // Avance vers l'étape coordonnées (aucune donnée transmise — POC).
-                  setStep((s) => s + 1);
+                  if (!emailValid || submitting) return;
+                  // APPEL 1 — sans coordonnées (§5).
+                  void send(false);
                 }}
               >
                 <span className="inline-flex w-fit items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-primary">
@@ -209,7 +312,9 @@ export function AssistantForm({ data }: { data: HubAssistant }) {
                   <label htmlFor="hub-assistant-email" className="block text-base font-bold text-foreground">
                     {data.contact.label}
                   </label>
-                  <p className="mt-1 text-xs text-muted-foreground">{data.contact.helper}</p>
+                  {data.contact.helper && (
+                    <p className="mt-1 text-xs text-muted-foreground">{data.contact.helper}</p>
+                  )}
                 </div>
                 <div className="relative">
                   <Mail className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -223,9 +328,14 @@ export function AssistantForm({ data }: { data: HubAssistant }) {
                     className="h-12 w-full rounded-xl border border-border bg-surface pl-11 pr-4 text-sm outline-none focus:border-cta focus:ring-2 focus:ring-cta/20"
                   />
                 </div>
+                {errorMsg && (
+                  <p role="alert" className="text-xs font-medium text-destructive">
+                    {errorMsg}
+                  </p>
+                )}
                 <button
                   type="submit"
-                  disabled={!emailValid}
+                  disabled={!emailValid || submitting}
                   className="inline-flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-cta text-sm font-bold text-cta-foreground shadow-cta transition hover:bg-cta-hover disabled:opacity-50"
                 >
                   {data.contact.submitLabel}
@@ -237,20 +347,22 @@ export function AssistantForm({ data }: { data: HubAssistant }) {
                 </p>
                 <button
                   type="button"
+                  disabled={submitting}
                   onClick={() => setStep((s) => Math.max(0, s - 1))}
-                  className="text-xs font-medium text-muted-foreground hover:text-foreground"
+                  className="text-xs font-medium text-muted-foreground hover:text-foreground disabled:opacity-50"
                 >
                   ← Retour
                 </button>
               </form>
             ) : isCoordinates ? (
               <form
-                className="space-y-4"
+                className="space-y-3"
+                noValidate
                 onSubmit={(event) => {
                   event.preventDefault();
-                  if (!coordinatesValid) return;
-                  // POC : rien n'est transmis.
-                  setSubmitted(true);
+                  if (!coordinatesValid || submitting) return;
+                  // APPEL 2 — avec coordonnées (§5). nom_prenom non vide (§8).
+                  void send(true);
                 }}
               >
                 <span className="inline-flex w-fit items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-primary">
@@ -260,23 +372,65 @@ export function AssistantForm({ data }: { data: HubAssistant }) {
                   <p className="text-base font-bold text-foreground">{data.coordinates.label}</p>
                   <p className="mt-1 text-xs text-muted-foreground">{data.coordinates.helper}</p>
                 </div>
-                <div className="space-y-3">
+
+                {/* Civilité — encart avec libellé + options (facultative). */}
+                <div className="rounded-xl border border-border bg-card px-4 py-2">
+                  <p className="text-xs text-muted-foreground">
+                    {data.coordinates.civilityLabel}
+                  </p>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    {data.coordinates.civilityOptions.map((option) => (
+                      <label
+                        key={option}
+                        className="flex cursor-pointer items-center gap-2 text-sm text-foreground"
+                      >
+                        <input
+                          type="radio"
+                          name="hub-assistant-civilite"
+                          checked={civilite === option}
+                          onChange={() => setCivilite(option)}
+                          className="h-4 w-4 accent-[var(--color-cta)]"
+                        />
+                        <span className={civilite === option ? 'font-semibold text-primary' : ''}>
+                          {option}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Champs empilés pleine largeur (Prénom avant Nom, cf. maquette). */}
+                <div className="space-y-2">
                   <CoordinateField
-                    id="hub-assistant-name"
+                    id="hub-assistant-prenom"
                     icon={<User className="h-4 w-4" />}
-                    label={data.coordinates.fields.name}
-                    value={name}
-                    onChange={setName}
+                    label={data.coordinates.fields.prenom}
+                    value={prenom}
+                    onChange={setPrenom}
                     type="text"
                   />
                   <CoordinateField
-                    id="hub-assistant-phone"
-                    icon={<Phone className="h-4 w-4" />}
-                    label={data.coordinates.fields.phone}
-                    value={phone}
-                    onChange={setPhone}
-                    type="tel"
+                    id="hub-assistant-nom"
+                    icon={<User className="h-4 w-4" />}
+                    label={data.coordinates.fields.name}
+                    value={nom}
+                    onChange={setNom}
+                    type="text"
                   />
+                  <PhoneField
+                    value={phone}
+                    ariaLabel={data.coordinates.fields.phone}
+                    onChange={(nextPhone, country, code) => {
+                      setPhone(nextPhone);
+                      setPays(country);
+                      setDialCode(code);
+                    }}
+                  />
+                  {phoneError && (
+                    <p role="alert" className="text-xs font-medium text-destructive">
+                      Veuillez saisir un numéro de téléphone valide.
+                    </p>
+                  )}
                   <CoordinateField
                     id="hub-assistant-postal"
                     icon={<MapPin className="h-4 w-4" />}
@@ -285,19 +439,16 @@ export function AssistantForm({ data }: { data: HubAssistant }) {
                     onChange={setPostalCode}
                     type="text"
                   />
-                  <CoordinateField
-                    id="hub-assistant-address"
-                    icon={<Home className="h-4 w-4" />}
-                    label={data.coordinates.fields.address}
-                    value={address}
-                    onChange={setAddress}
-                    type="text"
-                  />
                 </div>
+                {errorMsg && (
+                  <p role="alert" className="text-xs font-medium text-destructive">
+                    {errorMsg}
+                  </p>
+                )}
                 <button
                   type="submit"
-                  disabled={!coordinatesValid}
-                  className="inline-flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-cta text-sm font-bold text-cta-foreground shadow-cta transition hover:bg-cta-hover disabled:opacity-50"
+                  disabled={!coordinatesValid || submitting}
+                  className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-cta text-sm font-bold text-cta-foreground shadow-cta transition hover:bg-cta-hover disabled:opacity-50"
                 >
                   {data.coordinates.submitLabel}
                   <ArrowRight className="h-4 w-4" />
@@ -308,8 +459,9 @@ export function AssistantForm({ data }: { data: HubAssistant }) {
                 </p>
                 <button
                   type="button"
+                  disabled={submitting}
                   onClick={() => setStep((s) => Math.max(0, s - 1))}
-                  className="text-xs font-medium text-muted-foreground hover:text-foreground"
+                  className="text-xs font-medium text-muted-foreground hover:text-foreground disabled:opacity-50"
                 >
                   ← Retour
                 </button>
@@ -442,50 +594,38 @@ function CoordinateField({
   );
 }
 
-/** Écran de confirmation. Aucune donnée n'a été envoyée (POC). */
-function Success({ data, onRestart }: { data: HubAssistant; onRestart: () => void }) {
+/**
+ * Écran de remerciement : merci + couverture du guide + bouton de téléchargement
+ * (outline). Le guide est proposé au visiteur une fois sa demande enregistrée.
+ */
+function Success({ data }: { data: HubAssistant }) {
+  const { success } = data;
   return (
     <div className="text-center">
-      <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-success/10">
-        <Check className="h-7 w-7 text-success" />
-      </span>
-      <h3 className="mt-3 text-lg font-bold text-foreground">{data.success.title}</h3>
-      <p className="mt-2 text-sm text-muted-foreground">{data.success.subtitle}</p>
+      <h3 className="text-xl font-bold text-foreground sm:text-2xl">{success.title}</h3>
 
-      <div className="mt-5 rounded-2xl border border-border bg-surface p-5">
-        <p className="text-center text-sm font-bold text-primary">{data.success.nextStepsTitle}</p>
-        <span className="mx-auto mt-1 block h-0.5 w-10 rounded-full bg-primary" />
-        <ol className="mt-5 grid grid-cols-3 gap-3">
-          {data.success.nextSteps.map((next, index) => (
-            <li key={next.title} className="flex flex-col items-center text-center">
-              <span className="relative flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
-                <HubIcon name={next.icon} className="h-6 w-6 text-primary" />
-                <span className="absolute -bottom-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
-                  {index + 1}
-                </span>
-              </span>
-              <span className="mt-3 text-xs font-bold text-foreground sm:text-sm">{next.title}</span>
-              {next.desc && (
-                <span className="mt-1 text-[11px] leading-snug text-muted-foreground">
-                  {next.desc}
-                </span>
-              )}
-            </li>
-          ))}
-        </ol>
+      <div className="relative mx-auto mt-5 h-56 w-40">
+        <Image
+          src={success.image.src}
+          alt={success.image.alt}
+          fill
+          sizes="160px"
+          className="object-contain"
+        />
       </div>
 
-      <button
-        type="button"
-        onClick={onRestart}
-        className="mt-5 inline-flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-cta text-sm font-bold text-cta-foreground shadow-cta transition hover:bg-cta-hover"
-      >
-        {data.success.ctaLabel}
-        <ArrowRight className="h-4 w-4" />
-      </button>
-      <p className="mt-4 border-t border-border pt-4 text-xs text-muted-foreground">
-        {data.success.helpLine}
+      <p className="mx-auto mt-5 max-w-sm text-sm leading-relaxed text-muted-foreground">
+        {success.subtitle}
       </p>
+
+      <a
+        href={success.fileUrl ?? '#'}
+        download
+        className="mt-6 inline-flex h-14 w-full items-center justify-center gap-3 rounded-xl border-2 border-cta text-xl font-bold text-cta transition hover:bg-cta/5"
+      >
+        <Download className="h-5 w-5" />
+        {success.downloadLabel}
+      </a>
     </div>
   );
 }

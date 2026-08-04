@@ -257,10 +257,10 @@ function ArticleCard({ data }: { data: HubInfoCard }) {
       )}
       <div className="flex flex-1 flex-col p-5">
         <h4 className="text-base font-bold leading-snug text-foreground">{data.title}</h4>
-        {/* « Lire l'article » à gauche, CTA guide poussé à droite. */}
-        <div className="mt-auto flex flex-col gap-3 pt-5 sm:flex-row sm:items-center sm:justify-between">
+        {/* CTA guide par carte retiré en attendant la modif serveur (formulaire guide).
+            « Lire l'article » seul pour l'instant. */}
+        <div className="mt-auto flex pt-5">
           <ArticleLink href={data.href} />
-          <GuideButton label="Télécharger le guide complet" variant="soft" />
         </div>
       </div>
     </article>

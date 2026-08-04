@@ -319,7 +319,8 @@ export interface HubAssistant {
   contact: {
     badge: string;
     label: string;
-    helper: string;
+    /** Sous-titre optionnel sous le champ e-mail. */
+    helper?: string;
     emailPlaceholder: string;
     submitLabel: string;
   };
@@ -332,34 +333,67 @@ export interface HubAssistant {
     badge: string;
     label: string;
     helper: string;
+    /** Libellé de l'encart civilité, ex. 'Civilité'. */
+    civilityLabel: string;
+    /** Options de civilité (radios), ex. ['Monsieur', 'Madame']. */
+    civilityOptions: string[];
     fields: {
       name: string;
+      prenom: string;
       phone: string;
       postalCode: string;
-      address: string;
     };
     submitLabel: string;
   };
   success: {
     title: string;
+    /** Texte descriptif sous la couverture du guide. */
     subtitle: string;
-    nextStepsTitle: string;
-    /** `desc` facultative : le prototype n'en avait sur aucune des 3 étapes. */
-    nextSteps: { icon: HubIconName; title: string; desc?: string }[];
-    ctaLabel: string;
-    helpLine: string;
+    /** Couverture du guide affichée sur l'écran de remerciement. */
+    image: HubImage;
+    /** Bouton de téléchargement du guide (outline). */
+    downloadLabel: string;
+    /** URL du PDF. Design-only : peut rester '#'. */
+    fileUrl?: string;
   };
 }
 
-/** ⚠️ POC — mock, aucune donnée transmise. */
+/**
+ * ⚠️ POC — design multi-étapes (mock). Parcours : e-mail → coordonnées →
+ * téléchargement. La bascule « e-mail connu → saut direct au téléchargement »
+ * n'est pas encore câblée (design d'abord) ; le flux est linéaire pour l'instant.
+ */
 export interface HubGuideDialog {
   badge: string;
   titleParts: HubTitlePart[];
-  fields: { name: string; email: string; phone: string; postalCode: string };
-  consentLabel: string;
-  submitLabel: string;
+  fields: { name: string; prenom: string; email: string; phone: string; postalCode: string };
+  /** Placeholder du champ e-mail (le libellé `fields.email` sert de label visible). */
+  emailPlaceholder: string;
+  /** Bouton de l'étape 1 (e-mail). */
+  emailSubmitLabel: string;
+  /** Badge de l'étape 2 (coordonnées), ex. 'Dernière étape'. */
+  coordinatesBadge: string;
+  /** Titre de l'étape 2 (coordonnées). */
+  coordinatesTitle: string;
+  /** Sous-titre de l'étape 2 (coordonnées). */
+  coordinatesSubtitle: string;
+  /** Libellé de l'encart civilité + options (radios). */
+  civilityLabel: string;
+  civilityOptions: string[];
+  /** Bouton de l'étape 2 (coordonnées). */
+  coordinatesSubmitLabel: string;
   trust: string[];
-  success: { title: string; text: string; closeLabel: string };
+  /** Étape finale : incitation au téléchargement du guide. */
+  download: {
+    title: string;
+    subtitle?: string;
+    /** Texte sous la couverture (ex. « Vous pouvez aussi le récupérer… »). */
+    note?: string;
+    image: HubImage;
+    buttonLabel: string;
+    /** URL du PDF. Design-only : peut rester '#' tant que le fichier n'est pas livré. */
+    fileUrl?: string;
+  };
 }
 
 /** ⚠️ POC — mock, aucune donnée transmise. */
@@ -371,7 +405,6 @@ export interface HubLeadPopup {
   emailPlaceholder: string;
   submitLabel: string;
   reassurance: string;
-  items: { icon: HubIconName; label: string }[];
   successMessage: string;
   /** Visuel du guide, colonne de gauche. */
   image?: HubImage;

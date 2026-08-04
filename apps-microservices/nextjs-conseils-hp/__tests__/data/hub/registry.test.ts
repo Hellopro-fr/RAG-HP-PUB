@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { existsSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { HUB_PAGES, getHubPage, listHubPages } from '@/data/hub';
+import { HUB_PAGES, getHubPage, listHubPages, guideIdPageHub } from '@/data/hub';
 import { hubCanonicalPath } from '@/types/hub';
 import { resolveHubIcon } from '@/lib/hub/icons';
 import { parseHubSlug } from '@/app/hub/[hubSlug]/page';
@@ -31,8 +31,6 @@ function collectIconNames(page: HubPage): HubIconName[] {
     ...page.howItWorks.steps.map((s) => s.icon),
     ...page.finalCta.items.map((i) => i.icon),
     ...page.assistant.steps.flatMap((s) => s.illustrations ?? []),
-    ...page.assistant.success.nextSteps.map((s) => s.icon),
-    ...page.leadPopup.items.map((i) => i.icon),
   ];
   return names.filter((n): n is HubIconName => Boolean(n));
 }
@@ -53,6 +51,8 @@ function collectImages(page: HubPage): HubImage[] {
     page.finalCta.image,
     page.leadPopup.image,
     page.leadPopup.bannerImage,
+    page.guideDialog.download.image,
+    page.assistant.success.image,
     ...page.thematiques.flatMap((t) => [t.overlay?.image, ...t.cards.map((c) => c.image)]),
     ...page.ressources.items.map((r) => r.image),
     ...page.grandesEtapes.items.map((e) => e.image),
@@ -82,6 +82,15 @@ describe('registry HUB', () => {
   it('la clé du registry est égale à l’id de la page', () => {
     for (const [key, page] of Object.entries(HUB_PAGES)) {
       expect(page.id).toBe(Number(key));
+    }
+  });
+
+  it('l’id_page_hub du guide (dérivé) est un entier positif distinct de l’id projet', () => {
+    // Spec guide §5 : c'est le seul moyen de séparer les leads guide/projet.
+    for (const page of pages) {
+      const guideId = guideIdPageHub(page.id);
+      expect(Number.isInteger(guideId) && guideId > 0, `id_page_hub guide invalide (${guideId})`).toBe(true);
+      expect(guideId, `id guide ${guideId} ne doit pas égaler l'id projet ${page.id}`).not.toBe(page.id);
     }
   });
 
