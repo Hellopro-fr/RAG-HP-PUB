@@ -404,7 +404,7 @@ export const lancerElevagePoulesPondeuses: HubPage = {
     text: 'Tous les repères essentiels pour cadrer votre budget, choisir vos équipements, comprendre la réglementation et avancer sereinement.',
     ctaLabel: 'Télécharger mon guide',
     image: {
-      src: `${IMG}/guide-livre.webp`,
+      src: `${IMG}/Livre_poules_pondeuses_removebg.png`,
       alt: 'Guide complet — Lancer votre élevage de poules pondeuses',
     },
   },
@@ -572,7 +572,7 @@ export const lancerElevagePoulesPondeuses: HubPage = {
     ctaLabel: 'Recevoir mon guide gratuit',
     reassurance: 'Vos informations sont sécurisées et ne seront jamais partagées.',
     image: {
-      src: `${IMG}/guide-livre.webp`,
+      src: `${IMG}/Livre_poules_pondeuses_removebg.png`,
       alt: 'Guide complet — Lancer votre élevage de poules pondeuses',
     },
   },
@@ -667,7 +667,7 @@ export const lancerElevagePoulesPondeuses: HubPage = {
       subtitle:
         'Pour vous aider à avancer, nous vous offrons gratuitement un guide de démarrage. Vous pouvez aussi le récupérer à nouveau à tout moment.',
       image: {
-        src: `${IMG}/guide-livre.webp`,
+        src: `${IMG}/Livre_poules_pondeuses_removebg.png`,
         alt: 'Guide complet — Lancer votre élevage de poules pondeuses',
       },
       downloadLabel: 'Télécharger à nouveau le guide',
@@ -705,7 +705,7 @@ export const lancerElevagePoulesPondeuses: HubPage = {
       subtitle: 'Le téléchargement démarre automatiquement.',
       note: 'Vous pouvez aussi le récupérer à nouveau à tout moment.',
       image: {
-        src: `${IMG}/guide-livre.webp`,
+        src: `${IMG}/Livre_poules_pondeuses_removebg.png`,
         alt: 'Guide complet — Lancer votre élevage de poules pondeuses',
       },
       buttonLabel: 'Télécharger à nouveau le guide',
@@ -726,7 +726,7 @@ export const lancerElevagePoulesPondeuses: HubPage = {
     circleBadgeLines: ['100%', 'Gratuit'],
     // Visuel du livret — même asset que le CTA guide.
     image: {
-      src: `${IMG}/guide-livre.webp`,
+      src: `${IMG}/Livre_poules_pondeuses_removebg.png`,
       alt: 'Guide complet — Lancer votre élevage de poules pondeuses',
     },
     bannerImage: {

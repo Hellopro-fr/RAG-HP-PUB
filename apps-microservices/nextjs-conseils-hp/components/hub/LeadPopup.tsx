@@ -63,21 +63,16 @@ export function LeadPopup({
 
     const onScroll = () => {
       if (trigger.getBoundingClientRect().bottom >= 0) return;
-      setOpen(true);
+      window.removeEventListener('scroll', onScroll);
       try {
         window.sessionStorage.setItem(SEEN_KEY, '1');
       } catch {
         /* stockage indisponible : la pop-up réapparaîtra au rechargement */
       }
-      // Visiteur reconnu (cookie) → remerciement DIRECT (optimiste, pas d'étape
-      // vide) : le petit modal s'ouvre sur le téléchargement, APPEL 1 en fond.
-      const remembered = getRememberedEmail();
-      if (remembered) {
-        lead.setEmail(remembered);
-        lead.setPhase('download');
-        void lead.send(false, remembered);
-      }
-      window.removeEventListener('scroll', onScroll);
+      // Visiteur déjà connu (e-mail en cookie) → on ne le dérange pas : aucune
+      // pop-up, aucun remerciement, aucun téléchargement déclenché.
+      if (getRememberedEmail()) return;
+      setOpen(true);
     };
 
     window.addEventListener('scroll', onScroll, { passive: true });
@@ -145,22 +140,29 @@ export function LeadPopup({
                 d'une colonne de 140 px et se casse en un mot par ligne). */}
             <div
               className={`grid gap-6 sm:gap-8 ${
-                data.image ? 'sm:grid-cols-[140px_minmax(0,1fr)]' : 'sm:grid-cols-1'
+                data.image ? 'sm:grid-cols-[190px_minmax(0,1fr)]' : 'sm:grid-cols-1'
               }`}
             >
               {data.image && (
                 // Le livre remonte pour chevaucher le bandeau ; la pastille
                 // « 100% GRATUIT » se cale sur son coin haut-droit.
-                <div className="relative z-10 mx-auto -mt-6 h-40 w-32 sm:-mt-8 sm:h-44 sm:w-full">
+                <div className="relative z-10 mx-auto -mt-14 h-56 w-44 sm:-mt-16 sm:h-60 sm:w-full">
                   <Image
                     src={data.image.src}
                     alt={data.image.alt}
                     fill
-                    sizes="140px"
+                    sizes="220px"
                     className="object-contain"
                   />
                   {data.circleBadgeLines && data.circleBadgeLines.length > 0 && (
-                    <span className="absolute -right-2 -top-2 grid h-14 w-14 place-items-center rounded-full bg-cta text-center text-[9px] font-black uppercase leading-tight text-cta-foreground shadow-lg sm:h-16 sm:w-16 sm:text-[10px]">
+                    // Pastille : position visuelle conservée (le `top` compense la
+                    // remontée du conteneur), elle sort à moitié en haut-droite.
+                    <span className="absolute -right-2 top-1 flex h-14 w-14 flex-col items-center justify-center rounded-full bg-cta text-center text-[9px] font-black uppercase leading-tight text-cta-foreground shadow-lg sm:top-0 sm:h-16 sm:w-16 sm:text-[10px]">
+                      {/* Anneau blanc pointillé, en retrait du bord (décoratif). */}
+                      <span
+                        aria-hidden
+                        className="pointer-events-none absolute inset-[3px] rounded-full border-2 border-dashed border-white/80"
+                      />
                       {data.circleBadgeLines.map((line) => (
                         <span key={line}>{line}</span>
                       ))}
@@ -224,7 +226,7 @@ export function LeadPopup({
           if (!next) close();
         }}
       >
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-[42rem]">
           <DialogHeader className="sr-only">
             <DialogTitle>{guide.badge}</DialogTitle>
             <DialogDescription>Recevez gratuitement le guide complet.</DialogDescription>

@@ -203,7 +203,7 @@ export function DownloadStep({ download }: { download: HubGuideDialog['download'
         <p className="mt-1 text-sm text-muted-foreground">{download.subtitle}</p>
       )}
 
-      <div className="relative mx-auto mt-5 h-56 w-40">
+      <div className="relative mx-auto mt-5 h-64 w-48">
         <Image
           src={download.image.src}
           alt={download.image.alt}

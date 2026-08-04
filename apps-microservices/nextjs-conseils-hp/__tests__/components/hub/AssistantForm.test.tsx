@@ -224,21 +224,16 @@ describe('AssistantForm', () => {
   });
 
   /**
-   * E-mail mémorisé (cookie) : dès les réponses finies, on saute l'étape e-mail
-   * et on lance l'APPEL 1 → 201 → remerciement direct.
+   * Le questionnaire N'A PAS de raccourci « e-mail mémorisé » : même avec un
+   * cookie, l'étape e-mail est TOUJOURS affichée.
    */
-  it('saute l’étape e-mail si un e-mail est mémorisé', async () => {
+  it('affiche toujours l’étape e-mail, même si un e-mail est mémorisé', async () => {
     rememberEmail('connu@exemple.fr');
-    const { short, fetchMock } = renderShort([
-      { status: 201, body: { statut: 'enregistre', id_demande: 5, contact_connu: 1 } },
-    ]);
+    const { short, fetchMock } = renderShort([{ status: 200, body: { statut: 'coordonnees_requises' } }]);
 
-    await waitFor(() => expect(screen.getByText(short.success.title)).toBeDefined());
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
-    expect(body.email).toBe('connu@exemple.fr');
-    // L'étape e-mail n'est jamais affichée.
-    expect(screen.queryByLabelText(short.contact.label)).toBeNull();
+    await waitFor(() => expect(screen.getByLabelText(short.contact.label)).toBeDefined());
+    // Aucun appel réseau tant que l'utilisateur n'a pas soumis l'e-mail lui-même.
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('bloque l’étape coordonnées si le téléphone est invalide', async () => {
