@@ -199,6 +199,66 @@ class TestReconcileBatch:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Normalisation de la forme de reponse
+#
+# Regression vecue : le modele a enveloppe le tableau dans un objet, _reconcile_batch
+# n'a rien reconnu et TOUT le batch a ete enregistre en `absent_reponse_llm` — sans
+# marque, alors que la reponse etait bonne (et facturee).
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestNormaliserSorties:
+    produits = [
+        {"id_produit": "1", "titre": "Pont NOVARA T450", "categorie": "Pont elevateur"},
+        {"id_produit": "2", "titre": "Pont ORTIS ZR12", "categorie": "Pont elevateur"},
+    ]
+
+    def test_tableau_racine_inchange(self):
+        gen = _make_generator()
+        sorties = [{"id_produit": "1", "marque": "NOVARA"}]
+        assert gen._normaliser_sorties(sorties) == sorties
+
+    def test_liste_enveloppee_dans_un_objet(self):
+        """{"produits": [...]} : la liste est retrouvee quelle que soit la cle."""
+        gen = _make_generator()
+        attendu = [
+            {"id_produit": "1", "marque": "NOVARA"},
+            {"id_produit": "2", "marque": "ORTIS"},
+        ]
+
+        for cle in ("produits", "resultats", "data", "extractions", "n_importe_quoi"):
+            assert gen._normaliser_sorties({cle: attendu}) == attendu
+
+    def test_liste_enveloppee_alignee_de_bout_en_bout(self):
+        """Le vrai scenario : reponse enveloppee -> marques bien extraites."""
+        gen = _make_generator()
+        brut = {"produits": [
+            {"id_produit": "2", "marque": "ORTIS", "reference": "ZR12"},
+            {"id_produit": "1", "marque": "NOVARA", "reference": "T450"},
+        ]}
+
+        resultat = gen._reconcile_batch(self.produits, gen._normaliser_sorties(brut))
+
+        assert [r.marque for r in resultat] == ["NOVARA", "ORTIS"]
+        assert not any("absent_reponse_llm" in r.alertes for r in resultat)
+
+    def test_objet_unique_devient_liste_de_un(self):
+        gen = _make_generator()
+        assert gen._normaliser_sorties({"id_produit": "1", "marque": "NOVARA"}) == [
+            {"id_produit": "1", "marque": "NOVARA"}
+        ]
+
+    def test_liste_vide_enveloppee(self):
+        gen = _make_generator()
+        assert gen._normaliser_sorties({"produits": []}) == []
+
+    def test_forme_inexploitable(self):
+        gen = _make_generator()
+        assert gen._normaliser_sorties({"message": "aucun produit"}) == []
+        assert gen._normaliser_sorties("texte") == []
+        assert gen._normaliser_sorties(None) == []
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Garde-fous deterministes : le cout d'erreur n'est pas symetrique
 # ─────────────────────────────────────────────────────────────────────────────
 

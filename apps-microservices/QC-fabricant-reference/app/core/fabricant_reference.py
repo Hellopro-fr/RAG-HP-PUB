@@ -237,6 +237,12 @@ class FabricantReferenceGenerator:
             raise Exception(f"Erreur API DeepSeek ({result.get('code')}): {result.get('error')}")
 
         response_text = (result.get("content") or "").strip()
+
+        # Reponse BRUTE journalisee : sans elle, un desalignement (0 marque extraite sur
+        # tout un batch) est indiagnosticable — on ne sait pas si le modele a repondu
+        # autre chose que ce qu'on attend, ni sous quelle forme.
+        self._log(f"Reponse LLM brute ({nb_produits} produits):\n{response_text}")
+
         json_data = utils.extract_json_from_text(response_text)
 
         if json_data is None and re.sub(r"[^\[\]]", "", response_text) == "[]":
@@ -245,7 +251,37 @@ class FabricantReferenceGenerator:
         if json_data is None:
             raise Exception(f"Impossible d'extraire le JSON de la reponse ({nb_produits} produits)")
 
-        return json_data
+        return self._normaliser_sorties(json_data)
+
+    def _normaliser_sorties(self, json_data: Any) -> List[Any]:
+        """Ramene la reponse du modele a la LISTE d'extractions attendue.
+
+        Le prompt 133 demande un tableau, mais un modele enveloppe frequemment la liste
+        dans un objet ({"produits": [...]}, {"resultats": [...]}, ...). Sans cette
+        normalisation, _reconcile_batch() ne reconnait rien et TOUT le batch devient
+        `absent_reponse_llm` : les produits sont enregistres sans marque alors que le
+        modele avait repondu (et le run est facture).
+        """
+        if isinstance(json_data, list):
+            return json_data
+
+        if isinstance(json_data, dict):
+            # (a) une valeur porte la liste des extractions, quelle que soit sa cle
+            for cle, valeur in json_data.items():
+                if isinstance(valeur, list) and (not valeur or isinstance(valeur[0], dict)):
+                    self._log(
+                        f"AVERTISSEMENT: liste d'extractions trouvee sous la cle '{cle}' "
+                        f"(le prompt demande un tableau racine)"
+                    )
+                    return valeur
+
+            # (b) l'objet EST une extraction unique (batch d'un seul produit)
+            if "id_produit" in json_data:
+                self._log("AVERTISSEMENT: objet unique recu au lieu d'un tableau")
+                return [json_data]
+
+        self._log(f"AVERTISSEMENT: forme de reponse inexploitable ({type(json_data).__name__})")
+        return []
 
     # ── alignement et garde-fous ────────────────────────────────────────────
 
@@ -267,6 +303,15 @@ class FabricantReferenceGenerator:
         ignores = set(par_id) - ids_attendus
         if ignores:
             self._log(f"AVERTISSEMENT: {len(ignores)} id_produit inconnus ignores: {sorted(ignores)}")
+
+        # Aucun id exploitable : tout le batch part en abstention alors que le modele a
+        # repondu (et a ete facture). Signale explicitement — la reponse brute est loguee
+        # juste avant, elle dit sous quelle forme le modele a repondu.
+        if not par_id:
+            self._log(
+                f"AVERTISSEMENT: aucune extraction alignable dans la reponse — "
+                f"les {len(produits)} produit(s) du batch seront marques 'absent_reponse_llm'"
+            )
 
         resultats = []
         for produit in produits:

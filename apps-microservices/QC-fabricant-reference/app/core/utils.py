@@ -178,12 +178,15 @@ def to_json_string(data: Any) -> str:
 
 
 def ensure_directory(path: str) -> bool:
-    """Cree un repertoire s'il n'existe pas."""
+    """Cree un repertoire s'il n'existe pas.
+
+    Un echec n'est jamais bloquant (tracking best effort) : warning, pas error.
+    """
     try:
         Path(path).mkdir(parents=True, exist_ok=True)
         return True
     except Exception as e:
-        logger.error(f"Erreur lors de la creation du repertoire {path}: {e}")
+        logger.warning(f"Repertoire {path} non creable ({e}) — ecriture fichier ignoree")
         return False
 
 
@@ -251,11 +254,33 @@ def get_tracking_filepath(
     return os.path.join(directory, f"{timestamp}-tracking-{prefix}-{id_categorie}.txt")
 
 
+# Volume de tracking non inscriptible (droits du montage) : on ne reessaie pas a chaque
+# ligne de log. Un seul avertissement, puis tout reste dans la sortie standard du conteneur.
+_tracking_fichier_ko = False
+
+
 def write_log(filepath: str, message: str):
-    """Ecrit un message dans un fichier de log."""
+    """Ecrit un message dans un fichier de log (best effort).
+
+    Si le volume n'est pas inscriptible, l'ecriture fichier est desactivee pour la duree
+    du process apres UN avertissement : le run continue, les logs restent visibles dans
+    la sortie standard (docker logs). Corriger les droits du volume tracking/ pour les
+    retrouver sur disque.
+    """
+    global _tracking_fichier_ko
+
+    if _tracking_fichier_ko:
+        return
+
     try:
-        ensure_directory(os.path.dirname(filepath))
+        directory = os.path.dirname(filepath)
+        if directory:
+            Path(directory).mkdir(parents=True, exist_ok=True)
         with open(filepath, 'a', encoding='utf-8') as f:
             f.write(f"{message}\n")
     except Exception as e:
-        logger.error(f"Erreur lors de l'ecriture du log: {e}")
+        _tracking_fichier_ko = True
+        logger.warning(
+            f"Tracking fichier desactive pour ce process ({e}). "
+            f"Les logs restent dans la sortie standard — corriger les droits du volume tracking/."
+        )

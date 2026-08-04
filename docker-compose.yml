@@ -1966,6 +1966,7 @@ services:
       - /mnt/data/docker/images/generation-question-caracteristiques/qc-enrichissement:/app/tracking/enrichissement
       - /mnt/data/docker/images/generation-question-caracteristiques/qc-equivalence:/app/tracking/equivalence
       - /mnt/data/docker/images/generation-question-caracteristiques/qc-caracterisation:/app/tracking/caracterisation
+      - /mnt/data/docker/images/generation-question-caracteristiques/qc-fabricant-reference:/app/tracking/fabricant-reference
       # Monte les dossiers tracking des services prix (paths VM)
       - /mnt/data/docker/images/prix-extraction/prix-extraction-produits:/app/tracking/prix-extraction-produits
       - /mnt/data/docker/images/prix-extraction/prix-extraction-siteweb:/app/tracking/prix-extraction-siteweb

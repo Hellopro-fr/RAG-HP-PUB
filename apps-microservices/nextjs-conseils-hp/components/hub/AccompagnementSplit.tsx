@@ -1,5 +1,6 @@
 import Image from 'next/image';
 import { HubSection, HubIcon } from './primitives';
+import { sanitizeHubHtml } from '@/lib/hub/sanitize';
 import type { HubAccompagnement } from '@/types/hub';
 
 /** Bloc « accompagnement humain » : visuel, texte, liste de garanties. */
@@ -26,7 +27,11 @@ export function AccompagnementSplit({ data }: { data: HubAccompagnement }) {
             }`}
           >
             <h2 className="text-2xl font-bold tracking-tight text-foreground">{data.title}</h2>
-            <p className="text-muted-foreground">{data.text}</p>
+            {/* HTML restreint : le texte de référence compte deux paragraphes. */}
+            <div
+              className="space-y-3 text-muted-foreground [&_strong]:font-semibold [&_strong]:text-foreground"
+              dangerouslySetInnerHTML={{ __html: sanitizeHubHtml(data.text) }}
+            />
           </div>
 
           <div className="flex flex-col justify-center gap-3 p-6 sm:p-8 lg:col-span-3">

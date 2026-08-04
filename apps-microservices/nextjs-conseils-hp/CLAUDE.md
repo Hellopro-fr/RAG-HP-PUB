@@ -672,6 +672,15 @@ lib/hub/sanitize.ts       allowlist stricte, zéro attribut conservé
 lib/hub/icons.ts          nom → composant lucide
 ```
 
+**Contenus partagés entre pages.** `data/hub/_shared.ts` porte les blocs dont le
+texte est identique d'une verticale à l'autre — aujourd'hui `HOW_IT_WORKS`
+(parcours « Comment ça marche ? », validé comme référence pour tous les
+templates). Une page l'utilise par étalement, en n'y ajoutant que ce qui lui est
+propre : `howItWorks: { ...HOW_IT_WORKS, afterEditoId: 'edito-budget' }`.
+⚠️ N'y placer QUE du contenu réellement générique : les 3 pages HUB (élevage, food
+truck, laverie) n'ont rien en commun côté sujet, seulement côté parcours HelloPro.
+Un texte qui mentionne un métier n'a rien à faire dans ce fichier.
+
 **Règle de frontière client.** Les sections restent des Server Components ; les
 boutons qui ouvrent un dialog sont isolés dans `triggers.tsx`. Seul le bouton est
 hydraté, pas la section. Un Server Component ne pouvant pas passer de callback à

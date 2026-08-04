@@ -249,6 +249,10 @@ export interface HubHowItWorks {
 
 export interface HubAccompagnement {
   title: string;
+  /**
+   * HTML restreint, assaini au rendu. Utiliser des `<p>` pour plusieurs
+   * paragraphes — le texte de référence en compte deux.
+   */
   text: string;
   image?: HubImage;
   points: string[];

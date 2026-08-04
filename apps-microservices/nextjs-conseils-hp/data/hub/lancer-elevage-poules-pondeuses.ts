@@ -1,4 +1,5 @@
 import type { HubPage } from '@/types/hub';
+import { ACCOMPAGNEMENT, FAQ, HOW_IT_WORKS } from './_shared';
 
 /**
  * Page HUB 1000 — « Lancer un élevage de poules pondeuses ».
@@ -544,44 +545,15 @@ export const lancerElevagePoulesPondeuses: HubPage = {
     },
   ],
 
-  howItWorks: {
-    title: 'Comment ça marche ?',
-    // Position d'origine du prototype : entre edito-budget et edito-modele.
-    afterEditoId: 'edito-budget',
-    steps: [
-      {
-        icon: 'pencil',
-        title: 'Vous décrivez votre projet',
-        desc: "Remplissez le formulaire en quelques minutes pour nous parler de votre projet d'élevage.",
-      },
-      {
-        icon: 'search-check',
-        title: 'Nous qualifions votre besoin',
-        desc: 'Nos experts analysent vos réponses et préparent des recommandations personnalisées.',
-      },
-      {
-        icon: 'phone-call',
-        title: 'Un expert vous contacte',
-        desc: 'Un expert avicole vous appelle pour comprendre vos enjeux et affiner les solutions.',
-      },
-      {
-        icon: 'users-group',
-        title: 'Nous vous mettons en relation',
-        desc: 'Vous êtes mis en relation avec des fournisseurs sélectionnés, au bon moment de votre projet.',
-      },
-    ],
-  },
+  // Contenu partagé par les 3 pages HUB — cf. `_shared.ts`. Seule la position
+  // d'insertion est propre à cette page (entre edito-budget et edito-modele).
+  howItWorks: { ...HOW_IT_WORKS, afterEditoId: 'edito-budget' },
 
+  // Contenu partagé par les 3 pages HUB — cf. `_shared.ts`. Seul le visuel est
+  // propre à la page.
   accompagnement: {
-    title: 'Un accompagnement humain, simple et efficace',
-    text: 'Nous prenons le temps de comprendre votre projet pour vous mettre en relation avec les bons fournisseurs, au bon moment. Notre objectif : des solutions pertinentes et un projet qui réussit.',
-    image: { src: `${IMG}/accompagnement-expert.jpg`, alt: 'Échange avec un expert Hellopro' },
-    points: [
-      "Accompagnement d'un expert avicole",
-      'Solutions adaptées à votre projet',
-      'Mise en relation progressive et ciblée',
-      'Service 100% gratuit et sans engagement',
-    ],
+    ...ACCOMPAGNEMENT,
+    image: { src: `${IMG}/accompagnement-expert.jpg`, alt: 'Échange avec un conseiller Hellopro' },
   },
 
   finalCta: {
@@ -605,43 +577,8 @@ export const lancerElevagePoulesPondeuses: HubPage = {
     },
   },
 
-  faq: {
-    title: 'FAQ',
-    items: [
-      {
-        q: "Comment Hellopro m'accompagne dans mon projet ?",
-        a: 'Hellopro analyse votre besoin, vous met en relation avec un expert du secteur, puis vous oriente progressivement vers les fournisseurs adaptés à votre projet.',
-      },
-      {
-        q: 'Est-ce que je suis accompagné par un expert ?',
-        a: 'Oui. Un expert Hellopro prend contact avec vous après la qualification de votre projet afin de comprendre vos besoins et vous guider dans les prochaines étapes.',
-      },
-      {
-        q: 'Comment sont sélectionnés les fournisseurs ?',
-        a: "Les fournisseurs sont sélectionnés en fonction de votre projet, de vos contraintes et des échanges réalisés avec l'expert Hellopro lors de la phase de qualification.",
-      },
-      {
-        q: 'Est-ce que je contacte directement les fournisseurs ?',
-        a: "Non immédiatement. Hellopro organise d'abord une phase de qualification et d'accompagnement afin de vous orienter vers les interlocuteurs les plus adaptés.",
-      },
-      {
-        q: 'Que se passe-t-il après avoir rempli le formulaire ?',
-        a: 'Votre projet est analysé par Hellopro, un expert vous contacte pour affiner votre besoin, puis vous êtes progressivement mis en relation avec des fournisseurs adaptés.',
-      },
-      {
-        q: 'Est-ce que le service Hellopro est gratuit ?',
-        a: "Oui, l'accompagnement Hellopro est entièrement gratuit pour les porteurs de projet.",
-      },
-      {
-        q: 'Est-ce que je peux avancer sans être rappelé par un expert ?',
-        a: "Oui, mais l'accompagnement permet d'obtenir des réponses plus rapides et des mises en relation mieux adaptées à votre projet.",
-      },
-      {
-        q: 'Pourquoi passer par Hellopro plutôt que contacter directement un fournisseur ?',
-        a: 'Hellopro vous aide à structurer votre projet, éviter les erreurs de choix et accéder plus rapidement aux bons interlocuteurs selon votre besoin réel.',
-      },
-    ],
-  },
+  // Contenu intégralement partagé par les 3 pages HUB — cf. `_shared.ts`.
+  faq: FAQ,
 
   stickyCtaLabel: 'Obtenir mon kit projet',
 
