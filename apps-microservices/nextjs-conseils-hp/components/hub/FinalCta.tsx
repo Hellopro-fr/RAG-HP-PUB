@@ -1,6 +1,7 @@
 import Image from 'next/image';
 import { HubSection, HubIcon, HubTitle } from './primitives';
 import { GuideButton } from './triggers';
+import { HUB_SECTION_IDS } from '@/lib/hub/anchors';
 import type { HubFinalCta } from '@/types/hub';
 
 /**
@@ -9,7 +10,7 @@ import type { HubFinalCta } from '@/types/hub';
  */
 export function FinalCta({ data }: { data: HubFinalCta }) {
   return (
-    <HubSection id="cta-final">
+    <HubSection id={HUB_SECTION_IDS.finalCta}>
       <div className="overflow-hidden rounded-3xl bg-navy-deep px-6 py-10 sm:px-10 sm:py-12">
         {/* Même précaution que dans LeadPopup : ne pas réserver la colonne image
             si l'image est absente, sinon le texte hérite de ses 220 px. */}

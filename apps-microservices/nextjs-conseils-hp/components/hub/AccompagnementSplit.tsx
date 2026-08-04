@@ -1,12 +1,13 @@
 import Image from 'next/image';
 import { HubSection, HubIcon } from './primitives';
 import { sanitizeHubHtml } from '@/lib/hub/sanitize';
+import { HUB_SECTION_IDS } from '@/lib/hub/anchors';
 import type { HubAccompagnement } from '@/types/hub';
 
 /** Bloc « accompagnement humain » : visuel, texte, liste de garanties. */
 export function AccompagnementSplit({ data }: { data: HubAccompagnement }) {
   return (
-    <HubSection id="accompagnement">
+    <HubSection id={HUB_SECTION_IDS.accompagnement}>
       <div className="overflow-hidden rounded-2xl border border-border bg-surface">
         <div className="grid lg:grid-cols-12">
           {data.image && (

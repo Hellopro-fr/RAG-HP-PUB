@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { HUB_PAGES, getHubPage, listHubPages } from '@/data/hub';
 import { hubCanonicalPath } from '@/types/hub';
 import { resolveHubIcon } from '@/lib/hub/icons';
+import { HUB_SECTION_ID_LIST } from '@/lib/hub/anchors';
 import { parseHubSlug } from '@/app/hub/[hubSlug]/page';
 import type { HubIconName, HubImage, HubPage } from '@/types/hub';
 
@@ -127,31 +128,55 @@ describe.each(pages.map((page) => [page.slug, page] as const))('page HUB « %s �
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it('chaque entrée « bloc-* » du sommaire cible un bloc thématique existant', () => {
-    const thematiqueIds = new Set(page.thematiques.map((t) => t.id));
-    for (const item of page.nav.filter((n) => n.id.startsWith('bloc-'))) {
-      expect(thematiqueIds, `sommaire → ${item.id}`).toContain(item.id);
+  /**
+   * Ensemble des ancres réellement rendues par le template : sections fixes
+   * (`HUB_SECTION_ID_LIST`) + blocs thématiques + editos, tous porteurs d'un `id`.
+   * Le test ne connaissait auparavant que les deux dernières familles, ce qui
+   * l'empêchait de valider un lien vers `#nos-ressources` ou `#comment-ca-marche`.
+   */
+  const renderedAnchors = new Set([
+    ...HUB_SECTION_ID_LIST,
+    ...page.thematiques.map((t) => t.id),
+    ...page.editos.map((e) => e.id),
+  ]);
+
+  /**
+   * Les ancres finissent dans des URL partagées. Elles doivent donc être des
+   * slugs propres — pas d'espace, pas d'accent, pas de majuscule — et décrire le
+   * sujet de la section, jamais le composant qui la rend. Les préfixes
+   * d'implémentation (`bloc-`, `edito-`, `cta-`, `intro-`) sont refusés : ils
+   * venaient du prototype et faisaient fuiter du vocabulaire interne.
+   */
+  it('n’expose que des ancres en slug, sans vocabulaire d’implémentation', () => {
+    const anchors = [
+      ...page.thematiques.map((t) => t.id),
+      ...page.editos.map((e) => e.id),
+      ...page.nav.map((n) => n.id),
+    ];
+    for (const anchor of anchors) {
+      expect(anchor, `ancre « ${anchor} »`).toMatch(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
+      expect(anchor, `préfixe d'implémentation dans « ${anchor} »`).not.toMatch(
+        /^(bloc|edito|cta|intro|section)-/
+      );
     }
   });
 
-  it('chaque href de « grandes étapes » cible une ancre déclarée', () => {
-    const anchors = new Set([
-      ...page.thematiques.map((t) => t.id),
-      ...page.nav.map((n) => n.id),
-    ]);
+  it('chaque href de « grandes étapes » cible une ancre réellement rendue', () => {
     for (const step of page.grandesEtapes.items) {
       if (!step.href) continue;
       expect(step.href.startsWith('#'), `href brut: ${step.href}`).toBe(true);
-      expect(anchors, `grandes étapes → ${step.href}`).toContain(step.href.slice(1));
+      expect(renderedAnchors, `grandes étapes → ${step.href}`).toContain(step.href.slice(1));
+    }
+  });
+
+  it('chaque entrée du sommaire cible une ancre réellement rendue', () => {
+    for (const item of page.nav) {
+      expect(renderedAnchors, `sommaire → #${item.id}`).toContain(item.id);
     }
   });
 
   it('le déclencheur du lead popup cible une section existante', () => {
-    const anchors = new Set([
-      ...page.thematiques.map((t) => t.id),
-      ...page.nav.map((n) => n.id),
-    ]);
-    expect(anchors).toContain(page.leadPopup.triggerSectionId);
+    expect(renderedAnchors).toContain(page.leadPopup.triggerSectionId);
   });
 
   it('n’a pas d’id de sommaire dupliqué', () => {

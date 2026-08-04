@@ -3,6 +3,18 @@ import { sanitizeHubHtml } from '@/lib/hub/sanitize';
 import type { HubEdito } from '@/types/hub';
 
 /**
+ * Typographie UNIQUE du bloc éditorial : une seule taille, une seule couleur, le
+ * gras dans la même couleur que le texte courant.
+ *
+ * Le bloc en comptait trois combinaisons — paragraphes en gris `text-base`, puces
+ * en noir `text-base`, encart « À noter » en gris `text-sm` — plus des pastilles
+ * bleues. À la lecture, ça donnait l'impression de plusieurs polices sur une même
+ * section. Toute nuance de hiérarchie doit désormais passer par la structure
+ * (titre, cadre de l'encart), pas par la couleur ou la taille du texte.
+ */
+const PROSE = 'text-base leading-relaxed text-foreground [&_strong]:font-semibold';
+
+/**
  * Section éditoriale — le contenu SEO de la page.
  *
  * Server Component, colonne unique en `max-w-3xl` : c'est du texte long, la
@@ -26,14 +38,14 @@ export function EditoSection({ data }: { data: HubEdito }) {
             des phrases. Tout passe par le même sanitizer. */}
         {data.intro && (
           <p
-            className="mt-4 text-base text-muted-foreground [&_strong]:font-semibold [&_strong]:text-foreground"
+            className={`mt-4 ${PROSE}`}
             dangerouslySetInnerHTML={{ __html: sanitizeHubHtml(data.intro) }}
           />
         )}
 
         {data.bodyHtml && (
           <div
-            className="mt-4 space-y-3 text-base text-muted-foreground [&_li]:ml-5 [&_li]:list-disc [&_strong]:text-foreground [&_ul]:space-y-3"
+            className={`mt-4 space-y-4 ${PROSE} [&_li]:ml-5 [&_li]:list-disc [&_ul]:space-y-3`}
             dangerouslySetInnerHTML={{ __html: sanitizeHubHtml(data.bodyHtml) }}
           />
         )}
@@ -41,20 +53,24 @@ export function EditoSection({ data }: { data: HubEdito }) {
         {data.items && data.items.length > 0 && (
           <ul className="mt-4 space-y-2">
             {data.items.map((item) => (
-              <li key={item} className="flex items-start gap-2 text-base text-foreground">
-                <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+              <li key={item} className={`flex items-start gap-2.5 ${PROSE}`}>
+                {/* Pastille en noir : elle était bleue, seule touche de couleur
+                    d'un bloc autrement monochrome. */}
                 <span
-                  className="[&_strong]:font-semibold"
-                  dangerouslySetInnerHTML={{ __html: sanitizeHubHtml(item) }}
+                  aria-hidden
+                  className="mt-[0.55rem] h-1.5 w-1.5 shrink-0 rounded-full bg-foreground"
                 />
+                <span dangerouslySetInnerHTML={{ __html: sanitizeHubHtml(item) }} />
               </li>
             ))}
           </ul>
         )}
 
         {data.note && (
+          // Même typographie que le reste ; c'est le cadre qui distingue l'encart,
+          // pas une taille ni une couleur de texte différentes.
           <p
-            className="mt-6 rounded-2xl border border-border bg-surface p-5 text-sm text-muted-foreground [&_strong]:font-semibold [&_strong]:text-foreground"
+            className={`mt-6 rounded-2xl border border-border bg-surface p-5 ${PROSE}`}
             dangerouslySetInnerHTML={{ __html: sanitizeHubHtml(data.note) }}
           />
         )}

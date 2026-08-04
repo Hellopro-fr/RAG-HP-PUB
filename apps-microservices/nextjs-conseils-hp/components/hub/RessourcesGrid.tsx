@@ -1,6 +1,7 @@
 import Image from 'next/image';
 import { HubSection, HubIcon } from './primitives';
 import { AssistantButton } from './triggers';
+import { HUB_SECTION_IDS } from '@/lib/hub/anchors';
 import type { HubIconName, HubRessources } from '@/types/hub';
 
 /**
@@ -23,7 +24,7 @@ const TAG_ICONS: Record<string, HubIconName> = {
 
 export function RessourcesGrid({ data }: { data: HubRessources }) {
   return (
-    <HubSection id="nos-ressources">
+    <HubSection id={HUB_SECTION_IDS.ressources}>
       <div className="mx-auto max-w-3xl text-center">
         <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
           {data.title}

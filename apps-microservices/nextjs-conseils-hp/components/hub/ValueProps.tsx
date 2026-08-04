@@ -1,4 +1,5 @@
 import { HubSection, HubIcon } from './primitives';
+import { HUB_SECTION_IDS } from '@/lib/hub/anchors';
 import type { HubValueProps } from '@/types/hub';
 
 /**
@@ -45,7 +46,7 @@ import type { HubValueProps } from '@/types/hub';
  */
 export function ValueProps({ data }: { data: HubValueProps }) {
   return (
-    <HubSection id="intro-hub" className="bg-surface" compact>
+    <HubSection id={HUB_SECTION_IDS.valueProps} className="bg-surface" compact>
       <div className="mx-auto max-w-3xl text-center">
         <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
           {data.title}

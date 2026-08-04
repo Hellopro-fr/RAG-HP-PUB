@@ -1,5 +1,6 @@
 import Image from 'next/image';
 import { HubSection, HubIcon } from './primitives';
+import { HUB_SECTION_IDS } from '@/lib/hub/anchors';
 import type { HubGrandeEtape } from '@/types/hub';
 
 /**
@@ -14,7 +15,7 @@ export function GrandesEtapes({
   data: { title: string; items: HubGrandeEtape[] };
 }) {
   return (
-    <HubSection id="grandes-etapes" className="bg-surface">
+    <HubSection id={HUB_SECTION_IDS.grandesEtapes} className="bg-surface">
       <div className="mx-auto max-w-3xl text-center">
         <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
           {data.title}
