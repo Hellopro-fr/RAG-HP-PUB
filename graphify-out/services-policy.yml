@@ -49,6 +49,9 @@ graphed:
   - path: apps-microservices/api-detection-langue-fr
     added_at: 2026-05-05
     notes: "FastAPI server backing crawler's detection-langue-fr client. Promoted from templated_wrapper because the caller-contract / admission-control / inflight-dedup work made cross-service questions (crawler -> backend) routine."
+  - path: apps-microservices/api-gateway-go
+    added_at: 2026-08-04
+    notes: "The LIVE public ingress (Go), superseding the Python api-gateway. 50 code files -> 445 AST nodes + 44 semantic. Every request crosses it, so it carries the routing / auth-policy / downstream-timeout answers. Chose it over api-gateway on the user's call: api-gateway is the retired one."
 
 not_graphed:
   # ----------------------------------------------------------------------
@@ -278,9 +281,6 @@ not_graphed:
   - path: apps-microservices/api-gateway
     reason: deprecated
     details: "Python ingress, superseded by api-gateway-go (the deployed one). 17 py files vs 54 go. Was listed candidate_deferred until 2026-08-04 - that recommended the dead gateway and ignored the live one."
-  - path: apps-microservices/api-gateway-go
-    reason: candidate_deferred
-    details: "The LIVE public ingress. 54 go files, 112-line CLAUDE.md, 40 commits in the last 6 months. Every request crosses it, so it yields the most cross-service edges of any candidate."
   - path: apps-microservices/api-catalog-service
     reason: candidate_deferred
     details: "37 go files, gRPC via buf. Classified 2026-08-04 - had slipped past coverage-check."

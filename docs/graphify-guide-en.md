@@ -10,8 +10,8 @@ A persistent knowledge graph of this monorepo, built from code (AST) + docs (LLM
 
 **One unified graph** at `graphify-out/`, committed on `features/poc`:
 
-- 1700 nodes, ~3150 edges, 86 communities
-- Covers: `libs/`, `protos/`, `tools/`, `model-optimizer/`, `docs/`, and `apps-microservices/crawler-service/`
+- 9551 nodes, ~20900 edges, 254 communities (re-derived 2026-08-04 — re-measure before quoting, every merge grows it)
+- Covers: `libs/`, `protos/`, `tools/`, `model-optimizer/`, `docs/`, and 4 of the 99 services: `crawler-service`, `api-detection-langue-fr`, `graph-rag-api-recherche-rust-service`, `api-gateway-go`
 - 10 explicit cross-service links from crawler-service concepts to backbone concepts (e.g. `crawler_capacity_counter --uses--> cache_service.py`, `crawler_archiving_gcs_fallback --shares_data_with--> tools_upload_daemon`) — these are what answer questions like "how does the crawler use Redis" in a single query.
 
 The graph directory contains:
@@ -171,26 +171,27 @@ Answers are persisted to `graphify-out/memory/` and promoted to graph nodes on n
 
 The single source of truth is `graphify-out/services-policy.yml` (tracked, machine-readable, read by the coverage-check CI workflow). The tables below are the human-facing summary; keep them in sync with the YAML when you add a service.
 
-### Graphed (3)
+### Graphed (4)
 
 | Service | Added | Why |
 |---------|-------|-----|
 | `apps-microservices/crawler-service` | 2026-04-24 | Node.js + Python, complex state machine, recent bug-fix cluster (OOM relaunch, leader election, archive staging). |
 | `apps-microservices/graph-rag-api-recherche-rust-service` | 2026-04-24 | Rust (Actix-web / tonic). Core retrieval. Unique stack; cross-links to libs/rust-common-utils gRPC clients and to Python LLM providers. |
 | `apps-microservices/api-detection-langue-fr` | 2026-05-05 | FastAPI server backing crawler's detection-langue-fr client. Promoted from `templated_wrapper` because the caller-contract / admission-control / inflight-dedup work made cross-service questions (crawler → backend) routine. |
+| `apps-microservices/api-gateway-go` | 2026-08-04 | The LIVE public ingress (Go), superseding the Python `api-gateway`. 50 code files -> 445 AST nodes + 44 semantic. Every request crosses it, so it carries the routing / auth-policy / downstream-timeout answers. |
 
-### Not graphed (90)
+### Not graphed (94)
 
 Grouped by reason. See `graphify-out/services-policy.yml` for the full list with per-service details.
 
 | Reason code | Meaning | Count |
 |-------------|---------|------:|
 | `too_small` | < 10 files and no rich CLAUDE.md. Raw grep is enough. | 11 |
-| `frontend` | Next.js / React frontend, separate toolchain. | 6 |
+| `frontend` | Next.js / React frontend, separate toolchain. | 7 |
 | `debug_variant` | Debug or test variant of another service. | 1 |
 | `template_scaffold` | Template used to scaffold new services, not a live service. | 1 |
-| `templated_wrapper` | FastAPI / processor wrapper following a common pattern; graph one reference and skip siblings. | 62 |
-| `candidate_deferred` | Large / unique service that would be worth graphing, not prioritised yet. Promote when a cross-service query surfaces the need. | 9 |
+| `templated_wrapper` | FastAPI / processor wrapper following a common pattern; graph one reference and skip siblings. | 63 |
+| `candidate_deferred` | Large / unique service that would be worth graphing, not prioritised yet. Promote when a cross-service query surfaces the need. | 10 |
 
 Before running `/graphify <path> --update`, confirm the service is not already in one of those lists:
 
