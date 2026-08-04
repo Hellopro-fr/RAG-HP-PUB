@@ -78,8 +78,12 @@ async def test_closed_page_skips_unroute():
 
 @pytest.mark.asyncio
 async def test_disconnected_browser_skips_both_closes():
+    """A disconnected browser also gates unroute_all: page.is_closed() alone
+    can't tell (only the page's own close event flips it, not the browser's),
+    so a dead driver pipe must be caught via browser.is_connected() too."""
     page, context, browser = _StubPage(), _StubContext(), _StubBrowser(connected=False)
     await _teardown_targets(page, context, browser, "https://example.fr")
+    assert page.unroute_calls == 0
     assert context.close_calls == 0
     assert browser.close_calls == 0
 

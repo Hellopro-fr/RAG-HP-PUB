@@ -286,19 +286,23 @@ async def fetch_html(url: str, proxy: Optional[str] = None) -> Optional[ScrapeRe
     # Un domaine injoignable coûtait 3 tentatives (~140s) PUIS jusqu'à 3
     # variantes (~135s) = ~275s, proche du plafond de 300s par item : l'item
     # pouvait être annulé en vol, et cette annulation orphelinait les futures
-    # à l'origine du flood asyncio du 2026-08-03. Les variantes n'y changent
-    # rien SI ET SEULEMENT SI aucune tentative n'a échoué de façon réparable
-    # (not saw_repairable) : le dernier last_error seul ne suffit pas, car le
-    # break de _VARIANT_ELIGIBLE_ERRORS est mort sur Camoufox — un échec
-    # Gecko réparable (SSL, DNS) sur une tentative précédente serait masqué
-    # si la tentative finale tombe sur un Timeout.
+    # à l'origine du flood asyncio du 2026-08-03. Règle réelle du garde : on ne
+    # saute Phase 2 QUE si TOUTES les tentatives ont échoué de façon pointless
+    # (saw_repairable est resté False) — le dernier last_error seul ne suffit
+    # pas, car le break de _VARIANT_ELIGIBLE_ERRORS est mort sur Camoufox, et
+    # UNE SEULE tentative non-pointless suffit à réarmer les trois variantes,
+    # même du simple bruit d'infra (ex: un TargetClosedError de new_context
+    # sur un navigateur mort au lancement, qui ne contient ni 'Timeout' ni
+    # 'Contenu vide ou trop court'). C'est le prix assumé, côté sûr : mieux
+    # vaut tester des variantes pour rien que sauter un échec réparable.
     variant_pointless = last_error and any(
         tok in last_error for tok in _VARIANT_POINTLESS_ERRORS
     )
     if variant_pointless and not saw_repairable:
         logger.warning(
             f"[VARIANTES] ignorées pour {url} — "
-            f"échec non réparable par une variante: {last_error}"
+            f"échec non réparable par une variante: {last_error} "
+            f"(saw_repairable={saw_repairable})"
         )
         return None
 

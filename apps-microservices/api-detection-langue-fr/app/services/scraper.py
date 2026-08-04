@@ -339,7 +339,10 @@ async def _teardown_targets(page, context, browser, url: str) -> None:
         # Drain in-flight route callbacks before tearing down the page.
         # Suppresses TargetClosedError flood from _route_handler firing
         # on closed pages under concurrent load.
-        if page is not None and not page.is_closed():
+        # Also consult the browser: if the driver pipe dies, page.is_closed()
+        # stays False (only the page's own close event flips it), so
+        # unroute_all would still run and race a concurrent route callback.
+        if page is not None and browser.is_connected() and not page.is_closed():
             await _close_or_abandon(
                 page.unroute_all(behavior='ignoreErrors'),
                 settings.TEARDOWN_TIMEOUT_S,
