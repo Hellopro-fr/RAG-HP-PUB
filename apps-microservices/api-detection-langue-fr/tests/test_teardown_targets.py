@@ -5,8 +5,11 @@ teardown op raises TargetClosedError. Each one burned up to TEARDOWN_TIMEOUT_S,
 and `unroute_all` on a dead page is what made Playwright schedule its internal
 _update_interceptor_patterns task — the giant repeated traceback in prod logs.
 """
+import re
+
 import pytest
 
+import app.services.scraper as scraper
 from app.services.scraper import _teardown_targets
 
 
@@ -43,12 +46,25 @@ class _StubBrowser:
 
 
 @pytest.mark.asyncio
-async def test_all_live_closes_everything():
+async def test_all_live_closes_everything(monkeypatch):
+    calls = []
+
+    async def recorder(coro, timeout, what=""):
+        # Passthrough: still awaits the coroutine so the call-count
+        # assertions below keep working, but pins that every teardown op
+        # actually goes through _close_or_abandon (the abandon-on-timeout
+        # bound), not a bare await that would silently drop it.
+        calls.append(what)
+        await coro
+
+    monkeypatch.setattr(scraper, "_close_or_abandon", recorder)
+
     page, context, browser = _StubPage(), _StubContext(), _StubBrowser()
     await _teardown_targets(page, context, browser, "https://example.fr")
     assert page.unroute_calls == 1
     assert context.close_calls == 1
     assert browser.close_calls == 1
+    assert len(calls) == 3, "_close_or_abandon must wrap all three teardown ops"
 
 
 @pytest.mark.asyncio
@@ -75,24 +91,25 @@ async def test_none_page_and_context_are_tolerated():
     assert browser.close_calls == 1
 
 
-@pytest.mark.asyncio
-async def test_exception_inside_teardown_never_propagates():
-    class _Exploding(_StubContext):
-        async def close(self):
-            raise RuntimeError("boom during teardown")
+class _BadBrowser(_StubBrowser):
+    def is_connected(self):
+        raise RuntimeError("connection object already torn down")
 
-    browser = _StubBrowser()
-    # Must not raise: this helper runs inside a `finally`, so propagating
-    # would mask whatever error the scrape was already unwinding.
-    await _teardown_targets(_StubPage(), _Exploding(), browser, "https://example.fr")
+
+@pytest.mark.asyncio
+async def test_sync_exception_inside_teardown_never_propagates():
+    """A raising liveness predicate must not escape: the helper runs inside a
+    `finally`, so propagating would mask the scrape's original error.
+    NB the raise must be SYNCHRONOUS — an exception from a coroutine handed to
+    _close_or_abandon is drained there and never reaches the helper's body."""
+    await _teardown_targets(_StubPage(), _StubContext(), _BadBrowser(), "https://example.fr")
 
 
 @pytest.mark.asyncio
 async def test_single_definition_in_source():
     """The teardown block must exist once, not duplicated per scrape function."""
     import inspect
-    import app.services.scraper as scraper
     src = inspect.getsource(scraper)
-    assert src.count("unroute_all(behavior='ignoreErrors')") == 1, (
+    assert len(re.findall(r"\.unroute_all\(", src)) == 1, (
         "teardown is still duplicated across the two scrape functions"
     )
