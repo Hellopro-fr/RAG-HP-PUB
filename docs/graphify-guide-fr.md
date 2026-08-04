@@ -79,6 +79,37 @@ Déjà câblé :
 
 Aucune action requise. Chaque session démarre graph-aware.
 
+## Savoir ce qui reste a re-extraire
+
+`scripts/graphify-status.sh` repond « le graphe est-il perime ? » par un seul
+bit. Insuffisant quand une session a touche deux services graphes : on lance un
+update scope, le drapeau se vide, et le second service reste en arriere sans
+bruit.
+
+```bash
+python scripts/graphify_plan_update.py     # quelles aires sont dues, et pourquoi
+python scripts/graphify_plan_update.py --quiet     # exit 0 rien du, 1 quelque chose du
+python scripts/graphify_plan_update.py --commands  # juste les commandes
+```
+
+Il derive la portee du graphe depuis `graph.json`, prend le dernier commit qui
+l'a touche comme repere, et diffe le **contenu** avec git depuis la. Il
+n'utilise pas les mtimes de `manifest.json` : un checkout ou un merge les
+rafraichit sans changer un octet, ce qui sur-signale largement (mesure du
+2026-08-04 : 201 fichiers signales sur deux services alors qu'une poignee avait
+reellement ete editee).
+
+Une aire n'est listee que si le hook post-commit ne peut pas s'en charger seul :
+
+| Situation | Listee ? | Pourquoi |
+|---|---|---|
+| Code edite, fichier deja dans le graphe | non | le hook a re-extrait son AST gratuitement |
+| Contenu d'une doc / d'un CLAUDE.md modifie | oui | la semantique demande le LLM |
+| Fichier que le graphe n'a jamais vu | oui | le hook rafraichit la portee, il ne l'elargit jamais |
+
+`/graphify-refresh` enchaine le tout : plan, puis chaque update scope dans
+l'ordre, puis une seule passe de re-labellisation a la fin.
+
 ## Détecter un `/graphify --update` en attente
 
 Les hooks locaux (`post-commit`, `post-merge`) et la voie CI auto-rebuild peuvent rafraîchir l'AST code sans LLM. Ils ne peuvent pas rafraîchir les nœuds doc / CLAUDE.md — ça demande une passe sémantique via `/graphify --update`. Quand un changement doc dans le scope est détecté, le script de rebuild touche `graphify-out/.needs_update` (gitignoré, local uniquement) comme drapeau « en attente ».

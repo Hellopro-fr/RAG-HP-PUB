@@ -79,6 +79,35 @@ Already wired:
 
 No action needed. Every session starts graph-aware.
 
+## Knowing what is owed a re-extraction
+
+`scripts/graphify-status.sh` answers "is the graph stale?" with one bit. That is
+not enough when a session touched two graphed services: you run one scoped
+update, the pending flag clears, and the second service is silently left behind.
+
+```bash
+python scripts/graphify_plan_update.py     # which areas are owed, and why
+python scripts/graphify_plan_update.py --quiet     # exit 0 nothing owed, 1 owed
+python scripts/graphify_plan_update.py --commands  # just the commands
+```
+
+It derives the graph's scope from `graph.json`, takes the last commit that
+touched it as a watermark, and diffs **content** with git from there. It does
+not use `manifest.json` mtimes: a checkout or a merge bumps mtime without
+changing a byte, which over-reports badly (measured 2026-08-04: 201 files
+flagged across two services where a handful had actually been edited).
+
+An area is only listed when the post-commit hook cannot cover it by itself:
+
+| Situation | Listed? | Why |
+|---|---|---|
+| Code edited, file already in the graph | no | the hook re-extracted its AST for free |
+| Doc / CLAUDE.md content changed | yes | semantics need the LLM |
+| File the graph has never seen | yes | the hook refreshes scope, it never widens it |
+
+`/graphify-refresh` chains the whole thing: plan, run each scoped update in
+order, then one re-labelling pass at the end.
+
 ## Detecting a pending `/graphify --update`
 
 The local hooks (`post-commit`, `post-merge`) and the CI auto-rebuild path can both refresh code AST without LLM. They cannot refresh doc / CLAUDE.md nodes — that requires a semantic pass via `/graphify --update`. When a doc change in scope is detected, the rebuild script touches `graphify-out/.needs_update` (gitignored, local only) as a "pending" flag.
