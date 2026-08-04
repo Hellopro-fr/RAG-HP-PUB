@@ -196,7 +196,8 @@ def main() -> int:
         NEEDS_UPDATE_FLAG.touch()
         print(
             f"[graphify hook] {len(doc_changed)} doc/config file(s) in scope changed - "
-            "run `/graphify --update` in a Claude Code session for semantic refresh",
+            "run `/graphify <path> --update` in a Claude Code session for semantic "
+            "refresh - always pass a path, a bare --update rescans all 99 services",
             flush=True,
         )
 

@@ -1,5 +1,14 @@
 #!/bin/bash
-# PreToolUse hook: block production code edits if no corresponding test file exists.
+# PreToolUse hook: WARN when production code is edited with no corresponding test.
+#
+# Advisory by default — it injects a reminder into the model's context and lets
+# the edit through. Rationale, measured 2026-08-03 on a 60-file sample of real
+# production files: re-arming it as a hard block refused 33% of them. A gate that
+# refuses one edit in three gets disabled within the week (that is exactly what
+# happened in the sibling repo: two successive "Exclusion" commits).
+#
+# To make it blocking once coverage is higher: set TDD_GATE_STRICT=1.
+#
 # Adapted from claude-code-templates/tdd-gate for RAG-HP-PUB.
 
 INPUT=$(cat)
@@ -49,16 +58,33 @@ esac
 # infra by design), we skip paths anchored on common folder names used in
 # this DevHellopro workspace layout.
 #
-# Patterns are case-sensitive substring globs. Adapt to your own clone:
-#   - `*Marketplace*`  matches any path crossing a folder literally named
-#     `Marketplace` (default repo name in this org).
-#   - `*Hellopro*`     matches any path crossing a folder containing the
-#     literal substring `Hellopro` (covers `DevHellopro/`, `Hellopro-fr/`,
-#     and any repo with that brand prefix).
-# If your clone uses different folder names (e.g. `marketplace-hp/`,
-# `~/repos/hp-bo/`), add a pattern here matching your local layout.
+# A repo's gate governs THAT repo only.
+#
+# When a session opened on another repo adds this one with /permissions, this
+# hook still fires on our files — CLAUDE_PROJECT_DIR stays bound to the session's
+# root repo. Symmetrically, our gate would fire on THEIR files. Each repo has its
+# own test policy; do not impose ours. This replaces the hand-maintained sibling
+# list (`*Marketplace*`, `*meps-app*`), which went stale at every new neighbour.
+#
+# TRAP this fixes for good, found 2026-08-03: the list used to carry `*Hellopro*`
+# to cover `Hellopro-fr/`. But this clone lives under `D:/DevHellopro/...`, so
+# EVERY absolute path matched — and Write/Edit always pass absolute paths. The
+# hook had been inert on its own repo ever since, while still looking active.
+#
+# Both sides are lower-cased and slash-normalised: Windows sends backslashes and
+# either drive case.
+if [ -n "$CLAUDE_PROJECT_DIR" ]; then
+    PROJ_N=$(echo "$CLAUDE_PROJECT_DIR" | tr '\\' '/' | tr '[:upper:]' '[:lower:]')
+    FILE_N=$(echo "$FILE_PATH" | tr '\\' '/' | tr '[:upper:]' '[:lower:]')
+    case "$FILE_N" in
+        "$PROJ_N"/*) ;;
+        *) exit 0 ;;
+    esac
+fi
+
+# Skip known non-testable paths inside this repo
 case "$FILE_PATH" in
-    *migrations*|*schemas*|*.claude*|*protos/*|*docs/*|*hooks/*|*Marketplace*|*Hellopro*) exit 0 ;;
+    *migrations*|*schemas*|*.claude*|*protos/*|*docs/*|*hooks/*) exit 0 ;;
 esac
 
 # Search for a corresponding test file
@@ -77,17 +103,26 @@ for TEST_DIR in "$DIRNAME" "$DIRNAME/tests" "$DIRNAME/../tests" "$DIRNAME/../tes
     fi
 done
 
-# If not found locally, search project-wide (limited depth)
+# If not found locally, search the SERVICE the file belongs to — not the whole
+# monorepo. A test named foo_test.go in service A must not excuse foo.go in
+# service B.
 if [ "$FOUND" -eq 0 ]; then
-    RESULT=$(find "$CLAUDE_PROJECT_DIR" -maxdepth 6 \( -name "test_${STEM}.*" -o -name "${STEM}_test.*" -o -name "${STEM}.test.*" -o -name "${STEM}.spec.*" \) -not -path "*node_modules*" -not -path "*.venv*" -print -quit 2>/dev/null)
+    SERVICE_ROOT=$(echo "$DIRNAME" | sed -E 's#^(.*/(apps-microservices|libs)/[^/]+)/.*#\1#')
+    [ -d "$SERVICE_ROOT" ] || SERVICE_ROOT="$DIRNAME"
+    RESULT=$(find "$SERVICE_ROOT" -maxdepth 6 \( -name "test_${STEM}.*" -o -name "${STEM}_test.*" -o -name "${STEM}.test.*" -o -name "${STEM}.spec.*" \) -not -path "*node_modules*" -not -path "*.venv*" -print -quit 2>/dev/null)
     if [ -n "$RESULT" ]; then
         FOUND=1
     fi
 fi
 
 if [ "$FOUND" -eq 0 ]; then
-    echo "⚠️ TDD Gate: No test file found for '$BASENAME'. Write a test first, or use @test-writer to generate one." >&2
-    exit 2
+    MSG="TDD Gate: no test found for '$BASENAME'. Conventions: Go -> ${STEM}_test.go beside the file; Python -> tests/test_${STEM}.py; crawler-service -> src/${STEM}.test.ts (node:test); other TS/Vue -> ${STEM}.spec.ts (vitest). The test-writer agent can draft one."
+    if [ -n "$TDD_GATE_STRICT" ]; then
+        echo "⚠️ $MSG" >&2
+        exit 2
+    fi
+    # Advisory: reach the model without refusing the edit.
+    printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"%s"}}\n' "$MSG"
 fi
 
 exit 0

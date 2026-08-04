@@ -5,6 +5,7 @@ import random
 import time
 import uuid
 from dataclasses import dataclass, field
+from functools import partial
 from typing import Optional
 from urllib.parse import urlparse
 
@@ -283,6 +284,22 @@ async def _inject_cookie_consent(context, url: str) -> None:
         pass
 
 
+def _drain_orphan_exception(fut: asyncio.Future, what: str = "") -> None:
+    """Read a teardown task's exception once it completes, whichever path got there.
+
+    Without this, asyncio logs "Task exception was never retrieved" when the
+    task is garbage-collected — the log flood observed in prod on 2026-08-03.
+    A cancelled task must be skipped: `.exception()` re-raises CancelledError.
+    Attached as a done-callback so it also covers the caller-cancelled path
+    (see `_close_or_abandon`), not just the abandoned-after-timeout one.
+    """
+    if fut.cancelled():
+        return
+    exc = fut.exception()
+    if exc is not None:
+        logger.debug(f"teardown failed ({what}): {exc!r}")
+
+
 async def _close_or_abandon(coro, timeout: float, what: str = "") -> None:
     """Await a browser teardown coroutine, but ABANDON it if it exceeds `timeout`.
 
@@ -290,11 +307,59 @@ async def _close_or_abandon(coro, timeout: float, what: str = "") -> None:
     (cancel-then-await) would itself hang. asyncio.wait() returns on timeout
     WITHOUT cancelling; we simply stop waiting and leave the task detached (its
     OS process is already gone, so it leaks nothing meaningful). This lets the
-    caller escape `finally` and release its semaphore slot."""
+    caller escape `finally` and release its semaphore slot.
+
+    The drain callback is attached BEFORE the await, so all three ways this
+    can end are covered: fast failure (done before timeout, exception read via
+    the callback), abandoned (task keeps running after we stop waiting, callback
+    fires whenever it eventually settles), and caller-cancelled (a CancelledError
+    delivered to us while suspended in asyncio.wait propagates out immediately,
+    but the callback is already attached to `t` and still fires later)."""
     t = asyncio.ensure_future(coro)
+    t.add_done_callback(partial(_drain_orphan_exception, what=what))
     done, _pending = await asyncio.wait({t}, timeout=timeout)
     if not done:
         logger.warning(f"scraper teardown abandoned after {timeout}s: {what}")
+
+
+async def _teardown_targets(page, context, browser, url: str) -> None:
+    """Tear down page/context/browser, skipping targets that are already dead.
+
+    On a failed scrape the targets are usually gone, so every op would raise
+    TargetClosedError — each burning up to TEARDOWN_TIMEOUT_S, and `unroute_all`
+    on a dead page additionally makes Playwright schedule its internal
+    _update_interceptor_patterns task (the large repeated traceback in the
+    2026-08-03 logs). `is_closed()` / `is_connected()` are synchronous in the
+    Python API, so the guards cannot hang.
+
+    Runs inside a `finally`: never let anything propagate, or the original
+    scrape error would be masked.
+    """
+    try:
+        # Drain in-flight route callbacks before tearing down the page.
+        # Suppresses TargetClosedError flood from _route_handler firing
+        # on closed pages under concurrent load.
+        # Also consult the browser: if the driver pipe dies, page.is_closed()
+        # stays False (only the page's own close event flips it), so
+        # unroute_all would still run and race a concurrent route callback.
+        if page is not None and browser.is_connected() and not page.is_closed():
+            await _close_or_abandon(
+                page.unroute_all(behavior='ignoreErrors'),
+                settings.TEARDOWN_TIMEOUT_S,
+                f"unroute_all {url}",
+            )
+        # BrowserContext exposes no is_closed() in the Python API; if the
+        # browser is gone the context is gone with it.
+        if context is not None and browser.is_connected():
+            await _close_or_abandon(
+                context.close(), settings.TEARDOWN_TIMEOUT_S, f"context.close {url}"
+            )
+        if browser.is_connected():
+            await _close_or_abandon(
+                browser.close(), settings.TEARDOWN_TIMEOUT_S, f"browser.close {url}"
+            )
+    except Exception as teardown_err:
+        logger.debug(f"teardown error for {url}: {teardown_err!r}")
 
 
 async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) -> Optional[ScrapeResult]:
@@ -494,23 +559,7 @@ async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) 
                     logger.warning(f"Contenu trop court pour {url}")
                     return None
             finally:
-                # Drain in-flight route callbacks before tearing down the page.
-                # Suppresses TargetClosedError flood from _route_handler firing
-                # on closed pages under concurrent load.
-                if page is not None:
-                    try:
-                        await _close_or_abandon(page.unroute_all(behavior='ignoreErrors'), settings.TEARDOWN_TIMEOUT_S, f"unroute_all {url}")
-                    except Exception as unroute_err:
-                        logger.debug(f"unroute_all failed for {url}: {unroute_err}")
-                if context is not None:
-                    try:
-                        await _close_or_abandon(context.close(), settings.TEARDOWN_TIMEOUT_S, f"context.close {url}")
-                    except Exception as ctx_err:
-                        logger.debug(f"context.close failed for {url}: {ctx_err}")
-                try:
-                    await _close_or_abandon(browser.close(), settings.TEARDOWN_TIMEOUT_S, f"browser.close {url}")
-                except Exception as br_err:
-                    logger.debug(f"browser.close failed for {url}: {br_err}")
+                await _teardown_targets(page, context, browser, url)
         finally:
             await _close_or_abandon(p.stop(), settings.TEARDOWN_TIMEOUT_S, f"playwright.stop {url}")
 
@@ -623,23 +672,7 @@ async def scrape_html_with_redirects(
                         'redirects': redirects,
                     }
                 finally:
-                    # Drain in-flight route callbacks before tearing down the page.
-                    # Suppresses TargetClosedError flood from _route_handler firing
-                    # on closed pages under concurrent load.
-                    if page is not None:
-                        try:
-                            await _close_or_abandon(page.unroute_all(behavior='ignoreErrors'), settings.TEARDOWN_TIMEOUT_S, f"unroute_all {url}")
-                        except Exception as unroute_err:
-                            logger.debug(f"unroute_all failed for {url}: {unroute_err}")
-                    if context is not None:
-                        try:
-                            await _close_or_abandon(context.close(), settings.TEARDOWN_TIMEOUT_S, f"context.close {url}")
-                        except Exception as ctx_err:
-                            logger.debug(f"context.close failed for {url}: {ctx_err}")
-                    try:
-                        await _close_or_abandon(browser.close(), settings.TEARDOWN_TIMEOUT_S, f"browser.close {url}")
-                    except Exception as br_err:
-                        logger.debug(f"browser.close failed for {url}: {br_err}")
+                    await _teardown_targets(page, context, browser, url)
             finally:
                 await _close_or_abandon(p.stop(), settings.TEARDOWN_TIMEOUT_S, f"playwright.stop {url}")
 

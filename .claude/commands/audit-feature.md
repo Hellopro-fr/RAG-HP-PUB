@@ -1,3 +1,8 @@
+---
+description: Audite une fonctionnalité de bout en bout à travers le pipeline de microservices, du point d'entrée à la base
+argument-hint: <nom de la fonctionnalité>
+allowed-tools: Read, Grep, Glob, Bash
+---
 # /audit-feature — End-to-End Feature Audit
 
 Audit a complete feature across the microservice pipeline — from API entry point to database and back.

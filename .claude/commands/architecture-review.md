@@ -1,3 +1,8 @@
+---
+description: Revue architecturale d'un service, d'un domaine ou de la plateforme : couplage, cohésion, propriété des données, gestion d'échec, observabilité
+argument-hint: [service|domaine|plateforme]
+allowed-tools: Read, Grep, Glob, Bash
+---
 # /architecture-review — Architecture-Level Review
 
 Review the architecture of a service, feature, or the entire platform for structural quality, scalability, and maintainability.

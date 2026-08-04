@@ -26,6 +26,17 @@ _FATAL_ERRORS = (
 # Union des deux pour la fonction _is_retryable_error (rétrocompatibilité)
 _NON_RETRYABLE_ERRORS = _VARIANT_ELIGIBLE_ERRORS + _FATAL_ERRORS
 
+# Échecs qu'un changement de variante d'URL ne peut PAS réparer.
+# Basculer http/https ou www/sans-www ne rend pas un site lent plus rapide,
+# et ne remplit pas une page vide. Formulations stables sur les DEUX moteurs
+# (Camoufox/Firefox comme Chromium) — contrairement à _VARIANT_ELIGIBLE_ERRORS
+# ci-dessus qui ne contient que des codes Chromium et ne matche donc jamais
+# en production (CAMOUFOX_ENABLED=True par défaut).
+_VARIANT_POINTLESS_ERRORS = (
+    'Timeout',                     # « Timeout 30000ms exceeded » — Playwright, les 2 moteurs
+    'Contenu vide ou trop court',  # posé plus bas, branche contenu insuffisant
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -214,6 +225,12 @@ async def fetch_html(url: str, proxy: Optional[str] = None) -> Optional[ScrapeRe
 
     max_retries = settings.HTTP_MAX_RETRIES
     last_error = None
+    # Vrai dès qu'une tentative échoue pour une raison qu'une variante d'URL
+    # POURRAIT réparer (DNS, SSL...). Nécessaire car le break de
+    # _VARIANT_ELIGIBLE_ERRORS (ligne plus bas) est mort sur Camoufox — un
+    # échec Gecko réparable peut donc brûler les 3 tentatives, et si la
+    # dernière tombe sur un Timeout, last_error ne reflèterait plus que ça.
+    saw_repairable = False
 
     for attempt in range(1, max_retries + 1):
         # Toutes les tentatives utilisent auto (rotation intelligente Apify, pool large)
@@ -232,9 +249,19 @@ async def fetch_html(url: str, proxy: Optional[str] = None) -> Optional[ScrapeRe
 
             # Contenu vide/trop court — retryable
             last_error = "Contenu vide ou trop court"
+            saw_repairable = saw_repairable or not any(
+                tok in last_error for tok in _VARIANT_POINTLESS_ERRORS
+            )
 
         except Exception as e:
-            last_error = str(e)
+            # asyncio.TimeoutError/TimeoutError levée sans argument (ex: le
+            # wait_for du fallback Chromium dans scraper.py) a str(e) == '' —
+            # sans le fallback sur le nom de classe, la garde ci-dessous
+            # (last_error and ...) serait faussement inactive.
+            last_error = str(e) or type(e).__name__
+            saw_repairable = saw_repairable or not any(
+                tok in last_error for tok in _VARIANT_POINTLESS_ERRORS
+            )
 
             # Erreur fatale (config proxy) → arrêt immédiat, Phase 2 inutile
             if any(fatal in last_error for fatal in _FATAL_ERRORS):
@@ -255,6 +282,29 @@ async def fetch_html(url: str, proxy: Optional[str] = None) -> Optional[ScrapeRe
             await asyncio.sleep(wait_time)
 
     logger.warning(f"Échec de récupération HTML pour {url} après {max_retries} tentatives ({last_error})")
+
+    # Un domaine injoignable coûtait 3 tentatives (~140s) PUIS jusqu'à 3
+    # variantes (~135s) = ~275s, proche du plafond de 300s par item : l'item
+    # pouvait être annulé en vol, et cette annulation orphelinait les futures
+    # à l'origine du flood asyncio du 2026-08-03. Règle réelle du garde : on ne
+    # saute Phase 2 QUE si TOUTES les tentatives ont échoué de façon pointless
+    # (saw_repairable est resté False) — le dernier last_error seul ne suffit
+    # pas, car le break de _VARIANT_ELIGIBLE_ERRORS est mort sur Camoufox, et
+    # UNE SEULE tentative non-pointless suffit à réarmer les trois variantes,
+    # même du simple bruit d'infra (ex: un TargetClosedError de new_context
+    # sur un navigateur mort au lancement, qui ne contient ni 'Timeout' ni
+    # 'Contenu vide ou trop court'). C'est le prix assumé, côté sûr : mieux
+    # vaut tester des variantes pour rien que sauter un échec réparable.
+    variant_pointless = last_error and any(
+        tok in last_error for tok in _VARIANT_POINTLESS_ERRORS
+    )
+    if variant_pointless and not saw_repairable:
+        logger.warning(
+            f"[VARIANTES] ignorées pour {url} — "
+            f"échec non réparable par une variante: {last_error} "
+            f"(saw_repairable={saw_repairable})"
+        )
+        return None
 
     # Phase 2 : Fallback sur variantes d'URL (http/https, www/sans-www)
     # Couvre les cas de mauvaise configuration SSL ou DNS côté serveur.
