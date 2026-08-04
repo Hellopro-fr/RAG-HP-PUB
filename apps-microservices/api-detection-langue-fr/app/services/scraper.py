@@ -322,6 +322,43 @@ async def _close_or_abandon(coro, timeout: float, what: str = "") -> None:
         logger.warning(f"scraper teardown abandoned after {timeout}s: {what}")
 
 
+async def _teardown_targets(page, context, browser, url: str) -> None:
+    """Tear down page/context/browser, skipping targets that are already dead.
+
+    On a failed scrape the targets are usually gone, so every op would raise
+    TargetClosedError — each burning up to TEARDOWN_TIMEOUT_S, and `unroute_all`
+    on a dead page additionally makes Playwright schedule its internal
+    _update_interceptor_patterns task (the large repeated traceback in the
+    2026-08-03 logs). `is_closed()` / `is_connected()` are synchronous in the
+    Python API, so the guards cannot hang.
+
+    Runs inside a `finally`: never let anything propagate, or the original
+    scrape error would be masked.
+    """
+    try:
+        # Drain in-flight route callbacks before tearing down the page.
+        # Suppresses TargetClosedError flood from _route_handler firing
+        # on closed pages under concurrent load.
+        if page is not None and not page.is_closed():
+            await _close_or_abandon(
+                page.unroute_all(behavior='ignoreErrors'),
+                settings.TEARDOWN_TIMEOUT_S,
+                f"unroute_all {url}",
+            )
+        # BrowserContext exposes no is_closed() in the Python API; if the
+        # browser is gone the context is gone with it.
+        if context is not None and browser.is_connected():
+            await _close_or_abandon(
+                context.close(), settings.TEARDOWN_TIMEOUT_S, f"context.close {url}"
+            )
+        if browser.is_connected():
+            await _close_or_abandon(
+                browser.close(), settings.TEARDOWN_TIMEOUT_S, f"browser.close {url}"
+            )
+    except Exception as teardown_err:
+        logger.debug(f"teardown error for {url}: {teardown_err!r}")
+
+
 async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) -> Optional[ScrapeResult]:
     """
     Récupère le contenu HTML d'une URL via Playwright avec proxy obligatoire.
@@ -519,23 +556,7 @@ async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) 
                     logger.warning(f"Contenu trop court pour {url}")
                     return None
             finally:
-                # Drain in-flight route callbacks before tearing down the page.
-                # Suppresses TargetClosedError flood from _route_handler firing
-                # on closed pages under concurrent load.
-                if page is not None:
-                    try:
-                        await _close_or_abandon(page.unroute_all(behavior='ignoreErrors'), settings.TEARDOWN_TIMEOUT_S, f"unroute_all {url}")
-                    except Exception as unroute_err:
-                        logger.debug(f"unroute_all failed for {url}: {unroute_err}")
-                if context is not None:
-                    try:
-                        await _close_or_abandon(context.close(), settings.TEARDOWN_TIMEOUT_S, f"context.close {url}")
-                    except Exception as ctx_err:
-                        logger.debug(f"context.close failed for {url}: {ctx_err}")
-                try:
-                    await _close_or_abandon(browser.close(), settings.TEARDOWN_TIMEOUT_S, f"browser.close {url}")
-                except Exception as br_err:
-                    logger.debug(f"browser.close failed for {url}: {br_err}")
+                await _teardown_targets(page, context, browser, url)
         finally:
             await _close_or_abandon(p.stop(), settings.TEARDOWN_TIMEOUT_S, f"playwright.stop {url}")
 
@@ -648,23 +669,7 @@ async def scrape_html_with_redirects(
                         'redirects': redirects,
                     }
                 finally:
-                    # Drain in-flight route callbacks before tearing down the page.
-                    # Suppresses TargetClosedError flood from _route_handler firing
-                    # on closed pages under concurrent load.
-                    if page is not None:
-                        try:
-                            await _close_or_abandon(page.unroute_all(behavior='ignoreErrors'), settings.TEARDOWN_TIMEOUT_S, f"unroute_all {url}")
-                        except Exception as unroute_err:
-                            logger.debug(f"unroute_all failed for {url}: {unroute_err}")
-                    if context is not None:
-                        try:
-                            await _close_or_abandon(context.close(), settings.TEARDOWN_TIMEOUT_S, f"context.close {url}")
-                        except Exception as ctx_err:
-                            logger.debug(f"context.close failed for {url}: {ctx_err}")
-                    try:
-                        await _close_or_abandon(browser.close(), settings.TEARDOWN_TIMEOUT_S, f"browser.close {url}")
-                    except Exception as br_err:
-                        logger.debug(f"browser.close failed for {url}: {br_err}")
+                    await _teardown_targets(page, context, browser, url)
             finally:
                 await _close_or_abandon(p.stop(), settings.TEARDOWN_TIMEOUT_S, f"playwright.stop {url}")
 
