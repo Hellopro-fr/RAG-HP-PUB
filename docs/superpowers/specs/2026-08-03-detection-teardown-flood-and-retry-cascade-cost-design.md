@@ -42,7 +42,7 @@ future: <Task ... coro=<BrowserContext.close() ...> exception=TargetClosedError(
 
 **1. Phase 2 (URL variants) runs unconditionally, whatever the failure was.**
 
-`redirect_tracker.py` uses `_VARIANT_ELIGIBLE_ERRORS` (`:245-247`) only to `break` out of the retry loop early. After the loop, `:262` calls `_generate_url_variants(url)` with no reference to *why* Phase 1 failed. So a plain navigation timeout — which http/https and www toggling cannot possibly fix — still triggers up to 4 more full browser launches.
+`redirect_tracker.py` uses `_VARIANT_ELIGIBLE_ERRORS` (`:245-247`) only to `break` out of the retry loop early. After the loop, `:262` calls `_generate_url_variants(url)` with no reference to *why* Phase 1 failed. So a plain navigation timeout — which http/https and www toggling cannot possibly fix — still triggers up to 3 more full browser launches (`_generate_url_variants` builds a fixed 3-element list that dedup can only shrink, so 3 is the ceiling for every input, not 4).
 
 **Engine mismatch found while planning — changes the shape of the fix.** `_VARIANT_ELIGIBLE_ERRORS` (`:13-17`) holds only **Chromium** codes (`ERR_NAME_NOT_RESOLVED`, `ERR_CERT_DATE_INVALID`, `ERR_SSL_PROTOCOL_ERROR`), but `CAMOUFOX_ENABLED: bool = True` (`config.py:30`) and `CAMOUFOX` appears **nowhere in `docker-compose.yml`**, so the default holds and the service runs **Camoufox (stealth Firefox)**. Firefox emits Gecko errors (`NS_ERROR_UNKNOWN_HOST`, `SEC_ERROR_*`, `SSL_ERROR_*`) — and `grep` finds zero `NS_ERROR` / `SEC_ERROR` / `net::ERR` tokens anywhere in `app/`.
 
@@ -55,12 +55,12 @@ Cost of one hopeless domain:
 | phase | launches | cost each | subtotal |
 |---|---|---|---|
 | Phase 1 retries (`:218`) | 3 | launch + 30 s nav timeout + teardown, + 2 s/4 s sleeps | ~140 s |
-| Phase 2 variants (`:268`) | up to 4 | launch + 30 s nav timeout + teardown | ~180 s |
-| **total** | **up to 7** | | **~320 s** |
+| Phase 2 variants (`:268`) | up to 3 | launch + 30 s nav timeout + teardown | ~135 s |
+| **total** | **up to 6** | | **~275 s** |
 
-Against the 300 s per-item ceiling in `_run_batch_core`, that **deterministically overruns**. The item is cancelled mid-flight — and the cancellation is what orphans the in-flight futures that produce the flood. The reported log symptom is therefore *downstream* of this cost defect.
+~275 s sits *under* the 300 s per-item ceiling in `_run_batch_core` — so the cancellation observed in the log means the real per-launch cost exceeds this ~45 s estimate, not that the arithmetic above is the whole story. Either way the item was cancelled mid-flight, and the cancellation is what orphans the in-flight futures that produce the flood; the fix direction (up to 6 launches → up to 3) is unchanged by this correction. The reported log symptom is therefore *downstream* of this cost defect.
 
-The batch in the log is a **retry batch of already-failing domains** (it ends in `Pass 2: retry sequentiel` on `cantirac.fr`, and the caller is the `domaine_fr_retry` path), so `0 OK / 10 autres` is the expected input population — not a service defect. The defect is spending 320 s per domain to learn what was already known at 140 s.
+The batch in the log is a **retry batch of already-failing domains** (it ends in `Pass 2: retry sequentiel` on `cantirac.fr`, and the caller is the `domaine_fr_retry` path), so `0 OK / 10 autres` is the expected input population — not a service defect. The defect is spending up to ~275 s per domain to learn what was already known at 140 s.
 
 **2. Teardown runs against targets that are already dead.**
 
@@ -109,10 +109,10 @@ _VARIANT_POINTLESS_ERRORS = (
 Before `variants = _generate_url_variants(url)` (`:262`):
 
 ```python
-    # Un domaine injoignable coûtait 3 tentatives (~140s) PUIS 4 variantes
-    # (~180s) = ~320s, au-delà du plafond de 300s par item : l'item était
-    # annulé en vol, et cette annulation orphelinait les futures à l'origine
-    # du flood asyncio. Les variantes ne pouvaient rien y changer.
+    # Un domaine injoignable coûtait 3 tentatives (~140s) PUIS jusqu'à 3
+    # variantes (~135s) = ~275s, proche du plafond de 300s par item : l'item
+    # pouvait être annulé en vol, et cette annulation orphelinait les futures
+    # à l'origine du flood asyncio. Les variantes ne pouvaient rien y changer.
     variant_pointless = last_error and any(
         tok in last_error for tok in _VARIANT_POINTLESS_ERRORS
     )
@@ -126,7 +126,7 @@ Before `variants = _generate_url_variants(url)` (`:262`):
 
 Every other failure — DNS, SSL, connection refused, challenge — still gets its variants, so no existing rescue path is removed.
 
-**Accepted loss:** a site whose apex *times out* but whose `www`/`http` variant would have answered is no longer rescued. Judged acceptable: a timeout is far more often a slow or dead site than a variant-fixable misconfiguration, and today every hopeless domain pays 4 wasted launches to buy that rare rescue.
+**Accepted loss:** a site whose apex *times out* but whose `www`/`http` variant would have answered is no longer rescued. Judged acceptable: a timeout is far more often a slow or dead site than a variant-fixable misconfiguration, and today every hopeless domain pays up to 3 wasted launches to buy that rare rescue.
 
 **Parked, pre-existing, NOT fixed here:** `_VARIANT_ELIGIBLE_ERRORS` is Chromium-only, so the `break` at `:245-247` never fires on Camoufox — a DNS failure burns all 3 retries instead of short-circuiting to Phase 2. Fixing it means asserting exact Gecko token strings, which cannot be verified on this machine (no browser). Deferred rather than guessed: a wrong token would silently re-disable the path, which is the exact failure mode just caught. Verify against a real Camoufox DNS failure first.
 
@@ -182,7 +182,7 @@ The six dead `except Exception` handlers around the call sites become redundant 
 
 | Situation | Before | After |
 |---|---|---|
-| Domain fails Phase 1 with a nav timeout | 4 extra browser launches, ~320 s total, item cancelled at 300 s, flood | Phase 2 skipped, ~140 s, item returns a real verdict |
+| Domain fails Phase 1 with a nav timeout | up to 3 extra browser launches, ~275 s total (under the 300 s ceiling on the ~45 s/launch estimate — the observed cancellation implies the real cost runs higher), flood | Phase 2 skipped, ~140 s, item returns a real verdict |
 | Phase 1 returns empty/short content | variants tried | Phase 2 skipped |
 | Domain fails Phase 1 with DNS/SSL error | variants tried (after all 3 retries, since the `break` is dead on Camoufox) | unchanged — variants still tried |
 | Domain fails Phase 1 with connection-refused / challenge / other | variants tried | unchanged — variants still tried |

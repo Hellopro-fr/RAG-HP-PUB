@@ -225,6 +225,12 @@ async def fetch_html(url: str, proxy: Optional[str] = None) -> Optional[ScrapeRe
 
     max_retries = settings.HTTP_MAX_RETRIES
     last_error = None
+    # Vrai dès qu'une tentative échoue pour une raison qu'une variante d'URL
+    # POURRAIT réparer (DNS, SSL...). Nécessaire car le break de
+    # _VARIANT_ELIGIBLE_ERRORS (ligne plus bas) est mort sur Camoufox — un
+    # échec Gecko réparable peut donc brûler les 3 tentatives, et si la
+    # dernière tombe sur un Timeout, last_error ne reflèterait plus que ça.
+    saw_repairable = False
 
     for attempt in range(1, max_retries + 1):
         # Toutes les tentatives utilisent auto (rotation intelligente Apify, pool large)
@@ -243,9 +249,19 @@ async def fetch_html(url: str, proxy: Optional[str] = None) -> Optional[ScrapeRe
 
             # Contenu vide/trop court — retryable
             last_error = "Contenu vide ou trop court"
+            saw_repairable = saw_repairable or not any(
+                tok in last_error for tok in _VARIANT_POINTLESS_ERRORS
+            )
 
         except Exception as e:
-            last_error = str(e)
+            # asyncio.TimeoutError/TimeoutError levée sans argument (ex: le
+            # wait_for du fallback Chromium dans scraper.py) a str(e) == '' —
+            # sans le fallback sur le nom de classe, la garde ci-dessous
+            # (last_error and ...) serait faussement inactive.
+            last_error = str(e) or type(e).__name__
+            saw_repairable = saw_repairable or not any(
+                tok in last_error for tok in _VARIANT_POINTLESS_ERRORS
+            )
 
             # Erreur fatale (config proxy) → arrêt immédiat, Phase 2 inutile
             if any(fatal in last_error for fatal in _FATAL_ERRORS):
@@ -267,14 +283,19 @@ async def fetch_html(url: str, proxy: Optional[str] = None) -> Optional[ScrapeRe
 
     logger.warning(f"Échec de récupération HTML pour {url} après {max_retries} tentatives ({last_error})")
 
-    # Un domaine injoignable coûtait 3 tentatives (~140s) PUIS 4 variantes
-    # (~180s) = ~320s, au-delà du plafond de 300s par item : l'item était
-    # annulé en vol, et cette annulation orphelinait les futures à l'origine
-    # du flood asyncio du 2026-08-03. Les variantes n'y changeaient rien.
+    # Un domaine injoignable coûtait 3 tentatives (~140s) PUIS jusqu'à 3
+    # variantes (~135s) = ~275s, proche du plafond de 300s par item : l'item
+    # pouvait être annulé en vol, et cette annulation orphelinait les futures
+    # à l'origine du flood asyncio du 2026-08-03. Les variantes n'y changent
+    # rien SI ET SEULEMENT SI aucune tentative n'a échoué de façon réparable
+    # (not saw_repairable) : le dernier last_error seul ne suffit pas, car le
+    # break de _VARIANT_ELIGIBLE_ERRORS est mort sur Camoufox — un échec
+    # Gecko réparable (SSL, DNS) sur une tentative précédente serait masqué
+    # si la tentative finale tombe sur un Timeout.
     variant_pointless = last_error and any(
         tok in last_error for tok in _VARIANT_POINTLESS_ERRORS
     )
-    if variant_pointless:
+    if variant_pointless and not saw_repairable:
         logger.warning(
             f"[VARIANTES] ignorées pour {url} — "
             f"échec non réparable par une variante: {last_error}"

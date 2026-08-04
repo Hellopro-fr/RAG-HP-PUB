@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers-extended-cc:subagent-driven-development (recommended) or superpowers-extended-cc:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Stop the asyncio "exception was never retrieved" flood, and stop a hopeless domain costing ~320 s (which overruns the 300 s per-item ceiling and causes the cancellation that produces the flood).
+**Goal:** Stop the asyncio "exception was never retrieved" flood, and stop a hopeless domain costing up to ~275 s (close to the 300 s per-item ceiling — the observed cancellation implies the real per-launch cost runs above the ~45 s estimate behind that figure — and the cancellation is what causes the flood).
 
 **Architecture:** Three independent changes in `app/services/`. `_close_or_abandon` gains exception draining. The duplicated teardown block in both scrape functions is extracted into one liveness-aware helper. `redirect_tracker.fetch_html` gains a denylist gate so URL variants are skipped for failure classes they cannot fix.
 
@@ -442,7 +442,7 @@ Bilingual EN-then-FR message via the Write tool + `git commit --file=<path>`. EN
 
 ### Task 3: skip URL variants for failures they cannot fix
 
-**Goal:** A domain that fails Phase 1 with a navigation timeout or empty content no longer buys 4 more browser launches, bringing the worst case from ~320 s to ~140 s — under the 300 s per-item ceiling, so the item returns a real verdict instead of being cancelled.
+**Goal:** A domain that fails Phase 1 with a navigation timeout or empty content no longer buys up to 3 more browser launches, bringing the worst case from ~275 s to ~140 s — comfortably under the 300 s per-item ceiling (275 s already sat under it on the ~45 s/launch estimate, so the cancellation actually observed implies the real per-launch cost runs higher; either way the item now returns a real verdict instead of being cancelled).
 
 **Files:**
 - Modify: `apps-microservices/api-detection-langue-fr/app/services/redirect_tracker.py` (new tuple near `:13-27`; gate before `:262`)
@@ -467,9 +467,9 @@ Create `tests/test_variant_gate.py`:
 ```python
 """Phase-2 URL variants are skipped for failures they cannot fix (2026-08-03).
 
-A hopeless domain cost 3 retries (~140s) PLUS 4 variants (~180s) = ~320s,
-overrunning the 300s per-item ceiling in _run_batch_core. The item was then
-cancelled in flight, and that cancellation orphaned the futures behind the
+A hopeless domain cost 3 retries (~140s) PLUS up to 3 variants (~135s) =
+~275s, close to the 300s per-item ceiling in _run_batch_core. The item could
+be cancelled in flight, and that cancellation orphaned the futures behind the
 asyncio flood.
 
 The gate is a DENYLIST on purpose: _VARIANT_ELIGIBLE_ERRORS holds only
@@ -606,10 +606,10 @@ _VARIANT_POINTLESS_ERRORS = (
 In `fetch_html`, immediately before `variants = _generate_url_variants(url)` (`:262`):
 
 ```python
-    # Un domaine injoignable coûtait 3 tentatives (~140s) PUIS 4 variantes
-    # (~180s) = ~320s, au-delà du plafond de 300s par item : l'item était
-    # annulé en vol, et cette annulation orphelinait les futures à l'origine
-    # du flood asyncio du 2026-08-03. Les variantes n'y changeaient rien.
+    # Un domaine injoignable coûtait 3 tentatives (~140s) PUIS jusqu'à 3
+    # variantes (~135s) = ~275s, proche du plafond de 300s par item : l'item
+    # pouvait être annulé en vol, et cette annulation orphelinait les futures
+    # à l'origine du flood asyncio du 2026-08-03. Les variantes n'y changeaient rien.
     variant_pointless = last_error and any(
         tok in last_error for tok in _VARIANT_POINTLESS_ERRORS
     )
