@@ -1,3 +1,8 @@
+---
+description: Absorbe et résume plusieurs fichiers ou un sujet large avant d'en discuter — sans rien modifier
+argument-hint: <fichiers ou sujet>
+allowed-tools: Read, Grep, Glob
+---
 # /understand — Content Comprehension
 
 Absorb and summarize **multiple files, uploads, or broad topics** before discussing them. Use `/explain` instead for a single file or code block deep-dive.

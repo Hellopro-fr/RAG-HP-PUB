@@ -115,6 +115,7 @@ class TestRouteHandlerCleanup:
         mock_page.route = AsyncMock()
         mock_page.on = MagicMock()
         mock_page.wait_for_timeout = AsyncMock()
+        mock_page.is_closed = MagicMock(return_value=False)  # live page: teardown must not skip unroute_all
 
         mock_context = MagicMock()
         mock_context.new_page = AsyncMock(return_value=mock_page)
@@ -124,6 +125,7 @@ class TestRouteHandlerCleanup:
         mock_browser = MagicMock()
         mock_browser.new_context = AsyncMock(return_value=mock_context)
         mock_browser.close = AsyncMock(side_effect=lambda: call_order.append("browser.close"))
+        mock_browser.is_connected = MagicMock(return_value=True)  # live browser: teardown must not skip closes
 
         mock_pw = MagicMock()
         mock_pw.__aenter__ = AsyncMock(return_value=mock_pw)
@@ -158,6 +160,7 @@ class TestRouteHandlerCleanup:
             "Page.goto: net::ERR_SSL_PROTOCOL_ERROR at https://example.com/"
         ))
         mock_page.unroute_all = AsyncMock()
+        mock_page.is_closed = MagicMock(return_value=False)  # goto failed, page itself is still live
 
         mock_context = MagicMock()
         mock_context.new_page = AsyncMock(return_value=mock_page)
@@ -168,6 +171,7 @@ class TestRouteHandlerCleanup:
 
         mock_browser = MagicMock()
         mock_browser.new_context = AsyncMock(return_value=mock_context)
+        mock_browser.is_connected = MagicMock(return_value=True)  # live: teardown must still close
         async def close_br():
             closed["browser"] = True
         mock_browser.close = AsyncMock(side_effect=close_br)
@@ -210,6 +214,7 @@ class TestChallengeResolvedStatus:
         mock_browser = MagicMock()
         mock_browser.new_context = AsyncMock(return_value=mock_context)
         mock_browser.close = AsyncMock()
+        mock_browser.is_connected = MagicMock(return_value=True)  # live: teardown must still close
 
         mock_pw = MagicMock()
         mock_pw.__aenter__ = AsyncMock(return_value=mock_pw)
@@ -232,6 +237,7 @@ class TestChallengeResolvedStatus:
         mock_page.content = AsyncMock(side_effect=content_side_effect)
         mock_page.url = "https://example.com/"
         mock_page.unroute_all = AsyncMock()
+        mock_page.is_closed = MagicMock(return_value=False)  # live page: teardown must not skip unroute_all
         return mock_page
 
     @pytest.mark.asyncio

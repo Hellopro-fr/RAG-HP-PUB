@@ -10,8 +10,8 @@ Un graphe de connaissance persistant du monorepo, construit à partir du code (A
 
 **Un graphe unifié** à `graphify-out/`, commité sur `features/poc` :
 
-- 1700 nœuds, ~3150 arêtes, 86 communautés
-- Couvre : `libs/`, `protos/`, `tools/`, `model-optimizer/`, `docs/`, et `apps-microservices/crawler-service/`
+- 9551 nœuds, ~20900 arêtes, 254 communautés (re-dérivé le 2026-08-04 — re-mesurer avant de citer, chaque merge le fait grossir)
+- Couvre : `libs/`, `protos/`, `tools/`, `model-optimizer/`, `docs/`, et 4 des 99 services : `crawler-service`, `api-detection-langue-fr`, `graph-rag-api-recherche-rust-service`, `api-gateway-go`
 - 10 liens cross-service explicites depuis les concepts crawler-service vers les concepts backbone (par ex. `crawler_capacity_counter --uses--> cache_service.py`, `crawler_archiving_gcs_fallback --shares_data_with--> tools_upload_daemon`) — c'est ce qui permet de répondre à « comment le crawler utilise Redis » en une seule requête.
 
 Le dossier du graphe contient :
@@ -78,6 +78,37 @@ Déjà câblé :
 - **`.claude/settings.json`** possède un hook `PreToolUse` sur `Glob|Grep` qui injecte un rappel de consulter le graphe avant toute recherche brute.
 
 Aucune action requise. Chaque session démarre graph-aware.
+
+## Savoir ce qui reste a re-extraire
+
+`scripts/graphify-status.sh` repond « le graphe est-il perime ? » par un seul
+bit. Insuffisant quand une session a touche deux services graphes : on lance un
+update scope, le drapeau se vide, et le second service reste en arriere sans
+bruit.
+
+```bash
+python scripts/graphify_plan_update.py     # quelles aires sont dues, et pourquoi
+python scripts/graphify_plan_update.py --quiet     # exit 0 rien du, 1 quelque chose du
+python scripts/graphify_plan_update.py --commands  # juste les commandes
+```
+
+Il derive la portee du graphe depuis `graph.json`, prend le dernier commit qui
+l'a touche comme repere, et diffe le **contenu** avec git depuis la. Il
+n'utilise pas les mtimes de `manifest.json` : un checkout ou un merge les
+rafraichit sans changer un octet, ce qui sur-signale largement (mesure du
+2026-08-04 : 201 fichiers signales sur deux services alors qu'une poignee avait
+reellement ete editee).
+
+Une aire n'est listee que si le hook post-commit ne peut pas s'en charger seul :
+
+| Situation | Listee ? | Pourquoi |
+|---|---|---|
+| Code edite, fichier deja dans le graphe | non | le hook a re-extrait son AST gratuitement |
+| Contenu d'une doc / d'un CLAUDE.md modifie | oui | la semantique demande le LLM |
+| Fichier que le graphe n'a jamais vu | oui | le hook rafraichit la portee, il ne l'elargit jamais |
+
+`/graphify-refresh` enchaine le tout : plan, puis chaque update scope dans
+l'ordre, puis une seule passe de re-labellisation a la fin.
 
 ## Détecter un `/graphify --update` en attente
 
@@ -171,26 +202,27 @@ Les réponses sont persistées dans `graphify-out/memory/` et promues en nœuds 
 
 La source unique de vérité est `graphify-out/services-policy.yml` (tracké, lisible par machine, lu par le workflow CI coverage-check). Les tableaux ci-dessous sont le résumé pour humain ; les garder en phase avec le YAML lors de l'ajout d'un service.
 
-### Dans le graphe (3)
+### Dans le graphe (4)
 
 | Service | Ajouté | Pourquoi |
 |---------|--------|----------|
 | `apps-microservices/crawler-service` | 2026-04-24 | Node.js + Python, machine à états complexe, cluster récent de corrections (relance OOM, élection de leader, staging d'archives). |
 | `apps-microservices/graph-rag-api-recherche-rust-service` | 2026-04-24 | Rust (Actix-web / tonic). Récupération centrale. Stack unique ; cross-links vers les clients gRPC de libs/rust-common-utils et vers les providers LLM Python. |
 | `apps-microservices/api-detection-langue-fr` | 2026-05-05 | Serveur FastAPI qui répond au client detection-langue-fr du crawler. Promu depuis `templated_wrapper` car le travail caller-contract / admission-control / inflight-dedup a rendu les questions cross-service (crawler → backend) routinières. |
+| `apps-microservices/api-gateway-go` | 2026-08-04 | L'ingress public VIVANT (Go), qui supplante l'`api-gateway` Python. 50 fichiers de code -> 445 noeuds AST + 44 semantiques. Toute requete le traverse : il porte les reponses routage / politique d'auth / timeouts aval. |
 
-### Hors graphe (90)
+### Hors graphe (94)
 
 Regroupés par raison. Voir `graphify-out/services-policy.yml` pour la liste complète avec détails par service.
 
 | Code raison | Signification | Nombre |
 |-------------|---------------|-------:|
 | `too_small` | < 10 fichiers et pas de CLAUDE.md riche. Un grep brut suffit. | 11 |
-| `frontend` | Frontend Next.js / React, toolchain séparée. | 6 |
+| `frontend` | Frontend Next.js / React, toolchain séparée. | 7 |
 | `debug_variant` | Variante debug ou test d'un autre service. | 1 |
 | `template_scaffold` | Template servant à scaffolder de nouveaux services, pas un service vivant. | 1 |
-| `templated_wrapper` | Wrapper FastAPI / processor suivant un pattern commun ; grapher une référence, ignorer les frères. | 62 |
-| `candidate_deferred` | Service large / unique qui vaudrait la peine d'être graphé, pas prioritaire. Promouvoir quand une requête cross-service fait émerger le besoin. | 9 |
+| `templated_wrapper` | Wrapper FastAPI / processor suivant un pattern commun ; grapher une référence, ignorer les frères. | 63 |
+| `candidate_deferred` | Service large / unique qui vaudrait la peine d'être graphé, pas prioritaire. Promouvoir quand une requête cross-service fait émerger le besoin. | 10 |
 
 Avant de lancer `/graphify <path> --update`, vérifier que le service n'est pas déjà dans une de ces listes :
 
@@ -299,10 +331,14 @@ Quatre déclencheurs, par ordre de couverture :
 
 1. **Tout push backbone vers `main` ou `features/poc`** → **automatique** via le workflow CI à `.github/workflows/graphify-auto-rebuild.yml`. Seules ces deux branches déclenchent la CI — ce sont les branches d'intégration déployées ; les autres branches feature dépendent du hook local pour ne pas brûler des minutes CI sur du travail exploratoire. GitHub Actions lance le rebuild scoppé sur un runner éphémère (graphify installé là, pas chez nous) et commit les `graph.json` / `graph.html` / `GRAPH_REPORT.md` mis à jour sur la même branche avec `[skip graphify]` dans le message pour casser la boucle. Couvre le cas « serveur consume-only » — un agent serveur qui commit du code mais n'a pas graphify installé dépend entièrement de la CI pour la fraîcheur du graphe. Durée ~1 min par rebuild. Gratuit sur repos publics ; quelques centaines de minutes/mois sur privés.
 2. **Changements code-only dans le scope, en local** → **automatique** via le hook post-commit scoppé (si installé avec `bash scripts/install-graphify-hook.sh`). Aucun coût LLM. Tourne en ~5-15s après le commit. Redondant avec la CI mais utile pour avoir le `graph.json` local frais avant le prochain push.
-3. **Changements doc / CLAUDE.md dans le scope** → le hook local (et la CI) ne peuvent rafraîchir que l'AST ; la ré-extraction sémantique a besoin du LLM. CI / hook touchent `graphify-out/.needs_update` et loggent un rappel. Lancer ensuite `/graphify --update` depuis une session Claude Code quand pratique. Coût proportionnel à ce qui a été édité grâce au cache sémantique.
+3. **Changements doc / CLAUDE.md dans le scope** → le hook local (et la CI) ne peuvent rafraîchir que l'AST ; la ré-extraction sémantique a besoin du LLM. CI / hook touchent `graphify-out/.needs_update` et loggent un rappel. Lancer ensuite `/graphify <chemin> --update` depuis une session Claude Code quand pratique — **toujours avec un chemin** (voir l'avertissement plus bas). Coût proportionnel à ce qui a été édité grâce au cache sémantique.
 4. **Reconstruction complète** → `/graphify .` depuis zéro. À éviter sauf si le graphe est corrompu ou si la portée a changé drastiquement — ré-extrait tout.
 
-**Ne PAS lancer `graphify update .` en CLI** dans ce repo. La CLI amont invoque `_rebuild_code` qui rescanne tout le répertoire (pas de manifeste). Dans ce monorepo, ça aspire `apps-microservices/` et fait exploser le graphe. Le hook scoppé et la slash command sont les voies supportées. Pour un rebuild AST à la demande sans commiter, appeler directement le script :
+**Ne jamais ré-extraire sans chemin.** La ligne de partage est *avec chemin vs sans chemin*, pas *slash command vs CLI* — une version précédente de ce guide se trompait là-dessus. Vérifié le 2026-08-04 dans `graphify/detect.py:468` : `detect_incremental(root)` appelle `detect(root)` avant même de lire le manifeste, donc la portée vient du seul argument. Un `/graphify --update` nu scanne les 99 services exactement comme `graphify update .`, et tout ce que le manifeste n'a jamais vu — les 2 services non couverts, chaque fichier créé depuis son écriture — compte comme nouveau et se fait extraire. Passer le service : `/graphify apps-microservices/<service> --update`.
+
+Corollaire : **ne pas supprimer `graphify-out/manifest.json` pour « remettre à zéro »** quoi que ce soit. C'est une table `fichier -> mtime`, pas une frontière de portée, et `detect_incremental` lit un manifeste absent comme *tout est nouveau* (`full["new_files"] = full["files"]`). Le supprimer agrandit la mise à jour suivante, jamais l'inverse.
+
+Le hook scoppé et une slash command qualifiée par un chemin sont les voies supportées. Pour un rebuild AST à la demande sans commiter, appeler directement le script :
 
 ```bash
 python scripts/graphify_rebuild_scoped.py path/to/file1.py path/to/file2.ts
@@ -388,7 +424,7 @@ Expose les outils : `query_graph`, `get_node`, `get_neighbors`, `get_community`,
 | Symptôme | Correction |
 |----------|-----------|
 | `graphify: command not found` | `pip install graphifyy` |
-| `graphify update .` lancé et graphe explosé (10k+ nœuds) | Vous avez déclenché le piège du rebuild non-scoppé. `git checkout -- graphify-out/` pour restaurer. Utiliser `/graphify --update` depuis une session Claude Code, ou `python scripts/graphify_rebuild_scoped.py <fichiers>` directement. |
+| Ré-extraction sans chemin et graphe explosé (10k+ nœuds) | Vous avez déclenché le piège du rebuild non-scoppé — atteignable depuis `graphify update .` **et** depuis un `/graphify --update` nu. `git checkout -- graphify-out/` pour restaurer. Relancer ensuite avec le chemin du service (`/graphify apps-microservices/<service> --update`) ou appeler `python scripts/graphify_rebuild_scoped.py <fichiers>` directement. |
 | Équipier a lancé `graphify hook install` par erreur | `graphify hook uninstall` puis réinstaller le nôtre : `bash scripts/install-graphify-hook.sh`. `git checkout -- graphify-out/` si le graphe a été pollué. |
 | Hook post-commit déclenché mais n'a rien fait | Soit aucun fichier modifié n'est dans la portée du graphe (attendu pour les commits `apps-microservices/` sur services non-graphés), soit graphify n'est pas installé sur votre Python. Vérifier avec `python -c "import graphify"`. |
 | Sortie du hook mentionne `.needs_update` | Un doc/CLAUDE.md du scope a changé. La ré-extraction sémantique a besoin du LLM ; lancer `/graphify --update` dans une session Claude Code quand pratique. |

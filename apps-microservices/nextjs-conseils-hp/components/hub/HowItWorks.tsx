@@ -1,5 +1,6 @@
 import { ChevronRight } from 'lucide-react';
 import { HubSection, HubIcon } from './primitives';
+import { HUB_SECTION_IDS } from '@/lib/hub/anchors';
 import type { HubHowItWorks as HubHowItWorksData } from '@/types/hub';
 
 /**
@@ -16,7 +17,7 @@ import type { HubHowItWorks as HubHowItWorksData } from '@/types/hub';
  */
 export function HowItWorks({ data }: { data: HubHowItWorksData }) {
   return (
-    <HubSection id="comment-ca-marche">
+    <HubSection id={HUB_SECTION_IDS.howItWorks}>
       <div className="mx-auto max-w-3xl text-center">
         <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
           {data.title}

@@ -2,6 +2,7 @@ import { SiteHeader } from '@/components/conseil/SiteHeader';
 import { SiteFooter } from '@/components/conseil/SiteFooter';
 import { GtmFooterScripts } from '@/components/conseil/GtmFooterScripts';
 import { FaqBlock } from '@/components/conseil/blocks/FaqBlock';
+import { HUB_SECTION_IDS } from '@/lib/hub/anchors';
 import type { HeaderCategory } from '@/data/site/header-categories';
 import { guideIdPageHub } from '@/data/hub';
 import { HubHero } from './HubHero';
@@ -123,7 +124,10 @@ export function HubTemplate({ page, headerCategories = [] }: HubTemplateProps) {
         <FinalCta data={page.finalCta} />
 
         <div className="mx-auto max-w-3xl px-4">
-          <FaqBlock data={{ items: page.faq.items, title: page.faq.title }} sectionId="faq" />
+          <FaqBlock
+            data={{ items: page.faq.items, title: page.faq.title }}
+            sectionId={HUB_SECTION_IDS.faq}
+          />
         </div>
       </main>
 

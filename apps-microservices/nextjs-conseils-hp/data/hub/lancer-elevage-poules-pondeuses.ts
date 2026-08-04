@@ -1,4 +1,5 @@
 import type { HubPage } from '@/types/hub';
+import { HUB_SECTION_IDS } from '@/lib/hub/anchors';
 import { ACCOMPAGNEMENT, FAQ, HOW_IT_WORKS } from './_shared';
 
 /**
@@ -90,16 +91,19 @@ export const lancerElevagePoulesPondeuses: HubPage = {
     },
   },
 
-  // Les 8 ancres du sommaire sticky. ⚠️ Ne plus changer ces id une fois indexés.
+  // Les 8 entrées du sommaire sticky. Les id viennent soit de `HUB_SECTION_IDS`
+  // (sections fixes), soit des `thematiques[].id` ci-dessous.
+  // ⚠️ Ne plus les renommer une fois la page en ligne : ça casserait les liens
+  // profonds déjà partagés.
   nav: [
-    { id: 'intro-hub', label: 'Découvrir', icon: 'search' },
-    { id: 'bloc-budget', label: 'Budget & financement', icon: 'wallet' },
-    { id: 'bloc-dimensionnement', label: 'Dimensionnement', icon: 'ruler' },
-    { id: 'bloc-reglementation', label: 'Réglementation', icon: 'file-text' },
-    { id: 'bloc-equipements', label: 'Équipements', icon: 'wrench' },
-    { id: 'guide-gratuit', label: 'Guide gratuit', icon: 'download' },
-    { id: 'faq', label: 'FAQ', icon: 'help' },
-    { id: 'cta-final', label: 'Être accompagné', icon: 'mail' },
+    { id: HUB_SECTION_IDS.valueProps, label: 'Découvrir', icon: 'search' },
+    { id: 'budget-financement', label: 'Budget & financement', icon: 'wallet' },
+    { id: 'dimensionnement-projet', label: 'Dimensionnement', icon: 'ruler' },
+    { id: 'reglementation-demarches', label: 'Réglementation', icon: 'file-text' },
+    { id: 'equipements', label: 'Équipements', icon: 'wrench' },
+    { id: HUB_SECTION_IDS.guideCta, label: 'Guide gratuit', icon: 'download' },
+    { id: HUB_SECTION_IDS.faq, label: 'FAQ', icon: 'help' },
+    { id: HUB_SECTION_IDS.finalCta, label: 'Être accompagné', icon: 'mail' },
   ],
 
   valueProps: {
@@ -140,7 +144,7 @@ export const lancerElevagePoulesPondeuses: HubPage = {
 
   thematiques: [
     {
-      id: 'bloc-budget',
+      id: 'budget-financement',
       tag: 'Budget & financement',
       tagIcon: 'piggy-bank',
       layout: 'overlay-left',
@@ -150,7 +154,7 @@ export const lancerElevagePoulesPondeuses: HubPage = {
           5297,
           'Quel budget prévoir pour créer un élevage de poules pondeuses professionnel ?'
         ),
-        // Paliers alignés sur l'edito budget (`edito-budget`), qui fait référence.
+        // Paliers alignés sur l'edito budget (`quel-budget-prevoir`), qui fait référence.
         // Les deux sont visibles sur la même page : toute divergence se voit.
         intro:
           "Le budget pour créer un élevage de poules pondeuses varie de 30 000 € à 1,5 million d'euros selon la taille du troupeau.",
@@ -189,7 +193,7 @@ export const lancerElevagePoulesPondeuses: HubPage = {
       guideButtonLabel: 'Télécharger le guide complet',
     },
     {
-      id: 'bloc-dimensionnement',
+      id: 'dimensionnement-projet',
       tag: 'Dimensionnement du projet',
       tagIcon: 'ruler',
       layout: 'overlay-right',
@@ -249,7 +253,7 @@ export const lancerElevagePoulesPondeuses: HubPage = {
       guideButtonLabel: 'Télécharger le guide complet',
     },
     {
-      id: 'bloc-reglementation',
+      id: 'reglementation-demarches',
       tag: 'Réglementation & démarches',
       tagIcon: 'scale',
       layout: 'grid',
@@ -294,7 +298,7 @@ export const lancerElevagePoulesPondeuses: HubPage = {
       ],
     },
     {
-      id: 'bloc-equipements',
+      id: 'equipements',
       tag: 'Équipements',
       tagIcon: 'wrench',
       layout: 'carousel',
@@ -391,7 +395,7 @@ export const lancerElevagePoulesPondeuses: HubPage = {
     text: "Bénéficiez d'un échange qualifié pour cadrer votre besoin, valider vos priorités et avancer avec les bons interlocuteurs.",
     ctaLabel: 'Être accompagné gratuitement',
     // Position d'origine du prototype : entre dimensionnement et réglementation.
-    afterThematiqueId: 'bloc-dimensionnement',
+    afterThematiqueId: 'dimensionnement-projet',
     image: {
       src: `${IMG}/cta-accompagnement-gratuit.jpg`,
       alt: 'Accompagnement gratuit par un expert avicole',
@@ -463,30 +467,32 @@ export const lancerElevagePoulesPondeuses: HubPage = {
     items: [
       {
         label: 'Budgets & financement',
-        href: '#bloc-budget',
+        href: '#budget-financement',
         image: { src: `${IMG}/etapes/budget-financement.jpg`, alt: 'Budgets & financement' },
       },
       {
         label: 'Dimensionnement du projet',
-        href: '#bloc-dimensionnement',
+        href: '#dimensionnement-projet',
         image: { src: `${IMG}/etapes/dimensionnement.jpg`, alt: 'Dimensionnement du projet' },
       },
       {
         label: 'Équipements',
-        href: '#bloc-equipements',
+        href: '#equipements',
         image: { src: `${IMG}/etapes/equipements.jpg`, alt: 'Équipements' },
       },
       {
         label: 'Réglementation & démarches',
-        href: '#bloc-reglementation',
+        href: '#reglementation-demarches',
         image: {
           src: `${IMG}/etapes/reglementation.jpg`,
           alt: 'Réglementation & démarches',
         },
       },
-      // Pas de href dans le prototype → tuile non cliquable.
       {
+        // Aucun bloc thématique « Exploitation » : la tuile renvoie vers le bloc
+        // ressources, dont les 3 articles portent justement ce tag.
         label: 'Exploitation',
+        href: `#${HUB_SECTION_IDS.ressources}`,
         image: { src: `${IMG}/etapes/exploitation.jpg`, alt: 'Exploitation' },
       },
     ],
@@ -494,7 +500,9 @@ export const lancerElevagePoulesPondeuses: HubPage = {
 
   editos: [
     {
-      id: 'edito-pourquoi',
+      // Ancres dérivées du titre de la section : elles portent les mots-clés de la
+      // page et restent lisibles dans un lien partagé.
+      id: 'pourquoi-lancer-un-elevage',
       title: "Pourquoi lancer un élevage de poules pondeuses aujourd'hui ?",
       bodyHtml:
         "<p>Le marché français de l'œuf connaît une croissance soutenue. En 2025, la production nationale a atteint environ <strong>15,9 milliards d'œufs</strong>, en hausse de 0,8 % sur un an. Dans le même temps, la consommation a établi un nouveau record avec <strong>237 œufs par habitant</strong>, soit une progression de la demande nationale de 5 %. La France reste le premier producteur d'œufs de l'Union européenne, mais sa production ne couvre plus totalement ses besoins : le taux d'auto-approvisionnement est passé de 99,4 % en 2024 à 95,8 % en 2025.</p>" +
@@ -508,7 +516,7 @@ export const lancerElevagePoulesPondeuses: HubPage = {
       ],
     },
     {
-      id: 'edito-budget',
+      id: 'quel-budget-prevoir',
       title: 'Quel budget prévoir pour créer un élevage de poules pondeuses ?',
       intro:
         "Le <strong>budget pour créer un élevage de poules pondeuses</strong> va de 30 000 à 1,5 millions d'euros selon la capacité du bâtiment, le mode d'élevage, le niveau d'automatisation et des installations déjà présentes sur l'exploitation.",
@@ -520,7 +528,7 @@ export const lancerElevagePoulesPondeuses: HubPage = {
       note: "À noter : Le poulailler représente en moyenne <strong>40 à 60 % du budget global</strong>. Le foncier, le besoin en fonds de roulement et plusieurs mois d'alimentation doivent être budgétés séparément.",
     },
     {
-      id: 'edito-modele',
+      id: 'quel-modele-elevage-choisir',
       title: "Quel modèle d'élevage choisir pour maximiser la performance ?",
       intro:
         "Le choix du modèle d'élevage détermine directement la rentabilité, les contraintes réglementaires et les investissements de départ.",
@@ -533,7 +541,7 @@ export const lancerElevagePoulesPondeuses: HubPage = {
         '</ul>',
     },
     {
-      id: 'edito-accompagnement',
+      id: 'pourquoi-se-faire-accompagner',
       title: "Pourquoi se faire accompagner dans son projet d'élevage ?",
       intro:
         "Un projet d'élevage de poules pondeuses mobilise de nombreuses expertises : dimensionnement, réglementation, équipements, financement. Un accompagnement adapté permet de :",
@@ -546,8 +554,8 @@ export const lancerElevagePoulesPondeuses: HubPage = {
   ],
 
   // Contenu partagé par les 3 pages HUB — cf. `_shared.ts`. Seule la position
-  // d'insertion est propre à cette page (entre edito-budget et edito-modele).
-  howItWorks: { ...HOW_IT_WORKS, afterEditoId: 'edito-budget' },
+  // d'insertion est propre à cette page (entre les editos budget et modèle).
+  howItWorks: { ...HOW_IT_WORKS, afterEditoId: 'quel-budget-prevoir' },
 
   // Contenu partagé par les 3 pages HUB — cf. `_shared.ts`. Seul le visuel est
   // propre à la page.
@@ -733,6 +741,6 @@ export const lancerElevagePoulesPondeuses: HubPage = {
       src: `${IMG}/hero-section-pop-up.jpg`,
       alt: 'Élevage de poules pondeuses',
     },
-    triggerSectionId: 'bloc-reglementation',
+    triggerSectionId: 'reglementation-demarches',
   },
 };

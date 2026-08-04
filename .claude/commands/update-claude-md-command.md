@@ -1,3 +1,8 @@
+---
+description: Met à jour un CLAUDE.md (prévention d'erreur, changement projet, ou rescan du service)
+argument-hint: [service]
+allowed-tools: Read, Edit, Grep, Glob
+---
 # /update-claude-md — Propose CLAUDE.md Updates
 
 The user has encountered an issue or made a project change that requires updating CLAUDE.md files.

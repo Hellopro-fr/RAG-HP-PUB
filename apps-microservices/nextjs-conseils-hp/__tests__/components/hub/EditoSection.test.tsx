@@ -119,6 +119,49 @@ describe('EditoSection', () => {
     expect(container.innerHTML).not.toContain('onerror');
   });
 
+  /**
+   * RÉGRESSION : le bloc mélangeait trois typographies — paragraphes gris
+   * `text-base`, puces noires `text-base`, encart gris `text-sm` — plus des
+   * pastilles bleues. Une seule combinaison doit s'appliquer partout.
+   */
+  it('applique une typographie unique à intro, bodyHtml, items et note', () => {
+    const { container } = render(
+      <EditoSection
+        data={{
+          id: 'e',
+          title: 'T',
+          intro: 'Intro.',
+          bodyHtml: '<p>Corps.</p>',
+          items: ['Une puce'],
+          note: 'À noter.',
+        }}
+      />
+    );
+
+    const blocks = Array.from(
+      container.querySelectorAll('section > div > *:not(h2):not(ul), li')
+    );
+    expect(blocks.length).toBeGreaterThan(0);
+    for (const block of blocks) {
+      expect(block.className, block.textContent ?? '').toContain('text-base');
+      expect(block.className, block.textContent ?? '').toContain('text-foreground');
+      expect(block.className, block.textContent ?? '').not.toContain('text-muted-foreground');
+      expect(block.className, block.textContent ?? '').not.toContain('text-sm');
+    }
+  });
+
+  it('rend les pastilles de puce en noir, pas en bleu', () => {
+    const { container } = render(
+      <EditoSection data={{ id: 'e', title: 'T', items: ['A', 'B'] }} />
+    );
+    const markers = container.querySelectorAll('li > [aria-hidden="true"]');
+    expect(markers).toHaveLength(2);
+    for (const marker of markers) {
+      expect(marker.className).toContain('bg-foreground');
+      expect(marker.className).not.toContain('bg-primary');
+    }
+  });
+
   it('n’affiche rien de superflu quand seuls le titre et une liste vide existent', () => {
     const { container } = render(<EditoSection data={{ id: 'e', title: 'T', items: [] }} />);
     expect(container.querySelectorAll('li')).toHaveLength(0);

@@ -173,8 +173,11 @@ function InfoCard({ data }: { data: HubInfoCard }) {
       </div>
 
       {data.descriptionHtml ? (
+        // Termes en gras en NOIR et non en bleu : ce ne sont pas des liens, et le
+        // bleu leur donnait une fausse apparence de cliquable. Seules les icônes
+        // restent bleues dans ce bloc.
         <div
-          className="mt-3 text-sm leading-relaxed text-muted-foreground [&_strong]:font-semibold [&_strong]:text-primary"
+          className="mt-3 text-sm leading-relaxed text-muted-foreground [&_strong]:font-semibold [&_strong]:text-foreground"
           dangerouslySetInnerHTML={{ __html: sanitizeHubHtml(data.descriptionHtml) }}
         />
       ) : (
@@ -190,7 +193,7 @@ function InfoCard({ data }: { data: HubInfoCard }) {
             {data.href ? (
               <a
                 href={data.href}
-                className="flex w-full items-center justify-between gap-3 text-sm font-semibold text-primary hover:underline"
+                className="flex w-full items-center justify-between gap-3 text-sm font-semibold text-foreground hover:underline"
               >
                 <span>{data.linkLabel}</span>
                 <HubIcon name="arrow-right" className="h-4 w-4" />

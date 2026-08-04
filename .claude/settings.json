@@ -9,7 +9,9 @@
       "Read(./.env)",
       "Read(./.env.*)",
       "Read(./secrets/**)",
-      "Read(./config/credentials.json)"
+      "Read(./config/credentials.json)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)"
     ]
   },
   "env": {
@@ -20,7 +22,7 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash",
+        "matcher": "Bash|PowerShell",
         "hooks": [
           {
             "type": "command",
@@ -29,16 +31,6 @@
           {
             "type": "command",
             "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/dangerous-command-blocker.py"
-          },
-          {
-            "type": "command",
-            "if": "Bash(git push *--force*)",
-            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Force push is blocked. Use a regular push or ask the user for explicit permission.\"}}'"
-          },
-          {
-            "type": "command",
-            "if": "Bash(git push *-f*)",
-            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Force push (-f) is blocked. Use a regular push or ask the user for explicit permission.\"}}'"
           },
           {
             "type": "command",
@@ -66,28 +58,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "[ -f graphify-out/graph.json ] && echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"additionalContext\":\"graphify: Knowledge graph exists. Read graphify-out/GRAPH_REPORT.md for god nodes and community structure before searching raw files.\"}}' || true"
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "Edit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "if [[ \"$CLAUDE_TOOL_FILE_PATH\" == *.py ]]; then black \"$CLAUDE_TOOL_FILE_PATH\" 2>/dev/null || ruff format \"$CLAUDE_TOOL_FILE_PATH\" 2>/dev/null || true; fi"
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/auto-review-gate.sh"
+            "command": "[ -f \"$CLAUDE_PROJECT_DIR\"/graphify-out/graph.json ] && echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"additionalContext\":\"graphify: Knowledge graph exists. Read graphify-out/GRAPH_REPORT.md for god nodes and community structure before searching raw files.\"}}' || true"
           }
         ]
       }

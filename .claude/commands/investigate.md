@@ -1,3 +1,8 @@
+---
+description: Vérifie une affirmation sur le code avec des preuves fichier:ligne et rend un verdict CONFIRMED / PARTIALLY TRUE / FALSE / INCONCLUSIVE
+argument-hint: <affirmation à vérifier>
+allowed-tools: Read, Grep, Glob, Bash
+---
 # /investigate — Evidence-Based Statement Verification
 
 The user provides a statement or claim about the codebase. Your job is to verify it with evidence.

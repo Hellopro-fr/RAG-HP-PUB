@@ -1,6 +1,7 @@
 import Image from 'next/image';
 import { HubSection, CategoryTag, HubIcon } from './primitives';
 import { AssistantButton, GuideButton } from './triggers';
+import { HUB_SECTION_IDS } from '@/lib/hub/anchors';
 import type { HubAccompagnementBanner, HubGuideCta, HubImage } from '@/types/hub';
 
 /**
@@ -84,7 +85,7 @@ export function AccompagnementBanner({ data }: { data: HubAccompagnementBanner }
 export function GuideCta({ data }: { data: HubGuideCta }) {
   return (
     <Banner
-      id="guide-gratuit"
+      id={HUB_SECTION_IDS.guideCta}
       tag={data.tag}
       tagIcon="book-open"
       title={data.title}

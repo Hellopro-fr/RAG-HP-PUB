@@ -41,7 +41,9 @@ const VARIANTS: Record<NonNullable<TriggerProps['variant']>, string> = {
   outline:
     'h-12 rounded-lg border border-cta bg-card px-5 text-sm font-semibold text-cta hover:bg-cta/5',
   link: 'text-sm font-semibold text-primary hover:underline',
-  row: 'w-full justify-between text-sm font-semibold text-primary hover:underline',
+  // Ligne de bas de carte informative : en noir, aligné sur le rendu avec `href`
+  // (cf. InfoCard) — seules les icônes de ce bloc restent bleues.
+  row: 'w-full justify-between text-sm font-semibold text-foreground hover:underline',
   // Bouton secondaire discret des cartes article : bordure fine bleue.
   soft:
     'rounded-lg border border-primary/25 px-3 py-2 text-sm font-semibold text-primary hover:bg-primary/5',

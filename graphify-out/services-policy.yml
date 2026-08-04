@@ -49,6 +49,9 @@ graphed:
   - path: apps-microservices/api-detection-langue-fr
     added_at: 2026-05-05
     notes: "FastAPI server backing crawler's detection-langue-fr client. Promoted from templated_wrapper because the caller-contract / admission-control / inflight-dedup work made cross-service questions (crawler -> backend) routine."
+  - path: apps-microservices/api-gateway-go
+    added_at: 2026-08-04
+    notes: "The LIVE public ingress (Go), superseding the Python api-gateway. 50 code files -> 445 AST nodes + 44 semantic. Every request crosses it, so it carries the routing / auth-policy / downstream-timeout answers. Chose it over api-gateway on the user's call: api-gateway is the retired one."
 
 not_graphed:
   # ----------------------------------------------------------------------
@@ -90,6 +93,9 @@ not_graphed:
     reason: frontend
   - path: apps-microservices/mcp-gateway-frontend
     reason: frontend
+  - path: apps-microservices/nextjs-conseils-hp
+    reason: frontend
+    details: "146 files, Next.js. Classified 2026-08-04 - had slipped past coverage-check."
   - path: apps-microservices/nextjs-formulaire-hp
     reason: frontend
   - path: apps-microservices/opti-moteur-front
@@ -201,6 +207,9 @@ not_graphed:
     reason: templated_wrapper
   - path: apps-microservices/QC-generation-valeurs
     reason: templated_wrapper
+  - path: apps-microservices/QC-fabricant-reference
+    reason: templated_wrapper
+    details: "Same shape as its 8 QC-* siblings (app/, main.py, requirements.txt, tests/). Classified 2026-08-04 - had slipped past coverage-check."
 
   # small api-* / mcp-* wrappers around libs/common-utils
   - path: apps-microservices/api-classification
@@ -270,8 +279,14 @@ not_graphed:
     reason: candidate_deferred
     details: "85 code files, user-facing HTML chatbot. Prime candidate when chatbot UX surfaces in team questions."
   - path: apps-microservices/api-gateway
+    reason: deprecated
+    details: "Python ingress, superseded by api-gateway-go (the deployed one). 17 py files vs 54 go. Was listed candidate_deferred until 2026-08-04 - that recommended the dead gateway and ignored the live one."
+  - path: apps-microservices/api-catalog-service
     reason: candidate_deferred
-    details: "Public ingress. 9 code files + 3 docs. Graph for CORS / auth / routing questions."
+    details: "37 go files, gRPC via buf. Classified 2026-08-04 - had slipped past coverage-check."
+  - path: apps-microservices/mcp-zoho-service
+    reason: candidate_deferred
+    details: "21 go files, 97-line CLAUDE.md. Classified 2026-08-04 - had slipped past coverage-check."
   - path: apps-microservices/api-ingestion
     reason: candidate_deferred
     details: "Ingestion pipeline entry. 17 code files + 3 docs."
