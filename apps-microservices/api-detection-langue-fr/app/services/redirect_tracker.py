@@ -26,6 +26,17 @@ _FATAL_ERRORS = (
 # Union des deux pour la fonction _is_retryable_error (rétrocompatibilité)
 _NON_RETRYABLE_ERRORS = _VARIANT_ELIGIBLE_ERRORS + _FATAL_ERRORS
 
+# Échecs qu'un changement de variante d'URL ne peut PAS réparer.
+# Basculer http/https ou www/sans-www ne rend pas un site lent plus rapide,
+# et ne remplit pas une page vide. Formulations stables sur les DEUX moteurs
+# (Camoufox/Firefox comme Chromium) — contrairement à _VARIANT_ELIGIBLE_ERRORS
+# ci-dessus qui ne contient que des codes Chromium et ne matche donc jamais
+# en production (CAMOUFOX_ENABLED=True par défaut).
+_VARIANT_POINTLESS_ERRORS = (
+    'Timeout',                     # « Timeout 30000ms exceeded » — Playwright, les 2 moteurs
+    'Contenu vide ou trop court',  # posé plus bas, branche contenu insuffisant
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -255,6 +266,20 @@ async def fetch_html(url: str, proxy: Optional[str] = None) -> Optional[ScrapeRe
             await asyncio.sleep(wait_time)
 
     logger.warning(f"Échec de récupération HTML pour {url} après {max_retries} tentatives ({last_error})")
+
+    # Un domaine injoignable coûtait 3 tentatives (~140s) PUIS 4 variantes
+    # (~180s) = ~320s, au-delà du plafond de 300s par item : l'item était
+    # annulé en vol, et cette annulation orphelinait les futures à l'origine
+    # du flood asyncio du 2026-08-03. Les variantes n'y changeaient rien.
+    variant_pointless = last_error and any(
+        tok in last_error for tok in _VARIANT_POINTLESS_ERRORS
+    )
+    if variant_pointless:
+        logger.warning(
+            f"[VARIANTES] ignorées pour {url} — "
+            f"échec non réparable par une variante: {last_error}"
+        )
+        return None
 
     # Phase 2 : Fallback sur variantes d'URL (http/https, www/sans-www)
     # Couvre les cas de mauvaise configuration SSL ou DNS côté serveur.
