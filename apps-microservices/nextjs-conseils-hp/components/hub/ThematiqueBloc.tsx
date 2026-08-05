@@ -53,9 +53,16 @@ export function ThematiqueBloc({
         )}
 
         {data.layout === 'overlay-right' && data.overlay && (
+          // Overlay en PREMIER dans le DOM → en MOBILE il passe au-dessus des cartes
+          // (comme le bloc budget). Sur desktop, `lg:order-*` rétablit l'ordre
+          // d'origine (cartes à gauche, overlay à droite) : rendu inchangé.
           <div className="grid gap-6 lg:grid-cols-[45fr_55fr]">
-            <CardColumn cards={data.cards} guideLabel={data.guideButtonLabel} />
-            <OverlayCard data={data.overlay} />
+            <div className="lg:order-2">
+              <OverlayCard data={data.overlay} />
+            </div>
+            <div className="lg:order-1">
+              <CardColumn cards={data.cards} guideLabel={data.guideButtonLabel} />
+            </div>
           </div>
         )}
 

@@ -84,7 +84,7 @@ export function GuideDownloadDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-[42rem]">
         <DialogHeader className="sr-only">
           <DialogTitle>{data.badge}</DialogTitle>
           <DialogDescription>Recevez gratuitement le guide complet.</DialogDescription>

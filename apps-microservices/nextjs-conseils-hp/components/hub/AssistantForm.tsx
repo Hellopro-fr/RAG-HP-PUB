@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { ArrowRight, Download, Mail, MapPin, ShieldCheck, User } from 'lucide-react';
 import {
@@ -14,7 +14,7 @@ import { HubIcon } from './primitives';
 import { PhoneField } from './PhoneField';
 import { Confetti } from './Confetti';
 import { useAutoDownload } from '@/lib/hub/useAutoDownload';
-import { getRememberedEmail, rememberEmail } from '@/lib/hub/leadEmailCookie';
+import { rememberEmail } from '@/lib/hub/leadEmailCookie';
 import { isValidPhone } from '@/lib/hub/validation';
 import type { HubAssistant } from '@/types/hub';
 
@@ -69,19 +69,13 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
   // Verrou anti double-soumission (§11) + message d'erreur technique (§7/§9).
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-  // Garde : ne déclenche qu'UNE fois l'auto-envoi « e-mail mémorisé » par parcours.
-  const autoSentRef = useRef(false);
-  // Visiteur reconnu : capturé UNE SEULE fois après le montage (pas lu à chaque
-  // render). Sinon l'écriture du cookie à la soumission ferait clignoter le
-  // remerciement pendant que la requête est en vol.
-  const [recognized, setRecognized] = useState(false);
 
   // Flux : questionnaire (0..N-1) → e-mail (N) → coordonnées (N+1) → succès.
+  // ⚠️ Contrairement au guide/pop-up, le questionnaire N'A PAS de raccourci
+  // « e-mail mémorisé » : l'étape e-mail est TOUJOURS affichée.
   const totalSteps = data.steps.length + 2;
   const isContact = step === data.steps.length;
   const isCoordinates = step === data.steps.length + 1;
-  // Visiteur reconnu à l'étape e-mail → on affiche le remerciement (APPEL 1 en fond).
-  const skipEmailStep = isContact && recognized;
   const current = step < data.steps.length ? data.steps[step] : null;
   // 100% au succès quel que soit le chemin (e-mail reconnu = 1 seul appel).
   const progressPct = submitted ? 100 : (step / totalSteps) * 100;
@@ -101,7 +95,6 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
     setForceOpen(false);
     setSubmitting(false);
     setErrorMsg('');
-    autoSentRef.current = false;
   };
 
   /**
@@ -195,23 +188,6 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
     window.addEventListener(ASSISTANT_DIALOG_EVENT, handler);
     return () => window.removeEventListener(ASSISTANT_DIALOG_EVENT, handler);
   }, []);
-
-  // Lit le cookie UNE fois après le montage (client-only, pas de mismatch SSR).
-  useEffect(() => {
-    setRecognized(getRememberedEmail() !== '');
-  }, []);
-
-  // Visiteur reconnu : dès que les réponses sont finies (étape e-mail atteinte),
-  // on lance l'APPEL 1 en arrière-plan. Le remerciement est déjà affiché par
-  // `skipEmailStep` — aucune étape e-mail, aucune transition.
-  useEffect(() => {
-    if (!isContact || !recognized || autoSentRef.current || submitting || submitted) return;
-    autoSentRef.current = true;
-    const remembered = getRememberedEmail();
-    setEmail(remembered);
-    void send(false, remembered);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isContact, recognized, submitting, submitted]);
 
   const isSelected = (id: string, option: string) => {
     const value = answers[id];
@@ -318,7 +294,7 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
           }
         }}
       >
-        <DialogContent className="max-w-lg p-0">
+        <DialogContent className="max-w-[42rem] p-0">
           <DialogHeader className="sr-only">
             <DialogTitle>{data.cardTitle}</DialogTitle>
             <DialogDescription>
@@ -336,8 +312,7 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
           </div>
 
           <div className="px-6 py-4 sm:px-8">
-            {submitted || skipEmailStep ? (
-              // Visiteur reconnu : remerciement DIRECT (optimiste), pas d'étape vide.
+            {submitted ? (
               <Success data={data} />
             ) : isContact ? (
               <form
@@ -651,7 +626,7 @@ function Success({ data }: { data: HubAssistant }) {
       <Confetti />
       <h3 className="text-xl font-bold text-foreground sm:text-2xl">{success.title}</h3>
 
-      <div className="relative mx-auto mt-5 h-56 w-40">
+      <div className="relative mx-auto mt-5 h-64 w-48">
         <Image
           src={success.image.src}
           alt={success.image.alt}

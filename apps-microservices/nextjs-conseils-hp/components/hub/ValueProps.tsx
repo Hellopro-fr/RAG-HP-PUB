@@ -1,5 +1,6 @@
 import { HubSection, HubIcon } from './primitives';
 import { CARD_BODY, CARD_TITLE, SECTION_SUBTITLE, SECTION_TITLE, TAG } from './typography';
+import { ValuePropsCarousel } from './ValuePropsCarousel';
 import { HUB_SECTION_IDS } from '@/lib/hub/anchors';
 import type { HubValueProps } from '@/types/hub';
 
@@ -30,9 +31,16 @@ import type { HubValueProps } from '@/types/hub';
  * ⚠️ AUCUNE ROTATION AUTOMATIQUE.
  * Asana n'en a pas, et une carte qui se déplie toute seule toutes les 3,5 s
  * détourne l'attention pendant la lecture du reste de la page. C'est ce qui
- * permet à ce composant d'être un SERVER COMPONENT : sans état ni minuteur, le
- * survol est géré en CSS pur (`group-hover`). Zéro JavaScript, zéro hydratation,
- * et l'effet fonctionne avant même que le bundle soit chargé.
+ * permet à CE composant de rester un SERVER COMPONENT : sans état ni minuteur, le
+ * survol est géré en CSS pur (`group-hover`) et l'effet fonctionne avant même que
+ * le bundle soit chargé.
+ *
+ * Depuis l'ajout du carrousel mobile, la section n'est plus entièrement sans
+ * JavaScript : `ValuePropsCarousel` est un composant client, uniquement pour les
+ * pastilles de défilement sous `sm`. Les CARTES, elles, lui sont passées en
+ * `children` — donc rendues côté serveur, présentes dans le HTML initial, et le
+ * survol reste du CSS pur. C'est la frontière à préserver : le jour où une carte
+ * a besoin d'état, c'est le modèle de données qu'il faut revoir, pas la frontière.
  *
  * ⚠️ INVARIANT SEO — le texte reste TOUJOURS dans le DOM.
  * La description est repliée par `max-height` + `opacity`, jamais démontée. C'est
@@ -53,7 +61,7 @@ export function ValueProps({ data }: { data: HubValueProps }) {
         <p className={`mt-2 ${SECTION_SUBTITLE} text-muted-foreground`}>{data.subtitle}</p>
       </div>
 
-      <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <ValuePropsCarousel count={data.items.length}>
         {data.items.map((item) => {
           const isPrimary = item.accent === 'primary';
 
@@ -62,7 +70,8 @@ export function ValueProps({ data }: { data: HubValueProps }) {
               key={item.title}
               // Hauteur fixe + overflow-hidden : c'est ce qui empêche tout
               // redimensionnement. `transition-colors` uniquement sur la carte.
-              className="group flex h-full min-h-[19rem] flex-col overflow-hidden rounded-2xl border border-border bg-card p-5 shadow-sm transition-colors duration-300 lg:hover:border-transparent lg:hover:bg-navy-deep lg:hover:shadow-elegant"
+              // `snap-start` : seul ajout pour l'accroche du carrousel (sans effet en grille).
+              className="group flex h-full min-h-[19rem] snap-start flex-col overflow-hidden rounded-2xl border border-border bg-card p-5 shadow-sm transition-colors duration-300 lg:hover:border-transparent lg:hover:bg-navy-deep lg:hover:shadow-elegant"
             >
               <span
                 className={`inline-flex w-fit items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-primary transition-colors duration-300 lg:group-hover:bg-white/15 lg:group-hover:text-white ${TAG}`}
@@ -75,7 +84,7 @@ export function ValueProps({ data }: { data: HubValueProps }) {
                   `items-center` : au repos l'icône se cale au MILIEU de l'espace
                   libre. Alignée en haut, elle laissait un vide sous elle — c'est
                   la critique qui a motivé ce réglage. */}
-              <div className="flex flex-1 items-center py-3">
+              <div className="flex flex-1 items-center py-1">
                 <span
                   // La BOÎTE est animée, pas un `scale` : avec un `scale` la boîte
                   // continuerait à réserver 96px, la zone tampon ne se libérerait
@@ -121,7 +130,7 @@ export function ValueProps({ data }: { data: HubValueProps }) {
             </article>
           );
         })}
-      </div>
+      </ValuePropsCarousel>
 
       {/* Phrase de clôture rendue en `<p>` : elle a le POIDS visuel d'un titre de
           section, mais n'en est pas un — un second `h2` dans la section fausserait

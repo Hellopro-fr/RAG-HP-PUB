@@ -83,6 +83,12 @@ export function PhoneField({
       inputClassName="!h-12 !w-full !border-0 !bg-transparent !text-sm !text-foreground !outline-none focus:!ring-0"
       countrySelectorStyleProps={{
         buttonClassName: '!h-12 !rounded-l-xl !border-0 !bg-transparent !pl-3 !pr-1',
+        // Le dropdown hérite du fond transparent du conteneur (var CSS) : on lui
+        // redonne un fond solide (`!important` bat la variable héritée).
+        dropdownStyleProps: {
+          className: '!bg-card !border !border-border !shadow-elegant',
+          listItemClassName: '!bg-card hover:!bg-muted',
+        },
       }}
     />
   );

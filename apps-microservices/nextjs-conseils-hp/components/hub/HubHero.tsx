@@ -62,14 +62,27 @@ export function HubHero({
               {data.subtitle}
             </p>
 
-            <ul className="mt-8 grid gap-5 sm:grid-cols-3">
+            {/* Mobile : timeline verticale (pastilles reliées par une ligne).
+                Desktop (sm+) : grille 3 colonnes, icône au-dessus (inchangé).
+                Même markup `<ul><li>` + texte réel → aucune régression SEO. */}
+            <ul className="mt-8 flex flex-col sm:grid sm:grid-cols-3 sm:gap-5">
               {data.features.map((feature) => (
-                <li key={feature.title} className="flex flex-col gap-2">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/15 bg-white/10 text-white backdrop-blur">
+                <li
+                  key={feature.title}
+                  className="group relative flex gap-4 pb-6 last:pb-0 sm:block sm:pb-0"
+                >
+                  {/* Connecteur vertical — mobile seulement, masqué sous le dernier. */}
+                  <span
+                    aria-hidden
+                    className="absolute bottom-1 left-5 top-11 w-px -translate-x-1/2 bg-white/20 group-last:hidden sm:hidden"
+                  />
+                  <span className="relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/15 bg-white/10 text-white backdrop-blur sm:mb-2">
                     <HubIcon name={feature.icon} />
                   </span>
-                  <span className="text-sm font-semibold text-white">{feature.title}</span>
-                  <span className="text-xs text-white/70">{feature.desc}</span>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-sm font-semibold text-white">{feature.title}</span>
+                    <span className="text-xs text-white/70">{feature.desc}</span>
+                  </div>
                 </li>
               ))}
             </ul>
