@@ -151,6 +151,39 @@ def _git(*args) -> str:
     return out.stdout if out.returncode == 0 else ""
 
 
+DOC_EXT = {".md", ".json", ".txt", ".yml", ".yaml", ".rst"}
+
+
+def never_extracted(scope: ScopeIndex) -> dict[str, list[str]]:
+    """In-scope files the graph has never seen, regardless of the watermark.
+
+    The watermark advances on *any* commit touching graph.json, not just one that
+    extracted the file in front of it. So a scoped update that only re-extracts
+    area A moves the watermark past a doc added to area B in the same window, and
+    `changed_since_graph()` can never surface that doc again — it is invisible
+    for good. Measured 2026-08-05: 187 in-scope files in that state, including a
+    whole spec+plan chantier whose successor then had no lineage edge to point at.
+
+    Reported as advisory only: it deliberately does NOT feed the exit code, so
+    `--quiet` still converges to 0 once the changed-set is drained. Draining a
+    138-file backlog is a decision for a human, not a precondition for the hook.
+    """
+    owed: dict[str, list[str]] = {}
+    for raw in _git("ls-files").splitlines():
+        f = raw.strip()
+        if not f or f.startswith("graphify-out/"):
+            continue
+        rel_f = _rel(f)
+        suffix = Path(rel_f).suffix.lower()
+        if suffix not in CODE_EXT and suffix not in DOC_EXT:
+            continue
+        area = scope.area_of(rel_f)
+        if area is None or scope.knows(rel_f):
+            continue
+        owed.setdefault(area, []).append(rel_f)
+    return owed
+
+
 def changed_since_graph() -> tuple[list[str], str]:
     """Files whose content moved since the graph was last committed, plus the watermark.
 
@@ -189,9 +222,29 @@ def main() -> int:
     if quiet:
         return 1 if plan else 0
 
+    def advisory() -> None:
+        owed = never_extracted(scope)
+        total = sum(len(v) for v in owed.values())
+        if not total:
+            return
+        print()
+        print(f"  --- pour information : {total} fichier(s) du scope jamais extraits ---")
+        print("  Invisibles au diff ci-dessus (commites avant le repere). N'affecte pas")
+        print("  le code de sortie ; a resorber deliberement, pas en prerequis du hook.")
+        for area, files in sorted(owed.items(), key=lambda kv: -len(kv[1])):
+            print(f"    {area:<52} {len(files):>4}")
+        print("  Detail : python scripts/graphify_plan_update.py --never-extracted")
+
+    if "--never-extracted" in sys.argv:
+        for area, files in sorted(never_extracted(scope).items()):
+            for f in sorted(files):
+                print(f"{area}\t{f}")
+        return 0
+
     if not plan:
         print(f"[graphify] rien a re-extraire (repere: {watermark}, "
               f"{len(changed)} fichier(s) modifie(s), aucun dans le scope du graphe)")
+        advisory()
         return 0
 
     print(f"[graphify] {len(plan)} aire(s) a re-extraire - repere: {watermark}\n")
@@ -208,6 +261,7 @@ def main() -> int:
         print()
     print("  Lancer les commandes ci-dessus depuis une session Claude Code, dans cet ordre,")
     print("  puis re-labelliser une seule fois a la fin (chaque merge re-clusterise).")
+    advisory()
     return 1
 
 

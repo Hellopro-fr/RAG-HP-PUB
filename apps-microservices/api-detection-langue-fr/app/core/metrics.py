@@ -94,3 +94,12 @@ ASYNC_JOB_CAPACITY_REJECTED = Counter(
     "detect_async_job_capacity_rejected_total",
     "Submits rejected because MAX_ACTIVE_JOBS was reached",
 )
+
+# Orphaned Playwright protocol callbacks silenced by main.py's loop exception
+# handler. A cancelled scrape leaves page.goto's callback pending-and-uncancelled;
+# Connection.cleanup() sets TargetClosedError on it and nobody can retrieve it.
+# Counted rather than merely suppressed, so the noise stays observable.
+ORPHANED_PROTOCOL_FUTURES = Counter(
+    "detection_orphaned_protocol_futures_total",
+    "Orphaned Playwright protocol callbacks drained by the loop exception handler",
+)
