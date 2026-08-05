@@ -668,7 +668,7 @@ export const lancerElevagePoulesPondeuses: HubPage = {
         phone: 'Numéro de téléphone',
         postalCode: 'Code postal',
       },
-      submitLabel: 'Continuer',
+      submitLabel: 'Recevoir mon guide complet',
     },
     success: {
       title: 'Merci ! Votre projet est bien enregistré',
@@ -706,7 +706,7 @@ export const lancerElevagePoulesPondeuses: HubPage = {
     coordinatesSubtitle: 'Renseignez vos coordonnées pour télécharger votre guide',
     civilityLabel: 'Civilité',
     civilityOptions: ['Monsieur', 'Madame'],
-    coordinatesSubmitLabel: 'Continuer',
+    coordinatesSubmitLabel: 'Recevoir mon guide complet',
     trust: ['Un guide pratique et détaillé', '100% gratuit et sans engagement'],
     download: {
       title: 'Merci ! Votre guide est prêt',

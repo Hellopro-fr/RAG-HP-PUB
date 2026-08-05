@@ -1,4 +1,5 @@
 import { HubSection, HubIcon } from './primitives';
+import { ValuePropsCarousel } from './ValuePropsCarousel';
 import { HUB_SECTION_IDS } from '@/lib/hub/anchors';
 import type { HubValueProps } from '@/types/hub';
 
@@ -54,7 +55,7 @@ export function ValueProps({ data }: { data: HubValueProps }) {
         <p className="mt-2 text-base text-muted-foreground sm:text-lg">{data.subtitle}</p>
       </div>
 
-      <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <ValuePropsCarousel count={data.items.length}>
         {data.items.map((item) => {
           const isPrimary = item.accent === 'primary';
 
@@ -63,7 +64,8 @@ export function ValueProps({ data }: { data: HubValueProps }) {
               key={item.title}
               // Hauteur fixe + overflow-hidden : c'est ce qui empêche tout
               // redimensionnement. `transition-colors` uniquement sur la carte.
-              className="group flex h-full min-h-[19rem] flex-col overflow-hidden rounded-2xl border border-border bg-card p-5 shadow-sm transition-colors duration-300 lg:hover:border-transparent lg:hover:bg-navy-deep lg:hover:shadow-elegant"
+              // `snap-start` : seul ajout pour l'accroche du carrousel (sans effet en grille).
+              className="group flex h-full min-h-[19rem] snap-start flex-col overflow-hidden rounded-2xl border border-border bg-card p-5 shadow-sm transition-colors duration-300 lg:hover:border-transparent lg:hover:bg-navy-deep lg:hover:shadow-elegant"
             >
               <span className="inline-flex w-fit items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-primary transition-colors duration-300 lg:group-hover:bg-white/15 lg:group-hover:text-white">
                 {item.tag}
@@ -74,7 +76,7 @@ export function ValueProps({ data }: { data: HubValueProps }) {
                   `items-center` : au repos l'icône se cale au MILIEU de l'espace
                   libre. Alignée en haut, elle laissait un vide sous elle — c'est
                   la critique qui a motivé ce réglage. */}
-              <div className="flex flex-1 items-center py-3">
+              <div className="flex flex-1 items-center py-1">
                 <span
                   // La BOÎTE est animée, pas un `scale` : avec un `scale` la boîte
                   // continuerait à réserver 96px, la zone tampon ne se libérerait
@@ -116,7 +118,7 @@ export function ValueProps({ data }: { data: HubValueProps }) {
             </article>
           );
         })}
-      </div>
+      </ValuePropsCarousel>
 
       <p className="mt-8 text-center text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
         {data.closing}
