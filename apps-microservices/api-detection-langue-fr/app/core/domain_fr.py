@@ -16,6 +16,7 @@ from app.models.schemas import (
 )
 from app.services.language_detector import LanguageDetector
 from app.services.redirect_tracker import RedirectTracker, fetch_html
+from app.services.scraper import scrape_html
 from app.core.metrics import VALIDATION_SKIPPED
 from app.core.config import settings
 
@@ -1443,8 +1444,18 @@ class DomainFR:
 
             for alt_candidate in reliable_alternatives:
                 try:
+                    # Une alternative est une SONDE de confirmation, pas une cible
+                    # primaire : les reprises et les permutations http/https+www
+                    # existent pour l'URL demandée par l'appelant. Envelopper la
+                    # cascade complète de fetch_html (3 tentatives × ~85s) dans un
+                    # wait_for de 120s garantissait l'annulation en pleine
+                    # navigation, ce qui orphelinait le callback protocolaire du
+                    # goto et produisait le flood « Future exception was never
+                    # retrieved ». settings.APIFY_PROXY est déjà l'URL complète
+                    # (config.py:57-64), comme aux appels :414/:484.
                     alt_content_result = await asyncio.wait_for(
-                        fetch_html(alt_candidate.url), timeout=120
+                        scrape_html(alt_candidate.url, proxy=settings.APIFY_PROXY),
+                        timeout=120,
                     )
                     if not alt_content_result:
                         logger.warning(f"Impossible de récupérer le contenu de l'alternative {alt_candidate.url}")

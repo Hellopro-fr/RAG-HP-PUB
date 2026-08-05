@@ -67,10 +67,12 @@ def _stub_alternatives(detector, monkeypatch, candidates):
 
 
 def _stub_fetch(monkeypatch, html):
-    async def fake_fetch_html(url, proxy=None, *args, **kwargs):
+    # Case 6 probes an alternative with scrape_html, not the fetch_html cascade
+    # (2026-08-05) — the stub follows the call the code actually makes.
+    async def fake_scrape_html(url, timeout=90, proxy=None, *args, **kwargs):
         return SimpleNamespace(html=html, final_url=url, status_code=200,
                                content_type="text/html", headers={})
-    monkeypatch.setattr(domain_fr_module, "fetch_html", fake_fetch_html)
+    monkeypatch.setattr(domain_fr_module, "scrape_html", fake_scrape_html)
 
 
 def _validated_hreflang_alt():
