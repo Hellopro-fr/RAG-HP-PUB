@@ -13,6 +13,8 @@ from app.core.config import settings as _settings
 from app.core.async_jobs import JobStore, JobManager
 from common_utils.redis import cache_service
 from common_utils.redis.cache_service import init_redis_pool, close_redis_pool
+from playwright.async_api import Error as PlaywrightError
+from app.core.metrics import ORPHANED_PROTOCOL_FUTURES
 
 # Configuration du logging — INFO pour voir les logs de stratégie proxy, retry, etc.
 # Sans cette configuration, Python utilise WARNING par défaut et masque les logs INFO.
@@ -124,6 +126,41 @@ logger.info(
     f"Admission middleware attached: enabled={_admission_enabled}, "
     f"debug={_debug_admission.max_slots} (prod gating moved to route level)"
 )
+
+
+def _handle_loop_exception(loop, context) -> None:
+    """Drain orphaned Playwright protocol callbacks; report everything else.
+
+    A cancelled scrape (the 300s per-item wait_for, or any caller cancel) leaves
+    `page.goto`'s protocol callback pending AND uncancelled, because asyncio.wait
+    inside Playwright's _inner_send does not cancel what it awaited. When the
+    browser is then closed, Connection.cleanup() sets TargetClosedError on that
+    callback — and nobody can retrieve it, since the awaiting frame is gone.
+    Playwright already suppresses the two sibling cases (no_reply, and
+    already-cancelled) with the comment "To prevent 'Future exception was never
+    retrieved'"; this completes that suppression for the third.
+    Upstream: playwright-python#2163, unchanged through v1.62.0.
+
+    NARROW on three axes — a Playwright error, named TargetClosedError, with a
+    future but NO owning task. A TargetClosedError on a live awaited path has an
+    owning task and still reaches the default handler.
+
+    Matched by class NAME on purpose: TargetClosedError is not exported by
+    playwright.async_api (only Error is), and importing it from
+    playwright._impl._errors would tie us to a private module that the pending
+    1.58 -> 1.60 upgrade could move.
+    """
+    exc = context.get("exception")
+    if (
+        isinstance(exc, PlaywrightError)
+        and type(exc).__name__ == "TargetClosedError"
+        and context.get("future") is not None
+        and context.get("task") is None
+    ):
+        ORPHANED_PROTOCOL_FUTURES.inc()
+        logger.debug(f"orphaned Playwright protocol callback drained: {exc!r}")
+        return
+    loop.default_exception_handler(context)
 
 
 app.include_router(router, prefix="/api/v1")
