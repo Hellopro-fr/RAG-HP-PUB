@@ -63,6 +63,8 @@ async def lifespan(app: FastAPI):
     store = JobStore()
     app.state.job_manager = JobManager(store=store, batch_runner=_run_batch_core, settings=_settings)
     logging.getLogger(__name__).info("Async JobManager initialised (lifespan startup)")
+    asyncio.get_running_loop().set_exception_handler(_handle_loop_exception)
+    logging.getLogger(__name__).info("Loop exception handler installed (orphaned Playwright callbacks)")
     yield
     reconnect_task.cancel()
     await asyncio.gather(reconnect_task, return_exceptions=True)

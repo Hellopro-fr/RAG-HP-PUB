@@ -14,6 +14,7 @@ import asyncio
 import pytest
 from playwright.async_api import Error as PlaywrightError
 
+import main as main_module
 from main import _handle_loop_exception
 from app.core.metrics import ORPHANED_PROTOCOL_FUTURES
 
@@ -89,3 +90,24 @@ def test_context_without_exception_is_delegated():
     loop = _FakeLoop()
     _handle_loop_exception(loop, {"message": "something odd happened"})
     assert len(loop.delegated) == 1
+
+
+@pytest.mark.asyncio
+async def test_lifespan_installs_the_loop_exception_handler(monkeypatch):
+    """Nothing previously asserted the handler is actually wired onto the
+    running loop — every other test here calls _handle_loop_exception
+    directly. Mirrors tests/test_main.py:78-100
+    (test_lifespan_inits_shared_pool_and_bridges_redis_url)'s setup: fake
+    init/close so no real Redis is touched, then enter the real
+    lifespan(app) context and inspect the loop it ran on."""
+    async def fake_init():
+        pass
+
+    async def fake_close():
+        pass
+
+    monkeypatch.setattr(main_module, "init_redis_pool", fake_init)
+    monkeypatch.setattr(main_module, "close_redis_pool", fake_close)
+
+    async with main_module.lifespan(main_module.app):
+        assert asyncio.get_running_loop().get_exception_handler() is main_module._handle_loop_exception
