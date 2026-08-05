@@ -144,8 +144,15 @@ def _handle_loop_exception(loop, context) -> None:
     Upstream: playwright-python#2163, unchanged through v1.62.0.
 
     NARROW on three axes — a Playwright error, named TargetClosedError, with a
-    future but NO owning task. A TargetClosedError on a live awaited path has an
-    owning task and still reaches the default handler.
+    future that is a bare Future and not a Task. That third axis is the real
+    discriminator: Task.__del__ (asyncio/tasks.py) only special-cases a Task
+    destroyed while still pending; the never-retrieved-exception case falls
+    through to Future.__del__, which puts the Task itself under the 'future'
+    key and never sets a 'task' key (asyncio/base_events.py's own comment:
+    "Task is a subclass of Future, and sometimes the 'future' key holds a
+    Task"). So a TargetClosedError raised on a live awaited path surfaces here
+    as a Task under 'future' and still reaches the default handler; only a
+    bare, orphaned Future is drained.
 
     Matched by class NAME on purpose: TargetClosedError is not exported by
     playwright.async_api (only Error is), and importing it from
@@ -157,7 +164,13 @@ def _handle_loop_exception(loop, context) -> None:
         isinstance(exc, PlaywrightError)
         and type(exc).__name__ == "TargetClosedError"
         and context.get("future") is not None
-        and context.get("task") is None
+        # Task.__del__ falls through to Future.__del__ for the never-retrieved
+        # case, which puts the Task under the 'future' key and never sets
+        # 'task' (see asyncio/base_events.py's own comment). So the real
+        # discriminator is bare-Future vs Task: an orphaned protocol callback
+        # is a plain Future, whereas a Task that dropped an exception is one we
+        # still want reported.
+        and not isinstance(context.get("future"), asyncio.Task)
     ):
         ORPHANED_PROTOCOL_FUTURES.inc()
         logger.debug(f"orphaned Playwright protocol callback drained: {exc!r}")

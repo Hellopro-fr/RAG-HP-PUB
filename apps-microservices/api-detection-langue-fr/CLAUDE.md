@@ -215,13 +215,14 @@ Batch Pass 2 retry set (`_PASS2_RETRYABLE_METHODS`): `fetch_failed`, `challenge_
 
 - `detection_validation_verdicts_total{verdict}` — counter, label values: `valid`, `http_error`, `soft_404`, `redirected_to_home`.
 - `detection_homepage_fallback_triggered_total{outcome}` — counter, label values: `success`, `rejected`, `network_failure`.
+- `detection_orphaned_protocol_futures_total` — counter, no labels. Orphaned Playwright protocol callbacks drained by the loop exception handler in `main.py` (a cancelled scrape leaves `page.goto`'s callback pending; `Connection.cleanup()` sets `TargetClosedError` on it and nobody can retrieve it). **A value of zero is ambiguous** — it is consistent both with "no orphans occurred" and with "the handler is not installed"; pair it with checking that `Future exception was never retrieved` is absent from the log.
 
 ## Alternative-URL Validation Skip (`validate_alternatives`)
 
 `validate_alternatives: bool = true` on `DetectionRequest`, `BatchDetectionRequest`, and `AsyncBatchSubmitRequest` (threaded via `BatchOpts`). When **false**, COMPLETE-mode detection still **parses** alternatives from the HTML but performs **zero HTTP/browser work** on them:
 
 - skips the httpx Phase-1 + Phase-2 browser validation (`_validate_alternative_urls` → `scrape_html`),
-- skips the Case-6 browser NLP-confirmation loop (`fetch_html` per validated alt).
+- skips the Case-6 browser NLP-confirmation loop (a single `scrape_html` probe per validated alt, not a retry cascade).
 
 Returned alts: hreflang → `validated:true` (trusted declaration, unchanged); medium (`data-lang`/`link`/`option`) → `validated:false, reliability:'low'`. Default **true** ⇒ existing callers (BO) keep full validation.
 

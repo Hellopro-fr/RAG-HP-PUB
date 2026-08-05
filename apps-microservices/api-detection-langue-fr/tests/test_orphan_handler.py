@@ -6,8 +6,10 @@ the awaiting frame is gone by construction. Playwright suppresses the two siblin
 cases (no_reply, already-cancelled) and misses this one (upstream
 playwright-python#2163, unchanged through v1.62.0), so we complete the suppression.
 
-The handler must stay NARROW: a TargetClosedError on a live awaited path has an
-owning task and must still be reported.
+The handler must stay NARROW: the real discriminator is bare-Future vs Task —
+Task.__del__ falls through to Future.__del__ for the never-retrieved case,
+filing the Task itself under the 'future' key, so a TargetClosedError on a
+live awaited path surfaces as a Task and must still be reported.
 """
 import asyncio
 
@@ -54,18 +56,37 @@ def test_orphaned_future_is_drained_and_counted():
     assert _count() == before + 1, "the silenced orphan must be counted"
 
 
-def test_target_closed_with_owning_task_is_delegated():
-    """The guard against becoming a blanket suppressor."""
+@pytest.mark.asyncio
+async def test_target_closed_on_a_task_is_delegated():
+    """The guard against becoming a blanket suppressor.
+
+    CPython never emits a separate 'task' key for the never-retrieved-exception
+    pathway (Task.__del__ falls through to Future.__del__, which files the Task
+    itself under 'future') — so the real discriminator the handler applies is
+    bare-Future vs Task. This constructs a real Task carrying the
+    TargetClosedError, under 'future', with no 'task' key, mirroring what
+    asyncio actually produces.
+    """
     loop = _FakeLoop()
+
+    async def _never_awaited():
+        raise _TargetClosedError("Target page, context or browser has been closed")
+
+    task = asyncio.get_running_loop().create_task(_never_awaited())
+    await asyncio.sleep(0)  # let the task run to completion (exception set, unread)
 
     _handle_loop_exception(loop, {
         "message": "Task exception was never retrieved",
         "exception": _TargetClosedError("Target page, context or browser has been closed"),
-        "future": asyncio.Future(),
-        "task": object(),
+        "future": task,
     })
 
-    assert len(loop.delegated) == 1, "a TargetClosedError with an owner must be reported"
+    assert len(loop.delegated) == 1, "a TargetClosedError on a Task must be reported"
+
+    # Retrieve the exception ourselves so this test doesn't itself leak an
+    # unretrieved-exception warning at interpreter shutdown.
+    with pytest.raises(_TargetClosedError):
+        await task
 
 
 def test_other_playwright_error_is_delegated():
