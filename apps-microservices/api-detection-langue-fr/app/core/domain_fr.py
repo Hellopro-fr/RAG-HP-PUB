@@ -15,6 +15,10 @@ from app.models.schemas import (
     DebugUrlCheckInfo, DebugHtmlTagsInfo, DebugNlpInfo, DebugAlternativesInfo
 )
 from app.services.language_detector import LanguageDetector
+# fetch_html is no longer called from this module (Case 6 now probes with
+# scrape_html). It stays imported because three test files monkeypatch
+# app.core.domain_fr.fetch_html and would AttributeError without it.
+# Do not remove on an F401 sweep.
 from app.services.redirect_tracker import RedirectTracker, fetch_html
 from app.services.scraper import scrape_html
 from app.core.metrics import VALIDATION_SKIPPED

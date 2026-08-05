@@ -100,7 +100,11 @@ async def test_probe_returning_none_probes_every_candidate(monkeypatch):
         scrape_calls.append(url)
         return None          # what scrape_html returns on a bad/missing proxy
 
+    async def fake_fetch(url, proxy=None, *a, **kw):
+        raise AssertionError("Case 6 must not use the fetch_html cascade")
+
     monkeypatch.setattr(domain_fr_module, "scrape_html", fake_scrape)
+    monkeypatch.setattr(domain_fr_module, "fetch_html", fake_fetch)
 
     d = _make_detector()
     _stub_nlp(d, monkeypatch)
@@ -119,7 +123,11 @@ async def test_probe_raising_does_not_propagate(monkeypatch):
     async def fake_scrape(url, timeout=90, proxy=None):
         raise RuntimeError("Timeout 30000ms exceeded.")
 
+    async def fake_fetch(url, proxy=None, *a, **kw):
+        raise AssertionError("Case 6 must not use the fetch_html cascade")
+
     monkeypatch.setattr(domain_fr_module, "scrape_html", fake_scrape)
+    monkeypatch.setattr(domain_fr_module, "fetch_html", fake_fetch)
 
     d = _make_detector()
     _stub_nlp(d, monkeypatch)
@@ -140,7 +148,11 @@ async def test_probe_gets_the_full_proxy_url(monkeypatch):
         seen["proxy"] = proxy
         return None
 
+    async def fake_fetch(url, proxy=None, *a, **kw):
+        raise AssertionError("Case 6 must not use the fetch_html cascade")
+
     monkeypatch.setattr(domain_fr_module, "scrape_html", fake_scrape)
+    monkeypatch.setattr(domain_fr_module, "fetch_html", fake_fetch)
     monkeypatch.setattr(domain_fr_module.settings, "APIFY_PROXY",
                         "http://auto:pw@proxy.apify.com:8000")
 
