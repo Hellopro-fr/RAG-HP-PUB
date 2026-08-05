@@ -1,0 +1,325 @@
+# Plan de tracking — pages HUB « projet »
+
+> Périmètre : `conseils.hellopro.fr/<slug>-<id>-projet.html` (template `components/hub/`).
+> Version consolidée du **2026-08-05**. Remplace les versions précédentes.
+> Fichiers compagnons : `tracking-hub-events.csv` (événements), `tracking-hub-gtm.csv`
+> (paramétrage conteneur), `tracking-hub-recette.csv` (30 tests).
+> Statut : **arbitré, prêt à implémenter.** Rien n'est encore codé.
+
+---
+
+## 1. Constat de départ (mesuré en recette, pas supposé)
+
+Recette du 2026-08-04 sur `/lancer-elevage-poules-pondeuses-1000-projet.html` : questionnaire
+déroulé de bout en bout, dialog guide ouvert et soumis, pop-up déclenchée au scroll.
+
+**Ce qui fonctionne déjà** — poussé par `GtmFooterScripts` (transverse conseils) :
+
+| Donnée | Valeur observée |
+|---|---|
+| `page_template` | `page_hub` (arbitré ; valait `hub` avant le 2026-08-05) |
+| `product.category1` / `category5` | `Agriculture` / `Élevage-avicole` (dérivés du fil d'ariane) |
+| `user.visitorLoginState` | `unlogged` |
+| Conteneur GTM | `GTM-PBBSTMC` chargé |
+| Consent Mode | fonctionnel — refus ⇒ les 4 signaux passent en `denied` |
+
+**Ce qui manque :**
+
+> Sur l'intégralité du parcours, **le code HUB n'a poussé aucun événement dans le dataLayer.**
+> Les seuls événements captés — `gtm.click`, `gtm.linkClick`, `gtm.scrollDepth` — viennent des
+> déclencheurs automatiques du conteneur. Aucun fichier de `components/hub/` n'importe quoi que
+> ce soit de `lib/analytics/`.
+
+Conséquence : **« le workflow HUB est-il rentable ? » est aujourd'hui sans réponse mesurable.**
+
+---
+
+## 2. Décision fondatrice : un vocabulaire dédié `hub_*`
+
+**Les événements HUB ne réutilisent pas `quote_form_funnel`.**
+
+Réutiliser ce nom aurait donné des leads HUB comptabilisés sans configuration : les tags
+`demarrages_de_devis_all_forms` et `quote_funnel_validation` y sont déjà branchés. C'est
+précisément pourquoi il faut s'en abstenir.
+
+1. **Un lead HUB n'est pas un devis groupé.** Le questionnaire qualifie une intention, il ne
+   met pas en relation avec des fournisseurs.
+2. **Ça casserait une mesure existante.** L'analyse d'impact du template conseils compte ses
+   leads sur `quote_funnel_validation`. Des leads HUB dedans la contamineraient sans que
+   personne ne s'en aperçoive — les deux vivent sur le même sous-domaine.
+3. `page_template = page_hub` isole les pages, mais **seulement si chaque rapport pense au
+   filtre**. Un nom d'événement distinct rend l'oubli impossible.
+
+⚠️ Cet argument porte sur le **nom de l'événement**, pas sur la propriété GA4 de destination.
+La distinction a son importance — voir §7.
+
+---
+
+## 3. Le parcours réel — un aiguillage, pas une file d'attente
+
+C'est le point que toute lecture naïve du code manque, et il conditionne la moitié des
+événements. **Trois branches**, identiques dans les deux tunnels :
+
+```
+                                      ┌─ cookie hub_lead_email=1 présent ?
+                                      │
+              ┌── OUI ────────────────┴──► RACCOURCI : téléchargement direct du PDF
+              │                            ni étape e-mail, ni appel API, PAS de lead
+   clic CTA ──┤
+              └── NON ──► étape e-mail ──► APPEL 1 ──► réponse serveur
+                                                        ├─ contact CONNU ──► remerciement
+                                                        │                    + PDF auto
+                                                        │                    + bouton de repli
+                                                        └─ contact INCONNU ─► coordonnées
+                                                                              ──► APPEL 2
+                                                                              ──► remerciement
+```
+
+Quatre conséquences non négociables sur le plan :
+
+### 3.1 `user_known_status` vient de la réponse serveur, jamais du cookie
+
+Le cookie n'est posé qu'après un enregistrement réussi **sur cette machine**. Un contact
+déjà connu de Hellopro par un autre canal, ou revenu depuis un autre navigateur, serait
+compté `Unknown` alors que le serveur le reconnaît et saute l'étape coordonnées. **Le cookie
+sous-détecte ; seule la réponse de l'appel 1 fait foi.**
+
+### 3.2 `hub_email_check` — la métrique la plus utile du lot
+
+| Événement | Déclencheur | Paramètres |
+|---|---|---|
+| `hub_email_check` | réception de la réponse de l'APPEL 1 | `result` : `known` \| `unknown` |
+
+Il donne la part de visiteurs déjà en base, et distingue donc **« le HUB apporte de nouveaux
+contacts »** de **« le HUB fait re-remplir un formulaire à des gens déjà connus »**. Deux
+résultats radicalement différents pour juger la rentabilité du workflow — et indiscernables
+sans cet événement.
+
+### 3.3 Le raccourci `hub_lead_email=1` ne produit pas de lead
+
+Le cookie (mis en place actuellement, valeur `1`) signifie « cette personne a déjà soumis le
+formulaire coordonnées ». Au clic sur un CTA guide, le téléchargement part directement : pas
+d'étape e-mail, **pas d'appel API**, donc **aucun nouveau lead**.
+
+Le plan traite ce cas par un événement distinct :
+
+| Événement | Sens | Ne pas confondre avec |
+|---|---|---|
+| `hub_guide_shortcut` | re-téléchargement par un visiteur déjà converti | `hub_lead` — qui ne doit **pas** être émis ici |
+
+Sans cette séparation, deux erreurs symétriques sont possibles : compter chaque
+re-téléchargement comme une conversion (leads gonflés), ou n'émettre aucun événement et
+perdre entièrement le signal d'usage du guide. Le test 20 de la recette verrouille le point :
+trois re-téléchargements ⇒ 3 `hub_guide_download`, toujours 0 `hub_lead`.
+
+Note au passage : stocker `1` plutôt que l'adresse est un progrès — l'e-mail en clair dans un
+cookie était une donnée personnelle exposée côté client sans nécessité.
+
+### 3.4 Le taux d'abandon aux coordonnées a un dénominateur particulier
+
+Les événements `coordinates_view` / `coordinates_submit` ne sont émis que sur la branche
+**INCONNU**. Leur dénominateur est donc `hub_email_check` avec `result=unknown`, **pas**
+`hub_form_email_submit`. Rapporté au total, le taux serait mécaniquement sous-estimé.
+
+### 3.5 Le PDF est délivré dans les deux tunnels
+
+Vérifié en recette : l'écran de remerciement du questionnaire **projet** propose lui aussi le
+guide. `hub_guide_download` n'est donc pas réservé au tunnel guide — c'est `hub_group` qui dit
+d'où vient le téléchargement.
+
+---
+
+## 4. Les trois groupes
+
+| Groupe | Nature | Ce qu'il répond |
+|---|---|---|
+| **Projet** | tunnel — questionnaire du hero, 6 écrans, lead qualifié, `id_page_hub = 1000` | Combien de projets qualifiés, et à quelle étape on décroche |
+| **Guide** | tunnel — un e-mail contre un PDF, 4 portes d'entrée, `id_page_hub = 2000` | Combien de guides, et depuis quel emplacement |
+| **Engagement** | **pas un tunnel** — aucun point d'arrivée | Pourquoi les deux premiers convertissent ou non |
+
+`hub_group` (`projet` \| `guide` \| `engagement`) est ajouté par le helper sur **tous** les
+événements. `hub_lead_type`, présent dans une version antérieure, est supprimé : il portait la
+même information sur les seuls événements où il s'appliquait, et deux paramètres synonymes
+finissent toujours par diverger — l'un mis à jour, l'autre oublié, la divergence indétectable
+en aval.
+
+**Périmètre Engagement réduit à `hub_article_click`.** Les 20 liens sortants de la page 1000
+pointent vers `conseils.hellopro.fr` et sont aujourd'hui invisibles. Si le HUB ne convertit pas
+lui-même mais alimente des pages conseils qui, elles, convertissent, c'est le seul événement
+capable de le montrer — et donc de justifier le workflow autrement que par ses propres leads.
+`hub_nav_click`, `hub_section_view` et `hub_carousel_scroll` sont écartés : ils décrivent du
+confort d'analyse, à rouvrir seulement s'il faut expliquer un taux décevant.
+
+Liste complète des 20 événements : `tracking-hub-events.csv`.
+
+---
+
+## 5. Architecture d'implémentation
+
+### 5.1 Un helper unique, aucun `dataLayer.push` dans les composants
+
+Créer `lib/analytics/hub.ts`, miroir de `lib/analytics/gtm.ts` :
+
+```ts
+export function pushHubEvent(event: HubEventName, params?: HubEventParams): void
+```
+
+Les composants appellent ce helper, jamais `window.dataLayer.push` en direct : les paramètres
+communs sont ajoutés en un seul endroit, et un `grep pushHubEvent` donne l'inventaire exhaustif
+des points de mesure. C'est la règle qui a fait tenir `lib/analytics/gtm.ts` sur les pages
+conseils.
+
+⚠️ **Ne jamais appeler `gtag()` depuis un composant.** Le contrat est le dataLayer ; GTM route.
+Un `gtag` direct contourne le Consent Mode du conteneur.
+
+### 5.2 Paramètres communs — ajoutés automatiquement
+
+| Paramètre | Source | Exemple |
+|---|---|---|
+| `hub_group` | `projet` \| `guide` \| `engagement` | `projet` |
+| `hub_page_id` | `page.id` | `1000` |
+| `hub_page_slug` | `page.slug` | `lancer-elevage-poules-pondeuses` |
+| `id_page_hub` | id effectif de l'appel API | `1000` / `2000` |
+| `session_id` | `getHpSessionId()` — **helper existant réutilisé** | `session_1785854120765_a1b2c3d4e` |
+| `product.category5` | lu du dataLayer, comme `getCategory5()` | `Élevage-avicole` |
+
+`page_template`, le bloc `user` et `product.category1..5` sont **déjà poussés** : ne pas les
+redéclarer, GTM les lit comme variables de page.
+
+Réutiliser `getHpSessionId()` (fenêtre d'inactivité glissante de 30 min, `sessionStorage`
+partagé avec le formulaire legacy) permet de recoller un visiteur qui remplit le questionnaire
+projet **puis** télécharge le guide : deux leads, une session.
+
+### 5.3 Le signal de conversion n'est pas le code HTTP
+
+Observation de recette : l'appel 2 a renvoyé **HTTP 200** avec `statut: "enregistre"`, alors que
+la spec annonce 201. Le code gère déjà les deux (`res.status === 201 || corps?.statut ===
+'enregistre'`, `AssistantForm.tsx:168`).
+
+**Le push `hub_lead` doit vivre dans cette branche exacte**, à côté du `setSubmitted(true)`, et
+non être conditionné sur `res.status === 201` — sinon la conversion est perdue sur
+l'environnement observé.
+
+---
+
+## 6. Ce qui ne doit jamais partir dans le dataLayer
+
+**Aucune donnée personnelle, sous aucune forme, pas même hachée** : ni e-mail, ni téléphone, ni
+nom, ni prénom, ni code postal, ni civilité.
+
+Les libellés de réponses (`answer_label`) sont des **choix fermés** définis dans le fichier de
+données, pas de la saisie libre : ils peuvent partir.
+
+**Biais assumé** : sous consentement refusé, les pushes ont lieu mais GA4 ne transmet pas. Les
+chiffres du POC sous-estiment le volume réel du taux de refus. À mesurer plutôt qu'à ignorer —
+sans cette correction, un POC jugé « non rentable » peut ne l'être qu'en apparence.
+
+---
+
+## 7. GA4 — `G-DQTV4SHNME`, et les deux propriétés
+
+### 7.1 Destination et page_view
+
+Les événements `hub_*` partent sur **`G-DQTV4SHNME`**. Confirmé le 2026-08-05 : son tag de
+configuration se déclenche bien sur `conseils.hellopro.fr` et pas seulement sur `www`.
+
+`G-J3925VE86T` est **conservée**. Il faut seulement s'assurer que le `page_view` parte **aussi**
+vers `G-DQTV4SHNME`.
+
+⚠️ **Le point de vigilance principal du lot.** Ce réglage vit dans le tag de configuration, qui
+s'applique à **tout `conseils.hellopro.fr`** — pas seulement aux pages HUB. Deux tests avant
+mise en ligne, sur les deux types de page :
+
+- DebugView `G-DQTV4SHNME` sur une page **HUB** : exactement **un** `page_view`.
+- DebugView `G-DQTV4SHNME` sur une page **conseils** : exactement **un** `page_view`, et
+  `page_template = conseils`.
+
+Ni zéro (réglage manquant) ni deux (page_view émis par deux tags à la fois). Le `gtag('config',
+'G-J3925VE86T')` de `GtmFooterScripts` lignes 62-64 n'alimente que sa propre propriété : il ne
+crée pas de doublon sur `G-DQTV4SHNME`, mais il faut vérifier qu'aucun tag GTM ne fait déjà le
+travail avant d'en ajouter un.
+
+### 7.2 Les key events s'agrègent au niveau de la propriété
+
+Marquer `hub_lead` comme key event l'ajoute au total « conversions » de `G-DQTV4SHNME`. Tout
+rapport ou tableau de bord qui lit ce total sans détailler par nom d'événement comptera les
+leads HUB. **C'est le seul vrai vecteur de contamination des rapports existants, et il ne
+dépend pas du nom de l'événement.** Deux options : ne pas le marquer pendant le POC — les
+rapports standard suffisent à compter un événement nommé — ou le marquer et prévenir les
+lecteurs de ce total.
+
+### 7.3 À vérifier avant de créer quoi que ce soit
+
+- **Quota de dimensions** : 50 event-scoped par propriété, ce plan en demande 10.
+- **`page_template` enregistrée** dans `G-DQTV4SHNME` — sans elle, impossible de segmenter.
+- **Durée de conservation** (défaut 2 mois pour les explorations) : un POC jugé à 3 mois avec
+  2 mois de conservation perd sa première cohorte.
+
+### 7.4 Nommage de `product.category5`
+
+Le legacy pousse la clé plate `'product.category5'`. Un nom de paramètre GA4 n'accepte que
+lettres, chiffres et underscores : le point est invalide. La variable GTM lit
+`product.category5` et le tag l'envoie sous le nom **`product_category5`**.
+
+### 7.5 Conteneur GTM — le paramétrage est léger
+
+Un déclencheur *Custom Event* en regex `^hub_`, **un seul** tag GA4 Event avec `{{Event}}`
+comme nom d'événement, et les variables dataLayer. Vingt tags auraient le même comportement.
+Détail complet : `tracking-hub-gtm.csv`.
+
+---
+
+## 8. Pop-up de capture : la session de l'app n'est pas la session GA4
+
+La pop-up s'affiche **une fois par onglet** (`sessionStorage`), et réapparaît donc dans un
+nouvel onglet ou un autre navigateur. GA4, lui, compte une session **à travers les onglets**
+(30 min d'inactivité).
+
+Conséquence de mesure : un visiteur qui ouvre trois onglets génère **trois**
+`hub_guide_popup_view` dans **une seule** session GA4.
+
+**Ne pas calculer le taux de conversion de la pop-up en `hub_lead / hub_guide_popup_view`** —
+le dénominateur est gonflé. Utiliser « sessions avec l'événement » ou « utilisateurs », pas le
+nombre d'événements. Les tests 22 et 23 de la recette documentent les deux comportements.
+
+---
+
+## 9. `page_template = "page_hub"` est un contrat
+
+Valeur arbitrée le 2026-08-05, appliquée dans `HubTemplate.tsx` et verrouillée par
+`__tests__/components/hub/HubTemplate.test.tsx`.
+
+Des filtres et segments GA4 seront construits dessus. **La changer met les rapports à zéro sans
+lever la moindre erreur** — pas d'exception, pas de log, juste des courbes plates. D'où
+l'assertion sur la chaîne littérale dans le test, et non sur une constante importée du
+composant qui suivrait le changement en silence.
+
+À noter : les pages conseils émettent `conseils` et les pages HUB `page_hub`. La symétrie
+serait `conseils`/`hub` ou `page_conseils`/`page_hub`. Valeur retenue telle que demandée ; si
+l'homogénéité compte pour les rapports à venir, c'est maintenant qu'il faut trancher — après la
+première collecte, changer coûte une reprise de tous les segments.
+
+---
+
+## 10. Ordre d'implémentation
+
+| Lot | Contenu | Ce qu'on sait à la fin |
+|---|---|---|
+| 1 | `lib/analytics/hub.ts` + tests unitaires | rien — mais le socle est testable sans navigateur |
+| 2 | Tunnel projet (§3, events 1-11) | combien de projets, où ça décroche |
+| 3 | `hub_email_check` + `hub_lead` + `hub_form_abandon` sur les deux tunnels | part de contacts déjà connus, étape qui tue le tunnel |
+| 4 | Tunnel guide avec `entry_point` et `hub_guide_shortcut` | quelle porte convertit, usage réel du guide |
+| 5 | `hub_article_click` | si le HUB alimente les pages conseils |
+| 6 | Conteneur GTM + GA4 + recette 30 tests | les chiffres sont fiables |
+
+Les lots 1 à 3 suffisent à répondre à « combien de leads, et où ça décroche ». Le reste
+répond à « pourquoi », et ne se justifie qu'une fois du volume observé.
+
+---
+
+## 11. Reporté, hors périmètre tracking
+
+- **Barre sticky mobile** : icône de téléchargement pour un bouton qui ouvre le questionnaire.
+  Revu plus tard ; `entry_point = sticky_mobile` reste prévu dans le plan.
+- **PDF du guide** : `/seo_masterclass_detailed.pdf` (résidu du prototype Lovable) sera
+  remplacé quand l'équipe aura terminé le livre. Aucun impact sur le plan.

@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { CoordinatesStep, DownloadStep } from './GuideSteps';
+import { CARD_BODY, FEATURE_TITLE, META, TAG } from './typography';
 import { useGuideLead } from '@/lib/hub/useGuideLead';
 import { getRememberedEmail } from '@/lib/hub/leadEmailCookie';
 import type { HubLeadPopup, HubGuideDialog } from '@/types/hub';
@@ -169,16 +170,19 @@ export function LeadPopup({
                 </div>
               )}
               <div>
-                <span className="inline-flex items-center gap-2 rounded-full bg-cta/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-cta">
+                <span
+                  className={`inline-flex items-center gap-2 rounded-full bg-cta/10 px-3 py-1 text-cta ${TAG}`}
+                >
                   {data.badge}
                 </span>
-                <h2 className="mt-3 text-2xl font-bold leading-tight text-foreground sm:text-3xl">
-                  {data.title}
-                </h2>
+                {/* `FEATURE_TITLE` : ce grand modal est l'accroche de la page, il
+                    porte le même niveau qu'une carte vedette, non celui d'un
+                    dialog de parcours (`DIALOG_TITLE`, un cran en dessous). */}
+                <h2 className={`mt-3 ${FEATURE_TITLE} text-foreground`}>{data.title}</h2>
                 <p className="mt-1 text-xl font-semibold italic text-cta sm:text-2xl">
                   {data.scriptLine}
                 </p>
-                <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{data.text}</p>
+                <p className={`mt-3 ${CARD_BODY} text-muted-foreground`}>{data.text}</p>
               </div>
             </div>
 
@@ -209,7 +213,9 @@ export function LeadPopup({
               </p>
             )}
 
-            <p className="mt-3 flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
+            <p
+              className={`mt-3 flex items-center justify-center gap-1.5 ${META} text-muted-foreground`}
+            >
               <ShieldCheck className="h-3.5 w-3.5" />
               {data.reassurance}
             </p>

@@ -1,4 +1,5 @@
 import { HubSection, HubIcon } from './primitives';
+import { CARD_BODY, CARD_TITLE, SECTION_SUBTITLE, SECTION_TITLE, TAG } from './typography';
 import { HUB_SECTION_IDS } from '@/lib/hub/anchors';
 import type { HubValueProps } from '@/types/hub';
 
@@ -48,10 +49,8 @@ export function ValueProps({ data }: { data: HubValueProps }) {
   return (
     <HubSection id={HUB_SECTION_IDS.valueProps} className="bg-surface" compact>
       <div className="mx-auto max-w-3xl text-center">
-        <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-          {data.title}
-        </h2>
-        <p className="mt-2 text-base text-muted-foreground sm:text-lg">{data.subtitle}</p>
+        <h2 className={`${SECTION_TITLE} text-foreground`}>{data.title}</h2>
+        <p className={`mt-2 ${SECTION_SUBTITLE} text-muted-foreground`}>{data.subtitle}</p>
       </div>
 
       <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -65,7 +64,9 @@ export function ValueProps({ data }: { data: HubValueProps }) {
               // redimensionnement. `transition-colors` uniquement sur la carte.
               className="group flex h-full min-h-[19rem] flex-col overflow-hidden rounded-2xl border border-border bg-card p-5 shadow-sm transition-colors duration-300 lg:hover:border-transparent lg:hover:bg-navy-deep lg:hover:shadow-elegant"
             >
-              <span className="inline-flex w-fit items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-primary transition-colors duration-300 lg:group-hover:bg-white/15 lg:group-hover:text-white">
+              <span
+                className={`inline-flex w-fit items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-primary transition-colors duration-300 lg:group-hover:bg-white/15 lg:group-hover:text-white ${TAG}`}
+              >
                 {item.tag}
               </span>
 
@@ -95,7 +96,9 @@ export function ValueProps({ data }: { data: HubValueProps }) {
 
               {/* Bloc de texte ancré en bas : il grandit vers le HAUT. */}
               <div className="shrink-0">
-                <h3 className="text-lg font-bold leading-tight text-foreground transition-colors duration-300 lg:group-hover:text-white">
+                <h3
+                  className={`${CARD_TITLE} text-foreground transition-colors duration-300 lg:group-hover:text-white`}
+                >
                   {item.title}
                 </h3>
                 <span className="mt-2 block h-1 w-10 rounded-full bg-cta" />
@@ -108,7 +111,9 @@ export function ValueProps({ data }: { data: HubValueProps }) {
                   l'effet Asana ; sans lui, la révélation paraît mécanique.
                 */}
                 <div className="mt-3 max-h-40 translate-y-0 overflow-hidden opacity-100 transition-all duration-500 ease-out lg:mt-0 lg:max-h-0 lg:translate-y-3 lg:opacity-0 lg:group-hover:mt-3 lg:group-hover:max-h-40 lg:group-hover:translate-y-0 lg:group-hover:opacity-100 lg:motion-reduce:mt-3 lg:motion-reduce:max-h-40 lg:motion-reduce:translate-y-0 lg:motion-reduce:opacity-100">
-                  <p className="text-sm leading-relaxed text-muted-foreground transition-colors duration-300 lg:group-hover:text-white/80">
+                  <p
+                    className={`${CARD_BODY} text-muted-foreground transition-colors duration-300 lg:group-hover:text-white/80`}
+                  >
                     {item.desc}
                   </p>
                 </div>
@@ -118,9 +123,10 @@ export function ValueProps({ data }: { data: HubValueProps }) {
         })}
       </div>
 
-      <p className="mt-8 text-center text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-        {data.closing}
-      </p>
+      {/* Phrase de clôture rendue en `<p>` : elle a le POIDS visuel d'un titre de
+          section, mais n'en est pas un — un second `h2` dans la section fausserait
+          le plan de titres. Même échelle, balise différente. */}
+      <p className={`mt-8 text-center ${SECTION_TITLE} text-foreground`}>{data.closing}</p>
     </HubSection>
   );
 }

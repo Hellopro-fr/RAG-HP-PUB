@@ -4,6 +4,7 @@ import Image from 'next/image';
 import { ArrowRight, Download, MapPin, ShieldCheck, User } from 'lucide-react';
 import { PhoneField } from './PhoneField';
 import { Confetti } from './Confetti';
+import { DIALOG_TITLE, META, TAG } from './typography';
 import { useAutoDownload } from '@/lib/hub/useAutoDownload';
 import type { HubGuideDialog } from '@/types/hub';
 import type { GuideLead } from '@/lib/hub/useGuideLead';
@@ -71,13 +72,13 @@ export function CoordinatesStep({
 }) {
   return (
     <>
-      <span className="inline-flex w-fit items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-primary">
+      <span
+        className={`inline-flex w-fit items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-primary ${TAG}`}
+      >
         {guide.coordinatesBadge}
       </span>
       <div className="mt-2">
-        <h2 className="text-xl font-bold leading-tight text-foreground sm:text-2xl">
-          {guide.coordinatesTitle}
-        </h2>
+        <h2 className={`${DIALOG_TITLE} text-foreground`}>{guide.coordinatesTitle}</h2>
         <p className="mt-1 text-sm text-muted-foreground">{guide.coordinatesSubtitle}</p>
       </div>
 
@@ -171,7 +172,7 @@ export function CoordinatesStep({
           <ArrowRight className="h-4 w-4" />
         </button>
 
-        <p className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+        <p className={`flex items-center justify-center gap-2 ${META} text-muted-foreground`}>
           <ShieldCheck className="h-3.5 w-3.5 text-primary" />
           100% gratuit, sans engagement
         </p>
@@ -198,7 +199,7 @@ export function DownloadStep({ download }: { download: HubGuideDialog['download'
   return (
     <div className="relative text-center">
       <Confetti />
-      <h2 className="text-xl font-bold text-foreground sm:text-2xl">{download.title}</h2>
+      <h2 className={`${DIALOG_TITLE} text-foreground`}>{download.title}</h2>
       {download.subtitle && (
         <p className="mt-1 text-sm text-muted-foreground">{download.subtitle}</p>
       )}

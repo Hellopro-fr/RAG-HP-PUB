@@ -1,6 +1,7 @@
 import Image from 'next/image';
 import { HubSection, CategoryTag, HubIcon } from './primitives';
 import { AssistantButton, GuideButton } from './triggers';
+import { BANNER_TITLE, CARD_BODY } from './typography';
 import { HUB_SECTION_IDS } from '@/lib/hub/anchors';
 import type { HubAccompagnementBanner, HubGuideCta, HubImage } from '@/types/hub';
 
@@ -51,16 +52,16 @@ function Banner({ id, tag, tagIcon, title, text, ctaLabel, ctaIcon, image, actio
           <div>
             <CategoryTag icon={tagIcon}>{tag}</CategoryTag>
             <div className="mt-2 flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <h2 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
-                {title}
-              </h2>
+              {/* `BANNER_TITLE` et non `SECTION_TITLE` : niveau intermédiaire
+                  assumé, le CTA partage cette ligne (cf. typography.ts). */}
+              <h2 className={`${BANNER_TITLE} text-foreground`}>{title}</h2>
               {action === 'assistant' ? (
                 <AssistantButton label={ctaLabel} icon={ctaIcon} />
               ) : (
                 <GuideButton label={ctaLabel} icon={ctaIcon} variant="solid" />
               )}
             </div>
-            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{text}</p>
+            <p className={`mt-2 ${CARD_BODY} text-muted-foreground`}>{text}</p>
           </div>
         </div>
       </div>

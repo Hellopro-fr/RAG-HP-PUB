@@ -131,8 +131,11 @@ export function HubTemplate({ page, headerCategories = [] }: HubTemplateProps) {
         </div>
       </main>
 
-      {/* `hub` isole les pages projet des pages conseils dans GA4. */}
-      <GtmFooterScripts breadcrumb={page.breadcrumb} pageTemplate="hub" />
+      {/* `page_hub` isole les pages projet des pages conseils dans GA4.
+          ⚠️ Valeur arbitrée le 2026-08-05 : elle sert de filtre dans les rapports
+          GA4 et les segments déjà construits. La changer casse ces rapports
+          silencieusement — aucune erreur, juste des chiffres à zéro. */}
+      <GtmFooterScripts breadcrumb={page.breadcrumb} pageTemplate="page_hub" />
 
       {/* ⚠️ NE PAS ajouter <ScrollToTopButton /> ici : SiteFooter le rend déjà,
           positionné dans sa propre grille. Le bouton n'est pas `fixed` — le

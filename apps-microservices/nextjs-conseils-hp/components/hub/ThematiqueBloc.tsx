@@ -2,6 +2,13 @@ import Image from 'next/image';
 import { HubSection, CategoryTag, HubIcon, CheckBullet } from './primitives';
 import { CardCarousel } from './CardCarousel';
 import { AssistantButton, GuideButton } from './triggers';
+import {
+  CARD_BODY,
+  CARD_TITLE,
+  FEATURE_TITLE,
+  LINK_LABEL,
+  SECTION_SUBTITLE,
+} from './typography';
 import { sanitizeHubHtml } from '@/lib/hub/sanitize';
 import type { HubInfoCard, HubOverlayCard, HubThematique } from '@/types/hub';
 
@@ -29,7 +36,9 @@ export function ThematiqueBloc({
       <CategoryTag icon={data.tagIcon}>{data.tag}</CategoryTag>
 
       {data.intro && (
-        <p className="mt-3 max-w-3xl text-base text-muted-foreground">{data.intro}</p>
+        // Même échelle que le chapeau des sections centrées : c'est le même rôle,
+        // seul l'alignement diffère.
+        <p className={`mt-3 max-w-3xl ${SECTION_SUBTITLE} text-muted-foreground`}>{data.intro}</p>
       )}
 
       <div className="mt-6">
@@ -96,20 +105,18 @@ function OverlayCard({ data }: { data: HubOverlayCard }) {
       <div className="absolute inset-0 bg-gradient-to-br from-black/95 via-black/70 to-black/30" />
       <div className="relative flex h-full flex-col justify-center p-7 sm:p-9">
         <span className="mb-4 block h-1 w-10 rounded-full bg-cta" />
-        <h3 className="max-w-md text-2xl font-bold leading-tight text-white sm:text-3xl">
-          {data.title}
-        </h3>
+        <h3 className={`max-w-md ${FEATURE_TITLE} text-white`}>{data.title}</h3>
         {/* `intro` et les puces acceptent du HTML restreint (gras sur les chiffres
             clés). Toujours assaini — cf. lib/hub/sanitize.ts. */}
         {data.intro && (
           <p
-            className="mt-4 max-w-md text-sm leading-relaxed text-white/85 [&_strong]:font-semibold [&_strong]:text-white"
+            className={`mt-4 max-w-md ${CARD_BODY} text-white/85 [&_strong]:font-semibold [&_strong]:text-white`}
             dangerouslySetInnerHTML={{ __html: sanitizeHubHtml(data.intro) }}
           />
         )}
         <ul className="mt-6 space-y-3">
           {data.bullets.map((bullet) => (
-            <li key={bullet} className="flex items-start gap-3 text-sm text-white">
+            <li key={bullet} className={`flex items-start gap-3 ${CARD_BODY} text-white`}>
               <CheckBullet />
               <span
                 className="[&_strong]:font-semibold [&_strong]:text-white"
@@ -169,7 +176,7 @@ function InfoCard({ data }: { data: HubInfoCard }) {
             <HubIcon name={data.icon} />
           </span>
         )}
-        <h3 className="text-[17px] font-bold leading-snug text-foreground">{data.title}</h3>
+        <h3 className={`${CARD_TITLE} text-foreground`}>{data.title}</h3>
       </div>
 
       {data.descriptionHtml ? (
@@ -177,12 +184,12 @@ function InfoCard({ data }: { data: HubInfoCard }) {
         // bleu leur donnait une fausse apparence de cliquable. Seules les icônes
         // restent bleues dans ce bloc.
         <div
-          className="mt-3 text-sm leading-relaxed text-muted-foreground [&_strong]:font-semibold [&_strong]:text-foreground"
+          className={`mt-3 ${CARD_BODY} text-muted-foreground [&_strong]:font-semibold [&_strong]:text-foreground`}
           dangerouslySetInnerHTML={{ __html: sanitizeHubHtml(data.descriptionHtml) }}
         />
       ) : (
         data.description && (
-          <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{data.description}</p>
+          <p className={`mt-3 ${CARD_BODY} text-muted-foreground`}>{data.description}</p>
         )
       )}
 
@@ -193,7 +200,7 @@ function InfoCard({ data }: { data: HubInfoCard }) {
             {data.href ? (
               <a
                 href={data.href}
-                className="flex w-full items-center justify-between gap-3 text-sm font-semibold text-foreground hover:underline"
+                className={`flex w-full items-center justify-between gap-3 ${LINK_LABEL} text-foreground hover:underline`}
               >
                 <span>{data.linkLabel}</span>
                 <HubIcon name="arrow-right" className="h-4 w-4" />
@@ -230,7 +237,7 @@ function ArticleLink({ href }: { href?: string }) {
   return (
     <a
       href={href}
-      className="inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline"
+      className={`inline-flex items-center gap-2 ${LINK_LABEL} text-primary hover:underline`}
     >
       Lire l’article
       <HubIcon name="arrow-right" className="h-4 w-4" />
@@ -259,7 +266,7 @@ function ArticleCard({ data }: { data: HubInfoCard }) {
         </div>
       )}
       <div className="flex flex-1 flex-col p-5">
-        <h4 className="text-base font-bold leading-snug text-foreground">{data.title}</h4>
+        <h4 className={`${CARD_TITLE} text-foreground`}>{data.title}</h4>
         {/* CTA guide par carte retiré en attendant la modif serveur (formulaire guide).
             « Lire l'article » seul pour l'instant. */}
         <div className="mt-auto flex pt-5">

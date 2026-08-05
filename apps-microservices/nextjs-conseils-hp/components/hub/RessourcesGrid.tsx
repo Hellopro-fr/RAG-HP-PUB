@@ -1,6 +1,7 @@
 import Image from 'next/image';
 import { HubSection, HubIcon } from './primitives';
 import { AssistantButton } from './triggers';
+import { CARD_TITLE, LINK_LABEL, SECTION_SUBTITLE, SECTION_TITLE, TAG } from './typography';
 import { HUB_SECTION_IDS } from '@/lib/hub/anchors';
 import type { HubIconName, HubRessources } from '@/types/hub';
 
@@ -26,10 +27,8 @@ export function RessourcesGrid({ data }: { data: HubRessources }) {
   return (
     <HubSection id={HUB_SECTION_IDS.ressources}>
       <div className="mx-auto max-w-3xl text-center">
-        <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-          {data.title}
-        </h2>
-        <p className="mt-3 text-base text-muted-foreground sm:text-lg">{data.subtitle}</p>
+        <h2 className={`${SECTION_TITLE} text-foreground`}>{data.title}</h2>
+        <p className={`mt-3 ${SECTION_SUBTITLE} text-muted-foreground`}>{data.subtitle}</p>
       </div>
 
       <div className="mt-10 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
@@ -54,16 +53,18 @@ export function RessourcesGrid({ data }: { data: HubRessources }) {
               </div>
             )}
             <div className="flex flex-1 flex-col gap-3 p-5">
-              <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-primary">
+              <span
+                className={`inline-flex w-fit items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-primary ${TAG}`}
+              >
                 <HubIcon name={TAG_ICONS[item.tag]} className="h-3 w-3" />
                 {item.tag}
               </span>
-              <h3 className="text-base font-bold leading-snug text-foreground">{item.title}</h3>
+              <h3 className={`${CARD_TITLE} text-foreground`}>{item.title}</h3>
               <div className="mt-auto">
                 {item.href ? (
                   <a
                     href={item.href}
-                    className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline"
+                    className={`inline-flex items-center gap-1.5 ${LINK_LABEL} text-primary hover:underline`}
                   >
                     En savoir plus
                     <HubIcon name="arrow-right" className="h-4 w-4" />

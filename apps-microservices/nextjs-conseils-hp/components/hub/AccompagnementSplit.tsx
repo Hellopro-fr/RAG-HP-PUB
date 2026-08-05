@@ -1,5 +1,6 @@
 import Image from 'next/image';
 import { HubSection, HubIcon } from './primitives';
+import { CHECK_ITEM, PROSE, SECTION_TITLE } from './typography';
 import { sanitizeHubHtml } from '@/lib/hub/sanitize';
 import { HUB_SECTION_IDS } from '@/lib/hub/anchors';
 import type { HubAccompagnement } from '@/types/hub';
@@ -27,10 +28,14 @@ export function AccompagnementSplit({ data }: { data: HubAccompagnement }) {
               data.image ? 'lg:col-span-5' : 'lg:col-span-8'
             }`}
           >
-            <h2 className="text-2xl font-bold tracking-tight text-foreground">{data.title}</h2>
+            {/* `SECTION_TITLE` comme les 8 autres sections. Ce titre était le seul
+                en `text-2xl` sans palier `sm:` — un bloc pleine largeur avec un
+                titre d'un cran plus petit que ses voisins, d'où l'impression de
+                changement de typo en scrollant. */}
+            <h2 className={`${SECTION_TITLE} text-foreground`}>{data.title}</h2>
             {/* HTML restreint : le texte de référence compte deux paragraphes. */}
             <div
-              className="space-y-3 text-muted-foreground [&_strong]:font-semibold [&_strong]:text-foreground"
+              className={`space-y-3 ${PROSE} text-muted-foreground [&_strong]:text-foreground`}
               dangerouslySetInnerHTML={{ __html: sanitizeHubHtml(data.text) }}
             />
           </div>
@@ -39,7 +44,7 @@ export function AccompagnementSplit({ data }: { data: HubAccompagnement }) {
             {data.points.map((point) => (
               <div key={point} className="flex items-start gap-2.5">
                 <HubIcon name="check-circle" className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
-                <span className="text-sm font-medium text-foreground">{point}</span>
+                <span className={`${CHECK_ITEM} text-foreground`}>{point}</span>
               </div>
             ))}
           </div>

@@ -1,6 +1,7 @@
 import Image from 'next/image';
 import { HubSection, HubIcon, HubTitle } from './primitives';
 import { GuideButton } from './triggers';
+import { CHECK_ITEM, META, SECTION_SUBTITLE, SECTION_TITLE, TAG } from './typography';
 import { HUB_SECTION_IDS } from '@/lib/hub/anchors';
 import type { HubFinalCta } from '@/types/hub';
 
@@ -36,11 +37,13 @@ export function FinalCta({ data }: { data: HubFinalCta }) {
           )}
 
           <div className="min-w-0 text-center lg:text-left">
-            <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-white">
+            <span
+              className={`inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-white ${TAG}`}
+            >
               {data.badge}
             </span>
 
-            <h2 className="mt-4 text-3xl font-bold leading-tight tracking-tight text-white sm:text-4xl">
+            <h2 className={`mt-4 ${SECTION_TITLE} text-white`}>
               <HubTitle parts={data.titleParts} />
             </h2>
 
@@ -48,13 +51,11 @@ export function FinalCta({ data }: { data: HubFinalCta }) {
 
             {/* `max-w-[42rem]` et non `max-w-2xl` : ce token vaut 1400px ici
                 (cf. --container-2xl dans globals.css). */}
-            <p className="mt-4 max-w-[42rem] text-sm leading-relaxed text-white/80 sm:text-base">
-              {data.text}
-            </p>
+            <p className={`mt-4 max-w-[42rem] ${SECTION_SUBTITLE} text-white/80`}>{data.text}</p>
 
             <ul className="mt-5 flex flex-wrap justify-center gap-x-6 gap-y-3 lg:justify-start">
               {data.items.map((item) => (
-                <li key={item.label} className="flex items-center gap-2 text-sm text-white">
+                <li key={item.label} className={`flex items-center gap-2 ${CHECK_ITEM} text-white`}>
                   <span className="grid h-8 w-8 place-items-center rounded-full bg-white/10">
                     <HubIcon name={item.icon} className="h-4 w-4 text-white" />
                   </span>
@@ -75,7 +76,7 @@ export function FinalCta({ data }: { data: HubFinalCta }) {
               variant="solid"
               className="h-14 w-full px-8 text-base lg:w-auto"
             />
-            <p className="flex items-center gap-1.5 text-xs text-white/70">
+            <p className={`flex items-center gap-1.5 ${META} text-white/70`}>
               <HubIcon name="shield" className="h-3.5 w-3.5" />
               {data.reassurance}
             </p>

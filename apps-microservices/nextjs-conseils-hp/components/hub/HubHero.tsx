@@ -1,5 +1,6 @@
 import Image from 'next/image';
 import { HubIcon, HubTitle } from './primitives';
+import { PAGE_TITLE, SECTION_SUBTITLE } from './typography';
 import type { HubHero as HubHeroData } from '@/types/hub';
 
 /**
@@ -53,11 +54,11 @@ export function HubHero({
               {data.badge}
             </span>
 
-            <h1 className="mt-5 text-4xl font-bold leading-[1.05] tracking-tight text-white sm:text-5xl lg:text-6xl">
+            <h1 className={`mt-5 ${PAGE_TITLE} text-white`}>
               <HubTitle parts={data.titleParts} />
             </h1>
 
-            <p className="mt-5 max-w-[42rem] text-base text-white/80 sm:text-lg">
+            <p className={`mt-5 max-w-[42rem] ${SECTION_SUBTITLE} text-white/80`}>
               {data.subtitle}
             </p>
 

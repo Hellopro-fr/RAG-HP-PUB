@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { HubTitle } from './primitives';
+import { DIALOG_TITLE } from './typography';
 import { CoordinatesStep, DownloadStep } from './GuideSteps';
 import { useGuideLead } from '@/lib/hub/useGuideLead';
 import { getRememberedEmail } from '@/lib/hub/leadEmailCookie';
@@ -104,7 +105,7 @@ export function GuideDownloadDialog({
         <div className="px-6 py-5 sm:px-8">
           {lead.phase === 'email' && (
             <>
-              <h2 className="mx-auto mb-6 max-w-sm px-6 text-center text-xl font-bold leading-snug text-foreground sm:text-2xl">
+              <h2 className={`mx-auto mb-6 max-w-sm px-6 text-center ${DIALOG_TITLE} text-foreground`}>
                 <HubTitle parts={data.titleParts} />
               </h2>
 

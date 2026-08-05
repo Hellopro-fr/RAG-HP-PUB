@@ -1,4 +1,5 @@
 import { resolveHubIcon } from '@/lib/hub/icons';
+import { TAG } from './typography';
 import type { HubIconName, HubTitlePart } from '@/types/hub';
 
 /**
@@ -30,7 +31,9 @@ export function HubSection({ id, className = '', compact = false, children }: Hu
 /** Pastille de rubrique (« Budget & financement », « Équipements »…). */
 export function CategoryTag({ icon, children }: { icon?: HubIconName; children: React.ReactNode }) {
   return (
-    <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-primary">
+    <span
+      className={`inline-flex w-fit items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-primary ${TAG}`}
+    >
       <HubIcon name={icon} className="h-3.5 w-3.5" />
       {children}
     </span>

@@ -445,8 +445,6 @@ server {
 
 Tailwind 4 génère automatiquement les classes `bg-primary`, `text-primary-foreground`, `bg-accent`, etc.
 
-### 7.2 Classes Tailwind autorisées
-
 ### 7.1bis ⚠️ `max-w-2xl` vaut 1400px dans ce projet — ne pas l'utiliser
 
 `globals.css` définit `--container-2xl: 1400px` pour la largeur de page. En
@@ -461,6 +459,41 @@ flotter dans le vide.
 **Règle** : pour une largeur de lecture, écrire la valeur explicitement —
 `max-w-[42rem]`. Les autres échelons (`max-w-sm/md/lg/xl/3xl/7xl`) ne sont pas
 redéfinis et se comportent normalement ; seul `2xl` est piégé.
+
+### 7.1ter Échelle typographique du HUB — `components/hub/typography.ts`
+
+**Aucune classe `text-<taille>` en dur sur un titre d'un composant
+`components/hub/`.** Les tailles viennent des constantes de
+`components/hub/typography.ts` : `PAGE_TITLE`, `SECTION_TITLE`, `SECTION_SUBTITLE`,
+`BANNER_TITLE`, `FEATURE_TITLE`, `CARD_TITLE`, `CARD_BODY`, `PROSE`,
+`DIALOG_TITLE`, `TAG`, `LINK_LABEL`, `CHECK_ITEM`, `TILE_LABEL`, `META`.
+
+Pourquoi : les tailles avaient été portées bloc par bloc depuis le prototype
+Lovable. Mesure avant correction — **3 échelles de titre de section** (`text-3xl
+sm:text-4xl`, `text-2xl`, `text-xl sm:text-2xl`) et **4 de titre de carte**
+(`text-lg`, `text-[17px]`, `text-base`, `text-2xl sm:text-3xl`) pour 6 niveaux de
+hiérarchie réels. En scrollant, l'œil lit un changement de police à chaque bloc.
+Chaque valeur prise isolément était défendable : c'est un défaut de cohérence, pas
+de goût, et il ne se corrige donc qu'en un seul endroit.
+
+Deux règles à ne pas contourner :
+
+- **Aucune couleur dans les constantes.** Le même niveau sert sur fond clair et sur
+  aplat foncé (`FinalCta`, `OverlayCard`, hero). Et concaténer deux classes de
+  couleur Tailwind ne les départage pas de façon déterministe — c'est l'ordre dans
+  la feuille compilée qui tranche, pas l'ordre dans l'attribut. La couleur reste au
+  point d'appel.
+- **Un nouveau niveau se justifie par écrit** dans le fichier, ou n'existe pas.
+
+`__tests__/components/hub/typography.test.ts` échoue sur toute classe de taille
+écrite en dur dans un `<h1>`..`<h4>` de `components/hub/`.
+
+Deux exclusions assumées, listées dans le test :
+
+| Fichier | Raison |
+|---|---|
+| `components/hub/AssistantForm.tsx` | Questionnaire du hero — laissé tel quel sur demande. Retirer la ligne du test dira ce qu'il reste à convertir. |
+| `components/conseil/blocks/FaqBlock.tsx` | Partagé avec les pages conseils : le modifier changerait tout le template conseils. Rend son titre en `text-3xl font-extrabold` sans palier `sm:` — seul écart typographique restant en bas de page HUB. |
 
 ### 7.2 Classes Tailwind autorisées
 
@@ -650,7 +683,12 @@ Les pages HUB réutilisent `SiteHeader`, `SiteFooter`, `GtmFooterScripts`,
 footer** du prototype Lovable.
 
 `GtmFooterScripts` accepte une prop optionnelle **`pageTemplate`** (défaut
-`'conseils'`) : les pages HUB passent `'hub'` pour être isolables dans GA4.
+`'conseils'`) : les pages HUB passent **`'page_hub'`** pour être isolables dans GA4.
+
+⚠️ Cette valeur est un **contrat avec GA4**, pas un libellé interne : des filtres et
+segments sont construits dessus. La changer met les rapports à zéro sans lever
+d'erreur. Verrouillée par `__tests__/components/hub/HubTemplate.test.tsx`.
+Plan de tracking complet : `docs/tracking-hub.md`.
 
 ### 11bis.4 Composants
 

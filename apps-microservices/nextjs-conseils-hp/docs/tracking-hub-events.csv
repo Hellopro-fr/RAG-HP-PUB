@@ -1,0 +1,25 @@
+Groupe;#;Evenement;Declencheur;Point de code;Parametres specifiques;Priorite
+Tunnel Projet;1;hub_form_view;Etape 1 inline visible dans le hero (IntersectionObserver, une seule fois);AssistantForm.tsx - bloc inline hero;form_id=assistant / entry_point=hero / step_name=projet;P1
+Tunnel Projet;2;hub_form_start;Premiere reponse cochee (1er appel a selectOption);AssistantForm.tsx selectOption();answer_label / step_name;P1
+Tunnel Projet;3;hub_form_step;Affichage d'une etape du dialog - DEDUPLIQUE par step_name;AssistantForm.tsx setStep;step_index (0-based) / step_name (projet|volume|budget|delai) / step_total;P1
+Tunnel Projet;4;hub_form_email_view;Etape e-mail affichee;AssistantForm.tsx isContact;-;P1
+Tunnel Projet;5;hub_form_email_submit;Soumission e-mail valide - APPEL 1 parti;AssistantForm.tsx send(false);-;P1
+Tunnel Projet;6;hub_email_check;RECEPTION de la reponse de l'APPEL 1 - c'est l'aiguillage du parcours;AssistantForm.tsx send() apres await;result (known|unknown);P1
+Tunnel Projet;7;hub_form_coordinates_view;Etape coordonnees affichee - BRANCHE UNKNOWN UNIQUEMENT;AssistantForm.tsx;-;P1
+Tunnel Projet;8;hub_form_coordinates_submit;Soumission coordonnees - APPEL 2 - BRANCHE UNKNOWN UNIQUEMENT;AssistantForm.tsx send(true);-;P1
+Tunnel Projet;9;hub_lead;Branche succes: res.status===201 OU corps.statut==='enregistre' - JAMAIS sur le seul code HTTP;AssistantForm.tsx:168;lead_path (complet|reconnu) / steps_answered / user_known_status;P1
+Tunnel Projet;10;hub_form_error;Branches console.error de send();AssistantForm.tsx:179 et :183;error_stage (email|coordinates) / http_status;P2
+Tunnel Projet;11;hub_form_abandon;Fermeture du dialog avant hub_lead;AssistantForm.tsx onOpenChange;last_step_name / last_step_index;P1
+Tunnel Guide;12;hub_form_view;Ouverture du dialog guide;GuideDownloadDialog.tsx handler;form_id=guide / entry_point;P2
+Tunnel Guide;13;hub_form_email_submit;Soumission e-mail - APPEL 1;useGuideLead.ts send(false);entry_point;P2
+Tunnel Guide;14;hub_email_check;RECEPTION de la reponse de l'APPEL 1;useGuideLead.ts send() apres await;result (known|unknown) / entry_point;P2
+Tunnel Guide;15;hub_form_coordinates_submit;Soumission coordonnees - APPEL 2 - BRANCHE UNKNOWN UNIQUEMENT;useGuideLead.ts send(true);entry_point;P2
+Tunnel Guide;16;hub_lead;Phase passe a 'download' (res.status===201 OU statut==='enregistre');useGuideLead.ts:100;lead_path / entry_point / user_known_status;P2
+Tunnel Guide;17;hub_guide_popup_view;Pop-up de capture affichee au scroll (depassement de #nos-ressources);LeadPopup.tsx onScroll;trigger_section_id;P2
+Tunnel Guide;18;hub_guide_download;Telechargement du guide - emis AUSSI depuis le tunnel projet (hub_group dit d'ou);GuideSteps.tsx DownloadStep + useAutoDownload;download_trigger (auto|manual) / lead_path;P2
+Tunnel Guide;19;hub_guide_shortcut;Cookie hub_lead_email=1 present - telechargement DIRECT sans etape e-mail ni appel API;GuideDownloadDialog / LeadPopup - garde avant ouverture;entry_point;P1
+Engagement (pas un tunnel);20;hub_article_click;Clic vers conseils.hellopro.fr (20 liens sur la page 1000);ThematiqueBloc / RessourcesGrid / GrandesEtapes;article_url / article_id / source_block;P3
+Engagement (pas un tunnel);-;(scroll depth);NE RIEN CODER - declencheur natif du conteneur deja actif (seuils 25% et 50% observes);GTM;segmenter par page_template=page_hub;-
+ECARTES;-;hub_nav_click;Clic sur le sommaire sticky;-;A rouvrir si le POC tourne et qu'il faut expliquer un taux decevant;-
+ECARTES;-;hub_section_view;Section visible >= 50%;-;idem;-
+ECARTES;-;hub_carousel_scroll;Fleches ou dots du carrousel;-;idem;-

@@ -97,13 +97,20 @@ describe('HubTemplate', () => {
 
   /**
    * Sans GtmFooterScripts, les pages HUB ne remontent AUCUN événement.
-   * Et `pageTemplate="hub"` est ce qui permet de les isoler des pages conseils
-   * dans les rapports GA4 : une régression ici mélangerait les deux périmètres.
+   * Et `pageTemplate="page_hub"` est ce qui permet de les isoler des pages
+   * conseils dans les rapports GA4 : une régression ici mélangerait les deux
+   * périmètres.
+   *
+   * ⚠️ La valeur exacte est un CONTRAT avec GA4 (filtres et segments déjà
+   * construits dessus), pas un détail d'implémentation : la modifier sans
+   * reprendre les rapports les met à zéro sans lever d'erreur. D'où l'assertion
+   * sur la chaîne littérale et non sur une constante importée du composant, qui
+   * suivrait le changement en silence.
    */
-  it('déclare page_template = "hub" et transmet le fil d’ariane', () => {
+  it('déclare page_template = "page_hub" et transmet le fil d’ariane', () => {
     render(<HubTemplate page={page} />);
     const gtm = screen.getByTestId('gtm');
-    expect(gtm.getAttribute('data-page-template')).toBe('hub');
+    expect(gtm.getAttribute('data-page-template')).toBe('page_hub');
     expect(gtm.getAttribute('data-breadcrumb-length')).toBe(String(page.breadcrumb.length));
   });
 

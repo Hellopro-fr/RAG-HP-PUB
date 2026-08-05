@@ -1,5 +1,6 @@
 import { ChevronRight } from 'lucide-react';
 import { HubSection, HubIcon } from './primitives';
+import { CARD_BODY, CARD_TITLE, SECTION_TITLE } from './typography';
 import { HUB_SECTION_IDS } from '@/lib/hub/anchors';
 import type { HubHowItWorks as HubHowItWorksData } from '@/types/hub';
 
@@ -19,9 +20,7 @@ export function HowItWorks({ data }: { data: HubHowItWorksData }) {
   return (
     <HubSection id={HUB_SECTION_IDS.howItWorks}>
       <div className="mx-auto max-w-3xl text-center">
-        <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-          {data.title}
-        </h2>
+        <h2 className={`${SECTION_TITLE} text-foreground`}>{data.title}</h2>
       </div>
 
       <ol className="mt-10 flex flex-col items-stretch gap-5 lg:flex-row">
@@ -31,10 +30,10 @@ export function HowItWorks({ data }: { data: HubHowItWorksData }) {
               <span className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary">
                 <HubIcon name={step.icon} className="h-6 w-6" />
               </span>
-              <h3 className="mt-5 text-base font-bold text-foreground">
+              <h3 className={`mt-5 ${CARD_TITLE} text-foreground`}>
                 {index + 1}. {step.title}
               </h3>
-              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{step.desc}</p>
+              <p className={`mt-2 ${CARD_BODY} text-muted-foreground`}>{step.desc}</p>
             </div>
 
             {index < data.steps.length - 1 && (

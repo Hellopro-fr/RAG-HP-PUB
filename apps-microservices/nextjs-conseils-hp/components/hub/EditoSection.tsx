@@ -1,18 +1,14 @@
 import { HubSection } from './primitives';
 import { sanitizeHubHtml } from '@/lib/hub/sanitize';
+import { PROSE as PROSE_SCALE, SECTION_TITLE } from './typography';
 import type { HubEdito } from '@/types/hub';
 
 /**
- * Typographie UNIQUE du bloc éditorial : une seule taille, une seule couleur, le
- * gras dans la même couleur que le texte courant.
- *
- * Le bloc en comptait trois combinaisons — paragraphes en gris `text-base`, puces
- * en noir `text-base`, encart « À noter » en gris `text-sm` — plus des pastilles
- * bleues. À la lecture, ça donnait l'impression de plusieurs polices sur une même
- * section. Toute nuance de hiérarchie doit désormais passer par la structure
- * (titre, cadre de l'encart), pas par la couleur ou la taille du texte.
+ * Typographie du bloc : la constante `PROSE` de l'échelle partagée, plus la
+ * couleur (la couleur n'est jamais dans l'échelle — cf. `typography.ts`).
+ * Une seule taille, une seule couleur, le gras dans la couleur du texte courant.
  */
-const PROSE = 'text-base leading-relaxed text-foreground [&_strong]:font-semibold';
+const PROSE = `${PROSE_SCALE} text-foreground`;
 
 /**
  * Section éditoriale — le contenu SEO de la page.
@@ -29,9 +25,7 @@ export function EditoSection({ data }: { data: HubEdito }) {
   return (
     <HubSection id={data.id} compact>
       <div className="mx-auto max-w-3xl">
-        <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-          {data.title}
-        </h2>
+        <h2 className={`${SECTION_TITLE} text-foreground`}>{data.title}</h2>
 
         {/* `intro`, `items` et `note` acceptent du HTML restreint, comme `bodyHtml` :
             les chiffres clés et les intitulés de puce sont mis en gras au milieu

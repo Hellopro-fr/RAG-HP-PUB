@@ -1,5 +1,6 @@
 import Image from 'next/image';
 import { HubSection, HubIcon } from './primitives';
+import { SECTION_TITLE, TILE_LABEL } from './typography';
 import { HUB_SECTION_IDS } from '@/lib/hub/anchors';
 import type { HubGrandeEtape } from '@/types/hub';
 
@@ -17,9 +18,7 @@ export function GrandesEtapes({
   return (
     <HubSection id={HUB_SECTION_IDS.grandesEtapes} className="bg-surface">
       <div className="mx-auto max-w-3xl text-center">
-        <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-          {data.title}
-        </h2>
+        <h2 className={`${SECTION_TITLE} text-foreground`}>{data.title}</h2>
       </div>
 
       <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
@@ -42,7 +41,9 @@ export function GrandesEtapes({
                   <HubIcon name="compass" className="h-9 w-9" />
                 </div>
               )}
-              <div className="px-4 py-4 text-center text-sm font-semibold text-foreground">
+              {/* Légende de vignette : niveau à part, et non `CARD_TITLE` — cinq
+                  tuiles par rangée, un titre de carte y déborderait sur trois lignes. */}
+              <div className={`px-4 py-4 text-center ${TILE_LABEL} text-foreground`}>
                 {item.label}
               </div>
             </>

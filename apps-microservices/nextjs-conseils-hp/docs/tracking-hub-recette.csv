@@ -1,0 +1,31 @@
+#;Groupe;Scenario;Action;Attendu;Statut
+1;Socle;Chargement de page;Charger la page 1000;page_template=page_hub (et non "hub") / product.category1=Agriculture / product.category5=Elevage-avicole;A tester
+2;Socle;Consentement refuse;Cliquer "Continuer sans accepter";consent update avec les 4 signaux en denied;OK 2026-08-04
+3;Socle;page_view double property;DebugView de G-DQTV4SHNME;EXACTEMENT UN page_view par chargement - ni zero ni deux;A tester
+4;Socle;Non-regression conseils;DebugView de G-DQTV4SHNME sur une page conseils classique;EXACTEMENT UN page_view et page_template=conseils - le changement de tag de config ne doit rien casser;A tester
+5;Projet;Impression formulaire;Scroller jusqu'au hero;1 x hub_form_view - jamais 2 sur un aller-retour de scroll;A tester
+6;Projet;Demarrage;Cocher la 1ere reponse;1 x hub_form_start avec answer_label = libelle exact du choix;A tester
+7;Projet;Etapes;Derouler les 4 questions;4 x hub_form_step avec step_name distincts - AUCUN doublon;A tester
+8;Projet;Retour arriere;Cliquer "Retour" puis re-avancer;PAS de 2e hub_form_step pour la meme etape (deduplication par step_name);A tester
+9;Projet;Aiguillage inconnu;Soumettre un e-mail JAMAIS vu du serveur;hub_form_email_submit puis hub_email_check result=unknown puis hub_form_coordinates_view;A tester
+10;Projet;Aiguillage connu;Soumettre un e-mail DEJA en base cote serveur (sans cookie sur la machine);hub_email_check result=known / AUCUN hub_form_coordinates_view / hub_lead lead_path=reconnu / hub_guide_download;A tester
+11;Projet;Cookie != verite serveur;Meme test que 10 depuis un navigateur vierge;user_known_status=Known - preuve que la valeur vient de la reponse serveur et non du cookie absent;A tester
+12;Projet;Conversion complete;Completer les coordonnees;1 x hub_lead / hub_group=projet / id_page_hub=1000 / lead_path=complet;A tester
+13;Projet;PDF depuis le tunnel projet;Atteindre l'ecran de remerciement projet;hub_guide_download avec hub_group=projet - le PDF est delivre dans les DEUX tunnels;A tester
+14;Projet;Anti-double-comptage;Cliquer 2x rapidement sur le bouton de soumission;1 SEUL hub_lead (verrou submitting deja en place);A tester
+15;Projet;Abandon;Fermer le dialog a l'etape 3;1 x hub_form_abandon avec last_step_name=budget et AUCUN hub_lead;A tester
+16;Projet;Erreur technique;Simuler une reponse 500 de /api/demande;hub_form_error http_status=500 / AUCUN hub_lead / AUCUN hub_email_check;A tester
+17;Guide;Portes d'entree;Ouvrir le dialog depuis les 4 emplacements;entry_point = banner_guide | cta_final | bloc_thematique | popup_scroll selon le cas;A tester
+18;Guide;Conversion guide;Completer le parcours guide;hub_lead / hub_group=guide / id_page_hub=2000 (et non 1000);A tester
+19;Guide;Raccourci deja converti;Poser hub_lead_email=1 puis cliquer un bouton guide;hub_guide_shortcut + hub_guide_download lead_path=deja_converti / AUCUN hub_lead / AUCUN appel API / AUCUNE etape e-mail;A tester
+20;Guide;Pas de lead fantome;Rejouer le scenario 19 trois fois;3 x hub_guide_download et TOUJOURS 0 hub_lead - un re-telechargement n'est pas une conversion;A tester
+21;Guide;Telechargement auto;Atteindre l'ecran de remerciement;hub_guide_download download_trigger=auto puis manual au clic sur le bouton de repli;A tester
+22;Guide;Pop-up une fois par onglet;Scroller au-dela de #nos-ressources puis recharger la page;1 seul hub_guide_popup_view au 1er passage - aucun apres rechargement dans le meme onglet;A tester
+23;Guide;Pop-up nouvel onglet;Ouvrir la meme URL dans un nouvel onglet et scroller;hub_guide_popup_view se declenche A NOUVEAU - sessionStorage est par onglet donc plusieurs impressions dans UNE SEULE session GA4;A tester
+24;Transverse;Separation des tunnels;Faire les 2 parcours dans la meme session;2 x hub_lead avec le MEME session_id et des id_page_hub differents (1000 puis 2000);A tester
+25;Transverse;Groupe sur tous les events;Inspecter chaque push du parcours;hub_group present sur 100% des evenements hub_* - aucune valeur vide;A tester
+26;Transverse;Non-contamination;Faire un parcours HUB complet;AUCUN quote_form_funnel / quote_funnel_validation / Popup_Appel_Offre / eec.add;A tester
+27;Transverse;Absence de PII;Inspecter tous les pushes du parcours;aucun e-mail, telephone, nom, prenom, code postal ni civilite - meme haches;A tester
+28;Transverse;Maillage;Cliquer un lien "Lire l'article";hub_article_click avec article_id extrait du slug (ex. 5297) et source_block renseigne;A tester
+29;Transverse;Multi-pages;Rejouer 5 a 12 sur les pages 1001 et 1002;memes evenements avec hub_page_id et hub_page_slug differents;A tester
+30;Transverse;Nommage GA4;Inspecter le tag dans DebugView;le parametre s'appelle product_category5 et non product.category5;A tester
