@@ -31,17 +31,23 @@ def test_record_failure_tolerates_empty_cause():
 
 
 @pytest.mark.asyncio
-async def test_scrape_html_records_proxy_stage_without_leaking_secret():
+async def test_scrape_html_records_proxy_stage_without_leaking_secret(monkeypatch):
+    # _parse_proxy fait un urlparse() nu sans validation de format : la valeur
+    # ci-dessous lui serait en fait acceptée (elle ne rejette rien), donc on la
+    # patche pour forcer deterministiquement la branche 'proxy invalide'
+    # (scraper.py ~:397-400) sans dependre de Playwright ni du reseau.
+    monkeypatch.setattr(scraper, '_parse_proxy', lambda proxy: None)
     sink = {}
     result = await scraper.scrape_html(
         'https://example.com',
         proxy='http://auto:SUPERSECRET@proxy.apify.com:8000/broken',
         error_sink=sink,
     )
-    # _parse_proxy rejette cette valeur -> stage proxy
-    if result is None and sink.get('stage') == 'proxy':
-        assert 'SUPERSECRET' not in sink['cause']
-        assert 'proxy.apify.com' not in sink['cause']
+    assert result is None
+    assert sink['stage'] == 'proxy'
+    assert sink['cause'] == 'Proxy invalide (format non reconnu)'
+    assert 'SUPERSECRET' not in sink['cause']
+    assert 'proxy.apify.com' not in sink['cause']
 
 
 @pytest.mark.asyncio
