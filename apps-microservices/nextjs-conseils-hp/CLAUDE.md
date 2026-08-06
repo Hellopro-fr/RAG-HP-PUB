@@ -715,11 +715,12 @@ l'inventaire exhaustif des points de mesure ; un `dataLayer.push` éparpillé, n
   les événements. `hub_guide_download` est émis par les DEUX tunnels — le
   questionnaire offre aussi le guide.
 
-⚠️ **`hub_guide_shortcut` n'est pas encore branché** : le comportement cible
-(cookie `hub_lead_email=1` ⇒ téléchargement direct sans dialog ni appel API) est
-en cours d'implémentation ailleurs. Point d'accroche marqué en commentaire dans
-`GuideDownloadDialog.tsx`. Tant que ce n'est pas fait, un visiteur reconnu qui
-rouvre le dialog produit un `hub_form_submission` en double — cf. `docs/tracking-hub.md` §3.3.
+**Raccourci « lead déjà connu »** (cookie `hub_lead=1`, cf. `lib/hub/leadEmailCookie.ts`) :
+`GuideDownloadDialog` va directement à l'écran de téléchargement, **sans formulaire
+et sans appel API**. Ce parcours émet `hub_guide_shortcut` puis `hub_guide_download`
+(`lead_path: 'deja_converti'`) — et surtout **ni `hub_form_view`, ni `hub_email_check`,
+ni `hub_form_submission`** : un re-téléchargement n'est pas une conversion, et une
+vue de formulaire jamais présenté écraserait le taux du tunnel guide.
 
 ### 11bis.4 Composants
 
@@ -803,13 +804,14 @@ Objectif : valider la rentabilité du workflow, pas livrer une V1.
   (ex. 1000 → 2000), distinct du projet pour séparer les leads en stats.
   La route `/api/demande` rend `reponses`/`adresse` optionnels et déclare
   `civilite`/`pays`. `fileUrl` du PDF encore à `'#'` (asset à livrer).
-- **E-mail mémorisé (visiteur reconnu)** : à l'APPEL 1, l'e-mail est écrit dans un
-  cookie 30 j (`lib/hub/leadEmailCookie.ts`, `hub_lead_email`). Tant qu'il existe
-  et vaut un e-mail valide : ouvrir le dialog guide déclenche l'APPEL 1 **direct**
-  (saute l'étape e-mail) ; côté questionnaire projet, une fois les réponses finies
-  l'étape e-mail est **sautée** et l'APPEL 1 part directement → 201 → remerciement.
-  ⚠️ RGPD : ce cookie contient l'e-mail et est renvoyé à chaque requête du
-  sous-domaine — `localStorage` serait une alternative si la transmission pose problème.
+- **Lead connu (drapeau cookie)** : après un enregistrement réel (**201**), on pose
+  un cookie **drapeau** 30 j (`lib/hub/leadEmailCookie.ts`, `hub_lead=1`) — **jamais
+  l'e-mail** (le mail ne part que dans le corps de `POST /api/demande`, pas dans un
+  cookie renvoyé à chaque requête). Tant que le drapeau existe :
+  `GuideDownloadDialog` va **directement** à l'écran de téléchargement (sans appel,
+  puisqu'on n'a plus l'e-mail à ré-envoyer) ; `LeadPopup` **ne s'affiche pas** au
+  scroll. Le questionnaire projet (`AssistantForm`) **n'a PAS** ce raccourci :
+  l'étape e-mail y est **toujours** affichée. API : `markLeadKnown()` / `isLeadKnown()`.
 - **Téléchargement auto** : `lib/hub/useAutoDownload.ts` déclenche le download à
   l'affichage de l'écran de remerciement (guide, pop-up, projet). **No-op tant que
   `fileUrl = '#'`** ; cross-origin nécessitera `Content-Disposition: attachment`.

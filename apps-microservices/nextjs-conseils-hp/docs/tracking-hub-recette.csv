@@ -22,7 +22,7 @@
 21;Guide;Conversion guide;Completer le parcours guide;hub_form_submission / hub_group=guide / id_page_hub=2000 (et non 1000);A tester
 22;Guide;Erreur technique;Simuler une 500 pendant le parcours guide;hub_form_error avec hub_group=guide - absent de la version precedente du plan;A tester
 23;Guide;Abandon aux coordonnees;Fermer le dialog guide a l'etape coordonnees;hub_form_abandon last_step_name=coordinates / AUCUN hub_form_submission;A tester
-24;Guide;Raccourci deja converti;Poser hub_lead_email=1 puis cliquer un bouton guide;hub_guide_shortcut + hub_guide_download lead_path=deja_converti / AUCUN hub_form_submission / AUCUN appel API / AUCUNE etape e-mail;A tester
+24;Guide;Raccourci deja converti;Poser hub_lead=1 puis cliquer un bouton guide;hub_guide_shortcut + hub_guide_download lead_path=deja_converti / AUCUN hub_form_submission / AUCUN appel API / AUCUNE etape e-mail;A tester
 25;Guide;Pas de conversion fantome;Rejouer le scenario 24 trois fois;3 x hub_guide_download et TOUJOURS 0 hub_form_submission - un re-telechargement n'est pas une conversion;A tester
 26;Guide;Telechargement auto;Atteindre l'ecran de remerciement;hub_guide_download download_trigger=auto puis manual au clic sur le bouton de repli;A tester
 27;Guide;Pop-up une fois par onglet;Scroller au-dela de #nos-ressources puis recharger la page;1 seul hub_guide_popup_view au 1er passage - aucun apres rechargement dans le meme onglet;A tester

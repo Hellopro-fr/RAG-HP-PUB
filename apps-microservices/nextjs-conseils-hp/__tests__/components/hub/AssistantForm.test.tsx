@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { AssistantForm, openAssistantDialog } from '@/components/hub/AssistantForm';
 import { listHubPages } from '@/data/hub';
-import { rememberEmail } from '@/lib/hub/leadEmailCookie';
+import { markLeadKnown } from '@/lib/hub/leadEmailCookie';
 
 // PhoneField encapsule react-international-phone (+ son CSS) : on le mocke par un
 // input simple qui remonte toujours le pays « France » / indicatif « 33 ».
@@ -56,9 +56,8 @@ function renderShort(fetchResponses: MockResponse[] = [{ status: 200, body: {} }
 
 afterEach(() => {
   vi.restoreAllMocks();
-  // rememberEmail() pose un cookie que jsdom conserve entre tests : on le purge
-  // pour ne pas déclencher le raccourci « e-mail mémorisé » du test suivant.
-  document.cookie = 'hub_lead_email=; path=/; max-age=0';
+  // markLeadKnown() pose un cookie que jsdom conserve entre tests : on le purge.
+  document.cookie = 'hub_lead=; path=/; max-age=0';
 });
 
 describe('AssistantForm', () => {
@@ -227,8 +226,8 @@ describe('AssistantForm', () => {
    * Le questionnaire N'A PAS de raccourci « e-mail mémorisé » : même avec un
    * cookie, l'étape e-mail est TOUJOURS affichée.
    */
-  it('affiche toujours l’étape e-mail, même si un e-mail est mémorisé', async () => {
-    rememberEmail('connu@exemple.fr');
+  it('affiche toujours l’étape e-mail, même pour un lead connu', async () => {
+    markLeadKnown();
     const { short, fetchMock } = renderShort([{ status: 200, body: { statut: 'coordonnees_requises' } }]);
 
     await waitFor(() => expect(screen.getByLabelText(short.contact.label)).toBeDefined());

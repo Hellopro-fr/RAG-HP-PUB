@@ -80,7 +80,7 @@ function submitEmailStep() {
 
 afterEach(() => {
   vi.restoreAllMocks();
-  document.cookie = 'hub_lead_email=; path=/; max-age=0';
+  document.cookie = 'hub_lead=; path=/; max-age=0';
 });
 
 describe('LeadPopup', () => {

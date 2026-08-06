@@ -588,7 +588,7 @@ export const lancerElevagePoulesPondeuses: HubPage = {
   // Contenu intégralement partagé par les 3 pages HUB — cf. `_shared.ts`.
   faq: FAQ,
 
-  stickyCtaLabel: 'Obtenir mon kit projet',
+  stickyCtaLabel: 'Être accompagné gratuitement',
 
   /* ------------------------------------------------------------------ POC ---
      Les 3 formulaires ci-dessous sont portés en UI seule : aucune soumission
@@ -668,7 +668,7 @@ export const lancerElevagePoulesPondeuses: HubPage = {
         phone: 'Numéro de téléphone',
         postalCode: 'Code postal',
       },
-      submitLabel: 'Recevoir mon guide complet',
+      submitLabel: 'Continuer',
     },
     success: {
       title: 'Merci ! Votre projet est bien enregistré',

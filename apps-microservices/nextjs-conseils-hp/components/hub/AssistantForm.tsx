@@ -14,7 +14,7 @@ import { HubIcon } from './primitives';
 import { PhoneField } from './PhoneField';
 import { Confetti } from './Confetti';
 import { useAutoDownload } from '@/lib/hub/useAutoDownload';
-import { rememberEmail } from '@/lib/hub/leadEmailCookie';
+import { markLeadKnown } from '@/lib/hub/leadEmailCookie';
 import { isValidPhone } from '@/lib/hub/validation';
 import { pushHubEvent, pushHubEventOnce, questionStepName } from '@/lib/analytics/hub';
 import type { HubAssistant } from '@/types/hub';
@@ -198,8 +198,8 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
       if (res.status === 201 || corps?.statut === 'enregistre') {
         // ⚠️ `hub_form_submission` vit dans CETTE branche, et surtout PAS sous un
         // `res.status === 201` : l'API renvoie 200 + `statut:"enregistre"` sur
-        // certains environnements (constaté en recette). Se fier au seul code HTTP
-        // perdrait la conversion sans que rien ne le signale.
+        // certains environnements (vérifié en recette le 2026-08-05). Se fier au
+        // seul code HTTP perdrait la conversion sans que rien ne le signale.
         if (!withCoordinates) {
           // Succès dès l'appel 1 ⇒ le serveur connaissait le contact.
           pushHubEvent('hub_email_check', 'projet', { result: 'known' });
@@ -211,8 +211,8 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
           user_known_status: withCoordinates ? 'Unknown' : 'Known',
           steps_answered: answeredCount(),
         });
-        // Mémorise l'e-mail seulement après un enregistrement réel (201).
-        rememberEmail(emailOverride ?? email);
+        // Marque le drapeau « lead connu » (jamais l'e-mail) après un 201 réel.
+        markLeadKnown();
         setSubmitted(true); // succès : le bouton disparaît, on ne réactive pas.
         return;
       }
@@ -477,7 +477,7 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
             </DialogDescription>
           </DialogHeader>
 
-          <div className="pl-6 pr-14 pt-5 sm:pl-8">
+          <div className="pl-6 pr-14 pt-7 sm:pl-8">
             <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
               <div
                 className="h-full rounded-full bg-cta transition-all duration-500"

@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState } from 'react';
 import { isValidPhone } from './validation';
-import { rememberEmail } from './leadEmailCookie';
+import { markLeadKnown } from './leadEmailCookie';
 import { pushHubEvent, type HubEntryPoint } from '@/lib/analytics/hub';
 
 /**
@@ -79,23 +79,18 @@ export function useGuideLead(idPageHub: number, entryPoint: HubEntryPoint) {
 
   /**
    * Un seul appel en vol à la fois (§5). withCoordinates=false → APPEL 1.
-   * `emailOverride` permet d'envoyer directement l'e-mail mémorisé (cookie) sans
-   * attendre la mise à jour de l'état.
+   * `emailOverride` permet d'envoyer un e-mail sans attendre la mise à jour de l'état.
+   *
+   * ⚠️ `send()` n'est appelé QUE sur une saisie réelle du visiteur. Le raccourci
+   * « lead déjà connu » (cookie `hub_lead`) va directement à l'écran de
+   * téléchargement sans passer par ici — donc sans appel API. Une option
+   * `alreadyConverted` avait été ajoutée côté tracking pour neutraliser les
+   * événements de tunnel dans ce cas : elle est devenue inutile et a été retirée
+   * avec le comportement qu'elle compensait.
    */
-  /**
-   * `alreadyConverted` : l'appel part en ARRIÈRE-PLAN pour un visiteur déjà
-   * converti (cookie présent), qui n'a rien saisi et à qui on sert directement le
-   * guide. Aucun événement de tunnel n'est alors émis — voir le commentaire dans
-   * le corps de `send`.
-   */
-  const send = async (
-    withCoordinates: boolean,
-    emailOverride?: string,
-    options?: { alreadyConverted?: boolean },
-  ) => {
+  const send = async (withCoordinates: boolean, emailOverride?: string) => {
     if (submitting) return;
     const from = entryPointRef.current;
-    const alreadyConverted = options?.alreadyConverted === true;
     const emailToUse = emailOverride ?? email;
     setSubmitting(true);
     setErrorMsg('');
@@ -132,36 +127,22 @@ export function useGuideLead(idPageHub: number, entryPoint: HubEntryPoint) {
       if (res.status === 201 || corps?.statut === 'enregistre') {
         // ⚠️ La conversion est reconnue par CETTE condition, pas par le seul code
         // HTTP : l'API renvoie 200 + `statut:"enregistre"` sur certains
-        // environnements (constaté en recette).
-        // ⚠️ VISITEUR DÉJÀ CONVERTI : aucun événement de tunnel.
-        //
-        // Le cookie est posé, la personne n'a rien saisi, elle vient simplement
-        // reprendre son guide. L'appel API part quand même (le comportement cible
-        // — téléchargement direct sans dialog ni appel — est en cours de refonte
-        // ailleurs), mais le compter comme une conversion gonflerait
-        // `hub_form_submission` avec des gens déjà convertis, et `hub_email_check`
-        // afficherait un taux de contacts connus artificiellement élevé.
-        //
-        // Seul `hub_guide_download` est émis, par `DownloadStep`, avec
-        // `lead_path: 'deja_converti'` — un re-téléchargement reste ainsi mesurable
-        // sans polluer l'entonnoir.
-        if (!alreadyConverted) {
-          if (!withCoordinates) {
-            // Succès dès l'appel 1 ⇒ le serveur connaissait déjà le contact.
-            pushHubEvent('hub_email_check', 'guide', { result: 'known', entry_point: from });
-          }
-          pushHubEvent('hub_form_submission', 'guide', {
-            form_id: 'guide',
-            id_page_hub: idPageHub,
-            entry_point: from,
-            lead_path: withCoordinates ? 'complet' : 'reconnu',
-            user_known_status: withCoordinates ? 'Unknown' : 'Known',
-          });
+        // environnements (vérifié en recette le 2026-08-05, e-mail connu).
+        if (!withCoordinates) {
+          // Succès dès l'appel 1 ⇒ le serveur connaissait déjà le contact.
+          pushHubEvent('hub_email_check', 'guide', { result: 'known', entry_point: from });
         }
-        // Mémorise l'e-mail UNIQUEMENT après un enregistrement réel (201) : un
+        pushHubEvent('hub_form_submission', 'guide', {
+          form_id: 'guide',
+          id_page_hub: idPageHub,
+          entry_point: from,
+          lead_path: withCoordinates ? 'complet' : 'reconnu',
+          user_known_status: withCoordinates ? 'Unknown' : 'Known',
+        });
+        // Marque le drapeau UNIQUEMENT après un enregistrement réel (201) : un
         // 200 (coordonnées requises, rien écrit) ne doit pas « reconnaître » le
-        // visiteur au prochain passage.
-        rememberEmail(emailToUse);
+        // visiteur au prochain passage. On ne stocke PAS l'e-mail (cf. cookie).
+        markLeadKnown();
         setPhase('download');
         setSubmitting(false);
         return;

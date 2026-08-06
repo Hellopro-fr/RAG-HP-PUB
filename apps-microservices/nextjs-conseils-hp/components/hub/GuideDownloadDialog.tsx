@@ -13,7 +13,7 @@ import { HubTitle } from './primitives';
 import { DIALOG_TITLE } from './typography';
 import { CoordinatesStep, DownloadStep } from './GuideSteps';
 import { useGuideLead } from '@/lib/hub/useGuideLead';
-import { getRememberedEmail } from '@/lib/hub/leadEmailCookie';
+import { isLeadKnown, markLeadKnown } from '@/lib/hub/leadEmailCookie';
 import { pushHubEvent, type HubEntryPoint } from '@/lib/analytics/hub';
 import type { HubGuideDialog } from '@/types/hub';
 
@@ -72,36 +72,28 @@ export function GuideDownloadDialog({
       reset();
       setEmailError('');
       setOpen(true);
-      // Visiteur reconnu (e-mail mémorisé 30j) → on affiche DIRECTEMENT le
-      // remerciement (optimiste, aucune étape vide) et l'APPEL 1 part en fond.
-      const remembered = getRememberedEmail();
-      if (remembered) {
-        lead.setEmail(remembered);
+      // Visiteur reconnu (drapeau 30j) → écran de téléchargement DIRECT. On ne
+      // stocke plus l'e-mail, donc aucun ré-enregistrement : on affiche juste le
+      // remerciement et on rafraîchit le drapeau (fenêtre glissante de 30 j).
+      if (isLeadKnown()) {
+        markLeadKnown();
         lead.setPhase('download');
         setAlreadyConverted(true);
-        // `alreadyConverted` : l'appel part en fond, mais ce n'est PAS une
-        // conversion — la personne a déjà donné ses coordonnées, elle vient
-        // reprendre son guide. Sans ce drapeau, `hub_email_check` et
-        // `hub_form_submission` partaient ici aussi : trois événements pour un
-        // simple re-téléchargement, et un entonnoir faussé.
-        void lead.send(false, remembered, { alreadyConverted: true });
+        // RACCOURCI : aucun formulaire, aucun appel API. `hub_guide_shortcut`
+        // décrit exactement ce parcours et devient émettable maintenant que le
+        // comportement existe (il ne l'était pas tant que cette branche relançait
+        // un APPEL 1 : l'événement aurait décrit un parcours fictif).
+        //
+        // Surtout PAS de `hub_form_view` ici : le dialog s'ouvre, mais aucun
+        // formulaire ne sera présenté. Le compter ajouterait au tunnel guide des
+        // vues sans suite possible et écraserait son taux de conversion.
+        pushHubEvent('hub_guide_shortcut', 'guide', {
+          form_id: 'guide',
+          entry_point: from,
+          lead_path: 'deja_converti',
+        });
       } else {
         setAlreadyConverted(false);
-      }
-      // ⚠️ `hub_guide_shortcut` N'EST PAS émis ici, volontairement.
-      // Le comportement cible (cookie `hub_lead_email=1` ⇒ téléchargement direct,
-      // sans ouvrir le dialog ni appeler l'API) est en cours d'implémentation par
-      // ailleurs. Aujourd'hui cette branche OUVRE le dialog et relance un APPEL 1,
-      // ce qui produit un `hub_form_submission` pour quelqu'un de déjà converti.
-      // Émettre `hub_guide_shortcut` maintenant décrirait un parcours qui n'existe
-      // pas. À brancher au-dessus de `setOpen(true)`, en sortie anticipée, quand le
-      // comportement sera en place — cf. docs/tracking-hub.md §3.3.
-      // Pas de `hub_form_view` non plus pour un visiteur déjà converti : le
-      // dialog s'ouvre, mais aucun formulaire ne lui sera présenté. Le compter
-      // ajouterait au tunnel guide des vues sans suite possible et écraserait
-      // artificiellement son taux de conversion. Constaté en recette : le
-      // raccourci émettait encore `hub_form_view` avant cette garde.
-      if (!remembered) {
         pushHubEvent('hub_form_view', 'guide', {
           form_id: 'guide',
           entry_point: from,
@@ -154,7 +146,7 @@ export function GuideDownloadDialog({
 
         {/* Barre de progression sur les étapes coordonnées (66%) et remerciement (100%). */}
         {lead.phase !== 'email' && (
-          <div className="pl-6 pr-14 pt-5 sm:pl-8">
+          <div className="pl-6 pr-14 pt-7 sm:pl-8">
             <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
               <div
                 className="h-full rounded-full bg-cta transition-all duration-500"

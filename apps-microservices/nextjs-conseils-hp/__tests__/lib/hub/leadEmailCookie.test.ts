@@ -1,24 +1,24 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { getRememberedEmail, rememberEmail } from '@/lib/hub/leadEmailCookie';
+import { isLeadKnown, markLeadKnown } from '@/lib/hub/leadEmailCookie';
 
 afterEach(() => {
-  document.cookie = 'hub_lead_email=; path=/; max-age=0';
+  document.cookie = 'hub_lead=; path=/; max-age=0';
 });
 
 describe('leadEmailCookie', () => {
-  it('mémorise puis relit un e-mail valide', () => {
-    rememberEmail('jean@exemple.fr');
-    expect(getRememberedEmail()).toBe('jean@exemple.fr');
+  it('marque puis détecte un lead connu', () => {
+    expect(isLeadKnown()).toBe(false);
+    markLeadKnown();
+    expect(isLeadKnown()).toBe(true);
   });
 
-  it('ignore un e-mail invalide ou vide', () => {
-    rememberEmail('pas-un-email');
-    expect(getRememberedEmail()).toBe('');
-    rememberEmail('');
-    expect(getRememberedEmail()).toBe('');
+  it('ne stocke JAMAIS d’e-mail, uniquement le drapeau `1`', () => {
+    markLeadKnown();
+    expect(document.cookie).toContain('hub_lead=1');
+    expect(document.cookie).not.toMatch(/@/);
   });
 
-  it('renvoie une chaîne vide quand aucun e-mail n’est mémorisé', () => {
-    expect(getRememberedEmail()).toBe('');
+  it('renvoie false quand aucun cookie n’est présent', () => {
+    expect(isLeadKnown()).toBe(false);
   });
 });

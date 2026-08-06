@@ -13,7 +13,7 @@ import {
 import { CoordinatesStep, DownloadStep } from './GuideSteps';
 import { CARD_BODY, FEATURE_TITLE, META, TAG } from './typography';
 import { useGuideLead } from '@/lib/hub/useGuideLead';
-import { getRememberedEmail } from '@/lib/hub/leadEmailCookie';
+import { isLeadKnown } from '@/lib/hub/leadEmailCookie';
 import { pushHubEvent } from '@/lib/analytics/hub';
 import type { HubLeadPopup, HubGuideDialog } from '@/types/hub';
 
@@ -71,9 +71,9 @@ export function LeadPopup({
       } catch {
         /* stockage indisponible : la pop-up réapparaîtra au rechargement */
       }
-      // Visiteur déjà connu (e-mail en cookie) → on ne le dérange pas : aucune
+      // Visiteur déjà connu (drapeau en cookie) → on ne le dérange pas : aucune
       // pop-up, aucun remerciement, aucun téléchargement déclenché.
-      if (getRememberedEmail()) return;
+      if (isLeadKnown()) return;
       setOpen(true);
       // Impression de la pop-up. ⚠️ `sessionStorage` étant propre à l'ONGLET, un
       // visiteur qui ouvre la page dans trois onglets produit trois impressions
@@ -133,7 +133,10 @@ export function LeadPopup({
       >
         {/* ⚠️ PAS `max-w-2xl` : globals.css redéfinit `--container-2xl: 1400px` et
             Tailwind 4 fait lire ce token à `max-w-2xl`. Valeur explicite obligatoire. */}
-        <DialogContent className="max-w-[42rem] p-0">
+        <DialogContent
+          className="max-w-[42rem] p-0"
+          closeClassName="bg-white text-neutral-700 shadow-md hover:bg-white hover:text-neutral-900"
+        >
           <DialogHeader className="sr-only">
             <DialogTitle>{data.title}</DialogTitle>
             <DialogDescription>{data.text}</DialogDescription>
@@ -141,7 +144,7 @@ export function LeadPopup({
 
           {/* Bandeau photo pleine largeur, cadré légèrement haut. */}
           {data.bannerImage && (
-            <div className="relative h-44 w-full overflow-hidden bg-surface sm:h-52">
+            <div className="relative h-28 w-full overflow-hidden bg-surface sm:h-52">
               <Image
                 src={data.bannerImage.src}
                 alt={data.bannerImage.alt}
@@ -154,7 +157,7 @@ export function LeadPopup({
           )}
 
           <div
-            className={`relative bg-background px-6 pb-7 sm:px-8 ${
+            className={`relative bg-background px-6 pb-5 sm:px-8 sm:pb-7 ${
               // Carte blanche ENCARTÉE qui remonte dans le bandeau : celui-ci
               // apparaît en cadre sur les côtés et aux coins arrondis. Le padding
               // haut compense la remontée (-mt) pour garder la hauteur du contenu.
@@ -166,14 +169,14 @@ export function LeadPopup({
             {/* ⚠️ Colonne image seulement si l'image existe (sinon le texte hérite
                 d'une colonne de 140 px et se casse en un mot par ligne). */}
             <div
-              className={`grid gap-6 sm:gap-8 ${
+              className={`grid gap-3 sm:gap-8 ${
                 data.image ? 'sm:grid-cols-[190px_minmax(0,1fr)]' : 'sm:grid-cols-1'
               }`}
             >
               {data.image && (
                 // Le livre remonte pour chevaucher le bandeau ; la pastille
                 // « 100% GRATUIT » se cale sur son coin haut-droit.
-                <div className="relative z-10 mx-auto -mt-14 h-56 w-44 sm:-mt-16 sm:h-60 sm:w-full">
+                <div className="relative z-10 mx-auto -mt-10 h-44 w-32 sm:-mt-16 sm:h-60 sm:w-full">
                   <Image
                     src={data.image.src}
                     alt={data.image.alt}
@@ -210,11 +213,14 @@ export function LeadPopup({
                 <p className="mt-1 text-xl font-semibold italic text-cta sm:text-2xl">
                   {data.scriptLine}
                 </p>
-                <p className={`mt-3 ${CARD_BODY} text-muted-foreground`}>{data.text}</p>
+                {/* `mt-2` (son réglage) + `CARD_BODY` (l'échelle partagée) :
+                    la constante ne porte que taille/interligne, la marge reste
+                    au point d'appel. */}
+                <p className={`mt-2 ${CARD_BODY} text-muted-foreground`}>{data.text}</p>
               </div>
             </div>
 
-            <form onSubmit={submitEmail} className="mt-6 flex flex-col gap-3 sm:flex-row" noValidate>
+            <form onSubmit={submitEmail} className="mt-4 flex flex-col gap-3 sm:mt-6 sm:flex-row" noValidate>
               <input
                 type="email"
                 required
@@ -222,7 +228,9 @@ export function LeadPopup({
                 placeholder={data.emailPlaceholder}
                 value={lead.email}
                 onChange={(event) => lead.setEmail(event.target.value)}
-                className="h-12 flex-1 rounded-lg border border-border bg-background px-4 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                // Mobile (colonne) : pleine largeur, hauteur normale. `flex-1` réservé
+                // au `sm+` (ligne) — en colonne il écrasait la hauteur du champ.
+                className="h-12 w-full rounded-lg border border-border bg-background px-4 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 sm:w-auto sm:flex-1"
               />
               <button
                 type="submit"
@@ -258,14 +266,17 @@ export function LeadPopup({
           if (!next) close();
         }}
       >
-        <DialogContent className="max-w-[42rem]">
+        <DialogContent
+          className="max-w-[42rem]"
+          closeClassName="bg-white text-neutral-700 shadow-md hover:bg-white hover:text-neutral-900"
+        >
           <DialogHeader className="sr-only">
             <DialogTitle>{guide.badge}</DialogTitle>
             <DialogDescription>Recevez gratuitement le guide complet.</DialogDescription>
           </DialogHeader>
 
           {/* Barre de progression : coordonnées (66%) et remerciement (100%). */}
-          <div className="pl-6 pr-14 pt-4 sm:pl-8">
+          <div className="pl-6 pr-14 pt-7 sm:pl-8">
             <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
               <div
                 className="h-full rounded-full bg-cta transition-all duration-500"
@@ -275,7 +286,7 @@ export function LeadPopup({
           </div>
 
           <div className="px-6 py-4 sm:px-8">
-            {lead.phase === 'coordinates' ? (
+            {lead.phase === 'coordinates' && (
               <CoordinatesStep
                 guide={guide}
                 lead={lead}
@@ -283,7 +294,13 @@ export function LeadPopup({
                 entryPoint="popup_scroll"
                 onBack={() => lead.setPhase('email')}
               />
-            ) : (
+            )}
+            {/* `=== 'download'` STRICT : sinon, à la fermeture (reset → phase
+                'email'), le `else` rendait DownloadStep et déclenchait le
+                téléchargement auto alors que les coordonnées n'étaient pas finies.
+                ⚠️ Côté tracking, ce `else` produisait EN PLUS un `hub_guide_download`
+                fantôme à chaque fermeture. Ne pas revenir à un ternaire. */}
+            {lead.phase === 'download' && (
               <DownloadStep download={guide.download} group="guide" entryPoint="popup_scroll" />
             )}
           </div>

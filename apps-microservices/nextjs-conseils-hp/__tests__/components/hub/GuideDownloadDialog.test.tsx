@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { GuideDownloadDialog, openGuideDialog } from '@/components/hub/GuideDownloadDialog';
 import { listHubPages, guideIdPageHub } from '@/data/hub';
-import { rememberEmail } from '@/lib/hub/leadEmailCookie';
+import { markLeadKnown } from '@/lib/hub/leadEmailCookie';
 
 // PhoneField encapsule react-international-phone (+ CSS) : on le mocke par un input
 // simple qui remonte toujours le pays « France » / indicatif « 33 ».
@@ -56,9 +56,9 @@ function submitEmailStep() {
 
 afterEach(() => {
   vi.restoreAllMocks();
-  // rememberEmail() pose un cookie que jsdom conserve entre tests : on le purge
-  // pour ne pas déclencher le raccourci « e-mail mémorisé » du test suivant.
-  document.cookie = 'hub_lead_email=; path=/; max-age=0';
+  // markLeadKnown() pose un cookie que jsdom conserve entre tests : on le purge
+  // pour ne pas déclencher le raccourci « lead connu » du test suivant.
+  document.cookie = 'hub_lead=; path=/; max-age=0';
 });
 
 describe('GuideDownloadDialog', () => {
@@ -169,19 +169,18 @@ describe('GuideDownloadDialog', () => {
     expect(alerts.some((a) => /téléphone/i.test(a.textContent ?? ''))).toBe(true);
   });
 
-  /** E-mail mémorisé (cookie) : ouverture → APPEL 1 direct, pas d'étape e-mail. */
-  it('saute l’étape e-mail si un e-mail est mémorisé', async () => {
-    rememberEmail('connu@exemple.fr');
-    const fetchMock = stubFetch([
-      { status: 201, body: { statut: 'enregistre', id_demande: 9, contact_connu: 1 } },
-    ]);
+  /**
+   * Lead connu (drapeau cookie) : ouverture → écran de téléchargement DIRECT,
+   * SANS aucun appel réseau (on ne stocke plus l'e-mail, donc pas de ré-envoi).
+   */
+  it('va directement au téléchargement si le lead est connu, sans appel réseau', async () => {
+    markLeadKnown();
+    const fetchMock = stubFetch([{ status: 200, body: {} }]);
     render(<GuideDownloadDialog data={data} idPageHub={ID_PAGE_HUB} />);
     await open();
 
     await waitFor(() => expect(screen.getByText(data.download.title)).toBeDefined());
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
-    expect(body.email).toBe('connu@exemple.fr');
+    expect(fetchMock).not.toHaveBeenCalled();
     // L'étape e-mail (label « Adresse e-mail ») ne s'affiche jamais.
     expect(screen.queryByLabelText(data.fields.email)).toBeNull();
   });

@@ -61,7 +61,7 @@ C'est le point que toute lecture naïve du code manque, et il conditionne la moi
 événements. **Trois branches**, identiques dans les deux tunnels :
 
 ```
-                                      ┌─ cookie hub_lead_email=1 présent ?
+                                      ┌─ cookie hub_lead=1 présent ?
                                       │
               ┌── OUI ────────────────┴──► RACCOURCI : téléchargement direct du PDF
               │                            ni étape e-mail, ni appel API, PAS de lead
@@ -95,25 +95,28 @@ contacts »** de **« le HUB fait re-remplir un formulaire à des gens déjà co
 résultats radicalement différents pour juger la rentabilité du workflow — et indiscernables
 sans cet événement.
 
-### 3.3 Le raccourci `hub_lead_email=1` ne produit pas de lead
+### 3.3 Le raccourci `hub_lead=1` ne produit pas de lead
 
-Le cookie (mis en place actuellement, valeur `1`) signifie « cette personne a déjà soumis le
-formulaire coordonnées ». Au clic sur un CTA guide, le téléchargement part directement : pas
-d'étape e-mail, **pas d'appel API**, donc **aucun nouveau lead**.
+**Implémenté** (`lib/hub/leadEmailCookie.ts`, API `isLeadKnown()` / `markLeadKnown()`).
+Le cookie `hub_lead=1` signifie « ce navigateur a déjà soumis un lead ». Au clic sur un CTA
+guide, `GuideDownloadDialog` va directement à l'écran de téléchargement : pas d'étape e-mail,
+**pas d'appel API**, donc **aucun nouveau lead**.
 
-Le plan traite ce cas par un événement distinct :
+Trois événements sont donc explicitement ABSENTS de ce parcours :
 
-| Événement | Sens | Ne pas confondre avec |
-|---|---|---|
-| `hub_guide_shortcut` | re-téléchargement par un visiteur déjà converti | `hub_form_submission` — qui ne doit **pas** être émis ici |
+| Absent | Pourquoi |
+|---|---|
+| `hub_form_submission` | ce n'est pas une conversion, la personne l'était déjà |
+| `hub_email_check` | aucun e-mail n'est soumis, le serveur n'est pas interrogé |
+| `hub_form_view` | le dialog s'ouvre, mais **aucun formulaire n'est présenté** — compter cette vue écraserait le taux de conversion du tunnel guide |
 
-Sans cette séparation, deux erreurs symétriques sont possibles : compter chaque
-re-téléchargement comme une conversion (leads gonflés), ou n'émettre aucun événement et
-perdre entièrement le signal d'usage du guide. Le test 20 de la recette verrouille le point :
-trois re-téléchargements ⇒ 3 `hub_guide_download`, toujours 0 `hub_form_submission`.
+Ce qui est émis : `hub_guide_shortcut`, puis `hub_guide_download` avec
+`lead_path: 'deja_converti'`. Sans cette séparation, deux erreurs symétriques étaient
+possibles — compter chaque re-téléchargement comme une conversion, ou n'émettre aucun
+événement et perdre le signal d'usage du guide.
 
-Note au passage : stocker `1` plutôt que l'adresse est un progrès — l'e-mail en clair dans un
-cookie était une donnée personnelle exposée côté client sans nécessité.
+Note : le cookie stocke `1`, jamais l'adresse. Un cookie est renvoyé au serveur à chaque
+requête du sous-domaine ; y mettre l'e-mail l'exposait sans nécessité.
 
 ### 3.4 Le taux d'abandon aux coordonnées a un dénominateur particulier
 
@@ -175,13 +178,14 @@ puis clic sur un CTA guide. Trois événements partaient — `hub_guide_download
 `hub_email_check`, `hub_form_submission` — pour ce qui n'est qu'un
 re-téléchargement par quelqu'un de déjà converti.
 
-`useGuideLead.send()` accepte désormais `{ alreadyConverted: true }` et
-**n'émet aucun événement de tunnel** dans ce cas. L'appel API part toujours (le
-comportement cible — téléchargement direct sans dialog ni appel — est en cours de
-refonte ailleurs), mais il ne compte plus comme une conversion.
+**Résolu à la source** depuis que le raccourci n'appelle plus l'API (§3.3) :
+`send()` n'est plus invoqué du tout pour un visiteur déjà converti, donc aucun
+événement de tunnel ne peut partir. L'option `alreadyConverted` qui neutralisait
+ces événements côté tracking a été retirée avec le comportement qu'elle compensait.
 
-Le seul événement émis, `hub_guide_download`, porte `lead_path: 'deja_converti'` :
-le re-téléchargement reste mesurable sans entrer dans l'entonnoir.
+Les seuls événements émis, `hub_guide_shortcut` et `hub_guide_download`
+(`lead_path: 'deja_converti'`), gardent le re-téléchargement mesurable sans le
+faire entrer dans l'entonnoir.
 
 ### 3.7ter Tous les paramètres sont poussés à chaque événement
 

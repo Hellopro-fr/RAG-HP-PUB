@@ -45,10 +45,13 @@ export function HubHero({
       <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/50" />
 
       <div className="relative mx-auto flex min-h-[560px] max-w-7xl items-center px-4 py-12 sm:py-16 lg:py-20">
-        <div className="flex w-full flex-col items-center gap-10 lg:flex-row lg:gap-[8%]">
-          {/* `max-w-[42rem]` et non `max-w-2xl` : ce token vaut 1400px ici
-              (cf. --container-2xl dans globals.css). */}
-          <div className="w-full max-w-[42rem] lg:flex-1">
+        {/* Mobile empilé : bloc A (badge/titre/sous-titre) → FORMULAIRE → bloc C
+            (features/trust) — le formulaire suit ainsi le sous-titre. Desktop :
+            grille 2 colonnes (A au-dessus de C à gauche, formulaire à droite),
+            rendu inchangé. Un seul markup, aucun bloc dupliqué/masqué. */}
+        <div className="flex w-full flex-col items-center gap-6 lg:grid lg:grid-cols-[minmax(0,1fr)_560px] lg:items-center lg:gap-x-[8%] lg:gap-y-0">
+          {/* Bloc A — `max-w-[42rem]` et non `max-w-2xl` (ce token vaut 1400px ici). */}
+          <div className="w-full max-w-[42rem] lg:col-start-1 lg:row-start-1">
             <span className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-white backdrop-blur">
               <span className="h-1.5 w-1.5 rounded-full bg-cta" />
               {data.badge}
@@ -61,11 +64,26 @@ export function HubHero({
             <p className={`mt-5 max-w-[42rem] ${SECTION_SUBTITLE} text-white/80`}>
               {data.subtitle}
             </p>
+          </div>
 
+          {/* Formulaire — juste après le sous-titre en MOBILE ; colonne droite en desktop. */}
+          {formSlot && (
+            // `data-assistant-cta` : quand le formulaire du hero est à l'écran, la
+            // barre collée `StickyCta` se masque (même point d'entrée assistant).
+            <div
+              data-assistant-cta
+              className="w-full lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:max-w-[560px] lg:justify-self-end lg:self-center"
+            >
+              {formSlot}
+            </div>
+          )}
+
+          {/* Bloc C — features + trust. */}
+          <div className="w-full max-w-[42rem] lg:col-start-1 lg:row-start-2">
             {/* Mobile : timeline verticale (pastilles reliées par une ligne).
                 Desktop (sm+) : grille 3 colonnes, icône au-dessus (inchangé).
                 Même markup `<ul><li>` + texte réel → aucune régression SEO. */}
-            <ul className="mt-8 flex flex-col sm:grid sm:grid-cols-3 sm:gap-5">
+            <ul className="flex flex-col sm:grid sm:grid-cols-3 sm:gap-5 lg:mt-8">
               {data.features.map((feature) => (
                 <li
                   key={feature.title}
@@ -110,8 +128,6 @@ export function HubHero({
               </ul>
             )}
           </div>
-
-          {formSlot && <div className="w-full lg:max-w-[560px]">{formSlot}</div>}
         </div>
       </div>
     </section>
