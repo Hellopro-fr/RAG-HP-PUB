@@ -89,7 +89,9 @@ export function LeadPopup({
 
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Plus de `eslint-disable exhaustive-deps` ici : il couvrait les appels à
+    // `lead.*` de l'ancienne branche « visiteur reconnu », supprimée depuis.
+    // L'effet ne dépend plus que de `data.triggerSectionId`.
   }, [data.triggerSectionId]);
 
   const emailValid = EMAIL_RE.test(lead.email);

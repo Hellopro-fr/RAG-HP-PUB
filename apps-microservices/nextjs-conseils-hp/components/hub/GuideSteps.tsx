@@ -213,10 +213,17 @@ export function DownloadStep({
   download,
   group,
   entryPoint,
+  leadPath,
 }: {
   download: HubGuideDialog['download'];
   group: HubGroup;
   entryPoint?: HubEntryPoint;
+  /**
+   * `deja_converti` quand le visiteur reprend son guide sans rien saisir : c'est
+   * le SEUL événement émis dans ce cas, il doit donc porter lui-même de quoi
+   * distinguer un re-téléchargement d'un premier.
+   */
+  leadPath?: 'complet' | 'reconnu' | 'deja_converti';
 }) {
   // Téléchargement auto dès l'affichage de l'écran de remerciement.
   useAutoDownload(download.fileUrl);
@@ -229,6 +236,7 @@ export function DownloadStep({
     pushHubEvent('hub_guide_download', group, {
       download_trigger: 'auto',
       entry_point: entryPoint,
+      lead_path: leadPath,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -262,6 +270,7 @@ export function DownloadStep({
           pushHubEvent('hub_guide_download', group, {
             download_trigger: 'manual',
             entry_point: entryPoint,
+            lead_path: leadPath,
           })
         }
         className="mt-6 inline-flex h-10 items-center justify-center gap-2 rounded-lg px-4 text-sm font-medium text-muted-foreground transition hover:text-cta"

@@ -36,6 +36,19 @@ export function HubArticleClickTracker() {
       const href = link.getAttribute('href') ?? '';
       if (!href.includes(CONSEILS_HOST)) return;
 
+      // ⚠️ Exclut les téléchargements de fichier.
+      //
+      // `useAutoDownload` crée un `<a download>`, l'insère dans le document et
+      // appelle `.click()` : ce clic synthétique remonte jusqu'ici comme un vrai.
+      // Tant que le guide est servi en chemin relatif (`/…​.pdf`) le filtre d'hôte
+      // suffit, mais dès que le PDF définitif sera servi depuis
+      // `conseils.hellopro.fr`, chaque téléchargement produirait un
+      // `hub_article_click` fantôme — attribué qui plus est à la section où se
+      // trouve le dialog. Bug silencieux et pénible à diagnostiquer : on le coupe
+      // maintenant, pendant qu'on y pense.
+      if (link.hasAttribute('download')) return;
+      if (/\.(pdf|zip|docx?|xlsx?|pptx?|csv)(?:[?#].*)?$/i.test(href)) return;
+
       // `source_block` = id de la section conteneur (`budget-financement`,
       // `nos-ressources`, `grandes-etapes`…). Déjà rendu par `HubSection`, donc
       // aucun attribut supplémentaire à poser dans le balisage.

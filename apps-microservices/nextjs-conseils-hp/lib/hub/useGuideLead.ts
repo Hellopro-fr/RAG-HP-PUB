@@ -82,9 +82,20 @@ export function useGuideLead(idPageHub: number, entryPoint: HubEntryPoint) {
    * `emailOverride` permet d'envoyer directement l'e-mail mémorisé (cookie) sans
    * attendre la mise à jour de l'état.
    */
-  const send = async (withCoordinates: boolean, emailOverride?: string) => {
+  /**
+   * `alreadyConverted` : l'appel part en ARRIÈRE-PLAN pour un visiteur déjà
+   * converti (cookie présent), qui n'a rien saisi et à qui on sert directement le
+   * guide. Aucun événement de tunnel n'est alors émis — voir le commentaire dans
+   * le corps de `send`.
+   */
+  const send = async (
+    withCoordinates: boolean,
+    emailOverride?: string,
+    options?: { alreadyConverted?: boolean },
+  ) => {
     if (submitting) return;
     const from = entryPointRef.current;
+    const alreadyConverted = options?.alreadyConverted === true;
     const emailToUse = emailOverride ?? email;
     setSubmitting(true);
     setErrorMsg('');
@@ -122,17 +133,31 @@ export function useGuideLead(idPageHub: number, entryPoint: HubEntryPoint) {
         // ⚠️ La conversion est reconnue par CETTE condition, pas par le seul code
         // HTTP : l'API renvoie 200 + `statut:"enregistre"` sur certains
         // environnements (constaté en recette).
-        if (!withCoordinates) {
-          // Succès dès l'appel 1 ⇒ le serveur connaissait déjà le contact.
-          pushHubEvent('hub_email_check', 'guide', { result: 'known', entry_point: entryPoint });
+        // ⚠️ VISITEUR DÉJÀ CONVERTI : aucun événement de tunnel.
+        //
+        // Le cookie est posé, la personne n'a rien saisi, elle vient simplement
+        // reprendre son guide. L'appel API part quand même (le comportement cible
+        // — téléchargement direct sans dialog ni appel — est en cours de refonte
+        // ailleurs), mais le compter comme une conversion gonflerait
+        // `hub_form_submission` avec des gens déjà convertis, et `hub_email_check`
+        // afficherait un taux de contacts connus artificiellement élevé.
+        //
+        // Seul `hub_guide_download` est émis, par `DownloadStep`, avec
+        // `lead_path: 'deja_converti'` — un re-téléchargement reste ainsi mesurable
+        // sans polluer l'entonnoir.
+        if (!alreadyConverted) {
+          if (!withCoordinates) {
+            // Succès dès l'appel 1 ⇒ le serveur connaissait déjà le contact.
+            pushHubEvent('hub_email_check', 'guide', { result: 'known', entry_point: from });
+          }
+          pushHubEvent('hub_form_submission', 'guide', {
+            form_id: 'guide',
+            id_page_hub: idPageHub,
+            entry_point: from,
+            lead_path: withCoordinates ? 'complet' : 'reconnu',
+            user_known_status: withCoordinates ? 'Unknown' : 'Known',
+          });
         }
-        pushHubEvent('hub_form_submission', 'guide', {
-          form_id: 'guide',
-          id_page_hub: idPageHub,
-          entry_point: from,
-          lead_path: withCoordinates ? 'complet' : 'reconnu',
-          user_known_status: withCoordinates ? 'Unknown' : 'Known',
-        });
         // Mémorise l'e-mail UNIQUEMENT après un enregistrement réel (201) : un
         // 200 (coordonnées requises, rien écrit) ne doit pas « reconnaître » le
         // visiteur au prochain passage.
@@ -145,7 +170,7 @@ export function useGuideLead(idPageHub: number, entryPoint: HubEntryPoint) {
         // `result:'unknown'` vaut AUSSI « étape coordonnées affichée » : c'est la
         // même branche qui change de phase. Pas de `hub_form_coordinates_view`,
         // qui serait le même instant sous un second nom.
-        pushHubEvent('hub_email_check', 'guide', { result: 'unknown', entry_point: entryPoint });
+        pushHubEvent('hub_email_check', 'guide', { result: 'unknown', entry_point: from });
         setPhase('coordinates');
         setSubmitting(false);
         return;

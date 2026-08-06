@@ -1,6 +1,11 @@
 'use client';
 
 import { getCategory5, getHpSessionId } from './gtm';
+// ⚠️ Le TYPE seulement. `hubPageContextScript` NE DOIT PAS être réexporté d'ici :
+// ce module porte `'use client'`, et tout ce qui en sort est marqué client — un
+// Server Component ne pourrait plus l'appeler. Il s'importe depuis
+// `./hubPageContext`, qui est neutre.
+import type { HubPageContext } from './hubPageContext';
 
 /**
  * Tracking des pages HUB « projet » — point d'entrée UNIQUE.
@@ -69,8 +74,17 @@ export type HubEntryPoint =
 export interface HubEventParams {
   form_id?: 'assistant' | 'guide';
   entry_point?: HubEntryPoint;
-  /** Id de l'étape (`step.id` du fichier de données), jamais son libellé. */
+  /**
+   * Position de l'étape en libellé GÉNÉRIQUE : `1ere-question`, `2eme-question`…
+   * (plus `email` et `coordinates`). Voir `questionStepName`.
+   */
   step_name?: string;
+  /**
+   * Id métier de l'étape (`budget`, `volume`…), propre à chaque page.
+   * Complète `step_name` sans le remplacer : l'un sert à comparer les pages entre
+   * elles, l'autre à savoir QUELLE question fait décrocher sur une page donnée.
+   */
+  step_id?: string;
   step_index?: number;
   step_total?: number;
   /** Libellé du choix coché — choix fermé, donc pas une donnée personnelle. */
@@ -93,6 +107,38 @@ export interface HubEventParams {
   id_page_hub?: number;
 }
 
+/**
+ * Toutes les clés de `HubEventParams`, énumérées à l'exécution.
+ *
+ * ⚠️ Une clé ajoutée à l'interface DOIT l'être ici aussi, sinon elle ne sera
+ * jamais nettoyée entre deux événements. Le type `Record<keyof HubEventParams, …>`
+ * en fait une erreur de compilation si on en oublie une — c'est volontaire, un
+ * simple tableau de chaînes laisserait passer l'oubli.
+ */
+const HUB_PARAM_KEYS = Object.keys({
+  form_id: 0,
+  entry_point: 0,
+  step_name: 0,
+  step_id: 0,
+  step_index: 0,
+  step_total: 0,
+  answer_label: 0,
+  result: 0,
+  user_known_status: 0,
+  lead_path: 0,
+  steps_answered: 0,
+  last_step_name: 0,
+  last_step_index: 0,
+  error_stage: 0,
+  http_status: 0,
+  download_trigger: 0,
+  trigger_section_id: 0,
+  article_url: 0,
+  article_id: 0,
+  source_block: 0,
+  id_page_hub: 0,
+} satisfies Record<keyof HubEventParams, 0>) as Array<keyof HubEventParams>;
+
 interface DataLayerWindow extends Window {
   dataLayer?: Array<Record<string, unknown>>;
 }
@@ -107,15 +153,11 @@ interface DataLayerWindow extends Window {
  * dont plusieurs Server Components qui n'en ont aucun autre usage. Et c'est déjà
  * le motif du legacy pour `product.category5` (cf. `getCategory5`).
  *
- * Le push est émis par un `<script>` rendu par le SERVEUR (`HubTrackingContext`),
- * donc exécuté au parsing du document : il est dans le dataLayer bien avant qu'un
- * composant client puisse être hydraté, et il n'y a aucune course possible.
+ * Le push est émis par un `<script>` rendu par le SERVEUR (`HubTrackingContext`,
+ * qui appelle `hubPageContextScript` depuis `./hubPageContext`), donc exécuté au
+ * parsing du document : il est dans le dataLayer bien avant qu'un composant
+ * client puisse être hydraté, et il n'y a aucune course possible.
  */
-interface HubPageContext {
-  hub_page_id: number;
-  hub_page_slug: string;
-}
-
 function getHubPageContext(): Partial<HubPageContext> {
   if (typeof window === 'undefined') return {};
   const dl = (window as DataLayerWindow).dataLayer ?? [];
@@ -124,26 +166,10 @@ function getHubPageContext(): Partial<HubPageContext> {
   for (let i = dl.length - 1; i >= 0; i -= 1) {
     const entry = dl[i] as Partial<HubPageContext> | undefined;
     if (entry && typeof entry.hub_page_id === 'number') {
-      return { hub_page_id: entry.hub_page_id, hub_page_slug: entry.hub_page_slug };
+      return { hub_page_id: entry.hub_page_id, hub_page_uri: entry.hub_page_uri };
     }
   }
   return {};
-}
-
-/**
- * Sérialise le push de contexte pour le `<script>` serveur de `HubTrackingContext`.
- * Ici plutôt que dans le composant : la forme lue par `getHubPageContext` et la
- * forme écrite restent côte à côte, donc impossible de modifier l'une seule.
- */
-export function hubPageContextScript(pageId: number, slug: string): string {
-  const payload: HubPageContext = { hub_page_id: pageId, hub_page_slug: slug };
-  // `JSON.stringify` n'échappe PAS `<` : un slug contenant `</script>` fermerait
-  // la balise et le reste serait interprété comme du HTML. Le slug vient de nos
-  // fichiers de données, donc le risque est théorique — mais un JSON inline
-  // non échappé est le motif d'injection le plus banal du web, et le coût de
-  // s'en protéger est d'un `replace`.
-  const json = JSON.stringify(payload).replace(/</g, '\\u003c');
-  return `window.dataLayer=window.dataLayer||[];dataLayer.push(${json});`;
 }
 
 /* -------------------------------------------------------------- le push --- */
@@ -164,10 +190,23 @@ export function pushHubEvent(
   const w = window as DataLayerWindow;
   w.dataLayer = w.dataLayer || [];
 
-  // Les clés `undefined` sont retirées : GA4 enregistrerait sinon une dimension
-  // vide, indistinguable d'une valeur réellement absente à l'analyse.
+  // ⚠️ TOUTES les clés connues sont poussées, y compris celles que cet événement
+  // ne renseigne pas — avec la valeur `undefined`.
+  //
+  // GTM FUSIONNE les pushes successifs dans un modèle de données UNIQUE : une clé
+  // absente d'un push conserve la valeur du push précédent. Omettre les
+  // paramètres non pertinents laissait donc fuiter les valeurs d'un événement sur
+  // le suivant — constaté en recette : un `hub_form_submission` du tunnel guide
+  // portait encore `step_name: "delai"`, `answer_label` et `steps_answered: 4` du
+  // questionnaire projet rempli juste avant. Silencieux, et faux dans GA4.
+  //
+  // Une clé présente à `undefined` écrase la précédente, et le tag GA4 n'émet pas
+  // les paramètres `undefined` : la dimension est nettoyée sans être envoyée vide.
   const cleaned = Object.fromEntries(
-    Object.entries(params).filter(([, value]) => value !== undefined && value !== ''),
+    HUB_PARAM_KEYS.map((key) => {
+      const value = params[key];
+      return [key, value === '' ? undefined : value];
+    }),
   );
 
   w.dataLayer.push({
@@ -216,6 +255,24 @@ export function __resetHubEventDedup(): void {
 }
 
 /* ------------------------------------------------------------- utilitaire --- */
+
+/**
+ * Libellé générique d'une étape de questionnaire, à partir de son index 0-based :
+ * `1ere-question`, `2eme-question`, `3eme-question`…
+ *
+ * POURQUOI GÉNÉRIQUE plutôt que l'id métier (`budget`, `volume`) : les trois pages
+ * HUB n'ont pas les mêmes questions. Avec des ids métier, un entonnoir GA4 ne peut
+ * pas superposer les verticales — chaque page aurait ses propres noms d'étapes et
+ * il faudrait trois rapports au lieu d'un. La position, elle, est comparable.
+ *
+ * L'id métier n'est pas perdu pour autant : il part dans `step_id`.
+ *
+ * Reprend la convention du funnel devis legacy (`pushQuoteFormFunnel` utilise
+ * déjà `1ere-question`), ce qui évite deux vocabulaires dans le même conteneur.
+ */
+export function questionStepName(index: number): string {
+  return index === 0 ? '1ere-question' : `${index + 1}eme-question`;
+}
 
 /**
  * Extrait l'id numérique d'une URL de page conseil (`…-5297.html` → `5297`).

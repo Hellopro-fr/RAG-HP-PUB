@@ -16,7 +16,7 @@ import { Confetti } from './Confetti';
 import { useAutoDownload } from '@/lib/hub/useAutoDownload';
 import { rememberEmail } from '@/lib/hub/leadEmailCookie';
 import { isValidPhone } from '@/lib/hub/validation';
-import { pushHubEvent, pushHubEventOnce } from '@/lib/analytics/hub';
+import { pushHubEvent, pushHubEventOnce, questionStepName } from '@/lib/analytics/hub';
 import type { HubAssistant } from '@/types/hub';
 
 /**
@@ -96,13 +96,20 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
   // 100% au succès quel que soit le chemin (e-mail reconnu = 1 seul appel).
   const progressPct = submitted ? 100 : (step / totalSteps) * 100;
 
-  /** Écran courant — sert à `hub_form_abandon` et à la dédup des vues. */
+  /**
+   * Écran courant en libellé GÉNÉRIQUE — sert à `hub_form_abandon`, à `step_name`
+   * et à la dédup des vues. Comparable d'une page HUB à l'autre, contrairement
+   * aux ids métier des questions (cf. `questionStepName`).
+   */
   const screenName = (): string => {
     if (submitted) return 'success';
     if (isCoordinates) return 'coordinates';
     if (isContact) return 'email';
-    return data.steps[step]?.id ?? `step-${step}`;
+    return questionStepName(step);
   };
+
+  /** Id métier de l'étape courante (`budget`, `volume`…), ou `undefined` hors questionnaire. */
+  const screenId = (): string | undefined => data.steps[step]?.id;
 
   /** Nombre de questions réellement répondues — dimension de `hub_form_submission`. */
   const answeredCount = () => data.steps.filter((s) => Boolean(answers[s.id])).length;
@@ -269,7 +276,9 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
         pushHubEventOnce(`form_view:${idPageHub}`, 'hub_form_view', 'projet', {
           form_id: 'assistant',
           entry_point: 'hero',
-          step_name: data.steps[0]?.id,
+          step_name: questionStepName(0),
+          step_id: data.steps[0]?.id,
+          step_index: 0,
           step_total: totalSteps,
         });
       },
@@ -294,9 +303,11 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
     // et le rapport entre les deux donne le taux d'engagement du hero.
     if (!startedRef.current) {
       startedRef.current = true;
+      const index = data.steps.findIndex((s) => s.id === id);
       pushHubEvent('hub_form_start', 'projet', {
         form_id: 'assistant',
-        step_name: id,
+        step_name: questionStepName(index < 0 ? 0 : index),
+        step_id: id,
         answer_label: option,
       });
     }
@@ -368,7 +379,10 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
 
     pushHubEvent('hub_form_step', 'projet', {
       form_id: 'assistant',
+      // Générique (`2eme-question`…) pour rester comparable d'une page à l'autre ;
+      // l'id métier de la question part à côté, dans `step_id`.
       step_name: name,
+      step_id: screenId(),
       step_index: step,
       step_total: totalSteps,
     });
@@ -440,7 +454,10 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
             if (!submitted) {
               pushHubEvent('hub_form_abandon', 'projet', {
                 form_id: 'assistant',
+                // Même vocabulaire générique que `step_name` : c'est ce qui permet
+                // de croiser abandons et affichages dans un seul rapport.
                 last_step_name: screenName(),
+                step_id: screenId(),
                 last_step_index: step,
               });
             }

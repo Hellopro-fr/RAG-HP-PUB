@@ -57,6 +57,8 @@ export function GuideDownloadDialog({
   const [emailError, setEmailError] = useState('');
   // Emplacement du CTA qui a ouvert le dialog — dimension `entry_point`.
   const [entryPoint, setEntryPoint] = useState<HubEntryPoint>('banner_guide');
+  // Visiteur déjà converti (cookie posé) : re-téléchargement, pas une conversion.
+  const [alreadyConverted, setAlreadyConverted] = useState(false);
   const lead = useGuideLead(idPageHub, entryPoint);
   const { reset } = lead;
 
@@ -76,7 +78,15 @@ export function GuideDownloadDialog({
       if (remembered) {
         lead.setEmail(remembered);
         lead.setPhase('download');
-        void lead.send(false, remembered);
+        setAlreadyConverted(true);
+        // `alreadyConverted` : l'appel part en fond, mais ce n'est PAS une
+        // conversion — la personne a déjà donné ses coordonnées, elle vient
+        // reprendre son guide. Sans ce drapeau, `hub_email_check` et
+        // `hub_form_submission` partaient ici aussi : trois événements pour un
+        // simple re-téléchargement, et un entonnoir faussé.
+        void lead.send(false, remembered, { alreadyConverted: true });
+      } else {
+        setAlreadyConverted(false);
       }
       // ⚠️ `hub_guide_shortcut` N'EST PAS émis ici, volontairement.
       // Le comportement cible (cookie `hub_lead_email=1` ⇒ téléchargement direct,
@@ -86,12 +96,19 @@ export function GuideDownloadDialog({
       // Émettre `hub_guide_shortcut` maintenant décrirait un parcours qui n'existe
       // pas. À brancher au-dessus de `setOpen(true)`, en sortie anticipée, quand le
       // comportement sera en place — cf. docs/tracking-hub.md §3.3.
-      pushHubEvent('hub_form_view', 'guide', {
-        form_id: 'guide',
-        entry_point: from,
-        // Le dialog s'ouvre DIRECTEMENT sur l'écran e-mail : pas de
-        // `hub_form_email_view`, il serait simultané avec celui-ci.
-      });
+      // Pas de `hub_form_view` non plus pour un visiteur déjà converti : le
+      // dialog s'ouvre, mais aucun formulaire ne lui sera présenté. Le compter
+      // ajouterait au tunnel guide des vues sans suite possible et écraserait
+      // artificiellement son taux de conversion. Constaté en recette : le
+      // raccourci émettait encore `hub_form_view` avant cette garde.
+      if (!remembered) {
+        pushHubEvent('hub_form_view', 'guide', {
+          form_id: 'guide',
+          entry_point: from,
+          // Le dialog s'ouvre DIRECTEMENT sur l'écran e-mail : pas de
+          // `hub_form_email_view`, il serait simultané avec celui-ci.
+        });
+      }
     };
     window.addEventListener(GUIDE_DIALOG_EVENT, handler);
     return () => window.removeEventListener(GUIDE_DIALOG_EVENT, handler);
@@ -226,7 +243,12 @@ export function GuideDownloadDialog({
           )}
 
           {lead.phase === 'download' && (
-            <DownloadStep download={data.download} group="guide" entryPoint={entryPoint} />
+            <DownloadStep
+              download={data.download}
+              group="guide"
+              entryPoint={entryPoint}
+              leadPath={alreadyConverted ? 'deja_converti' : undefined}
+            />
           )}
         </div>
       </DialogContent>

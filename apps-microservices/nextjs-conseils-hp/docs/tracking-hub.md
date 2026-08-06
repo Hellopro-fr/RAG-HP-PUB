@@ -168,6 +168,61 @@ conversion faux — et plus élevé que la réalité, donc peu susceptible d'êt
 
 ---
 
+### 3.7bis Le visiteur déjà converti n'émet QUE `hub_guide_download`
+
+Scénario constaté en recette : questionnaire projet complété (donc cookie posé),
+puis clic sur un CTA guide. Trois événements partaient — `hub_guide_download`,
+`hub_email_check`, `hub_form_submission` — pour ce qui n'est qu'un
+re-téléchargement par quelqu'un de déjà converti.
+
+`useGuideLead.send()` accepte désormais `{ alreadyConverted: true }` et
+**n'émet aucun événement de tunnel** dans ce cas. L'appel API part toujours (le
+comportement cible — téléchargement direct sans dialog ni appel — est en cours de
+refonte ailleurs), mais il ne compte plus comme une conversion.
+
+Le seul événement émis, `hub_guide_download`, porte `lead_path: 'deja_converti'` :
+le re-téléchargement reste mesurable sans entrer dans l'entonnoir.
+
+### 3.7ter Tous les paramètres sont poussés à chaque événement
+
+**GTM fusionne les pushes dans un modèle de données unique : une clé absente
+conserve la valeur du push précédent.** Constaté en recette — un
+`hub_form_submission` du tunnel guide portait encore `step_name: "delai"`,
+`answer_label` et `steps_answered: 4` du questionnaire projet rempli juste avant.
+
+`pushHubEvent` pousse donc **toutes** les clés de `HubEventParams`, celles que
+l'événement ne renseigne pas valant `undefined` — ce qui écrase la précédente. Le
+tag GA4 n'envoie pas les paramètres `undefined` : la dimension est nettoyée sans
+être transmise vide.
+
+⚠️ Une clé ajoutée à `HubEventParams` doit l'être aussi dans `HUB_PARAM_KEYS`,
+sinon elle ne sera jamais nettoyée. Le type `satisfies Record<keyof HubEventParams, 0>`
+en fait une erreur de compilation.
+
+### 3.8 `step_name` est GÉNÉRIQUE, `step_id` porte le métier
+
+`step_name` vaut `1ere-question`, `2eme-question`, `3eme-question`… puis `email` et
+`coordinates`. **Jamais l'id métier de la question.**
+
+Raison : les trois pages HUB n'ont pas les mêmes questions. Avec `budget` ou
+`volume`, un entonnoir GA4 ne peut pas superposer les verticales — chaque page
+aurait ses propres noms d'étapes, donc trois rapports au lieu d'un, et aucune
+comparaison possible entre l'élevage, le food-truck et la laverie. La **position**,
+elle, est comparable.
+
+Cette convention est aussi celle du funnel devis legacy (`pushQuoteFormFunnel`
+émet déjà `1ere-question`) : un seul vocabulaire dans le conteneur.
+
+L'information métier n'est pas perdue — elle part dans **`step_id`**
+(`budget`, `volume`, `delai`…). Les deux dimensions répondent à deux questions
+différentes : `step_name` à « à quelle position décroche-t-on, toutes pages
+confondues », `step_id` à « quelle question tue le tunnel sur CETTE page ».
+
+`last_step_name` de `hub_form_abandon` suit le même vocabulaire, sans quoi
+abandons et affichages ne se croiseraient pas dans un même rapport.
+
+---
+
 ## 4. Les trois groupes
 
 | Groupe | Nature | Ce qu'il répond |
@@ -217,7 +272,7 @@ Un `gtag` direct contourne le Consent Mode du conteneur.
 |---|---|---|
 | `hub_group` | `projet` \| `guide` \| `engagement` | `projet` |
 | `hub_page_id` | `page.id` | `1000` |
-| `hub_page_slug` | `page.slug` | `lancer-elevage-poules-pondeuses` |
+| `hub_page_uri` | `hubCanonicalPath(page)` — URI **publique**, pas la route interne | `/lancer-elevage-poules-pondeuses-1000-projet.html` |
 | `id_page_hub` | id effectif de l'appel API | `1000` / `2000` |
 | `session_id` | `getHpSessionId()` — **helper existant réutilisé** | `session_1785854120765_a1b2c3d4e` |
 | `product.category5` | lu du dataLayer, comme `getCategory5()` | `Élevage-avicole` |

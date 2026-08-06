@@ -22,7 +22,7 @@ import { EditoSection } from './EditoSection';
 import { HowItWorks } from './HowItWorks';
 import { AccompagnementSplit } from './AccompagnementSplit';
 import { FinalCta } from './FinalCta';
-import type { HubPage } from '@/types/hub';
+import { hubCanonicalPath, type HubPage } from '@/types/hub';
 
 interface HubTemplateProps {
   page: HubPage;
@@ -99,7 +99,11 @@ export function HubTemplate({ page, headerCategories = [] }: HubTemplateProps) {
             dataLayer avant qu'un événement puisse partir. Le déplacer plus bas
             n'aurait pas d'effet visible mais rendrait l'ordre dépendant de
             l'hydratation — un manque de dimension intermittent. */}
-        <HubTrackingContext pageId={page.id} slug={page.slug} />
+        {/* `hubCanonicalPath` et non `page.slug` : c'est l'URI PUBLIQUE
+            (`/<slug>-<id>-projet.html`), la seule qui recoupe `page_location`, la
+            Search Console et les logs. La route interne `/hub/<slug>-<id>` servie
+            par le rewrite ne veut rien dire pour un lecteur de rapport. */}
+        <HubTrackingContext pageId={page.id} uri={hubCanonicalPath(page)} />
         <HubArticleClickTracker />
 
         <HubHero data={page.hero} formSlot={<AssistantForm data={page.assistant} idPageHub={page.id} />} />

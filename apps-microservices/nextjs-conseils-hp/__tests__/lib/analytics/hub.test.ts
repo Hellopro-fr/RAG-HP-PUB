@@ -3,9 +3,12 @@ import {
   pushHubEvent,
   pushHubEventOnce,
   __resetHubEventDedup,
-  hubPageContextScript,
   articleIdFromUrl,
+  questionStepName,
 } from '@/lib/analytics/hub';
+// Module neutre (sans `'use client'`) : c'est ce qui permet à `HubTrackingContext`,
+// Server Component, d'appeler cette fonction. Cf. lib/analytics/hubPageContext.ts.
+import { hubPageContextScript } from '@/lib/analytics/hubPageContext';
 
 /**
  * Le helper est le seul point d'écriture du dataLayer pour les pages HUB : s'il
@@ -51,17 +54,20 @@ describe('pushHubEvent — paramètres communs', () => {
     expect(dl()[0].session_id).toBe(dl()[1].session_id);
   });
 
-  it('lit hub_page_id et hub_page_slug depuis le dataLayer', () => {
-    dl().push({ hub_page_id: 1000, hub_page_slug: 'lancer-elevage-poules-pondeuses' });
+  it('lit hub_page_id et hub_page_uri depuis le dataLayer', () => {
+    dl().push({
+      hub_page_id: 1000,
+      hub_page_uri: '/lancer-elevage-poules-pondeuses-1000-projet.html',
+    });
     pushHubEvent('hub_form_submission', 'projet');
     const last = dl()[dl().length - 1];
     expect(last.hub_page_id).toBe(1000);
-    expect(last.hub_page_slug).toBe('lancer-elevage-poules-pondeuses');
+    expect(last.hub_page_uri).toBe('/lancer-elevage-poules-pondeuses-1000-projet.html');
   });
 
   it('retient le contexte le PLUS RÉCENT si plusieurs sont présents', () => {
-    dl().push({ hub_page_id: 1000, hub_page_slug: 'a' });
-    dl().push({ hub_page_id: 1002, hub_page_slug: 'c' });
+    dl().push({ hub_page_id: 1000, hub_page_uri: '/a-1000-projet.html' });
+    dl().push({ hub_page_id: 1002, hub_page_uri: '/c-1002-projet.html' });
     pushHubEvent('hub_form_view', 'projet');
     expect(dl()[dl().length - 1].hub_page_id).toBe(1002);
   });
@@ -80,16 +86,39 @@ describe('pushHubEvent — paramètres communs', () => {
 });
 
 describe('pushHubEvent — nettoyage des paramètres', () => {
-  it('omet les paramètres undefined et les chaînes vides', () => {
+  it('pousse TOUTES les clés connues, à undefined si non fournies', () => {
+    // C'est ce qui empêche une valeur de fuiter d'un événement au suivant : GTM
+    // fusionne les pushes, une clé absente conserve la valeur précédente.
     pushHubEvent('hub_form_step', 'projet', {
-      step_name: 'budget',
-      step_index: undefined,
+      step_name: '2eme-question',
       last_step_name: '',
     });
     const push = dl()[0];
-    expect(push.step_name).toBe('budget');
-    expect('step_index' in push).toBe(false);
-    expect('last_step_name' in push).toBe(false);
+    expect(push.step_name).toBe('2eme-question');
+    expect('step_index' in push).toBe(true);
+    expect(push.step_index).toBeUndefined();
+    // Chaîne vide traitée comme une absence, pour la même raison.
+    expect(push.last_step_name).toBeUndefined();
+  });
+
+  it('efface la valeur d’un paramètre laissé par l’événement précédent', () => {
+    // Scénario constaté en recette : questionnaire projet complété (step_name =
+    // "delai", answer_label, steps_answered), puis clic sur un CTA guide. Sans
+    // cette remise à zéro, GTM attachait encore les valeurs du projet à
+    // l'événement du guide.
+    pushHubEvent('hub_form_step', 'projet', {
+      step_name: '4eme-question',
+      step_id: 'delai',
+      answer_label: 'Création d’un premier élevage',
+      steps_answered: 4,
+    });
+    pushHubEvent('hub_guide_download', 'guide', { download_trigger: 'auto' });
+
+    const second = dl()[1];
+    expect(second.download_trigger).toBe('auto');
+    for (const key of ['step_name', 'step_id', 'answer_label', 'steps_answered']) {
+      expect(second[key]).toBeUndefined();
+    }
   });
 
   it('conserve step_index = 0 (valeur significative, pas une absence)', () => {
@@ -164,21 +193,38 @@ describe('pushHubEventOnce', () => {
 
 describe('hubPageContextScript', () => {
   it('produit un push exploitable par getHubPageContext', () => {
-    const script = hubPageContextScript(1001, 'creer-food-truck');
+    const script = hubPageContextScript(1001, '/creer-food-truck-1001-projet.html');
     expect(script).toContain('"hub_page_id":1001');
-    expect(script).toContain('"hub_page_slug":"creer-food-truck"');
+    expect(script).toContain('"hub_page_uri":"/creer-food-truck-1001-projet.html"');
 
     // Exécution réelle du script, puis lecture par le helper : c'est le contrat
     // entre l'écriture serveur et la lecture client qu'on vérifie ici, pas la
     // chaîne produite.
     new Function(script)();
     pushHubEvent('hub_form_view', 'projet');
-    expect(dl()[dl().length - 1].hub_page_id).toBe(1001);
+    const last = dl()[dl().length - 1];
+    expect(last.hub_page_id).toBe(1001);
+    expect(last.hub_page_uri).toBe('/creer-food-truck-1001-projet.html');
   });
 
-  it('échappe le slug (aucune injection possible depuis les données)', () => {
+  it('échappe l’URI (aucune injection possible depuis les données)', () => {
     const script = hubPageContextScript(1000, 'a"</script><script>alert(1)');
     expect(script).not.toContain('</script>');
+  });
+});
+
+describe('questionStepName', () => {
+  it('produit des libellés ordinaux génériques', () => {
+    expect(questionStepName(0)).toBe('1ere-question');
+    expect(questionStepName(1)).toBe('2eme-question');
+    expect(questionStepName(3)).toBe('4eme-question');
+  });
+
+  it('reste identique quelle que soit la page HUB', () => {
+    // C'est TOUT l'intérêt : les 3 verticales n'ont pas les mêmes questions, mais
+    // leurs entonnoirs doivent se superposer dans un seul rapport GA4. Un id
+    // métier (`budget`, `volume`) rendrait la comparaison impossible.
+    expect(questionStepName(1)).toBe('2eme-question');
   });
 });
 
