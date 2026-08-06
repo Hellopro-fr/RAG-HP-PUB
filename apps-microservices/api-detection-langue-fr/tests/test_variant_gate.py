@@ -33,7 +33,7 @@ def _fast_and_offline(monkeypatch):
 
 
 def _counting_raiser(message, calls):
-    async def fake_scrape(target, proxy=None):
+    async def fake_scrape(target, proxy=None, error_sink=None):
         calls.append(target)
         raise RuntimeError(message)
     return fake_scrape
@@ -75,7 +75,7 @@ async def test_gecko_dns_error_still_tries_variants(monkeypatch):
 async def test_empty_content_skips_variants(monkeypatch, caplog):
     calls = []
 
-    async def fake_scrape(target, proxy=None):
+    async def fake_scrape(target, proxy=None, error_sink=None):
         calls.append(target)
         return None  # drives the "Contenu vide ou trop court" branch
 
@@ -94,7 +94,7 @@ async def test_success_on_first_attempt_makes_one_call(monkeypatch, caplog):
     calls = []
     sentinel = object()
 
-    async def fake_scrape(target, proxy=None):
+    async def fake_scrape(target, proxy=None, error_sink=None):
         calls.append(target)
         return sentinel
 
@@ -117,7 +117,7 @@ async def test_empty_message_timeout_error_skips_variants(monkeypatch, caplog):
     short-circuit false and all 3 variants would run pointlessly."""
     calls = []
 
-    async def fake_scrape(target, proxy=None):
+    async def fake_scrape(target, proxy=None, error_sink=None):
         calls.append(target)
         raise asyncio.TimeoutError()  # empty message: str(e) == ''
 
@@ -139,7 +139,7 @@ async def test_gecko_ssl_then_timeout_still_tries_variants(monkeypatch, caplog):
     repairable failure."""
     calls = []
 
-    async def fake_scrape(target, proxy=None):
+    async def fake_scrape(target, proxy=None, error_sink=None):
         calls.append(target)
         if len(calls) <= 2:
             raise RuntimeError("SEC_ERROR_EXPIRED_CERTIFICATE")
