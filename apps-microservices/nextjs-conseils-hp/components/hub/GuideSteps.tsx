@@ -1,11 +1,13 @@
 'use client';
 
+import { useEffect } from 'react';
 import Image from 'next/image';
 import { ArrowRight, Download, MapPin, ShieldCheck, User } from 'lucide-react';
 import { PhoneField } from './PhoneField';
 import { Confetti } from './Confetti';
 import { DIALOG_TITLE, META, TAG } from './typography';
 import { useAutoDownload } from '@/lib/hub/useAutoDownload';
+import { pushHubEvent, type HubEntryPoint, type HubGroup } from '@/lib/analytics/hub';
 import type { HubGuideDialog } from '@/types/hub';
 import type { GuideLead } from '@/lib/hub/useGuideLead';
 
@@ -62,12 +64,15 @@ export function CoordinatesStep({
   guide,
   lead,
   idPrefix,
+  entryPoint,
   onBack,
 }: {
   guide: HubGuideDialog;
   lead: GuideLead;
   /** Préfixe des `id`/`name` (évite toute collision entre les 2 points d'entrée). */
   idPrefix: string;
+  /** Emplacement d'origine — dimension `entry_point` du tracking. */
+  entryPoint: HubEntryPoint;
   onBack?: () => void;
 }) {
   return (
@@ -86,6 +91,10 @@ export function CoordinatesStep({
         onSubmit={(event) => {
           event.preventDefault();
           if (!lead.coordinatesValid || lead.submitting) return;
+          pushHubEvent('hub_form_coordinates_submit', 'guide', {
+            form_id: 'guide',
+            entry_point: entryPoint,
+          });
           void lead.send(true);
         }}
         className="mt-2 space-y-2"
@@ -192,10 +201,38 @@ export function CoordinatesStep({
   );
 }
 
-/** Étape finale : remerciement + couverture du guide + bouton de téléchargement. */
-export function DownloadStep({ download }: { download: HubGuideDialog['download'] }) {
+/**
+ * Étape finale : remerciement + couverture du guide + bouton de téléchargement.
+ *
+ * `group` est une prop et non une constante : cet écran est aussi atteint depuis
+ * le tunnel PROJET (le questionnaire offre le guide en fin de parcours). Coder
+ * `'guide'` en dur attribuerait au tunnel guide des téléchargements issus du
+ * questionnaire — et gonflerait sa performance apparente.
+ */
+export function DownloadStep({
+  download,
+  group,
+  entryPoint,
+}: {
+  download: HubGuideDialog['download'];
+  group: HubGroup;
+  entryPoint?: HubEntryPoint;
+}) {
   // Téléchargement auto dès l'affichage de l'écran de remerciement.
   useAutoDownload(download.fileUrl);
+
+  // `auto` : déclenché par `useAutoDownload` à l'affichage. Le clic sur le lien
+  // ci-dessous émet `manual`. Distinguer les deux dit si le téléchargement
+  // automatique fonctionne réellement chez les visiteurs — un taux de `manual`
+  // élevé signifierait que l'automatique est bloqué par le navigateur.
+  useEffect(() => {
+    pushHubEvent('hub_guide_download', group, {
+      download_trigger: 'auto',
+      entry_point: entryPoint,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div className="relative text-center">
       <Confetti />
@@ -221,6 +258,12 @@ export function DownloadStep({ download }: { download: HubGuideDialog['download'
       <a
         href={download.fileUrl ?? '#'}
         download
+        onClick={() =>
+          pushHubEvent('hub_guide_download', group, {
+            download_trigger: 'manual',
+            entry_point: entryPoint,
+          })
+        }
         className="mt-6 inline-flex h-10 items-center justify-center gap-2 rounded-lg px-4 text-sm font-medium text-muted-foreground transition hover:text-cta"
       >
         <Download className="h-4 w-4" />

@@ -14,6 +14,7 @@ import { DIALOG_TITLE } from './typography';
 import { CoordinatesStep, DownloadStep } from './GuideSteps';
 import { useGuideLead } from '@/lib/hub/useGuideLead';
 import { getRememberedEmail } from '@/lib/hub/leadEmailCookie';
+import { pushHubEvent, type HubEntryPoint } from '@/lib/analytics/hub';
 import type { HubGuideDialog } from '@/types/hub';
 
 /**
@@ -30,10 +31,17 @@ import type { HubGuideDialog } from '@/types/hub';
  */
 const GUIDE_DIALOG_EVENT = 'hp:open-guide-dialog';
 
-/** Ouvre le dialog depuis n'importe où (client uniquement). */
-export function openGuideDialog() {
+/**
+ * Ouvre le dialog depuis n'importe où (client uniquement).
+ *
+ * `entryPoint` voyage dans le `detail` de l'événement : quatre emplacements de la
+ * page ouvrent ce même dialog, et c'est la seule façon de savoir lequel a
+ * converti. Le fixer à la construction du dialog serait impossible — il n'en
+ * existe qu'une instance, montée par `HubTemplate`.
+ */
+export function openGuideDialog(entryPoint: HubEntryPoint = 'banner_guide') {
   if (typeof window === 'undefined') return;
-  window.dispatchEvent(new CustomEvent(GUIDE_DIALOG_EVENT));
+  window.dispatchEvent(new CustomEvent(GUIDE_DIALOG_EVENT, { detail: { entryPoint } }));
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -47,11 +55,17 @@ export function GuideDownloadDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [emailError, setEmailError] = useState('');
-  const lead = useGuideLead(idPageHub);
+  // Emplacement du CTA qui a ouvert le dialog — dimension `entry_point`.
+  const [entryPoint, setEntryPoint] = useState<HubEntryPoint>('banner_guide');
+  const lead = useGuideLead(idPageHub, entryPoint);
   const { reset } = lead;
 
   useEffect(() => {
-    const handler = () => {
+    const handler = (event: Event) => {
+      const from =
+        (event as CustomEvent<{ entryPoint?: HubEntryPoint }>).detail?.entryPoint ??
+        'banner_guide';
+      setEntryPoint(from);
       // Réinitialise le parcours à chaque ouverture.
       reset();
       setEmailError('');
@@ -64,6 +78,20 @@ export function GuideDownloadDialog({
         lead.setPhase('download');
         void lead.send(false, remembered);
       }
+      // ⚠️ `hub_guide_shortcut` N'EST PAS émis ici, volontairement.
+      // Le comportement cible (cookie `hub_lead_email=1` ⇒ téléchargement direct,
+      // sans ouvrir le dialog ni appeler l'API) est en cours d'implémentation par
+      // ailleurs. Aujourd'hui cette branche OUVRE le dialog et relance un APPEL 1,
+      // ce qui produit un `hub_form_submission` pour quelqu'un de déjà converti.
+      // Émettre `hub_guide_shortcut` maintenant décrirait un parcours qui n'existe
+      // pas. À brancher au-dessus de `setOpen(true)`, en sortie anticipée, quand le
+      // comportement sera en place — cf. docs/tracking-hub.md §3.3.
+      pushHubEvent('hub_form_view', 'guide', {
+        form_id: 'guide',
+        entry_point: from,
+        // Le dialog s'ouvre DIRECTEMENT sur l'écran e-mail : pas de
+        // `hub_form_email_view`, il serait simultané avec celui-ci.
+      });
     };
     window.addEventListener(GUIDE_DIALOG_EVENT, handler);
     return () => window.removeEventListener(GUIDE_DIALOG_EVENT, handler);
@@ -78,12 +106,29 @@ export function GuideDownloadDialog({
     }
     setEmailError('');
     if (lead.submitting) return;
+    pushHubEvent('hub_form_email_submit', 'guide', {
+      form_id: 'guide',
+      entry_point: entryPoint,
+    });
     // APPEL 1 — sans coordonnées.
     void lead.send(false);
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        // Abandon : fermeture avant d'avoir atteint l'écran de téléchargement.
+        if (!next && lead.phase !== 'download') {
+          pushHubEvent('hub_form_abandon', 'guide', {
+            form_id: 'guide',
+            entry_point: entryPoint,
+            last_step_name: lead.phase,
+          });
+        }
+        setOpen(next);
+      }}
+    >
       <DialogContent className="max-w-[42rem]">
         <DialogHeader className="sr-only">
           <DialogTitle>{data.badge}</DialogTitle>
@@ -175,11 +220,14 @@ export function GuideDownloadDialog({
               guide={data}
               lead={lead}
               idPrefix="guide"
+              entryPoint={entryPoint}
               onBack={() => lead.setPhase('email')}
             />
           )}
 
-          {lead.phase === 'download' && <DownloadStep download={data.download} />}
+          {lead.phase === 'download' && (
+            <DownloadStep download={data.download} group="guide" entryPoint={entryPoint} />
+          )}
         </div>
       </DialogContent>
     </Dialog>

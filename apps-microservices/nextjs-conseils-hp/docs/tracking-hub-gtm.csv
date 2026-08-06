@@ -34,7 +34,7 @@ Variable dataLayer;DL - source_block;source_block;id du bloc thematique | ressou
 Variable dataLayer;DL - product_category5;product.category5;ATTENTION cle dataLayer avec un point mais parametre GA4 nomme product_category5 (le point est invalide en GA4)
 Parametres du tag;Mapping;Mapper chaque variable ci-dessus en parametre d'evenement du tag GA4;Ne PAS remapper page_template ni le bloc user - deja lus comme variables de page
 Admin GA4;Dimensions personnalisees;hub_page_id / hub_page_slug / hub_group / entry_point / step_name / lead_path / user_known_status / result / source_block / download_trigger;10 dimensions event-scoped
-Admin GA4;Key event hub_lead;A ARBITRER - le marquer l'ajoute au total conversions de la propriete;Voir tracking-hub.md 7.2 - seul vrai vecteur de contamination des rapports existants
-Admin GA4;Exploration entonnoir;hub_form_view > hub_form_start > hub_form_step > hub_form_email_submit > hub_email_check > hub_lead segmentee par hub_page_id;Permet de comparer les 3 verticales entre elles
+Admin GA4;Key event hub_form_submission;A ARBITRER - le marquer l'ajoute au total conversions de la propriete;Voir tracking-hub.md 7.2 - seul vrai vecteur de contamination des rapports existants
+Admin GA4;Exploration entonnoir;hub_form_view > hub_form_start > hub_form_step > hub_form_email_submit > hub_email_check > hub_form_submission segmentee par hub_page_id;ATTENTION 8 evenements commencent par hub_form_ et un seul est la conversion - verifier deux fois la derniere etape de l'entonnoir
 Admin GA4;Conservation des donnees;Verifier la duree de conservation (defaut 2 mois pour les explorations);Un POC juge a 3 mois avec 2 mois de conservation perd sa premiere cohorte
 Consentement;Verification;Le tag doit rester couvert par le Consent Mode du conteneur (analytics_storage);Sous refus les pushs ont lieu mais GA4 ne transmet pas - le POC sous-estime du taux de refus

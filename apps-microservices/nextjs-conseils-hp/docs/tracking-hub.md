@@ -105,27 +105,66 @@ Le plan traite ce cas par un événement distinct :
 
 | Événement | Sens | Ne pas confondre avec |
 |---|---|---|
-| `hub_guide_shortcut` | re-téléchargement par un visiteur déjà converti | `hub_lead` — qui ne doit **pas** être émis ici |
+| `hub_guide_shortcut` | re-téléchargement par un visiteur déjà converti | `hub_form_submission` — qui ne doit **pas** être émis ici |
 
 Sans cette séparation, deux erreurs symétriques sont possibles : compter chaque
 re-téléchargement comme une conversion (leads gonflés), ou n'émettre aucun événement et
 perdre entièrement le signal d'usage du guide. Le test 20 de la recette verrouille le point :
-trois re-téléchargements ⇒ 3 `hub_guide_download`, toujours 0 `hub_lead`.
+trois re-téléchargements ⇒ 3 `hub_guide_download`, toujours 0 `hub_form_submission`.
 
 Note au passage : stocker `1` plutôt que l'adresse est un progrès — l'e-mail en clair dans un
 cookie était une donnée personnelle exposée côté client sans nécessité.
 
 ### 3.4 Le taux d'abandon aux coordonnées a un dénominateur particulier
 
-Les événements `coordinates_view` / `coordinates_submit` ne sont émis que sur la branche
-**INCONNU**. Leur dénominateur est donc `hub_email_check` avec `result=unknown`, **pas**
-`hub_form_email_submit`. Rapporté au total, le taux serait mécaniquement sous-estimé.
+`hub_form_coordinates_submit` n'est émis que sur la branche **INCONNU**. Son dénominateur est
+donc `hub_email_check` avec `result=unknown`, **pas** `hub_form_email_submit`. Rapporté au
+total, le taux serait mécaniquement sous-estimé.
+
+### 3.5 Pas d'événement « vue » quand un autre le porte déjà
+
+Règle de non-redondance, appliquée après relecture du 2026-08-05. Un écran affiché par la
+**même branche de code, dans le même tick** qu'un événement déjà émis ne mérite pas son propre
+événement : ce serait deux noms pour un seul instant, et donc deux valeurs qui finiront par
+diverger.
+
+| Événement candidat | Verdict | Preuve |
+|---|---|---|
+| `hub_form_coordinates_view` | **supprimé des deux tunnels** | `useGuideLead.ts:109-112` et `AssistantForm.tsx:174-178` affichent l'étape dans la branche `200 / coordonnees_requises`, celle-là même qui déclenche `hub_email_check`. `result=unknown` **est** le signal « étape coordonnées affichée ». |
+| `hub_form_email_view` — tunnel **guide** | **absent à raison** | Le dialog s'ouvre directement sur l'écran e-mail : `hub_form_view` et lui seraient simultanés. |
+| `hub_form_email_view` — tunnel **projet** | **conservé** | Il suit la 4ᵉ question, et peut être **entièrement sauté** (`skipEmailStep` pour un visiteur reconnu). Son absence est donc une information à part entière. |
+
+L'asymétrie entre les deux tunnels est voulue, mais elle n'était pas écrite — ce qui la rendait
+indiscernable d'un oubli. C'est corrigé ici.
+
+### 3.6 Deux événements manquaient réellement au tunnel guide
+
+`hub_form_error` et `hub_form_abandon` n'y figuraient pas, et rien ne le justifiait :
+`useGuideLead.ts:114` et `:118` ont exactement les mêmes branches d'erreur que le tunnel
+projet, et on peut fermer le dialog guide ou la pop-up sans convertir.
+
+L'abandon à l'étape coordonnées du guide est même **plus** intéressant que côté projet : on y
+demande téléphone et code postal pour un simple PDF. C'est l'endroit du parcours où le rapport
+entre ce qu'on exige et ce qu'on offre est le plus défavorable.
 
 ### 3.5 Le PDF est délivré dans les deux tunnels
 
 Vérifié en recette : l'écran de remerciement du questionnaire **projet** propose lui aussi le
 guide. `hub_guide_download` n'est donc pas réservé au tunnel guide — c'est `hub_group` qui dit
 d'où vient le téléchargement.
+
+---
+
+### 3.7 Nommage de l'événement de conversion
+
+`hub_form_submission` — renommé le 2026-08-05 (valait `hub_lead`).
+
+⚠️ **Point de vigilance à la construction des entonnoirs GA4.** Huit événements commencent
+désormais par `hub_form_` et un seul est la conversion. Dans la liste alphabétique de GA4,
+`hub_form_submission` voisine avec `hub_form_email_submit` et
+`hub_form_coordinates_submit`, qui sont des étapes intermédiaires. Vérifier deux fois la
+dernière étape d'un entonnoir : se tromper ne produit aucune erreur, seulement un taux de
+conversion faux — et plus élevé que la réalité, donc peu susceptible d'être remis en question.
 
 ---
 
@@ -196,7 +235,7 @@ Observation de recette : l'appel 2 a renvoyé **HTTP 200** avec `statut: "enregi
 la spec annonce 201. Le code gère déjà les deux (`res.status === 201 || corps?.statut ===
 'enregistre'`, `AssistantForm.tsx:168`).
 
-**Le push `hub_lead` doit vivre dans cette branche exacte**, à côté du `setSubmitted(true)`, et
+**Le push `hub_form_submission` doit vivre dans cette branche exacte**, à côté du `setSubmitted(true)`, et
 non être conditionné sur `res.status === 201` — sinon la conversion est perdue sur
 l'environnement observé.
 
@@ -241,7 +280,7 @@ travail avant d'en ajouter un.
 
 ### 7.2 Les key events s'agrègent au niveau de la propriété
 
-Marquer `hub_lead` comme key event l'ajoute au total « conversions » de `G-DQTV4SHNME`. Tout
+Marquer `hub_form_submission` comme key event l'ajoute au total « conversions » de `G-DQTV4SHNME`. Tout
 rapport ou tableau de bord qui lit ce total sans détailler par nom d'événement comptera les
 leads HUB. **C'est le seul vrai vecteur de contamination des rapports existants, et il ne
 dépend pas du nom de l'événement.** Deux options : ne pas le marquer pendant le POC — les
@@ -307,7 +346,7 @@ première collecte, changer coûte une reprise de tous les segments.
 |---|---|---|
 | 1 | `lib/analytics/hub.ts` + tests unitaires | rien — mais le socle est testable sans navigateur |
 | 2 | Tunnel projet (§3, events 1-11) | combien de projets, où ça décroche |
-| 3 | `hub_email_check` + `hub_lead` + `hub_form_abandon` sur les deux tunnels | part de contacts déjà connus, étape qui tue le tunnel |
+| 3 | `hub_email_check` + `hub_form_submission` + `hub_form_abandon` sur les deux tunnels | part de contacts déjà connus, étape qui tue le tunnel |
 | 4 | Tunnel guide avec `entry_point` et `hub_guide_shortcut` | quelle porte convertit, usage réel du guide |
 | 5 | `hub_article_click` | si le HUB alimente les pages conseils |
 | 6 | Conteneur GTM + GA4 + recette 30 tests | les chiffres sont fiables |

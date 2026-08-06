@@ -6,6 +6,8 @@ import { HUB_SECTION_IDS } from '@/lib/hub/anchors';
 import type { HeaderCategory } from '@/data/site/header-categories';
 import { guideIdPageHub } from '@/data/hub';
 import { HubHero } from './HubHero';
+import { HubTrackingContext } from './HubTrackingContext';
+import { HubArticleClickTracker } from './HubArticleClickTracker';
 import { AssistantForm } from './AssistantForm';
 import { HubSectionNav } from './HubSectionNav';
 import { GuideDownloadDialog } from './GuideDownloadDialog';
@@ -92,6 +94,14 @@ export function HubTemplate({ page, headerCategories = [] }: HubTemplateProps) {
       <SiteHeader categories={headerCategories} />
 
       <main>
+        {/* ⚠️ EN TÊTE de <main>, avant tout composant client émetteur : c'est un
+            <script> serveur, exécuté au parsing, donc `hub_page_id` est dans le
+            dataLayer avant qu'un événement puisse partir. Le déplacer plus bas
+            n'aurait pas d'effet visible mais rendrait l'ordre dépendant de
+            l'hydratation — un manque de dimension intermittent. */}
+        <HubTrackingContext pageId={page.id} slug={page.slug} />
+        <HubArticleClickTracker />
+
         <HubHero data={page.hero} formSlot={<AssistantForm data={page.assistant} idPageHub={page.id} />} />
         <HubSectionNav items={page.nav} />
         <ValueProps data={page.valueProps} />

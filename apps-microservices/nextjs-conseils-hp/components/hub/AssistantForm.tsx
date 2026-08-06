@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import { ArrowRight, Download, Mail, MapPin, ShieldCheck, User } from 'lucide-react';
 import {
@@ -16,6 +16,7 @@ import { Confetti } from './Confetti';
 import { useAutoDownload } from '@/lib/hub/useAutoDownload';
 import { rememberEmail } from '@/lib/hub/leadEmailCookie';
 import { isValidPhone } from '@/lib/hub/validation';
+import { pushHubEvent, pushHubEventOnce } from '@/lib/analytics/hub';
 import type { HubAssistant } from '@/types/hub';
 
 /**
@@ -70,6 +71,21 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
+  /* ------------------------------------------------------------ tracking ---
+   * Plan : `docs/tracking-hub.md`. Tout passe par `pushHubEvent` — aucun
+   * `dataLayer.push` en direct ici.
+   *
+   * Deux portées de déduplication, à ne pas confondre :
+   *  - `hub_form_view` (impression du hero) : UNE fois par chargement de page,
+   *    d'où `pushHubEventOnce` dont le registre vit dans le module ;
+   *  - `hub_form_step` / `hub_form_email_view` : une fois par PARCOURS, d'où un
+   *    ref local vidé par `reset()`. Un visiteur qui rouvre le questionnaire doit
+   *    ré-émettre ses étapes, sinon le second parcours est invisible.
+   */
+  const heroRef = useRef<HTMLDivElement>(null);
+  const firedScreensRef = useRef<Set<string>>(new Set());
+  const startedRef = useRef(false);
+
   // Flux : questionnaire (0..N-1) → e-mail (N) → coordonnées (N+1) → succès.
   // ⚠️ Contrairement au guide/pop-up, le questionnaire N'A PAS de raccourci
   // « e-mail mémorisé » : l'étape e-mail est TOUJOURS affichée.
@@ -79,6 +95,17 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
   const current = step < data.steps.length ? data.steps[step] : null;
   // 100% au succès quel que soit le chemin (e-mail reconnu = 1 seul appel).
   const progressPct = submitted ? 100 : (step / totalSteps) * 100;
+
+  /** Écran courant — sert à `hub_form_abandon` et à la dédup des vues. */
+  const screenName = (): string => {
+    if (submitted) return 'success';
+    if (isCoordinates) return 'coordinates';
+    if (isContact) return 'email';
+    return data.steps[step]?.id ?? `step-${step}`;
+  };
+
+  /** Nombre de questions réellement répondues — dimension de `hub_form_submission`. */
+  const answeredCount = () => data.steps.filter((s) => Boolean(answers[s.id])).length;
 
   const reset = () => {
     setStep(0);
@@ -95,6 +122,9 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
     setForceOpen(false);
     setSubmitting(false);
     setErrorMsg('');
+    // Dédup à la portée du parcours : le suivant doit ré-émettre ses étapes.
+    firedScreensRef.current.clear();
+    startedRef.current = false;
   };
 
   /**
@@ -159,21 +189,53 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
       }
 
       if (res.status === 201 || corps?.statut === 'enregistre') {
+        // ⚠️ `hub_form_submission` vit dans CETTE branche, et surtout PAS sous un
+        // `res.status === 201` : l'API renvoie 200 + `statut:"enregistre"` sur
+        // certains environnements (constaté en recette). Se fier au seul code HTTP
+        // perdrait la conversion sans que rien ne le signale.
+        if (!withCoordinates) {
+          // Succès dès l'appel 1 ⇒ le serveur connaissait le contact.
+          pushHubEvent('hub_email_check', 'projet', { result: 'known' });
+        }
+        pushHubEvent('hub_form_submission', 'projet', {
+          form_id: 'assistant',
+          id_page_hub: idPageHub,
+          lead_path: withCoordinates ? 'complet' : 'reconnu',
+          user_known_status: withCoordinates ? 'Unknown' : 'Known',
+          steps_answered: answeredCount(),
+        });
         // Mémorise l'e-mail seulement après un enregistrement réel (201).
         rememberEmail(emailOverride ?? email);
         setSubmitted(true); // succès : le bouton disparaît, on ne réactive pas.
         return;
       }
       if (res.status === 200 && corps?.statut === 'coordonnees_requises') {
+        // `result:'unknown'` vaut AUSSI « étape coordonnées affichée » : c'est la
+        // même branche qui incrémente `step`. D'où l'absence d'un
+        // `hub_form_coordinates_view`, qui serait le même instant sous un autre nom.
+        pushHubEvent('hub_email_check', 'projet', { result: 'unknown' });
         setStep((s) => s + 1);
         setSubmitting(false);
         return;
       }
       console.error('[AssistantForm] réponse inattendue', res.status, corps);
+      pushHubEvent('hub_form_error', 'projet', {
+        form_id: 'assistant',
+        error_stage: withCoordinates ? 'coordinates' : 'email',
+        http_status: res.status,
+      });
       setErrorMsg('Une erreur technique est survenue. Merci de réessayer.');
       setSubmitting(false);
     } catch (err) {
       console.error('[AssistantForm] échec réseau', err);
+      // `http_status: 0` = échec réseau, à distinguer d'une réponse serveur
+      // inattendue. Sans cette distinction, une coupure réseau et un bug d'API
+      // se ressemblent dans les rapports.
+      pushHubEvent('hub_form_error', 'projet', {
+        form_id: 'assistant',
+        error_stage: withCoordinates ? 'coordinates' : 'email',
+        http_status: 0,
+      });
       setErrorMsg('Une erreur technique est survenue. Merci de réessayer.');
       setSubmitting(false);
     }
@@ -189,12 +251,55 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
     return () => window.removeEventListener(ASSISTANT_DIALOG_EVENT, handler);
   }, []);
 
+  /**
+   * `hub_form_view` — impression de l'étape 1 dans le hero.
+   *
+   * Motif repris de `HeroQuoteForm` (pages conseils) : `IntersectionObserver`
+   * déconnecté au premier croisement. Une impression, pas un compteur de
+   * passages de scroll. `pushHubEventOnce` verrouille en plus au niveau du module,
+   * ce qui protège d'un double montage en mode strict React.
+   */
+  useEffect(() => {
+    const el = heroRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting) return;
+        observer.disconnect();
+        pushHubEventOnce(`form_view:${idPageHub}`, 'hub_form_view', 'projet', {
+          form_id: 'assistant',
+          entry_point: 'hero',
+          step_name: data.steps[0]?.id,
+          step_total: totalSteps,
+        });
+      },
+      { threshold: 0.01 },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idPageHub]);
+
+  /* `hub_form_step` / `hub_form_email_view` : voir l'effet placé après la
+     déclaration de `modalOpen` — il en dépend. */
+
   const isSelected = (id: string, option: string) => {
     const value = answers[id];
     return Array.isArray(value) ? value.includes(option) : value === option;
   };
 
   const selectOption = (id: string, option: string, multi: boolean) => {
+    // `hub_form_start` — la PREMIÈRE réponse cochée du parcours, quelle que soit
+    // l'étape. C'est le vrai démarrage : `hub_form_view` n'est qu'une impression,
+    // et le rapport entre les deux donne le taux d'engagement du hero.
+    if (!startedRef.current) {
+      startedRef.current = true;
+      pushHubEvent('hub_form_start', 'projet', {
+        form_id: 'assistant',
+        step_name: id,
+        answer_label: option,
+      });
+    }
     if (multi) {
       setAnswers((prev) => {
         const list = Array.isArray(prev[id]) ? (prev[id] as string[]) : [];
@@ -231,10 +336,53 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
   const digitsOf = (s: string) => (s.match(/\d/g) ?? []).length;
   const phoneError = digitsOf(phone) > digitsOf(dialCode) && !isValidPhone(phone);
 
+  /**
+   * `hub_form_step` et `hub_form_email_view` — affichage des écrans du dialog.
+   *
+   * ⚠️ Placé ICI et non avec les autres effets : il dépend de `modalOpen`, déclaré
+   * juste au-dessus. Un `useEffect` évalue son tableau de dépendances pendant le
+   * rendu — le remonter avant la déclaration lèverait une `ReferenceError` de TDZ.
+   *
+   * L'étape 0 est rendue inline dans le hero et son impression est déjà couverte
+   * par `hub_form_view` : on ne l'émet pas ici, sinon le premier écran compterait
+   * deux fois dans l'entonnoir.
+   *
+   * `screenName()` sert de clé de dédup : revenir en arrière puis ré-avancer ne
+   * doit pas gonfler le compteur de l'étape, sans quoi le taux d'abandon par
+   * étape devient faux.
+   */
+  useEffect(() => {
+    if (!modalOpen || submitted) return;
+    const name = screenName();
+    if (firedScreensRef.current.has(name)) return;
+    firedScreensRef.current.add(name);
+
+    if (isContact) {
+      pushHubEvent('hub_form_email_view', 'projet', { form_id: 'assistant' });
+      return;
+    }
+    // L'étape coordonnées n'a pas d'événement de vue : `hub_email_check`
+    // (`result:'unknown'`) est émis par la même branche, au même instant.
+    if (isCoordinates) return;
+    if (step === 0) return;
+
+    pushHubEvent('hub_form_step', 'projet', {
+      form_id: 'assistant',
+      step_name: name,
+      step_index: step,
+      step_total: totalSteps,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, modalOpen, submitted, isContact, isCoordinates]);
+
   return (
     <>
       {/* ---------------------------------------------------- Carte du hero --- */}
-      <div className="w-full overflow-hidden rounded-3xl border border-border bg-card shadow-elegant">
+      {/* `heroRef` : cible de l'IntersectionObserver de `hub_form_view`. */}
+      <div
+        ref={heroRef}
+        className="w-full overflow-hidden rounded-3xl border border-border bg-card shadow-elegant"
+      >
         <div className="px-6 pt-5 sm:px-8 sm:pt-6">
           <div className="flex items-start justify-between gap-4">
             <h2 className="text-lg font-bold text-foreground sm:text-xl">{data.cardTitle}</h2>
@@ -286,6 +434,16 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
           // contenu reste stable pendant l'animation de sortie) puis on
           // réinitialise après l'animation → pas de flash du questionnaire.
           if (!open) {
+            // `hub_form_abandon` — AVANT `reset()`, qui efface l'étape courante.
+            // Émis seulement si le parcours n'a pas abouti : fermer l'écran de
+            // remerciement n'est pas un abandon.
+            if (!submitted) {
+              pushHubEvent('hub_form_abandon', 'projet', {
+                form_id: 'assistant',
+                last_step_name: screenName(),
+                last_step_index: step,
+              });
+            }
             setClosing(true);
             window.setTimeout(() => {
               reset();
@@ -320,6 +478,11 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
                 onSubmit={(event) => {
                   event.preventDefault();
                   if (!emailValid || submitting) return;
+                  // Émis ICI et non dans `send()` : `send()` sert les deux appels,
+                  // et seul ce point correspond à une soumission d'e-mail par le
+                  // visiteur. `hub_email_check` reste dans `send()`, là où arrive
+                  // le verdict du serveur.
+                  pushHubEvent('hub_form_email_submit', 'projet', { form_id: 'assistant' });
                   // APPEL 1 — sans coordonnées (§5).
                   void send(false);
                 }}
@@ -380,6 +543,9 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
                 onSubmit={(event) => {
                   event.preventDefault();
                   if (!coordinatesValid || submitting) return;
+                  pushHubEvent('hub_form_coordinates_submit', 'projet', {
+                    form_id: 'assistant',
+                  });
                   // APPEL 2 — avec coordonnées (§5). nom_prenom non vide (§8).
                   void send(true);
                 }}
@@ -621,6 +787,14 @@ function Success({ data }: { data: HubAssistant }) {
   const { success } = data;
   // Téléchargement auto du guide dès l'affichage de l'écran de remerciement.
   useAutoDownload(success.fileUrl);
+
+  // ⚠️ `hub_group: 'projet'` et non 'guide' : le PDF est aussi délivré en fin de
+  // questionnaire. L'attribuer au tunnel guide gonflerait sa performance avec des
+  // téléchargements qu'il n'a pas générés.
+  useEffect(() => {
+    pushHubEvent('hub_guide_download', 'projet', { download_trigger: 'auto' });
+  }, []);
+
   return (
     <div className="relative text-center">
       <Confetti />
@@ -643,6 +817,9 @@ function Success({ data }: { data: HubAssistant }) {
       <a
         href={success.fileUrl ?? '#'}
         download
+        onClick={() =>
+          pushHubEvent('hub_guide_download', 'projet', { download_trigger: 'manual' })
+        }
         className="mt-6 inline-flex h-10 items-center justify-center gap-2 rounded-lg px-4 text-sm font-medium text-muted-foreground transition hover:text-cta"
       >
         <Download className="h-4 w-4" />

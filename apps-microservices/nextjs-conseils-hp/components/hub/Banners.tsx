@@ -58,7 +58,12 @@ function Banner({ id, tag, tagIcon, title, text, ctaLabel, ctaIcon, image, actio
               {action === 'assistant' ? (
                 <AssistantButton label={ctaLabel} icon={ctaIcon} />
               ) : (
-                <GuideButton label={ctaLabel} icon={ctaIcon} variant="solid" />
+                <GuideButton
+                  label={ctaLabel}
+                  icon={ctaIcon}
+                  variant="solid"
+                  entryPoint="banner_guide"
+                />
               )}
             </div>
             <p className={`mt-2 ${CARD_BODY} text-muted-foreground`}>{text}</p>

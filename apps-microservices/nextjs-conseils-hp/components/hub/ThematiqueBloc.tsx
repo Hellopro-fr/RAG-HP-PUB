@@ -164,7 +164,14 @@ function CardColumn({ cards, guideLabel }: { cards: HubInfoCard[]; guideLabel?: 
       {cards.map((card) => (
         <InfoCard key={card.title} data={card} />
       ))}
-      {guideLabel && <GuideButton label={guideLabel} icon="download" className="w-full" />}
+      {guideLabel && (
+        <GuideButton
+          label={guideLabel}
+          icon="download"
+          className="w-full"
+          entryPoint="bloc_thematique"
+        />
+      )}
     </div>
   );
 }

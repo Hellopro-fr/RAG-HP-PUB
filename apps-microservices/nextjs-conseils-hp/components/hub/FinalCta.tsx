@@ -71,6 +71,7 @@ export function FinalCta({ data }: { data: HubFinalCta }) {
               className="absolute left-0 top-0 hidden h-full border-l border-dashed border-white/25 lg:block"
             />
             <GuideButton
+              entryPoint="cta_final"
               label={data.ctaLabel}
               icon="download"
               variant="solid"

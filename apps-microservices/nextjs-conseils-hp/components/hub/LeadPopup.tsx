@@ -14,6 +14,7 @@ import { CoordinatesStep, DownloadStep } from './GuideSteps';
 import { CARD_BODY, FEATURE_TITLE, META, TAG } from './typography';
 import { useGuideLead } from '@/lib/hub/useGuideLead';
 import { getRememberedEmail } from '@/lib/hub/leadEmailCookie';
+import { pushHubEvent } from '@/lib/analytics/hub';
 import type { HubLeadPopup, HubGuideDialog } from '@/types/hub';
 
 /**
@@ -45,7 +46,7 @@ export function LeadPopup({
   idPageHub: number;
 }) {
   const [open, setOpen] = useState(false);
-  const lead = useGuideLead(idPageHub);
+  const lead = useGuideLead(idPageHub, 'popup_scroll');
   const { reset } = lead;
 
   useEffect(() => {
@@ -74,6 +75,16 @@ export function LeadPopup({
       // pop-up, aucun remerciement, aucun téléchargement déclenché.
       if (getRememberedEmail()) return;
       setOpen(true);
+      // Impression de la pop-up. ⚠️ `sessionStorage` étant propre à l'ONGLET, un
+      // visiteur qui ouvre la page dans trois onglets produit trois impressions
+      // dans UNE SEULE session GA4 : ne pas calculer le taux de conversion de la
+      // pop-up sur le NOMBRE d'événements, mais sur les sessions ou les
+      // utilisateurs (cf. docs/tracking-hub.md §8).
+      pushHubEvent('hub_guide_popup_view', 'guide', {
+        form_id: 'guide',
+        entry_point: 'popup_scroll',
+        trigger_section_id: data.triggerSectionId,
+      });
     };
 
     window.addEventListener('scroll', onScroll, { passive: true });
@@ -86,12 +97,25 @@ export function LeadPopup({
   const submitEmail = (event: React.FormEvent) => {
     event.preventDefault();
     if (!emailValid || lead.submitting) return;
+    pushHubEvent('hub_form_email_submit', 'guide', {
+      form_id: 'guide',
+      entry_point: 'popup_scroll',
+    });
     // APPEL 1 — sans coordonnées. Le passage de phase ferme ce grand modal et
     // ouvre le petit (coordonnées ou téléchargement).
     void lead.send(false);
   };
 
   const close = () => {
+    // Abandon : fermeture avant l'écran de téléchargement. Émis AVANT `reset()`,
+    // qui remet la phase à 'email' et effacerait l'étape réellement atteinte.
+    if (lead.phase !== 'download') {
+      pushHubEvent('hub_form_abandon', 'guide', {
+        form_id: 'guide',
+        entry_point: 'popup_scroll',
+        last_step_name: lead.phase,
+      });
+    }
     setOpen(false);
     reset();
   };
@@ -254,10 +278,11 @@ export function LeadPopup({
                 guide={guide}
                 lead={lead}
                 idPrefix="popup"
+                entryPoint="popup_scroll"
                 onBack={() => lead.setPhase('email')}
               />
             ) : (
-              <DownloadStep download={guide.download} />
+              <DownloadStep download={guide.download} group="guide" entryPoint="popup_scroll" />
             )}
           </div>
         </DialogContent>

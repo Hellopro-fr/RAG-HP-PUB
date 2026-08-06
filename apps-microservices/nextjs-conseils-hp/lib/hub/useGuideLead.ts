@@ -1,8 +1,9 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { isValidPhone } from './validation';
 import { rememberEmail } from './leadEmailCookie';
+import { pushHubEvent, type HubEntryPoint } from '@/lib/analytics/hub';
 
 /**
  * Flux commun aux deux points d'entrée « guide » (dialog `GuideDownloadDialog`
@@ -24,7 +25,26 @@ import { rememberEmail } from './leadEmailCookie';
  */
 export type GuideLeadPhase = 'email' | 'coordinates' | 'download';
 
-export function useGuideLead(idPageHub: number) {
+/**
+ * `entryPoint` sert UNIQUEMENT au tracking : quatre emplacements de la page
+ * ouvrent le même dialog, et savoir lequel convertit décide de ce qu'on garde.
+ * Passé en argument plutôt que fixé dans le hook : le dialog est ouvert par un
+ * événement `window`, donc l'emplacement n'est connu qu'au moment du clic.
+ */
+export function useGuideLead(idPageHub: number, entryPoint: HubEntryPoint) {
+  /**
+   * ⚠️ Lu via un ref, pas via la closure.
+   *
+   * `GuideDownloadDialog` enregistre son écouteur d'ouverture UNE seule fois
+   * (`useEffect` avec `[reset]`), et ce gestionnaire appelle `send()` pour le
+   * visiteur reconnu. Cette closure capture le `send` du PREMIER rendu, donc la
+   * valeur initiale d'`entryPoint` — la conversion serait attribuée au bandeau
+   * guide même si le clic venait du CTA final. Le ref est réassigné à chaque
+   * rendu : `send` y lit toujours la valeur courante, d'où qu'il soit appelé.
+   */
+  const entryPointRef = useRef(entryPoint);
+  entryPointRef.current = entryPoint;
+
   const [phase, setPhase] = useState<GuideLeadPhase>('email');
   const [email, setEmail] = useState('');
   const [civilite, setCivilite] = useState('');
@@ -64,6 +84,7 @@ export function useGuideLead(idPageHub: number) {
    */
   const send = async (withCoordinates: boolean, emailOverride?: string) => {
     if (submitting) return;
+    const from = entryPointRef.current;
     const emailToUse = emailOverride ?? email;
     setSubmitting(true);
     setErrorMsg('');
@@ -98,6 +119,20 @@ export function useGuideLead(idPageHub: number) {
       }
 
       if (res.status === 201 || corps?.statut === 'enregistre') {
+        // ⚠️ La conversion est reconnue par CETTE condition, pas par le seul code
+        // HTTP : l'API renvoie 200 + `statut:"enregistre"` sur certains
+        // environnements (constaté en recette).
+        if (!withCoordinates) {
+          // Succès dès l'appel 1 ⇒ le serveur connaissait déjà le contact.
+          pushHubEvent('hub_email_check', 'guide', { result: 'known', entry_point: entryPoint });
+        }
+        pushHubEvent('hub_form_submission', 'guide', {
+          form_id: 'guide',
+          id_page_hub: idPageHub,
+          entry_point: from,
+          lead_path: withCoordinates ? 'complet' : 'reconnu',
+          user_known_status: withCoordinates ? 'Unknown' : 'Known',
+        });
         // Mémorise l'e-mail UNIQUEMENT après un enregistrement réel (201) : un
         // 200 (coordonnées requises, rien écrit) ne doit pas « reconnaître » le
         // visiteur au prochain passage.
@@ -107,15 +142,33 @@ export function useGuideLead(idPageHub: number) {
         return;
       }
       if (res.status === 200 && corps?.statut === 'coordonnees_requises') {
+        // `result:'unknown'` vaut AUSSI « étape coordonnées affichée » : c'est la
+        // même branche qui change de phase. Pas de `hub_form_coordinates_view`,
+        // qui serait le même instant sous un second nom.
+        pushHubEvent('hub_email_check', 'guide', { result: 'unknown', entry_point: entryPoint });
         setPhase('coordinates');
         setSubmitting(false);
         return;
       }
       console.error('[useGuideLead] réponse inattendue', res.status, corps);
+      pushHubEvent('hub_form_error', 'guide', {
+        form_id: 'guide',
+        entry_point: from,
+        error_stage: withCoordinates ? 'coordinates' : 'email',
+        http_status: res.status,
+      });
       setErrorMsg('Une erreur technique est survenue. Merci de réessayer.');
       setSubmitting(false);
     } catch (err) {
       console.error('[useGuideLead] échec réseau', err);
+      // `http_status: 0` = échec réseau, à distinguer d'une réponse serveur
+      // inattendue : une coupure et un bug d'API ne se corrigent pas pareil.
+      pushHubEvent('hub_form_error', 'guide', {
+        form_id: 'guide',
+        entry_point: from,
+        error_stage: withCoordinates ? 'coordinates' : 'email',
+        http_status: 0,
+      });
       setErrorMsg('Une erreur technique est survenue. Merci de réessayer.');
       setSubmitting(false);
     }

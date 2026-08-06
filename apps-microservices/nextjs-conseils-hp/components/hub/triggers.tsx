@@ -3,6 +3,7 @@
 import { HubIcon } from './primitives';
 import { openAssistantDialog } from './AssistantForm';
 import { openGuideDialog } from './GuideDownloadDialog';
+import type { HubEntryPoint } from '@/lib/analytics/hub';
 import type { HubIconName } from '@/types/hub';
 
 /**
@@ -73,9 +74,26 @@ function TriggerButton({
   );
 }
 
-/** Ouvre le dialog de téléchargement du guide. */
-export function GuideButton({ variant = 'outline', ...props }: TriggerProps) {
-  return <TriggerButton onClick={openGuideDialog} variant={variant} {...props} />;
+/**
+ * Ouvre le dialog de téléchargement du guide.
+ *
+ * `entryPoint` est OBLIGATOIRE : quatre emplacements de la page ouvrent ce même
+ * dialog, et c'est la seule dimension qui dira lequel convertit. Le rendre
+ * optionnel garantirait qu'on l'oublie sur un bouton et que ses conversions
+ * soient attribuées au mauvais emplacement — une erreur silencieuse.
+ */
+export function GuideButton({
+  variant = 'outline',
+  entryPoint,
+  ...props
+}: TriggerProps & { entryPoint: HubEntryPoint }) {
+  return (
+    <TriggerButton
+      onClick={() => openGuideDialog(entryPoint)}
+      variant={variant}
+      {...props}
+    />
+  );
 }
 
 /** Ouvre le questionnaire « plan projet ». */

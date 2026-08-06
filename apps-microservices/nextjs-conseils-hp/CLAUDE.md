@@ -688,7 +688,38 @@ footer** du prototype Lovable.
 ⚠️ Cette valeur est un **contrat avec GA4**, pas un libellé interne : des filtres et
 segments sont construits dessus. La changer met les rapports à zéro sans lever
 d'erreur. Verrouillée par `__tests__/components/hub/HubTemplate.test.tsx`.
-Plan de tracking complet : `docs/tracking-hub.md`.
+
+### 11bis.3bis Tracking HUB — `lib/analytics/hub.ts`
+
+Plan complet : `docs/tracking-hub.md` (+ 3 CSV : événements, GTM, recette).
+
+**RÈGLE : aucun composant de `components/hub/` n'écrit dans le dataLayer.** Tout
+passe par `pushHubEvent(event, group, params)`. Un `grep pushHubEvent` donne
+l'inventaire exhaustif des points de mesure ; un `dataLayer.push` éparpillé, non.
+
+- **Vocabulaire dédié `hub_*`.** Ne JAMAIS pousser `quote_form_funnel`,
+  `quote_funnel_validation`, `Popup_Appel_Offre` ni `eec.add` depuis le HUB : ces
+  noms déclenchent les tags des KPI devis, et l'analyse d'impact du template
+  conseils compte ses leads sur `quote_funnel_validation`.
+- **`HubEventParams` est une liste FERMÉE** — c'est la garde anti-PII. Passer un
+  `email` est une erreur de typecheck, pas une revue de code à faire. Ne pas
+  remplacer par un `Record<string, unknown>`.
+- **La conversion (`hub_form_submission`) se reconnaît à
+  `res.status === 201 || corps?.statut === 'enregistre'`**, jamais au seul code
+  HTTP : l'API renvoie 200 + `statut:"enregistre"` sur certains environnements.
+- **Deux portées de déduplication** : `pushHubEventOnce` (une fois par CHARGEMENT
+  de page, registre au niveau du module) et un `useRef` local (une fois par
+  PARCOURS, vidé au `reset()`). Les confondre rend invisible le second parcours
+  d'un même visiteur.
+- `hub_group` distingue `projet` / `guide` / `engagement` et accompagne **tous**
+  les événements. `hub_guide_download` est émis par les DEUX tunnels — le
+  questionnaire offre aussi le guide.
+
+⚠️ **`hub_guide_shortcut` n'est pas encore branché** : le comportement cible
+(cookie `hub_lead_email=1` ⇒ téléchargement direct sans dialog ni appel API) est
+en cours d'implémentation ailleurs. Point d'accroche marqué en commentaire dans
+`GuideDownloadDialog.tsx`. Tant que ce n'est pas fait, un visiteur reconnu qui
+rouvre le dialog produit un `hub_form_submission` en double — cf. `docs/tracking-hub.md` §3.3.
 
 ### 11bis.4 Composants
 
