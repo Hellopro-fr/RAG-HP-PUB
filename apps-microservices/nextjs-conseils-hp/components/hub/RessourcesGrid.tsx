@@ -1,5 +1,6 @@
 import Image from 'next/image';
 import { HubSection, HubIcon } from './primitives';
+import { HubCardCarousel } from './HubCardCarousel';
 import { AssistantButton } from './triggers';
 import { HUB_SECTION_IDS } from '@/lib/hub/anchors';
 import type { HubIconName, HubRessources } from '@/types/hub';
@@ -32,11 +33,18 @@ export function RessourcesGrid({ data }: { data: HubRessources }) {
         <p className="mt-3 text-base text-muted-foreground sm:text-lg">{data.subtitle}</p>
       </div>
 
-      <div className="mt-10 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+      {/* Mobile : carrousel standard HUB (cartes intactes, sans aperçu, flèches en
+          haut + points en bas). Desktop (md+) : grille d'origine. Un seul markup. */}
+      <HubCardCarousel
+        label={`Carrousel — ${data.title}`}
+        className="mt-10"
+        trackClass="gap-5 md:grid md:grid-cols-2 md:overflow-visible xl:grid-cols-3"
+        controlsHiddenClass="md:hidden"
+      >
         {data.items.map((item) => (
           <article
             key={item.title}
-            className="flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm transition hover:-translate-y-1 hover:shadow-elegant"
+            className="flex h-full shrink-0 basis-full snap-start flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm transition hover:-translate-y-1 hover:shadow-elegant md:basis-auto"
           >
             {item.image ? (
               <div className="relative h-52 w-full shrink-0">
@@ -82,7 +90,7 @@ export function RessourcesGrid({ data }: { data: HubRessources }) {
             </div>
           </article>
         ))}
-      </div>
+      </HubCardCarousel>
     </HubSection>
   );
 }

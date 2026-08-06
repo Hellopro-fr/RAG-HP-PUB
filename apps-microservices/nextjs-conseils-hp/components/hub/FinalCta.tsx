@@ -9,21 +9,31 @@ import type { HubFinalCta } from '@/types/hub';
  * du sommaire sticky ; son bouton ouvre le dialog de téléchargement du guide.
  */
 export function FinalCta({ data }: { data: HubFinalCta }) {
+  // Placement grille desktop selon présence d'image (ne pas réserver la colonne
+  // image si absente, sinon le texte hérite de ses 220 px).
+  const gridCols = data.image
+    ? 'lg:grid-cols-[220px_minmax(0,1fr)_auto]'
+    : 'lg:grid-cols-[minmax(0,1fr)_auto]';
+  const textCol = data.image ? 'lg:col-start-2' : 'lg:col-start-1';
+  const btnCol = data.image ? 'lg:col-start-3' : 'lg:col-start-2';
+
   return (
     <HubSection id={HUB_SECTION_IDS.finalCta}>
-      <div className="overflow-hidden rounded-3xl bg-navy-deep px-6 py-10 sm:px-10 sm:py-12">
-        {/* Même précaution que dans LeadPopup : ne pas réserver la colonne image
-            si l'image est absente, sinon le texte hérite de ses 220 px. */}
-        <div
-          className={`grid items-center gap-8 lg:gap-10 ${
-            data.image
-              ? 'lg:grid-cols-[220px_minmax(0,1fr)_auto]'
-              : 'lg:grid-cols-[minmax(0,1fr)_auto]'
-          }`}
-        >
+      <div className="overflow-hidden rounded-3xl bg-navy-deep px-5 py-8 sm:px-10 sm:py-12">
+        {/* MOBILE : pile badge (haut) → image → titre/texte/avantages → bouton.
+            DESKTOP : image à gauche, colonne texte (badge en tête) au centre,
+            bouton à droite. Un seul markup réordonné par la grille, pas de doublon. */}
+        <div className={`grid items-center gap-6 sm:gap-8 lg:gap-10 ${gridCols}`}>
+          {/* Badge — mobile : tout en haut (centré) ; desktop : en tête du texte. */}
+          <div className={`text-center lg:text-left lg:row-start-1 ${textCol}`}>
+            <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-white">
+              {data.badge}
+            </span>
+          </div>
+
           {data.image && (
-            <div className="flex justify-center lg:justify-start">
-              <div className="relative h-56 w-44 sm:h-64 sm:w-52">
+            <div className="flex justify-center lg:col-start-1 lg:row-span-2 lg:row-start-1 lg:justify-start lg:self-center">
+              <div className="relative h-44 w-36 sm:h-64 sm:w-52">
                 <Image
                   src={data.image.src}
                   alt={data.image.alt}
@@ -35,24 +45,21 @@ export function FinalCta({ data }: { data: HubFinalCta }) {
             </div>
           )}
 
-          <div className="min-w-0 text-center lg:text-left">
-            <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-white">
-              {data.badge}
-            </span>
-
-            <h2 className="mt-4 text-3xl font-bold leading-tight tracking-tight text-white sm:text-4xl">
+          {/* Titre + trait + texte + avantages. */}
+          <div className={`min-w-0 text-center lg:text-left lg:row-start-2 ${textCol}`}>
+            <h2 className="text-3xl font-bold leading-tight tracking-tight text-white sm:text-4xl">
               <HubTitle parts={data.titleParts} />
             </h2>
 
-            <span className="mt-4 block h-0.5 w-16 bg-cta/70" />
+            <span className="mx-auto mt-4 block h-0.5 w-16 bg-cta/70 lg:mx-0" />
 
             {/* `max-w-[42rem]` et non `max-w-2xl` : ce token vaut 1400px ici
                 (cf. --container-2xl dans globals.css). */}
-            <p className="mt-4 max-w-[42rem] text-sm leading-relaxed text-white/80 sm:text-base">
+            <p className="mx-auto mt-4 max-w-[42rem] text-sm leading-relaxed text-white/80 sm:text-base">
               {data.text}
             </p>
 
-            <ul className="mt-5 flex flex-wrap justify-center gap-x-6 gap-y-3 lg:justify-start">
+            <ul className="mt-5 flex flex-col items-start gap-3 lg:flex-row lg:flex-wrap lg:items-center lg:justify-start lg:gap-x-6 lg:gap-y-3">
               {data.items.map((item) => (
                 <li key={item.label} className="flex items-center gap-2 text-sm text-white">
                   <span className="grid h-8 w-8 place-items-center rounded-full bg-white/10">
@@ -64,7 +71,10 @@ export function FinalCta({ data }: { data: HubFinalCta }) {
             </ul>
           </div>
 
-          <div className="relative flex flex-col items-center gap-3 lg:pl-8">
+          {/* Bouton + réassurance. */}
+          <div
+            className={`relative flex flex-col items-center gap-3 lg:row-span-2 lg:row-start-1 lg:self-center lg:pl-8 ${btnCol}`}
+          >
             <span
               aria-hidden
               className="absolute left-0 top-0 hidden h-full border-l border-dashed border-white/25 lg:block"

@@ -37,9 +37,12 @@ export function CardCarousel({
     if (!track) return;
     const perPage = track.clientWidth;
     if (perPage === 0) return;
-    // -1px de tolérance : les largeurs fractionnaires font sinon apparaître une
-    // page fantôme de quelques pixels.
-    setPageCount(Math.max(1, Math.ceil((track.scrollWidth - 1) / perPage)));
+    // On retire le total des gaps (`gap-5` = 20px) de `scrollWidth` avant le
+    // `ceil` : en 1 carte/vue (mobile), les gaps gonflaient la largeur et créaient
+    // une page fantôme (flèche « suivant » jamais grisée). `-1px` = tolérance
+    // pour les largeurs fractionnaires en multi-cartes/vue (desktop).
+    const gaps = Math.max(0, track.children.length - 1) * 20;
+    setPageCount(Math.max(1, Math.ceil((track.scrollWidth - gaps - 1) / perPage)));
     setActivePage(Math.round(track.scrollLeft / perPage));
   }, []);
 
@@ -82,17 +85,14 @@ export function CardCarousel({
       {hasControls && (
         // Flèches aux deux extrémités, pastilles centrées entre elles.
         <div className="mt-5 flex items-center gap-4">
-          {/* Masquées sur mobile : le défilement au doigt s'y suffit, et deux
-              flèches de 40 px mangeraient la largeur utile des pastilles. */}
-          <div className="hidden sm:block">
-            <ArrowButton
-              label="Cartes précédentes"
-              disabled={activePage === 0}
-              onClick={() => scrollToPage(activePage - 1)}
-            >
-              <ChevronLeft className="h-5 w-5" />
-            </ArrowButton>
-          </div>
+          {/* Flèches visibles sur tous les écrans (mobile inclus). */}
+          <ArrowButton
+            label="Cartes précédentes"
+            disabled={activePage === 0}
+            onClick={() => scrollToPage(activePage - 1)}
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </ArrowButton>
 
           <div className="flex flex-1 items-center justify-center gap-2">
             {Array.from({ length: pageCount }, (_, page) => (
@@ -109,15 +109,13 @@ export function CardCarousel({
             ))}
           </div>
 
-          <div className="hidden sm:block">
-            <ArrowButton
-              label="Cartes suivantes"
-              disabled={activePage >= pageCount - 1}
-              onClick={() => scrollToPage(activePage + 1)}
-            >
-              <ChevronRight className="h-5 w-5" />
-            </ArrowButton>
-          </div>
+          <ArrowButton
+            label="Cartes suivantes"
+            disabled={activePage >= pageCount - 1}
+            onClick={() => scrollToPage(activePage + 1)}
+          >
+            <ChevronRight className="h-5 w-5" />
+          </ArrowButton>
         </div>
       )}
     </div>

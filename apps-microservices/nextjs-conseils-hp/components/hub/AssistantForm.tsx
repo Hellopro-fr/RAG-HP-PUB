@@ -14,7 +14,7 @@ import { HubIcon } from './primitives';
 import { PhoneField } from './PhoneField';
 import { Confetti } from './Confetti';
 import { useAutoDownload } from '@/lib/hub/useAutoDownload';
-import { rememberEmail } from '@/lib/hub/leadEmailCookie';
+import { markLeadKnown } from '@/lib/hub/leadEmailCookie';
 import { isValidPhone } from '@/lib/hub/validation';
 import type { HubAssistant } from '@/types/hub';
 
@@ -159,8 +159,8 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
       }
 
       if (res.status === 201 || corps?.statut === 'enregistre') {
-        // Mémorise l'e-mail seulement après un enregistrement réel (201).
-        rememberEmail(emailOverride ?? email);
+        // Marque le drapeau « lead connu » (jamais l'e-mail) après un 201 réel.
+        markLeadKnown();
         setSubmitted(true); // succès : le bouton disparaît, on ne réactive pas.
         return;
       }
@@ -302,7 +302,7 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
             </DialogDescription>
           </DialogHeader>
 
-          <div className="pl-6 pr-14 pt-5 sm:pl-8">
+          <div className="pl-6 pr-14 pt-7 sm:pl-8">
             <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
               <div
                 className="h-full rounded-full bg-cta transition-all duration-500"

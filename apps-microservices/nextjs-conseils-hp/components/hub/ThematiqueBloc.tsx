@@ -1,6 +1,7 @@
 import Image from 'next/image';
 import { HubSection, CategoryTag, HubIcon, CheckBullet } from './primitives';
 import { CardCarousel } from './CardCarousel';
+import { HubCardCarousel } from './HubCardCarousel';
 import { AssistantButton, GuideButton } from './triggers';
 import { sanitizeHubHtml } from '@/lib/hub/sanitize';
 import type { HubInfoCard, HubOverlayCard, HubThematique } from '@/types/hub';
@@ -58,11 +59,20 @@ export function ThematiqueBloc({
         )}
 
         {data.layout === 'grid' && (
-          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+          // Mobile : carrousel standard HUB (cartes à taille pleine, sans aperçu,
+          // flèches en haut + points en bas). Desktop (md+) : grille d'origine.
+          // Un seul markup, `ArticleCard` inchangé, aucun doublon.
+          <HubCardCarousel
+            label={`Carrousel — ${data.tag}`}
+            trackClass="gap-5 md:grid md:grid-cols-2 md:overflow-visible xl:grid-cols-3"
+            controlsHiddenClass="md:hidden"
+          >
             {data.cards.map((card) => (
-              <ArticleCard key={card.title} data={card} />
+              <div key={card.title} className="shrink-0 basis-full snap-start md:basis-auto">
+                <ArticleCard data={card} />
+              </div>
             ))}
-          </div>
+          </HubCardCarousel>
         )}
 
         {data.layout === 'carousel' && (

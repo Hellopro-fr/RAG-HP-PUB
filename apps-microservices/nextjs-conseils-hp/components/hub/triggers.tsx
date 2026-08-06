@@ -56,14 +56,20 @@ function TriggerButton({
   variant,
   iconPosition,
   className,
+  markAssistant,
 }: Required<Pick<TriggerProps, 'label' | 'variant'>> &
-  Pick<TriggerProps, 'icon' | 'iconPosition' | 'className'> & { onClick: () => void }) {
+  Pick<TriggerProps, 'icon' | 'iconPosition' | 'className'> & {
+    onClick: () => void;
+    /** Marque le bouton comme CTA « assistant » observé par `StickyCta`. */
+    markAssistant?: boolean;
+  }) {
   const iconNode = <HubIcon name={icon} className="h-4 w-4" />;
   const atEnd = iconPosition === 'end';
   return (
     <button
       type="button"
       onClick={onClick}
+      {...(markAssistant ? { 'data-assistant-cta': '' } : {})}
       className={`inline-flex shrink-0 items-center justify-center gap-2 transition ${VARIANTS[variant]} ${className ?? ''}`}
     >
       {!atEnd && iconNode}
@@ -80,5 +86,15 @@ export function GuideButton({ variant = 'outline', ...props }: TriggerProps) {
 
 /** Ouvre le questionnaire « plan projet ». */
 export function AssistantButton({ variant = 'solid', ...props }: TriggerProps) {
-  return <TriggerButton onClick={openAssistantDialog} variant={variant} {...props} />;
+  // Seuls les CTA de TYPE BOUTON (pas les liens `link`/`row`) sont observés par
+  // `StickyCta` : quand l'un est visible, la barre collée du bas se masque.
+  const markAssistant = variant !== 'link' && variant !== 'row';
+  return (
+    <TriggerButton
+      onClick={openAssistantDialog}
+      variant={variant}
+      markAssistant={markAssistant}
+      {...props}
+    />
+  );
 }

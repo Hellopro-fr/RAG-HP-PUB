@@ -28,11 +28,19 @@ function Banner({ id, tag, tagIcon, title, text, ctaLabel, ctaIcon, image, actio
   return (
     <HubSection id={id}>
       <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
-        <div className="grid items-center gap-5 px-5 py-5 sm:px-6 lg:grid-cols-[160px_minmax(0,1fr)] lg:gap-8 lg:px-8">
+        {/* MOBILE : pile badge (haut-gauche) → image → titre+bouton → texte.
+            DESKTOP (lg) : grille image à gauche, badge au-dessus du contenu à
+            droite. Un seul markup (3 blocs réordonnés par la grille), pas de doublon. */}
+        <div className="flex flex-col gap-4 px-5 py-6 sm:px-6 lg:grid lg:grid-cols-[160px_minmax(0,1fr)] lg:items-center lg:gap-x-8 lg:gap-y-2 lg:px-8 lg:py-5">
+          {/* Badge — mobile : tout en haut à gauche ; desktop : haut de la colonne droite. */}
+          <div className="lg:col-start-2 lg:row-start-1">
+            <CategoryTag icon={tagIcon}>{tag}</CategoryTag>
+          </div>
+
           {image ? (
             // Boîte carrée + `object-contain` : le ratio réel est préservé sans
             // qu'on ait à déclarer les dimensions du fichier.
-            <div className="relative mx-auto h-32 w-full max-w-[140px]">
+            <div className="relative mx-auto h-32 w-full max-w-[140px] lg:col-start-1 lg:row-span-2 lg:row-start-1 lg:self-center">
               <Image
                 src={image.src}
                 alt={image.alt}
@@ -43,24 +51,28 @@ function Banner({ id, tag, tagIcon, title, text, ctaLabel, ctaIcon, image, actio
             </div>
           ) : (
             // Visuel non livré → pastille d'icône.
-            <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+            <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-2xl bg-primary/10 text-primary lg:col-start-1 lg:row-span-2 lg:row-start-1 lg:self-center">
               <HubIcon name={tagIcon} className="h-10 w-10" />
             </div>
           )}
 
-          <div>
-            <CategoryTag icon={tagIcon}>{tag}</CategoryTag>
-            <div className="mt-2 flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <h2 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
-                {title}
-              </h2>
+          {/* Contenu — grille interne. MOBILE (< sm) : pile titre → texte → BOUTON
+              (dernier, pleine largeur). sm+ : titre + bouton sur une ligne, texte
+              dessous (disposition d'origine conservée). */}
+          <div className="sm:grid sm:grid-cols-[1fr_auto] sm:items-center sm:gap-x-4 lg:col-start-2 lg:row-start-2">
+            <h2 className="text-xl font-bold tracking-tight text-foreground sm:col-start-1 sm:row-start-1 sm:text-2xl">
+              {title}
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground sm:col-span-2 sm:col-start-1 sm:row-start-2">
+              {text}
+            </p>
+            <div className="mt-4 w-full sm:col-start-2 sm:row-start-1 sm:mt-0 sm:w-auto sm:justify-self-end">
               {action === 'assistant' ? (
                 <AssistantButton label={ctaLabel} icon={ctaIcon} />
               ) : (
                 <GuideButton label={ctaLabel} icon={ctaIcon} variant="solid" />
               )}
             </div>
-            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{text}</p>
           </div>
         </div>
       </div>

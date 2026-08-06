@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from 'react';
 import { isValidPhone } from './validation';
-import { rememberEmail } from './leadEmailCookie';
+import { markLeadKnown } from './leadEmailCookie';
 
 /**
  * Flux commun aux deux points d'entrée « guide » (dialog `GuideDownloadDialog`
@@ -98,10 +98,10 @@ export function useGuideLead(idPageHub: number) {
       }
 
       if (res.status === 201 || corps?.statut === 'enregistre') {
-        // Mémorise l'e-mail UNIQUEMENT après un enregistrement réel (201) : un
+        // Marque le drapeau UNIQUEMENT après un enregistrement réel (201) : un
         // 200 (coordonnées requises, rien écrit) ne doit pas « reconnaître » le
-        // visiteur au prochain passage.
-        rememberEmail(emailToUse);
+        // visiteur au prochain passage. On ne stocke PAS l'e-mail (cf. cookie).
+        markLeadKnown();
         setPhase('download');
         setSubmitting(false);
         return;

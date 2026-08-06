@@ -12,7 +12,7 @@ import {
 import { HubTitle } from './primitives';
 import { CoordinatesStep, DownloadStep } from './GuideSteps';
 import { useGuideLead } from '@/lib/hub/useGuideLead';
-import { getRememberedEmail } from '@/lib/hub/leadEmailCookie';
+import { isLeadKnown, markLeadKnown } from '@/lib/hub/leadEmailCookie';
 import type { HubGuideDialog } from '@/types/hub';
 
 /**
@@ -55,13 +55,12 @@ export function GuideDownloadDialog({
       reset();
       setEmailError('');
       setOpen(true);
-      // Visiteur reconnu (e-mail mémorisé 30j) → on affiche DIRECTEMENT le
-      // remerciement (optimiste, aucune étape vide) et l'APPEL 1 part en fond.
-      const remembered = getRememberedEmail();
-      if (remembered) {
-        lead.setEmail(remembered);
+      // Visiteur reconnu (drapeau 30j) → écran de téléchargement DIRECT. On ne
+      // stocke plus l'e-mail, donc aucun ré-enregistrement : on affiche juste le
+      // remerciement et on rafraîchit le drapeau (fenêtre glissante de 30 j).
+      if (isLeadKnown()) {
+        markLeadKnown();
         lead.setPhase('download');
-        void lead.send(false, remembered);
       }
     };
     window.addEventListener(GUIDE_DIALOG_EVENT, handler);
@@ -91,7 +90,7 @@ export function GuideDownloadDialog({
 
         {/* Barre de progression sur les étapes coordonnées (66%) et remerciement (100%). */}
         {lead.phase !== 'email' && (
-          <div className="pl-6 pr-14 pt-5 sm:pl-8">
+          <div className="pl-6 pr-14 pt-7 sm:pl-8">
             <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
               <div
                 className="h-full rounded-full bg-cta transition-all duration-500"

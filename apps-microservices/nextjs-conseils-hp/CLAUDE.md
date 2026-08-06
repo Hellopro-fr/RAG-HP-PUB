@@ -734,13 +734,14 @@ Objectif : valider la rentabilité du workflow, pas livrer une V1.
   (ex. 1000 → 2000), distinct du projet pour séparer les leads en stats.
   La route `/api/demande` rend `reponses`/`adresse` optionnels et déclare
   `civilite`/`pays`. `fileUrl` du PDF encore à `'#'` (asset à livrer).
-- **E-mail mémorisé (visiteur reconnu)** : à l'APPEL 1, l'e-mail est écrit dans un
-  cookie 30 j (`lib/hub/leadEmailCookie.ts`, `hub_lead_email`). Tant qu'il existe
-  et vaut un e-mail valide : ouvrir le dialog guide déclenche l'APPEL 1 **direct**
-  (saute l'étape e-mail) ; côté questionnaire projet, une fois les réponses finies
-  l'étape e-mail est **sautée** et l'APPEL 1 part directement → 201 → remerciement.
-  ⚠️ RGPD : ce cookie contient l'e-mail et est renvoyé à chaque requête du
-  sous-domaine — `localStorage` serait une alternative si la transmission pose problème.
+- **Lead connu (drapeau cookie)** : après un enregistrement réel (**201**), on pose
+  un cookie **drapeau** 30 j (`lib/hub/leadEmailCookie.ts`, `hub_lead=1`) — **jamais
+  l'e-mail** (le mail ne part que dans le corps de `POST /api/demande`, pas dans un
+  cookie renvoyé à chaque requête). Tant que le drapeau existe :
+  `GuideDownloadDialog` va **directement** à l'écran de téléchargement (sans appel,
+  puisqu'on n'a plus l'e-mail à ré-envoyer) ; `LeadPopup` **ne s'affiche pas** au
+  scroll. Le questionnaire projet (`AssistantForm`) **n'a PAS** ce raccourci :
+  l'étape e-mail y est **toujours** affichée. API : `markLeadKnown()` / `isLeadKnown()`.
 - **Téléchargement auto** : `lib/hub/useAutoDownload.ts` déclenche le download à
   l'affichage de l'écran de remerciement (guide, pop-up, projet). **No-op tant que
   `fileUrl = '#'`** ; cross-origin nécessitera `Content-Disposition: attachment`.

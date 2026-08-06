@@ -1,28 +1,29 @@
 'use client';
 
 /**
- * Mémorisation de l'e-mail du visiteur dans un cookie 30 jours, pour ne pas le
- * re-demander : un visiteur reconnu qui relance un téléchargement (ou termine le
- * questionnaire) passe directement à l'écran de remerciement.
+ * Drapeau « ce navigateur a déjà soumis un lead » — cookie 30 jours.
  *
- * ⚠️ RGPD / perf : ce cookie (qui contient l'e-mail) est renvoyé au serveur à
- * CHAQUE requête sous `conseils.hellopro.fr`. Pour éviter cette transmission, on
- * pourrait utiliser `localStorage` (client-only) — choix « cookie » fait à la demande.
+ * ⚠️ La valeur stockée est UNIQUEMENT `1`, JAMAIS l'e-mail. Un cookie est renvoyé
+ * au serveur à chaque requête du sous-domaine ; y mettre l'e-mail l'exposerait
+ * inutilement (RGPD + poids). L'e-mail n'est transmis QUE dans le corps de la
+ * soumission `POST /api/demande`, jamais persisté côté navigateur.
+ *
+ * Effet « visiteur reconnu » (cookie présent) :
+ *  - `GuideDownloadDialog` : va directement à l'écran de téléchargement ;
+ *  - `LeadPopup` : ne s'affiche pas au scroll (on ne redérange pas) ;
+ *  - `AssistantForm` : PAS de raccourci (l'étape e-mail reste toujours affichée).
  */
-const COOKIE_NAME = 'hub_lead_email';
+const COOKIE_NAME = 'hub_lead';
 const MAX_AGE_SECONDS = 30 * 24 * 60 * 60; // 30 jours
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-/** E-mail mémorisé, ou chaîne vide si absent / invalide. */
-export function getRememberedEmail(): string {
-  if (typeof document === 'undefined') return '';
-  const match = document.cookie.match(new RegExp(`(?:^|; )${COOKIE_NAME}=([^;]*)`));
-  const email = match ? decodeURIComponent(match[1]) : '';
-  return EMAIL_RE.test(email) ? email : '';
+/** true si ce navigateur a déjà soumis un lead (cookie drapeau présent). */
+export function isLeadKnown(): boolean {
+  if (typeof document === 'undefined') return false;
+  return new RegExp(`(?:^|; )${COOKIE_NAME}=1(?:;|$)`).test(document.cookie);
 }
 
-/** Mémorise un e-mail valide (no-op si vide / invalide). */
-export function rememberEmail(email: string): void {
-  if (typeof document === 'undefined' || !EMAIL_RE.test(email)) return;
-  document.cookie = `${COOKIE_NAME}=${encodeURIComponent(email)}; path=/; max-age=${MAX_AGE_SECONDS}; samesite=lax`;
+/** Marque ce navigateur comme ayant déjà soumis un lead (valeur `1`, 30 jours). */
+export function markLeadKnown(): void {
+  if (typeof document === 'undefined') return;
+  document.cookie = `${COOKIE_NAME}=1; path=/; max-age=${MAX_AGE_SECONDS}; samesite=lax`;
 }

@@ -39,8 +39,12 @@ function DialogOverlay({ className, ...props }: React.ComponentProps<typeof Dial
 function DialogContent({
   className,
   children,
+  closeClassName,
   ...props
-}: React.ComponentProps<typeof DialogPrimitive.Content>) {
+}: React.ComponentProps<typeof DialogPrimitive.Content> & {
+  /** Classes ajoutées au bouton de fermeture (ex. fond blanc arrondi sur image). */
+  closeClassName?: string;
+}) {
   return (
     <DialogPortal>
       <DialogOverlay />
@@ -62,7 +66,10 @@ function DialogContent({
         {children}
         <DialogPrimitive.Close
           aria-label="Fermer"
-          className="absolute right-4 top-4 rounded-full p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className={cn(
+            'absolute right-4 top-4 rounded-full p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+            closeClassName
+          )}
         >
           <X className="h-4 w-4" />
         </DialogPrimitive.Close>
