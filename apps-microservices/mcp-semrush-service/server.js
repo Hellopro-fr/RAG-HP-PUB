@@ -35,8 +35,17 @@ function httpGet(urlStr) {
 
 function buildQS(params) {
   return Object.entries(params)
-    .filter(([, v]) => v !== undefined && v !== null && v !== '')
-    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
+    .filter(([, v]) => {
+      if (v === undefined || v === null || v === '') return false;
+      if (Array.isArray(v) && v.length === 0) return false;
+      return true;
+    })
+    .flatMap(([k, v]) => {
+      const key = encodeURIComponent(k);
+      return Array.isArray(v)
+        ? v.map((item) => `${key}=${encodeURIComponent(String(item))}`)
+        : [`${key}=${encodeURIComponent(String(v))}`];
+    })
     .join('&');
 }
 

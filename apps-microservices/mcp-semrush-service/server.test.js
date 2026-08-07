@@ -33,3 +33,33 @@ test('baseline: the two existing backlink tools are present', () => {
 test('BACK points at the Semrush analytics endpoint', () => {
   assert.strictEqual(BACK, 'https://api.semrush.com/analytics/v1/');
 });
+
+test('buildQS expands array values into repeated params', () => {
+  const qs = buildQS({ targets: ['a.com', 'b.com'] });
+  assert.strictEqual(qs, 'targets=a.com&targets=b.com');
+});
+
+test('buildQS url-encodes each array element', () => {
+  const qs = buildQS({ targets: ['a b.com', 'c&d.com'] });
+  assert.strictEqual(qs, 'targets=a%20b.com&targets=c%26d.com');
+});
+
+test('buildQS drops empty arrays', () => {
+  const qs = buildQS({ targets: [], key: 'k' });
+  assert.strictEqual(qs, 'key=k');
+});
+
+test('REGRESSION: buildQS scalar behavior is unchanged', () => {
+  const qs = buildQS({ key: 'abc', type: 'domain_ranks', domain: 'hellopro.fr' });
+  assert.strictEqual(qs, 'key=abc&type=domain_ranks&domain=hellopro.fr');
+});
+
+test('REGRESSION: buildQS still drops undefined, null and empty string', () => {
+  const qs = buildQS({ a: 'x', b: undefined, c: null, d: '', e: 'y' });
+  assert.strictEqual(qs, 'a=x&e=y');
+});
+
+test('REGRESSION: buildQS keeps numeric zero', () => {
+  const qs = buildQS({ display_offset: 0, a: 'x' });
+  assert.strictEqual(qs, 'display_offset=0&a=x');
+});
