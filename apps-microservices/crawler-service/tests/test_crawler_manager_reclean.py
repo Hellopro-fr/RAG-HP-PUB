@@ -13,6 +13,13 @@ source-inspection wiring checks on _reconcile_locked, which cannot be
 invoked end-to-end here: it calls os.uname() (POSIX-only — fails on this
 Windows dev box) and drives a real redis pipeline (same gap noted by
 TestReconcileStaleHealWiring in test_crawler_manager_shutdown_finalize.py).
+
+_reclean_archived_leftovers no longer loads the GCS-verified allowlist
+itself — _reconcile_locked loads it once per tick and passes it in (shared
+with the archived-status repair pass, Task 3). Most tests below fetch it via
+manager._load_reclean_allowlist() to keep exercising the real parsing logic
+against the fixture's allowlist file; the fail-closed test passes None
+directly since that is the exact condition it exercises.
 """
 import inspect
 import json
@@ -68,7 +75,8 @@ def _job(crawl_id: str, root) -> dict:
 async def test_old_leftover_removed_sidecars_survive(manager, tmp_path):
     root = _make_archived_dir(tmp_path, "crawl-a")
 
-    actioned = await manager._reclean_archived_leftovers([_job("crawl-a", root)], set())
+    verified = manager._load_reclean_allowlist()
+    actioned = await manager._reclean_archived_leftovers([_job("crawl-a", root)], set(), verified)
 
     assert actioned == 1
     assert not (root / "storage").exists()
@@ -83,8 +91,9 @@ async def test_active_prev_id_skipped(manager, tmp_path):
     cleaning it would yank the dataset out from under the running crawl."""
     root = _make_archived_dir(tmp_path, "crawl-b")
 
+    verified = manager._load_reclean_allowlist()
     actioned = await manager._reclean_archived_leftovers(
-        [_job("crawl-b", root)], active_prev_ids={"crawl-b"})
+        [_job("crawl-b", root)], active_prev_ids={"crawl-b"}, verified=verified)
 
     assert actioned == 0
     assert (root / "storage" / "datasets" / "000000001.json").is_file()
@@ -96,7 +105,8 @@ async def test_fresh_subtree_skipped(manager, tmp_path):
     must stay browsable."""
     root = _make_archived_dir(tmp_path, "crawl-c", age_seconds=0)
 
-    actioned = await manager._reclean_archived_leftovers([_job("crawl-c", root)], set())
+    verified = manager._load_reclean_allowlist()
+    actioned = await manager._reclean_archived_leftovers([_job("crawl-c", root)], set(), verified)
 
     assert actioned == 0
     assert (root / "storage").is_dir()
@@ -113,7 +123,8 @@ async def test_cap_max_per_tick(manager, tmp_path):
         roots.append(root)
         jobs.append(_job(f"crawl-{i}", root))
 
-    actioned = await manager._reclean_archived_leftovers(jobs, set())
+    verified = manager._load_reclean_allowlist()
+    actioned = await manager._reclean_archived_leftovers(jobs, set(), verified)
 
     assert actioned == 3
     remaining = sum(1 for root in roots if (root / "storage").is_dir())
@@ -125,7 +136,8 @@ async def test_disabled_kill_switch_is_noop(manager, monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "ARCHIVED_RECLEAN_ENABLED", False)
     root = _make_archived_dir(tmp_path, "crawl-d")
 
-    actioned = await manager._reclean_archived_leftovers([_job("crawl-d", root)], set())
+    verified = manager._load_reclean_allowlist()
+    actioned = await manager._reclean_archived_leftovers([_job("crawl-d", root)], set(), verified)
 
     assert actioned == 0
     assert (root / "storage").is_dir()
@@ -140,7 +152,8 @@ async def test_missing_storage_path_dir_no_crash(manager, tmp_path):
         {"crawl_id": "crawl-no-path", "status": "archived"},
     ]
 
-    actioned = await manager._reclean_archived_leftovers(jobs, set())
+    verified = manager._load_reclean_allowlist()
+    actioned = await manager._reclean_archived_leftovers(jobs, set(), verified)
 
     assert actioned == 0
 
@@ -151,8 +164,9 @@ async def test_fallback_storage_path_from_crawl_id(manager, monkeypatch, tmp_pat
     monkeypatch.setattr(settings, "CRAWLER_STORAGE_PATH", str(tmp_path))
     root = _make_archived_dir(tmp_path, "crawl-e")
 
+    verified = manager._load_reclean_allowlist()
     actioned = await manager._reclean_archived_leftovers(
-        [{"crawl_id": "crawl-e", "status": "archived"}], set())
+        [{"crawl_id": "crawl-e", "status": "archived"}], set(), verified)
 
     assert actioned == 1
     assert not (root / "storage").exists()
@@ -174,8 +188,9 @@ async def test_partial_cleanup_warns_and_continues(manager, monkeypatch, tmp_pat
 
     monkeypatch.setattr(manager, "_cleanup_local_data", flaky_cleanup)
 
+    verified = manager._load_reclean_allowlist()
     actioned = await manager._reclean_archived_leftovers(
-        [_job("crawl-bad", root_bad), _job("crawl-ok", root_ok)], set())
+        [_job("crawl-bad", root_bad), _job("crawl-ok", root_ok)], set(), verified)
 
     # Both consumed a per-tick slot (attempted); only crawl-ok's tree is gone.
     assert actioned == 2
@@ -186,12 +201,17 @@ async def test_partial_cleanup_warns_and_continues(manager, monkeypatch, tmp_pat
 @pytest.mark.asyncio
 async def test_missing_allowlist_fail_closed(manager, monkeypatch, tmp_path):
     """No verified-in-GCS list -> no deletion at all, even for an otherwise
-    fully eligible candidate (Redis 'archived' alone is not trusted)."""
+    fully eligible candidate (Redis 'archived' alone is not trusted).
+
+    verified is passed as None directly — this is the exact condition
+    _reconcile_locked's _load_reclean_allowlist() produces when the file is
+    missing/empty; the monkeypatch below documents why (kept for context
+    even though the callee no longer reads the setting itself)."""
     monkeypatch.setattr(settings, "ARCHIVED_RECLEAN_VERIFIED_LIST",
                         str(tmp_path / "no-such.list"))
     root = _make_archived_dir(tmp_path, "crawl-a")
 
-    actioned = await manager._reclean_archived_leftovers([_job("crawl-a", root)], set())
+    actioned = await manager._reclean_archived_leftovers([_job("crawl-a", root)], set(), None)
 
     assert actioned == 0
     assert (root / "storage").is_dir()
@@ -205,7 +225,8 @@ async def test_unverified_id_skipped(manager, monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "ARCHIVED_RECLEAN_VERIFIED_LIST", str(allowlist))
     root = _make_archived_dir(tmp_path, "crawl-a")
 
-    actioned = await manager._reclean_archived_leftovers([_job("crawl-a", root)], set())
+    verified = manager._load_reclean_allowlist()
+    actioned = await manager._reclean_archived_leftovers([_job("crawl-a", root)], set(), verified)
 
     assert actioned == 0
     assert (root / "storage" / "datasets" / "000000001.json").is_file()
@@ -223,7 +244,8 @@ async def test_allowlist_comments_and_blanks_parsed(manager, monkeypatch, tmp_pa
     monkeypatch.setattr(settings, "ARCHIVED_RECLEAN_VERIFIED_LIST", str(allowlist))
     root = _make_archived_dir(tmp_path, "crawl-a")
 
-    actioned = await manager._reclean_archived_leftovers([_job("crawl-a", root)], set())
+    verified = manager._load_reclean_allowlist()
+    actioned = await manager._reclean_archived_leftovers([_job("crawl-a", root)], set(), verified)
 
     assert actioned == 1
     assert not (root / "storage").exists()

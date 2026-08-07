@@ -3649,6 +3649,7 @@ class CrawlerManager:
         all_jobs_raw = await pipe.execute()
         auto_stash_pool = []  # collected during scan; dispatched after the loop (auto-stash P2)
         archived_candidates = []  # status='archived' jobs — leftover storage/ reclean sweep
+        finished_candidates = []  # status='finished' jobs — archived-status repair pass
         active_prev_ids = set()  # previous_crawl_id of in-flight jobs (update-restore guard)
 
         for i, job_raw in enumerate(all_jobs_raw):
@@ -3665,6 +3666,9 @@ class CrawlerManager:
 
                 if status == "archived":
                     archived_candidates.append(job_data)
+
+                if status == "finished":
+                    finished_candidates.append(job_data)
 
                 if settings.AUTO_STASH_ENABLED and \
                         status in ("finished", "failed", "stopped") and not job_data.get("stashed_at"):
@@ -3896,8 +3900,11 @@ class CrawlerManager:
         # GCS-fallback branches (mark archived with NO cleanup), GET /html
         # re-extracting the full tar, update-mode _restore_archived_crawl when
         # the update never finalizes. This sweep is the retry. ---
+        # One read per tick, shared by the repair pass (Task 3) and the reclean.
+        verified_ids = self._load_reclean_allowlist()
+
         if settings.ARCHIVED_RECLEAN_ENABLED and archived_candidates:
-            await self._reclean_archived_leftovers(archived_candidates, active_prev_ids)
+            await self._reclean_archived_leftovers(archived_candidates, active_prev_ids, verified_ids)
 
         # Correct the global counter
         counter_value_raw = await cache_service.get_key(CRAWL_RUNNING_COUNT_KEY)
@@ -3956,13 +3963,15 @@ class CrawlerManager:
             replayed += 1
         return replayed
 
-    async def _reclean_archived_leftovers(self, jobs: list, active_prev_ids: set) -> int:
+    async def _reclean_archived_leftovers(self, jobs: list, active_prev_ids: set,
+                                          verified: Optional[set]) -> int:
         """Re-cleans leftover storage/ subtrees under status='archived' crawls.
 
         Called once per reconcile tick, leader-only. Deletion requires BOTH
         Redis status='archived' AND presence in the host-generated
         GCS-verified allowlist (ARCHIVED_RECLEAN_VERIFIED_LIST, written by
-        tools/verify_archives_in_gcs.sh). The list is the safety property —
+        tools/verify_archives_in_gcs.sh and loaded once per tick by
+        _reconcile_locked, which passes it in). The list is the safety property —
         the tar is proven present in gs://bucket/crawls/ with a plausible
         size. Redis alone is NOT trusted: the upload daemon uploads AFTER the
         status flips, dead-letters exist, and blobs get recreated; the
@@ -3985,7 +3994,6 @@ class CrawlerManager:
         """
         if not settings.ARCHIVED_RECLEAN_ENABLED:
             return 0
-        verified = self._load_reclean_allowlist()
         if verified is None:
             return 0  # fail-closed: no verified-in-GCS list -> no deletion at all
         recleaned = 0
@@ -4039,9 +4047,10 @@ class CrawlerManager:
             ids = set()
         if not ids:
             logger.warning(
-                f"Archived-leftover reclean: verification list '{path}' "
-                f"missing/empty — sweep disabled (fail-closed). Generate it "
-                f"host-side with tools/verify_archives_in_gcs.sh")
+                f"GCS-verified list '{path}' missing/empty — archived-leftover "
+                f"reclean AND archived-status repair are both disabled "
+                f"(fail-closed). Generate it host-side with "
+                f"tools/verify_archives_in_gcs.sh")
             return None
         return ids
 
