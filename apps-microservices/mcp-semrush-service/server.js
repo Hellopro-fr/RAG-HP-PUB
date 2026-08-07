@@ -448,69 +448,80 @@ function sendError(id, code, message) {
   sendMsg({ jsonrpc: '2.0', id, error: { code, message } });
 }
 
-const rl = readline.createInterface({ input: process.stdin, terminal: false });
+function handleLine(line) {
+  return (async () => {
+    line = line.trim();
+    if (!line) return;
 
-rl.on('line', async (line) => {
-  line = line.trim();
-  if (!line) return;
+    let req;
+    try {
+      req = JSON.parse(line);
+    } catch {
+      return;
+    }
 
-  let req;
-  try {
-    req = JSON.parse(line);
-  } catch {
-    return;
-  }
+    const { id, method, params = {} } = req;
 
-  const { id, method, params = {} } = req;
+    // Notifications (no id) — per MCP spec, no response
+    if (id === undefined || id === null) return;
 
-  // Notifications (no id) — per MCP spec, no response
-  if (id === undefined || id === null) return;
+    try {
+      switch (method) {
+        case 'initialize':
+          sendResult(id, {
+            protocolVersion: '2024-11-05',
+            capabilities: { tools: {} },
+            serverInfo: { name: 'semrush-mcp', version: '2.0.0' },
+          });
+          break;
 
-  try {
-    switch (method) {
-      case 'initialize':
-        sendResult(id, {
-          protocolVersion: '2024-11-05',
-          capabilities: { tools: {} },
-          serverInfo: { name: 'semrush-mcp', version: '2.0.0' },
-        });
-        break;
+        case 'tools/list':
+          sendResult(id, {
+            tools: TOOLS.map((t) => ({
+              name: t.name,
+              description: t.description,
+              inputSchema: t.inputSchema,
+            })),
+          });
+          break;
 
-      case 'tools/list':
-        sendResult(id, {
-          tools: TOOLS.map((t) => ({
-            name: t.name,
-            description: t.description,
-            inputSchema: t.inputSchema,
-          })),
-        });
-        break;
-
-      case 'tools/call': {
-        const { name, arguments: args = {} } = params;
-        const tool = toolByName[name];
-        if (!tool) {
-          sendError(id, -32602, `Unknown tool: ${name}`);
+        case 'tools/call': {
+          const { name, arguments: args = {} } = params;
+          const tool = toolByName[name];
+          if (!tool) {
+            sendError(id, -32602, `Unknown tool: ${name}`);
+            break;
+          }
+          try {
+            const text = await tool.run(args);
+            sendResult(id, {
+              content: [{ type: 'text', text: String(text) }],
+            });
+          } catch (err) {
+            sendResult(id, {
+              content: [{ type: 'text', text: `Error: ${err.message}` }],
+              isError: true,
+            });
+          }
           break;
         }
-        try {
-          const text = await tool.run(args);
-          sendResult(id, {
-            content: [{ type: 'text', text: String(text) }],
-          });
-        } catch (err) {
-          sendResult(id, {
-            content: [{ type: 'text', text: `Error: ${err.message}` }],
-            isError: true,
-          });
-        }
-        break;
-      }
 
-      default:
-        sendError(id, -32601, `Method not found: ${method}`);
+        default:
+          sendError(id, -32601, `Method not found: ${method}`);
+      }
+    } catch (err) {
+      sendError(id, -32603, `Internal error: ${err.message}`);
     }
-  } catch (err) {
-    sendError(id, -32603, `Internal error: ${err.message}`);
-  }
-});
+  })();
+}
+
+function main() {
+  const rl = readline.createInterface({ input: process.stdin, terminal: false });
+  rl.on('line', handleLine);
+}
+
+if (require.main === module) {
+  main();
+}
+
+module.exports = { TOOLS, toolByName, buildQS, BACK, handleLine };
