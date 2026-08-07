@@ -25,7 +25,32 @@ export function EditoSection({ data }: { data: HubEdito }) {
   return (
     <HubSection id={data.id} compact>
       <div className="mx-auto max-w-3xl">
-        <h2 className={`${SECTION_TITLE} text-foreground`}>{data.title}</h2>
+        {/* `h3` et non `h2` — demandé le 2026-08-07 avec la structure de référence.
+            La TAILLE reste celle d'un titre de section (`SECTION_TITLE`) : c'est le
+            niveau qui change, pas l'apparence.
+
+            ⚠️ POINT OUVERT — en attente de l'équipe SEO (2026-08-07).
+            Ces blocs n'ont aucun parent thématique : le `h3` les rattache au
+            dernier `h2` rendu avant eux, qui n'a aucun rapport. Avec
+            `afterEditoId: 'quel-budget-prevoir'`, le plan réel donne :
+
+              h2 Comment ça marche ?
+                h3 1. Vous décrivez votre projet   … (les 4 étapes)
+                h3 Quel modèle d'élevage choisir ?      ← édito
+                h3 Pourquoi se faire accompagner ?      ← édito
+
+            Les deux éditos se lisent comme les étapes 5 et 6 du processus, alors
+            que c'est le contenu le plus riche en mots-clés de la page. Idem pour
+            les deux premiers, rattachés à « Explorez les grandes étapes » qui
+            n'est qu'une rangée de tuiles de navigation.
+
+            Deux sorties possibles :
+             a) `h2` — ce sont des sections de plein droit (retour à l'état d'avant) ;
+             b) un `h2` chapeau avant le premier édito (ex. « Tout savoir sur votre
+                projet… »), les éditos restant en `h3` dessous. Meilleur SEO, mais
+                demande un titre par page et un champ de plus dans `HubPage`.
+            Ne pas laisser en l'état sans décision. */}
+        <h3 className={`${SECTION_TITLE} text-foreground`}>{data.title}</h3>
 
         {/* `intro`, `items` et `note` acceptent du HTML restreint, comme `bodyHtml` :
             les chiffres clés et les intitulés de puce sont mis en gras au milieu

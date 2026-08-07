@@ -34,7 +34,12 @@ export function ThematiqueBloc({
 }) {
   return (
     <HubSection id={data.id} className={alternate ? 'bg-surface' : ''}>
-      <CategoryTag icon={data.tagIcon}>{data.tag}</CategoryTag>
+      {/* Le nom du cluster est le TITRE de la section : `h2`, sous le `h1` du
+          hero, et parent des `h3` des cartes ci-dessous. Sans lui, ces cartes
+          étaient des h3 sans parent. */}
+      <CategoryTag as="h2" icon={data.tagIcon}>
+        {data.tag}
+      </CategoryTag>
 
       {data.intro && (
         // Même échelle que le chapeau des sections centrées : c'est le même rôle,
@@ -290,7 +295,10 @@ function ArticleCard({ data }: { data: HubInfoCard }) {
         </div>
       )}
       <div className="flex flex-1 flex-col p-5">
-        <h4 className={`${CARD_TITLE} text-foreground`}>{data.title}</h4>
+        {/* `h3` et non `h4` : même niveau que les cartes des autres layouts
+            (overlay, info). Toutes les cartes d'un bloc thématique sont des
+            enfants directs du `h2` du cluster, quel que soit leur habillage. */}
+        <h3 className={`${CARD_TITLE} text-foreground`}>{data.title}</h3>
         {/* CTA guide par carte retiré en attendant la modif serveur (formulaire guide).
             « Lire l'article » seul pour l'instant. */}
         <div className="mt-auto flex pt-5">

@@ -23,9 +23,32 @@ interface BannerProps {
   image?: HubImage;
   /** Quel dialog le CTA ouvre. */
   action: 'assistant' | 'guide';
+  /**
+   * Balise du titre.
+   *
+   * RÈGLE (arbitrée le 2026-08-07) : **un titre introduit un corps de contenu.**
+   * Contrainte supplémentaire : toute entrée du sommaire doit atterrir sur un titre.
+   *
+   * - `h2` si le bandeau porte un `id` référencé dans `page.nav` : le titre
+   *   annonce l'arrivée à qui a cliqué dans le sommaire (cas de `GuideCta`).
+   * - `p` sinon : une bande CTA sans ancre n'est la destination de rien et
+   *   n'introduit aucun contenu. L'inscrire au plan de titres y ajoute une entrée
+   *   qui ne mène nulle part — un lecteur d'écran qui navigue par titres y
+   *   atterrit pour n'y trouver qu'une phrase et un bouton
+   *   (cas de `AccompagnementBanner`).
+   *
+   * ⚠️ Ne pas en déduire « rien d'autre qu'une entrée du sommaire n'est un
+   * titre » : `AccompagnementSplit` est absent du sommaire et garde son `h2`,
+   * parce qu'il a un vrai corps de texte. C'est le contenu qui décide.
+   *
+   * Explicite et sans valeur par défaut : le choix doit être fait à chaque
+   * appel, pas hérité par inadvertance.
+   */
+  titleAs: 'h2' | 'p';
 }
 
-function Banner({ id, tag, tagIcon, title, text, ctaLabel, ctaIcon, image, action }: BannerProps) {
+function Banner({ id, tag, tagIcon, title, text, ctaLabel, ctaIcon, image, action, titleAs }: BannerProps) {
+  const Title = titleAs;
   return (
     <HubSection id={id}>
       <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
@@ -64,10 +87,12 @@ function Banner({ id, tag, tagIcon, title, text, ctaLabel, ctaIcon, image, actio
             {/* `BANNER_TITLE` et non `SECTION_TITLE` : niveau intermédiaire assumé,
                 le CTA partage cette ligne en sm+ (cf. typography.ts). Les classes
                 de placement dans la grille restent au point d'appel — l'échelle ne
-                porte que taille, graisse et interligne. */}
-            <h2 className={`${BANNER_TITLE} text-foreground sm:col-start-1 sm:row-start-1`}>
+                porte que taille, graisse et interligne.
+                La BALISE, elle, vient de `titleAs` : l'apparence est la même que le
+                titre soit un `h2` ou un `p`. */}
+            <Title className={`${BANNER_TITLE} text-foreground sm:col-start-1 sm:row-start-1`}>
               {title}
-            </h2>
+            </Title>
             <p
               className={`mt-2 ${CARD_BODY} text-muted-foreground sm:col-span-2 sm:col-start-1 sm:row-start-2`}
             >
@@ -98,6 +123,9 @@ export function AccompagnementBanner({ data }: { data: HubAccompagnementBanner }
       tag={data.tag}
       tagIcon="phone-call"
       title={data.title}
+      // Hors du plan de titres (arbitré le 2026-08-07) : ce bandeau n'introduit
+      // aucun contenu, il propose une action. Apparence inchangée.
+      titleAs="p"
       text={data.text}
       ctaLabel={data.ctaLabel}
       image={data.image}
@@ -113,6 +141,12 @@ export function GuideCta({ data }: { data: HubGuideCta }) {
       tag={data.tag}
       tagIcon="book-open"
       title={data.title}
+      // `h2` CONSERVÉ, contrairement au bandeau accompagnement — la différence
+      // n'est pas cosmétique : ce bandeau porte `id="guide-gratuit"` et c'est une
+      // ENTRÉE DU SOMMAIRE. Qui clique « Guide gratuit » atterrit ici, et un titre
+      // lui annonce où il est. Le bandeau accompagnement n'a pas d'id et n'est la
+      // destination de rien : son titre n'introduisait aucune arrivée.
+      titleAs="h2"
       text={data.text}
       ctaLabel={data.ctaLabel}
       ctaIcon="download"
