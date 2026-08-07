@@ -736,7 +736,6 @@ export const lancerElevagePoulesPondeuses: HubPage = {
     emailPlaceholder: 'Votre adresse e-mail',
     submitLabel: 'Continuer',
     reassurance: '100% gratuit, sans engagement',
-    successMessage: 'Merci ! Votre guide arrive dans quelques instants par e-mail.',
     circleBadgeLines: ['100%', 'Gratuit'],
     // Visuel du livret — même asset que le CTA guide.
     image: {

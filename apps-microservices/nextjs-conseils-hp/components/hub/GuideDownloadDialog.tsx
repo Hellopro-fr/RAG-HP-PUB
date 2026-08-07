@@ -14,8 +14,18 @@ import { DIALOG_TITLE } from './typography';
 import { CoordinatesStep, DownloadStep } from './GuideSteps';
 import { useGuideLead } from '@/lib/hub/useGuideLead';
 import { isLeadKnown, markLeadKnown } from '@/lib/hub/leadEmailCookie';
+import {
+  GUIDE_DIALOG_EVENT,
+  DEFAULT_GUIDE_ENTRY_POINT,
+  readGuideEntryPoint,
+} from '@/lib/hub/guideDialogEvent';
 import { pushHubEvent, type HubEntryPoint } from '@/lib/analytics/hub';
 import type { HubGuideDialog } from '@/types/hub';
+
+// Re-export : l'opener vit dans un module léger (voir guideDialogEvent.ts) pour ne
+// pas embarquer ce dialog lourd dans le bundle des déclencheurs. Ré-exposé ici par
+// compatibilité d'API (importé tel quel par les tests).
+export { openGuideDialog } from '@/lib/hub/guideDialogEvent';
 
 /**
  * Dialog de téléchargement du guide — ouvert par tous les boutons « guide » de
@@ -29,29 +39,34 @@ import type { HubGuideDialog } from '@/types/hub';
  * `id_page_hub` = prop `idPageHub` (dérivée de l'id de la page, distincte du
  * projet — cf. `guideIdPageHub`). Le consentement reste purement front (non transmis).
  */
-const GUIDE_DIALOG_EVENT = 'hp:open-guide-dialog';
-
-/**
- * Ouvre le dialog depuis n'importe où (client uniquement).
- *
- * `entryPoint` voyage dans le `detail` de l'événement : quatre emplacements de la
- * page ouvrent ce même dialog, et c'est la seule façon de savoir lequel a
- * converti. Le fixer à la construction du dialog serait impossible — il n'en
- * existe qu'une instance, montée par `HubTemplate`.
- */
-export function openGuideDialog(entryPoint: HubEntryPoint = 'banner_guide') {
-  if (typeof window === 'undefined') return;
-  window.dispatchEvent(new CustomEvent(GUIDE_DIALOG_EVENT, { detail: { entryPoint } }));
-}
-
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function GuideDownloadDialog({
   data,
   idPageHub,
+  autoOpenOnMount = false,
+  autoOpenEntryPoint,
 }: {
   data: HubGuideDialog;
   idPageHub: number;
+  /**
+   * Emplacement du CTA à rejouer avec `autoOpenOnMount`.
+   *
+   * ⚠️ INDISPENSABLE au montage paresseux. Le rejeu appelle le handler SANS
+   * événement : sans cette prop, `entry_point` retomberait sur la valeur par
+   * défaut et le PREMIER clic guide de chaque visiteur — donc la majorité des
+   * ouvertures — serait attribué au bandeau, quel que soit le CTA réellement
+   * cliqué. Erreur invisible : la dimension serait remplie, simplement fausse.
+   */
+  autoOpenEntryPoint?: HubEntryPoint;
+  /**
+   * Ouvre le dialog dès le montage, comme si `hp:open-guide-dialog` venait d'être
+   * reçu. Utilisé quand le dialog est monté PARESSEUSEMENT en réponse à cet
+   * événement (cf. `HubOverlays`) : le chunk se charge en async, l'événement
+   * d'origine est donc manqué par le listener interne → on le rejoue ici. Défaut
+   * `false` : montage direct (page, tests) = comportement inchangé.
+   */
+  autoOpenOnMount?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [emailError, setEmailError] = useState('');
@@ -63,10 +78,12 @@ export function GuideDownloadDialog({
   const { reset } = lead;
 
   useEffect(() => {
-    const handler = (event: Event) => {
-      const from =
-        (event as CustomEvent<{ entryPoint?: HubEntryPoint }>).detail?.entryPoint ??
-        'banner_guide';
+    const handler = (event?: Event) => {
+      // Rejeu au montage (pas d'événement) → on reprend l'emplacement capté par
+      // `HubOverlays` au moment du clic. Sinon, lecture du `detail`.
+      const from = event
+        ? readGuideEntryPoint(event)
+        : (autoOpenEntryPoint ?? DEFAULT_GUIDE_ENTRY_POINT);
       setEntryPoint(from);
       // Réinitialise le parcours à chaque ouverture.
       reset();
@@ -103,6 +120,9 @@ export function GuideDownloadDialog({
       }
     };
     window.addEventListener(GUIDE_DIALOG_EVENT, handler);
+    // Monté en réponse à l'événement mais après coup (chunk lazy) → on rejoue
+    // l'ouverture manquée. `reset` étant stable, cet effet ne s'exécute qu'au montage.
+    if (autoOpenOnMount) handler();
     return () => window.removeEventListener(GUIDE_DIALOG_EVENT, handler);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reset]);

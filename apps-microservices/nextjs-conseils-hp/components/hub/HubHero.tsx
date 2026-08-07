@@ -34,6 +34,9 @@ export function HubHero({
             fill
             priority
             sizes="100vw"
+            // Image LCP fortement obscurcie (blur-2px + scale-105 + 3 overlays
+            // noirs) : une qualité réduite est invisible mais allège le payload LCP.
+            quality={55}
             className="scale-105 object-cover blur-[2px]"
           />
         </div>

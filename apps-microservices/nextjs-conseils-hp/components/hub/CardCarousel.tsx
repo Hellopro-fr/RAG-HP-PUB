@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Children, useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 /**
@@ -19,6 +19,14 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
  * que de dupliquer ces seuils en JS — deux sources de vérité à garder synchrones —
  * on mesure `scrollWidth / clientWidth`. La pagination suit donc automatiquement
  * la mise en page, quel que soit le nombre de cartes.
+ *
+ * SEED SSR = NB DE CARTES (anti-CLS)
+ * `pageCount` est initialisé au nombre d'enfants — soit exactement la pagination
+ * mobile (1 carte/vue). La barre de commandes est donc peinte à la bonne hauteur
+ * DÈS LE PREMIER RENDU au lieu d'apparaître après hydratation (ce qui décalait le
+ * contenu suivant = CLS). La mesure reste la source de vérité : au montage, elle
+ * réajuste le compte de points sur desktop (2/3 cartes par vue) — la hauteur de la
+ * barre ne changeant pas, ce réajustement ne provoque aucun décalage vertical.
  */
 export function CardCarousel({
   children,
@@ -29,7 +37,8 @@ export function CardCarousel({
   label: string;
 }) {
   const trackRef = useRef<HTMLUListElement>(null);
-  const [pageCount, setPageCount] = useState(1);
+  // Seed = nb de cartes = pagination mobile (1 carte/vue) → barre stable dès le SSR.
+  const [pageCount, setPageCount] = useState(() => Math.max(1, Children.count(children)));
   const [activePage, setActivePage] = useState(0);
 
   const measure = useCallback(() => {

@@ -21,6 +21,18 @@ const nextConfig = {
   // Voir CLAUDE.md §6 et §20 (décision 2026-05-22)
 
   images: {
+    // WebP uniquement (défaut Next). ⚠️ NE PAS ajouter 'image/avif' : les images
+    // HUB incluent des PNG transparents (livres `_removebg.png`), et l'AVIF à canal
+    // alpha est mal rendu sur iOS Safari 15.4–16 (versions du browserslist) → image
+    // transparente invisible en mobile. WebP gère l'alpha partout. En prime, éviter
+    // l'AVIF supprime son encodage coûteux sous `cpus: 0.5` (affichages lents).
+    formats: ['image/webp'],
+    // Les images HUB sont des assets STATIQUES immuables (chemins figés dans
+    // data/hub/). Le TTL par défaut du cache optimiseur est de 60 s : passé ce
+    // délai, l'image est ré-encodée à la requête suivante — coûteux en AVIF sous
+    // `cpus: 0.5`, d'où des affichages lents par intermittence. On fixe 1 an :
+    // chaque variante n'est encodée qu'UNE fois, plus de ré-encodage périodique.
+    minimumCacheTTL: 31536000,
     remotePatterns: [
       { protocol: 'https', hostname: 'www.hellopro.fr' },
       { protocol: 'https', hostname: 'cdn.hellopro.fr' },
@@ -85,4 +97,16 @@ const nextConfig = {
   },
 };
 
-module.exports = nextConfig;
+// Bundle analyzer — activé UNIQUEMENT en passant ANALYZE=true. Le `require` est
+// fait DANS le `if` : un build/`npm ci` normal ne le charge jamais, donc le paquet
+// n'a PAS besoin d'être dans package.json (le mettre y casserait `npm ci`, dont le
+// lockfile ne le connaît pas). Pour analyser en local, l'installer ad hoc puis
+// lancer le build, sans toucher au lockfile :
+//   npm i --no-save @next/bundle-analyzer && ANALYZE=true npm run build
+let exportedConfig = nextConfig;
+if (process.env.ANALYZE === 'true') {
+  const withBundleAnalyzer = require('@next/bundle-analyzer')({ enabled: true });
+  exportedConfig = withBundleAnalyzer(nextConfig);
+}
+
+module.exports = exportedConfig;

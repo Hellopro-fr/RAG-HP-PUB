@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import Image from 'next/image';
 import { ArrowRight, Download, MapPin, ShieldCheck, User } from 'lucide-react';
-import { PhoneField } from './PhoneField';
+import { PhoneField } from './PhoneFieldLazy';
 import { Confetti } from './Confetti';
 import { DIALOG_TITLE, META, TAG } from './typography';
 import { useAutoDownload } from '@/lib/hub/useAutoDownload';

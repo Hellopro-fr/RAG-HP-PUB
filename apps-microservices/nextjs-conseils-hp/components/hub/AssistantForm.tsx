@@ -11,7 +11,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { HubIcon } from './primitives';
-import { PhoneField } from './PhoneField';
+import { PhoneField } from './PhoneFieldLazy';
 import { Confetti } from './Confetti';
 import { useAutoDownload } from '@/lib/hub/useAutoDownload';
 import { markLeadKnown } from '@/lib/hub/leadEmailCookie';

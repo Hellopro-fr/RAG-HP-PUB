@@ -2,7 +2,11 @@
 
 import { HubIcon } from './primitives';
 import { openAssistantDialog } from './AssistantForm';
-import { openGuideDialog } from './GuideDownloadDialog';
+// ⚠️ Import depuis `guideDialogEvent` et NON depuis `GuideDownloadDialog` :
+// ces boutons sont rendus dès le chargement, importer le dialog ici re-tirerait
+// tout son corps (Radix + étapes) dans le bundle initial et annulerait son
+// chargement paresseux.
+import { openGuideDialog } from '@/lib/hub/guideDialogEvent';
 import type { HubEntryPoint } from '@/lib/analytics/hub';
 import type { HubIconName } from '@/types/hub';
 
