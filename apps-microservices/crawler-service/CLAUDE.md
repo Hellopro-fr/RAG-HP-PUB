@@ -417,7 +417,7 @@ every tick, so it disarms in ≤ 300s with no restart. Turning
 `ARCHIVED_STATUS_REPAIR_ENABLED` off does **not** stop `_reclean_archived_leftovers`;
 they are disjoint settings. And note that merely *creating* that allowlist arms the
 reclean for the ~2398 already-`archived` crawls that still carry a `storage/`
-subtree — set `ARCHIVED_RECLEAN_ENABLED=false` first if that is not wanted yet.
+subtree. The sweep is **already active today** (`ARCHIVED_RECLEAN_ENABLED=true` by default), held back only by the absent allowlist file — set it to `false` **before** creating the allowlist if you want to defer the deletion.
 Neither the status flip nor the `rmtree` has a reverse.
 
 Spec: `docs/superpowers/specs/2026-08-07-archived-status-repair-design.md`.
