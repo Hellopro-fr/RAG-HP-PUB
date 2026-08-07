@@ -1166,10 +1166,10 @@ test('backlinks now requests the nofollow column', () => {
   assert.ok(url.includes(`export_columns=${encodeURIComponent(columns)}`));
 });
 
-test('backlinks still sends type=backlinks', () => {
+test('backlinks still sends type=backlinks exactly', () => {
   const url = buildBacklinkUrl(specByName('backlinks'), { target: 'hellopro.fr' });
-  assert.ok(url.includes('type=backlinks&') || url.includes('type=backlinks%26') ||
-            /[?&]type=backlinks(&|$)/.test(url));
+  // Anchored so it cannot pass on type=backlinks_anchors or any other prefix match.
+  assert.match(url, /[?&]type=backlinks(&|$)/);
 });
 
 test('backlinks_domains keeps its tool name but sends type=backlinks_refdomains', () => {
