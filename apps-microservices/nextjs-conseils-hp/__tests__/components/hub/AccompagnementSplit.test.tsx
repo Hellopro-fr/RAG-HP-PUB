@@ -15,7 +15,10 @@ const data = listHubPages()[0].accompagnement;
 describe('AccompagnementSplit', () => {
   it('rend le titre et les points', () => {
     render(<AccompagnementSplit data={data} />);
-    expect(screen.getByRole('heading', { level: 2 }).textContent).toBe(data.title);
+    // Section de réassurance : hors du plan de titres depuis l'arbitrage SEO du
+    // 2026-08-07. Le libellé s'affiche, mais ce n'est plus un heading.
+    expect(screen.getByText(data.title)).toBeDefined();
+    expect(screen.queryAllByRole('heading')).toHaveLength(0);
     for (const point of data.points) {
       expect(screen.getByText(point)).toBeDefined();
     }

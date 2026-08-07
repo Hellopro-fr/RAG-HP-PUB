@@ -26,20 +26,14 @@ interface BannerProps {
   /**
    * Balise du titre.
    *
-   * RÈGLE (arbitrée le 2026-08-07) : **un titre introduit un corps de contenu.**
-   * Contrainte supplémentaire : toute entrée du sommaire doit atterrir sur un titre.
+   * Les DEUX bandeaux valent `p` depuis l'arbitrage SEO du 2026-08-07 : le plan
+   * de titres de la page ne retient que les intitulés porteurs de mots-clés
+   * métier, et une bande CTA n'en porte pas.
    *
-   * - `h2` si le bandeau porte un `id` référencé dans `page.nav` : le titre
-   *   annonce l'arrivée à qui a cliqué dans le sommaire (cas de `GuideCta`).
-   * - `p` sinon : une bande CTA sans ancre n'est la destination de rien et
-   *   n'introduit aucun contenu. L'inscrire au plan de titres y ajoute une entrée
-   *   qui ne mène nulle part — un lecteur d'écran qui navigue par titres y
-   *   atterrit pour n'y trouver qu'une phrase et un bouton
-   *   (cas de `AccompagnementBanner`).
-   *
-   * ⚠️ Ne pas en déduire « rien d'autre qu'une entrée du sommaire n'est un
-   * titre » : `AccompagnementSplit` est absent du sommaire et garde son `h2`,
-   * parce qu'il a un vrai corps de texte. C'est le contenu qui décide.
+   * Le paramètre reste néanmoins ouvert : un bandeau qui introduirait un vrai
+   * corps de contenu — ou qui deviendrait la cible d'une entrée du sommaire —
+   * mériterait son `h2`. Le choix doit être fait à chaque appel, sans valeur par
+   * défaut, pour qu'il ne soit jamais hérité par inadvertance.
    *
    * Explicite et sans valeur par défaut : le choix doit être fait à chaque
    * appel, pas hérité par inadvertance.
@@ -141,12 +135,9 @@ export function GuideCta({ data }: { data: HubGuideCta }) {
       tag={data.tag}
       tagIcon="book-open"
       title={data.title}
-      // `h2` CONSERVÉ, contrairement au bandeau accompagnement — la différence
-      // n'est pas cosmétique : ce bandeau porte `id="guide-gratuit"` et c'est une
-      // ENTRÉE DU SOMMAIRE. Qui clique « Guide gratuit » atterrit ici, et un titre
-      // lui annonce où il est. Le bandeau accompagnement n'a pas d'id et n'est la
-      // destination de rien : son titre n'introduisait aucune arrivée.
-      titleAs="h2"
+      // `p` depuis le 2026-08-07 : les DEUX bandeaux sortent du plan de titres.
+      // Ce sont des CTA, pas des sections de contenu.
+      titleAs="p"
       text={data.text}
       ctaLabel={data.ctaLabel}
       ctaIcon="download"

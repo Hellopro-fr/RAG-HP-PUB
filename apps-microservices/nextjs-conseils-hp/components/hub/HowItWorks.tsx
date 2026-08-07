@@ -20,7 +20,9 @@ export function HowItWorks({ data }: { data: HubHowItWorksData }) {
   return (
     <HubSection id={HUB_SECTION_IDS.howItWorks}>
       <div className="mx-auto max-w-3xl text-center">
-        <h2 className={`${SECTION_TITLE} text-foreground`}>{data.title}</h2>
+        {/* Hors plan de titres (2026-08-07) : section de service, sans mot-clé
+            métier. Apparence inchangée. */}
+        <p className={`${SECTION_TITLE} text-foreground`}>{data.title}</p>
       </div>
 
       <ol className="mt-10 flex flex-col items-stretch gap-5 lg:flex-row">
@@ -30,9 +32,11 @@ export function HowItWorks({ data }: { data: HubHowItWorksData }) {
               <span className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary">
                 <HubIcon name={step.icon} className="h-6 w-6" />
               </span>
-              <h3 className={`mt-5 ${CARD_TITLE} text-foreground`}>
+              {/* Étapes hors plan de titres, comme la section qui les contient.
+                  L'ordre reste porté par le `<ol>` et la numérotation du texte. */}
+              <p className={`mt-5 ${CARD_TITLE} text-foreground`}>
                 {index + 1}. {step.title}
-              </h3>
+              </p>
               <p className={`mt-2 ${CARD_BODY} text-muted-foreground`}>{step.desc}</p>
             </div>
 

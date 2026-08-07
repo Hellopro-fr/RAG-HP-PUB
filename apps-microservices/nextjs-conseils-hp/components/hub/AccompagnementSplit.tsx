@@ -28,11 +28,9 @@ export function AccompagnementSplit({ data }: { data: HubAccompagnement }) {
               data.image ? 'lg:col-span-5' : 'lg:col-span-8'
             }`}
           >
-            {/* `SECTION_TITLE` comme les 8 autres sections. Ce titre était le seul
-                en `text-2xl` sans palier `sm:` — un bloc pleine largeur avec un
-                titre d'un cran plus petit que ses voisins, d'où l'impression de
-                changement de typo en scrollant. */}
-            <h2 className={`${SECTION_TITLE} text-foreground`}>{data.title}</h2>
+            {/* Hors plan de titres (2026-08-07) : section de réassurance, sans
+                mot-clé métier. `SECTION_TITLE` conservé — seule la balise change. */}
+            <p className={`${SECTION_TITLE} text-foreground`}>{data.title}</p>
             {/* HTML restreint : le texte de référence compte deux paragraphes. */}
             <div
               className={`space-y-3 ${PROSE} text-muted-foreground [&_strong]:text-foreground`}

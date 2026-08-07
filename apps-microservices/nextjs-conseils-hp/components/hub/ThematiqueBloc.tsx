@@ -34,12 +34,11 @@ export function ThematiqueBloc({
 }) {
   return (
     <HubSection id={data.id} className={alternate ? 'bg-surface' : ''}>
-      {/* Le nom du cluster est le TITRE de la section : `h2`, sous le `h1` du
-          hero, et parent des `h3` des cartes ci-dessous. Sans lui, ces cartes
-          étaient des h3 sans parent. */}
-      <CategoryTag as="h2" icon={data.tagIcon}>
-        {data.tag}
-      </CategoryTag>
+      {/* Pastille, PAS un titre — arbitré le 2026-08-07 par l'équipe SEO : le plan
+          de titres ne retient que les intitulés porteurs de mots-clés, et les noms
+          de clusters n'y figurent pas. Les cartes ci-dessous sont donc des `h3`
+          rattachés au dernier `h2` rendu avant elles. */}
+      <CategoryTag icon={data.tagIcon}>{data.tag}</CategoryTag>
 
       {data.intro && (
         // Même échelle que le chapeau des sections centrées : c'est le même rôle,

@@ -522,8 +522,15 @@ export const lancerElevagePoulesPondeuses: HubPage = {
       ],
     },
     {
+      // ⚠️ L'`id` reste `quel-budget-prevoir` alors que le titre a changé : c'est
+      // l'ancre publique de la section ET la valeur de `howItWorks.afterEditoId`.
+      // La renommer casserait les liens profonds déjà partagés et le point
+      // d'insertion de « Comment ça marche ».
       id: 'quel-budget-prevoir',
-      title: 'Quel budget prévoir pour créer un élevage de poules pondeuses ?',
+      // Reformulé le 2026-08-07 : l'ancien intitulé « Quel budget prévoir pour
+      // créer un élevage de poules pondeuses ? » faisait doublon avec le titre de
+      // la carte overlay du bloc budget, visible sur la MÊME page.
+      title: "Combien coûte la création d'un élevage de poules pondeuses ?",
       intro:
         "Le <strong>budget pour créer un élevage de poules pondeuses</strong> va de 30 000 à 1,5 millions d'euros selon la capacité du bâtiment, le mode d'élevage, le niveau d'automatisation et des installations déjà présentes sur l'exploitation.",
       items: [

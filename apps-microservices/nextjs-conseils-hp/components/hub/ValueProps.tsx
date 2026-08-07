@@ -105,11 +105,15 @@ export function ValueProps({ data }: { data: HubValueProps }) {
 
               {/* Bloc de texte ancré en bas : il grandit vers le HAUT. */}
               <div className="shrink-0">
-                <h3
+                {/* `<p>` et non un titre — arbitré le 2026-08-07 : ces quatre
+                    libellés sont des arguments de réassurance, pas des sections
+                    de contenu, et ne figurent pas au plan de titres retenu.
+                    Apparence inchangée (`CARD_TITLE`). */}
+                <p
                   className={`${CARD_TITLE} text-foreground transition-colors duration-300 lg:group-hover:text-white`}
                 >
                   {item.title}
-                </h3>
+                </p>
                 <span className="mt-2 block h-1 w-10 rounded-full bg-cta" />
 
                 {/*
@@ -132,10 +136,11 @@ export function ValueProps({ data }: { data: HubValueProps }) {
         })}
       </ValuePropsCarousel>
 
-      {/* Phrase de clôture rendue en `<p>` : elle a le POIDS visuel d'un titre de
-          section, mais n'en est pas un — un second `h2` dans la section fausserait
-          le plan de titres. Même échelle, balise différente. */}
-      <p className={`mt-8 text-center ${SECTION_TITLE} text-foreground`}>{data.closing}</p>
+      {/* `h2` — arbitré le 2026-08-07. Cette phrase de clôture devient le titre
+          qui introduit les blocs thématiques rendus juste après : les cartes de
+          ces blocs sont des `h3`, et sans ce `h2` elles n'auraient aucun parent.
+          Second `h2` de la section, donc, et c'est voulu. */}
+      <h2 className={`mt-8 text-center ${SECTION_TITLE} text-foreground`}>{data.closing}</h2>
     </HubSection>
   );
 }

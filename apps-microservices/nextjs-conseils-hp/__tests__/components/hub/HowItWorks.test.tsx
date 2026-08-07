@@ -11,22 +11,27 @@ describe('HowItWorks', () => {
     expect(container.querySelector('section#comment-ca-marche')).not.toBeNull();
   });
 
-  it('rend le titre de section', () => {
+  /**
+   * Section de SERVICE : hors du plan de titres depuis l'arbitrage SEO du
+   * 2026-08-07. Le libellé reste affiché avec la même apparence, mais aucun
+   * élément de ce composant ne doit être un heading — sans quoi il réapparaîtrait
+   * dans l'outline de la page.
+   */
+  it('rend le titre de section sans en faire un heading', () => {
     render(<HowItWorks data={data} />);
-    expect(screen.getByRole('heading', { level: 2 }).textContent).toBe(data.title);
+    expect(screen.getByText(data.title)).toBeDefined();
+    expect(screen.queryAllByRole('heading')).toHaveLength(0);
   });
 
   /**
    * RÉGRESSION : le numéro avait été sorti du titre pour devenir un gros chiffre
-   * décoratif à côté de l'icône. L'ordre doit être porté par le texte du titre,
-   * lisible tel quel — y compris à la navigation par titres.
+   * décoratif à côté de l'icône. L'ordre doit rester porté par le texte lui-même,
+   * lisible tel quel.
    */
-  it('préfixe chaque titre par son numéro d’étape', () => {
+  it('préfixe chaque étape par son numéro', () => {
     render(<HowItWorks data={data} />);
     data.steps.forEach((step, index) => {
-      expect(
-        screen.getByRole('heading', { level: 3, name: `${index + 1}. ${step.title}` })
-      ).toBeDefined();
+      expect(screen.getByText(`${index + 1}. ${step.title}`)).toBeDefined();
     });
   });
 

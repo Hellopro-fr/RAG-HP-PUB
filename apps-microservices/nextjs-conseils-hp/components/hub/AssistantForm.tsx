@@ -399,7 +399,9 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
       >
         <div className="px-6 pt-5 sm:px-8 sm:pt-6">
           <div className="flex items-start justify-between gap-4">
-            <h2 className="text-lg font-bold text-foreground sm:text-xl">{data.cardTitle}</h2>
+            {/* `<p>` : le libellé de la carte n'est pas au plan de titres retenu
+                (2026-08-07) — c'est la QUESTION en dessous qui porte le `h2`. */}
+            <p className="text-lg font-bold text-foreground sm:text-xl">{data.cardTitle}</p>
             <span className="shrink-0 rounded-full bg-cta/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-cta">
               Question 1/{totalSteps}
             </span>
@@ -411,7 +413,11 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
 
         {inlineStep && (
           <div className="space-y-4 px-6 py-5 sm:px-8 sm:py-6">
-            <h3 className="text-base font-bold text-foreground sm:text-lg">{inlineStep.label}</h3>
+            {/* `h2` — arbitré le 2026-08-07 : la question d'entrée est le premier
+                titre après le `h1`. Elle est rendue dans le HTML initial (bloc
+                inline du hero), contrairement aux étapes suivantes qui vivent dans
+                un dialog. Apparence inchangée. */}
+            <h2 className="text-base font-bold text-foreground sm:text-lg">{inlineStep.label}</h2>
             <div className="flex flex-col gap-2">
               {inlineStep.options.map((option, index) => (
                 <OptionButton

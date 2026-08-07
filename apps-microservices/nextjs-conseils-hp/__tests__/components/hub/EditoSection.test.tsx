@@ -3,17 +3,14 @@ import { render, screen } from '@testing-library/react';
 import { EditoSection } from '@/components/hub/EditoSection';
 
 describe('EditoSection', () => {
-  it('porte son id comme ancre et rend le titre en h3', () => {
+  it('porte son id comme ancre et rend le titre en h2', () => {
     const { container } = render(
       <EditoSection data={{ id: 'edito-budget', title: 'Quel budget prévoir ?' }} />
     );
     expect(container.querySelector('section#edito-budget')).not.toBeNull();
-    // ⚠️ NIVEAU 3, pas 2 : les blocs éditoriaux développent les sections de
-    // niveau 2 au lieu d'en constituer une de même rang (structure de référence
-    // du 2026-08-07). Assertion sur le niveau et non sur l'apparence — la taille
-    // reste celle d'un titre de section.
-    expect(screen.getByRole('heading', { level: 3 }).textContent).toBe('Quel budget prévoir ?');
-    expect(screen.queryByRole('heading', { level: 2 })).toBeNull();
+    // NIVEAU 2 : les blocs éditoriaux sont des sections de plein droit et portent
+    // le contenu le plus riche en mots-clés de la page (arbitrage SEO 2026-08-07).
+    expect(screen.getByRole('heading', { level: 2 }).textContent).toBe('Quel budget prévoir ?');
   });
 
   it('rend intro, items et note ensemble', () => {
@@ -143,10 +140,9 @@ describe('EditoSection', () => {
       />
     );
 
-    // `:not(h3)` depuis le passage du titre en niveau 3 : ce test contrôle la
-    // typographie du CORPS, le titre en est exclu.
+    // Le titre (`h2`) est exclu : ce test contrôle la typographie du CORPS.
     const blocks = Array.from(
-      container.querySelectorAll('section > div > *:not(h3):not(ul), li')
+      container.querySelectorAll('section > div > *:not(h2):not(ul), li')
     );
     expect(blocks.length).toBeGreaterThan(0);
     for (const block of blocks) {

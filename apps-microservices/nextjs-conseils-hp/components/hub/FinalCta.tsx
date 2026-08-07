@@ -53,9 +53,11 @@ export function FinalCta({ data }: { data: HubFinalCta }) {
           {/* Titre + trait + texte + avantages. Le badge a sa propre cellule
               au-dessus : il n'est plus rendu ici. */}
           <div className={`min-w-0 text-center lg:text-left lg:row-start-2 ${textCol}`}>
-            <h2 className={`${SECTION_TITLE} text-white`}>
+            {/* Hors plan de titres (2026-08-07) : bandeau de conversion, pas une
+                section de contenu. Apparence inchangée. */}
+            <p className={`${SECTION_TITLE} text-white`}>
               <HubTitle parts={data.titleParts} />
-            </h2>
+            </p>
 
             <span className="mx-auto mt-4 block h-0.5 w-16 bg-cta/70 lg:mx-0" />
 
