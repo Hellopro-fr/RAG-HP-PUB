@@ -14,7 +14,7 @@ def client():
 async def _fetch_html_stub_with_cause(url, proxy_url, error_sink=None):
     """Mime un echec de fetch qui a bien capture une cause dans le sink recu."""
     if error_sink is not None:
-        error_sink['cause'] = 'NS_ERROR_CONNECTION_REFUSED'
+        error_sink['cause'] = 'NS_ERROR_WHATEVER'
         error_sink['stage'] = 'navigation'
     return None
 
@@ -36,7 +36,7 @@ def test_detect_fetch_failed_surfaces_failure_detail(client):
     assert r.status_code == 200
     body = r.json()
     assert body["method"] == "fetch_failed"
-    assert body["failure_detail"] == "navigation: NS_ERROR_CONNECTION_REFUSED"
+    assert body["failure_detail"] == "navigation: NS_ERROR_WHATEVER"
 
 
 def test_detect_fetch_failed_without_cause_is_none(client):
@@ -60,7 +60,7 @@ def test_detect_debug_fetch_failed_surfaces_failure_detail(client):
     assert r.status_code == 200
     body = r.json()
     assert body["result"]["method"] == "fetch_failed"
-    assert body["result"]["failure_detail"] == "navigation: NS_ERROR_CONNECTION_REFUSED"
+    assert body["result"]["failure_detail"] == "navigation: NS_ERROR_WHATEVER"
 
 
 def test_failure_detail_defaults_to_none():
