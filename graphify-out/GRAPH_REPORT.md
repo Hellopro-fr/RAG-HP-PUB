@@ -1,31 +1,31 @@
-# Graph Report - apps-microservices/api-detection-langue-fr + docs  (2026-08-05)
+# Graph Report - api-detection-langue-fr + crawler-service + libs + docs  (2026-08-07)
 
 ## Corpus Check
-- 10 files · ~0 words
+- 18 files · ~0 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 10281 nodes · 23922 edges · 222 communities detected
-- Extraction: 63% EXTRACTED · 37% INFERRED · 0% AMBIGUOUS · INFERRED: 8757 edges (avg confidence: 0.61)
-- Token cost: 0 input · 659,633 output
+- 10513 nodes · 24797 edges · 222 communities detected
+- Extraction: 63% EXTRACTED · 37% INFERRED · 0% AMBIGUOUS · INFERRED: 9249 edges (avg confidence: 0.6)
+- Token cost: 0 input · 463,386 output
 
 ## Community Hubs (Navigation)
-- [[_COMMUNITY_common-utils GuardMetrics|common-utils: GuardMetrics]]
-- [[_COMMUNITY_CrawlerManager Core & Tests|CrawlerManager Core & Tests]]
+- [[_COMMUNITY_crawler-service Migration & Archive Types|crawler-service: Migration & Archive Types]]
+- [[_COMMUNITY_CrawlerManager Tests (manager & stash)|CrawlerManager Tests (manager & stash)]]
 - [[_COMMUNITY_crawler-service test_admin_job_dump.py|crawler-service: test_admin_job_dump.py]]
 - [[_COMMUNITY_graphify-guide-en.md Limitation ID collision on sha...|graphify-guide-en.md: Limitation: ID collision on sha...]]
 - [[_COMMUNITY_common-utils setup.py|common-utils: setup.py]]
 - [[_COMMUNITY_common-utils __init__.py|common-utils: __init__.py]]
 - [[_COMMUNITY_common-utils Creates a dictionary of headers...|common-utils: Creates a dictionary of headers...]]
-- [[_COMMUNITY_superpowers Garde-fou engine validate_unit(...|superpowers: Garde-fou engine validate_unit(...]]
+- [[_COMMUNITY_common-utils OCR Extractor & CleanHTML|common-utils: OCR Extractor & CleanHTML]]
 - [[_COMMUNITY_common-utils Creates pika.BasicProperties fo...|common-utils: Creates pika.BasicProperties fo...]]
 - [[_COMMUNITY_superpowers crawler-service CLAUDE|superpowers: crawler-service CLAUDE.md]]
 - [[_COMMUNITY_API Gateway Go (routingauthcatalog)|API Gateway Go (routing/auth/catalog)]]
 - [[_COMMUNITY_Detection FR Response Models|Detection FR Response Models]]
-- [[_COMMUNITY_crawler-service crawler-service|crawler-service: crawler-service]]
-- [[_COMMUNITY_HTML Cleaning & Challenge Detection|HTML Cleaning & Challenge Detection]]
+- [[_COMMUNITY_common-utils Milvus Concurrency Guard|common-utils: Milvus Concurrency Guard]]
+- [[_COMMUNITY_Detection FR Scraper & Redirects|Detection FR Scraper & Redirects]]
 - [[_COMMUNITY_crawler-service redisClient.test.ts|crawler-service: redisClient.test.ts]]
-- [[_COMMUNITY_Crawl Start  OOM Relaunch|Crawl Start / OOM Relaunch]]
+- [[_COMMUNITY_common-utils Milvus Produit CRUD & DLQ|common-utils: Milvus Produit CRUD & DLQ]]
 - [[_COMMUNITY_common-utils test_MilvusProduitInserer.py|common-utils: test_MilvusProduitInserer.py]]
 - [[_COMMUNITY_common-utils OCRDocExtractor|common-utils: OCRDocExtractor]]
 - [[_COMMUNITY_common-utils __init__.py|common-utils: __init__.py]]
@@ -36,20 +36,21 @@
 - [[_COMMUNITY_common-utils normalize_quantity()|common-utils: normalize_quantity()]]
 - [[_COMMUNITY_superpowers BO detectBatchUrlsAsync() helpe...|superpowers: BO detectBatchUrlsAsync() helpe...]]
 - [[_COMMUNITY_common-utils spacy_client.py|common-utils: spacy_client.py]]
-- [[_COMMUNITY_Milvus CRUD Layer (common-utils)|Milvus CRUD Layer (common-utils)]]
+- [[_COMMUNITY_Claude Code Team Guide & Config Migration|Claude Code Team Guide & Config Migration]]
 - [[_COMMUNITY_crawler-service test_auto_stash_move_config.py|crawler-service: test_auto_stash_move_config.py]]
 - [[_COMMUNITY_crawler-service queuePurge.ts|crawler-service: queuePurge.ts]]
 - [[_COMMUNITY_tests classify_entry()|tests: classify_entry()]]
 - [[_COMMUNITY_superpowers 7 kept workflows for active ser...|superpowers: 7 kept workflows for active ser...]]
-- [[_COMMUNITY_Crawler Redis Cache & Seam (docs)|Crawler Redis Cache & Seam (docs)]]
-- [[_COMMUNITY_Crawler Schemas, Stash & Reconcile|Crawler Schemas, Stash & Reconcile]]
+- [[_COMMUNITY_common-utils Redis Cache Service|common-utils: Redis Cache Service]]
+- [[_COMMUNITY_Crawler Admin & Admission Control|Crawler Admin & Admission Control]]
+- [[_COMMUNITY_CrawlerManager Schemas, Archive & Reconcile|CrawlerManager Schemas, Archive & Reconcile]]
 - [[_COMMUNITY_common-utils TestLuaScripts|common-utils: TestLuaScripts]]
 - [[_COMMUNITY_crawler-service _LockHeartbeat|crawler-service: _LockHeartbeat]]
 - [[_COMMUNITY_GCS Archive Audit Tool|GCS Archive Audit Tool]]
 - [[_COMMUNITY_Async Job Manager & Store|Async Job Manager & Store]]
 - [[_COMMUNITY_crawler-service crawler-service failure classif...|crawler-service: crawler-service failure classif...]]
 - [[_COMMUNITY_crawler-service test_auto_stash_config.py|crawler-service: test_auto_stash_config.py]]
-- [[_COMMUNITY_GCS Upload  Download Daemons|GCS Upload / Download Daemons]]
+- [[_COMMUNITY_Stash Crawls Batch Tool|Stash Crawls Batch Tool]]
 - [[_COMMUNITY_Crawler Migration & Archive Types|Crawler Migration & Archive Types]]
 - [[_COMMUNITY_superpowers Dead Services Cleanup Plan|superpowers: Dead Services Cleanup Plan]]
 - [[_COMMUNITY_common-utils database_client.py|common-utils: database_client.py]]
@@ -61,25 +62,26 @@
 - [[_COMMUNITY_common-utils get_message_or_stop()|common-utils: get_message_or_stop()]]
 - [[_COMMUNITY_superpowers GCS Archive Audit Tool Plan|superpowers: GCS Archive Audit Tool Plan]]
 - [[_COMMUNITY_crawler-service test_crawler_capacity_disk.py|crawler-service: test_crawler_capacity_disk.py]]
-- [[_COMMUNITY_superpowers crawler-service|superpowers: crawler-service]]
+- [[_COMMUNITY_Crawler - Detection Client Seam (docs)|Crawler <-> Detection Client Seam (docs)]]
 - [[_COMMUNITY_crawler-service test_crawler_version.py|crawler-service: test_crawler_version.py]]
 - [[_COMMUNITY_api-detection-langue-fr INFLIGHT_REQUESTS Gauge Semanti...|api-detection-langue-fr: INFLIGHT_REQUESTS Gauge Semanti...]]
 - [[_COMMUNITY_common-utils lua_scripts.py|common-utils: lua_scripts.py]]
 - [[_COMMUNITY_misc export_reranker_model()|misc: export_reranker_model()]]
 - [[_COMMUNITY_superpowers Cache-manager perf redesign (re...|superpowers: Cache-manager perf redesign (re...]]
 - [[_COMMUNITY_Crawler Engine Core (mainfunctions)|Crawler Engine Core (main/functions)]]
-- [[_COMMUNITY_Crawler Admin & Admission Control|Crawler Admin & Admission Control]]
+- [[_COMMUNITY_Crawler Engine Core (mainfunctions)|Crawler Engine Core (main/functions)]]
 - [[_COMMUNITY_crawler-service test_admin_config.py|crawler-service: test_admin_config.py]]
 - [[_COMMUNITY_Graph-RAG Rust Service Core|Graph-RAG Rust Service Core]]
+- [[_COMMUNITY_CrawlerManager Core & Reconcile|CrawlerManager Core & Reconcile]]
 - [[_COMMUNITY_superpowers 7 import gotchas (G1-G7)|superpowers: 7 import gotchas (G1-G7)]]
 - [[_COMMUNITY_superpowers robots.txt Total Block Detectio...|superpowers: robots.txt Total Block Detectio...]]
-- [[_COMMUNITY_superpowers feature_cache.py module (serial...|superpowers: feature_cache.py module (serial...]]
+- [[_COMMUNITY_superpowers SSO, MCP Zoho & Consent Specs|superpowers: SSO, MCP Zoho & Consent Specs]]
 - [[_COMMUNITY_Detection Langue FR Core|Detection Langue FR Core]]
 - [[_COMMUNITY_common-utils __init__.py|common-utils: __init__.py]]
 - [[_COMMUNITY_api-detection-langue-fr __init__.py|api-detection-langue-fr: __init__.py]]
+- [[_COMMUNITY_HTML Cleaning & Language Detection|HTML Cleaning & Language Detection]]
 - [[_COMMUNITY_api-detection-langue-fr __init__.py|api-detection-langue-fr: __init__.py]]
 - [[_COMMUNITY_Detection FR Routes & Page Validation|Detection FR Routes & Page Validation]]
-- [[_COMMUNITY_Detection FR Scraper & Redirects|Detection FR Scraper & Redirects]]
 - [[_COMMUNITY_api-detection-langue-fr __init__.py|api-detection-langue-fr: __init__.py]]
 - [[_COMMUNITY_api-detection-langue-fr Normalise l'encodage du contenu...|api-detection-langue-fr: Normalise l'encodage du contenu...]]
 - [[_COMMUNITY_api-detection-langue-fr __init__.py|api-detection-langue-fr: __init__.py]]
@@ -111,7 +113,7 @@
 - [[_COMMUNITY_api-detection-langue-fr Verify CAMOUFOX_ENABLED setting...|api-detection-langue-fr: Verify CAMOUFOX_ENABLED setting...]]
 - [[_COMMUNITY_api-detection-langue-fr On happy path, page.unroute_all...|api-detection-langue-fr: On happy path, page.unroute_all...]]
 - [[_COMMUNITY_api-detection-langue-fr A mid-fetch exception still tri...|api-detection-langue-fr: A mid-fetch exception still tri...]]
-- [[_COMMUNITY_OAuth 2.1 + PKCE Auth Lib|OAuth 2.1 + PKCE Auth Lib]]
+- [[_COMMUNITY_GCS UploadDownload Daemons & Unstash|GCS Upload/Download Daemons & Unstash]]
 - [[_COMMUNITY_superpowers Milvus Global Concurrency Guard...|superpowers: Milvus Global Concurrency Guard...]]
 - [[_COMMUNITY_api-detection-langue-fr scrape_html captures response.s...|api-detection-langue-fr: scrape_html captures response.s...]]
 - [[_COMMUNITY_api-detection-langue-fr When Playwright returns no Resp...|api-detection-langue-fr: When Playwright returns no Resp...]]
@@ -120,7 +122,6 @@
 - [[_COMMUNITY_CLAUDE.md .error marker|CLAUDE.md: .error marker]]
 - [[_COMMUNITY_crawler-service Maps internal error codes to hu...|crawler-service: Maps internal error codes to hu...]]
 - [[_COMMUNITY_misc Maps internal error codes to hu...|misc: Maps internal error codes to hu...]]
-- [[_COMMUNITY_common-utils TrafilaturaHp|common-utils: TrafilaturaHp]]
 - [[_COMMUNITY_superpowers DLQ Manager UX Improvements (20...|superpowers: DLQ Manager UX Improvements (20...]]
 - [[_COMMUNITY_common-utils reranking_client.py|common-utils: reranking_client.py]]
 - [[_COMMUNITY_superpowers DLQ Manager UX Improvements Plan|superpowers: DLQ Manager UX Improvements Plan]]
@@ -133,11 +134,11 @@
 - [[_COMMUNITY_superpowers Concept POST crawlerstash{i...|superpowers: Concept: POST /crawler/stash/{i...]]
 - [[_COMMUNITY_superpowers Google Sheets Import for MCP Ga...|superpowers: Google Sheets Import for MCP Ga...]]
 - [[_COMMUNITY_crawler-service test_admin_sidecar.py|crawler-service: test_admin_sidecar.py]]
-- [[_COMMUNITY_superpowers GCS Audit Tar Prefix Fix + Quar...|superpowers: GCS Audit Tar Prefix Fix + Quar...]]
-- [[_COMMUNITY_common-utils DeepseekOCRDocExtractor|common-utils: DeepseekOCRDocExtractor]]
+- [[_COMMUNITY_Crawler Auto-Stash Eligibility & Sweep|Crawler Auto-Stash Eligibility & Sweep]]
 - [[_COMMUNITY_superpowers Spec Stash Bind-Mount Pre-Flig...|superpowers: Spec: Stash Bind-Mount Pre-Flig...]]
 - [[_COMMUNITY_superpowers Dead Services Cleanup Phase 1 (...|superpowers: Dead Services Cleanup Phase 1 (...]]
 - [[_COMMUNITY_crawler-service test_crawler.py|crawler-service: test_crawler.py]]
+- [[_COMMUNITY_Crawler Migration & Archive Types|Crawler Migration & Archive Types]]
 - [[_COMMUNITY_superpowers Crawler Monitor Dataset & Queue...|superpowers: Crawler Monitor Dataset & Queue...]]
 - [[_COMMUNITY_superpowers _is_stash_eligible predicate (g...|superpowers: _is_stash_eligible predicate (g...]]
 - [[_COMMUNITY_superpowers _LockHeartbeat (server-side ren...|superpowers: _LockHeartbeat (server-side ren...]]
@@ -145,9 +146,8 @@
 - [[_COMMUNITY_crawler-service test_admin_redis_debug.py|crawler-service: test_admin_redis_debug.py]]
 - [[_COMMUNITY_superpowers Rationale TTLinterval=6 gives...|superpowers: Rationale: TTL/interval=6 gives...]]
 - [[_COMMUNITY_crawler-service DedupManager.test.ts|crawler-service: DedupManager.test.ts]]
-- [[_COMMUNITY_superpowers mcp-zoho-service (new Go MCP pr...|superpowers: mcp-zoho-service (new Go MCP pr...]]
+- [[_COMMUNITY_superpowers Dynamic Unit Normalization|superpowers: Dynamic Unit Normalization]]
 - [[_COMMUNITY_BDD Doc-Enrichment Workflow|BDD Doc-Enrichment Workflow]]
-- [[_COMMUNITY_common-utils DLQProperties.py|common-utils: DLQProperties.py]]
 - [[_COMMUNITY_crawler-service test_timing_summary_tool.ts|crawler-service: test_timing_summary_tool.ts]]
 - [[_COMMUNITY_superpowers BO results timeout bump to 900...|superpowers: BO /results timeout bump to 900...]]
 - [[_COMMUNITY_superpowers 28 deleted workflow files (9 ci...|superpowers: 28 deleted workflow files (9 ci...]]
@@ -157,7 +157,7 @@
 - [[_COMMUNITY_superpowers Task 6 documentation (tools + ...|superpowers: Task 6: documentation (tools + ...]]
 - [[_COMMUNITY_superpowers libauthflow.ts framework-fre...|superpowers: lib/auth/flow.ts: framework-fre...]]
 - [[_COMMUNITY_superpowers async_jobs.py JobStore + JobMa...|superpowers: async_jobs.py: JobStore + JobMa...]]
-- [[_COMMUNITY_crawler-service aggregator.ts|crawler-service: aggregator.ts]]
+- [[_COMMUNITY_superpowers Image Comparison & Feature Cache|superpowers: Image Comparison & Feature Cache]]
 - [[_COMMUNITY_superpowers Blast radius crawler-service N...|superpowers: Blast radius: crawler-service N...]]
 - [[_COMMUNITY_superpowers WHY stashed_at orthogonal field...|superpowers: WHY stashed_at orthogonal field...]]
 - [[_COMMUNITY_superpowers Manual headpowerac recovery re...|superpowers: Manual headpowerac recovery: re...]]
@@ -167,13 +167,14 @@
 - [[_COMMUNITY_crawler-service Stash daemons separate upload_...|crawler-service: Stash daemons: separate upload_...]]
 - [[_COMMUNITY_crawler-service Auto-stash eligibility (_is_sta...|crawler-service: Auto-stash eligibility (_is_sta...]]
 - [[_COMMUNITY_crawler-service Auto-stash job_data fields (ort...|crawler-service: Auto-stash job_data fields (ort...]]
+- [[_COMMUNITY_common-utils TrafilaturaHp|common-utils: TrafilaturaHp]]
 - [[_COMMUNITY_superpowers Download-driven self-heal guar...|superpowers: Download-driven self-heal: guar...]]
 - [[_COMMUNITY_crawler-service Reconciliation leader election...|crawler-service: Reconciliation leader election:...]]
 - [[_COMMUNITY_crawler-service test_config_paths.py|crawler-service: test_config_paths.py]]
 - [[_COMMUNITY_superpowers Embedding-service livelock bud...|superpowers: Embedding-service livelock: bud...]]
 - [[_COMMUNITY_crawler-service Content-extractor co-deploy rul...|crawler-service: Content-extractor co-deploy rul...]]
 - [[_COMMUNITY_crawler-service QM_RAW_SAME_SIM (default 0.97, ...|crawler-service: QM_RAW_SAME_SIM (default 0.97, ...]]
-- [[_COMMUNITY_Stash Crawls Batch Tool|Stash Crawls Batch Tool]]
+- [[_COMMUNITY_OAuth 2.1 + PKCE Shared Auth Lib|OAuth 2.1 + PKCE Shared Auth Lib]]
 - [[_COMMUNITY_crawler-service Pre-flight disk space check me...|crawler-service: Pre-flight disk space check: me...]]
 - [[_COMMUNITY_auth flow.test.ts|auth: flow.test.ts]]
 - [[_COMMUNITY_auth session.test.ts|auth: session.test.ts]]
@@ -213,11 +214,10 @@
 - [[_COMMUNITY_api-detection-langue-fr A mid-fetch exception still tri...|api-detection-langue-fr: A mid-fetch exception still tri...]]
 - [[_COMMUNITY_crawler-service RingBufferHandler|crawler-service: RingBufferHandler]]
 - [[_COMMUNITY_common-utils PDFProcessor|common-utils: PDFProcessor]]
-- [[_COMMUNITY_crawler-service test_admin_crawl_log.py|crawler-service: test_admin_crawl_log.py]]
 - [[_COMMUNITY_common-utils prometheus.py|common-utils: prometheus.py]]
 - [[_COMMUNITY_superpowers Archive Staging Subdirectory Plan|superpowers: Archive Staging Subdirectory Plan]]
 - [[_COMMUNITY_superpowers nginx regex location ~ crawle...|superpowers: nginx regex location ~ ^/crawle...]]
-- [[_COMMUNITY_crawler-service ._is_stash_eligible()|crawler-service: ._is_stash_eligible()]]
+- [[_COMMUNITY_Service Overviews (crawler + detection CLAUDE.md)|Service Overviews (crawler + detection CLAUDE.md)]]
 - [[_COMMUNITY_crawler-service DedupManager.test.ts|crawler-service: DedupManager.test.ts]]
 - [[_COMMUNITY_graphify-guide-en.md scriptsgraphify_plan_update.py...|graphify-guide-en.md: scripts/graphify_plan_update.py...]]
 - [[_COMMUNITY_crawler-service PushedSet.test.ts|crawler-service: PushedSet.test.ts]]
@@ -238,24 +238,24 @@
 2. `IncludeInArchive` - 381 edges
 3. `ReindexResponse` - 381 edges
 4. `CrawlStatus` - 381 edges
-5. `DetectionMode` - 282 edges
+5. `DetectionMode` - 300 edges
 6. `DomainFR` - 275 edges
-7. `DetectionResponse` - 195 edges
-8. `BatchItem` - 157 edges
-9. `LanguageDetector` - 149 edges
-10. `DebugAlternativesInfo` - 136 edges
+7. `DetectionResponse` - 227 edges
+8. `BatchItem` - 176 edges
+9. `DebugAlternativesInfo` - 155 edges
+10. `ScrapeResult` - 155 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `Change 2 — the service's first set_exception_handler, narrow on three axes` --semantically_similar_to--> `Drain orphaned Playwright protocol callbacks; report everything else.      A c`  [INFERRED] [semantically similar]
-  docs/superpowers/specs/2026-08-05-detection-orphaned-goto-callback-flood-design.md → apps-microservices/api-detection-langue-fr/main.py
 - `GeminiClient` --semantically_similar_to--> `gemini_client Gemini Infrastructure`  [INFERRED] [semantically similar]
   D:\DevHellopro\Workspaces\RAG-HP-PUB\libs\common-utils\src\common_utils\llm\providers.py → apps-microservices/graph-rag-api-recherche-rust-service/CLAUDE.md
 - `Framework-free OAuth2 + PKCE primitives (parity with libs/auth/node oauth.ts).` --semantically_similar_to--> `Node/Python parity contract (env convention, PKCE S256, claims, TTL)`  [INFERRED] [semantically similar]
   libs\auth\python\hellopro_auth\oauth.py → docs/superpowers/specs/2026-06-18-shared-auth-lib-design.md
-- `Rationale: match TargetClosedError by public base class plus class NAME — it is not exported by playwright.async_api, and importing it from playwright._impl._errors would tie the handler to a private module the 1.58-to-1.60 upgrade could move` --semantically_similar_to--> `Stand-in with the real class NAME — the handler matches on the name     because`  [INFERRED] [semantically similar]
-  docs/superpowers/plans/2026-08-05-detection-orphaned-goto-callback-flood.md → apps-microservices/api-detection-langue-fr/tests/test_orphan_handler.py
-- `cache_service.py (Redis lock helper)` --semantically_similar_to--> `Redis State and Counters`  [INFERRED] [semantically similar]
-  libs/common-utils/cache_service.py → apps-microservices/crawler-service/CLAUDE.md
+- `Drain orphaned Playwright protocol callbacks; report everything else.      A c` --semantically_similar_to--> `Change 2 — the service's first set_exception_handler, narrow on three axes`  [INFERRED] [semantically similar]
+  apps-microservices/api-detection-langue-fr/main.py → docs/superpowers/specs/2026-08-05-detection-orphaned-goto-callback-flood-design.md
+- `WHY the retry must be explicit: redis-py defaults to Retry(NoBackoff(), 0) with an empty retry_on_error (verified 5.2.1), so the first command on a reaped socket raises ConnectionError and every cache_service helper swallows it into its default return (None/0/[]/False) — indistinguishable from a real answer; redis is unpinned so the default is whatever pip resolved` --semantically_similar_to--> `retry_on_error is what lets _disconnect_raise fall through to the retry     loo`  [INFERRED] [semantically similar]
+  apps-microservices/crawler-service/CLAUDE.md → libs/common-utils/tests/test_cache_service.py
+- `detect_challenge_page()` --semantically_similar_to--> `The crawler's hand-ported challenge classifier has drifted from the service's 9 families`  [EXTRACTED] [semantically similar]
+  D:\DevHellopro\Workspaces\RAG-HP-PUB\apps-microservices\api-detection-langue-fr\app\services\language_detector.py → docs/superpowers/references/2026-07-29-crawler-detection-seam-audit.md
 
 ## Hyperedges (group relationships)
 - **Three independent paths keep the graph fresh** — graphify_auto_rebuild_workflow, graphify_scoped_hook, graphify_semantic_update_trigger [EXTRACTED 0.90]
@@ -270,18 +270,21 @@
 - **The falsification set that bounded this fix: OOM-kill, Playwright process leak behind 876 PIDs, and CPU saturation all disproved by measurement, which withdrew the pids_limit recommendation and removed any case for a structural Playwright refactor** — teardown_flood_spec_falsified_oom_kill, teardown_flood_spec_falsified_process_leak, teardown_flood_spec_falsified_cpu_saturation, teardown_flood_spec_withdrawn_pids_limit, teardown_flood_spec_no_structural_playwright_refactor, teardown_flood_spec_rationale_pstop_stays_unconditional [EXTRACTED 1.00]
 - **The three-change fix and the suites that guard it: variant denylist gate, liveness-aware teardown, exception drain** — teardown_flood_spec_denylist_variant_gate, teardown_flood_spec_liveness_teardown_guard, teardown_flood_spec_drain_exception, teardown_flood_plan_test_variant_gate_suite, teardown_flood_plan_test_teardown_targets_suite, teardown_flood_plan_test_close_or_abandon_suite, scraper_close_or_abandon, scraper_teardown_targets, redirect_tracker_fetch_html [EXTRACTED 1.00]
 - **Detection asyncio unretrieved-exception flood lineage: inflight_dedup fut.exception() then this chantier's teardown drain (2026-08-03) then the orphaned goto-callback loop handler (2026-08-05)** — teardown_flood_spec, teardown_flood_plan, teardown_flood_spec_drain_exception, teardown_flood_spec_rationale_same_defect_class_as_inflight_dedup, orphaned_goto_spec, orphaned_goto_plan, orphaned_goto_spec_narrow_loop_handler, main_handle_loop_exception, scraper_close_or_abandon [INFERRED 0.85]
+- **Les 5 barrières qui rendent B2 inerte à la livraison (liste vide, flag false, aperçu par défaut, validation humaine, re-vérification sur lecture fraîche)** — failure_cause_spec_barrier_empty_cause_list, failure_cause_spec_barrier_retire_proposal_flag, failure_cause_spec_barrier_dry_run_default, failure_cause_spec_barrier_human_validation, failure_cause_plan_rationale_fresh_read_revalidation, failure_cause_plan_rationale_user_gate_task6 [EXTRACTED 1.00]
+- **Les affirmations réfutées ou corrigées pendant l'investigation — reprendre l'une d'elles coûterait un cycle** — failure_cause_spec_rationale_refuted_expose_last_error, failure_cause_spec_rationale_refuted_two_run_threshold, failure_cause_spec_rationale_gecko_label_unattested, failure_cause_spec_correction_fatal_errors_not_chromium, failure_cause_plan_rationale_two_families_of_death, failure_cause_plan_residual_chromium_amalgam_task7 [EXTRACTED 1.00]
+- **Le principe transversal du chantier: aucune valeur n'est devinée — le stage vient du site d'appel, le stage 'browser' de l'absence d'écriture, et la liste de causes se remplit sur des libellés récoltés** — failure_cause_spec_rationale_stage_from_call_site, failure_cause_plan_rationale_browser_stage_from_absence, failure_cause_spec_cause_harvest_procedure, failure_cause_spec_barrier_empty_cause_list, failure_cause_spec_rationale_guessing_label_is_the_failure_mode [INFERRED 0.85]
 
 ## Communities
 
-### Community 20 - "common-utils: GuardMetrics"
+### Community 21 - "crawler-service: Migration & Archive Types"
 Cohesion: 0.05
 Nodes (102): CollectionName, Enum, CollectionNameGraph, Enum for the possible collection names.     The values correspond to the string, Enum for the possible collection names.     The values correspond to the string, # TODO:, get_llm_chat_response(), get_llm_chat_batch_response() (+94 more)
 
-### Community 1 - "CrawlerManager Core & Tests"
-Cohesion: 0.0
-Nodes (985): str, DLQPropertiesAsync, create_dlq_headers(), create_dlq_message(), Sets a dictionary for a key, serializing it to JSON., Deletes a key from Redis., _count_files_in_dir(), CrawlerManager (+977 more)
+### Community 3 - "CrawlerManager Tests (manager & stash)"
+Cohesion: 0.01
+Nodes (623): str, DLQPropertiesAsync, create_dlq_headers(), create_dlq_message(), CrawlerManager, mock_cache_service(), TestStaleHandlerCounter, test_stale_handler_decrements_counter() (+615 more)
 
-### Community 85 - "crawler-service: test_admin_job_dump.py"
+### Community 86 - "crawler-service: test_admin_job_dump.py"
 Cohesion: 0.67
 Nodes (3): DLQProperties, create_dlq_headers(), create_dlq_properties()
 
@@ -301,39 +304,39 @@ Nodes (1): Creates a dictionary of headers for a DLQ message based on an aio_pik
 Cohesion: 1.0
 Nodes (1): Creates a persistent aio_pika.Message ready for the Dead Letter Queue.
 
-### Community 24 - "superpowers: Garde-fou engine validate_unit(..."
-Cohesion: 0.03
-Nodes (72): gen_email_uuid(), AnonymizeText, CleanHTML, Class base to clean data., Convert HTML content to BeautifulSoup object., Steps:         1. Convert HTML to BeautifulSoup object.         2. Keep only t, Strip HTML tags and return cleaned text.         Remove all tags except tags rel, DeepseekOCRDocExtractor (+64 more)
+### Community 22 - "common-utils: OCR Extractor & CleanHTML"
+Cohesion: 0.02
+Nodes (86): gen_email_uuid(), AnonymizeText, CleanHTML, Class base to clean data., Convert HTML content to BeautifulSoup object., Steps:         1. Convert HTML to BeautifulSoup object.         2. Keep only t, Strip HTML tags and return cleaned text.         Remove all tags except tags rel, DeepseekOCRDocExtractor (+78 more)
 
 ### Community 127 - "common-utils: Creates pika.BasicProperties fo..."
 Cohesion: 1.0
 Nodes (1): Cleans up whitespace and removes control characters.
 
-### Community 29 - "superpowers: crawler-service CLAUDE.md"
+### Community 30 - "superpowers: crawler-service CLAUDE.md"
 Cohesion: 0.07
 Nodes (27): TrafilaturaHp, _normalize_sentence(), _normalize_whitespace(), Normalizes a sentence for accurate comparison., Cleans up whitespace and removes control characters., Pre-processes the HTML content:         1. Removes script/style/noscript tags., Post-processes the extracted content:         1. Extracts article content (produ, Extrait le texte avec BeautifulSoup en ciblant les balises pertinentes. (+19 more)
 
-### Community 4 - "API Gateway Go (routing/auth/catalog)"
+### Community 5 - "API Gateway Go (routing/auth/catalog)"
 Cohesion: 0.01
 Nodes (169): InputJSON, OutputJSON, main(), extractContent(), outputError(), ApiDoc, api-gateway (Python/FastAPI), api-gateway-go (Go/Gin/GORM) (+161 more)
 
-### Community 9 - "Detection FR Response Models"
+### Community 11 - "Detection FR Response Models"
 Cohesion: 0.02
-Nodes (229): BaseModel, InsertDevisRequest, InsertEchangeRequest, InsertProduitRequest, InsertWebsiteRequest, _normalize_url_for_dedup(), _homepage_of(), _is_homepage() (+221 more)
+Nodes (228): BaseModel, InsertDevisRequest, InsertEchangeRequest, InsertProduitRequest, InsertWebsiteRequest, _normalize_url_for_dedup(), _homepage_of(), _is_homepage() (+220 more)
 
-### Community 21 - "crawler-service: crawler-service"
+### Community 23 - "common-utils: Milvus Concurrency Guard"
 Cohesion: 0.05
 Nodes (63): GuardConfig, GuardMetrics, Prometheus metrics for MilvusConcurrencyGuard.      Uses module-level singleto, Record a successful slot acquisition., Record a slot release., Record an acquire timeout., Set the configuration gauges (typically called once at startup)., Set fallback mode indicator (1 = Redis unavailable, 0 = normal). (+55 more)
 
-### Community 11 - "HTML Cleaning & Challenge Detection"
+### Community 6 - "Detection FR Scraper & Redirects"
 Cohesion: 0.01
-Nodes (232): Configuration de l'application, Settings, BaseSettings, env_or(), env_or_opt(), Config, detect_challenge_page(), Détecte si le contenu HTML est une page de challenge/protection anti-bot     (C (+224 more)
+Nodes (386): Configuration de l'application, reconcile_running_jobs_count(), scheduled_archive_cleanup(), validation_exception_handler(), startup_event(), shutdown_event(), read_root(), Periodically checks the actual number of 'running' jobs in Redis and corrects (+378 more)
 
 ### Community 104 - "crawler-service: redisClient.test.ts"
 Cohesion: 1.0
 Nodes (1): Atomic Lua scripts for Redis-based concurrency guard. All slot operations (acqu
 
-### Community 7 - "Crawl Start / OOM Relaunch"
+### Community 7 - "common-utils: Milvus Produit CRUD & DLQ"
 Cohesion: 0.01
 Nodes (119): MilvusProduitsMigration, main(), Script de migration de la collection produits_3 vers produits_4 Objectif: Augmen, Classe pour gérer la migration de produits_3 vers produits_4, Vérifier que la collection source existe, Créer une copie de sauvegarde (optionnel mais recommandé pour petites collection, Créer la nouvelle collection produits_4 avec le schéma corrigé, Filtre les chunks qui existent déjà dans la collection cible         Vérifie: id (+111 more)
 
@@ -349,19 +352,19 @@ Nodes (36): Config, Embedding, _clean_text(), Ajoute une ligne avec le temps d�
 Cohesion: 1.0
 Nodes (1): Nettoie une chaîne de texte en normalisant les espaces et en corrigeant
 
-### Community 68 - "common-utils: test_graceful.py"
+### Community 69 - "common-utils: test_graceful.py"
 Cohesion: 0.29
 Nodes (4): PDFProcessor, A class to extract text from a PDF file's binary content., Initializes the PDFProcessor with the binary content of the file.         :param, Executes the full workflow: opens the file from memory and extracts text.
 
-### Community 62 - "api-gateway-go: models.go"
+### Community 63 - "api-gateway-go: models.go"
 Cohesion: 0.25
 Nodes (6): get_collection_schema(), classic_search_vector(), hybrid_search_vector(), Appelle le service gRPC pour obtenir le schéma d'une collection avec un cache d', Appelle le service gRPC pour effectuer une recherche classique par filtre., Appelle le service gRPC pour effectuer une recherche hybride     combinant rech
 
-### Community 42 - "common-utils: graph_database_client.py"
+### Community 43 - "common-utils: graph_database_client.py"
 Cohesion: 0.13
 Nodes (20): PropertyInfo, NodeLabel, RelationshipType, GraphSchema, BatchResult, _dict_to_struct(), execute_cypher(), execute_batch_cypher() (+12 more)
 
-### Community 39 - "common-utils: graph_milvus_client.py"
+### Community 40 - "common-utils: graph_milvus_client.py"
 Cohesion: 0.08
 Nodes (26): SearchResult, upsert_entity(), upsert_entity_batch(), search_similar_entities(), check_entities_exist(), upsert_label(), upsert_label_batch(), search_similar_labels() (+18 more)
 
@@ -369,7 +372,7 @@ Nodes (26): SearchResult, upsert_entity(), upsert_entity_batch(), search_similar
 Cohesion: 0.28
 Nodes (8): NormalizedQuantity, NormalizedRange, normalize_quantity(), normalize_range(), Result of quantity normalization., Result of range normalization., Normalize a single quantity (value + unit).          Args:         label: The, Normalize a numeric range (min/max + unit).          Args:         label: The
 
-### Community 78 - "superpowers: BO detectBatchUrlsAsync() helpe..."
+### Community 79 - "superpowers: BO detectBatchUrlsAsync() helpe..."
 Cohesion: 0.4
 Nodes (4): rerank_documents(), rerank_documents_with_scores(), Appelle le service gRPC de reranking pour réorganiser une liste de documents., Appelle le service gRPC de reranking pour réorganiser une liste de documents et
 
@@ -377,7 +380,7 @@ Nodes (4): rerank_documents(), rerank_documents_with_scores(), Appelle le servic
 Cohesion: 0.28
 Nodes (8): Token, Entity, lemmatize(), extract_entities(), Token with lemmatization information., Named entity extracted from text., Call the gRPC service to lemmatize text.          Args:         text: The tex, Call the gRPC service to extract named entities from text.          Args:
 
-### Community 8 - "Milvus CRUD Layer (common-utils)"
+### Community 10 - "Claude Code Team Guide & Config Migration"
 Cohesion: 0.01
 Nodes (218): BaseLLMClient, ABC, OpenAIClient, DeepSeekClient, GeminiClient, AnthropicClient, LLMFactory, create_client() (+210 more)
 
@@ -385,41 +388,45 @@ Nodes (218): BaseLLMClient, ABC, OpenAIClient, DeepSeekClient, GeminiClient, Ant
 Cohesion: 0.67
 Nodes (2): setup_logging(), Configure root logger with a stdout handler.      Safe to call multiple times
 
-### Community 69 - "crawler-service: queuePurge.ts"
+### Community 70 - "crawler-service: queuePurge.ts"
 Cohesion: 0.29
 Nodes (6): start_metrics_server_in_thread(), get_metrics_app(), measure_processing_time(), Starts a Prometheus metrics HTTP server in a separate thread.     This is essent, Returns a WSGI app for serving Prometheus metrics.     Useful for embedding into, A decorator that measures the execution time of a function (sync or async)     a
 
-### Community 33 - "tests: classify_entry()"
+### Community 34 - "tests: classify_entry()"
 Cohesion: 0.08
 Nodes (23): DocumentTextExtractor, Classe pour extraire le texte de différents types de documents, Initialise l'extracteur                  Args:             download_dir: Réperto, Vérifie si une chaîne est une URL                  Args:             path_or_url, Extrait le nom de fichier depuis une URL                  Args:             url:, Télécharge un fichier depuis une URL                  Args:             url: URL, Résout un chemin ou URL vers un chemin local                  Args:, Convertit une image vers un format supporté par l'OCR                  Args: (+15 more)
 
-### Community 79 - "superpowers: 7 kept workflows for active ser..."
+### Community 80 - "superpowers: 7 kept workflows for active ser..."
 Cohesion: 0.4
 Nodes (2): RabbitMQConnection, Crée une connexion RabbitMQ avec un nombre limité de tentatives.          :param
 
-### Community 5 - "Crawler Redis Cache & Seam (docs)"
+### Community 12 - "common-utils: Redis Cache Service"
 Cohesion: 0.01
-Nodes (399): Initializes the Redis connection pool.     Connects to Redis using the URL from, Closes the Redis connection pool., Atomically sets a key only if it does not already exist (SET NX).     Returns T, Sets a raw value for a key., Gets the raw string value of a key., Gets all keys matching a given prefix using SCAN., Atomically increments a key's value by 1., Atomically decrements a key's value by 1.      WARNING: This function can driv (+391 more)
+Nodes (256): Initializes the Redis connection pool.     Connects to Redis using the URL from, Closes the Redis connection pool., Atomically sets a key only if it does not already exist (SET NX).     Returns T, Sets a raw value for a key., Gets the raw string value of a key., Deletes a key from Redis., Gets all keys matching a given prefix using SCAN., Atomically increments a key's value by 1. (+248 more)
 
-### Community 0 - "Crawler Schemas, Stash & Reconcile"
+### Community 9 - "Crawler Admin & Admission Control"
+Cohesion: 0.01
+Nodes (211): Sets a dictionary for a key, serializing it to JSON., set_json(), Prometheus metrics exposition endpoint., AdmissionController, FastAPI admission-control middleware.  Scope after the crawler carve-out refac, Atomic in-flight counter with a hard max.      Not a semaphore: acquire() does, Try to acquire a slot. Returns True on success, False if saturated., Release a slot. Defensive: does not go below zero. (+203 more)
+
+### Community 0 - "CrawlerManager Schemas, Archive & Reconcile"
 Cohesion: 0.0
-Nodes (1266): Gets a dictionary for a key, deserializing it from JSON., Safely counts files in a directory, excluding Crawlee metadata., Read isError from _callback_payload.json in the crawl storage dir.     Returns, Flatten a dict/list payload into a list of (key, value) tuples using     PHP-st, Safely counts files in a directory, excluding Crawlee metadata., Publie une mise à jour du statut d'un job sur le canal Pub/Sub de Redis., Relaunches a crawl that was killed due to OOM, preserving the concurrency slot., Returns the failure webhook's request_id, generating + persisting one if absent. (+1258 more)
+Nodes (1332): Gets a dictionary for a key, deserializing it from JSON., _count_files_in_dir(), _map_error_to_message(), Safely counts files in a directory, excluding Crawlee metadata., Read isError from _callback_payload.json in the crawl storage dir.     Returns, Flatten a dict/list payload into a list of (key, value) tuples using     PHP-st, Safely counts files in a directory, excluding Crawlee metadata., Publie une mise à jour du statut d'un job sur le canal Pub/Sub de Redis. (+1324 more)
 
 ### Community 58 - "common-utils: TestLuaScripts"
 Cohesion: 0.22
 Nodes (2): TestLuaScripts, Tests for Lua script string definitions. Validates that the scripts are well-fo
 
-### Community 34 - "crawler-service: _LockHeartbeat"
+### Community 35 - "crawler-service: _LockHeartbeat"
 Cohesion: 0.08
 Nodes (23): load_report(), load_exclude_ids(), _has_tmp_sibling(), classify_entry(), build_queue(), upload_to_gcs(), parse_args(), main() (+15 more)
 
-### Community 13 - "GCS Archive Audit Tool"
+### Community 16 - "GCS Archive Audit Tool"
 Cohesion: 0.02
 Nodes (104): _run_gcloud(), check_gcloud_auth(), gcloud_ls(), gcloud_download(), gcloud_delete(), gcloud_move(), extract_crawl_id(), classify_by_name() (+96 more)
 
-### Community 6 - "Async Job Manager & Store"
+### Community 8 - "Async Job Manager & Store"
 Cohesion: 0.02
-Nodes (275): Shared test fixtures.  Since the migration to the shared common_utils Redis po, Gracefully shut down all locally running crawlers on this replica., Gracefully shut down all locally running crawlers on this replica., metrics_endpoint(), root(), Prometheus metrics exposition endpoint., _generate_url_variants(), Génère les variantes d'URL à essayer quand l'URL originale échoue.      Bascul (+267 more)
+Nodes (243): Shared test fixtures.  Since the migration to the shared common_utils Redis po, Gracefully shut down all locally running crawlers on this replica., Gracefully shut down all locally running crawlers on this replica., metrics_endpoint(), root(), Prometheus metrics for api-detection-langue-fr.  Exposed at /metrics. Used to, _generate_url_variants(), Génère les variantes d'URL à essayer quand l'URL originale échoue.      Bascul (+235 more)
 
 ### Community 94 - "crawler-service: crawler-service failure classif..."
 Cohesion: 0.67
@@ -429,19 +436,19 @@ Nodes (2): export_embedding_model(), Charge le modèle d'embedding, exporte le m
 Cohesion: 0.67
 Nodes (2): export_reranker_model(), Charge le modèle de reranking, l'exporte au format ONNX,     et génère le fichie
 
-### Community 16 - "GCS Upload / Download Daemons"
-Cohesion: 0.02
-Nodes (146): Crawler Daemon Guide, Crawler Service CLAUDE.md, Crawler Service README, _verify_bind_mount helper, 503 BIND_MOUNT_MISSING error code, os.path.ismount detection primitive, Post-lock TOCTOU re-validation pattern, Fail-open disk pre-flight check (+138 more)
+### Community 20 - "Stash Crawls Batch Tool"
+Cohesion: 0.03
+Nodes (114): Crawler Daemon Guide, Crawler Service CLAUDE.md, Two-phase commit unstash protocol, .unstash-cleanup-done marker, UNSTASH_GCS_ORPHAN log prefix, UNSTASH_CLEANUP_GRACE_SECONDS (30s), DELETE_AFTER_DOWNLOAD=true daemon flag, Rationale: two-phase commit avoids data loss on extract failure (+106 more)
 
-### Community 19 - "Crawler Migration & Archive Types"
-Cohesion: 0.02
-Nodes (110): Camoufox Default Browser Plan, camoufox-js (stealth Firefox), Async context manager that renews a Redis lock TTL while a long-running     ope, Async context manager that renews a Redis lock TTL while a long-running     ope, stash_lock:{id} Redis lock, unstash_lock:{id} Redis lock, Ownership-safe Lua DEL lock release, reconcile_leader_lock pattern (+102 more)
+### Community 33 - "Crawler Migration & Archive Types"
+Cohesion: 0.08
+Nodes (41): Camoufox Default Browser Plan, camoufox-js (stealth Firefox), stash_lock:{id} Redis lock, unstash_lock:{id} Redis lock, Ownership-safe Lua DEL lock release, reconcile_leader_lock pattern, crawler-service CLAUDE.md, Camoufox OOM Restart Loop Plan (+33 more)
 
-### Community 48 - "superpowers: Dead Services Cleanup Plan"
+### Community 49 - "superpowers: Dead Services Cleanup Plan"
 Cohesion: 0.17
 Nodes (12): Dead Services Cleanup Plan, Archive Branch Strategy, api-rest-milvus-bkp (superseded), database-service (superseded), api-classification-v2 (test variant), Dormant Services Cleanup Phase 2, categories-processor-service (dormant), fournisseurs-processor-service (dormant) (+4 more)
 
-### Community 63 - "common-utils: database_client.py"
+### Community 64 - "common-utils: database_client.py"
 Cohesion: 0.25
 Nodes (8): Milvus Global Concurrency Guard Plan, Redis Lua ACQUIRE/RELEASE/CORRECT Scripts, Three-Tier Slot Pool (Search > High-write > Low-write), TTL-Based Crash-Safe Leases, Prevent RAM Overload on Milvus VM, api-detection-langue-fr Concurrency Defense, Three-Layer Defense (admission + container + contract), TargetClosedError Flood Fix (unroute_all + try/finally)
 
@@ -465,23 +472,23 @@ Nodes (9): Crawler Capacity Counter & OOM Fixes, Redis Capacity Counter Drift (5
 Cohesion: 1.0
 Nodes (1): ignoreHTTPSErrors in Camoufox/Chromium
 
-### Community 80 - "common-utils: get_message_or_stop()"
+### Community 81 - "common-utils: get_message_or_stop()"
 Cohesion: 0.4
 Nodes (5): Archive Disk Space Pre-flight Check, 503 Rejection + Fail-Open Diagnostics, Archive Staging Subdirectory Plan, Atomic os.rename from .staging/ to archives/, Eliminate Upload Daemon FileNotFoundError Race
 
-### Community 49 - "superpowers: GCS Archive Audit Tool Plan"
+### Community 50 - "superpowers: GCS Archive Audit Tool Plan"
 Cohesion: 0.17
 Nodes (12): GCS Archive Audit Tool Plan, Archive Classifications (OK/CORRUPTED/WRONG_NAME/...), gcloud Storage CLI Shell Wrappers (no Python GCS lib), GCS Audit Multi-Source Domain Resolution, _resolve_domain_name Multi-Source Helper, GCS Audit Prefix Fix + Quarantine Restore, _normalize_member_name (handles ./ prefix), --restore-from-quarantine Flag (+4 more)
 
-### Community 86 - "crawler-service: test_crawler_capacity_disk.py"
+### Community 87 - "crawler-service: test_crawler_capacity_disk.py"
 Cohesion: 0.5
 Nodes (4): content-extractor-api-service Design Spec, boilerpy3 /clean Endpoint, HeaderFooterExtractor /extract Endpoint, Thin Wrapper Over libs/common-utils
 
-### Community 36 - "superpowers: crawler-service"
-Cohesion: 0.06
-Nodes (33): Regional Path Exclusion Design (2026-04-06), Multilingual Regional Path Duplicates, alternative_urls Exclusion List, Rationale: Apply exclusion at discovery and update-mode seeding, crawler-service, api-detection-langue-fr, robots.txt Total Block Detection & Bypass (2026-04-08), robots.txt Blanket Block (+25 more)
+### Community 14 - "Crawler <-> Detection Client Seam (docs)"
+Cohesion: 0.02
+Nodes (184): Regional Path Exclusion Design (2026-04-06), Multilingual Regional Path Duplicates, alternative_urls Exclusion List, Rationale: Apply exclusion at discovery and update-mode seeding, crawler-service, api-detection-langue-fr, robots.txt Total Block Detection & Bypass (2026-04-08), robots.txt Blanket Block (+176 more)
 
-### Community 87 - "crawler-service: test_crawler_version.py"
+### Community 88 - "crawler-service: test_crawler_version.py"
 Cohesion: 0.67
 Nodes (4): Dead Services Cleanup Phase 1 (2026-04-09), Timestamped Archive Branch Approach, Dormant Services Cleanup Phase 2 (2026-04-09), Remaining Services Cleanup Phase 3 (2026-04-10)
 
@@ -497,27 +504,31 @@ Nodes (2): Crawler Monitor Dataset & Queue Insights (2026-04-12), crawler-monito
 Cohesion: 0.67
 Nodes (3): Google Sheets Import for MCP Gateway (2026-04-16), mcp-gateway-service + frontend, Google OAuth2 + Sheets API
 
-### Community 45 - "superpowers: Cache-manager perf redesign (re..."
+### Community 47 - "superpowers: Cache-manager perf redesign (re..."
 Cohesion: 0.15
 Nodes (16): Archive Pre-flight Disk Space Check (2026-04-18), Rationale: Diagnostic-first defense over silent producer/consumer fix, Archive Staging Subdirectory (2026-04-18), tmp.tar.gz Glob Race with Upload Daemon, GCS Archive Audit Tool (2026-04-18), tools/gcs_archive_audit.py, Audit Classifications (OK/WRONG_NAME/CORRUPTED/...), Rationale: Use gcloud CLI to avoid new PyPI dependency (+8 more)
 
-### Community 2 - "Crawler Engine Core (main/functions)"
+### Community 1 - "Crawler Engine Core (main/functions)"
 Cohesion: 0.0
-Nodes (656): verify_api_key(), Verifies the API key if API_KEY is configured in settings.     If API_KEY is not, resetContextState(), makeTmpStorage(), classifyFragment(), recordClassification(), maybeCommitDecision(), writeDecisionFile() (+648 more)
+Nodes (719): verify_api_key(), Verifies the API key if API_KEY is configured in settings.     If API_KEY is not, resetContextState(), makeTmpStorage(), classifyFragment(), recordClassification(), maybeCommitDecision(), writeDecisionFile() (+711 more)
 
-### Community 10 - "Crawler Admin & Admission Control"
-Cohesion: 0.02
-Nodes (201): AdmissionController, FastAPI admission-control middleware.  Scope after the crawler carve-out refac, Atomic in-flight counter with a hard max.      Not a semaphore: acquire() does, Try to acquire a slot. Returns True on success, False if saturated., Release a slot. Defensive: does not go below zero., AdmissionMiddleware, BaseHTTPMiddleware, _normalize_encoding() (+193 more)
+### Community 60 - "Crawler Engine Core (main/functions)"
+Cohesion: 0.31
+Nodes (7): isBlanketBlock(), createMockRobotsFile(), testBlanketBlockDetection(), robots.txt Blanket Block Bypass (multi-path probe at startup; disable robots filtering; robots_txt_bypassed observability), WHY only blanket blocks bypassed: selective blocks (Disallow: /products/) are respected, not bypassed, robots.txt blanket-block bypass (isBlanketBlock multi-path probe; robots=undefined; robots_txt_bypassed observability), robots.txt blanket-block bypass: isBlanketBlock multi-path probe (Disallow:* / Disallow:/), startup-only, robots=undefined disables filtering, robots_txt_bypassed observability
 
-### Community 74 - "crawler-service: test_admin_config.py"
+### Community 75 - "crawler-service: test_admin_config.py"
 Cohesion: 0.33
 Nodes (2): TestArchiveMockE2E, Verifies that the bash script:         1. Finds the file.         2. Calls 'gclo
 
-### Community 15 - "Graph-RAG Rust Service Core"
+### Community 17 - "Graph-RAG Rust Service Core"
 Cohesion: 0.02
 Nodes (56): QueryRequest, QueryResponse, CypherQueryRequest, CypherQueryResponse, CategorieCountResponse, ScoringOptions, MatchingOptionsScore, MatchingOptions (+48 more)
 
-### Community 30 - "superpowers: 7 import gotchas (G1-G7)"
+### Community 4 - "CrawlerManager Core & Reconcile"
+Cohesion: 0.01
+Nodes (408): _count_files_in_dir(), CrawlerManager, Safely counts files in a directory, excluding Crawlee metadata., Manages the lifecycle of crawler subprocesses.     This class is now stateless,, Flatten a dict/list payload into a list of (key, value) tuples using     PHP-st, Kill a process and all its children via the process group., Maps internal error codes to human-readable French messages for DB storage., Relaunches a crawl that was killed due to OOM, preserving the concurrency slot. (+400 more)
+
+### Community 31 - "superpowers: 7 import gotchas (G1-G7)"
 Cohesion: 0.09
 Nodes (34): TimingRecorder, assert(), tmpDir(), mkEntry(), mkSample(), test1(), test2(), test3() (+26 more)
 
@@ -525,13 +536,13 @@ Nodes (34): TimingRecorder, assert(), tmpDir(), mkEntry(), mkSample(), test1(), 
 Cohesion: 0.67
 Nodes (3): Crawler Monitor UI Redesign (oklch tokens, Linear/Vercel/Stripe aesthetic), Crawler Monitor design system: oklch tokens + Tailwind theme + primitives (Pill, StatTile, Sparkline, Timeline, CapacityRing, AreaChart, LogLine, KV, ProjCard), Refondue pages: Overview, Job Details, Domains, Capacity Planning, Health, Audit, Albums, Dark Mode, Mobile responsive
 
-### Community 26 - "superpowers: feature_cache.py module (serial..."
+### Community 27 - "superpowers: SSO, MCP Zoho & Consent Specs"
 Cohesion: 0.04
-Nodes (76): account-service SSO, account-service-backend, account-service-frontend, OAuth 2.1 Authorization Server module (lifted from mcp-gateway authserver, consent stripped), PKCE S256 mandatory (code_verifier + code_challenge SHA-256), Refresh token rotation + reuse detection (chain revocation by sid + Slack alert), Logout broadcaster (HMAC-SHA256 webhook + 4 worker goroutines + retries 1s/2s/4s + logout_events table), MySQL schema: users, oauth2_clients, oauth2_authorization_codes, oauth2_refresh_tokens, logout_events, audit_logs (+68 more)
+Nodes (75): account-service SSO, account-service-backend, account-service-frontend, OAuth 2.1 Authorization Server module (lifted from mcp-gateway authserver, consent stripped), PKCE S256 mandatory (code_verifier + code_challenge SHA-256), Refresh token rotation + reuse detection (chain revocation by sid + Slack alert), Logout broadcaster (HMAC-SHA256 webhook + 4 worker goroutines + retries 1s/2s/4s + logout_events table), MySQL schema: users, oauth2_clients, oauth2_authorization_codes, oauth2_refresh_tokens, logout_events, audit_logs (+67 more)
 
-### Community 3 - "Detection Langue FR Core"
+### Community 2 - "Detection Langue FR Core"
 Cohesion: 0.01
-Nodes (729): _normalize_url_for_dedup(), _homepage_of(), _is_homepage(), _ttl_from_verdict(), _build_challenge_error_msg(), _with_group(), _detect_single_url(), detect_french() (+721 more)
+Nodes (726): _normalize_url_for_dedup(), _homepage_of(), _is_homepage(), _ttl_from_verdict(), _build_challenge_error_msg(), _with_group(), _detect_single_url(), detect_french() (+718 more)
 
 ### Community 153 - "common-utils: __init__.py"
 Cohesion: 1.0
@@ -541,17 +552,17 @@ Nodes (1): Current admitted in-flight count (unsynchronized read for observabili
 Cohesion: 1.0
 Nodes (1): Number of coalesced calls served from a shared future.
 
+### Community 13 - "HTML Cleaning & Language Detection"
+Cohesion: 0.02
+Nodes (175): detect_challenge_page(), Détecte si le contenu HTML est une page de challenge/protection anti-bot     (C, Calcule un score basé sur la présence de mots fonctionnels français.         Re, Supprime les éléments HTML liés aux bannières cookies/consentement/RGPD., Nettoie le contenu HTML et extrait le texte visible.          Combine le meill, Détecte la langue par analyse NLP du contenu textuel visible., Calcule un score basé sur la présence de mots fonctionnels français.         Re, Supprime les éléments HTML liés aux bannières cookies/consentement/RGPD. (+167 more)
+
 ### Community 158 - "api-detection-langue-fr: __init__.py"
 Cohesion: 1.0
 Nodes (1): Normalise l'encodage du contenu HTML en UTF-8.          Reproduit le comportem
 
-### Community 14 - "Detection FR Routes & Page Validation"
-Cohesion: 0.03
-Nodes (99): validate(), _is_redirect_to_home(), _detect_soft_404(), _visible_text_length(), Pure page validator for api-detection-langue-fr.  Classifies a ScrapeResult ag, Classify a ScrapeResult against the requested URL.      Order of checks:, Lightweight visible-text length for the thin-content threshold., _scrape() (+91 more)
-
-### Community 12 - "Detection FR Scraper & Redirects"
-Cohesion: 0.01
-Nodes (186): get_url_redirection_pemavor(), _is_retryable_error(), fetch_html(), Détermine si une erreur est retryable (transitoire) ou permanente., Récupère le contenu HTML d'une URL via Playwright avec proxy obligatoire., build_proxy_url(), _parse_proxy(), _launch_browser() (+178 more)
+### Community 15 - "Detection FR Routes & Page Validation"
+Cohesion: 0.02
+Nodes (125): validate(), _is_redirect_to_home(), _detect_soft_404(), _visible_text_length(), Pure page validator for api-detection-langue-fr.  Classifies a ScrapeResult ag, Classify a ScrapeResult against the requested URL.      Order of checks:, Lightweight visible-text length for the thin-content threshold., _scrape() (+117 more)
 
 ### Community 160 - "api-detection-langue-fr: __init__.py"
 Cohesion: 1.0
@@ -597,7 +608,7 @@ Nodes (1): On happy path, page.unroute_all is called before context.close.
 Cohesion: 1.0
 Nodes (1): A mid-fetch exception still triggers context.close and browser.close (try/finall
 
-### Community 50 - "common-utils: test_api_info.py"
+### Community 51 - "common-utils: test_api_info.py"
 Cohesion: 0.24
 Nodes (10): register_api_info(), Register GET /api-info on the given FastAPI app with the catalog convention., test_minimal_payload(), test_full_payload(), test_custom_openapi_url(), register_api_info(), Register GET /api-info on the given FastAPI app with the catalog convention., test_minimal_payload() (+2 more)
 
@@ -677,11 +688,11 @@ Nodes (1): When Playwright returns no Response, status_code defaults to 0.
 Cohesion: 1.0
 Nodes (1): Number of coalesced calls served from a shared future.
 
-### Community 17 - "OAuth 2.1 + PKCE Auth Lib"
+### Community 18 - "GCS Upload/Download Daemons & Unstash"
 Cohesion: 0.02
-Nodes (151): POST /detect-batch endpoint, crawler-service CLAUDE.md, Crawler Daemon Guide, tools CLAUDE.md, upload_daemon.sh, download_daemon.sh, gcs_archive_audit.py, dlq_archiver.py (+143 more)
+Nodes (153): POST /detect-batch endpoint, crawler-service CLAUDE.md, Crawler Daemon Guide, tools CLAUDE.md, upload_daemon.sh, download_daemon.sh, gcs_archive_audit.py, dlq_archiver.py (+145 more)
 
-### Community 64 - "superpowers: Milvus Global Concurrency Guard..."
+### Community 65 - "superpowers: Milvus Global Concurrency Guard..."
 Cohesion: 0.25
 Nodes (7): test_download_requests_path_matches_compose_bind_target(), test_download_results_path_matches_compose_bind_target(), test_download_daemon_uses_canonical_env_var_names(), Regression tests for GCS download path alignment.  These three tests pin the c, settings.DOWNLOAD_REQUESTS_PATH must equal the compose bind target.      Compo, settings.DOWNLOAD_RESULTS_PATH must equal the compose bind target.      Compos, tools/download_daemon.sh must read the same env var names as Python.      Hist
 
@@ -713,15 +724,11 @@ Nodes (1): Maps internal error codes to human-readable French messages for DB st
 Cohesion: 1.0
 Nodes (1): Returns (error_message, failure_cause) for a subprocess exit code.          Re
 
-### Community 27 - "common-utils: TrafilaturaHp"
-Cohesion: 0.04
-Nodes (51): ProgressMonitor, clock(), onStalled(), readFinished(), Plan: Redis Loss & Progress Stall Detection, Plan tasks JSON (11 tasks, all completed), Rationale: 10min progress-stall threshold tolerates legitimate slow pages, tunable per-deployment, Rationale: ProgressMonitor early-returns until window age ≥ threshold to avoid startup false-positive (+43 more)
-
 ### Community 109 - "superpowers: DLQ Manager UX Improvements (20..."
 Cohesion: 1.0
 Nodes (2): Rationale: TTL/interval=6 gives 5 missed-renewal slack vs Redis latency, Settings: STASH_LOCK_TTL=1800, ARCHIVE_LOCK_TTL=1800, HEARTBEAT_INTERVAL=300, HEARTBEAT_MAX_DURATION=14400
 
-### Community 81 - "common-utils: reranking_client.py"
+### Community 82 - "common-utils: reranking_client.py"
 Cohesion: 0.4
 Nodes (5): Rationale: nginx proxy_next_upstream + non_idempotent retries POST → cross-replica race, nginx regex location ~ ^/crawler/(stash|unstash|archive)/ proxy_next_upstream off, api-gateway-go/nginx.conf, api-gateway/nginx.conf, T4: Disable nginx upstream POST retry on /stash + /unstash + /archive
 
@@ -737,7 +744,7 @@ Nodes (1): Maps internal error codes to human-readable French messages for DB st
 Cohesion: 1.0
 Nodes (1): Returns (error_message, failure_cause) for a subprocess exit code.          Re
 
-### Community 65 - "crawler-service: .get_pending_callbacks()"
+### Community 66 - "crawler-service: .get_pending_callbacks()"
 Cohesion: 0.25
 Nodes (6): Crawler Dataset Retry-Dup Fix Design Spec (2026-05-24), Crawler Dataset Retry-Dup Fix Implementation Plan, Crawler Dataset Retry-Dup Fix tasks.json sidecar (4 tasks, all completed), Triggering incident: crawl 6649 bp-tech.fr — silent 0-URL exit code 2, Out of scope: full-isolation stats / questionmark idempotency / detection-quota mitigation / Crawlee upstream / seed_no_extraction failure signal, Test strategy: injected no-op, delegation, error-path reject→0, legacy construct
 
@@ -761,35 +768,35 @@ Nodes (1): Deferred: server-side BackgroundTasks migration of stash_crawl
 Cohesion: 1.0
 Nodes (2): makeFakeClient(), resetMock()
 
-### Community 70 - "crawler-service: test_admin_sidecar.py"
+### Community 71 - "crawler-service: test_admin_sidecar.py"
 Cohesion: 0.29
 Nodes (3): app_with_admin_router(), Tests for /admin/redis-debug endpoint., Build a minimal FastAPI app with only the admin router mounted.
 
-### Community 46 - "superpowers: GCS Audit Tar Prefix Fix + Quar..."
-Cohesion: 0.13
-Nodes (14): test_with_retry_succeeds_after_one_retry(), test_with_retry_exhausts_and_raises(), manager_with_mocks(), test_replica_saturated_returns_503_with_zero_redis_ops(), test_global_saturated_returns_503_with_only_read_probe(), test_race_overshoot_rolls_back(), Tests for crawler_manager.start_crawl capacity short-circuit + Redis retry.  Spe, Retries once on transient ConnectionError, then succeeds. (+6 more)
-
-### Community 23 - "common-utils: DeepseekOCRDocExtractor"
+### Community 25 - "Crawler Auto-Stash Eligibility & Sweep"
 Cohesion: 0.03
-Nodes (95): _reconcile_locked sweep, Reconciliation Leader Election, Capacity Counter (crawl_jobs:running_count), Rationale: Sweep tars via create_task (no lock hold), Stash one crawl on behalf of the sweep. Swallows 409 (already         stashed /, Stash one crawl on behalf of the sweep. Swallows 409 (already         stashed /, Wipes any persistent state from a prior run of this crawl_id that         would, mgr() (+87 more)
+Nodes (100): _reconcile_locked sweep, _is_stash_eligible, Reconciliation Leader Election, Capacity Counter (crawl_jobs:running_count), Rationale: Sweep tars via create_task (no lock hold), Stash one crawl on behalf of the sweep. Swallows 409 (already         stashed /, Stash one crawl on behalf of the sweep. Swallows 409 (already         stashed /, Wipes any persistent state from a prior run of this crawl_id that         would (+92 more)
 
-### Community 92 - "superpowers: Spec: Stash Bind-Mount Pre-Flig..."
+### Community 90 - "superpowers: Spec: Stash Bind-Mount Pre-Flig..."
 Cohesion: 0.67
 Nodes (2): test_auto_stash_defaults(), Auto-stash settings defaults (P2, Task 6).
 
-### Community 90 - "superpowers: Dead Services Cleanup Phase 1 (..."
+### Community 91 - "superpowers: Dead Services Cleanup Phase 1 (..."
 Cohesion: 0.67
 Nodes (2): test_move_defaults(), Move-flow settings defaults (P3, Task 10).
 
-### Community 60 - "crawler-service: test_crawler.py"
+### Community 61 - "crawler-service: test_crawler.py"
 Cohesion: 0.31
 Nodes (7): test_record_downloaded_at_persists_fresh_copy(), test_record_downloaded_at_skips_when_job_gone(), test_record_downloaded_at_swallows_errors(), Tests for app/router/crawler.py.  Currently covers the auto-stash `downloaded_, Re-reads Redis and writes downloaded_at onto the FRESH copy (so a     concurren, If the job vanished from Redis between fetch and write, do not recreate it., A Redis failure must never propagate out of a download.
+
+### Community 45 - "Crawler Migration & Archive Types"
+Cohesion: 0.11
+Nodes (18): Auto-Stash / Unstash Crawl Workflow, Phase 1 — Transparency Layer, Phase 2 — Auto-Stash Sweep, Phase 3 — Stash→Archive Move, /results stashed branch — transparent inline unstash, _restore_previous_crawl (update-mode stashed restore), _move_stash_to_archive (.move-request + poll .move-done), .move-request / .move-done / .move-error markers (+10 more)
 
 ### Community 110 - "superpowers: Crawler Monitor Dataset & Queue..."
 Cohesion: 1.0
 Nodes (2): stashed_at orthogonal Redis field (not a status enum), WHY stashed_at orthogonal field: preserves 409 matrix + BO status parsing
 
-### Community 51 - "superpowers: _is_stash_eligible predicate (g..."
+### Community 52 - "superpowers: _is_stash_eligible predicate (g..."
 Cohesion: 0.18
 Nodes (12): finished_at job_data field (terminal transition stamp), downloaded_at job_data field (/results stream-start), size_bytes job_data field (disk-pressure ordering), _stamp_terminal_fields helper (finished_at + size_bytes), _is_stash_eligible predicate (grace/timeout, pure, fail-open), _select_stash_candidates (eligible + disk-pressure top-N, capped), _auto_stash_one (background stash dispatch, swallows 409), _disk_used_pct (storage filesystem used %, fail-open 0.0) (+4 more)
 
@@ -801,11 +808,11 @@ Nodes (1): BO /results timeout bump to 900s (sendRequest $timeout)
 Cohesion: 1.0
 Nodes (1): Auto-stash tunables (AUTO_STASH_ENABLED, STASH_GRACE/SAFETY/HIGH_WATER/MAX_PER_SWEEP)
 
-### Community 75 - "crawler-service: test_admin_redis_debug.py"
+### Community 76 - "crawler-service: test_admin_redis_debug.py"
 Cohesion: 0.33
 Nodes (6): BO detectBatchUrlsAsync() helper (submit + poll loop, computes incomplete_urls), Correlation contract (dual $results_by_url + $results_by_domain index, alt-URL/redirect), incomplete_urls (submitted URLs absent from results → re-enqueue domaine_fr_retry), BO async constants (DETECTION_ASYNC_SUBMIT/POLL_TIMEOUT_S, MAX_WAIT_S, BATCH_SIZE), BO hot-path migrations (script_identifier_site_fr_v2 + script_retry_identifier_site_fr), WHY MAX_WAIT_S < JOB_RESULT_TTL_S ≤ JOB_TTL_ACTIVE_S (poll within budget can't 404 a completed job)
 
-### Community 112 - "superpowers: Rationale: TTL/interval=6 gives..."
+### Community 111 - "superpowers: Rationale: TTL/interval=6 gives..."
 Cohesion: 1.0
 Nodes (2): Tech stack: Python FastAPI orchestrator, Node 22 + TypeScript + Crawlee 3 + Playwright, Camoufox stealth, Redis, common-utils, Camoufox default browser: stealth Firefox C++ anti-detection (camoufox: true default), headless required in Docker, binary baked at build, camoufox_used observability
 
@@ -813,19 +820,15 @@ Nodes (2): Tech stack: Python FastAPI orchestrator, Node 22 + TypeScript + Crawl
 Cohesion: 1.0
 Nodes (1): BROWSER_SEMAPHORE_SIZE=6 global cap; alt-fetches sequential within a call
 
-### Community 25 - "superpowers: mcp-zoho-service (new Go MCP pr..."
+### Community 26 - "superpowers: Dynamic Unit Normalization"
 Cohesion: 0.03
 Nodes (82): Dynamic Unit Normalization Design Spec, graph-rag-normalize-unite-service (target service), Redeploy-per-unit pain (FIX 1-16 churn), Five dynamic layers A-E, Layer A pint defines (56 statements), Layer B UNIT_TO_DIMENSION (200 keys), Layer C LABEL_TO_DIMENSION (99 ordered keys), Layer D CANONICAL_UNITS (36 entries) (+74 more)
 
-### Community 31 - "BDD Doc-Enrichment Workflow"
+### Community 28 - "BDD Doc-Enrichment Workflow"
 Cohesion: 0.05
 Nodes (60): BDD doc-enrichment workflow (design spec), BDD doc-enrichment workflow (implementation plan), BDD doc-enrichment runbook, Objective: reusable code-free table doc-enrichment process, MCP 'Table BDD' system (read-only MySQL exposure to LLM), Six bdd_* MCP tools (read-only), bdd_list_tables tool, bdd_describe_table tool (+52 more)
 
-### Community 88 - "common-utils: DLQProperties.py"
-Cohesion: 0.5
-Nodes (4): Sweep decision table (§6): heal only when exists & size>=floor & not-stale, Freshness guard (created_at>=local_mtime) for reused crawl_id==id_domaine, No byte-level local==GCS compare (would require full tar download), Task 3: _is_confidently_archived + _local_data_mtime + _free_local_crawl_data
-
-### Community 111 - "crawler-service: test_timing_summary_tool.ts"
+### Community 112 - "crawler-service: test_timing_summary_tool.ts"
 Cohesion: 1.0
 Nodes (2): Non-goals: no bulk migration of est_archiver=1 crawls, no deep integrity validation, Download-driven self-heal: guard bites only on legacy archived crawl access
 
@@ -833,11 +836,11 @@ Nodes (2): Non-goals: no bulk migration of est_archiver=1 crawls, no deep integr
 Cohesion: 1.0
 Nodes (1): Task 6: documentation (tools + crawler-service CLAUDE.md)
 
-### Community 43 - "superpowers: 28 deleted workflow files (9 ci..."
+### Community 44 - "superpowers: 28 deleted workflow files (9 ci..."
 Cohesion: 0.12
 Nodes (21): Dead Workflows Cleanup Implementation Plan, Dead Workflows Cleanup Design Spec, Goal: delete 28 dead-service GitHub Actions workflows from .github/workflows/, Scope: workflow files only; service directories in apps-microservices/ untouched, Nine retired services (api-ingestion, devis-processor, di/echange/website database-qdrant+processor, embedding, webhook), Three workflow generations per dead service (ci_services_*, cd_build_push_services_*, service-*-pipeline), Dead criterion: workflow references a retired service no longer active, Orphan workflow test-embedding-service.yaml (.yaml not .yml) (+13 more)
 
-### Community 76 - "graphify-guide-en.md: 4-step checklist: add a service..."
+### Community 77 - "graphify-guide-en.md: 4-step checklist: add a service..."
 Cohesion: 0.33
 Nodes (6): 7 kept workflows for active services, ci_services_crawler.yml (kept — crawler-service active), api-catalog CI+CD workflows kept (ci_services_api_catalog.yml, cd_build_push_api_catalog.yml), account-service backend+frontend CI workflows kept, graphify infra workflows kept (graphify-auto-rebuild.yml, graphify-coverage-check.yml), WHY: keep ci_services_api_catalog.yml — original omission was an oversight, both CI+CD for active api-catalog must stay
 
@@ -853,15 +856,15 @@ Nodes (1): Manual headpowerac recovery: reclaim then same-id restart, never drop
 Cohesion: 1.0
 Nodes (1): Test strategy: injected no-op, cleanup keeps dataset, fullCleanup all-three, isInDataset delegation, error-path reject→false, legacy
 
-### Community 47 - "superpowers: lib/auth/flow.ts: framework-fre..."
+### Community 48 - "superpowers: lib/auth/flow.ts: framework-fre..."
 Cohesion: 0.17
 Nodes (15): redis-client-frontend account-service SSO login (OAuth 2.1 + PKCE), Plan: redis-client-frontend SSO login implementation, D1: native Next.js BFF OAuth client (hand-rolled PKCE + jose), not Auth.js, lib/auth/oauth.ts: PKCE (S256), authorize URL, token exchange (Basic auth), verifyAndExtract, D2: own 8h rcf_session cookie signed with separate SESSION_SECRET (edge-safe jose), lib/auth/flow.ts: framework-free startLogin / completeCallback orchestration, D3: email allow-list (ADMIN_EMAILS) — authenticated != authorized, protects FLUSHDB, D4: remove paste-ADMIN_TOKEN login; delete app/login/page.tsx (+7 more)
 
-### Community 40 - "superpowers: async_jobs.py: JobStore + JobMa..."
+### Community 41 - "superpowers: async_jobs.py: JobStore + JobMa..."
 Cohesion: 0.08
 Nodes (24): content-extractor Async + Cache + Sync Hardening (implementation plan), content-extractor Hardening + Async + Result Cache (design spec), Problem: sync CPU-bound boilerpy3/HeaderFooterExtractor blocks the single event loop -> 0 bytes / 30s timeout, Axis 1: asyncio.to_thread offload + UVICORN_WORKERS (processes, not threads, give CPU parallelism), WHY: GIL means one extraction per process; parallelism = workers x replicas, not threads/ProcessPoolExecutor, Axis 2: hybrid request shape (hardened sync + batched async submit/poll), extractor_core.py: pure sync clean_core + header_footer_core, extractor_service.py: async orchestration (cache-aside + thread offload + run_batch) (+16 more)
 
-### Community 28 - "crawler-service: aggregator.ts"
+### Community 29 - "superpowers: Image Comparison & Feature Cache"
 Cohesion: 0.04
 Nodes (57): Image-Comparison Feature Cache (Design C) Plan, Design C: per-URL feature/pHash cache spec, Goal: cache feature {pHash,HSV hist} per URL to skip download+decode+extract, Cache-aside on shared Redis via common_utils.redis.cache_service, feature_cache.py module (serialize<->Redis, guarded, degrade-to-miss), feature_key: imgfeat:<version>:uuid5(NAMESPACE_URL,url), serialize_feature: JSON {phash hex(16), hist float list(512)}, deserialize_feature: rebuild {phash ImageHash, hist np.float32}; None on any error (+49 more)
 
@@ -901,6 +904,10 @@ Nodes (1): Content-extractor co-deploy rule: when DIEZ_TIER2_ENABLED or QM_TIER2
 Cohesion: 1.0
 Nodes (1): QM_RAW_SAME_SIM (default 0.97, read at call time): tier-2 pair counts same only if /clean text matches AND raw HTML jaccard >= threshold; guards /clean search-grid blind spot, errs toward KEEP (no route loss)
 
+### Community 36 - "common-utils: TrafilaturaHp"
+Cohesion: 0.07
+Nodes (31): isDrainedSample(), mkQueue(), rm(), recountQueueFromDisk(), repairQueueMetadata(), isUnreconciledIdle(), resolveDrainDiskRecount(), Drain-guard disk-recount backstop (+23 more)
+
 ### Community 114 - "superpowers: Download-driven self-heal: guar..."
 Cohesion: 1.0
 Nodes (2): drainAbortInitiated shared latch (abort at most once), autoscaledPool.abort() clean shutdown
@@ -909,11 +916,11 @@ Nodes (2): drainAbortInitiated shared latch (abort at most once), autoscaledPool
 Cohesion: 1.0
 Nodes (1): Local tsc --noEmit unavailable (empty node_modules; VM Docker build authoritative)
 
-### Community 66 - "crawler-service: test_config_paths.py"
+### Community 67 - "crawler-service: test_config_paths.py"
 Cohesion: 0.43
 Nodes (4): isPending(), flagStaleVariantsOnDisk(), stripFn(), writeReq()
 
-### Community 37 - "superpowers: Embedding-service livelock: bud..."
+### Community 38 - "superpowers: Embedding-service livelock: bud..."
 Cohesion: 0.11
 Nodes (30): Embedding-Service Livelock Fix Implementation Plan, PREFETCH_COUNT env tunable (default 2), PROCESS_TIMEOUT env tunable (default 240s), GRPC_TIMEOUT retune (45 -> 110), Embedding-service RabbitMQ consumer (consumer.py), docker-compose embedding-service env block, Embedding-service retry livelock, Triton Semaphore(3) non-HIGH contention (model-service) (+22 more)
 
@@ -925,7 +932,7 @@ Nodes (1): Maps internal error codes to human-readable French messages for DB st
 Cohesion: 1.0
 Nodes (1): Returns (error_message, failure_cause) for a subprocess exit code.          Re
 
-### Community 18 - "Stash Crawls Batch Tool"
+### Community 19 - "OAuth 2.1 + PKCE Shared Auth Lib"
 Cohesion: 0.03
 Nodes (124): parseAdminEmails(), deriveClientEnvKeys(), __resetClientCredentialsCache(), fetchClientCredentialsFromApi(), resolveClientCredentials(), req(), getAuthConfig(), startLogin() (+116 more)
 
@@ -973,7 +980,7 @@ Nodes (1): Identifie le cas de decision applique pour le debug.
 Cohesion: 1.0
 Nodes (1): Drop lone surrogates and C0/C1 control chars (keeping tab/newline/CR)         s
 
-### Community 44 - "superpowers: Move-flow daemon (download_daem..."
+### Community 46 - "superpowers: Move-flow daemon (download_daem..."
 Cohesion: 0.18
 Nodes (17): Cache-manager perf redesign (redis-client-frontend), Consent-gated SCAN (Scan keys ConfirmDialog), Paginated SCAN-based key browser, Total Keys via DBSIZE (O(1), Total Size dropped), Per-key TTL/TYPE/MEMORY USAGE without GET, Server-side MATCH glob search, Load-more (SCAN cursor advance), Pure scan-state module (cursor append/replace) (+9 more)
 
@@ -985,11 +992,11 @@ Nodes (1): Regression guard for the correspondance ``id_produit_milvus`` field s
 Cohesion: 1.0
 Nodes (1): Nettoie une chaîne de texte en normalisant les espaces et en corrigeant
 
-### Community 77 - "crawler-service: TestArchiveMockE2E"
+### Community 78 - "crawler-service: TestArchiveMockE2E"
 Cohesion: 0.4
 Nodes (4): get_message_or_stop(), Graceful-drain helper for asyncio queue consumers.  Lives in ``autres`` (a std, Await the next item from ``buffer``, or return ``None`` as soon as     ``stop_ev, Await the next item from ``buffer``, or return ``None`` as soon as     ``stop_e
 
-### Community 67 - "superpowers: Crawler Dataset Retry-Dup Fix I..."
+### Community 68 - "superpowers: Crawler Dataset Retry-Dup Fix I..."
 Cohesion: 0.25
 Nodes (3): Graceful-drain helper: interrupt an idle queue wait on shutdown without droppin, test_imports_without_heavy_optional_deps(), Regression guard: the drain helper must import with only the stdlib.      It i
 
@@ -1009,7 +1016,7 @@ Nodes (1): Identifie le cas de decision applique pour le debug.
 Cohesion: 1.0
 Nodes (1): Free the disk-heavy Crawlee tree ({storage_path}/storage/: datasets,         re
 
-### Community 91 - "superpowers: Sweep decision table (§6): heal..."
+### Community 92 - "superpowers: Sweep decision table (§6): heal..."
 Cohesion: 0.5
 Nodes (4): crawler-service HTTP status & navigation retry policy, crawler-service failure classification & auto-recovery on restart, Rationale: page.goto resolves on domcontentloaded so HTTP status is read even on heavy pages (load hung the full 90s and retried real 404s 5x), Rationale: classify failures so a proxy-gateway outage's NS_ERROR_PROXY victims are reclaimed on restart instead of burning the retry budget and being lost
 
@@ -1045,15 +1052,15 @@ Nodes (3): Prometheus Observability (validation verdicts, homepage fallback, asy
 Cohesion: 1.0
 Nodes (1): A mid-fetch exception still triggers context.close and browser.close (try/finall
 
-### Community 52 - "api-gateway-go: .PolicyFor()"
+### Community 53 - "api-gateway-go: .PolicyFor()"
 Cohesion: 0.24
 Nodes (9): AuthPolicy, ServicePolicy, AuthSnapshot, canonicalPath(), TestPolicyFor_UnknownService_FailOpen(), TestPolicyFor_KnownService_DefaultBearer(), TestPolicyFor_PublicPathBypass(), TestPolicyFor_EndpointOverrideWinsOverPublicPaths() (+1 more)
 
-### Community 61 - "crawler-service: isBlanketBlock()"
+### Community 62 - "crawler-service: isBlanketBlock()"
 Cohesion: 0.22
 Nodes (4): InfoRefreshToken, InfoAccessToken, ApiCallHistory, TestTableNames()
 
-### Community 38 - "api-gateway-go: main.go (Entry Point)"
+### Community 39 - "api-gateway-go: main.go (Entry Point)"
 Cohesion: 0.07
 Nodes (29): main.go (Entry Point), config.go (Env-driven Config), db.go (GORM MySQL Setup), models.go (ApiCallHistory, InfoRefreshToken, InfoAccessToken), schemas.go (Response Structs), middleware.go (DocsAuthMiddleware, VerifyAPIToken), token_service.go (JWT Generation Helpers), proxy.go (Reverse-Proxy Handler) (+21 more)
 
@@ -1077,39 +1084,35 @@ Nodes (1): Rationale: Side-by-Side Go Port Until Cutover
 Cohesion: 1.0
 Nodes (1): Redis Access-Token TTL Cache
 
-### Community 35 - "crawler-service: RingBufferHandler"
+### Community 37 - "crawler-service: RingBufferHandler"
 Cohesion: 0.11
 Nodes (22): RingBufferHandler, get_recent(), clear(), In-memory ring buffer of recent orchestrator log lines.  Docker logs rotate (~, Appends (levelno, formatted line) to the module-level ring buffer., Newest `limit` matching lines, returned in chronological order.     Raises re.e, clean_buffer(), _fill() (+14 more)
 
-### Community 71 - "common-utils: PDFProcessor"
+### Community 72 - "common-utils: PDFProcessor"
 Cohesion: 0.29
 Nodes (3): test_api_key_masked_when_set(), test_compose_env_parity(), GUARDRAIL: every env var declared in the docker-compose crawler-service     env
 
-### Community 53 - "crawler-service: test_admin_crawl_log.py"
-Cohesion: 0.18
-Nodes (6): app_and_job(), test_tail_single_partial_line_keeps_fragment(), test_traversal_crawl_id_rejected(), Tests for GET /admin/logs/{crawl_id} (crawler.log tail)., A window holding only one (partial) line must return the fragment,     not an e, Fallback path (no storage_path in job) must reject a crawl_id that     escapes
-
-### Community 72 - "common-utils: prometheus.py"
+### Community 73 - "common-utils: prometheus.py"
 Cohesion: 0.29
 Nodes (3): app_with_admin_router(), Tests for /admin/redis-debug endpoint., Build a minimal FastAPI app with only the admin router mounted.
 
-### Community 83 - "superpowers: Archive Staging Subdirectory Plan"
+### Community 84 - "superpowers: Archive Staging Subdirectory Plan"
 Cohesion: 0.4
 Nodes (2): test_capacity_survives_disk_state_failure(), Disk block is debug-only: a failure must degrade to disk=None, never 503.
 
-### Community 84 - "superpowers: nginx regex location ~ ^/crawle..."
+### Community 85 - "superpowers: nginx regex location ~ ^/crawle..."
 Cohesion: 0.6
 Nodes (4): _client(), test_version_defaults_to_unknown(), test_version_reads_env(), Tests for the public GET /version endpoint (deploy identity).
 
-### Community 22 - "crawler-service: ._is_stash_eligible()"
+### Community 24 - "Service Overviews (crawler + detection CLAUDE.md)"
 Cohesion: 0.02
-Nodes (109): api-detection-langue-fr Service, Tech Stack (Python/FastAPI/Camoufox), Camoufox Stealth Scraper (Chromium fallback), Redis Cache (cache_service pool), Async Batch Job API (/detect-batch-async), FIFO Job Queue (JOB_WORKER_CONCURRENCY), Idempotent Re-submit (client_job_id), Terminal-Write Hardening (2026-07-26 incident) (+101 more)
+Nodes (111): api-detection-langue-fr Service, Tech Stack (Python/FastAPI/Camoufox), Camoufox Stealth Scraper (Chromium fallback), Redis Cache (cache_service pool), Async Batch Job API (/detect-batch-async), FIFO Job Queue (JOB_WORKER_CONCURRENCY), Idempotent Re-submit (client_job_id), Terminal-Write Hardening (2026-07-26 incident) (+103 more)
 
 ### Community 254 - "crawler-service: DedupManager.test.ts"
 Cohesion: 1.0
 Nodes (1): Noscript Repair Fallback (clean_html_to_text)
 
-### Community 41 - "graphify-guide-en.md: scripts/graphify_plan_update.py..."
+### Community 42 - "graphify-guide-en.md: scripts/graphify_plan_update.py..."
 Cohesion: 0.1
 Nodes (23): manifest.json (mtime index), graph.json (unified graph data), labels.json (community names), GRAPH_REPORT.md (audit report), .needs_update flag, install-graphify-hook.sh (installer), post-merge hook, scripts/graphify_rebuild_scoped.py (+15 more)
 
@@ -1121,7 +1124,7 @@ Nodes (1): graphify-out/memory/ (saved Q&A, promoted to nodes)
 Cohesion: 1.0
 Nodes (1): Upstream `graphify hook install` unscoped rescan (gotcha)
 
-### Community 73 - "crawler-service: test_admin_redis_debug.py"
+### Community 74 - "crawler-service: test_admin_redis_debug.py"
 Cohesion: 0.33
 Nodes (7): Gotcha: invented cross-link target IDs, Gotcha: community re-clustering shuffles labels.json, Rationale: labels should derive from community content, not be human-assigned, Decision: one unified graph over per-service graphs, 4-step checklist: add a service to the unified graph, .github/workflows/graphify-auto-rebuild.yml, scripts/graphify_check_service.py (classifier)
 
@@ -1200,9 +1203,11 @@ Nodes (1): Détermine si l'URL a un signal très fort de site français.        
   docs/superpowers/specs/2026-08-03-detection-teardown-flood-and-retry-cascade-cost-design.md · relation: conceptually_related_to
 - `Second-order cost, same cause: one alternative can legitimately eat 255 s+ of the 300 s per-item budget, so a multi-alternative domain gets cancelled at the batch level instead — reproducing the same orphaned callbacks one layer up` → `Noted in passing, not touched: ADMISSION_MAX_SLOTS=8 exceeds BROWSER_SEMAPHORE_SIZE=6, so two admitted items always queue on the browser semaphore inside the same item budget — 6 browsers on 4 CPUs at 30% utilisation is not the constraint`  [AMBIGUOUS]
   docs/superpowers/specs/2026-08-03-detection-teardown-flood-and-retry-cascade-cost-design.md · relation: conceptually_related_to
+- `CONTRAINTE 5 — les listes mortes le sont pour DEUX raisons distinctes (correction 2026-08-07 d'un amalgame): codes ERR_* Chromium qui ne matchent jamais sur Camoufox/Firefox d'un côté, branche except inatteignable de l'autre. Les deux familles ne se corrigent pas de la même façon` → `RÉSIDU relevé à l'extraction: la contrainte 5 corrige l'amalgame « trois listes Chromium », mais le commentaire du script Task 6 et le gabarit CLAUDE.md de Task 7 le reproduisent en rangeant encore _FATAL_ERRORS parmi les listes Chromium (le CLAUDE.md RÉELLEMENT livré porte bien la correction)`  [AMBIGUOUS]
+  docs/superpowers/plans/2026-08-06-detection-failure-cause-and-retire-proposal.md · relation: references
 
 ## Knowledge Gaps
-- **3003 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+2998 more)
+- **3062 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+3057 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **Thin community `graphify-guide-en.md: Limitation: ID collision on sha...`** (1 nodes): `Creates a dictionary of headers for a DLQ message, compatible with both pika and`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
