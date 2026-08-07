@@ -215,3 +215,82 @@ async def test_client_name_strips_surrounding_whitespace_from_service_name(reset
 
     _, kwargs = from_url.call_args
     assert kwargs["client_name"] == "api-gateway-crawler-service-test"
+
+
+# --- Retry on transient connection errors -----------------------------------
+# Redis reaps idle connections server-side (CONFIG timeout=300, applied by
+# redis_diagnose.sh --apply-timeout). The pool keeps handing them out, and
+# health_check_interval only turns the failure into a PING failure — it does
+# not heal it. Without an explicit retry, redis-py builds Retry(NoBackoff(), 0)
+# and an empty retry_on_error (verified on redis-py 5.2.1), so the first
+# command on a reaped socket raises instead of reconnecting.
+
+
+@pytest.mark.asyncio
+async def test_init_configures_bounded_retry(reset_cache_service):
+    from redis.asyncio.retry import Retry
+
+    mock_client = AsyncMock()
+    mock_client.ping = AsyncMock(return_value=True)
+    mock_client.register_script = MagicMock(return_value=MagicMock())
+
+    with patch("redis.asyncio.from_url", return_value=mock_client) as from_url:
+        await reset_cache_service.init_redis_pool()
+
+    _, kwargs = from_url.call_args
+    assert isinstance(kwargs["retry"], Retry)
+    assert getattr(kwargs["retry"], "_retries") == 3
+
+
+@pytest.mark.asyncio
+async def test_init_retries_connection_and_timeout_errors(reset_cache_service):
+    """retry_on_error is what lets _disconnect_raise fall through to the retry
+    loop instead of re-raising on the first failure."""
+    from redis.exceptions import ConnectionError as RedisConnectionError
+    from redis.exceptions import TimeoutError as RedisTimeoutError
+
+    mock_client = AsyncMock()
+    mock_client.ping = AsyncMock(return_value=True)
+    mock_client.register_script = MagicMock(return_value=MagicMock())
+
+    with patch("redis.asyncio.from_url", return_value=mock_client) as from_url:
+        await reset_cache_service.init_redis_pool()
+
+    _, kwargs = from_url.call_args
+    assert set(kwargs["retry_on_error"]) == {RedisConnectionError, RedisTimeoutError}
+
+
+# --- set_json_nx TTL --------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_set_json_nx_forwards_ttl(reset_cache_service):
+    fake = AsyncMock()
+    fake.set = AsyncMock(return_value=True)
+    reset_cache_service.redis_client = fake
+
+    assert await reset_cache_service.set_json_nx("k", {"a": 1}, ttl=604800) is True
+    _, kwargs = fake.set.call_args
+    assert kwargs["nx"] is True
+    assert kwargs["ex"] == 604800
+
+
+@pytest.mark.asyncio
+async def test_set_json_nx_defaults_to_no_expiry(reset_cache_service):
+    fake = AsyncMock()
+    fake.set = AsyncMock(return_value=True)
+    reset_cache_service.redis_client = fake
+
+    await reset_cache_service.set_json_nx("k", {"a": 1})
+    _, kwargs = fake.set.call_args
+    assert kwargs["ex"] is None
+
+
+@pytest.mark.asyncio
+async def test_set_json_nx_returns_false_when_key_exists(reset_cache_service):
+    # Redis replies with nil (None) when a SET NX finds the key present.
+    fake = AsyncMock()
+    fake.set = AsyncMock(return_value=None)
+    reset_cache_service.redis_client = fake
+
+    assert await reset_cache_service.set_json_nx("k", {"a": 1}) is False
