@@ -135,7 +135,7 @@ diverger.
 |---|---|---|
 | `hub_form_coordinates_view` | **supprimé des deux tunnels** | `useGuideLead.ts:109-112` et `AssistantForm.tsx:174-178` affichent l'étape dans la branche `200 / coordonnees_requises`, celle-là même qui déclenche `hub_email_check`. `result=unknown` **est** le signal « étape coordonnées affichée ». |
 | `hub_form_email_view` — tunnel **guide** | **absent à raison** | Le dialog s'ouvre directement sur l'écran e-mail : `hub_form_view` et lui seraient simultanés. |
-| `hub_form_email_view` — tunnel **projet** | **conservé** | Il suit la 4ᵉ question, et peut être **entièrement sauté** (`skipEmailStep` pour un visiteur reconnu). Son absence est donc une information à part entière. |
+| `hub_form_email_view` — tunnel **projet** | **conservé** | Il suit la 4ᵉ question et constitue un écran distinct : entre `hub_form_step` de la dernière question et lui, un abandon est possible. ⚠️ La justification initiale — « il peut être sauté par `skipEmailStep` » — **ne vaut plus** : ce raccourci a été retiré du questionnaire, l'étape e-mail y est désormais TOUJOURS affichée. |
 
 L'asymétrie entre les deux tunnels est voulue, mais elle n'était pas écrite — ce qui la rendait
 indiscernable d'un oubli. C'est corrigé ici.

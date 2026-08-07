@@ -202,7 +202,7 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
         // seul code HTTP perdrait la conversion sans que rien ne le signale.
         if (!withCoordinates) {
           // Succès dès l'appel 1 ⇒ le serveur connaissait le contact.
-          pushHubEvent('hub_email_check', 'projet', { result: 'known' });
+          pushHubEvent('hub_email_check', 'projet', { email_check_result:'known' });
         }
         pushHubEvent('hub_form_submission', 'projet', {
           form_id: 'assistant',
@@ -220,7 +220,7 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
         // `result:'unknown'` vaut AUSSI « étape coordonnées affichée » : c'est la
         // même branche qui incrémente `step`. D'où l'absence d'un
         // `hub_form_coordinates_view`, qui serait le même instant sous un autre nom.
-        pushHubEvent('hub_email_check', 'projet', { result: 'unknown' });
+        pushHubEvent('hub_email_check', 'projet', { email_check_result:'unknown' });
         setStep((s) => s + 1);
         setSubmitting(false);
         return;

@@ -41,10 +41,14 @@ export const lancerElevagePoulesPondeuses: HubPage = {
   id: 1000,
   slug: SLUG,
 
+  // Métadonnées SEO fournies par l'équipe le 2026-08-06.
+  // ⚠️ `title` est utilisé VERBATIM (`title: { absolute }` dans generateMetadata) :
+  // le suffixe « | Hellopro » fait partie de la chaîne, il n'est pas ajouté par un
+  // template. Ne pas le retirer en pensant qu'il est dupliqué.
   meta: {
-    title: 'Lancer son élevage de poules pondeuses — Hellopro',
+    title: 'Créer un élevage de poules pondeuses | Hellopro',
     description:
-      "Hellopro accompagne les porteurs de projets agricoles de l'idée à la mise en production : budget, bâtiment, équipements, conformité et fournisseurs.",
+      'Créez votre élevage de poules pondeuses sans faux pas : normes, bâtiment, matériel, rentabilité. Guide gratuit et conseiller dédié à votre écoute.',
     // Vignette de partage social. Sans elle, `openGraph.images` sortait vide.
     ogImage: `${IMG}/hero-poules.jpg`,
   },
@@ -64,10 +68,12 @@ export const lancerElevagePoulesPondeuses: HubPage = {
 
   hero: {
     badge: 'Accompagnement gratuit',
+    // H1 fourni par l'équipe le 2026-08-06. Le fragment `accent` s'affiche en
+    // orange : il porte le mot-clé principal, comme sur les deux autres pages.
     titleParts: [
-      { text: 'Lancez votre élevage de ' },
+      { text: 'Lancer son élevage de ' },
       { text: 'poules pondeuses', accent: true },
-      { text: ' en toute sérénité' },
+      { text: ' : du projet à la première ponte' },
     ],
     subtitle:
       'Recevez en moins de 2 minutes une estimation de budget, les équipements nécessaires et les étapes clés de votre projet.',

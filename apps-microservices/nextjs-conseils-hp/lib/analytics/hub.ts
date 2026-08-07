@@ -89,8 +89,14 @@ export interface HubEventParams {
   step_total?: number;
   /** Libellé du choix coché — choix fermé, donc pas une donnée personnelle. */
   answer_label?: string;
-  /** Verdict de l'APPEL 1 : le serveur connaît-il ce contact ? */
-  result?: 'known' | 'unknown';
+  /**
+   * Verdict de l'APPEL 1 : le serveur connaît-il ce contact ?
+   *
+   * Nommé `email_check_result` et non `result` : une dimension GA4 appelée
+   * « result » dans une propriété partagée entre plusieurs périmètres est
+   * ambiguë, et un nom de dimension est figé dès son enregistrement.
+   */
+  email_check_result?: 'known' | 'unknown';
   user_known_status?: 'Known' | 'Unknown';
   lead_path?: 'complet' | 'reconnu' | 'deja_converti';
   steps_answered?: number;
@@ -123,7 +129,7 @@ const HUB_PARAM_KEYS = Object.keys({
   step_index: 0,
   step_total: 0,
   answer_label: 0,
-  result: 0,
+  email_check_result: 0,
   user_known_status: 0,
   lead_path: 0,
   steps_answered: 0,

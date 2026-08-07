@@ -130,7 +130,7 @@ export function useGuideLead(idPageHub: number, entryPoint: HubEntryPoint) {
         // environnements (vérifié en recette le 2026-08-05, e-mail connu).
         if (!withCoordinates) {
           // Succès dès l'appel 1 ⇒ le serveur connaissait déjà le contact.
-          pushHubEvent('hub_email_check', 'guide', { result: 'known', entry_point: from });
+          pushHubEvent('hub_email_check', 'guide', { email_check_result:'known', entry_point: from });
         }
         pushHubEvent('hub_form_submission', 'guide', {
           form_id: 'guide',
@@ -151,7 +151,7 @@ export function useGuideLead(idPageHub: number, entryPoint: HubEntryPoint) {
         // `result:'unknown'` vaut AUSSI « étape coordonnées affichée » : c'est la
         // même branche qui change de phase. Pas de `hub_form_coordinates_view`,
         // qui serait le même instant sous un second nom.
-        pushHubEvent('hub_email_check', 'guide', { result: 'unknown', entry_point: from });
+        pushHubEvent('hub_email_check', 'guide', { email_check_result:'unknown', entry_point: from });
         setPhase('coordinates');
         setSubmitting(false);
         return;
