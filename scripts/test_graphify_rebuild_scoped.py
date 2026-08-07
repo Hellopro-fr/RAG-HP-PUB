@@ -265,3 +265,69 @@ def test_main_survives_html_viz_node_cap(tmp_path, monkeypatch):
 
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))
+
+
+# --- preserve-and-place partition -------------------------------------------
+# Regression guard for the label-rot defect measured 2026-08-07: the hook used
+# cluster(graph) on every commit, renumbering communities while labels.json
+# stayed keyed by id. One run moved 81% of nodes to a different id, silently
+# invalidating every human label in the file.
+
+
+def _line_graph(n=6):
+    import networkx as nx
+
+    g = nx.Graph()
+    g.add_nodes_from(range(n))
+    g.add_edges_from((i, i + 1) for i in range(n - 1))
+    return g
+
+
+def test_preserve_and_place_keeps_existing_community_ids():
+    """The committed partition must survive verbatim - that is the whole point."""
+    g = _line_graph(4)
+    prior = [{"id": i, "community": 7 if i < 2 else 9} for i in range(4)]
+    out = rebuild._preserve_and_place(g, prior)
+    assert {c: sorted(v) for c, v in out.items()} == {7: [0, 1], 9: [2, 3]}
+
+
+def test_preserve_and_place_places_new_node_with_its_neighbours():
+    g = _line_graph(4)
+    g.add_edge(3, 99)  # 99 is new: no community yet
+    prior = [{"id": i, "community": 7 if i < 2 else 9} for i in range(4)]
+    out = rebuild._preserve_and_place(g, prior)
+    assert 99 in out[9], "a new node must join the community of its neighbours"
+
+
+def test_preserve_and_place_refreshed_node_keeps_its_community():
+    """A re-extracted AST node arrives with no community; it must not be re-placed
+    into a different one just because the extraction dropped the attribute."""
+    g = _line_graph(4)
+    prior = [{"id": i, "community": 7 if i < 2 else 9} for i in range(4)]
+    g.nodes[0].pop("community", None)
+    out = rebuild._preserve_and_place(g, prior)
+    assert 0 in out[7]
+
+
+def test_preserve_and_place_isolated_new_node_gets_fresh_id():
+    g = _line_graph(2)
+    g.add_node("lonely")
+    prior = [{"id": i, "community": 3} for i in range(2)]
+    out = rebuild._preserve_and_place(g, prior)
+    assert "lonely" in out[4], "an unreachable new node gets the next free id"
+
+
+def test_preserve_and_place_falls_back_to_cluster_on_seed():
+    """No prior partition at all (first ever build) -> real clustering."""
+    g = _line_graph(4)
+    out = rebuild._preserve_and_place(g, [])
+    assert out and all(isinstance(v, list) for v in out.values())
+    assert sum(len(v) for v in out.values()) == 4
+
+
+def test_preserve_and_place_ignores_prior_nodes_absent_from_graph():
+    g = _line_graph(2)
+    prior = [{"id": 0, "community": 5}, {"id": 1, "community": 5},
+             {"id": "deleted", "community": 5}]
+    out = rebuild._preserve_and_place(g, prior)
+    assert sorted(out[5]) == [0, 1]
