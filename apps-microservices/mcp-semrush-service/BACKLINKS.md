@@ -372,23 +372,32 @@ All standard- and multi-shaped reports (`backlinks`, `backlinks_domains`,
 `display_limit × 40`. `backlinks_overview` is the one exception: it always returns a single
 row and bills **40 units per request**, independent of `display_limit` (it has none).
 
-`server.js` enforces a hard ceiling via `MAX_DISPLAY_LIMIT = 100` and `clampDisplayLimit()`:
-any `display_limit` above 100 — including Semrush's own server-side default of 10,000 when
-the parameter is omitted from a raw API call — is silently reduced to 100 before the request
-is sent. There is no warning or error when a value gets clamped; the call simply succeeds
-with fewer rows than requested. If you request `10000` you get `100`, silently.
+`server.js` enforces a hard ceiling via `MAX_DISPLAY_LIMIT = 100` and `clampDisplayLimit()`.
+Two distinct mechanisms are in play, and they must not be conflated:
+
+- **Omitted `display_limit`.** When a caller of this MCP server does not pass
+  `display_limit` at all, `clampDisplayLimit()` returns its **fallback of 10** — not
+  Semrush's own default, and not `MAX_DISPLAY_LIMIT`. This server always sends an explicit
+  `display_limit` to Semrush, so Semrush's documented server-side default of 10,000 rows
+  (400,000 units) only applies to a *raw* API call made outside this server, never to one
+  that goes through it.
+- **Explicitly-requested value above the ceiling.** When a caller passes a `display_limit`
+  greater than `MAX_DISPLAY_LIMIT`, `clampDisplayLimit()` silently reduces it to **100**
+  before the request is sent. There is no warning or error when this happens; the call
+  simply succeeds with fewer rows than requested.
 
 | `display_limit` requested | `display_limit` actually sent | Units consumed |
 |---|---|---|
+| *(omitted)* | 10 (our fallback) | 400 |
 | 10 (default) | 10 | 400 |
 | 100 | 100 | 4,000 |
 | 1,000 | 100 (clamped) | 4,000 |
-| 10,000 (Semrush's own default) | 100 (clamped) | 4,000 |
+| 10,000 | 100 (clamped) | 4,000 |
 
-This clamp (`server.js:52-58`) is the only thing standing between a bare
-`backlinks(target: "…")` call and Semrush's much larger default. Do not remove it, and do
-not raise `MAX_DISPLAY_LIMIT` without deliberately deciding the new unit ceiling is
-acceptable.
+This clamp (the `clampDisplayLimit()` function and `MAX_DISPLAY_LIMIT` constant in
+`server.js`) is the only thing standing between a bare `backlinks(target: "…")` call and
+Semrush's much larger default. Do not remove it, and do not raise `MAX_DISPLAY_LIMIT`
+without deliberately deciding the new unit ceiling is acceptable.
 
 ## Subscription requirements
 

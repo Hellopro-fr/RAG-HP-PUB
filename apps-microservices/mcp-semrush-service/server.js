@@ -506,6 +506,8 @@ function backlinkInputSchema(spec) {
         targets: {
           type: 'array',
           items: { type: 'string' },
+          minItems: 2,
+          maxItems: 5,
           description: 'Domains to compare (2 to 5, e.g. ["hellopro.fr", "competitor.fr"])',
         },
         target_type: { type: 'string', description: `${TARGET_TYPE_DESC}. Applied to every target.` },
@@ -522,7 +524,9 @@ function backlinkInputSchema(spec) {
     target: { type: 'string', description: 'Domain or URL to analyze (e.g. hellopro.fr)' },
     target_type: { type: 'string', description: TARGET_TYPE_DESC },
   };
-  if (spec.shape === 'standard') {
+  // display_limit is the DEFAULT for every shape except summary (billed per request,
+  // always one row). Gating on `=== 'standard'` instead fails OPEN on any other shape.
+  if (spec.shape !== 'summary') {
     properties.display_limit = {
       type: 'integer',
       description: `Rows to return (default 10, max ${MAX_DISPLAY_LIMIT}). Each row costs 40 Semrush API units.`,
@@ -553,7 +557,11 @@ function buildBacklinkParams(spec, args = {}) {
     target_type,
     export_columns: spec.columns,
   };
-  if (spec.shape === 'standard') {
+  // Clamp is the DEFAULT for every shape except summary (billed per request, always
+  // one row). Gating on `=== 'standard'` instead fails OPEN: an unrecognized shape
+  // (typo, missing field) would send no display_limit at all, and Semrush applies its
+  // own 10,000-row default — 400,000 API units on a single call.
+  if (spec.shape !== 'summary') {
     params.display_limit = clampDisplayLimit(display_limit, 10);
   }
   return params;
@@ -576,6 +584,25 @@ function makeBacklinkTool(spec) {
       return text;
     },
   };
+}
+
+// Fail fast at startup, not silently at billing time: a BACKLINK_REPORTS entry with a
+// misspelled or missing `shape` must not reach buildBacklinkParams/backlinkInputSchema,
+// where an unrecognized value would otherwise be treated as "not summary" (safe) only
+// because of the inversion above — better to reject it outright and name the entry.
+const VALID_BACKLINK_SHAPES = ['summary', 'standard', 'multi'];
+
+function assertValidBacklinkShape(spec) {
+  if (!VALID_BACKLINK_SHAPES.includes(spec.shape)) {
+    throw new Error(
+      `BACKLINK_REPORTS entry "${spec.name}" has invalid shape "${spec.shape}" ` +
+      `(must be one of: ${VALID_BACKLINK_SHAPES.join(', ')})`,
+    );
+  }
+}
+
+for (const spec of BACKLINK_REPORTS) {
+  assertValidBacklinkShape(spec);
 }
 
 TOOLS.push(...BACKLINK_REPORTS.map(makeBacklinkTool));
@@ -689,4 +716,5 @@ module.exports = {
   buildBacklinkParams,
   buildBacklinkUrl,
   makeBacklinkTool,
+  assertValidBacklinkShape,
 };

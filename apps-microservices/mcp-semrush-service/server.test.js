@@ -3,7 +3,11 @@
 const test = require('node:test');
 const assert = require('node:assert');
 
-const { TOOLS, toolByName, buildQS, BACK, handleLine, MAX_DISPLAY_LIMIT, clampDisplayLimit, isSemrushError, BACKLINK_REPORTS, buildBacklinkUrl, makeBacklinkTool } = require('./server.js');
+const {
+  TOOLS, toolByName, buildQS, BACK, handleLine, MAX_DISPLAY_LIMIT, clampDisplayLimit,
+  isSemrushError, BACKLINK_REPORTS, buildBacklinkUrl, buildBacklinkParams, makeBacklinkTool,
+  assertValidBacklinkShape,
+} = require('./server.js');
 
 test('server.js can be required without hanging', () => {
   assert.ok(Array.isArray(TOOLS));
@@ -354,4 +358,88 @@ test('REGRESSION: the 14 non-backlink tools are still registered', () => {
                    'phrase_questions', 'keyword_difficulty']) {
     assert.ok(names.includes(n), `${n} still registered`);
   }
+});
+
+// ── Cost guard: fail closed, not open ───────────────────────────────────────
+// buildBacklinkParams/backlinkInputSchema must clamp display_limit for every shape
+// EXCEPT summary. An `if (shape === 'standard')` gate (instead of `!== 'summary'`)
+// fails OPEN on a misspelled or missing shape: no display_limit is sent at all, and
+// Semrush's own default of 10,000 rows applies (400,000 units per call).
+
+test('every non-summary BACKLINK_REPORTS entry clamps display_limit to <= MAX_DISPLAY_LIMIT', () => {
+  for (const spec of BACKLINK_REPORTS) {
+    if (spec.shape === 'summary') continue;
+    const args = spec.shape === 'multi'
+      ? { targets: ['a.com', 'b.com'] }
+      : { target: 'hellopro.fr' };
+    const url = buildBacklinkUrl(spec, args);
+    const match = url.match(/display_limit=(\d+)/);
+    assert.ok(match, `${spec.name} (shape=${spec.shape}) must send a display_limit`);
+    assert.ok(
+      Number(match[1]) <= MAX_DISPLAY_LIMIT,
+      `${spec.name} display_limit must be <= MAX_DISPLAY_LIMIT`,
+    );
+  }
+});
+
+test('summary shape is still the only one that omits display_limit', () => {
+  const url = buildBacklinkUrl(specByName('backlinks_overview'), { target: 'hellopro.fr' });
+  assert.ok(!url.includes('display_limit'), 'summary reports have no display_limit');
+});
+
+test('an unknown/misspelled shape still gets the display_limit clamp (fail-closed, not fail-open)', () => {
+  // Reproduces the reported failure: a table entry with shape:'standrd' (typo) used to
+  // fall through both the multi and the standard-only branches with NO display_limit at
+  // all, letting Semrush apply its own 10,000-row default (400,000 units per call).
+  const spec = { name: 'x', type: 'backlinks_anchors', shape: 'standrd', columns: 'anchor' };
+  const params = buildBacklinkParams(spec, { target: 'x.fr' });
+  assert.ok(
+    Object.prototype.hasOwnProperty.call(params, 'display_limit'),
+    'an unrecognized shape must still get a display_limit rather than none at all',
+  );
+  assert.ok(params.display_limit <= MAX_DISPLAY_LIMIT);
+});
+
+test('assertValidBacklinkShape throws on an invalid shape, naming the offending entry', () => {
+  assert.throws(
+    () => assertValidBacklinkShape({ name: 'bad_entry', shape: 'standrd' }),
+    (err) => err.message.includes('bad_entry') && /shape/i.test(err.message),
+  );
+});
+
+test('assertValidBacklinkShape accepts all three valid shapes', () => {
+  for (const shape of ['summary', 'standard', 'multi']) {
+    assert.doesNotThrow(() => assertValidBacklinkShape({ name: 'ok_entry', shape }));
+  }
+});
+
+test('every entry in BACKLINK_REPORTS already has a valid shape', () => {
+  for (const spec of BACKLINK_REPORTS) {
+    assert.doesNotThrow(() => assertValidBacklinkShape(spec), `${spec.name} has a valid shape`);
+  }
+});
+
+// ── Reachability: tools/list and tools/call must agree ──────────────────────
+// toolByName is built from TOOLS AFTER BACKLINK_REPORTS is pushed into it. If a future
+// refactor reorders those two statements, tools/list still advertises 23 tools while
+// tools/call can reach only the 14 hand-written ones — every backlink tool would return
+// "Unknown tool". This is invisible to assertions that read TOOLS/BACKLINK_REPORTS
+// directly, so it must be exercised through toolByName itself.
+
+test('every backlink tool is reachable through toolByName (the tools/call path)', () => {
+  for (const s of BACKLINK_REPORTS) {
+    assert.ok(toolByName[s.name], `${s.name} must be callable via tools/call`);
+  }
+});
+
+test('toolByName has exactly one entry per registered tool (no drop, no duplicate)', () => {
+  assert.strictEqual(Object.keys(toolByName).length, TOOLS.length);
+});
+
+// ── backlinks_matrix: enforce the documented 2-5 domain bound ───────────────
+
+test('backlinks_matrix schema bounds targets to 2-5 domains', () => {
+  const tool = makeBacklinkTool(specByName('backlinks_matrix'));
+  assert.strictEqual(tool.inputSchema.properties.targets.minItems, 2);
+  assert.strictEqual(tool.inputSchema.properties.targets.maxItems, 5);
 });
