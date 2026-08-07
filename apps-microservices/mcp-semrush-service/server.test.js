@@ -12,7 +12,7 @@ test('server.js can be required without hanging', () => {
 // This is the single tool-count assertion for the whole plan. Tasks 5, 6, 7 and 8
 // each UPDATE the expected number here rather than adding their own count test.
 test('registered tool count', () => {
-  assert.strictEqual(TOOLS.length, 21);
+  assert.strictEqual(TOOLS.length, 22);
 });
 
 test('baseline: every tool has name, description, inputSchema, run', () => {
@@ -222,4 +222,37 @@ test('the five new standard backlink tools are registered', () => {
                    'backlinks_geo', 'backlinks_tld']) {
     assert.ok(names.includes(n), `${n} is registered`);
   }
+});
+
+test('summary shape omits display_limit from the query', () => {
+  const url = buildBacklinkUrl(specByName('backlinks_overview'), { target: 'hellopro.fr' });
+  assert.ok(url.includes('type=backlinks_overview'));
+  assert.ok(url.includes('target=hellopro.fr'));
+  assert.ok(url.includes('target_type=root_domain'));
+  assert.ok(!url.includes('display_limit'), 'summary reports have no display_limit');
+});
+
+test('summary shape ignores a display_limit passed by the caller', () => {
+  const url = buildBacklinkUrl(specByName('backlinks_overview'), {
+    target: 'hellopro.fr', display_limit: 500,
+  });
+  assert.ok(!url.includes('display_limit'));
+});
+
+test('summary shape omits display_limit from its inputSchema', () => {
+  const tool = makeBacklinkTool(specByName('backlinks_overview'));
+  assert.strictEqual(tool.inputSchema.properties.display_limit, undefined);
+  assert.ok(tool.inputSchema.properties.target);
+});
+
+test('backlinks_overview sends its documented export_columns', () => {
+  const columns = 'ascore,total,domains_num,urls_num,ips_num,ipclassc_num,follows_num,' +
+                  'nofollows_num,sponsored_num,ugc_num,texts_num,images_num,forms_num,frames_num';
+  const url = buildBacklinkUrl(specByName('backlinks_overview'), { target: 'hellopro.fr' });
+  assert.ok(url.includes(`export_columns=${encodeURIComponent(columns)}`));
+});
+
+test('backlinks_overview description mentions it is the cheapest backlink call', () => {
+  const tool = makeBacklinkTool(specByName('backlinks_overview'));
+  assert.match(tool.description, /40 units|cheapest/i);
 });
