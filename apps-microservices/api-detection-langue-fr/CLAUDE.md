@@ -228,7 +228,8 @@ Optional field on `DetectionResponse` (`app/models/schemas.py:113-118`), format
 supplied by the caller, first-writer-wins (a navigation error is the root cause of the
 "content too short" that follows it in the same call, so it must not be overwritten).
 `_format_failure_detail` (`app/api/routes.py:82-87`) turns that sink into the publishable
-string, or `None` if nothing was captured.
+string, or `None` if nothing was captured — called at the two `fetch_failed` response
+sites, `/detect` (`app/api/routes.py:219`) and `/detect-debug` (`:880`).
 
 | `stage` | Set at | Trigger |
 |---|---|---|
@@ -269,6 +270,15 @@ included — is never written to Redis for that method.
   (`app/api/routes.py:270-295` — `_fetch_with_admission` is called there without
   `error_sink`) nor for the stub-page hop (`:359-382`, same omission) — out of scope for
   this chantier (spec §3).
+- Across a multi-attempt fetch, the published cause is the **last** attempt tried, not
+  the root cause. `last_failure` is unconditionally reassigned on every Phase 1 retry
+  (`redirect_tracker.py:278`, `:289`) and every Phase 2 URL-variant attempt (`:360`,
+  `:362`), and only that final value reaches `_publish_failure` (`:335`, `:373`) — by
+  design, last-non-empty-attempt wins, there is no aggregation across attempts. So if
+  attempt 1 hits a real `navigation`/`proxy` cause but a later retry or variant ends in
+  the generic "content too short" (`scraper.py:598`), that generic message is what gets
+  published, not the earlier, more informative one. A `failure_detail` read off a
+  multi-attempt fetch is the last attempt's story, not necessarily the whole one.
 
 ## Alternative-URL Validation Skip (`validate_alternatives`)
 
