@@ -35,11 +35,7 @@ function httpGet(urlStr) {
 
 function buildQS(params) {
   return Object.entries(params)
-    .filter(([, v]) => {
-      if (v === undefined || v === null || v === '') return false;
-      if (Array.isArray(v) && v.length === 0) return false;
-      return true;
-    })
+    .filter(([, v]) => v !== undefined && v !== null && v !== '')
     .flatMap(([k, v]) => {
       const key = encodeURIComponent(k);
       return Array.isArray(v)
