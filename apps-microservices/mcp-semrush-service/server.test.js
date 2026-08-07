@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 
-const { TOOLS, toolByName, buildQS, BACK, handleLine, MAX_DISPLAY_LIMIT, clampDisplayLimit, isSemrushError } = require('./server.js');
+const { TOOLS, toolByName, buildQS, BACK, handleLine, MAX_DISPLAY_LIMIT, clampDisplayLimit, isSemrushError, BACKLINK_REPORTS, buildBacklinkUrl, makeBacklinkTool } = require('./server.js');
 
 test('server.js can be required without hanging', () => {
   assert.ok(Array.isArray(TOOLS));
@@ -12,7 +12,7 @@ test('server.js can be required without hanging', () => {
 // This is the single tool-count assertion for the whole plan. Tasks 5, 6, 7 and 8
 // each UPDATE the expected number here rather than adding their own count test.
 test('registered tool count', () => {
-  assert.strictEqual(TOOLS.length, 16);
+  assert.strictEqual(TOOLS.length, 21);
 });
 
 test('baseline: every tool has name, description, inputSchema, run', () => {
@@ -163,4 +163,63 @@ test('a tool returning a result object has it passed through with isError', asyn
   const msg = JSON.parse(results.join(''));
   assert.strictEqual(msg.result.isError, true);
   assert.strictEqual(msg.result.content[0].text, 'ERROR 50 :: NOTHING FOUND');
+});
+
+const specByName = (n) => BACKLINK_REPORTS.find((s) => s.name === n);
+
+test('standard shape builds the expected query', () => {
+  const url = buildBacklinkUrl(specByName('backlinks_anchors'), { target: 'hellopro.fr' });
+  assert.ok(url.startsWith('https://api.semrush.com/analytics/v1/?'));
+  assert.ok(url.includes('type=backlinks_anchors'));
+  assert.ok(url.includes('target=hellopro.fr'));
+  assert.ok(url.includes('target_type=root_domain'));
+  assert.ok(url.includes('display_limit=10'));
+});
+
+test('standard shape defaults target_type to root_domain and honours an override', () => {
+  const url = buildBacklinkUrl(specByName('backlinks_pages'), {
+    target: 'https://hellopro.fr/x.html', target_type: 'url',
+  });
+  assert.ok(url.includes('target_type=url'));
+});
+
+test('standard shape clamps display_limit', () => {
+  const url = buildBacklinkUrl(specByName('backlinks_geo'), { target: 'hellopro.fr', display_limit: 9999 });
+  assert.ok(url.includes('display_limit=100'));
+  assert.ok(!url.includes('display_limit=9999'));
+});
+
+test('each standard report sends its documented export_columns', () => {
+  const expected = {
+    backlinks_anchors: 'anchor,domains_num,backlinks_num,first_seen,last_seen',
+    backlinks_pages: 'source_url,source_title,response_code,backlinks_num,domains_num,last_seen,external_num,internal_num',
+    backlinks_competitors: 'score,neighbour,similarity,common_refdomains,domains_num,backlinks_num',
+    backlinks_geo: 'country,domains_num,backlinks_num',
+    backlinks_tld: 'zone,domains_num,backlinks_num',
+  };
+  for (const [name, columns] of Object.entries(expected)) {
+    const url = buildBacklinkUrl(specByName(name), { target: 'hellopro.fr' });
+    assert.ok(
+      url.includes(`export_columns=${encodeURIComponent(columns)}`),
+      `${name} sends its documented columns`,
+    );
+  }
+});
+
+test('makeBacklinkTool produces a standard-shape inputSchema', () => {
+  const tool = makeBacklinkTool(specByName('backlinks_anchors'));
+  assert.strictEqual(tool.name, 'backlinks_anchors');
+  assert.ok(tool.description.length > 0);
+  assert.deepStrictEqual(tool.inputSchema.required, ['target']);
+  assert.ok(tool.inputSchema.properties.target);
+  assert.ok(tool.inputSchema.properties.target_type);
+  assert.ok(tool.inputSchema.properties.display_limit);
+});
+
+test('the five new standard backlink tools are registered', () => {
+  const names = TOOLS.map((t) => t.name);
+  for (const n of ['backlinks_anchors', 'backlinks_pages', 'backlinks_competitors',
+                   'backlinks_geo', 'backlinks_tld']) {
+    assert.ok(names.includes(n), `${n} is registered`);
+  }
 });

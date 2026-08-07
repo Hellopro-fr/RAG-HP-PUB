@@ -455,6 +455,103 @@ const TOOLS = [
   */
 ];
 
+// ── Backlink reports (table-driven) ─────────────────────────────────────────
+// Semrush backlink reports are not uniform. Three parameter shapes exist:
+//   standard — target + target_type + display_limit  (billed per row)
+//   summary  — target + target_type, single row      (billed per request)
+//   multi    — targets[] + target_types[]            (billed per row)
+// Columns are verbatim from developer.semrush.com/api/v3/analytics/backlinks/
+
+const BACKLINK_REPORTS = [
+  {
+    name: 'backlinks_anchors',
+    type: 'backlinks_anchors',
+    shape: 'standard',
+    description: 'Anchor texts used in backlinks pointing at a domain, with domain and backlink counts. Requires Semrush Business plan.',
+    columns: 'anchor,domains_num,backlinks_num,first_seen,last_seen',
+  },
+  {
+    name: 'backlinks_pages',
+    type: 'backlinks_pages',
+    shape: 'standard',
+    description: 'Pages on the target that receive backlinks, ranked by backlink count. Requires Semrush Business plan.',
+    columns: 'source_url,source_title,response_code,backlinks_num,domains_num,last_seen,external_num,internal_num',
+  },
+  {
+    name: 'backlinks_competitors',
+    type: 'backlinks_competitors',
+    shape: 'standard',
+    description: 'Domains with a backlink profile similar to the target, with the number of shared referring domains. Requires Semrush Business plan.',
+    columns: 'score,neighbour,similarity,common_refdomains,domains_num,backlinks_num',
+  },
+  {
+    name: 'backlinks_geo',
+    type: 'backlinks_geo',
+    shape: 'standard',
+    description: 'Referring domains grouped by country. Requires Semrush Business plan.',
+    columns: 'country,domains_num,backlinks_num',
+  },
+  {
+    name: 'backlinks_tld',
+    type: 'backlinks_tld',
+    shape: 'standard',
+    description: 'Referring domains grouped by top-level domain (zone). Requires Semrush Business plan.',
+    columns: 'zone,domains_num,backlinks_num',
+  },
+];
+
+const TARGET_TYPE_DESC = 'Target type: root_domain, domain, or url. Default: root_domain';
+
+function backlinkInputSchema(spec) {
+  const properties = {
+    target: { type: 'string', description: 'Domain or URL to analyze (e.g. hellopro.fr)' },
+    target_type: { type: 'string', description: TARGET_TYPE_DESC },
+  };
+  if (spec.shape === 'standard') {
+    properties.display_limit = {
+      type: 'integer',
+      description: `Rows to return (default 10, max ${MAX_DISPLAY_LIMIT}). Each row costs 40 Semrush API units.`,
+    };
+  }
+  return { type: 'object', properties, required: ['target'] };
+}
+
+function buildBacklinkParams(spec, args = {}) {
+  const { target, target_type = 'root_domain', display_limit } = args;
+  const params = {
+    key: API_KEY,
+    type: spec.type,
+    target,
+    target_type,
+    export_columns: spec.columns,
+  };
+  if (spec.shape === 'standard') {
+    params.display_limit = clampDisplayLimit(display_limit, 10);
+  }
+  return params;
+}
+
+function buildBacklinkUrl(spec, args) {
+  return BACK + '?' + buildQS(buildBacklinkParams(spec, args));
+}
+
+function makeBacklinkTool(spec) {
+  return {
+    name: spec.name,
+    description: spec.description,
+    inputSchema: backlinkInputSchema(spec),
+    async run(args) {
+      const text = await httpGet(buildBacklinkUrl(spec, args));
+      if (isSemrushError(text)) {
+        return { content: [{ type: 'text', text: String(text) }], isError: true };
+      }
+      return text;
+    },
+  };
+}
+
+TOOLS.push(...BACKLINK_REPORTS.map(makeBacklinkTool));
+
 const toolByName = Object.fromEntries(TOOLS.map((t) => [t.name, t]));
 
 // ── MCP protocol (stdio) ────────────────────────────────────────────────────
@@ -551,4 +648,17 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { TOOLS, toolByName, buildQS, BACK, handleLine, MAX_DISPLAY_LIMIT, clampDisplayLimit, isSemrushError };
+module.exports = {
+  TOOLS,
+  toolByName,
+  buildQS,
+  BACK,
+  handleLine,
+  MAX_DISPLAY_LIMIT,
+  clampDisplayLimit,
+  isSemrushError,
+  BACKLINK_REPORTS,
+  buildBacklinkParams,
+  buildBacklinkUrl,
+  makeBacklinkTool,
+};
