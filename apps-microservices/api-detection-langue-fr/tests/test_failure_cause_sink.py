@@ -100,6 +100,7 @@ async def test_fetch_html_publishes_phase1_cause(monkeypatch):
     fake, _ = _fake_scrape([{'cause': 'NS_ERROR_EXAMPLE', 'stage': 'navigation'}])
     monkeypatch.setattr(redirect_tracker, 'scrape_html', fake)
     monkeypatch.setattr(redirect_tracker, '_generate_url_variants', lambda u: [])
+    monkeypatch.setattr(redirect_tracker.asyncio, 'sleep', _no_sleep)
     sink = {}
     assert await redirect_tracker.fetch_html('https://x.test', proxy='p', error_sink=sink) is None
     assert sink['cause'] == 'NS_ERROR_EXAMPLE'

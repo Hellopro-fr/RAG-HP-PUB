@@ -4,7 +4,7 @@ import logging
 from typing import Optional
 from urllib.parse import urlparse
 from app.core.config import settings
-from app.services.scraper import ScrapeResult, scrape_html, build_proxy_url
+from app.services.scraper import ScrapeResult, scrape_html, build_proxy_url, FAILURE_CAUSE_MAX_LEN
 
 # Erreurs non-retryables pour la MÊME URL (inutile de réessayer la même URL)
 # mais qui DOIVENT déclencher Phase 2 (variantes http/https, www/sans-www).
@@ -44,6 +44,16 @@ def _publish_failure(sink: Optional[dict], failure: Optional[dict]) -> None:
     """Recopie la cause agrégée dans le dict de l'appelant, si les deux existent."""
     if sink is not None and failure:
         sink.update(failure)
+
+
+def _derive_failure(sink: dict, fallback_cause: str) -> dict:
+    """Cause d'une tentative ratée sur exception : le sink d'attempt/variante s'il
+    porte une 'cause' (un des 4 points instrumentés de scrape_html a écrit),
+    sinon un stage 'browser' déduit de cette absence — jamais du texte de
+    l'erreur. Centralise aussi la troncature (même limite que scraper.py)."""
+    if sink.get('cause'):
+        return dict(sink)
+    return {'cause': fallback_cause[:FAILURE_CAUSE_MAX_LEN], 'stage': 'browser'}
 
 
 class RedirectTracker:
@@ -276,13 +286,7 @@ async def fetch_html(
             # sans le fallback sur le nom de classe, la garde ci-dessous
             # (last_error and ...) serait faussement inactive.
             last_error = str(e) or type(e).__name__
-            if attempt_sink.get('cause'):
-                last_failure = dict(attempt_sink)
-            else:
-                # Le sink est vide : l'échec est hors des points instrumentés de
-                # scrape_html (new_context/new_page/launch). Le stage est déduit de
-                # cette absence, pas du texte de l'erreur.
-                last_failure = {'cause': last_error[:200], 'stage': 'browser'}
+            last_failure = _derive_failure(attempt_sink, last_error)
             saw_repairable = saw_repairable or not any(
                 tok in last_error for tok in _VARIANT_POINTLESS_ERRORS
             )
@@ -355,10 +359,7 @@ async def fetch_html(
                 if variant_sink.get('cause'):
                     last_failure = dict(variant_sink)
             except Exception as e:
-                if variant_sink.get('cause'):
-                    last_failure = dict(variant_sink)
-                else:
-                    last_failure = {'cause': (str(e) or type(e).__name__)[:200], 'stage': 'browser'}
+                last_failure = _derive_failure(variant_sink, str(e) or type(e).__name__)
                 if not _is_retryable_error(str(e)):
                     logger.warning(f"[VARIANTE] Erreur permanente pour {variant}: {e}")
                     continue
