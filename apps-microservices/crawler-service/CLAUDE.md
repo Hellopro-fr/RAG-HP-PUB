@@ -385,7 +385,7 @@ Without them redis-py builds `Retry(NoBackoff(), 0)` with an empty `retry_on_err
 
 Because `get_json` returns `None` on both "absent" and "read errored", `get_job_or_recover` (`app/router/crawler.py`) could not tell a missing blob from an unanswered one. It rebuilt an 8-field stub from disk and wrote it with `set_json`, destroying the live blob: the completion marker only ever carries `finished`/`failed`/`stopped`, so `archived` and `stashed_at` are unrepresentable on disk, and `get_results_archive` then skipped its GCS branch → `/results` 404. The 7-day TTL (the only TTL among the 23 writers of `crawl_job:`) made it recur after expiry. Measured on PROD before the fix: 345 recoveries over 3 days across 266 crawl_ids, `finished` in 345 cases out of 345.
 
-The write is now `set_json_nx(..., ttl=604800)` — an existing blob wins, a genuinely absent one is still indexed, and the refusal is logged at WARNING. **13 endpoints depend on `get_job_or_recover`**, including `GET /status/{crawl_id}` and four `/admin/*` routes, so a read-only-looking call is a write path.
+The write is now `set_json_nx(..., ttl=604800)` — an existing blob wins, a genuinely absent one is still indexed, and the refusal is logged at WARNING. **12 endpoints depend on `get_job_or_recover`** (8 in `router/crawler.py`, 4 in `router/admin.py`), **8 of them GET** — including `GET /status/{crawl_id}`, which the BO polls. A read-only-looking call is a write path.
 
 ### Node side (crawler subprocess)
 
