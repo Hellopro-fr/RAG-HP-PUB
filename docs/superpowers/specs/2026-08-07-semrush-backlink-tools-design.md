@@ -140,8 +140,17 @@ so all 16 existing tools are unaffected. A regression test pins that.
 
 ### 2. `display_limit` clamp
 
-`Math.min(display_limit, MAX_DISPLAY_LIMIT)` applied in the factory for `standard` and
-`multi` shapes. Clamping is **silent** — the call succeeds and returns up to 100 rows.
+`Math.min(display_limit, MAX_DISPLAY_LIMIT)` applied in the factory wherever a shape
+exposes `display_limit`. That is confirmed for `standard`. The `summary` shape does not
+expose it at all.
+
+For `multi` (`backlinks_matrix`), the Semrush reference does not state whether
+`display_limit` is supported. Implementation must confirm this against a live call before
+deciding: if supported, expose it and clamp it like `standard`; if not, omit it from the
+schema. Do not assume either way — a `display_limit` silently ignored by Semrush would make
+the cost guard look effective when it is not.
+
+Clamping is **silent** — the call succeeds and returns up to 100 rows.
 
 Rationale: these tools are called by an LLM, which may generate a large `display_limit`
 without understanding the cost. A silent clamp degrades gracefully; an error would fail the
