@@ -3900,8 +3900,12 @@ class CrawlerManager:
         # GCS-fallback branches (mark archived with NO cleanup), GET /html
         # re-extracting the full tar, update-mode _restore_archived_crawl when
         # the update never finalizes. This sweep is the retry. ---
-        # One read per tick, shared by the repair pass (Task 3) and the reclean.
-        verified_ids = self._load_reclean_allowlist()
+        # One read per tick, shared by the reclean (and, from Task 3, the repair
+        # pass). Skipped when no consumer will use it, so a tick with nothing to
+        # do costs no file I/O and logs no warning.
+        verified_ids = (self._load_reclean_allowlist()
+                        if (settings.ARCHIVED_RECLEAN_ENABLED and archived_candidates)
+                        else None)
 
         if settings.ARCHIVED_RECLEAN_ENABLED and archived_candidates:
             await self._reclean_archived_leftovers(archived_candidates, active_prev_ids, verified_ids)
