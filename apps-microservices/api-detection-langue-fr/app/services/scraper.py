@@ -141,6 +141,32 @@ _PERMANENT_NAV_ERRORS = (
     'ERR_CERT_DATE_INVALID',
 )
 
+# Longueur max d'une cause publiée. Le message Playwright est multi-lignes et embarque
+# le call-log complet : sans troncature on l'injecterait dans chaque réponse HTTP et
+# dans le cache Redis.
+FAILURE_CAUSE_MAX_LEN = 200
+
+
+def _record_failure(sink: Optional[dict], stage: str, cause: str) -> None:
+    """Publie la cause d'un échec dans le dict fourni par l'appelant.
+
+    `stage` vient du SITE D'APPEL, jamais d'une analyse de `cause` : c'est ce qui
+    garantit qu'aucun libellé d'erreur n'est présupposé (aucun code Gecko/Chromium
+    n'est attesté en production — cf. spec §2.3).
+
+    Premier écrivain gagne : dans un même appel, une erreur de navigation est la
+    racine du « contenu trop court » qui suit, donc elle ne doit pas être écrasée.
+
+    NE JAMAIS passer une valeur de proxy dans `cause` : elle contient un mot de
+    passe et cette chaîne finit dans une réponse HTTP puis dans un mail opérateur.
+    """
+    if sink is None or 'cause' in sink:
+        return
+    lines = (cause or '').splitlines()
+    sink['cause'] = (lines[0] if lines else '')[:FAILURE_CAUSE_MAX_LEN]
+    sink['stage'] = stage
+
+
 # Import de la détection de challenge centralisée (évite la duplication)
 from app.services.language_detector import detect_challenge_page as _detect_challenge_page
 
@@ -362,7 +388,12 @@ async def _teardown_targets(page, context, browser, url: str) -> None:
         logger.debug(f"teardown error for {url}: {teardown_err!r}")
 
 
-async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) -> Optional[ScrapeResult]:
+async def scrape_html(
+    url: str,
+    timeout: int = 90,
+    proxy: Optional[str] = None,
+    error_sink: Optional[dict] = None,
+) -> Optional[ScrapeResult]:
     """
     Récupère le contenu HTML d'une URL via Playwright avec proxy obligatoire.
 
@@ -377,6 +408,8 @@ async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) 
         url: URL à scraper
         timeout: Timeout en secondes pour le chargement de la page (défaut: 90)
         proxy: Proxy URL obligatoire (format: http://user:pass@host:port)
+        error_sink: Dict optionnel où publier la cause d'un échec (clés 'cause'/'stage').
+            None (défaut) = comportement inchangé, rien n'est écrit.
 
     Returns:
         ScrapeResult (html, final_url, status_code, content_type, headers) ou None en cas d'erreur.
@@ -388,15 +421,19 @@ async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) 
             "Playwright non installé. Installez-le avec: "
             "pip install playwright && python -m playwright install chromium"
         )
+        _record_failure(error_sink, 'runtime', 'Playwright non installé')
         return None
 
     if not proxy:
         logger.error(f"Proxy obligatoire pour scrape_html: {url}")
+        _record_failure(error_sink, 'proxy', 'Proxy obligatoire non fourni')
         return None
 
     playwright_proxy = _parse_proxy(proxy)
     if not playwright_proxy:
         logger.error(f"Proxy invalide pour {url}: {proxy}")
+        # Volontairement SANS la valeur du proxy : elle contient le mot de passe.
+        _record_failure(error_sink, 'proxy', 'Proxy invalide (format non reconnu)')
         return None
 
     async with _BROWSER_SEMAPHORE:
@@ -439,6 +476,7 @@ async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) 
                     response = await page.goto(url, wait_until='domcontentloaded', timeout=nav_timeout)
                 except Exception as nav_e:
                     err_str = str(nav_e)
+                    _record_failure(error_sink, 'navigation', err_str or type(nav_e).__name__)
                     # Erreurs permanentes — re-raise pour que fetch_html puisse
                     # classifier l'erreur et basculer vers les variantes URL (Phase 2)
                     if any(err in err_str for err in _PERMANENT_NAV_ERRORS):
@@ -557,6 +595,7 @@ async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) 
                     )
                 else:
                     logger.warning(f"Contenu trop court pour {url}")
+                    _record_failure(error_sink, 'content', 'Contenu vide ou trop court')
                     return None
             finally:
                 await _teardown_targets(page, context, browser, url)

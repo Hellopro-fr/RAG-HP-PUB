@@ -54,6 +54,7 @@ async def _fetch_with_admission(
     url: str,
     proxy_url: Optional[str],
     endpoint_label: str,
+    error_sink: Optional[dict] = None,
 ):
     """Acquire a prod admission slot, run fetch_html, release.
 
@@ -72,10 +73,18 @@ async def _fetch_with_admission(
         raise _AdmissionRejected
     INFLIGHT_REQUESTS.inc()
     try:
-        return await fetch_html(url, proxy_url)
+        return await fetch_html(url, proxy_url, error_sink=error_sink)
     finally:
         INFLIGHT_REQUESTS.dec()
         await _prod_admission.release()
+
+
+def _format_failure_detail(sink: Optional[dict]) -> Optional[str]:
+    """Formate le sink d'échec en chaîne publiable, ou None si rien n'a été capturé."""
+    cause = (sink or {}).get('cause')
+    if not cause:
+        return None
+    return f"{(sink or {}).get('stage') or 'unknown'}: {cause}"
 
 
 _inflight_dedup = InflightDedup()
@@ -187,21 +196,27 @@ async def _detect_single_url(
 
         # [2] Fetch HTML (admission gate inside dedup leader; followers wait
         # on leader's future and do NOT acquire a slot).
+        fetch_sink: dict = {}
         if _INFLIGHT_DEDUP_ENABLED and not force_refresh:
             dedup_key = _normalize_url_for_dedup(url)
             fetch_result = await _inflight_dedup.coalesce(
                 dedup_key,
-                lambda: _fetch_with_admission(url, proxy_url, "/api/v1/detect"),
+                lambda: _fetch_with_admission(url, proxy_url, "/api/v1/detect", error_sink=fetch_sink),
             )
         else:
             fetch_result = await _fetch_with_admission(
-                url, proxy_url, "/api/v1/detect"
+                url, proxy_url, "/api/v1/detect", error_sink=fetch_sink
             )
 
         if not fetch_result:
+            # Limite connue : sous INFLIGHT_DEDUP_ENABLED, seul le leader
+            # exécute la lambda ci-dessus et remplit fetch_sink — un follower
+            # sur la même URL reçoit failure_detail=None (même cause, publiée
+            # par le leader). Ne pas tenter de partager le sink entre coroutines.
             return DetectionResponse(
                 ok=False, url=url, method='fetch_failed',
-                error='Impossible de récupérer le contenu HTML'
+                error='Impossible de récupérer le contenu HTML',
+                failure_detail=_format_failure_detail(fetch_sink),
             )
 
         html_content = fetch_result.html
@@ -848,7 +863,8 @@ async def detect_french_debug(request: DetectionRequest) -> DebugDetectionRespon
 
         if not html_content:
             fetched_by = 'api'
-            fetch_result = await fetch_html(request.url, request.proxy_url)
+            debug_fetch_sink: dict = {}
+            fetch_result = await fetch_html(request.url, request.proxy_url, error_sink=debug_fetch_sink)
             if not fetch_result:
                 from app.models.schemas import (
                     DebugInfo, DebugFetchInfo, DebugCleaningInfo,
@@ -860,7 +876,8 @@ async def detect_french_debug(request: DetectionRequest) -> DebugDetectionRespon
                         ok=False,
                         url=request.url,
                         method='fetch_failed',
-                        error='Impossible de recuperer le contenu HTML'
+                        error='Impossible de recuperer le contenu HTML',
+                        failure_detail=_format_failure_detail(debug_fetch_sink),
                     ),
                     debug=DebugInfo(
                         fetch=DebugFetchInfo(fetched_by='api', raw_html_length=0, raw_html_preview=''),

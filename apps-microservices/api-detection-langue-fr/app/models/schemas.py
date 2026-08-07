@@ -110,6 +110,12 @@ class DetectionResponse(BaseModel):
         default=None,
         description="URL réellement analysée si différente de l'URL demandée (cas: repli homepage, ou cache HIT cross-URL via la clé domain). None = analyse directe de l'URL demandée."
     )
+    failure_detail: Optional[str] = Field(
+        default=None,
+        description="Cause brute observée d'un échec de fetch, au format '<stage>: <cause>'. "
+                    "Aucune classification : la chaîne est celle du moteur, tronquée. "
+                    "None quand aucune cause n'a été capturée."
+    )
 
 
 class BatchItem(BaseModel):

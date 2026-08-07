@@ -217,6 +217,69 @@ Batch Pass 2 retry set (`_PASS2_RETRYABLE_METHODS`): `fetch_failed`, `challenge_
 - `detection_homepage_fallback_triggered_total{outcome}` — counter, label values: `success`, `rejected`, `network_failure`.
 - `detection_orphaned_protocol_futures_total` — counter, no labels. Orphaned Playwright protocol callbacks drained by the loop exception handler in `main.py` (a cancelled scrape leaves `page.goto`'s callback pending; `Connection.cleanup()` sets `TargetClosedError` on it and nobody can retrieve it). **A value of zero is ambiguous** — it is consistent both with "no orphans occurred" and with "the handler is not installed"; pair it with checking that `Future exception was never retrieved` is absent from the log.
 
+## Fetch Failure Detail (`failure_detail`)
+
+Optional field on `DetectionResponse` (`app/models/schemas.py:113-118`), format
+`"<stage>: <cause>"`. **No classification**: `cause` is the engine's own error message
+(first line only), truncated to `FAILURE_CAUSE_MAX_LEN` = 200 chars
+(`app/services/scraper.py:147`) — never a guessed label.
+
+`_record_failure` (`app/services/scraper.py:150-167`) writes into an `error_sink` dict
+supplied by the caller, first-writer-wins (a navigation error is the root cause of the
+"content too short" that follows it in the same call, so it must not be overwritten).
+`_format_failure_detail` (`app/api/routes.py:82-87`) turns that sink into the publishable
+string, or `None` if nothing was captured — called at the two `fetch_failed` response
+sites, `/detect` (`app/api/routes.py:219`) and `/detect-debug` (`:880`).
+
+| `stage` | Set at | Trigger |
+|---|---|---|
+| `runtime` | `scraper.py:424` | Playwright not installed (`ImportError`) |
+| `proxy` | `scraper.py:427-437`, `redirect_tracker.py:244` | Proxy missing or unparseable — **the proxy value itself is never published** (`scraper.py:435-436`): it carries a password |
+| `navigation` | `scraper.py:479` (the `except` branch around `page.goto`) | `page.goto` raised |
+| `content` | `scraper.py:598` | Page fetched but body empty or ≤100 chars |
+| `browser` | `redirect_tracker.py:56` (`_derive_failure`) | Failure outside the 4 instrumented points above — browser launch (`scraper.py:442`), `new_context` (`:457`), `new_page` (`:463`), etc. The sink never got a `cause`, so `_derive_failure` falls back to this stage from the raw exception, still never analyzing its text |
+
+`stage` always comes from the **call site** in the code — the literal argument passed to
+`_record_failure`, or the hardcoded fallback in `_derive_failure` — never from parsing
+`cause`'s text. That is what guarantees no error label is presupposed.
+
+**The three Chromium error-code lists stay dead, on purpose.** Two of them are real
+Chromium `ERR_*` strings that the deployed engine (Camoufox/Firefox,
+`CAMOUFOX_ENABLED=True` by default, `app/core/config.py:30`) never emits, so the
+membership tests that consult them never match in production: `_PERMANENT_NAV_ERRORS`
+(`scraper.py:137-142`) and `_VARIANT_ELIGIBLE_ERRORS` (`redirect_tracker.py:13-17`). The
+third, `_FATAL_ERRORS` (`redirect_tracker.py:20-24`), is not actually a Chromium list —
+it holds this service's own French config-error strings (`'Proxy obligatoire'`, …) — but
+it is dead for a different reason: `scrape_html` never raises with those messages on a
+proxy failure, it returns `None` instead (`scraper.py:427-437`), so the `except`-branch
+check that reads it (`redirect_tracker.py:295`) is never reached that way. Repairing any
+of the three on a guessed label is exactly the failure mode this chantier avoids —
+harvesting the real labels is a manual procedure: spec
+`docs/superpowers/specs/2026-08-06-detection-failure-cause-and-retire-proposal-design.md`
+§6.
+
+**Never cached on `fetch_failed`.** `fetch_failed` is in `DomainCache._NEVER_CACHE_METHODS`
+(`app/core/domain_fr.py:53`, enforced at `:113`): the whole response — `failure_detail`
+included — is never written to Redis for that method.
+
+**Known limits:**
+- Under `INFLIGHT_DEDUP_ENABLED` (`app/api/routes.py:91`, default `true`), only the
+  *leader* for a given URL runs the fetch and fills the sink; a *follower* waiting on the
+  same coalesced result gets `failure_detail=None` (`app/api/routes.py:211-220`).
+- The field is not produced for the homepage-fallback network failure
+  (`app/api/routes.py:270-295` — `_fetch_with_admission` is called there without
+  `error_sink`) nor for the stub-page hop (`:359-382`, same omission) — out of scope for
+  this chantier (spec §3).
+- Across a multi-attempt fetch, the published cause is the **last** attempt tried, not
+  the root cause. `last_failure` is unconditionally reassigned on every Phase 1 retry
+  (`redirect_tracker.py:278`, `:289`) and every Phase 2 URL-variant attempt (`:360`,
+  `:362`), and only that final value reaches `_publish_failure` (`:335`, `:373`) — by
+  design, last-non-empty-attempt wins, there is no aggregation across attempts. So if
+  attempt 1 hits a real `navigation`/`proxy` cause but a later retry or variant ends in
+  the generic "content too short" (`scraper.py:598`), that generic message is what gets
+  published, not the earlier, more informative one. A `failure_detail` read off a
+  multi-attempt fetch is the last attempt's story, not necessarily the whole one.
+
 ## Alternative-URL Validation Skip (`validate_alternatives`)
 
 `validate_alternatives: bool = true` on `DetectionRequest`, `BatchDetectionRequest`, and `AsyncBatchSubmitRequest` (threaded via `BatchOpts`). When **false**, COMPLETE-mode detection still **parses** alternatives from the HTML but performs **zero HTTP/browser work** on them:

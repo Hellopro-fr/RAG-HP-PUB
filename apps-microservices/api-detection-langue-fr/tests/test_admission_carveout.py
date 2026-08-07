@@ -120,7 +120,7 @@ def test_batch_pass2_retries_admission_rejected(monkeypatch):
         call_count["n"] += 1
         return call_count["n"] != 1  # first call refuses, subsequent succeed
 
-    async def fake_fetch(url, proxy_url):
+    async def fake_fetch(url, proxy_url, error_sink=None):
         # >100 chars visibles : un corps trop mince serait classé
         # fetch_empty_content (transitoire, désormais Pass-2-retryable) et le
         # verdict admission_rejected du Pass 1 survivrait au lieu d'être promu.
@@ -204,7 +204,7 @@ def test_dedup_follower_no_admission_acquire(monkeypatch):
     # Block the leader's fetch long enough for followers to enter coalesce.
     fetch_release = threading.Event()
 
-    async def slow_fetch(url, proxy_url):
+    async def slow_fetch(url, proxy_url, error_sink=None):
         # Wait (in a thread-friendly way) until all followers have joined
         while not fetch_release.is_set():
             await __import__("asyncio").sleep(0.05)
@@ -373,7 +373,7 @@ def test_homepage_fallback_admission(monkeypatch):
         call_count["n"] += 1
         return call_count["n"] == 1  # initial fetch OK; homepage fetch refused
 
-    async def fake_fetch(url, proxy_url):
+    async def fake_fetch(url, proxy_url, error_sink=None):
         # First fetch returns a soft-404 shaped page
         return ScrapeResult(
             html="<html><head><title>404 Page non trouvée</title></head>"
@@ -470,7 +470,7 @@ async def test_dedup_follower_strict_single_loop(monkeypatch):
 
     fetch_event = asyncio.Event()
 
-    async def slow_fetch(url, proxy_url):
+    async def slow_fetch(url, proxy_url, error_sink=None):
         await fetch_event.wait()
         return ScrapeResult(
             html="<html lang='fr'><body>Bonjour</body></html>",
@@ -591,7 +591,7 @@ def test_batch_no_structural_admission_rejected(monkeypatch):
         "équipements industriels pour les professionnels depuis 1985. "
     )
 
-    async def slow_fetch(url, proxy_url):
+    async def slow_fetch(url, proxy_url, error_sink=None):
         await _asyncio.sleep(0.05)  # chevauchement réel des fetches
         return ScrapeResult(
             html=f"<html lang='fr'><body>{fr_text * 3}</body></html>",
