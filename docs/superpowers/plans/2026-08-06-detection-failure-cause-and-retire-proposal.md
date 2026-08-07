@@ -39,9 +39,19 @@ Ces contraintes sont des **non-régressions vérifiées dans le code**. Les viol
 4. **Le sink n'est lu que si le résultat est falsy.** La branche navigation transitoire
    (`scraper.py:448-449`) écrit dans le sink **puis continue** et peut réussir
    l'extraction partielle. Un sink rempli n'implique pas un échec.
-5. **Ne PAS toucher les trois listes de codes Chromium mortes** :
-   `_VARIANT_ELIGIBLE_ERRORS` (`redirect_tracker.py:13-17`), `_FATAL_ERRORS` (`:20-24`),
-   `_PERMANENT_NAV_ERRORS` (`scraper.py:137-142`). Les réparer exige les vrais libellés.
+5. **Ne PAS toucher ces trois listes mortes** : `_VARIANT_ELIGIBLE_ERRORS`
+   (`redirect_tracker.py:13-17`), `_FATAL_ERRORS` (`:20-24`), `_PERMANENT_NAV_ERRORS`
+   (`scraper.py:137-142`).
+   **Elles sont mortes pour DEUX raisons distinctes** (correction du 2026-08-07 — une
+   version antérieure les amalgamait toutes en « listes Chromium ») :
+   - `_VARIANT_ELIGIBLE_ERRORS` et `_PERMANENT_NAV_ERRORS` contiennent des codes `ERR_*`
+     **Chromium** et ne matchent jamais sur le moteur déployé (Camoufox/Firefox). Les
+     réparer exige de vrais libellés Gecko, qui ne sont attestés nulle part.
+   - `_FATAL_ERRORS` contient des chaînes **françaises propres au service**
+     (`'Proxy non configuré'`, `'Proxy obligatoire'`, `'Proxy invalide'`) — aucun code
+     Chromium. Elle est morte parce que `scrape_html` **retourne `None` au lieu de lever**
+     sur ces cas (`scraper.py:393-400`), donc la branche `except` qui la teste est
+     inatteignable. Y ajouter des codes Gecko ne la réparerait pas.
 6. **`error_sink` est optionnel avec défaut `None`** partout. Les 2 appelants de
    `scrape_html` dans `domain_fr.py` (`:438`, `:1461`) et les 3 appels de
    `_fetch_with_admission` hors périmètre (`routes.py:261`, `:266`, `:349`) ne changent

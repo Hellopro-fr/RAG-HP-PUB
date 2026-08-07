@@ -77,10 +77,20 @@ qui l'affirme sans preuve — laquelle déclare elle-même le token non vérifia
 machine (`docs/superpowers/specs/2026-08-03-detection-teardown-flood-and-retry-cascade-cost-design.md:131`).
 C'est une **supposition circulaire**.
 
-Trois listes de codes Chromium sont mortes sur le moteur déployé, dans deux services :
+Trois listes de codes **Chromium** sont mortes sur le moteur déployé, dans deux services :
 `_VARIANT_ELIGIBLE_ERRORS` et `_PERMANENT_NAV_ERRORS` (détection), `PERMANENT_ERROR_MARKERS`
 (`crawler-service/crawler/src/httpStatusPolicy.ts:138-146`). **Deviner un libellé est le
 mode d'échec que ce design évite**, et c'est la raison de tout son découpage.
+
+> **Correction (2026-08-07, relevée à l'implémentation).** Une version antérieure de ce
+> document rangeait `_FATAL_ERRORS` parmi les « listes de codes Chromium ». C'est faux et
+> trompeur : cette liste contient des chaînes **françaises propres au service**
+> (`'Proxy non configuré'`, `'Proxy obligatoire'`, `'Proxy invalide'`,
+> `redirect_tracker.py:20-24`), aucun code `ERR_*`. Elle est morte pour une raison
+> **différente** — `scrape_html` retourne `None` au lieu de lever sur ces cas
+> (`scraper.py:393-400`), donc la branche `except` qui la teste est inatteignable.
+> La conséquence pratique compte : y ajouter des codes Gecko ne la réparerait pas.
+> Les deux familles de mort ne se corrigent pas de la même façon.
 
 ---
 
