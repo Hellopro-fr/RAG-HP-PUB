@@ -45,6 +45,18 @@ function buildQS(params) {
     .join('&');
 }
 
+// ── Cost guard ──────────────────────────────────────────────────────────────
+// Backlink reports bill 40 Semrush API units per returned row. Clamp silently:
+// the call succeeds with fewer rows rather than failing the caller's task.
+
+const MAX_DISPLAY_LIMIT = 100;   // 100 rows x 40 units = 4,000 unit ceiling
+
+function clampDisplayLimit(value, fallback) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 1) return fallback;
+  return Math.min(Math.floor(n), MAX_DISPLAY_LIMIT);
+}
+
 // ── Semrush API base URLs ───────────────────────────────────────────────────
 
 const STD    = 'https://api.semrush.com/';                     // Standard analytics
@@ -529,4 +541,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { TOOLS, toolByName, buildQS, BACK, handleLine };
+module.exports = { TOOLS, toolByName, buildQS, BACK, handleLine, MAX_DISPLAY_LIMIT, clampDisplayLimit };

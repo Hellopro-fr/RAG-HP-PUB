@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 
-const { TOOLS, buildQS, BACK } = require('./server.js');
+const { TOOLS, buildQS, BACK, MAX_DISPLAY_LIMIT, clampDisplayLimit } = require('./server.js');
 
 test('server.js can be required without hanging', () => {
   assert.ok(Array.isArray(TOOLS));
@@ -62,4 +62,37 @@ test('REGRESSION: buildQS still drops undefined, null and empty string', () => {
 test('REGRESSION: buildQS keeps numeric zero', () => {
   const qs = buildQS({ display_offset: 0, a: 'x' });
   assert.strictEqual(qs, 'display_offset=0&a=x');
+});
+
+test('clampDisplayLimit caps values above the maximum', () => {
+  assert.strictEqual(clampDisplayLimit(5000, 10), MAX_DISPLAY_LIMIT);
+});
+
+test('clampDisplayLimit passes values at or below the maximum through', () => {
+  assert.strictEqual(clampDisplayLimit(25, 10), 25);
+  assert.strictEqual(clampDisplayLimit(MAX_DISPLAY_LIMIT, 10), MAX_DISPLAY_LIMIT);
+});
+
+test('clampDisplayLimit returns the fallback for missing values', () => {
+  assert.strictEqual(clampDisplayLimit(undefined, 10), 10);
+  assert.strictEqual(clampDisplayLimit(null, 10), 10);
+});
+
+test('clampDisplayLimit returns the fallback for junk and out-of-range values', () => {
+  assert.strictEqual(clampDisplayLimit('abc', 10), 10);
+  assert.strictEqual(clampDisplayLimit(0, 10), 10);
+  assert.strictEqual(clampDisplayLimit(-5, 10), 10);
+  assert.strictEqual(clampDisplayLimit(Infinity, 10), 10);
+});
+
+test('clampDisplayLimit floors fractional values', () => {
+  assert.strictEqual(clampDisplayLimit(12.7, 10), 12);
+});
+
+test('clampDisplayLimit accepts numeric strings', () => {
+  assert.strictEqual(clampDisplayLimit('42', 10), 42);
+});
+
+test('MAX_DISPLAY_LIMIT is 100 (4,000 API units per call)', () => {
+  assert.strictEqual(MAX_DISPLAY_LIMIT, 100);
 });
