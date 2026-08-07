@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 
-const { TOOLS, buildQS, BACK, MAX_DISPLAY_LIMIT, clampDisplayLimit } = require('./server.js');
+const { TOOLS, toolByName, buildQS, BACK, handleLine, MAX_DISPLAY_LIMIT, clampDisplayLimit, isSemrushError } = require('./server.js');
 
 test('server.js can be required without hanging', () => {
   assert.ok(Array.isArray(TOOLS));
@@ -95,4 +95,72 @@ test('clampDisplayLimit accepts numeric strings', () => {
 
 test('MAX_DISPLAY_LIMIT is 100 (4,000 API units per call)', () => {
   assert.strictEqual(MAX_DISPLAY_LIMIT, 100);
+});
+
+test('isSemrushError detects Semrush error bodies', () => {
+  assert.strictEqual(isSemrushError('ERROR 50 :: NOTHING FOUND'), true);
+  assert.strictEqual(isSemrushError('ERROR 120 :: WRONG KEY - ID PAIR'), true);
+  assert.strictEqual(isSemrushError('ERROR 130 :: API DISABLED'), true);
+  assert.strictEqual(isSemrushError('ERROR 134 :: API UNITS BALANCE IS ZERO'), true);
+});
+
+test('isSemrushError tolerates surrounding whitespace', () => {
+  assert.strictEqual(isSemrushError('\n  ERROR 50 :: NOTHING FOUND\n'), true);
+});
+
+test('isSemrushError does not flag real CSV payloads', () => {
+  const csv = 'page_ascore;source_url;anchor\n42;https://x.com/a;click here';
+  assert.strictEqual(isSemrushError(csv), false);
+});
+
+test('isSemrushError does not flag CSV whose data merely contains the word ERROR', () => {
+  const csv = 'anchor;backlinks_num\nERROR CODE GUIDE;12';
+  assert.strictEqual(isSemrushError(csv), false);
+});
+
+test('isSemrushError handles empty and non-string input', () => {
+  assert.strictEqual(isSemrushError(''), false);
+  assert.strictEqual(isSemrushError(undefined), false);
+});
+
+test('REGRESSION: a string-returning tool still produces a plain text result', async () => {
+  const results = [];
+  const original = process.stdout.write;
+  process.stdout.write = (chunk) => { results.push(String(chunk)); return true; };
+  try {
+    const stub = { name: 'stub_string', description: 'd', inputSchema: {}, run: async () => 'plain csv' };
+    toolByName.stub_string = stub;
+    await handleLine(JSON.stringify({
+      jsonrpc: '2.0', id: 1, method: 'tools/call',
+      params: { name: 'stub_string', arguments: {} },
+    }));
+  } finally {
+    process.stdout.write = original;
+    delete toolByName.stub_string;
+  }
+  const msg = JSON.parse(results.join(''));
+  assert.deepStrictEqual(msg.result, { content: [{ type: 'text', text: 'plain csv' }] });
+});
+
+test('a tool returning a result object has it passed through with isError', async () => {
+  const results = [];
+  const original = process.stdout.write;
+  process.stdout.write = (chunk) => { results.push(String(chunk)); return true; };
+  try {
+    const stub = {
+      name: 'stub_object', description: 'd', inputSchema: {},
+      run: async () => ({ content: [{ type: 'text', text: 'ERROR 50 :: NOTHING FOUND' }], isError: true }),
+    };
+    toolByName.stub_object = stub;
+    await handleLine(JSON.stringify({
+      jsonrpc: '2.0', id: 2, method: 'tools/call',
+      params: { name: 'stub_object', arguments: {} },
+    }));
+  } finally {
+    process.stdout.write = original;
+    delete toolByName.stub_object;
+  }
+  const msg = JSON.parse(results.join(''));
+  assert.strictEqual(msg.result.isError, true);
+  assert.strictEqual(msg.result.content[0].text, 'ERROR 50 :: NOTHING FOUND');
 });

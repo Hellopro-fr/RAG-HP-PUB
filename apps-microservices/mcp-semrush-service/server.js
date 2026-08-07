@@ -57,6 +57,12 @@ function clampDisplayLimit(value, fallback) {
   return Math.min(Math.floor(n), MAX_DISPLAY_LIMIT);
 }
 
+// The Semrush Analytics API answers HTTP 200 with a plain-text `ERROR n :: MESSAGE`
+// body on failure. Without this check such a body reaches the caller as a success.
+function isSemrushError(text) {
+  return /^ERROR\s+\d+\s*::/.test(String(text ?? '').trim());
+}
+
 // ── Semrush API base URLs ───────────────────────────────────────────────────
 
 const STD    = 'https://api.semrush.com/';                     // Standard analytics
@@ -510,10 +516,14 @@ function handleLine(line) {
             break;
           }
           try {
-            const text = await tool.run(args);
-            sendResult(id, {
-              content: [{ type: 'text', text: String(text) }],
-            });
+            const out = await tool.run(args);
+            // A tool may return a plain string (the 14 original tools) or a
+            // complete MCP result object (the backlink factory, which sets isError).
+            if (out && typeof out === 'object' && Array.isArray(out.content)) {
+              sendResult(id, out);
+            } else {
+              sendResult(id, { content: [{ type: 'text', text: String(out) }] });
+            }
           } catch (err) {
             sendResult(id, {
               content: [{ type: 'text', text: `Error: ${err.message}` }],
@@ -541,4 +551,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { TOOLS, toolByName, buildQS, BACK, handleLine, MAX_DISPLAY_LIMIT, clampDisplayLimit };
+module.exports = { TOOLS, toolByName, buildQS, BACK, handleLine, MAX_DISPLAY_LIMIT, clampDisplayLimit, isSemrushError };
