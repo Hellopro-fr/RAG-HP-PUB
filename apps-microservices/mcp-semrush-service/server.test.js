@@ -294,3 +294,64 @@ test('backlinks_matrix sends its documented export_columns', () => {
   const url = buildBacklinkUrl(specByName('backlinks_matrix'), { targets: ['a.com'] });
   assert.ok(url.includes(`export_columns=${encodeURIComponent(columns)}`));
 });
+
+test('backlinks now requests the nofollow column', () => {
+  const url = buildBacklinkUrl(specByName('backlinks'), { target: 'hellopro.fr' });
+  const columns = 'page_ascore,source_url,target_url,anchor,nofollow,' +
+                  'external_num,internal_num,first_seen,last_seen';
+  assert.ok(url.includes(`export_columns=${encodeURIComponent(columns)}`));
+});
+
+test('backlinks still sends type=backlinks exactly', () => {
+  const url = buildBacklinkUrl(specByName('backlinks'), { target: 'hellopro.fr' });
+  // Anchored so it cannot pass on type=backlinks_anchors or any other prefix match.
+  assert.match(url, /[?&]type=backlinks(&|$)/);
+});
+
+test('backlinks_domains keeps its tool name but sends type=backlinks_refdomains', () => {
+  const spec = specByName('backlinks_domains');
+  assert.strictEqual(spec.type, 'backlinks_refdomains');
+  const url = buildBacklinkUrl(spec, { target: 'hellopro.fr' });
+  assert.ok(url.includes('type=backlinks_refdomains'));
+});
+
+test('backlinks_domains columns are unchanged', () => {
+  const columns = 'domain_ascore,domain,backlinks_num,ip,country,first_seen,last_seen';
+  const url = buildBacklinkUrl(specByName('backlinks_domains'), { target: 'hellopro.fr' });
+  assert.ok(url.includes(`export_columns=${encodeURIComponent(columns)}`));
+});
+
+test('the migrated tools inherit the display_limit clamp', () => {
+  for (const name of ['backlinks', 'backlinks_domains']) {
+    const url = buildBacklinkUrl(specByName(name), { target: 'hellopro.fr', display_limit: 9999 });
+    assert.ok(url.includes('display_limit=100'), `${name} is clamped`);
+  }
+});
+
+test('all nine backlink tools come from the table', () => {
+  assert.strictEqual(BACKLINK_REPORTS.length, 9);
+  const names = BACKLINK_REPORTS.map((s) => s.name).sort();
+  assert.deepStrictEqual(names, [
+    'backlinks', 'backlinks_anchors', 'backlinks_competitors', 'backlinks_domains',
+    'backlinks_geo', 'backlinks_matrix', 'backlinks_overview', 'backlinks_pages',
+    'backlinks_tld',
+  ]);
+});
+
+// Catches a botched migration that leaves both the hand-written block and the
+// table entry registered under the same name. The `registered tool count` test
+// from Task 1 already pins the total at 23.
+test('no duplicate tool names after the migration', () => {
+  assert.strictEqual(new Set(TOOLS.map((t) => t.name)).size, TOOLS.length);
+});
+
+test('REGRESSION: the 14 non-backlink tools are still registered', () => {
+  const names = TOOLS.map((t) => t.name);
+  for (const n of ['domain_overview', 'domain_organic_keywords', 'domain_paid_keywords',
+                   'competitors', 'keyword_overview', 'keyword_overview_single_db',
+                   'batch_keyword_overview', 'keyword_organic_results', 'keyword_paid_results',
+                   'keyword_ads_history', 'related_keywords', 'broad_match_keywords',
+                   'phrase_questions', 'keyword_difficulty']) {
+    assert.ok(names.includes(n), `${n} still registered`);
+  }
+});

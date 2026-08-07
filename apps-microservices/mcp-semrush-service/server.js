@@ -345,47 +345,6 @@ const TOOLS = [
     },
   },
 
-  // ── Backlinks (fixed: target_type now always included) ──
-  {
-    name: 'backlinks',
-    description: 'Backlinks for a domain: list of inbound links. Requires Semrush Business plan.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        target:        { type: 'string', description: 'Domain or URL to analyze (e.g. hellopro.fr)' },
-        target_type:   { type: 'string', description: 'Target type: root_domain, domain, or url. Default: root_domain' },
-        display_limit: { type: 'integer', description: 'Number of backlinks (default: 10)' },
-      },
-      required: ['target'],
-    },
-    async run({ target, target_type = 'root_domain', display_limit = 10 }) {
-      return httpGet(BACK + '?' + buildQS({
-        key: API_KEY, type: 'backlinks', target, target_type, display_limit,
-        export_columns: 'page_ascore,source_url,target_url,anchor,external_num,internal_num,first_seen,last_seen',
-      }));
-    },
-  },
-
-  {
-    name: 'backlinks_domains',
-    description: 'Referring domains (backlink sources) for a domain. Requires Semrush Business plan.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        target:        { type: 'string', description: 'Domain to analyze (e.g. hellopro.fr)' },
-        target_type:   { type: 'string', description: 'Target type: root_domain, domain, or url. Default: root_domain' },
-        display_limit: { type: 'integer', description: 'Number of referring domains (default: 10)' },
-      },
-      required: ['target'],
-    },
-    async run({ target, target_type = 'root_domain', display_limit = 10 }) {
-      return httpGet(BACK + '?' + buildQS({
-        key: API_KEY, type: 'backlinks_refdomains', target, target_type, display_limit,
-        export_columns: 'domain_ascore,domain,backlinks_num,ip,country,first_seen,last_seen',
-      }));
-    },
-  },
-
   // ── Traffic / Trends ──
   // DISABLED: requires Semrush Trends API subscription (returns ERROR 130 :: API DISABLED)
   // To re-enable: subscribe to Trends API at semrush.com, then uncomment the block below.
@@ -470,6 +429,21 @@ const BACKLINK_REPORTS = [
     description: 'Backlink profile summary for a domain: authority score, total backlinks, referring domains and IPs, and follow vs nofollow counts. Costs 40 units per request rather than per row, making it the cheapest backlink call — use it before drilling into per-row reports. Requires Semrush Business plan.',
     columns: 'ascore,total,domains_num,urls_num,ips_num,ipclassc_num,follows_num,' +
              'nofollows_num,sponsored_num,ugc_num,texts_num,images_num,forms_num,frames_num',
+  },
+  {
+    name: 'backlinks',
+    type: 'backlinks',
+    shape: 'standard',
+    description: 'Individual backlinks pointing at a domain or URL, with source page authority, anchor text and follow status. Requires Semrush Business plan.',
+    columns: 'page_ascore,source_url,target_url,anchor,nofollow,' +
+             'external_num,internal_num,first_seen,last_seen',
+  },
+  {
+    name: 'backlinks_domains',
+    type: 'backlinks_refdomains',
+    shape: 'standard',
+    description: 'Referring domains linking to a target, with authority score and link counts. Cheaper per unit of insight than the backlinks report — one row covers many links. Requires Semrush Business plan.',
+    columns: 'domain_ascore,domain,backlinks_num,ip,country,first_seen,last_seen',
   },
   {
     name: 'backlinks_anchors',
