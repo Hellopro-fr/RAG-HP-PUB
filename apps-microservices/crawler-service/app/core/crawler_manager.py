@@ -21,6 +21,7 @@ from fastapi import HTTPException, status
 from redis.exceptions import ConnectionError as RedisConnectionError, TimeoutError as RedisTimeoutError
 
 from app.core.config import settings
+from app.core import archived_status_repair
 from common_utils.redis import cache_service
 from app.schemas.crawler import CrawlStatus, IncludeInArchive, ReindexResponse
 
@@ -77,6 +78,18 @@ async def _with_retry(callable_coro, *args, **kwargs):
                 f"Redis transient error on attempt {attempt + 1}/{_REDIS_RETRY_ATTEMPTS + 1}: {e}. Retrying."
             )
             await asyncio.sleep(_REDIS_RETRY_BACKOFF_MS / 1000.0)
+
+
+def _mtime_or_none(path: str) -> Optional[float]:
+    """mtime of `path`, or None when it does not exist.
+
+    Any OTHER OSError propagates on purpose: "unreadable" is not "absent", and a
+    caller that conflated the two would treat a permissions problem as evidence.
+    """
+    try:
+        return os.path.getmtime(path)
+    except FileNotFoundError:
+        return None
 
 
 def _parse_iso_naive_utc(value: str) -> datetime:
@@ -3900,15 +3913,23 @@ class CrawlerManager:
         # GCS-fallback branches (mark archived with NO cleanup), GET /html
         # re-extracting the full tar, update-mode _restore_archived_crawl when
         # the update never finalizes. This sweep is the retry. ---
-        # One read per tick, shared by the reclean (and, from Task 3, the repair
-        # pass). Skipped when no consumer will use it, so a tick with nothing to
-        # do costs no file I/O and logs no warning.
+        # One read per tick, shared by the repair pass and the reclean. Skipped
+        # when neither consumer will use it, so a tick with nothing to do costs
+        # no file I/O and logs no warning.
         verified_ids = (self._load_reclean_allowlist()
-                        if (settings.ARCHIVED_RECLEAN_ENABLED and archived_candidates)
+                        if ((settings.ARCHIVED_RECLEAN_ENABLED and archived_candidates)
+                            or (settings.ARCHIVED_STATUS_REPAIR_ENABLED and finished_candidates))
                         else None)
 
+        # Repair BEFORE the reclean: a crawl whose status is corrected here is
+        # appended to archived_candidates and cleaned in this same tick.
+        if settings.ARCHIVED_STATUS_REPAIR_ENABLED and finished_candidates:
+            await self._repair_archived_status(
+                finished_candidates, verified_ids, archived_candidates)
+
         if settings.ARCHIVED_RECLEAN_ENABLED and archived_candidates:
-            await self._reclean_archived_leftovers(archived_candidates, active_prev_ids, verified_ids)
+            await self._reclean_archived_leftovers(
+                archived_candidates, active_prev_ids, verified_ids)
 
         # Correct the global counter
         counter_value_raw = await cache_service.get_key(CRAWL_RUNNING_COUNT_KEY)
@@ -3966,6 +3987,94 @@ class CrawlerManager:
                 entry["url"], entry["params"], entry["crawl_id"], entry["webhook_type"]))
             replayed += 1
         return replayed
+
+    async def _archive_lock_held(self, crawl_id: str) -> bool:
+        """True when archive_lock:{crawl_id} is held.
+
+        Fail-closed: an unknown lock state returns True. archive_crawl writes
+        _status_snapshot.json at :2550 but only marks the blob at :2605, after a
+        tar that can run for minutes — during that window conditions 1-5 hold by
+        construction, and repairing would strand the crawl as 'archived' if the
+        tar then fails (:2622).
+        """
+        try:
+            if cache_service.redis_client is None:
+                return True
+            return bool(await cache_service.redis_client.exists(f"archive_lock:{crawl_id}"))
+        except Exception as e:
+            logger.warning(
+                f"status-repair: archive_lock probe failed for '{crawl_id}' "
+                f"({e}) — treating as held.")
+            return True
+
+    async def _repair_archived_status(self, finished_candidates: list,
+                                      verified: Optional[set],
+                                      archived_candidates: list) -> int:
+        """Flips 'finished' blobs whose tar is listed in GCS back to 'archived'.
+
+        Called once per reconcile tick, leader-only, immediately before
+        _reclean_archived_leftovers so a repaired crawl is recleanable in the same
+        tick. Deletion is not this method's business — it only corrects a status
+        the disk cannot express (the completion marker carries
+        finished/failed/stopped, never 'archived').
+
+        Requires BOTH the flag and the GCS-verified allowlist. No list => nothing
+        (fail-closed), same property as the reclean.
+
+        Never raises (reconcile-loop protection). Returns the count repaired.
+
+        Spec: docs/superpowers/specs/2026-08-07-archived-status-repair-design.md
+        """
+        if not settings.ARCHIVED_STATUS_REPAIR_ENABLED:
+            return 0
+        if verified is None:
+            return 0
+        repaired = 0
+        for job_data in finished_candidates:
+            if repaired >= settings.ARCHIVED_STATUS_REPAIR_MAX_PER_TICK:
+                break
+            crawl_id = job_data.get("crawl_id")
+            try:
+                if not crawl_id:
+                    continue
+                storage_path = job_data.get("storage_path") or os.path.join(
+                    settings.CRAWLER_STORAGE_PATH, str(crawl_id))
+                try:
+                    snapshot_mtime = _mtime_or_none(
+                        os.path.join(storage_path, '_status_snapshot.json'))
+                    log_mtime = _mtime_or_none(os.path.join(storage_path, 'crawler.log'))
+                except OSError as e:
+                    logger.warning(
+                        f"status-repair: cannot stat sidecars of '{crawl_id}' "
+                        f"({e}) — skipping, not rejecting.")
+                    continue
+
+                if archived_status_repair.classify(
+                    crawl_id=crawl_id,
+                    status=job_data.get("status"),
+                    stashed_at=job_data.get("stashed_at"),
+                    verified_ids=verified,
+                    snapshot_mtime=snapshot_mtime,
+                    log_mtime=log_mtime,
+                ) is not None:
+                    continue
+
+                if await self._archive_lock_held(crawl_id):
+                    logger.info(
+                        f"status-repair: '{crawl_id}' skipped — archive in progress.")
+                    continue
+
+                logger.info(
+                    f"ARCHIVED_STATUS_REPAIR crawl_id={crawl_id} finished->archived")
+                await self._mark_as_archived(crawl_id)
+                # Mirror the write locally so the reclean, which runs next on this
+                # same list, sees an 'archived' job.
+                job_data["status"] = "archived"
+                archived_candidates.append(job_data)
+                repaired += 1
+            except Exception as e:
+                logger.warning(f"status-repair failed for '{crawl_id}': {e}")
+        return repaired
 
     async def _reclean_archived_leftovers(self, jobs: list, active_prev_ids: set,
                                           verified: Optional[set]) -> int:
