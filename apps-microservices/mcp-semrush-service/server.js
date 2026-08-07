@@ -506,11 +506,44 @@ const BACKLINK_REPORTS = [
     description: 'Referring domains grouped by top-level domain (zone). Requires Semrush Business plan.',
     columns: 'zone,domains_num,backlinks_num',
   },
+  // Step 1 finding: display_limit IS documented for backlinks_matrix. Confirmed by
+  // fetching https://developer.semrush.com/api/v3/analytics/backlinks/ directly (raw
+  // HTML, not just the rendered summary) — the "Comparison by Referring Domains"
+  // section lists an optional `display_limit` parameter ("Number of results returned
+  // to a request... integer") alongside display_sort/display_offset/display_filter,
+  // and its own request example includes `&display_limit=5`. Clamped identically to
+  // the `standard` shape.
+  {
+    name: 'backlinks_matrix',
+    type: 'backlinks_matrix',
+    shape: 'multi',
+    description: 'Compare the backlink profiles of up to five domains by referring-domain overlap. Finds domains that link to competitors but not to you. Requires Semrush Business plan.',
+    columns: 'domain,domain_ascore,domain_score,matches_num,backlinks_num',
+  },
 ];
 
 const TARGET_TYPE_DESC = 'Target type: root_domain, domain, or url. Default: root_domain';
 
 function backlinkInputSchema(spec) {
+  if (spec.shape === 'multi') {
+    return {
+      type: 'object',
+      properties: {
+        targets: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Domains to compare (2 to 5, e.g. ["hellopro.fr", "competitor.fr"])',
+        },
+        target_type: { type: 'string', description: `${TARGET_TYPE_DESC}. Applied to every target.` },
+        display_limit: {
+          type: 'integer',
+          description: `Rows to return (default 10, max ${MAX_DISPLAY_LIMIT}). Each row costs 40 Semrush API units.`,
+        },
+      },
+      required: ['targets'],
+    };
+  }
+
   const properties = {
     target: { type: 'string', description: 'Domain or URL to analyze (e.g. hellopro.fr)' },
     target_type: { type: 'string', description: TARGET_TYPE_DESC },
@@ -525,6 +558,19 @@ function backlinkInputSchema(spec) {
 }
 
 function buildBacklinkParams(spec, args = {}) {
+  if (spec.shape === 'multi') {
+    const { targets = [], target_type = 'root_domain', display_limit } = args;
+    const list = Array.isArray(targets) ? targets : [targets];
+    return {
+      key: API_KEY,
+      type: spec.type,
+      targets: list,
+      target_types: list.map(() => target_type),
+      export_columns: spec.columns,
+      display_limit: clampDisplayLimit(display_limit, 10),
+    };
+  }
+
   const { target, target_type = 'root_domain', display_limit } = args;
   const params = {
     key: API_KEY,

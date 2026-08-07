@@ -12,7 +12,7 @@ test('server.js can be required without hanging', () => {
 // This is the single tool-count assertion for the whole plan. Tasks 5, 6, 7 and 8
 // each UPDATE the expected number here rather than adding their own count test.
 test('registered tool count', () => {
-  assert.strictEqual(TOOLS.length, 22);
+  assert.strictEqual(TOOLS.length, 23);
 });
 
 test('baseline: every tool has name, description, inputSchema, run', () => {
@@ -255,4 +255,42 @@ test('backlinks_overview sends its documented export_columns', () => {
 test('backlinks_overview description mentions it is the cheapest backlink call', () => {
   const tool = makeBacklinkTool(specByName('backlinks_overview'));
   assert.match(tool.description, /40 units|cheapest/i);
+});
+
+test('multi shape emits repeated targets parameters', () => {
+  const url = buildBacklinkUrl(specByName('backlinks_matrix'), {
+    targets: ['hellopro.fr', 'competitor.fr'],
+  });
+  assert.ok(url.includes('type=backlinks_matrix'));
+  assert.ok(url.includes('targets=hellopro.fr'));
+  assert.ok(url.includes('targets=competitor.fr'));
+});
+
+test('multi shape emits one target_types entry per target', () => {
+  const url = buildBacklinkUrl(specByName('backlinks_matrix'), {
+    targets: ['a.com', 'b.com', 'c.com'],
+  });
+  const count = (url.match(/target_types=root_domain/g) || []).length;
+  assert.strictEqual(count, 3, 'one target_types per target');
+});
+
+test('multi shape applies a target_type override to every target', () => {
+  const url = buildBacklinkUrl(specByName('backlinks_matrix'), {
+    targets: ['a.com', 'b.com'], target_type: 'domain',
+  });
+  const count = (url.match(/target_types=domain/g) || []).length;
+  assert.strictEqual(count, 2);
+});
+
+test('multi shape requires targets, not target, in its schema', () => {
+  const tool = makeBacklinkTool(specByName('backlinks_matrix'));
+  assert.deepStrictEqual(tool.inputSchema.required, ['targets']);
+  assert.strictEqual(tool.inputSchema.properties.targets.type, 'array');
+  assert.strictEqual(tool.inputSchema.properties.target, undefined);
+});
+
+test('backlinks_matrix sends its documented export_columns', () => {
+  const columns = 'domain,domain_ascore,domain_score,matches_num,backlinks_num';
+  const url = buildBacklinkUrl(specByName('backlinks_matrix'), { targets: ['a.com'] });
+  assert.ok(url.includes(`export_columns=${encodeURIComponent(columns)}`));
 });
