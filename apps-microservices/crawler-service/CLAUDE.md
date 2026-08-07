@@ -373,6 +373,20 @@ Three client-side prongs + one operator-side step prevent the connection-cap exh
 
 Client name: `crawler-py-{HOSTNAME or pid-N}`.
 
+#### Retry on reaped connections (2026-08-07)
+
+The server-side reap below is what makes this mandatory. The pool keeps handing out sockets Redis has already closed, and `health_check_interval` only turns the failure into a failed PING — it does not heal it. `init_redis_pool` therefore passes an explicit `retry=Retry(ExponentialBackoff(cap=1.0, base=0.05), 3)` plus `retry_on_error=[ConnectionError, TimeoutError]`; the second is required, or `_disconnect_raise` re-raises before the retry loop gets a second attempt.
+
+Without them redis-py builds `Retry(NoBackoff(), 0)` with an empty `retry_on_error` (verified on redis-py 5.2.1), so the first command on a reaped socket raises `ConnectionError: Connection closed by server.` — and **every `cache_service` helper swallows it into its default return value** (`None`, `0`, `[]`, `False`), which no caller can distinguish from a real answer. `redis` is unpinned (`requirements.txt`, and `common-utils/setup.py` says `redis>=5.0.0`), so passing the retry explicitly also makes the behaviour independent of whatever pip resolved at image build time.
+
+`_with_retry` (`crawler_manager.py:61`) does **not** cover this: the `cache_service` helpers catch `Exception` internally, so the wrapper never sees a `RedisConnectionError`. The only error that reaches it is the builtin `ConnectionError("Redis is not connected.")` raised when the client is `None` — an `OSError` subclass.
+
+#### Disk recovery must not clobber (2026-08-07)
+
+Because `get_json` returns `None` on both "absent" and "read errored", `get_job_or_recover` (`app/router/crawler.py`) could not tell a missing blob from an unanswered one. It rebuilt an 8-field stub from disk and wrote it with `set_json`, destroying the live blob: the completion marker only ever carries `finished`/`failed`/`stopped`, so `archived` and `stashed_at` are unrepresentable on disk, and `get_results_archive` then skipped its GCS branch → `/results` 404. The 7-day TTL (the only TTL among the 23 writers of `crawl_job:`) made it recur after expiry. Measured on PROD before the fix: 345 recoveries over 3 days across 266 crawl_ids, `finished` in 345 cases out of 345.
+
+The write is now `set_json_nx(..., ttl=604800)` — an existing blob wins, a genuinely absent one is still indexed, and the refusal is logged at WARNING. **13 endpoints depend on `get_job_or_recover`**, including `GET /status/{crawl_id}` and four `/admin/*` routes, so a read-only-looking call is a write path.
+
 ### Node side (crawler subprocess)
 
 Heartbeat publishes and `DedupManager` operations now multiplex on a single shared Redis client created via `createSharedRedisClient(redisUrl, { crawlId, monitor })` in `crawler/src/redisClient.ts`. Halves per-crawl conn count (2 → 1) and halves the orphan blast radius when the process is OOM-killed.
@@ -392,6 +406,8 @@ Client name: `crawler-node-{crawlId}`. Monitor attached as `'shared'`.
 - `CONFIG REWRITE` — persists to `redis.conf` so the setting survives restart.
 
 These complement the client-side keepalive — TCP-half-open conns left behind by SIGKILL'd Node processes are reaped automatically.
+
+Measured 2026-08-07 via `GET /admin/redis-debug`: `timeout=300`, `tcp-keepalive=300` (not the `60` the script sets — re-run `--apply-timeout` if the documented value is wanted). Crawler connections were observed idling at 264s and 276s, i.e. routinely within seconds of the reap line, and one replica's pool held 7 connection objects while Redis saw a single live connection under that replica's name. Keepalive cannot prevent the reap in any case: Redis's `timeout` counts command idleness (`lastinteraction`), not TCP packets. The reap is intended — the client-side retry above is what makes it harmless.
 
 ### Diagnostic tools
 
