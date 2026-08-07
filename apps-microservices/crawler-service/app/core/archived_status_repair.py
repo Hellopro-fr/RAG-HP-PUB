@@ -18,8 +18,14 @@ STASHED = "stashed"
 NOT_IN_GCS_LIST = "not_in_gcs_list"
 NO_SNAPSHOT = "no_snapshot"
 RUN_AFTER_ARCHIVE = "run_after_archive"
-# Condition 6 is NOT evaluated by classify(): it needs a Redis round trip, and the
-# caller runs it LAST so the EXISTS is only paid for blobs that already passed 1-5.
+# A snapshot rewrite not yet (or never) followed by a successful archive: the
+# tar is in flight, or the process died mid-tar. Unlike condition 5, this one
+# does NOT self-clear when the archive completes normally — archiving again
+# rewrites the snapshot, so a failed attempt leaves it permanently "recent"
+# relative to nothing but wall-clock time (spec S4/I-3).
+SNAPSHOT_TOO_RECENT = "snapshot_too_recent"
+# Condition 7 is NOT evaluated by classify(): it needs a Redis round trip, and the
+# caller runs it LAST so the EXISTS is only paid for blobs that already passed 1-6.
 # The constant lives here so both callers report the same bucket name.
 ARCHIVE_IN_PROGRESS = "archive_in_progress"
 
@@ -31,6 +37,8 @@ def classify(
     verified_ids: AbstractSet[str],
     snapshot_mtime: Optional[float],
     log_mtime: Optional[float],
+    snapshot_age_seconds: Optional[float],
+    min_snapshot_age_seconds: float,
 ) -> Optional[str]:
     """Return None when the crawl must be repaired to 'archived', else the name
     of the FIRST condition it fails.
@@ -45,12 +53,25 @@ def classify(
             the file is absent. Any OTHER stat error must make the caller skip the
             crawl entirely rather than pass None here.
         log_mtime: mtime of {storage_path}/crawler.log, same rule.
+        snapshot_age_seconds: caller-computed `now - snapshot_mtime` (this module
+            never touches wall-clock time, so it takes the result rather than the
+            inputs). None must reject, same as an absent log_mtime.
+        min_snapshot_age_seconds: the caller's settings.ARCHIVED_RECLEAN_MIN_AGE_SECONDS
+            — reused rather than a new setting, passed in rather than imported so
+            this module stays dependency-free.
 
     The log/snapshot comparison is what separates "archived and untouched since"
     from "archived, then re-crawled". crawler.log is appended for the whole run and
-    _cleanup_local_data keeps it deliberately (crawler_manager.py:2637-2640), so
+    _cleanup_local_data keeps it deliberately (crawler_manager.py:2650-2653), so
     nothing removes it — unlike _completion_marker.json, which
     _cleanup_stale_state_for_relaunch deletes on every relaunch.
+
+    The age check (condition 6) closes a gap condition 5 leaves open: a genuine
+    repair target was archived days ago, so its snapshot is old; a snapshot
+    written minutes ago means an archive is currently running or just failed
+    partway through — condition 5 alone cannot tell these apart, because a
+    fresh snapshot is by construction the most recently touched file in the
+    crawl dir regardless of which case it is.
     """
     if status != "finished":
         return NOT_FINISHED
@@ -62,6 +83,8 @@ def classify(
         return NO_SNAPSHOT
     if log_mtime is None or log_mtime >= snapshot_mtime:
         return RUN_AFTER_ARCHIVE
+    if snapshot_age_seconds is None or snapshot_age_seconds <= min_snapshot_age_seconds:
+        return SNAPSHOT_TOO_RECENT
     return None
 
 

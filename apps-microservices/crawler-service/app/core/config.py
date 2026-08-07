@@ -125,7 +125,7 @@ class Settings(BaseSettings):
     # inert, read the dry-run, then flip.
     ARCHIVED_STATUS_REPAIR_ENABLED: bool = False
     # Redis writes per tick. Starts low: reconcile_leader_lock has a 600s TTL and
-    # NO heartbeat (crawler_manager.py:3350), so a tick that outlives it would let
+    # NO heartbeat (crawler_manager.py:3363), so a tick that outlives it would let
     # a second leader in. Raise only after watching the "Reconciliation complete"
     # timing.
     ARCHIVED_STATUS_REPAIR_MAX_PER_TICK: int = 10

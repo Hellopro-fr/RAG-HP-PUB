@@ -69,6 +69,7 @@ def test_allowlist_load_skipped_when_nothing_will_consume_it():
 # --- Task 3: the pass itself ------------------------------------------------
 
 import os
+import time
 
 from app.core.config import settings
 
@@ -122,6 +123,21 @@ async def test_no_allowlist_writes_nothing(repair_on):
         n = await mgr._repair_archived_status([_job()], None, archived)
     assert n == 0
     mark.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_not_in_gcs_list_skips_before_the_stat_block(repair_on):
+    """Conditions 1-3 are free (finished_candidates is already all-'finished',
+    stashed_at is a dict lookup, allowlist membership is a set lookup) and
+    reject nearly all candidates — os.stat is real I/O and must not run for a
+    candidate the allowlist alone already rejects."""
+    mgr = CrawlerManager()
+    with patch.object(CrawlerManager, "_mark_as_archived", AsyncMock()) as mark, \
+         patch("app.core.crawler_manager.os.path.getmtime") as gm:
+        n = await mgr._repair_archived_status([_job(crawl_id="9999")], {"6712"}, [])
+    assert n == 0
+    mark.assert_not_awaited()
+    gm.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -199,7 +215,7 @@ async def test_archive_lock_absent_is_not_held():
     fake.exists = AsyncMock(return_value=0)
     with patch("app.core.crawler_manager.cache_service.redis_client", fake):
         assert await mgr._archive_lock_held("6712") is False
-    fake.exists.assert_awaited_once_with("archive_lock:6712")
+    fake.exists.assert_awaited_once_with("archive_lock:6712", "stash_lock:6712")
 
 
 @pytest.mark.asyncio
@@ -270,3 +286,52 @@ def test_pass_runs_before_the_reclean():
     assert src.index("_repair_archived_status") < src.index("_reclean_archived_leftovers"), (
         "repair must run first, or a repaired job waits a whole tick for cleanup"
     )
+
+
+@pytest.mark.asyncio
+async def test_repaired_job_is_recleaned_in_the_same_tick(monkeypatch, tmp_path):
+    """Pins the design's most delicate ordering property (spec S5):
+    archived_candidates starts EMPTY, is populated SOLELY by the repair pass,
+    and is then consumed by the reclean in the same tick. It works only
+    because _reconcile_locked runs the reclean right after the repair returns
+    (test_pass_runs_before_the_reclean pins the source order; this test pins
+    that the actual hand-off produces a real deletion, not just a list
+    append). Real tmp dirs, like test_crawler_manager_reclean.py, rather than
+    mocking os.path.getmtime — the reclean's own age gate reads a real mtime
+    off the 'storage' subtree that _repair_archived_status never touches."""
+    monkeypatch.setattr(settings, "ARCHIVED_STATUS_REPAIR_ENABLED", True, raising=False)
+    monkeypatch.setattr(settings, "ARCHIVED_STATUS_REPAIR_MAX_PER_TICK", 10, raising=False)
+    monkeypatch.setattr(settings, "ARCHIVED_RECLEAN_ENABLED", True, raising=False)
+    monkeypatch.setattr(settings, "ARCHIVED_RECLEAN_MIN_AGE_SECONDS", 1, raising=False)
+    monkeypatch.setattr(settings, "ARCHIVED_RECLEAN_MAX_PER_TICK", 3, raising=False)
+
+    root = tmp_path / "6712"
+    (root / "storage" / "datasets").mkdir(parents=True)
+    (root / "storage" / "datasets" / "000000001.json").write_text("{}")
+    (root / "crawler.log").write_text("log\n")
+    (root / "_status_snapshot.json").write_text("{}")
+    old = time.time() - 200000  # settled archive: log older than snapshot, both ancient
+    os.utime(root / "crawler.log", (old, old))
+    os.utime(root / "_status_snapshot.json", (old + 50, old + 50))
+    os.utime(root / "storage", (old + 50, old + 50))
+
+    job = {"crawl_id": "6712", "status": "finished", "storage_path": str(root)}
+    archived_candidates = []  # starts empty — the property under test
+
+    mgr = CrawlerManager()
+    with patch.object(CrawlerManager, "_archive_lock_held", AsyncMock(return_value=False)), \
+         patch.object(CrawlerManager, "_mark_as_archived", AsyncMock()), \
+         patch("app.core.crawler_manager.cache_service.get_json",
+               AsyncMock(return_value={"crawl_id": "6712", "status": "finished"})):
+        repaired = await mgr._repair_archived_status([job], {"6712"}, archived_candidates)
+
+    assert repaired == 1
+    assert archived_candidates == [job], (
+        "archived_candidates must be populated SOLELY by the repair pass"
+    )
+
+    actioned = await mgr._reclean_archived_leftovers(archived_candidates, set(), {"6712"})
+
+    assert actioned == 1, "the reclean must consume the job the repair pass just appended"
+    assert not (root / "storage").exists()
+    assert (root / "crawler.log").is_file(), "sidecars at the crawl-dir root are kept"

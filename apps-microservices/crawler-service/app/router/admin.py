@@ -562,13 +562,18 @@ _STATUS_REPAIR_BUCKETS = (
     archived_status_repair.NOT_IN_GCS_LIST,
     archived_status_repair.NO_SNAPSHOT,
     archived_status_repair.RUN_AFTER_ARCHIVE,
+    archived_status_repair.SNAPSHOT_TOO_RECENT,
     archived_status_repair.ARCHIVE_IN_PROGRESS,
 )
 
 
 @router.get("/archived-status-repair", dependencies=[Depends(verify_api_key)])
 async def archived_status_repair_dry_run(
-    limit: int = Query(2000, ge=1, le=20000,
+    # Default IS the cap: prod holds ~6756 crawl_job:* keys, and an operator
+    # calling this with no params must see the whole keyspace, not <1/3 of it
+    # (a 2000 default under-reported candidates_count by ~3.4x and made the
+    # runbook's spot-check fail for no real reason).
+    limit: int = Query(20000, ge=1, le=20000,
                        description="Max crawl_job keys to scan. Counts below "
                                    "describe the scanned subset only."),
 ):
@@ -594,24 +599,36 @@ async def archived_status_repair_dry_run(
 
     keys = []
     truncated = False
-    async for key in client.scan_iter(match=f"{CRAWL_JOB_PREFIX}*", count=500):
-        keys.append(key)
-        if len(keys) >= limit:
-            truncated = True
-            break
+    try:
+        async for key in client.scan_iter(match=f"{CRAWL_JOB_PREFIX}*", count=500):
+            keys.append(key)
+            if len(keys) >= limit:
+                truncated = True
+                break
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Redis scan failed: {e}")
 
     blobs = []
+    skipped = 0
     if keys:
         pipe = client.pipeline()
         for key in keys:
             pipe.get(key)
-        for raw in await pipe.execute():
+        try:
+            raw_values = await pipe.execute()
+        except Exception as e:
+            raise HTTPException(status_code=503, detail=f"Redis pipeline execute failed: {e}")
+        for raw in raw_values:
             if not raw:
+                # Key vanished between scan and get (TTL expiry, race) — counted
+                # so scanned == candidates_count + sum(rejected) + skipped +
+                # unreadable_sidecars still reconciles.
+                skipped += 1
                 continue
             try:
                 blobs.append(json.loads(raw))
             except (TypeError, ValueError):
-                continue
+                skipped += 1
 
     buckets = {name: 0 for name in _STATUS_REPAIR_BUCKETS}
     candidates = []
@@ -621,6 +638,7 @@ async def archived_status_repair_dry_run(
     for blob in blobs:
         crawl_id = blob.get("crawl_id")
         if not crawl_id:
+            skipped += 1
             continue
         storage_path = blob.get("storage_path") or os.path.join(
             settings.CRAWLER_STORAGE_PATH, str(crawl_id))
@@ -631,6 +649,8 @@ async def archived_status_repair_dry_run(
         except OSError:
             unreadable += 1
             continue
+        snapshot_age_seconds = (
+            None if snapshot_mtime is None else time.time() - snapshot_mtime)
 
         # No allowlist -> classify() against an empty set, so a finished/
         # non-stashed blob always fails condition 3 (not_in_gcs_list) instead
@@ -643,8 +663,15 @@ async def archived_status_repair_dry_run(
             verified_ids=verified or set(),
             snapshot_mtime=snapshot_mtime,
             log_mtime=log_mtime,
+            snapshot_age_seconds=snapshot_age_seconds,
+            min_snapshot_age_seconds=settings.ARCHIVED_RECLEAN_MIN_AGE_SECONDS,
         )
-        if reason == archived_status_repair.NOT_IN_GCS_LIST:
+        # With no allowlist at all, EVERY finished/non-stashed blob fails
+        # condition 3 — stash_only_hint would just count them all, a
+        # meaningless "hint" (it's supposed to flag the narrow stash-origin
+        # residual of spec S7, not "we have no evidence about anything").
+        # Only meaningful once a real (possibly empty) allowlist was loaded.
+        if reason == archived_status_repair.NOT_IN_GCS_LIST and verified is not None:
             # Fails ONLY condition 3 => would be repairable if its tar were
             # verified in GCS. Mostly stash-origin crawls (spec S7).
             stash_only_hint += 1
@@ -662,6 +689,7 @@ async def archived_status_repair_dry_run(
         "scanned": len(keys),
         "truncated": truncated,
         "unreadable_sidecars": unreadable,
+        "skipped": skipped,
         "candidates": candidates,
         "candidates_count": len(candidates),
         "rejected": buckets,

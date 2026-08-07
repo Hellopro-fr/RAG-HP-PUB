@@ -91,6 +91,24 @@ def test_no_allowlist_yields_no_candidates(client):
     assert body["candidates_count"] == 0
 
 
+def test_stash_only_hint_disabled_without_allowlist(client):
+    """With no allowlist at all, every finished/non-stashed blob fails
+    condition 3 (verified_ids=set()) — stash_only_hint would otherwise count
+    ALL of them, a meaningless "hint" indistinguishable from "we have zero
+    evidence about anything". It must fire only once a real (possibly empty)
+    allowlist was actually loaded. The rejected["not_in_gcs_list"] bucket
+    itself stays an accurate classification either way, so it is NOT gated
+    the same way — gating it too would silently drop those blobs from the
+    scanned/rejected/skipped reconciliation."""
+    from app.core.crawler_manager import crawler_manager
+    with patch.object(type(crawler_manager), "_load_reclean_allowlist",
+                      return_value=None), \
+         patch("app.router.admin.os.path.getmtime", side_effect=_getmtime):
+        body = client.get("/admin/archived-status-repair").json()
+    assert body["stash_only_hint"] == 0
+    assert body["rejected"]["not_in_gcs_list"] == 2  # 6712 + 6715
+
+
 def test_limit_truncates(client):
     from app.core.crawler_manager import crawler_manager
     with patch.object(type(crawler_manager), "_load_reclean_allowlist",
@@ -118,6 +136,106 @@ def test_503_when_redis_down(client, monkeypatch):
     from common_utils.redis import cache_service
     monkeypatch.setattr(cache_service, "redis_client", None, raising=False)
     assert client.get("/admin/archived-status-repair").status_code == 503
+
+
+def test_503_when_scan_iter_fails(monkeypatch):
+    """A mid-request Redis drop during the scan must be a 503 with a clean
+    detail, matching the endpoint's own stated contract (it justifies NOT
+    using scan_keys_by_prefix precisely because that helper swallows errors
+    into a false zero instead of a 503) — not an unwrapped 500."""
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "API_KEY", None, raising=False)
+    from app.router.admin import router as AdminRouter
+    app = FastAPI()
+    app.include_router(AdminRouter)
+
+    fake = MagicMock()
+
+    async def _broken_scan_iter(match=None, count=None):
+        raise ConnectionError("redis gone")
+        yield  # pragma: no cover - makes this an async generator
+
+    fake.scan_iter = _broken_scan_iter
+    from common_utils.redis import cache_service
+    monkeypatch.setattr(cache_service, "redis_client", fake, raising=False)
+
+    resp = TestClient(app).get("/admin/archived-status-repair")
+    assert resp.status_code == 503
+
+
+def test_503_when_pipeline_execute_fails(monkeypatch):
+    """Same contract, for the failure window between listing keys and
+    reading their values."""
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "API_KEY", None, raising=False)
+    from app.router.admin import router as AdminRouter
+    app = FastAPI()
+    app.include_router(AdminRouter)
+
+    fake = MagicMock()
+
+    async def _scan_iter(match=None, count=None):
+        yield "crawl_job:6712"
+
+    fake.scan_iter = _scan_iter
+    pipe = MagicMock()
+    pipe.get = MagicMock()
+    pipe.execute = AsyncMock(side_effect=ConnectionError("redis gone"))
+    fake.pipeline = MagicMock(return_value=pipe)
+    from common_utils.redis import cache_service
+    monkeypatch.setattr(cache_service, "redis_client", fake, raising=False)
+
+    resp = TestClient(app).get("/admin/archived-status-repair")
+    assert resp.status_code == 503
+
+
+def test_skipped_counter_reconciles_scanned(monkeypatch):
+    """Blobs that fail to parse or lack crawl_id must not be dropped
+    silently — the operator does arithmetic on these counts before
+    authorising a destructive campaign, so scanned must equal
+    candidates_count + sum(rejected.values()) + unreadable_sidecars +
+    skipped."""
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "API_KEY", None, raising=False)
+    from app.router.admin import router as AdminRouter
+    app = FastAPI()
+    app.include_router(AdminRouter)
+
+    raws = [
+        json.dumps({"crawl_id": "6712", "status": "finished",
+                    "storage_path": "/app/storage/6712"}),
+        "not-json{{{",                      # unparsable
+        json.dumps({"status": "finished"}),  # missing crawl_id
+        None,                                 # vanished between scan and get
+    ]
+
+    fake = MagicMock()
+
+    async def _scan_iter(match=None, count=None):
+        for i in range(len(raws)):
+            yield f"crawl_job:{i}"
+
+    fake.scan_iter = _scan_iter
+    pipe = MagicMock()
+    pipe.get = MagicMock()
+    pipe.execute = AsyncMock(return_value=raws)
+    fake.pipeline = MagicMock(return_value=pipe)
+    fake.exists = AsyncMock(return_value=0)
+
+    from app.core.crawler_manager import crawler_manager
+    from common_utils.redis import cache_service
+    monkeypatch.setattr(cache_service, "redis_client", fake, raising=False)
+
+    with patch.object(type(crawler_manager), "_load_reclean_allowlist",
+                      return_value={"6712"}), \
+         patch("app.router.admin.os.path.getmtime", side_effect=_getmtime):
+        body = TestClient(app).get("/admin/archived-status-repair").json()
+
+    assert body["scanned"] == len(raws)
+    assert body["skipped"] == 3  # unparsable + missing crawl_id + vanished
+    total = (body["candidates_count"] + sum(body["rejected"].values())
+             + body["unreadable_sidecars"] + body["skipped"])
+    assert total == body["scanned"]
 
 
 def test_does_not_depend_on_get_job_or_recover():

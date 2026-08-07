@@ -3989,21 +3989,30 @@ class CrawlerManager:
         return replayed
 
     async def _archive_lock_held(self, crawl_id: str) -> bool:
-        """True when archive_lock:{crawl_id} is held.
+        """True when archive_lock:{crawl_id} OR stash_lock:{crawl_id} is held.
 
         Fail-closed: an unknown lock state returns True. archive_crawl writes
-        _status_snapshot.json at :2550 but only marks the blob at :2605, after a
+        _status_snapshot.json at :2563 but only marks the blob at :2618, after a
         tar that can run for minutes — during that window conditions 1-5 hold by
         construction, and repairing would strand the crawl as 'archived' if the
         tar then fails (:2622).
+
+        stash_crawl races the same way but under stash_lock: the auto-stash
+        sweep dispatches it via asyncio.create_task a few lines before the
+        repair pass runs in the same _reconcile_locked tick, it re-validates
+        'finished' after taking the lock, and only writes stashed_at AFTER the
+        tar — so the repair's own fresh re-read (_repair_archived_status) would
+        still see 'finished' during that window too. Redis EXISTS is variadic
+        and returns a count, so checking both costs the same one round trip.
         """
         try:
             if cache_service.redis_client is None:
                 return True
-            return bool(await cache_service.redis_client.exists(f"archive_lock:{crawl_id}"))
+            return bool(await cache_service.redis_client.exists(
+                f"archive_lock:{crawl_id}", f"stash_lock:{crawl_id}"))
         except Exception as e:
             logger.warning(
-                f"status-repair: archive_lock probe failed for '{crawl_id}' "
+                f"status-repair: archive_lock/stash_lock probe failed for '{crawl_id}' "
                 f"({e}) — treating as held.")
             return True
 
@@ -4037,6 +4046,15 @@ class CrawlerManager:
             try:
                 if not crawl_id:
                     continue
+                # Cheap pre-check before the stat block: conditions 1-3 are free
+                # (status is already 'finished' by construction of
+                # finished_candidates, stashed_at is a dict lookup) and reject
+                # nearly all candidates (spec: ~1058/1940 sampled finished blobs
+                # are stashed; most of the remainder aren't GCS-verified). Two
+                # os.stat calls per candidate is real I/O — skip it for anything
+                # classify() would reject on condition 3 alone anyway.
+                if str(crawl_id) not in verified:
+                    continue
                 storage_path = job_data.get("storage_path") or os.path.join(
                     settings.CRAWLER_STORAGE_PATH, str(crawl_id))
                 try:
@@ -4048,6 +4066,8 @@ class CrawlerManager:
                         f"status-repair: cannot stat sidecars of '{crawl_id}' "
                         f"({e}) — skipping, not rejecting.")
                     continue
+                snapshot_age_seconds = (
+                    None if snapshot_mtime is None else time.time() - snapshot_mtime)
 
                 if archived_status_repair.classify(
                     crawl_id=crawl_id,
@@ -4056,6 +4076,8 @@ class CrawlerManager:
                     verified_ids=verified,
                     snapshot_mtime=snapshot_mtime,
                     log_mtime=log_mtime,
+                    snapshot_age_seconds=snapshot_age_seconds,
+                    min_snapshot_age_seconds=settings.ARCHIVED_RECLEAN_MIN_AGE_SECONDS,
                 ) is not None:
                     continue
 
@@ -4079,6 +4101,12 @@ class CrawlerManager:
                 # same list, sees an 'archived' job.
                 job_data["status"] = "archived"
                 archived_candidates.append(job_data)
+                # _mark_as_archived's write swallows Redis errors while connected
+                # (cache_service.py), so a silently-failed write still lands here
+                # as a "repair" — this count is optimistic. Not restructured: the
+                # reclean requires status=='archived' AND GCS verification, so a
+                # phantom repair self-heals next tick (re-read sees 'finished'
+                # again) without ever authorizing a bad deletion.
                 repaired += 1
             except Exception as e:
                 logger.warning(f"status-repair failed for '{crawl_id}': {e}")
