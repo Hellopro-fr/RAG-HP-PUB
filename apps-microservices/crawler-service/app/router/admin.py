@@ -13,7 +13,9 @@ from fastapi.responses import PlainTextResponse
 
 from app.core.auth import verify_api_key
 from app.core import log_buffer
+from app.core import archived_status_repair
 from app.core.config import settings
+from app.core.crawler_manager import crawler_manager, CRAWL_JOB_PREFIX, _mtime_or_none
 from app.router.crawler import get_job_or_recover
 from common_utils.redis import cache_service
 
@@ -552,3 +554,116 @@ async def storage_dirs(
             d["redis"] = {"error": str(e)}
 
     return _response(len(names), dirs, budget_hit)
+
+
+_STATUS_REPAIR_BUCKETS = (
+    archived_status_repair.NOT_FINISHED,
+    archived_status_repair.STASHED,
+    archived_status_repair.NOT_IN_GCS_LIST,
+    archived_status_repair.NO_SNAPSHOT,
+    archived_status_repair.RUN_AFTER_ARCHIVE,
+    archived_status_repair.ARCHIVE_IN_PROGRESS,
+)
+
+
+@router.get("/archived-status-repair", dependencies=[Depends(verify_api_key)])
+async def archived_status_repair_dry_run(
+    limit: int = Query(2000, ge=1, le=20000,
+                       description="Max crawl_job keys to scan. Counts below "
+                                   "describe the scanned subset only."),
+):
+    """Dry-run of the archived-status repair pass: what it WOULD flip, and why
+    each finished blob was rejected. Mirrors _repair_archived_status's
+    decision order (crawler_manager.py) so the counts here match what the
+    pass would actually do.
+
+    Read-only by construction: unlike the other /admin/* routes in this
+    module, this one deliberately does NOT take the job-lookup dependency
+    whose recovery path writes to Redis — that write path is the very defect
+    this whole feature repairs. Uses client.scan_iter directly rather than
+    cache_service.scan_keys_by_prefix, which swallows Redis errors into an
+    empty list and would report a false "zero candidates" instead of a 503.
+
+    Spec: docs/superpowers/specs/2026-08-07-archived-status-repair-design.md
+    """
+    client = cache_service.redis_client
+    if client is None:
+        raise HTTPException(status_code=503, detail="Redis not connected")
+
+    verified = crawler_manager._load_reclean_allowlist()
+
+    keys = []
+    truncated = False
+    async for key in client.scan_iter(match=f"{CRAWL_JOB_PREFIX}*", count=500):
+        keys.append(key)
+        if len(keys) >= limit:
+            truncated = True
+            break
+
+    blobs = []
+    if keys:
+        pipe = client.pipeline()
+        for key in keys:
+            pipe.get(key)
+        for raw in await pipe.execute():
+            if not raw:
+                continue
+            try:
+                blobs.append(json.loads(raw))
+            except (TypeError, ValueError):
+                continue
+
+    buckets = {name: 0 for name in _STATUS_REPAIR_BUCKETS}
+    candidates = []
+    stash_only_hint = 0
+    unreadable = 0
+
+    for blob in blobs:
+        crawl_id = blob.get("crawl_id")
+        if not crawl_id:
+            continue
+        storage_path = blob.get("storage_path") or os.path.join(
+            settings.CRAWLER_STORAGE_PATH, str(crawl_id))
+        try:
+            snapshot_mtime = _mtime_or_none(
+                os.path.join(storage_path, '_status_snapshot.json'))
+            log_mtime = _mtime_or_none(os.path.join(storage_path, 'crawler.log'))
+        except OSError:
+            unreadable += 1
+            continue
+
+        # No allowlist -> classify() against an empty set, so a finished/
+        # non-stashed blob always fails condition 3 (not_in_gcs_list) instead
+        # of silently passing — same fail-closed shape as the pass itself
+        # (_repair_archived_status returns 0 outright when verified is None).
+        reason = archived_status_repair.classify(
+            crawl_id=crawl_id,
+            status=blob.get("status"),
+            stashed_at=blob.get("stashed_at"),
+            verified_ids=verified or set(),
+            snapshot_mtime=snapshot_mtime,
+            log_mtime=log_mtime,
+        )
+        if reason == archived_status_repair.NOT_IN_GCS_LIST:
+            # Fails ONLY condition 3 => would be repairable if its tar were
+            # verified in GCS. Mostly stash-origin crawls (spec S7).
+            stash_only_hint += 1
+        if reason is not None:
+            buckets[reason] += 1
+            continue
+        if await crawler_manager._archive_lock_held(crawl_id):
+            buckets[archived_status_repair.ARCHIVE_IN_PROGRESS] += 1
+            continue
+        candidates.append(str(crawl_id))
+
+    return {
+        "verified_list_present": verified is not None,
+        "verified_ids_count": len(verified) if verified else 0,
+        "scanned": len(keys),
+        "truncated": truncated,
+        "unreadable_sidecars": unreadable,
+        "candidates": candidates,
+        "candidates_count": len(candidates),
+        "rejected": buckets,
+        "stash_only_hint": stash_only_hint,
+    }
