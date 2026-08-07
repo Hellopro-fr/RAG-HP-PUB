@@ -2,7 +2,7 @@
 
 import { HubIcon } from './primitives';
 import { openAssistantDialog } from './AssistantForm';
-import { openGuideDialog } from './GuideDownloadDialog';
+import { openGuideDialog } from '@/lib/hub/guideDialogEvent';
 import type { HubIconName } from '@/types/hub';
 
 /**

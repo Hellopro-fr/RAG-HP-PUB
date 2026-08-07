@@ -13,7 +13,13 @@ import { HubTitle } from './primitives';
 import { CoordinatesStep, DownloadStep } from './GuideSteps';
 import { useGuideLead } from '@/lib/hub/useGuideLead';
 import { isLeadKnown, markLeadKnown } from '@/lib/hub/leadEmailCookie';
+import { GUIDE_DIALOG_EVENT } from '@/lib/hub/guideDialogEvent';
 import type { HubGuideDialog } from '@/types/hub';
+
+// Re-export : l'opener vit dans un module léger (voir guideDialogEvent.ts) pour ne
+// pas embarquer ce dialog lourd dans le bundle des déclencheurs. Ré-exposé ici par
+// compatibilité d'API (importé tel quel par les tests).
+export { openGuideDialog } from '@/lib/hub/guideDialogEvent';
 
 /**
  * Dialog de téléchargement du guide — ouvert par tous les boutons « guide » de
@@ -27,22 +33,23 @@ import type { HubGuideDialog } from '@/types/hub';
  * `id_page_hub` = prop `idPageHub` (dérivée de l'id de la page, distincte du
  * projet — cf. `guideIdPageHub`). Le consentement reste purement front (non transmis).
  */
-const GUIDE_DIALOG_EVENT = 'hp:open-guide-dialog';
-
-/** Ouvre le dialog depuis n'importe où (client uniquement). */
-export function openGuideDialog() {
-  if (typeof window === 'undefined') return;
-  window.dispatchEvent(new CustomEvent(GUIDE_DIALOG_EVENT));
-}
-
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function GuideDownloadDialog({
   data,
   idPageHub,
+  autoOpenOnMount = false,
 }: {
   data: HubGuideDialog;
   idPageHub: number;
+  /**
+   * Ouvre le dialog dès le montage, comme si `hp:open-guide-dialog` venait d'être
+   * reçu. Utilisé quand le dialog est monté PARESSEUSEMENT en réponse à cet
+   * événement (cf. `HubOverlays`) : le chunk se charge en async, l'événement
+   * d'origine est donc manqué par le listener interne → on le rejoue ici. Défaut
+   * `false` : montage direct (page, tests) = comportement inchangé.
+   */
+  autoOpenOnMount?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [emailError, setEmailError] = useState('');
@@ -64,6 +71,9 @@ export function GuideDownloadDialog({
       }
     };
     window.addEventListener(GUIDE_DIALOG_EVENT, handler);
+    // Monté en réponse à l'événement mais après coup (chunk lazy) → on rejoue
+    // l'ouverture manquée. `reset` étant stable, cet effet ne s'exécute qu'au montage.
+    if (autoOpenOnMount) handler();
     return () => window.removeEventListener(GUIDE_DIALOG_EVENT, handler);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reset]);

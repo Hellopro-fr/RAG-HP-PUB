@@ -8,8 +8,7 @@ import { guideIdPageHub } from '@/data/hub';
 import { HubHero } from './HubHero';
 import { AssistantForm } from './AssistantForm';
 import { HubSectionNav } from './HubSectionNav';
-import { GuideDownloadDialog } from './GuideDownloadDialog';
-import { LeadPopup } from './LeadPopup';
+import { HubOverlays } from './HubOverlays';
 import { StickyCta } from './StickyCta';
 import { ValueProps } from './ValueProps';
 import { ThematiqueBloc } from './ThematiqueBloc';
@@ -140,13 +139,13 @@ export function HubTemplate({ page, headerCategories = [] }: HubTemplateProps) {
       <SiteFooter />
 
       {/* Surcouches : montées une seule fois, pilotées par événement window.
-          Les dialogs ne rendent rien tant qu'ils sont fermés (Radix Portal). */}
+          `HubOverlays` charge les dialogs guide + pop-up PARESSEUSEMENT (armés au
+          1er clic guide / 1er scroll) → hors du bundle initial, sans fenêtre morte. */}
       <StickyCta label={page.stickyCtaLabel} />
-      <GuideDownloadDialog data={page.guideDialog} idPageHub={guideIdPageHub(page.id)} />
-      <LeadPopup
-        data={page.leadPopup}
+      <HubOverlays
         guide={page.guideDialog}
-        idPageHub={guideIdPageHub(page.id)}
+        leadPopup={page.leadPopup}
+        guideIdPageHub={guideIdPageHub(page.id)}
       />
     </div>
   );

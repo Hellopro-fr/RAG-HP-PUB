@@ -12,7 +12,8 @@ vi.mock('next/image', () => ({
 }));
 
 // PhoneField encapsule react-international-phone (+ CSS) : mocké par un input simple.
-vi.mock('@/components/hub/PhoneField', () => ({
+// On mocke le WRAPPER lazy (chargé par GuideSteps) → jsdom n'importe jamais la lib.
+vi.mock('@/components/hub/PhoneFieldLazy', () => ({
   PhoneField: ({
     value,
     ariaLabel,

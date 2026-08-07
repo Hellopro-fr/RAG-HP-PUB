@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import { ArrowRight, Download, MapPin, ShieldCheck, User } from 'lucide-react';
-import { PhoneField } from './PhoneField';
+import { PhoneField } from './PhoneFieldLazy';
 import { Confetti } from './Confetti';
 import { useAutoDownload } from '@/lib/hub/useAutoDownload';
 import type { HubGuideDialog } from '@/types/hub';

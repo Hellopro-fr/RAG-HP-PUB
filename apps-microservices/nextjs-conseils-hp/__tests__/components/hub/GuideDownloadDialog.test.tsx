@@ -6,7 +6,8 @@ import { markLeadKnown } from '@/lib/hub/leadEmailCookie';
 
 // PhoneField encapsule react-international-phone (+ CSS) : on le mocke par un input
 // simple qui remonte toujours le pays « France » / indicatif « 33 ».
-vi.mock('@/components/hub/PhoneField', () => ({
+// On mocke le WRAPPER lazy (chargé par GuideSteps) → jsdom n'importe jamais la lib.
+vi.mock('@/components/hub/PhoneFieldLazy', () => ({
   PhoneField: ({
     value,
     ariaLabel,

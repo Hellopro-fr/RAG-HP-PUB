@@ -409,7 +409,6 @@ export interface HubLeadPopup {
   emailPlaceholder: string;
   submitLabel: string;
   reassurance: string;
-  successMessage: string;
   /** Visuel du guide, colonne de gauche. */
   image?: HubImage;
   /** Bandeau photo en tête de la pop-up, pleine largeur. */

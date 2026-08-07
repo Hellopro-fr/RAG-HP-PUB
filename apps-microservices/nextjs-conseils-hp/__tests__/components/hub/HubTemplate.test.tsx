@@ -32,12 +32,24 @@ vi.mock('@/components/hub/AssistantForm', () => ({
 vi.mock('@/components/hub/HubSectionNav', () => ({
   HubSectionNav: () => <nav data-testid="section-nav" />,
 }));
+// `GuideDownloadDialog` n'est plus monté directement (il passe par `HubOverlays`,
+// mocké ci-dessous) et `triggers.tsx` importe l'opener depuis le module léger
+// `guideDialogEvent`. Ce mock reste par PRÉCAUTION : si un import résiduel pointait
+// encore vers le vrai module, il ne chargerait pas ses dépendances lourdes en jsdom.
 vi.mock('@/components/hub/GuideDownloadDialog', () => ({
   GuideDownloadDialog: () => <div data-testid="guide-dialog" />,
   openGuideDialog: () => {},
 }));
-vi.mock('@/components/hub/LeadPopup', () => ({
-  LeadPopup: () => <div data-testid="lead-popup" />,
+// Les surcouches guide + pop-up sont désormais montées PARESSEUSEMENT par
+// `HubOverlays` (armées au clic/scroll, donc absentes d'un rendu de test statique).
+// On le mocke par les deux marqueurs pour que ce test reste un test de COMPOSITION.
+vi.mock('@/components/hub/HubOverlays', () => ({
+  HubOverlays: () => (
+    <>
+      <div data-testid="guide-dialog" />
+      <div data-testid="lead-popup" />
+    </>
+  ),
 }));
 vi.mock('@/components/hub/StickyCta', () => ({
   StickyCta: () => <div data-testid="sticky-cta" />,

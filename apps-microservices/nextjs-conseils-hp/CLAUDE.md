@@ -666,6 +666,9 @@ components/hub/
   HowItWorks.tsx / AccompagnementSplit.tsx / FinalCta.tsx
   AssistantForm.tsx      'use client' — étape 1 inline dans le hero, suite en dialog
   GuideDownloadDialog.tsx / LeadPopup.tsx / StickyCta.tsx   'use client' — surcouches
+  HubOverlays.tsx        'use client' — charge guide+pop-up en LAZY (ssr:false),
+                         armés au 1er clic guide / 1er scroll (hors bundle initial,
+                         sans fenêtre morte grâce à `autoOpenOnMount` du dialog guide)
   triggers.tsx           'use client' — GuideButton / AssistantButton
 components/ui/dialog.tsx  primitive Radix (écrite à la main, pas via la CLI shadcn)
 lib/hub/sanitize.ts       allowlist stricte, zéro attribut conservé
@@ -716,8 +719,13 @@ Objectif : valider la rentabilité du workflow, pas livrer une V1.
   international** via
   `components/hub/PhoneField.tsx` (`react-international-phone`, indicateur pays),
   **Code postal**. Le **pays** choisi dans l'indicateur est envoyé dans
-  `coordonnees.pays`. `PhoneField` est mocké dans les tests (isole
-  la lib + son CSS) — pense à `npm install react-international-phone`.
+  `coordonnees.pays`. ⚡ **Chargé en LAZY** via `components/hub/PhoneFieldLazy.tsx`
+  (`next/dynamic`, `ssr:false`) : `react-international-phone` (+ son CSS) est la lib
+  la plus lourde du HUB mais ne sert qu'à l'étape coordonnées → sortie du bundle
+  initial (gain INP/TBT), son chunk n'est chargé qu'à l'affichage du champ.
+  `AssistantForm` et `GuideSteps` importent donc depuis `PhoneFieldLazy`, et les
+  tests mockent `@/components/hub/PhoneFieldLazy` (isole la lib + son CSS) — pense à
+  `npm install react-international-phone`.
   ⚠️ **2 colonnes serveur à créer** : `coordonnees.civilite` et `coordonnees.pays`
   (déclarées dans le Zod de la route pour ne pas être supprimées ; le serveur les
   ignore tant que les colonnes n'existent pas). `nom_prenom`/`telephone`/
