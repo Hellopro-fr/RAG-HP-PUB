@@ -6,6 +6,10 @@ from functools import wraps
 from typing import Callable, Any, TypeVar, ParamSpec, Optional, Dict, List
 
 import redis.asyncio as redis
+from redis.asyncio.retry import Retry
+from redis.backoff import ExponentialBackoff
+from redis.exceptions import ConnectionError as RedisConnectionError
+from redis.exceptions import TimeoutError as RedisTimeoutError
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -22,6 +26,15 @@ DEFAULT_MAX_CONNECTIONS = 20
 DEFAULT_SOCKET_TIMEOUT_S = 10
 DEFAULT_SOCKET_CONNECT_TIMEOUT_S = 5
 DEFAULT_HEALTH_CHECK_INTERVAL_S = 30
+# Redis reaps idle connections server-side (CONFIG timeout=300). The pool keeps
+# handing the reaped sockets out; health_check_interval only turns the failure
+# into a failed PING, it does not heal it. Passing no retry leaves redis-py at
+# Retry(NoBackoff(), 0) with an empty retry_on_error (verified on 5.2.1), so the
+# first command on a reaped socket raises. One retry is enough to reconnect —
+# three costs ~0.35s worst case and covers a restart blip too.
+DEFAULT_RETRY_ATTEMPTS = 3
+DEFAULT_RETRY_BACKOFF_BASE_S = 0.05
+DEFAULT_RETRY_BACKOFF_CAP_S = 1.0
 
 
 def _replica_name() -> str:
@@ -111,6 +124,16 @@ async def init_redis_pool():
             socket_timeout=sock_to,
             health_check_interval=health_iv,
             client_name=client_name,
+            retry=Retry(
+                ExponentialBackoff(
+                    cap=DEFAULT_RETRY_BACKOFF_CAP_S,
+                    base=DEFAULT_RETRY_BACKOFF_BASE_S,
+                ),
+                DEFAULT_RETRY_ATTEMPTS,
+            ),
+            # Required: without it _disconnect_raise re-raises before the retry
+            # loop gets a second attempt.
+            retry_on_error=[RedisConnectionError, RedisTimeoutError],
         )
         await redis_client.ping()
         # Register Lua scripts for EVALSHA-based execution (avoids sending raw Lua on every call)
@@ -150,14 +173,18 @@ async def set_json(key: str, data: Dict[str, Any], ttl: Optional[int] = None):
     except Exception as e:
         logger.error(f"Failed to set JSON for key '{key}' in Redis: {e}", exc_info=True)
 
-async def set_json_nx(key: str, data: Dict[str, Any]) -> bool:
+async def set_json_nx(key: str, data: Dict[str, Any], ttl: Optional[int] = None) -> bool:
     """Atomically sets a key only if it does not already exist (SET NX).
-    Returns True if the key was set, False if it already existed."""
+    Returns True if the key was set, False if it already existed.
+
+    `ttl` (seconds) applies only to the key this call creates — SET NX with EX
+    is a single round trip, so an existing key keeps its own expiry untouched.
+    """
     if not redis_client:
         raise ConnectionError("Redis is not connected.")
     try:
         value = json.dumps(data, default=str)
-        result = await redis_client.set(key, value, nx=True)
+        result = await redis_client.set(key, value, nx=True, ex=ttl)
         return result is True
     except Exception as e:
         logger.error(f"Failed to SET NX for key '{key}' in Redis: {e}", exc_info=True)
