@@ -316,8 +316,11 @@ Columns returned:
 
 Returns one row per referring domain, showing which of up to five compared domains it links
 to. Use it to find domains that link to competitors but not to you. This is the one
-`multi`-shaped report: it takes `targets`/`target_types` arrays instead of a single
-`target`/`target_type`, so each is sent to Semrush as a repeated query parameter.
+`multi`-shaped report: the caller supplies a `targets` array and a single `target_type`
+(applied to every entry in `targets`) instead of one `target`/`target_type` pair. On the
+wire, that single `target_type` is fanned out into one repeated `target_types=` query
+parameter per target — but `target_types` (plural) is only ever a Semrush wire-format
+detail, never a parameter the caller sets.
 
 | Parameter | Type | Required | Default | Notes |
 |---|---|---|---|---|
