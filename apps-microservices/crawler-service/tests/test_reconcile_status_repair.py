@@ -131,7 +131,9 @@ async def test_repairs_and_hands_the_job_to_the_reclean(repair_on):
     job = _job()
     with patch.object(CrawlerManager, "_mark_as_archived", AsyncMock()) as mark, \
          patch.object(CrawlerManager, "_archive_lock_held", AsyncMock(return_value=False)), \
-         patch("app.core.crawler_manager.os.path.getmtime", side_effect=_stat_map()):
+         patch("app.core.crawler_manager.os.path.getmtime", side_effect=_stat_map()), \
+         patch("app.core.crawler_manager.cache_service.get_json",
+               AsyncMock(return_value={"crawl_id": "6712", "status": "finished"})):
         n = await mgr._repair_archived_status([job], {"6712"}, archived)
     assert n == 1
     mark.assert_awaited_once_with("6712")
@@ -146,10 +148,65 @@ async def test_respects_the_per_tick_cap(repair_on, monkeypatch):
     jobs = [_job(crawl_id=str(i)) for i in range(5)]
     with patch.object(CrawlerManager, "_mark_as_archived", AsyncMock()) as mark, \
          patch.object(CrawlerManager, "_archive_lock_held", AsyncMock(return_value=False)), \
-         patch("app.core.crawler_manager.os.path.getmtime", side_effect=_stat_map()):
+         patch("app.core.crawler_manager.os.path.getmtime", side_effect=_stat_map()), \
+         patch("app.core.crawler_manager.cache_service.get_json",
+               AsyncMock(return_value={"status": "finished"})):
         n = await mgr._repair_archived_status(jobs, {str(i) for i in range(5)}, [])
     assert n == 2
     assert mark.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_stale_relaunched_job_is_not_repaired(repair_on):
+    """The predicate judged a snapshot taken at scan time, possibly thousands of
+    blobs (and awaits) ago. A fresh re-read showing the crawl is no longer
+    'finished' (e.g. relaunched to 'running') must veto the write — otherwise a
+    live crawl gets flipped to 'archived' out from under its own process."""
+    mgr = CrawlerManager()
+    archived = []
+    with patch.object(CrawlerManager, "_mark_as_archived", AsyncMock()) as mark, \
+         patch.object(CrawlerManager, "_archive_lock_held", AsyncMock(return_value=False)), \
+         patch("app.core.crawler_manager.os.path.getmtime", side_effect=_stat_map()), \
+         patch("app.core.crawler_manager.cache_service.get_json",
+               AsyncMock(return_value={"crawl_id": "6712", "status": "running"})):
+        n = await mgr._repair_archived_status([_job()], {"6712"}, archived)
+    assert n == 0
+    mark.assert_not_awaited()
+    assert archived == []
+
+
+@pytest.mark.asyncio
+async def test_vanished_job_is_not_repaired(repair_on):
+    """cache_service.get_json returns None for BOTH 'absent' and 'read errored' —
+    either way, a repair must not proceed on it."""
+    mgr = CrawlerManager()
+    archived = []
+    with patch.object(CrawlerManager, "_mark_as_archived", AsyncMock()) as mark, \
+         patch.object(CrawlerManager, "_archive_lock_held", AsyncMock(return_value=False)), \
+         patch("app.core.crawler_manager.os.path.getmtime", side_effect=_stat_map()), \
+         patch("app.core.crawler_manager.cache_service.get_json",
+               AsyncMock(return_value=None)):
+        n = await mgr._repair_archived_status([_job()], {"6712"}, archived)
+    assert n == 0
+    mark.assert_not_awaited()
+    assert archived == []
+
+
+@pytest.mark.asyncio
+async def test_archive_lock_absent_is_not_held():
+    mgr = CrawlerManager()
+    fake = AsyncMock()
+    fake.exists = AsyncMock(return_value=0)
+    with patch("app.core.crawler_manager.cache_service.redis_client", fake):
+        assert await mgr._archive_lock_held("6712") is False
+    fake.exists.assert_awaited_once_with("archive_lock:6712")
+
+
+@pytest.mark.asyncio
+async def test_no_redis_client_is_fail_closed():
+    mgr = CrawlerManager()
+    with patch("app.core.crawler_manager.cache_service.redis_client", None):
+        assert await mgr._archive_lock_held("6712") is True
 
 
 @pytest.mark.asyncio

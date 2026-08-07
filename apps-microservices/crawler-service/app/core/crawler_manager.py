@@ -4064,9 +4064,17 @@ class CrawlerManager:
                         f"status-repair: '{crawl_id}' skipped — archive in progress.")
                     continue
 
+                # The predicate judged a snapshot taken at scan time, possibly
+                # thousands of blobs ago; only the mtimes were read live. Re-read
+                # the two mutable fields it relied on, so a crawl relaunched since
+                # the scan is not flipped out from under its own running process.
+                fresh = await cache_service.get_json(f"{CRAWL_JOB_PREFIX}{crawl_id}")
+                if not fresh or fresh.get("status") != "finished" or fresh.get("stashed_at"):
+                    continue
+
+                await self._mark_as_archived(crawl_id)
                 logger.info(
                     f"ARCHIVED_STATUS_REPAIR crawl_id={crawl_id} finished->archived")
-                await self._mark_as_archived(crawl_id)
                 # Mirror the write locally so the reclean, which runs next on this
                 # same list, sees an 'archived' job.
                 job_data["status"] = "archived"
