@@ -69,6 +69,38 @@ Trois conclusions, toutes portantes :
 
 **Faiblesse de cette mesure, et raison du choix d'observation** : six textes courts, dont quatre rédigés par l'assistant. Le seuil de 5 est plausible, pas éprouvé. C'est pourquoi le volet B est livré **inerte** (§5).
 
+---
+
+**Correction du 2026-08-10 (post-implémentation).** Les chiffres du tableau
+ci-dessus — en particulier les valeurs 15, 9, 0.761 et 1.000 (PT) — viennent
+d'extraits qui n'ont **pas été conservés** mot pour mot : ils ne sont pas
+reproductibles et ne doivent plus être cités comme référence. L'implémenteur
+et le relecteur du volet B ont chacun, **indépendamment**, rejoué
+`_compute_french_signal` et `_count_french_exclusive_distinct` sur les
+échantillons durables du dépôt (`tests/test_lexical_observation.py`), avec
+accord exact entre les deux mesures :
+
+| Échantillon | signal agrégé (`french_signal`) | exclusifs distincts |
+|---|---|---|
+| FR (prose) | 1.000 | **8** |
+| ES (prose) | 0.833 | 0 |
+| PT (prose) | 0.814 | 1 (`mais`) |
+| IT (prose) | 0.417 | 0 |
+| EN (prose) | 0.000 | 0 |
+| FR catalogue (sans prose) | 0.000 | 0 |
+
+C'est cette table qu'il faut citer désormais, pas les 15/9/0.761/1.000
+d'origine — ceux-ci restent ci-dessus comme trace de ce qui a motivé la
+décision au moment où elle a été prise, non comme référence chiffrée. Les
+conclusions ne changent pas : la conclusion 1 (score agrégé inutilisable comme
+discriminant) est même **renforcée** — l'espagnol mesuré à 0.833 dépasse le
+plancher `> 0.3` du Cas 8 encore plus largement que le 0.761 d'origine. La
+conclusion 2 (le compte de distincts sépare nettement) tient aussi : 8 pour le
+français contre 0 ou 1 pour tout le reste. La conclusion 3 (`mais` faussement
+exclusif, seuil à 1 invalide) est inchangée. Table publiée aussi dans le
+`CLAUDE.md` du service, section « Lexical-Signal Observation at Case 9
+(inert) ».
+
 ## 4. Volet A — rattrapage par variante d'URL (actif)
 
 **Emplacement** : `_detect_single_url` dans `app/api/routes.py`, juste après le premier `check_page_if_french` (`:400`). C'est le seul point où le verdict et l'URL demandée coexistent.
