@@ -193,6 +193,10 @@ _ENV_WHITELIST_PREFIXES = (
     "PROGRESS_", "REDIS_LOSS", "REDIS_MAX", "REDIS_SOCKET", "REDIS_HEALTH",
     "NODE_OPTIONS", "MAX_CONCURRENT", "DEFAULT_MAX_GLOBAL", "AUTO_STASH",
     "STASH_", "QUEUE_", "CONTENT_EXTRACTOR", "DATASET_",
+    # ARCHIVED_ gates an irreversible rmtree; seeing the RAW env value next to
+    # the resolved setting is how an operator tells "compose default" from
+    # "someone's .env override" before arming it.
+    "ARCHIVED_",
 )
 # Compose env vars deliberately NOT exposed by /admin/config. Add here ONLY
 # with a justification comment; anything diagnostic belongs in the whitelist.

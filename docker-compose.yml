@@ -1402,6 +1402,15 @@ services:
       - STASH_SAFETY_TIMEOUT_SECONDS=${STASH_SAFETY_TIMEOUT_SECONDS:-172800}
       - STASH_DISK_HIGH_WATER_PCT=${STASH_DISK_HIGH_WATER_PCT:-85}
       - STASH_MAX_PER_SWEEP=${STASH_MAX_PER_SWEEP:-5}
+      # The two archival gates, pinned here ON PURPOSE. ARCHIVED_RECLEAN_ENABLED
+      # defaults to True in code (app/core/config.py:110) and its body runs
+      # shutil.rmtree on a crawl's storage/ subtree with no undo, so until today
+      # the only thing holding it back was an unversioned override in the VM's
+      # .env — invisible, and lost the moment a recreate drops it. These lines
+      # invert that: absent any override, compose supplies false. Never change
+      # these defaults to true; arm per-environment via the .env instead.
+      - ARCHIVED_RECLEAN_ENABLED=${ARCHIVED_RECLEAN_ENABLED:-false}
+      - ARCHIVED_STATUS_REPAIR_ENABLED=${ARCHIVED_STATUS_REPAIR_ENABLED:-false}
       - TIMING_ENABLED=${TIMING_ENABLED:-true}
       - TIMING_SAMPLE_INTERVAL_MS=${TIMING_SAMPLE_INTERVAL_MS:-5000}
     deploy:
