@@ -101,18 +101,29 @@ async def _variant_rescue(
     mode: DetectionMode,
     use_nlp_detection: bool,
     forced_method: Optional[str],
+    elapsed_s: float,
 ) -> Optional[DetectionResponse]:
     """Re-teste les formes http/https et www/apex de `url`, rend le premier
     verdict français obtenu.
 
     Rend `None` — donc « garde le verdict d'origine » — dans TOUS les autres
-    cas : budget nul, aucune variante, sonde en échec, sonde en timeout, page
-    de challenge, aucune variante française. Un rattrapage ne doit jamais
-    dégrader un verdict : le transformer en `error` par un timeout serait pire
-    que le faux négatif qu'il corrige, puisqu'`error` n'est ni re-tenté en
-    Pass 2 ni porteur d'une cause.
+    cas : budget nul ou épuisé par l'item, aucune variante, sonde en échec,
+    sonde en timeout, exception QUELCONQUE pendant l'analyse d'une variante,
+    page invalide, page de challenge, aucune variante française. Un
+    rattrapage ne doit jamais dégrader un verdict : le transformer en `error`
+    par un timeout ou une exception serait pire que le faux négatif qu'il
+    corrige, puisqu'`error` n'est ni re-tenté en Pass 2 ni porteur d'une cause.
+
+    `elapsed_s` = temps déjà écoulé pour CET item (fetch primaire + validation
+    + stub-hop éventuel) : le budget effectif est plafonné par ce qu'il reste
+    avant _ITEM_WALL_CLOCK_S, pas seulement par VARIANT_RESCUE_BUDGET_S — sans
+    ça, un item déjà proche des 300s du wait_for() appelant se ferait pousser
+    par-dessus par le rattrapage lui-même.
     """
-    budget = settings.VARIANT_RESCUE_BUDGET_S
+    budget = min(
+        settings.VARIANT_RESCUE_BUDGET_S,
+        _ITEM_WALL_CLOCK_S - elapsed_s - _RESCUE_MARGIN_S,
+    )
     if budget <= 0:
         return None
 
@@ -123,7 +134,7 @@ async def _variant_rescue(
     deadline = time.monotonic() + budget
     for variant in variants:
         remaining = deadline - time.monotonic()
-        if remaining <= 0:
+        if remaining < _MIN_PROBE_S:
             logger.info(f"[VARIANT-RESCUE] budget épuisé pour {url}")
             VARIANT_RESCUE_OUTCOME.labels(outcome="budget_exhausted").inc()
             return None
@@ -139,7 +150,58 @@ async def _variant_rescue(
                 scrape_html(variant, proxy=proxy_url or settings.APIFY_PROXY),
                 timeout=remaining,
             )
+
+            if not fetch or not fetch.html:
+                continue
+
+            if settings.INVALID_PAGE_DETECTION_ENABLED and validate_page(
+                fetch, requested_url=variant
+            ) != ValidationVerdict.VALID:
+                # Le primaire rejette http_error/soft_404/redirected_to_home —
+                # une variante ne doit pas ouvrir une porte que le chemin
+                # normal ferme (ex. 404/500 au corps français, faux-positif).
+                logger.info(f"[VARIANT-RESCUE] {variant} : page invalide, ignorée")
+                continue
+
+            challenge = detect_challenge_page(fetch.html)
+            if challenge:
+                logger.info(f"[VARIANT-RESCUE] {variant} : page {challenge}, ignorée")
+                continue
+
+            variant_final = fetch.final_url or variant
+            # validate_alternatives=False, en dur : la question posée est « CETTE
+            # forme d'URL est-elle française ? », pas « expose-t-elle une
+            # alternative française ? » — la chasse aux alternatives a déjà eu lieu
+            # sur la forme d'origine, avec le réglage de l'appelant. Sans ce faux,
+            # la boucle du Cas 6 ouvrirait des navigateurs supplémentaires HORS du
+            # budget (jusqu'à 120s par alternative), et l'annuler en pleine
+            # navigation ré-ouvrirait le flood de callbacks orphelins que le commentaire
+            # de domain_fr.py:1451-1459 documente.
+            detector = DomainFR(
+                homepage=variant_final,
+                forced_method=forced_method,
+                use_nlp_detection=use_nlp_detection,
+                original_homepage=url,
+                validate_alternatives=False,
+            )
+            candidate = await detector.check_page_if_french(fetch.html, mode)
+            if not candidate.ok:
+                continue
+
+            candidate.analyzed_url = variant_final
+            candidate.method = f"{candidate.method}+variant_rescue"
+            logger.info(
+                f"[VARIANT-RESCUE] OK {url} via {variant_final} ({candidate.method})"
+            )
+            VARIANT_RESCUE_OUTCOME.labels(outcome="success").inc()
+            return candidate
         except Exception as e:
+            # Le try couvre TOUTE l'analyse de la variante (fetch + validation +
+            # DomainFR/NLP), pas seulement le fetch : check_page_if_french tourne
+            # BeautifulSoup et le stack NLP sur du HTML tiers arbitraire, et une
+            # exception qui s'en échapperait remonterait jusqu'au handler batch
+            # générique, qui transforme le Check_nok_v2 d'origine en method='error'
+            # — exactement la dégradation que ce helper promet de ne jamais causer.
             # Y compris asyncio.TimeoutError : une sonde ratée n'est pas un
             # échec de la détection, c'est l'absence d'un rattrapage.
             # `Exception` et non `BaseException` : asyncio.CancelledError dérive
@@ -148,42 +210,6 @@ async def _variant_rescue(
             # française ».
             logger.info(f"[VARIANT-RESCUE] {variant} : sonde en échec ({e!r})")
             continue
-
-        if not fetch or not fetch.html:
-            continue
-
-        challenge = detect_challenge_page(fetch.html)
-        if challenge:
-            logger.info(f"[VARIANT-RESCUE] {variant} : page {challenge}, ignorée")
-            continue
-
-        variant_final = fetch.final_url or variant
-        # validate_alternatives=False, en dur : la question posée est « CETTE
-        # forme d'URL est-elle française ? », pas « expose-t-elle une
-        # alternative française ? » — la chasse aux alternatives a déjà eu lieu
-        # sur la forme d'origine, avec le réglage de l'appelant. Sans ce faux,
-        # la boucle du Cas 6 ouvrirait des navigateurs supplémentaires HORS du
-        # budget (jusqu'à 120s par alternative), et l'annuler en pleine
-        # navigation ré-ouvrirait le flood de callbacks orphelins que le commentaire
-        # de domain_fr.py:1451-1459 documente.
-        detector = DomainFR(
-            homepage=variant_final,
-            forced_method=forced_method,
-            use_nlp_detection=use_nlp_detection,
-            original_homepage=url,
-            validate_alternatives=False,
-        )
-        candidate = await detector.check_page_if_french(fetch.html, mode)
-        if not candidate.ok:
-            continue
-
-        candidate.analyzed_url = variant_final
-        candidate.method = f"{candidate.method}+variant_rescue"
-        logger.info(
-            f"[VARIANT-RESCUE] OK {url} via {variant_final} ({candidate.method})"
-        )
-        VARIANT_RESCUE_OUTCOME.labels(outcome="success").inc()
-        return candidate
 
     VARIANT_RESCUE_OUTCOME.labels(outcome="no_variant_french").inc()
     return None
@@ -199,6 +225,24 @@ _PASS2_RETRYABLE_METHODS = (
     'fetch_failed', 'challenge_page', 'admission_rejected',
     'http_error_transient', 'fetch_empty_content',
 )
+
+# Plafond horloge par item, imposé par les quatre wait_for() du batch ci-dessus
+# (Pass 1 process_single/process_group, Pass 2 séquentiel/first_match) qui
+# transforment déjà un dépassement en method='error' ("Timeout global item
+# (300s)"). Une seule constante remplace les quatre littéraux dupliqués — le
+# rattrapage [4bis] doit connaître ce même plafond pour ne pas pousser un item
+# par-dessus.
+_ITEM_WALL_CLOCK_S = 300
+
+# Marge retirée du temps restant avant de lancer le rattrapage : celui-ci doit
+# se terminer confortablement avant le wait_for(_ITEM_WALL_CLOCK_S) de
+# l'appelant, jamais pile à la limite.
+_RESCUE_MARGIN_S = 15
+
+# Sous ce seuil, une sonde a plus de chances d'être annulée en pleine
+# navigation que de répondre — et une navigation annulée est la condition des
+# callbacks de protocole orphelins documentée par domain_fr.py:1451-1459.
+_MIN_PROBE_S = 30
 
 
 def _normalize_url_for_dedup(url: str) -> str:
@@ -279,6 +323,7 @@ async def _detect_single_url(
     validate_alternatives: bool = True,
 ) -> DetectionResponse:
     """Pipeline de détection FR pour une URL unique."""
+    t0 = time.monotonic()  # budget du rattrapage [4bis] = ce qui reste du plafond batch
     effective_url = url
     html_was_provided = html_content is not None
     fetch_result: Optional[ScrapeResult] = None
@@ -510,6 +555,7 @@ async def _detect_single_url(
     if not html_was_provided and result.method in _VARIANT_RESCUE_METHODS:
         rescued = await _variant_rescue(
             url, proxy_url, mode, use_nlp_detection, forced_method,
+            time.monotonic() - t0,
         )
         if rescued:
             result = rescued
@@ -688,7 +734,7 @@ async def _run_batch_core(
             await asyncio.sleep(min(index * 0.5, max_stagger))
         async with semaphore:
             try:
-                return await asyncio.wait_for(_process_item_core(item), timeout=300)
+                return await asyncio.wait_for(_process_item_core(item), timeout=_ITEM_WALL_CLOCK_S)
             except asyncio.TimeoutError:
                 count = await _increment_count()
                 logger.error(f"[BATCH] [{count}/{total_items}] TIMEOUT {item.url} après 300s")
@@ -735,7 +781,7 @@ async def _run_batch_core(
             for item in group_items:
                 try:
                     async with semaphore:
-                        result = await asyncio.wait_for(_process_item_core(item), timeout=300)
+                        result = await asyncio.wait_for(_process_item_core(item), timeout=_ITEM_WALL_CLOCK_S)
                 except asyncio.TimeoutError:
                     result = DetectionResponse(
                         ok=False, url=item.url, method='error',
@@ -773,7 +819,7 @@ async def _run_batch_core(
                     async with semaphore:
                         retry_result = await asyncio.wait_for(
                             _process_item_core(item, force_refresh_override=True),
-                            timeout=300,
+                            timeout=_ITEM_WALL_CLOCK_S,
                         )
                     if retry_result.ok:
                         group_results[i] = _with_group(retry_result, group_key)
@@ -846,7 +892,7 @@ async def _run_batch_core(
                     # batch entier (le Pass 1 est borné, le Pass 2 doit l'être).
                     retry_result = await asyncio.wait_for(
                         _process_item_core(item, force_refresh_override=True),
-                        timeout=300,
+                        timeout=_ITEM_WALL_CLOCK_S,
                     )
                 if retry_result.method not in _PASS2_RETRYABLE_METHODS:
                     results[idx] = retry_result

@@ -33,9 +33,23 @@ vos projets, depuis le premier releve sur place jusqu'a la mise en service des
 installations. Nous intervenons aussi pour le depannage et l'entretien.
 </p></body></html>"""
 
-HTML_CHALLENGE = """<html><head><title>Just a moment...</title></head>
-<body><div id="cf-wrapper">Checking your browser before accessing the site.
-DDoS protection by Cloudflare</div></body></html>"""
+# Cloudflare Turnstile réel (ancre chl_page/v1 + confirmation `<title>un
+# instant`, cf. language_detector.py:54-63) — ET lang="fr" + prose française
+# nette : si le garde challenge de _variant_rescue disparaissait, ce contenu
+# se ferait accepter comme rattrapage FR à tort. Une page challenge purement
+# anglaise (l'ancien fixture) passait le test même sans le garde, puisque son
+# contenu échouait déjà la détection FR pour une autre raison — ce fixture ne
+# passe QUE grâce au garde.
+HTML_CHALLENGE = """<html lang="fr"><head><title>Un instant...</title></head>
+<body>
+<script src="/cdn-cgi/challenge-platform/h/g/orchestrate/chl_page/v1?ray=abc123"></script>
+<div id="cf-wrapper">
+Nous verifions que vous n'etes pas un robot avant de vous laisser continuer
+vers notre catalogue de produits industriels. Merci de patienter quelques
+instants : cette verification protege nos clients contre les robots
+malveillants et les tentatives d'acces frauduleuses a notre site.
+</div>
+</body></html>"""
 
 
 def _scrape(html, final_url=URL, status_code=200):
@@ -45,10 +59,11 @@ def _scrape(html, final_url=URL, status_code=200):
 @pytest.fixture(autouse=True)
 def _rescue_on(monkeypatch):
     """Budget généreux par défaut ; chaque test le resserre s'il le veut."""
-    monkeypatch.setattr(settings, "VARIANT_RESCUE_BUDGET_S", 120, raising=False)
+    monkeypatch.setattr(settings, "VARIANT_RESCUE_BUDGET_S", 120)
 
 
-async def _detect(primary, probe, url=URL, html_content=None, cache_set=None):
+async def _detect(primary, probe, url=URL, html_content=None, cache_set=None,
+                   forced_method=None):
     """Lance _detect_single_url avec le fetch primaire et les sondes stubés.
 
     `force_refresh=True` court-circuite la lecture de cache ET le dedup
@@ -61,6 +76,7 @@ async def _detect(primary, probe, url=URL, html_content=None, cache_set=None):
          patch("app.api.routes.domain_cache.set", cache_set):
         return await _detect_single_url(
             url=url, html_content=html_content, force_refresh=True,
+            forced_method=forced_method,
         )
 
 
@@ -117,17 +133,25 @@ async def test_kill_switch_budget_zero(monkeypatch):
 async def test_budget_depasse_rend_le_verdict_dorigine(monkeypatch):
     """Invariant central : un rattrapage ne dégrade JAMAIS un verdict.
     Sans ce garde, une sonde lente pousserait l'item vers le wait_for de 300s
-    et transformerait un Check_nok_v2 en error — pire que le défaut corrigé."""
-    monkeypatch.setattr(settings, "VARIANT_RESCUE_BUDGET_S", 1, raising=False)
+    et transformerait un Check_nok_v2 en error — pire que le défaut corrigé.
+
+    Budget=31 : la 1re variante voit remaining≈31s (>= _MIN_PROBE_S=30) → la
+    sonde est lancée. Elle répond (EN, donc pas de rattrapage) après 1.2s
+    réelles — pas de TimeoutError, `remaining` (31) couvrait large le sleep.
+    Avant la 2e variante, remaining≈31-1.2≈29.8s (< _MIN_PROBE_S) → la boucle
+    s'arrête sur budget_exhausted SANS sonder la 2e/3e variante : une seule
+    sonde au total, pas trois."""
+    monkeypatch.setattr(settings, "VARIANT_RESCUE_BUDGET_S", 31, raising=False)
     primary = AsyncMock(return_value=_scrape(HTML_EN))
 
     async def slow_probe(*a, **kw):
-        await asyncio.sleep(3)
-        return _scrape(HTML_FR)
+        await asyncio.sleep(1.2)
+        return _scrape(HTML_EN)
 
     probe = AsyncMock(side_effect=slow_probe)
     res = await _detect(primary, probe)
 
+    assert probe.call_count == 1
     assert res.ok is False
     assert res.method == "Check_nok_v2"
     assert res.error is None or "imeout" not in (res.error or "")
@@ -135,13 +159,40 @@ async def test_budget_depasse_rend_le_verdict_dorigine(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_verdict_hors_perimetre_ne_sonde_pas():
-    """http_error (404) est une propriété de la page, pas de la forme d'URL."""
+    """http_error (404) est une propriété de la page, pas de la forme d'URL.
+
+    Ce cas revient de la branche [3] invalid-page, bien AVANT le bloc [4bis] —
+    il ne prouve donc rien sur le filtre `in _VARIANT_RESCUE_METHODS` lui-même
+    (voir test_verdict_forced_hors_perimetre_atteint_le_point_de_decision
+    ci-dessous pour un verdict qui, lui, atteint ce filtre)."""
     primary = AsyncMock(return_value=_scrape("<html><body>Not Found</body></html>",
                                              status_code=404))
     probe = AsyncMock(return_value=_scrape(HTML_FR))
 
     await _detect(primary, probe)
 
+    assert probe.call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_verdict_forced_hors_perimetre_atteint_le_point_de_decision():
+    """Contrepartie du test ci-dessus : celui-ci prouve le retour précoce
+    (avant le bloc [4bis]) ; celui-ci prouve que le filtre
+    `result.method in _VARIANT_RESCUE_METHODS` du bloc [4bis] est bien
+    ÉVALUÉ mais rend faux pour un verdict hors périmètre.
+
+    forced_method="langHtml" sur HTML_EN (`<html lang="en">`) : le tag HTML ne
+    confirme pas le forced_method en français (domain_fr.py:1179, value="en"
+    != "fr") → tombe dans l'else déterministe (domain_fr.py:1242-1246) →
+    method='Check_nok_forced', qui n'est PAS dans _VARIANT_RESCUE_METHODS
+    (seuls Check_nok_v2 et fetch_empty_content y figurent) — purement
+    regex-based, aucune dépendance au stack NLP local."""
+    primary = AsyncMock(return_value=_scrape(HTML_EN))
+    probe = AsyncMock(return_value=_scrape(HTML_FR))
+
+    res = await _detect(primary, probe, forced_method="langHtml")
+
+    assert res.method == "Check_nok_forced"
     assert probe.call_count == 0
 
 
