@@ -3995,7 +3995,7 @@ class CrawlerManager:
         _status_snapshot.json at :2563 but only marks the blob at :2618, after a
         tar that can run for minutes — during that window conditions 1-5 hold by
         construction, and repairing would strand the crawl as 'archived' if the
-        tar then fails (:2622).
+        tar then fails (:2635).
 
         stash_crawl races the same way but under stash_lock: the auto-stash
         sweep dispatches it via asyncio.create_task a few lines before the

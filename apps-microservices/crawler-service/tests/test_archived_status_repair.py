@@ -8,9 +8,10 @@ different operator-facing counts for the same Redis state.
 The log/snapshot comparison replaces an earlier marker-based check that was
 fail-OPEN: _cleanup_stale_state_for_relaunch deletes _completion_marker.json on
 every relaunch (crawler_manager.py:3511) and _monitor_process writes
-status='finished' at :1284 but the marker only at :1298, swallowing failures at
-:1301. A re-crawled id caught in that window would have been flipped to
-'archived', making /results serve the previous generation's tar.
+status='finished' to Redis at :1297 but the marker only at :1311-1312,
+swallowing failures at :1314-1315. A re-crawled id caught in that window would
+have been flipped to 'archived', making /results serve the previous
+generation's tar.
 
 Condition 6 (snapshot age) closes a second gap the same shape as the first:
 condition 5 alone is fail-open on a snapshot rewrite NOT followed by a
