@@ -13,6 +13,8 @@ from unittest.mock import AsyncMock, patch
 
 from app.api.routes import _detect_single_url
 from app.core.config import settings
+from app.core.domain_fr import DomainFR
+from app.services.language_detector import LanguageDetector
 from app.services.scraper import ScrapeResult
 
 URL = "https://sfte-shop.example/"
@@ -135,13 +137,13 @@ async def test_budget_depasse_rend_le_verdict_dorigine(monkeypatch):
     Sans ce garde, une sonde lente pousserait l'item vers le wait_for de 300s
     et transformerait un Check_nok_v2 en error — pire que le défaut corrigé.
 
-    Budget=31 : la 1re variante voit remaining≈31s (>= _MIN_PROBE_S=30) → la
+    Budget=81 : la 1re variante voit remaining≈81s (>= _MIN_PROBE_S=80) → la
     sonde est lancée. Elle répond (EN, donc pas de rattrapage) après 1.2s
-    réelles — pas de TimeoutError, `remaining` (31) couvrait large le sleep.
-    Avant la 2e variante, remaining≈31-1.2≈29.8s (< _MIN_PROBE_S) → la boucle
+    réelles — pas de TimeoutError, `remaining` (81) couvrait large le sleep.
+    Avant la 2e variante, remaining≈81-1.2≈79.8s (< _MIN_PROBE_S) → la boucle
     s'arrête sur budget_exhausted SANS sonder la 2e/3e variante : une seule
     sonde au total, pas trois."""
-    monkeypatch.setattr(settings, "VARIANT_RESCUE_BUDGET_S", 31, raising=False)
+    monkeypatch.setattr(settings, "VARIANT_RESCUE_BUDGET_S", 81, raising=False)
     primary = AsyncMock(return_value=_scrape(HTML_EN))
 
     async def slow_probe(*a, **kw):
@@ -176,8 +178,8 @@ async def test_verdict_hors_perimetre_ne_sonde_pas():
 
 @pytest.mark.asyncio
 async def test_verdict_forced_hors_perimetre_atteint_le_point_de_decision():
-    """Contrepartie du test ci-dessus : celui-ci prouve le retour précoce
-    (avant le bloc [4bis]) ; celui-ci prouve que le filtre
+    """Contrepartie du test ci-dessus : celui-là (le test ci-dessus) prouve le
+    retour précoce (avant le bloc [4bis]) ; celui-ci prouve que le filtre
     `result.method in _VARIANT_RESCUE_METHODS` du bloc [4bis] est bien
     ÉVALUÉ mais rend faux pour un verdict hors périmètre.
 
@@ -234,3 +236,106 @@ async def test_le_resultat_rattrape_part_au_cache():
     # 2e argument = l'URL analysée qui a semé l'entrée, comme au repli homepage
     # (routes.py:339).
     assert cache_set.await_args.args[1] == "http://x.example/"
+
+
+@pytest.mark.asyncio
+async def test_variante_http_error_ne_rattrape_pas():
+    """Une sonde qui répond par un statut HTTP 4xx/5xx ne doit JAMAIS être
+    acceptée comme rattrapage, même si son corps est un français limpide —
+    sans ce garde, une variante servant un 404 français ouvrirait une porte
+    que le chemin primaire ferme : un faux POSITIF, la mauvaise direction pour
+    un chantier qui corrige des faux négatifs. Couvre le garde ajouté au
+    Round 1 (task-1-report, Finding 3), qui n'avait encore aucun test dédié —
+    seul `test_variante_challenge_ignoree` protégeait une AUTRE page rejetée
+    (challenge), pas ce statut HTTP."""
+    primary = AsyncMock(return_value=_scrape(HTML_EN))
+    probe = AsyncMock(return_value=_scrape(HTML_FR, status_code=404))
+
+    res = await _detect(primary, probe)
+
+    assert res.method == "Check_nok_v2"
+    assert probe.call_count == 3
+
+
+@pytest.mark.asyncio
+async def test_exception_pendant_lanalyse_dune_variante_ne_degrade_pas():
+    """Le `except Exception` de _variant_rescue couvre TOUTE l'analyse d'une
+    variante (fetch + validation + DomainFR/NLP), pas seulement le fetch —
+    c'est ce qui empêche une exception BeautifulSoup/NLP sur du HTML tiers
+    arbitraire de remonter jusqu'au handler batch générique, qui
+    transformerait le Check_nok_v2 d'origine en method='error' : une
+    dégradation strictement pire que le faux négatif que le rattrapage
+    corrige. Couvre le fix du Finding 1 (task-1-report, round 1), dont la
+    seule vérification à ce jour était un script jetable non committé."""
+    primary = AsyncMock(return_value=_scrape(HTML_EN))
+    probe = AsyncMock(return_value=_scrape(HTML_FR))
+
+    real_check = DomainFR.check_page_if_french
+
+    async def _raise_on_variant(self, content, mode):
+        # Seule l'analyse de la SONDE (contenu HTML_FR) doit exploser ; le
+        # chemin primaire (contenu HTML_EN) garde son comportement RÉEL, pour
+        # produire un verdict d'origine authentique à protéger — pas un stub.
+        if content == HTML_FR:
+            raise RuntimeError("échec NLP simulé sur la sonde")
+        return await real_check(self, content, mode)
+
+    with patch.object(DomainFR, "check_page_if_french", _raise_on_variant):
+        res = await _detect(primary, probe)
+
+    assert res.ok is False
+    assert res.method == "Check_nok_v2"
+
+
+# Contenu neutre pour la sonde du test ci-dessous : le verdict NLP est forcé
+# par monkeypatch via le marqueur MARQUEUR_VARIANTE, donc la prose réelle
+# n'importe pas — seul compte le fait qu'elle diffère de HTML_EN/HTML_FR pour
+# ne jamais être confondue avec le chemin primaire.
+HTML_VARIANT_CASE9_LEXICAL = """<html lang="en-US"><body><p>
+MARQUEUR_VARIANTE contenu neutre, sans signal de langue particulier.
+</p></body></html>"""
+
+
+@pytest.mark.asyncio
+async def test_diagnostic_lexical_de_la_sonde_ne_fuit_pas_dans_la_reponse(monkeypatch):
+    """Épingle la frontière entre le Volet A (rattrapage) et le Volet B
+    (observation lexicale au Cas 9) : si la sonde elle-même retombe en Cas 9
+    avec un diagnostic lexical dans `error`, ce candidat est rejeté par
+    `if not candidate.ok: continue` (routes.py) — il ne doit JAMAIS ressortir.
+    Régression que ce test attrape : un futur refactor qui propagerait ce
+    candidat malgré `ok=False`, ou qui lirait son `error` avant ce test, ferait
+    apparaître le diagnostic lexical calculé sur le texte de la VARIANTE
+    attaché à une réponse qui parle de l'URL D'ORIGINE."""
+    primary = AsyncMock(return_value=_scrape(HTML_EN))
+    probe = AsyncMock(return_value=_scrape(HTML_VARIANT_CASE9_LEXICAL))
+
+    real_fasttext = LanguageDetector.detect_from_text_content_fasttext
+
+    def _fake_fasttext(self, content):
+        if "MARQUEUR_VARIANTE" not in content:
+            # Chemin primaire (HTML_EN) : comportement RÉEL, non stubé.
+            return real_fasttext(self, content)
+        # Mime automatismes.net (spec 2026-08-10 §1) : fastText tranche pour
+        # une autre langue avec assurance, MAIS le compte lexical franchit le
+        # seuil d'observation — exactement la situation où le Cas 9 écrit un
+        # diagnostic dans `error` (domain_fr.py:1677-1691).
+        return {
+            "lang": "de", "confidence": 0.95,
+            "method": "nlp_detection_fasttext",
+            "details": {
+                "fasttext": {"predictions": []}, "french_signal": 0.0,
+                "french_exclusive_distinct": settings.LEXICAL_OBSERVATION_MIN_DISTINCT,
+            },
+        }
+
+    monkeypatch.setattr(
+        LanguageDetector, "detect_from_text_content_fasttext", _fake_fasttext
+    )
+
+    res = await _detect(primary, probe)
+
+    assert probe.call_count == 3
+    assert res.method == "Check_nok_v2"
+    # Le diagnostic lexical de la SONDE n'a pas fuité sur la réponse à propos
+    # de l'URL d'origine (HTML_EN n'a lui-même aucun mot exclusif français).
+    assert res.error is None

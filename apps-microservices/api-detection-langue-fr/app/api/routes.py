@@ -132,10 +132,21 @@ async def _variant_rescue(
         return None
 
     deadline = time.monotonic() + budget
-    for variant in variants:
+    for idx, variant in enumerate(variants):
         remaining = deadline - time.monotonic()
         if remaining < _MIN_PROBE_S:
-            logger.info(f"[VARIANT-RESCUE] budget épuisé pour {url}")
+            if idx == 0:
+                # Rien à imputer aux sondes : aucune n'a encore tourné. Le
+                # déficit vient du temps déjà brûlé par l'item lui-même
+                # (fetch primaire + validation + stub-hop, `elapsed_s`) avant
+                # même d'entrer dans cette boucle — message distinct pour ne
+                # pas laisser croire à une sonde lente.
+                logger.info(
+                    f"[VARIANT-RESCUE] budget épuisé pour {url} avant la "
+                    f"1re sonde (item déjà à {elapsed_s:.1f}s d'écoulé)"
+                )
+            else:
+                logger.info(f"[VARIANT-RESCUE] budget épuisé pour {url}")
             VARIANT_RESCUE_OUTCOME.labels(outcome="budget_exhausted").inc()
             return None
 
@@ -145,9 +156,15 @@ async def _variant_rescue(
             # budget). Même patron que la sonde de confirmation du Cas 6
             # (domain_fr.py:1460-1463). Le wait_for est borné par le RESTE du
             # budget, pas par une constante : une variante lente ne peut donc
-            # pas le dépasser à elle seule.
+            # pas le dépasser à elle seule. `timeout=int(remaining)` fait
+            # aussi suivre la borne de navigation INTERNE de scrape_html
+            # (nav_timeout = min(timeout, 30), scraper.py) sur le temps
+            # RÉELLEMENT disponible plutôt que sur son défaut de 90s.
             fetch = await asyncio.wait_for(
-                scrape_html(variant, proxy=proxy_url or settings.APIFY_PROXY),
+                scrape_html(
+                    variant, timeout=int(remaining),
+                    proxy=proxy_url or settings.APIFY_PROXY,
+                ),
                 timeout=remaining,
             )
 
@@ -188,6 +205,20 @@ async def _variant_rescue(
             if not candidate.ok:
                 continue
 
+            # La chasse aux alternatives a déjà eu lieu sur la forme D'ORIGINE,
+            # avec le réglage validate_alternatives de l'appelant — c'est
+            # exactement l'argument derrière le validate_alternatives=False
+            # forcé ci-dessus. Mais ce flag ne gate QUE la validation :
+            # detect_alternative_languages tourne quand même (gaté sur
+            # `mode == COMPLETE`, pas sur validate_alternatives) et résout ses
+            # candidats contre self.homepage, qui pour une sonde est l'hôte de
+            # la VARIANTE — les laisser fuiter exposerait des
+            # alternative_urls sur un domaine possiblement différent, sans le
+            # signaler. BO script_launch_crawl_csv.php branche sur la seule
+            # PRÉSENCE de ce champ pour lancer un crawl sur l'URL qu'il
+            # contient : les vider ici complète ce que
+            # validate_alternatives=False avait déjà pour but.
+            candidate.alternative_urls = []
             candidate.analyzed_url = variant_final
             candidate.method = f"{candidate.method}+variant_rescue"
             logger.info(
@@ -242,7 +273,16 @@ _RESCUE_MARGIN_S = 15
 # Sous ce seuil, une sonde a plus de chances d'être annulée en pleine
 # navigation que de répondre — et une navigation annulée est la condition des
 # callbacks de protocole orphelins documentée par domain_fr.py:1451-1459.
-_MIN_PROBE_S = 30
+#
+# Dérivation (scraper.py, scrape_html) — délibérément le PIRE cas, puisque
+# c'est exactement ce que ce plancher existe pour empêcher :
+#   settings.BROWSER_LAUNCH_TIMEOUT_S (45s, lancement Camoufox/Chromium, AVANT
+#   toute navigation) + jusqu'à 30s de domcontentloaded (nav_timeout =
+#   min(timeout, 30)) + la phase networkidle (bonus ~5s) + marge ≈ 80s.
+# L'ancienne valeur (30) était déjà INFÉRIEURE au seul lancement navigateur —
+# une sonde entrée avec 30s restants était donc quasi certaine d'être annulée
+# en pleine navigation, exactement la condition que ce garde doit empêcher.
+_MIN_PROBE_S = 80
 
 
 def _normalize_url_for_dedup(url: str) -> str:
@@ -559,9 +599,24 @@ async def _detect_single_url(
         )
         if rescued:
             result = rescued
-            # L'URL analysée devient la graine de l'entrée de cache, comme au
-            # repli homepage (`domain_cache.set(url, homepage, …)` ligne 339).
-            # La CLÉ reste le domaine d'origine.
+            # L'URL analysée devient la graine de l'entrée de cache. PAS
+            # « comme au repli homepage » (l'ancienne formulation ici était
+            # fausse) : le résultat du repli homepage reste TOUJOURS sur le
+            # même hôte que le domaine d'origine (sa propre racine), donc ne
+            # sème jamais de seconde clé — le vrai miroir est la redirection
+            # cross-domaine ORDINAIRE du fetch primaire (`effective_url =
+            # final_url` ci-dessus, quand le domaine change en cours de
+            # Phase 1). `domain_cache.set(url, effective_url, …)` (plus bas)
+            # sème alors DEUX clés Redis dès que le domaine change :
+            # `fr_detect:{domaine d'origine}` et `fr_detect:{domaine cible}`
+            # (DomainCache.set, domain_fr.py:136-139, sur
+            # `result_domain != input_domain`) — la seconde à `ok=True`/30j,
+            # avec un payload dont `requested_url` nomme quand même le
+            # domaine D'ORIGINE. La CLÉ ne reste donc PAS le domaine
+            # d'origine pour un rattrapage cross-domaine : c'est exactement
+            # le même comportement que la redirection ordinaire, pas un ajout
+            # de ce rattrapage — voir le known-limit correspondant dans le
+            # CLAUDE.md du service.
             effective_url = rescued.analyzed_url or effective_url
 
     if not html_was_provided:
@@ -737,10 +792,10 @@ async def _run_batch_core(
                 return await asyncio.wait_for(_process_item_core(item), timeout=_ITEM_WALL_CLOCK_S)
             except asyncio.TimeoutError:
                 count = await _increment_count()
-                logger.error(f"[BATCH] [{count}/{total_items}] TIMEOUT {item.url} après 300s")
+                logger.error(f"[BATCH] [{count}/{total_items}] TIMEOUT {item.url} après {_ITEM_WALL_CLOCK_S}s")
                 return DetectionResponse(
                     ok=False, url=item.url, method='error',
-                    error='Timeout global item (300s)'
+                    error=f'Timeout global item ({_ITEM_WALL_CLOCK_S}s)'
                 )
 
     # =========================================================================
@@ -785,7 +840,7 @@ async def _run_batch_core(
                 except asyncio.TimeoutError:
                     result = DetectionResponse(
                         ok=False, url=item.url, method='error',
-                        error='Timeout global item (300s)')
+                        error=f'Timeout global item ({_ITEM_WALL_CLOCK_S}s)')
                 last_result = result
                 if result.ok:
                     return (_with_group(result, group_key), [])
@@ -829,7 +884,7 @@ async def _run_batch_core(
                         group_results[i] = _with_group(retry_result, group_key)
                         break
                 except asyncio.TimeoutError:
-                    logger.warning(f"[BATCH][first_match] Pass 2 TIMEOUT groupe '{group_key}' {item.url} après 300s")
+                    logger.warning(f"[BATCH][first_match] Pass 2 TIMEOUT groupe '{group_key}' {item.url} après {_ITEM_WALL_CLOCK_S}s")
                 except Exception as e:
                     logger.warning(f"[BATCH][first_match] Pass 2 ERROR groupe '{group_key}' {item.url}: {e}")
 
@@ -905,7 +960,7 @@ async def _run_batch_core(
                     logger.warning(f"[BATCH] Retry ECHEC {item.url} ({retry_result.method})")
 
             except asyncio.TimeoutError:
-                logger.warning(f"[BATCH] Retry TIMEOUT {item.url} après 300s")
+                logger.warning(f"[BATCH] Retry TIMEOUT {item.url} après {_ITEM_WALL_CLOCK_S}s")
             except Exception as e:
                 logger.warning(f"[BATCH] Retry ERROR {item.url}: {e}")
 

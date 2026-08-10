@@ -15,6 +15,29 @@
 - Volet B livré **en observation** : il expose et diagnostique, il ne décide pas.
 - Spec approuvée en l'état : `docs/superpowers/specs/2026-08-10-detection-faux-negatifs-design.md` (commit `a55defa1`).
 
+> **Note (2026-08-10, vague de fixes finale de revue).** Les chiffres lexicaux
+> cités dans les blocs de code ci-dessous (Step 3 de la Task 1, docstring de
+> `_count_french_exclusive_distinct`, section volet B de la Task 3 — « 9 à
+> 15 », `0.761`, et les affirmations d'agrégat qui vont avec) ont été
+> **supersédés pendant l'implémentation** : ils viennent d'extraits qui n'ont
+> pas été conservés mot pour mot et ne sont pas reproductibles sur ce dépôt.
+> Ces blocs ne sont PAS réécrits ici — un plan est un enregistrement de ce qui
+> a été demandé, pas un document vivant. Table faisant foi désormais (mesurée
+> deux fois indépendamment, implémenteur + relecteur, accord exact) :
+>
+> | Échantillon | signal agrégé (`french_signal`) | exclusifs distincts |
+> |---|---|---|
+> | FR (prose) | 1.000 | **8** |
+> | ES (prose) | 0.833 | 0 |
+> | PT (prose) | 0.814 | 1 (`mais`) |
+> | IT (prose) | 0.417 | 0 |
+> | EN (prose) | 0.000 | 0 |
+> | FR catalogue (sans prose) | 0.000 | 0 |
+>
+> Voir la note de correction du 2026-08-10 au §3 de la spec
+> (`docs/superpowers/specs/2026-08-10-detection-faux-negatifs-design.md`) pour
+> le détail et les conclusions inchangées.
+
 ---
 
 ## Structure des fichiers
@@ -65,7 +88,7 @@ Tout est dans `apps-microservices/api-detection-langue-fr/`.
 - [ ] Une variante servant une page de challenge est ignorée sans compter comme succès
 - [ ] Le résultat rattrapé est celui qui part au cache (`domain_cache.set` reçoit le `method` suffixé)
 
-**Verify:** `python -m pytest tests/test_variant_rescue.py -v` → 9 passed
+**Verify:** `python -m pytest tests/test_variant_rescue.py -v` → 10 passed
 
 **Steps:**
 
@@ -456,7 +479,7 @@ Dans `app/api/routes.py`, entre la ligne 403 (`result.analyzed_url = stub_target
 - [ ] **Step 8: Lancer les tests jusqu'au vert**
 
 Run: `python -m pytest tests/test_variant_rescue.py -v`
-Expected: 9 passed.
+Expected: 10 passed.
 
 Si `test_variante_francaise_rattrape` échoue avec `ok=False`, c'est que `HTML_FR` n'a pas convaincu le stack NLP présent dans le venv : **allonger la prose française**, ne pas affaiblir l'assertion. Le test doit prouver un rattrapage réel, pas un rattrapage stubé.
 
@@ -784,7 +807,7 @@ Dans `app/core/domain_fr.py`, remplacer le bloc `:1655-1665` (commentaire du Cas
 - [ ] **Step 6: Lancer les tests jusqu'au vert**
 
 Run: `python -m pytest tests/test_lexical_observation.py -v`
-Expected: 13 passed.
+Expected: 14 passed.
 
 Si `test_prose_francaise_au_dessus_du_seuil_dactivation_envisage` échoue, **allonger `FR_PROSE`** — c'est l'échantillon qui est trop court, pas le seuil qui est trop haut. Relever le compte réel de chaque échantillon et le noter en commentaire dans le test : c'est cette table qui servira à choisir le seuil d'activation.
 

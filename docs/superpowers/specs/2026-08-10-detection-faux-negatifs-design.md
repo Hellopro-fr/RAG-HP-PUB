@@ -101,6 +101,21 @@ exclusif, seuil à 1 invalide) est inchangée. Table publiée aussi dans le
 `CLAUDE.md` du service, section « Lexical-Signal Observation at Case 9
 (inert) ».
 
+**Corroboration indépendante — un TROISIÈME jeu de valeurs, sur un TROISIÈME
+jeu d'échantillons.** Le chantier soft-French antérieur
+(`docs/superpowers/specs/2026-07-28-detection-soft-french-lexical-corroboration-design.md`,
+§ mesure du 2026-07-29) a rejoué le même `french_signal` sur SES propres
+échantillons et mesuré : espagnol (prose industrielle) **0.990** avec ZÉRO mot
+exclusivement français (19 correspondances sur les mots partagés
+`de`/`la`/`le`/`un`), espagnol (e-commerce) 0.679, portugais **0.407**,
+italien 0.275, anglais 0.000, la page française cible 1.000. Ni ce jeu de
+valeurs (0.990/0.407…) ni les deux précédents (0.761/1.000 d'origine ;
+0.833/0.814 réel-repo) ne coïncident — trois mesures indépendantes, trois jeux
+de valeurs distincts. Ce n'est pas une contradiction à trancher : c'est en
+soi une preuve supplémentaire que l'agrégat est fortement dépendant de
+l'échantillon — ce qui RENFORCE, plutôt qu'affaiblit, la conclusion qu'il ne
+peut pas servir de discriminant.
+
 ## 4. Volet A — rattrapage par variante d'URL (actif)
 
 **Emplacement** : `_detect_single_url` dans `app/api/routes.py`, juste après le premier `check_page_if_french` (`:400`). C'est le seul point où le verdict et l'URL demandée coexistent.
@@ -136,6 +151,8 @@ Trois pas, aucun changement de verdict :
 2. **Diagnostiquer au Cas 9.** Quand ce compte atteint un seuil d'observation bas — **≥ 3** — écrire dans le champ `error` du verdict : `"lexical: N mots exclusifs distincts — rattrapage candidat"`.
 
    > **Deux seuils distincts, à ne pas confondre.** Le **seuil d'observation (3)** décide seulement de l'affichage du diagnostic : il est délibérément plus permissif que nécessaire pour faire apparaître les cas limites — notamment ceux situés entre le portugais (1) et le français mesuré (9 à 15) — puisque rien n'est activé et qu'aucun verdict ne change. Le **seuil d'activation** que le §3 situe à ≥ 5 n'est **pas** implémenté par ce chantier : il sera fixé plus tard, sur les comptes réellement observés en production. Écrire 3 ici et 5 plus tard n'est pas une incohérence, c'est la différence entre regarder et décider.
+   >
+   > *(Le « français mesuré (9 à 15) » ci-dessus est le chiffre d'ORIGINE, non reproductible — voir la note de correction du 2026-08-10 au §3 : valeur reproductible actuelle = 8. Les conclusions de ce paragraphe ne changent pas.)*
 3. **Ne rien décider.** `ok=False`, `method='Check_nok_v2'` : identiques à aujourd'hui.
 
 **Pourquoi le champ `error`** : le Cas 9 (`domain_fr.py:1661-1665`) ne le renseigne pas — vérifié, la colonne « Erreur » est vide pour les 5 `Check_nok_v2` du run — et le BO l'affiche déjà dans le tableau des jugés. Zéro changement de contrat, visible au prochain run, aucune modification côté BO.
