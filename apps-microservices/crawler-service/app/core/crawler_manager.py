@@ -4250,11 +4250,11 @@ class CrawlerManager:
                     continue
                 verdict = archived_status_repair.archive_freshness_verdict(
                     log_mtime=log_mtime, snapshot_mtime=snapshot_mtime)
-                if verdict == archived_status_repair.RUN_AFTER_ARCHIVE:
-                    skipped_tree_newer += 1
-                    continue
-                if verdict == archived_status_repair.NO_SNAPSHOT:
-                    skipped_no_snapshot += 1
+                if verdict is not None:
+                    if verdict == archived_status_repair.NO_SNAPSHOT:
+                        skipped_no_snapshot += 1
+                    else:
+                        skipped_tree_newer += 1
                     continue
                 try:
                     age_seconds = time.time() - os.stat(subtree).st_mtime

@@ -355,16 +355,21 @@ async def test_summary_counts_each_refusal(manager, tmp_path, caplog):
     os.utime(newer / "crawler.log", (snapshot_at + 60, snapshot_at + 60))
     nosnap = _make_archived_dir(tmp_path, "crawl-2")
     (nosnap / "_status_snapshot.json").unlink()
+    newer2 = _make_archived_dir(tmp_path, "crawl-3")
+    snapshot_at2 = os.stat(newer2 / "_status_snapshot.json").st_mtime
+    os.utime(newer2 / "crawler.log", (snapshot_at2 + 60, snapshot_at2 + 60))
 
     verified = manager._load_reclean_allowlist()
     with caplog.at_level("INFO"):
         actioned = await manager._reclean_archived_leftovers(
-            [_job("crawl-0", ok), _job("crawl-1", newer), _job("crawl-2", nosnap)],
+            [_job("crawl-0", ok), _job("crawl-1", newer), _job("crawl-2", nosnap),
+             _job("crawl-3", newer2)],
             set(), verified)
 
     assert actioned == 1
     assert not (ok / "storage").exists()
     assert (newer / "storage").is_dir()
     assert (nosnap / "storage").is_dir()
+    assert (newer2 / "storage").is_dir()
     assert ("ARCHIVED_LEFTOVER_RECLEAN_SUMMARY actioned=1 "
-            "skipped_tree_newer=1 skipped_no_snapshot=1") in caplog.text
+            "skipped_tree_newer=2 skipped_no_snapshot=1") in caplog.text
