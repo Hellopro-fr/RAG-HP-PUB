@@ -387,6 +387,42 @@ Because `get_json` returns `None` on both "absent" and "read errored", `get_job_
 
 The write is now `set_json_nx(..., ttl=604800)` — an existing blob wins, a genuinely absent one is still indexed, and the refusal is logged at WARNING. **12 endpoints depend on `get_job_or_recover`** (8 in `router/crawler.py`, 4 in `router/admin.py`), **8 of them GET** — including `GET /status/{crawl_id}`, which the BO polls. A read-only-looking call is a write path.
 
+#### Archived-status repair (2026-08-07)
+
+`_repair_archived_status`, in `_reconcile_locked` just before the reclean, flips
+`finished` blobs back to `archived` when their tar is listed in the GCS allowlist.
+It exists because `get_results_archive` branches on `status == 'archived'`
+(`:1651`), so a blob that lost that status 404s forever on `/results`. Two
+populations: the recovery stubs fixed forward by `2a12a098`, and the pre-existing
+"legacy stuck at finished" of `:2517-2518`.
+
+| setting | default | note |
+|---|---|---|
+| `ARCHIVED_STATUS_REPAIR_ENABLED` | `false` | deploy inert, read the dry-run, then flip |
+| `ARCHIVED_STATUS_REPAIR_MAX_PER_TICK` | `10` | low on purpose: `reconcile_leader_lock` has a 600s TTL and **no** heartbeat (`:3363`) |
+
+Six conditions, evaluated in order — `finished`, not stashed, id in `verified_in_gcs.list`,
+`_status_snapshot.json` present, `crawler.log` **older** than the snapshot, and
+`archive_lock:{id}` free. The freshness check is anchored on `crawler.log` and not
+on `_completion_marker.json`: `_cleanup_stale_state_for_relaunch` deletes the
+marker on every relaunch (`:3511`) while `_cleanup_local_data` keeps the log
+deliberately (`:2650-2653`). Anchoring on the marker was fail-open on re-crawled
+ids and would have made `/results` serve the previous generation's tar.
+
+Dry-run: `GET /admin/archived-status-repair` — read-only, does not take
+`Depends(get_job_or_recover)`.
+
+**Kill switch.** `rm /app/archives/verified_in_gcs.list` — the `verified_in_gcs.list` file is re-read
+every tick, so it disarms in ≤ 300s with no restart. Turning
+`ARCHIVED_STATUS_REPAIR_ENABLED` off does **not** stop `_reclean_archived_leftovers`;
+they are disjoint settings. And note that merely *creating* that allowlist arms the
+reclean for the ~2398 already-`archived` crawls that still carry a `storage/`
+subtree. The sweep is **already active today** (`ARCHIVED_RECLEAN_ENABLED=true` by default), held back only by the absent allowlist file — set it to `false` **before** creating the allowlist if you want to defer the deletion.
+Neither the status flip nor the `rmtree` has a reverse.
+
+Spec: `docs/superpowers/specs/2026-08-07-archived-status-repair-design.md`.
+Plan: `docs/superpowers/plans/2026-08-07-archived-status-repair.md`.
+
 ### Node side (crawler subprocess)
 
 Heartbeat publishes and `DedupManager` operations now multiplex on a single shared Redis client created via `createSharedRedisClient(redisUrl, { crawlId, monitor })` in `crawler/src/redisClient.ts`. Halves per-crawl conn count (2 → 1) and halves the orphan blast radius when the process is OOM-killed.

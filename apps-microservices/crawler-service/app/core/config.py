@@ -119,6 +119,17 @@ class Settings(BaseSettings):
     # missing/empty file => the sweep deletes NOTHING (fail-closed).
     ARCHIVED_RECLEAN_VERIFIED_LIST: str = "/app/archives/verified_in_gcs.list"
 
+    # --- Archived-status repair (spec 2026-08-07) ---
+    # Flips 'finished' blobs whose tar is listed in the GCS allowlist back to
+    # 'archived', so GET /results stops 404-ing on them. Default off: deploy
+    # inert, read the dry-run, then flip.
+    ARCHIVED_STATUS_REPAIR_ENABLED: bool = False
+    # Redis writes per tick. Starts low: reconcile_leader_lock has a 600s TTL and
+    # NO heartbeat (crawler_manager.py:3363), so a tick that outlives it would let
+    # a second leader in. Raise only after watching the "Reconciliation complete"
+    # timing.
+    ARCHIVED_STATUS_REPAIR_MAX_PER_TICK: int = 10
+
     model_config = {
         "env_file": ".env",
         "extra": "ignore",
