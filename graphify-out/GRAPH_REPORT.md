@@ -1,13 +1,13 @@
-# Graph Report - api-detection-langue-fr + crawler-service + libs + docs  (2026-08-07)
+# Graph Report - crawler-service + docs  (2026-08-10)
 
 ## Corpus Check
-- 18 files · ~0 words
+- 13 files · ~0 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 10513 nodes · 24797 edges · 222 communities detected
-- Extraction: 63% EXTRACTED · 37% INFERRED · 0% AMBIGUOUS · INFERRED: 9249 edges (avg confidence: 0.6)
-- Token cost: 0 input · 463,386 output
+- 10764 nodes · 25331 edges · 222 communities detected
+- Extraction: 63% EXTRACTED · 37% INFERRED · 0% AMBIGUOUS · INFERRED: 9359 edges (avg confidence: 0.6)
+- Token cost: 0 input · 429,670 output
 
 ## Community Hubs (Navigation)
 - [[_COMMUNITY_crawler-service Migration & Archive Types|crawler-service: Migration & Archive Types]]
@@ -234,7 +234,7 @@
 - [[_COMMUNITY_graphify-guide-en.md PreToolUse hook on GlobGrep (n...|graphify-guide-en.md: PreToolUse hook on Glob|Grep (n...]]
 
 ## God Nodes (most connected - your core abstractions)
-1. `CrawlerManager` - 464 edges
+1. `CrawlerManager` - 503 edges
 2. `IncludeInArchive` - 381 edges
 3. `ReindexResponse` - 381 edges
 4. `CrawlStatus` - 381 edges
@@ -252,8 +252,8 @@
   libs\auth\python\hellopro_auth\oauth.py → docs/superpowers/specs/2026-06-18-shared-auth-lib-design.md
 - `Drain orphaned Playwright protocol callbacks; report everything else.      A c` --semantically_similar_to--> `Change 2 — the service's first set_exception_handler, narrow on three axes`  [INFERRED] [semantically similar]
   apps-microservices/api-detection-langue-fr/main.py → docs/superpowers/specs/2026-08-05-detection-orphaned-goto-callback-flood-design.md
-- `WHY the retry must be explicit: redis-py defaults to Retry(NoBackoff(), 0) with an empty retry_on_error (verified 5.2.1), so the first command on a reaped socket raises ConnectionError and every cache_service helper swallows it into its default return (None/0/[]/False) — indistinguishable from a real answer; redis is unpinned so the default is whatever pip resolved` --semantically_similar_to--> `retry_on_error is what lets _disconnect_raise fall through to the retry     loo`  [INFERRED] [semantically similar]
-  apps-microservices/crawler-service/CLAUDE.md → libs/common-utils/tests/test_cache_service.py
+- `retry_on_error is what lets _disconnect_raise fall through to the retry     loo` --semantically_similar_to--> `WHY the retry must be explicit: redis-py defaults to Retry(NoBackoff(), 0) with an empty retry_on_error (verified 5.2.1), so the first command on a reaped socket raises ConnectionError and every cache_service helper swallows it into its default return (None/0/[]/False) — indistinguishable from a real answer; redis is unpinned so the default is whatever pip resolved`  [INFERRED] [semantically similar]
+  libs/common-utils/tests/test_cache_service.py → apps-microservices/crawler-service/CLAUDE.md
 - `detect_challenge_page()` --semantically_similar_to--> `The crawler's hand-ported challenge classifier has drifted from the service's 9 families`  [EXTRACTED] [semantically similar]
   D:\DevHellopro\Workspaces\RAG-HP-PUB\apps-microservices\api-detection-langue-fr\app\services\language_detector.py → docs/superpowers/references/2026-07-29-crawler-detection-seam-audit.md
 
@@ -273,6 +273,10 @@
 - **Les 5 barrières qui rendent B2 inerte à la livraison (liste vide, flag false, aperçu par défaut, validation humaine, re-vérification sur lecture fraîche)** — failure_cause_spec_barrier_empty_cause_list, failure_cause_spec_barrier_retire_proposal_flag, failure_cause_spec_barrier_dry_run_default, failure_cause_spec_barrier_human_validation, failure_cause_plan_rationale_fresh_read_revalidation, failure_cause_plan_rationale_user_gate_task6 [EXTRACTED 1.00]
 - **Les affirmations réfutées ou corrigées pendant l'investigation — reprendre l'une d'elles coûterait un cycle** — failure_cause_spec_rationale_refuted_expose_last_error, failure_cause_spec_rationale_refuted_two_run_threshold, failure_cause_spec_rationale_gecko_label_unattested, failure_cause_spec_correction_fatal_errors_not_chromium, failure_cause_plan_rationale_two_families_of_death, failure_cause_plan_residual_chromium_amalgam_task7 [EXTRACTED 1.00]
 - **Le principe transversal du chantier: aucune valeur n'est devinée — le stage vient du site d'appel, le stage 'browser' de l'absence d'écriture, et la liste de causes se remplit sur des libellés récoltés** — failure_cause_spec_rationale_stage_from_call_site, failure_cause_plan_rationale_browser_stage_from_absence, failure_cause_spec_cause_harvest_procedure, failure_cause_spec_barrier_empty_cause_list, failure_cause_spec_rationale_guessing_label_is_the_failure_mode [INFERRED 0.85]
+- **One seven-condition predicate, three consumers: the pure module, the repair pass caller (which owns the lock probe), and the dry-run endpoint that must evaluate the same seven** — crawler_v52_repair_seven_condition_gate, archived_status_repair_is_status_repair_candidate, crawler_manager_crawlermanager_repair_archived_status, admin_archived_status_repair_dry_run [EXTRACTED 0.95]
+- **The six conditions of the repair predicate, each closing a distinct way the evidence can lie** — archived_repair_spec_rationale_cond1_status_finished, archived_repair_spec_rationale_cond2_not_stashed, archived_repair_spec_rationale_cond3_in_gcs_allowlist, archived_repair_spec_rationale_cond4_snapshot_present, archived_repair_spec_rationale_cond5_log_older_than_snapshot, archived_repair_spec_rationale_cond6_archive_lock_free, archived_repair_spec_predicate [EXTRACTED 1.00]
+- **The deployment safety interlock: the allowlist file arms two disjoint consumers, only one of which the repair flag controls** — archived_repair_spec_allowlist_evidence, archived_repair_spec_kill_switch, archived_repair_spec_rationale_residual_allowlist_arms_reclean, archived_repair_spec_deployment_sequence, archived_repair_spec_rationale_deploy_order_revised, archived_repair_spec_settings [EXTRACTED 0.95]
+- **What adversarial review changed: a fail-open freshness anchor, an overstated snapshot claim, a self-contradicting stat-error rule, and a deployment order that deleted before it measured** — archived_repair_spec_rationale_marker_anchor_refuted, archived_repair_spec_rationale_snapshot_not_proof_corrected, archived_repair_spec_rationale_stat_errors_fail_closed, archived_repair_spec_rationale_deploy_order_revised, archived_repair_spec_rationale_cond6_archive_lock_free [EXTRACTED 1.00]
 
 ## Communities
 
@@ -282,7 +286,7 @@ Nodes (102): CollectionName, Enum, CollectionNameGraph, Enum for the possible co
 
 ### Community 3 - "CrawlerManager Tests (manager & stash)"
 Cohesion: 0.01
-Nodes (623): str, DLQPropertiesAsync, create_dlq_headers(), create_dlq_message(), CrawlerManager, mock_cache_service(), TestStaleHandlerCounter, test_stale_handler_decrements_counter() (+615 more)
+Nodes (694): str, DLQPropertiesAsync, create_dlq_headers(), create_dlq_message(), CrawlerManager, mock_cache_service(), TestStaleHandlerCounter, test_stale_handler_decrements_counter() (+686 more)
 
 ### Community 86 - "crawler-service: test_admin_job_dump.py"
 Cohesion: 0.67
@@ -330,7 +334,7 @@ Nodes (63): GuardConfig, GuardMetrics, Prometheus metrics for MilvusConcurrencyG
 
 ### Community 6 - "Detection FR Scraper & Redirects"
 Cohesion: 0.01
-Nodes (386): Configuration de l'application, reconcile_running_jobs_count(), scheduled_archive_cleanup(), validation_exception_handler(), startup_event(), shutdown_event(), read_root(), Periodically checks the actual number of 'running' jobs in Redis and corrects (+378 more)
+Nodes (387): Configuration de l'application, reconcile_running_jobs_count(), scheduled_archive_cleanup(), validation_exception_handler(), startup_event(), shutdown_event(), read_root(), Periodically checks the actual number of 'running' jobs in Redis and corrects (+379 more)
 
 ### Community 104 - "crawler-service: redisClient.test.ts"
 Cohesion: 1.0
@@ -402,15 +406,15 @@ Nodes (2): RabbitMQConnection, Crée une connexion RabbitMQ avec un nombre limit
 
 ### Community 12 - "common-utils: Redis Cache Service"
 Cohesion: 0.01
-Nodes (256): Initializes the Redis connection pool.     Connects to Redis using the URL from, Closes the Redis connection pool., Atomically sets a key only if it does not already exist (SET NX).     Returns T, Sets a raw value for a key., Gets the raw string value of a key., Deletes a key from Redis., Gets all keys matching a given prefix using SCAN., Atomically increments a key's value by 1. (+248 more)
+Nodes (257): Initializes the Redis connection pool.     Connects to Redis using the URL from, Closes the Redis connection pool., Atomically sets a key only if it does not already exist (SET NX).     Returns T, Sets a raw value for a key., Gets the raw string value of a key., Deletes a key from Redis., Gets all keys matching a given prefix using SCAN., Atomically increments a key's value by 1. (+249 more)
 
 ### Community 9 - "Crawler Admin & Admission Control"
 Cohesion: 0.01
-Nodes (211): Sets a dictionary for a key, serializing it to JSON., set_json(), Prometheus metrics exposition endpoint., AdmissionController, FastAPI admission-control middleware.  Scope after the crawler carve-out refac, Atomic in-flight counter with a hard max.      Not a semaphore: acquire() does, Try to acquire a slot. Returns True on success, False if saturated., Release a slot. Defensive: does not go below zero. (+203 more)
+Nodes (249): Sets a dictionary for a key, serializing it to JSON., set_json(), Prometheus metrics exposition endpoint., AdmissionController, FastAPI admission-control middleware.  Scope after the crawler carve-out refac, Atomic in-flight counter with a hard max.      Not a semaphore: acquire() does, Try to acquire a slot. Returns True on success, False if saturated., Release a slot. Defensive: does not go below zero. (+241 more)
 
 ### Community 0 - "CrawlerManager Schemas, Archive & Reconcile"
 Cohesion: 0.0
-Nodes (1332): Gets a dictionary for a key, deserializing it from JSON., _count_files_in_dir(), _map_error_to_message(), Safely counts files in a directory, excluding Crawlee metadata., Read isError from _callback_payload.json in the crawl storage dir.     Returns, Flatten a dict/list payload into a list of (key, value) tuples using     PHP-st, Safely counts files in a directory, excluding Crawlee metadata., Publie une mise à jour du statut d'un job sur le canal Pub/Sub de Redis. (+1324 more)
+Nodes (1443): Gets a dictionary for a key, deserializing it from JSON., _count_files_in_dir(), _map_error_to_message(), Safely counts files in a directory, excluding Crawlee metadata., Read isError from _callback_payload.json in the crawl storage dir.     Returns, Flatten a dict/list payload into a list of (key, value) tuples using     PHP-st, Safely counts files in a directory, excluding Crawlee metadata., Publie une mise à jour du statut d'un job sur le canal Pub/Sub de Redis. (+1435 more)
 
 ### Community 58 - "common-utils: TestLuaScripts"
 Cohesion: 0.22
@@ -426,7 +430,7 @@ Nodes (104): _run_gcloud(), check_gcloud_auth(), gcloud_ls(), gcloud_download(),
 
 ### Community 8 - "Async Job Manager & Store"
 Cohesion: 0.02
-Nodes (243): Shared test fixtures.  Since the migration to the shared common_utils Redis po, Gracefully shut down all locally running crawlers on this replica., Gracefully shut down all locally running crawlers on this replica., metrics_endpoint(), root(), Prometheus metrics for api-detection-langue-fr.  Exposed at /metrics. Used to, _generate_url_variants(), Génère les variantes d'URL à essayer quand l'URL originale échoue.      Bascul (+235 more)
+Nodes (244): Shared test fixtures.  Since the migration to the shared common_utils Redis po, Gracefully shut down all locally running crawlers on this replica., Gracefully shut down all locally running crawlers on this replica., metrics_endpoint(), root(), Prometheus metrics for api-detection-langue-fr.  Exposed at /metrics. Used to, _generate_url_variants(), Génère les variantes d'URL à essayer quand l'URL originale échoue.      Bascul (+236 more)
 
 ### Community 94 - "crawler-service: crawler-service failure classif..."
 Cohesion: 0.67
@@ -774,7 +778,7 @@ Nodes (3): app_with_admin_router(), Tests for /admin/redis-debug endpoint., Buil
 
 ### Community 25 - "Crawler Auto-Stash Eligibility & Sweep"
 Cohesion: 0.03
-Nodes (100): _reconcile_locked sweep, _is_stash_eligible, Reconciliation Leader Election, Capacity Counter (crawl_jobs:running_count), Rationale: Sweep tars via create_task (no lock hold), Stash one crawl on behalf of the sweep. Swallows 409 (already         stashed /, Stash one crawl on behalf of the sweep. Swallows 409 (already         stashed /, Wipes any persistent state from a prior run of this crawl_id that         would (+92 more)
+Nodes (103): _reconcile_locked sweep, _is_stash_eligible, Reconciliation Leader Election, Capacity Counter (crawl_jobs:running_count), Rationale: Sweep tars via create_task (no lock hold), Stash one crawl on behalf of the sweep. Swallows 409 (already         stashed /, Stash one crawl on behalf of the sweep. Swallows 409 (already         stashed /, Wipes any persistent state from a prior run of this crawl_id that         would (+95 more)
 
 ### Community 90 - "superpowers: Spec: Stash Bind-Mount Pre-Flig..."
 Cohesion: 0.67
@@ -825,8 +829,8 @@ Cohesion: 0.03
 Nodes (82): Dynamic Unit Normalization Design Spec, graph-rag-normalize-unite-service (target service), Redeploy-per-unit pain (FIX 1-16 churn), Five dynamic layers A-E, Layer A pint defines (56 statements), Layer B UNIT_TO_DIMENSION (200 keys), Layer C LABEL_TO_DIMENSION (99 ordered keys), Layer D CANONICAL_UNITS (36 entries) (+74 more)
 
 ### Community 28 - "BDD Doc-Enrichment Workflow"
-Cohesion: 0.05
-Nodes (60): BDD doc-enrichment workflow (design spec), BDD doc-enrichment workflow (implementation plan), BDD doc-enrichment runbook, Objective: reusable code-free table doc-enrichment process, MCP 'Table BDD' system (read-only MySQL exposure to LLM), Six bdd_* MCP tools (read-only), bdd_list_tables tool, bdd_describe_table tool (+52 more)
+Cohesion: 0.04
+Nodes (74): BDD doc-enrichment workflow (design spec), BDD doc-enrichment workflow (implementation plan), BDD doc-enrichment runbook, Objective: reusable code-free table doc-enrichment process, MCP 'Table BDD' system (read-only MySQL exposure to LLM), Six bdd_* MCP tools (read-only), bdd_list_tables tool, bdd_describe_table tool (+66 more)
 
 ### Community 112 - "crawler-service: test_timing_summary_tool.ts"
 Cohesion: 1.0
@@ -1183,8 +1187,12 @@ Nodes (1): Détermine si l'URL a un signal très fort de site français.        
   docs/claude-code-team-guide-en.md · relation: conceptually_related_to
 - `._validate_alternative_urls()` → `One Challenge Detector, Three Consumers (45s poll / detect reclass / Case-6 guard)`  [AMBIGUOUS]
   docs/superpowers/specs/2026-07-25-detection-langue-fr-challenge-noscript-altprobe-design.md · relation: references
+- `stash_lock:{id} Redis lock` → `Out of scope: stashed stubs. Repairing them would mean fabricating a lost stashed_at, and /results on a stashed crawl triggers an unstash that DELETES the GCS copy — the same reason the reclean already excludes stashed leftovers`  [AMBIGUOUS]
+  docs/superpowers/specs/2026-08-07-archived-status-repair-design.md · relation: conceptually_related_to
 - `graphify team guide (scoped hook, slash commands, edge honesty tags)` → `Layered Claude Code memory system (root CLAUDE.md, rules, agents, commands, service CLAUDE.md, personal, primer)`  [AMBIGUOUS]
   docs/claude-code-team-guide-en.md · relation: conceptually_related_to
+- `job_dump()` → `Correction of a comfortable assumption: '/admin/* is read-only' is false — 12 endpoints (8 GET) depend on get_job_or_recover and can write through its recovery path; the new dry-run deliberately does not`  [AMBIGUOUS]
+  docs/superpowers/specs/2026-08-07-archived-status-repair-design.md · relation: references
 - `._abandon_job()` → `Terminal-Write Loss Incident (job 9597267b: 5/5 OK, record stuck running/success_count=0)`  [AMBIGUOUS]
   docs/superpowers/specs/2026-07-19-detection-langue-fr-job-queue-concurrency-clamp-design.md · relation: conceptually_related_to
 - `Finding A: technical failures laundered into the not_french business verdict` → `Why Case 9 deliberately returns no alternative_urls: crawler routes.ts and BO not_french_signal.php read 'ok=false + non-empty alternatives' as a distinct signal from not_french`  [AMBIGUOUS]
@@ -1205,9 +1213,17 @@ Nodes (1): Détermine si l'URL a un signal très fort de site français.        
   docs/superpowers/specs/2026-08-03-detection-teardown-flood-and-retry-cascade-cost-design.md · relation: conceptually_related_to
 - `CONTRAINTE 5 — les listes mortes le sont pour DEUX raisons distinctes (correction 2026-08-07 d'un amalgame): codes ERR_* Chromium qui ne matchent jamais sur Camoufox/Firefox d'un côté, branche except inatteignable de l'autre. Les deux familles ne se corrigent pas de la même façon` → `RÉSIDU relevé à l'extraction: la contrainte 5 corrige l'amalgame « trois listes Chromium », mais le commentaire du script Task 6 et le gabarit CLAUDE.md de Task 7 le reproduisent en rangeant encore _FATAL_ERRORS parmi les listes Chromium (le CLAUDE.md RÉELLEMENT livré porte bien la correction)`  [AMBIGUOUS]
   docs/superpowers/plans/2026-08-06-detection-failure-cause-and-retire-proposal.md · relation: references
+- `archived_status_repair.py` → `DOC DRIFT to verify before trusting: spec and plan both describe SIX conditions (five in the pure module plus the caller's archive_lock probe). The shipped module carries a SEVENTH, a minimum snapshot age (SNAPSHOT_TOO_RECENT), and the caller's probe covers stash_lock too — added during implementation, documented only in the service CLAUDE.md`  [AMBIGUOUS]
+  docs/superpowers/specs/2026-08-07-archived-status-repair-design.md · relation: references
+- `test_condition_6_rejects_snapshot_below_min_age()` → `DOC DRIFT to verify before trusting: spec and plan both describe SIX conditions (five in the pure module plus the caller's archive_lock probe). The shipped module carries a SEVENTH, a minimum snapshot age (SNAPSHOT_TOO_RECENT), and the caller's probe covers stash_lock too — added during implementation, documented only in the service CLAUDE.md`  [AMBIGUOUS]
+  docs/superpowers/specs/2026-08-07-archived-status-repair-design.md · relation: references
+- `test_both_min_age_consumers_use_the_same_setting()` → `DOC DRIFT to verify before trusting: spec and plan both describe SIX conditions (five in the pure module plus the caller's archive_lock probe). The shipped module carries a SEVENTH, a minimum snapshot age (SNAPSHOT_TOO_RECENT), and the caller's probe covers stash_lock too — added during implementation, documented only in the service CLAUDE.md`  [AMBIGUOUS]
+  docs/superpowers/specs/2026-08-07-archived-status-repair-design.md · relation: references
+- `Pure predicate module archived_status_repair.py — six conjoint conditions in a fixed evaluation order, no I/O, testable without Docker` → `DOC DRIFT to verify before trusting: spec and plan both describe SIX conditions (five in the pure module plus the caller's archive_lock probe). The shipped module carries a SEVENTH, a minimum snapshot age (SNAPSHOT_TOO_RECENT), and the caller's probe covers stash_lock too — added during implementation, documented only in the service CLAUDE.md`  [AMBIGUOUS]
+  docs/superpowers/specs/2026-08-07-archived-status-repair-design.md · relation: rationale_for
 
 ## Knowledge Gaps
-- **3062 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+3057 more)
+- **3147 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+3142 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **Thin community `graphify-guide-en.md: Limitation: ID collision on sha...`** (1 nodes): `Creates a dictionary of headers for a DLQ message, compatible with both pika and`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
