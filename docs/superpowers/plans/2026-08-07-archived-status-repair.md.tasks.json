@@ -4,19 +4,19 @@
     {
       "id": 0,
       "subject": "Task 1: Pure predicate module",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** A dependency-free function that returns either \"repair this\" or the name of the first condition the crawl fails.\n\n**Files:**\n- Create: `apps-microservices/crawler-service/app/core/archived_status_repair.py`\n- Test: `apps-microservices/crawler-service/tests/test_archived_status_repair.py`\n\n**Acceptance Criteria:**\n- [ ] `classify()` returns `None` for a crawl meeting conditions 1-5, else the bucket name of the **first** failing condition\n- [ ] Evaluation order is exactly: status -> stashed -> allowlist -> snapshot -> log/mtime\n- [ ] `log_mtime is None` rejects (no `is None` escape hatch - this was the fail-open bug)\n- [ ] `log_mtime >= snapshot_mtime` rejects\n- [ ] Module imports nothing beyond `typing`\n- [ ] Condition 6 (`archive_lock`) is deliberately NOT evaluated here; only its bucket constant lives there, and the docstring says why\n\n**Verify:** `cd apps-microservices/crawler-service && python -m pytest tests/test_archived_status_repair.py -v` -> 15 tests pass\n\nFull code for the test file and the module is in the plan, Task 1, Steps 1 and 3.\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/app/core/archived_status_repair.py\", \"apps-microservices/crawler-service/tests/test_archived_status_repair.py\"], \"verifyCommand\": \"cd apps-microservices/crawler-service && python -m pytest tests/test_archived_status_repair.py -v\", \"acceptanceCriteria\": [\"classify() returns None for a candidate, else the first failing bucket\", \"evaluation order status->stashed->allowlist->snapshot->log\", \"log_mtime None rejects\", \"log_mtime >= snapshot_mtime rejects\", \"module imports nothing beyond typing\"], \"modelTier\": \"standard\", \"planPath\": \"docs/superpowers/plans/2026-08-07-archived-status-repair.md\"}\n```"
     },
     {
       "id": 1,
       "subject": "Task 2: Hoist allowlist, accumulate finished blobs",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** Make `_reconcile_locked` load the GCS allowlist once and collect `finished` blobs, so two consumers can share both. Behaviour-preserving refactor.\n\n**Files:**\n- Modify: `apps-microservices/crawler-service/app/core/crawler_manager.py:3650-3652` (accumulator), `:3899-3900` (call site), `:3959` (signature), `:3988-3990` (drop the internal load), `:4041-4044` (generalise the warning)\n- Test: `apps-microservices/crawler-service/tests/test_reconcile_status_repair.py`\n\n**Acceptance Criteria:**\n- [ ] `_reclean_archived_leftovers` takes `verified` as a parameter and no longer calls `_load_reclean_allowlist()` itself\n- [ ] It still returns 0 without deleting anything when `verified is None`\n- [ ] `_reconcile_locked` builds `finished_candidates` from `status == 'finished'` blobs\n- [ ] `_load_reclean_allowlist` is called at most once per tick\n- [ ] Existing reclean tests still pass (update their call sites to the 3-arg form)\n\n**Verify:** `cd apps-microservices/crawler-service && python -m pytest tests/test_crawler_manager_reclean.py tests/test_reconcile_status_repair.py -v` -> all pass\n\nFull code in the plan, Task 2, Steps 1 and 3.\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/app/core/crawler_manager.py\", \"apps-microservices/crawler-service/tests/test_reconcile_status_repair.py\", \"apps-microservices/crawler-service/tests/test_crawler_manager_reclean.py\"], \"verifyCommand\": \"cd apps-microservices/crawler-service && python -m pytest tests/test_crawler_manager_reclean.py tests/test_reconcile_status_repair.py -v\", \"acceptanceCriteria\": [\"_reclean_archived_leftovers takes verified as a parameter\", \"returns 0 and deletes nothing when verified is None\", \"_reconcile_locked builds finished_candidates\", \"_load_reclean_allowlist called at most once per tick\"], \"modelTier\": \"standard\", \"planPath\": \"docs/superpowers/plans/2026-08-07-archived-status-repair.md\"}\n```"
     },
     {
       "id": 2,
       "subject": "Task 3: The repair pass",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         0,
         1
@@ -26,7 +26,7 @@
     {
       "id": 3,
       "subject": "Task 4: Read-only dry-run endpoint",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         2
       ],
@@ -35,12 +35,12 @@
     {
       "id": 4,
       "subject": "Task 5: Document the pass in CLAUDE.md",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         3
       ],
       "description": "**Goal:** The service's own doc carries the flags, the predicate's reasoning, and above all the kill switch, so an operator does not learn it from the spec.\n\n**Files:**\n- Modify: `apps-microservices/crawler-service/CLAUDE.md` (new subsection after \"Disk recovery must not clobber (2026-08-07)\")\n\n**Acceptance Criteria:**\n- [ ] Both settings documented with defaults, and the reason the cap starts at 10 (leader lock 600s TTL, no heartbeat)\n- [ ] The kill switch is named explicitly: `rm /app/archives/verified_in_gcs.list`, effective in <=300s with no restart\n- [ ] States that turning `ARCHIVED_STATUS_REPAIR_ENABLED` off does NOT stop the reclean - disjoint settings\n- [ ] States that merely creating the allowlist arms the reclean for the ~2398 already-`archived` crawls that still carry a `storage/` subtree\n- [ ] Explains why the freshness anchor is `crawler.log` and not `_completion_marker.json`\n- [ ] Links the spec and this plan\n\n**Verify:** `grep -c \"verified_in_gcs.list\" apps-microservices/crawler-service/CLAUDE.md` -> >= 2\n\nFull text in the plan, Task 5, Step 1.\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/CLAUDE.md\"], \"verifyCommand\": \"grep -c 'verified_in_gcs.list' apps-microservices/crawler-service/CLAUDE.md\", \"acceptanceCriteria\": [\"both settings and the reason for the cap of 10\", \"kill switch named: delete the allowlist file\", \"repair flag off does not stop the reclean\", \"creating the allowlist arms the reclean on ~2398 crawls\", \"why crawler.log and not the completion marker\", \"links spec and plan\"], \"modelTier\": \"mechanical\", \"planPath\": \"docs/superpowers/plans/2026-08-07-archived-status-repair.md\"}\n```"
     }
   ],
-  "lastUpdated": "2026-08-07T00:00:00Z"
+  "lastUpdated": "2026-08-07T19:50:00Z"
 }
