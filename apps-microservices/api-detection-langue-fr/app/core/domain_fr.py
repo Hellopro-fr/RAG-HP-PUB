@@ -1668,6 +1668,12 @@ class DomainFR:
         # seraient rattrapables et à quel seuil. Le champ `error` est libre au
         # Cas 9 (aucune autre écriture) et déjà affiché par le rapport BO :
         # zéro changement de contrat. Le VERDICT, lui, ne change pas.
+        # Dénominateur du recensement : la clé vient de `nlp_result['details']`,
+        # donc absente si `nlp_result` est `None` (NLP indisponible). Les
+        # comptes publiés ici couvrent « Cas 9 atteint AVEC un verdict NLP »,
+        # pas tout le Cas 9 — sans conséquence pour la classe motivante
+        # (fastText répond avec assurance), mais une session future ne doit
+        # pas les lire comme une couverture complète.
         lexical_note = None
         threshold = settings.LEXICAL_OBSERVATION_MIN_DISTINCT
         exclusive_distinct = (

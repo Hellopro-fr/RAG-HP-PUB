@@ -90,10 +90,20 @@ class TestCompteur:
         assert _counter()(FR_CATALOGUE) <= 1
 
     def test_mots_distincts_pas_occurrences(self):
-        assert _counter()("le le le le le le le le le le le le") <= 1
+        """`nous` est exclusif (language_detector.py:199) : un mutant qui
+        compterait les OCCURRENCES rendrait 12 ici ; le vrai compteur (mots
+        DISTINCTS) rend 1. `le`, utilisé dans une version antérieure de ce
+        test, est un mot PARTAGÉ (:207-211) — il rend 0 sous les deux
+        implémentations et ne garde donc rien."""
+        assert _counter()("nous " * 12) == 1
 
     def test_texte_trop_court_rend_zero(self):
-        assert _counter()("le la les des") == 0
+        """5 mots, tous exclusifs (nous vous avec dans pour) : un mutant SANS
+        le plancher à 10 mots (:300-301) rendrait 5 (5 distincts) ; le vrai
+        compteur, sous le plancher, rend 0. `le la les des`, utilisé dans une
+        version antérieure de ce test, sont tous des mots PARTAGÉS — 0 sous
+        les deux implémentations, donc aucune garde."""
+        assert _counter()("nous vous avec dans pour") == 0
 
 
 class TestSignalAgregeInchange:
@@ -155,6 +165,21 @@ async def test_sous_le_seuil_aucun_diagnostic(monkeypatch):
 
     assert res.method == "Check_nok_v2"
     assert res.error is None
+
+
+@pytest.mark.asyncio
+async def test_seuil_exact_ecrit_le_diagnostic(monkeypatch):
+    """Épingle la frontière : à exactement `LEXICAL_OBSERVATION_MIN_DISTINCT`,
+    le diagnostic DOIT être écrit — la comparaison est `>=`, pas `>`. Référence
+    le setting plutôt que 3 en dur : suit le défaut s'il bouge."""
+    threshold = settings.LEXICAL_OBSERVATION_MIN_DISTINCT
+    d = DomainFR(homepage=URL, use_nlp_detection=True)
+    _stub_nlp(d, monkeypatch, lang="de", confidence=0.95, exclusive_distinct=threshold)
+
+    res = await d.check_page_if_french(HTML, DetectionMode.COMPLETE)
+
+    assert res.error is not None
+    assert f"{threshold} mots exclusifs distincts" in res.error
 
 
 @pytest.mark.asyncio

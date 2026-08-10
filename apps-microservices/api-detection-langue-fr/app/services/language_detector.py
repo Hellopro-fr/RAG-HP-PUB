@@ -320,11 +320,15 @@ class LanguageDetector:
         """Nombre de mots exclusivement français DISTINCTS présents dans le texte.
 
         Discriminant délibérément séparé du score agrégé de
-        `_compute_french_signal`, qui SATURE et ne peut donc pas servir ici :
-        mesuré le 2026-08-10, il vaut 1.000 pour du portugais comme pour du
-        français, et 0.761 pour de l'espagnol. Le compte de mots exclusifs
-        distincts sépare nettement — 9 à 15 pour du français rédigé, 0 à 1 pour
-        les autres langues (spec 2026-08-10 §3).
+        `_compute_french_signal`, qui SATURE et ne peut donc pas discriminer
+        les langues romanes : mesuré le 2026-08-10 sur les échantillons de
+        `tests/test_lexical_observation.py` (reproductible, contrairement aux
+        chiffres du §3 de la spec, mesurés sur des extraits non conservés —
+        ne pas les traiter comme reproductibles ici), il vaut FR 1.0, ES
+        0.833, PT 0.814, IT 0.417 — l'espagnol dépasse largement le plancher
+        0.3 que lit le Cas 8. Le compte de mots exclusifs distincts, sur les
+        mêmes échantillons, sépare nettement : FR 8, ES 0, IT 0, PT 1
+        (`mais`), EN 0, catalogue sans prose 0.
 
         Distincts et non occurrences : un menu répétant « le » vingt fois n'est
         pas plus français qu'une phrase le contenant une fois.
