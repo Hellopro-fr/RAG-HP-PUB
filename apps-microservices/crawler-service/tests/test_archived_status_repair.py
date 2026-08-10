@@ -131,3 +131,34 @@ def test_module_is_pure():
     src = inspect.getsource(asr)
     for forbidden in ("import os", "import redis", "import time", "cache_service", "open("):
         assert forbidden not in src, f"pure predicate module must not reference {forbidden}"
+
+
+def test_freshness_no_snapshot():
+    """No snapshot means no local proof that a tar was ever produced."""
+    assert asr.archive_freshness_verdict(1000.0, None) == asr.NO_SNAPSHOT
+
+
+def test_freshness_no_log():
+    """No crawler.log means no proof the crawl's activity predates the archive."""
+    assert asr.archive_freshness_verdict(None, 1000.0) == asr.RUN_AFTER_ARCHIVE
+
+
+def test_freshness_log_after_snapshot():
+    assert asr.archive_freshness_verdict(1001.0, 1000.0) == asr.RUN_AFTER_ARCHIVE
+
+
+def test_freshness_equal_timestamps_reject():
+    """>= and not >: an archive and a crawl landing in the same clock tick must
+    not authorise a deletion. Equality is unreachable in practice at float
+    resolution, so the strictness costs nothing and the error leans safe."""
+    assert asr.archive_freshness_verdict(1000.0, 1000.0) == asr.RUN_AFTER_ARCHIVE
+
+
+def test_freshness_log_before_snapshot_is_clear():
+    assert asr.archive_freshness_verdict(999.0, 1000.0) is None
+
+
+def test_freshness_both_absent_reports_snapshot_first():
+    """Order is the dry-run contract: a blob is counted in its FIRST failing
+    bucket, so no-snapshot must win over no-log."""
+    assert asr.archive_freshness_verdict(None, None) == asr.NO_SNAPSHOT
