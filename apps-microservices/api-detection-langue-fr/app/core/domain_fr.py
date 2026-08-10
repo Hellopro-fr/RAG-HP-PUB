@@ -1658,10 +1658,37 @@ class DomainFR:
         # alternatives non vides » comme un signal distinct de not_french ;
         # exposer les candidates trouvées-puis-rejetées casserait cette chaîne.
         # Le diagnostic passe par /detect-debug (debug.alternatives).
+        #
+        # OBSERVATION du signal lexical (aucune décision). Un faux négatif
+        # mesuré le 2026-08-10 — automatismes.net, 3500 caractères de français
+        # limpide, ni `html lang` ni hreflang ni TLD — n'atteint jamais le
+        # Cas 8, dont le garde `soft_from_fasttext` (:1606-1611) exige que
+        # fastText ait dit `fr`. Le compte de mots exclusifs distincts est donc
+        # publié ICI, en clair, pour qu'un run réel dise combien de domaines
+        # seraient rattrapables et à quel seuil. Le champ `error` est libre au
+        # Cas 9 (aucune autre écriture) et déjà affiché par le rapport BO :
+        # zéro changement de contrat. Le VERDICT, lui, ne change pas.
+        lexical_note = None
+        threshold = settings.LEXICAL_OBSERVATION_MIN_DISTINCT
+        exclusive_distinct = (
+            ((nlp_result or {}).get('details') or {}).get('french_exclusive_distinct')
+        )
+        if (
+            threshold > 0
+            and isinstance(exclusive_distinct, int)
+            and exclusive_distinct >= threshold
+        ):
+            lexical_note = (
+                f"lexical: {exclusive_distinct} mots exclusifs distincts — "
+                f"rattrapage candidat"
+            )
+            logger.info(f"[LEXICAL-OBS] {url} : {lexical_note}")
+
         return DetectionResponse(
             ok=False,
             url=url,
-            method='Check_nok_v2'
+            method='Check_nok_v2',
+            error=lexical_note,
         )
 
     async def check_page_if_french_debug(

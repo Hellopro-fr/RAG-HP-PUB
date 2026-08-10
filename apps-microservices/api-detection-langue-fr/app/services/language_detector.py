@@ -315,7 +315,29 @@ class LanguageDetector:
         # Normaliser avec un multiplicateur réduit (×10 au lieu de ×20)
         # Si >10% de mots français pondérés → signal fort
         return min(1.0, french_ratio * 10)
-    
+
+    def _count_french_exclusive_distinct(self, text: str) -> int:
+        """Nombre de mots exclusivement français DISTINCTS présents dans le texte.
+
+        Discriminant délibérément séparé du score agrégé de
+        `_compute_french_signal`, qui SATURE et ne peut donc pas servir ici :
+        mesuré le 2026-08-10, il vaut 1.000 pour du portugais comme pour du
+        français, et 0.761 pour de l'espagnol. Le compte de mots exclusifs
+        distincts sépare nettement — 9 à 15 pour du français rédigé, 0 à 1 pour
+        les autres langues (spec 2026-08-10 §3).
+
+        Distincts et non occurrences : un menu répétant « le » vingt fois n'est
+        pas plus français qu'une phrase le contenant une fois.
+
+        OBSERVATION uniquement — aucun verdict ne lit cette valeur pour décider.
+        """
+        words = re.findall(r'\b\w+\b', text.lower())
+        # Même plancher que _compute_french_signal (:300-301) : sous 10 mots,
+        # aucun compte n'est significatif.
+        if len(words) < 10:
+            return 0
+        return len({w for w in words if w in self.FRENCH_EXCLUSIVE_STOPWORDS})
+
     def _remove_cookie_consent_elements(self, soup: BeautifulSoup) -> None:
         """
         Supprime les éléments HTML liés aux bannières cookies/consentement/RGPD.
@@ -606,6 +628,7 @@ class LanguageDetector:
                 'langdetect': {'lang': langdetect_result, 'confidence': round(langdetect_confidence, 3)} if langdetect_result else None,
                 'langid': {'lang': langid_result, 'confidence': round(langid_confidence, 3)} if langid_result else None,
                 'french_signal': round(french_signal, 3),
+                'french_exclusive_distinct': self._count_french_exclusive_distinct(text),
                 'weighted_scores': {k: round(v, 3) for k, v in results.items()}
             }
             
@@ -684,7 +707,11 @@ class LanguageDetector:
                         for l, s in zip(labels, scores)
                     ]
                 },
-                'french_signal': round(french_signal, 3)
+                'french_signal': round(french_signal, 3),
+                # Observation : discriminant non saturant, voir
+                # _count_french_exclusive_distinct. Additif — aucun lecteur
+                # existant de `details` n'en dépend.
+                'french_exclusive_distinct': self._count_french_exclusive_distinct(text),
             }
             
             # Confiance finale basée sur fastText uniquement
