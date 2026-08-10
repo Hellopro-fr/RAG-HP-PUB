@@ -4210,6 +4210,8 @@ class CrawlerManager:
         if verified is None:
             return 0  # fail-closed: no verified-in-GCS list -> no deletion at all
         recleaned = 0
+        skipped_tree_newer = 0
+        skipped_no_snapshot = 0
         for job_data in jobs:
             if recleaned >= settings.ARCHIVED_RECLEAN_MAX_PER_TICK:
                 break
@@ -4227,6 +4229,33 @@ class CrawlerManager:
                         f"Archived-leftover reclean: skipping '{crawl_id}' — an "
                         f"in-flight update crawl restored it as previous_crawl_id.")
                     continue
+                # Freshness: the allowlist attests that a tar EXISTS in GCS, not
+                # that it is newer than this tree. archive_crawl marks 'archived'
+                # without re-tarring in two branches (local-tar reuse :2570-2578,
+                # GCS fallback :2583-2594), and a relaunch reuses the same crawl
+                # id — so an OLD tar can authorise deleting a NEW dataset that
+                # exists nowhere else. _status_snapshot.json is written only on the
+                # real archiving path (:2627), which both branches return before
+                # reaching, so its mtime is the age of the attested tar. Checked
+                # BEFORE the age gate on purpose: we want the summary to count
+                # every dangerous case, including those the age gate would save.
+                try:
+                    snapshot_mtime = _mtime_or_none(
+                        os.path.join(storage_path, '_status_snapshot.json'))
+                    log_mtime = _mtime_or_none(os.path.join(storage_path, 'crawler.log'))
+                except OSError as e:
+                    logger.warning(
+                        f"reclean: cannot stat sidecars of '{crawl_id}' ({e}) "
+                        f"— skipping, not deleting.")
+                    continue
+                verdict = archived_status_repair.archive_freshness_verdict(
+                    log_mtime=log_mtime, snapshot_mtime=snapshot_mtime)
+                if verdict == archived_status_repair.RUN_AFTER_ARCHIVE:
+                    skipped_tree_newer += 1
+                    continue
+                if verdict == archived_status_repair.NO_SNAPSHOT:
+                    skipped_no_snapshot += 1
+                    continue
                 try:
                     age_seconds = time.time() - os.stat(subtree).st_mtime
                 except OSError:
@@ -4242,6 +4271,11 @@ class CrawlerManager:
             except Exception as e:
                 logger.warning(
                     f"Archived-leftover reclean failed for '{job_data.get('crawl_id')}': {e}")
+        if recleaned or skipped_tree_newer or skipped_no_snapshot:
+            logger.info(
+                f"ARCHIVED_LEFTOVER_RECLEAN_SUMMARY actioned={recleaned} "
+                f"skipped_tree_newer={skipped_tree_newer} "
+                f"skipped_no_snapshot={skipped_no_snapshot}")
         return recleaned
 
     def _load_reclean_allowlist(self) -> Optional[set]:

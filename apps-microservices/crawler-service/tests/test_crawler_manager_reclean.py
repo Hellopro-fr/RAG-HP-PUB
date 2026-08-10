@@ -55,7 +55,14 @@ def manager(monkeypatch, tmp_path):
 
 def _make_archived_dir(base, crawl_id: str, age_seconds: int = MIN_AGE * 2):
     """Build a realistic archived crawl dir: heavy storage/ tree + small
-    sidecars at the root (which the reclean must NOT touch)."""
+    sidecars at the root (which the reclean must NOT touch).
+
+    crawler.log is deliberately stamped OLDER than _status_snapshot.json: a real
+    archived crawl logged while it ran and was snapshotted at archive time, so
+    the log precedes the snapshot. The freshness guard compares exactly those two
+    mtimes, and writing them back-to-back would leave them equal on a
+    coarse-resolution filesystem — which the guard rejects, by design.
+    """
     root = base / crawl_id
     datasets = root / "storage" / "datasets"
     datasets.mkdir(parents=True)
@@ -64,6 +71,9 @@ def _make_archived_dir(base, crawl_id: str, age_seconds: int = MIN_AGE * 2):
     (root / "_status_snapshot.json").write_text("{}")
     backdate = time.time() - age_seconds
     os.utime(root / "storage", (backdate, backdate))
+    snapshot_at = time.time()
+    os.utime(root / "_status_snapshot.json", (snapshot_at, snapshot_at))
+    os.utime(root / "crawler.log", (snapshot_at - 60, snapshot_at - 60))
     return root
 
 
@@ -286,3 +296,75 @@ class TestReconcileWiring:
             "the rmtree must run off the event loop (worker thread), like "
             "every other blocking fs op in this module"
         )
+
+
+@pytest.mark.asyncio
+async def test_tree_newer_than_archive_is_not_deleted(manager, tmp_path):
+    """THE regression. Archived blob + old snapshot + fresh crawler.log means the
+    crawl ran after its last real archiving, so the tar in GCS is OLDER than this
+    tree. archive_crawl's two shortcut branches produce exactly this state, and
+    the allowlist attests that old tar — it authorises the deletion. Deleting
+    here destroys a dataset that exists nowhere else."""
+    root = _make_archived_dir(tmp_path, "crawl-c")
+    snapshot_at = os.stat(root / "_status_snapshot.json").st_mtime
+    os.utime(root / "crawler.log", (snapshot_at + 60, snapshot_at + 60))
+
+    verified = manager._load_reclean_allowlist()
+    actioned = await manager._reclean_archived_leftovers(
+        [_job("crawl-c", root)], set(), verified)
+
+    assert actioned == 0
+    assert (root / "storage").is_dir()
+
+
+@pytest.mark.asyncio
+async def test_missing_snapshot_is_not_deleted(manager, tmp_path):
+    """No snapshot: nothing locally proves a tar was ever produced."""
+    root = _make_archived_dir(tmp_path, "crawl-d")
+    (root / "_status_snapshot.json").unlink()
+
+    verified = manager._load_reclean_allowlist()
+    actioned = await manager._reclean_archived_leftovers(
+        [_job("crawl-d", root)], set(), verified)
+
+    assert actioned == 0
+    assert (root / "storage").is_dir()
+
+
+@pytest.mark.asyncio
+async def test_missing_log_is_not_deleted(manager, tmp_path):
+    """No crawler.log: nothing proves the crawl's activity predates the archive."""
+    root = _make_archived_dir(tmp_path, "crawl-e")
+    (root / "crawler.log").unlink()
+
+    verified = manager._load_reclean_allowlist()
+    actioned = await manager._reclean_archived_leftovers(
+        [_job("crawl-e", root)], set(), verified)
+
+    assert actioned == 0
+    assert (root / "storage").is_dir()
+
+
+@pytest.mark.asyncio
+async def test_summary_counts_each_refusal(manager, tmp_path, caplog):
+    """The summary is what makes the guard verifiable while arming: every
+    skipped_tree_newer is a case where the data-loss chain would have fired."""
+    ok = _make_archived_dir(tmp_path, "crawl-0")
+    newer = _make_archived_dir(tmp_path, "crawl-1")
+    snapshot_at = os.stat(newer / "_status_snapshot.json").st_mtime
+    os.utime(newer / "crawler.log", (snapshot_at + 60, snapshot_at + 60))
+    nosnap = _make_archived_dir(tmp_path, "crawl-2")
+    (nosnap / "_status_snapshot.json").unlink()
+
+    verified = manager._load_reclean_allowlist()
+    with caplog.at_level("INFO"):
+        actioned = await manager._reclean_archived_leftovers(
+            [_job("crawl-0", ok), _job("crawl-1", newer), _job("crawl-2", nosnap)],
+            set(), verified)
+
+    assert actioned == 1
+    assert not (ok / "storage").exists()
+    assert (newer / "storage").is_dir()
+    assert (nosnap / "storage").is_dir()
+    assert ("ARCHIVED_LEFTOVER_RECLEAN_SUMMARY actioned=1 "
+            "skipped_tree_newer=1 skipped_no_snapshot=1") in caplog.text
