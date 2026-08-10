@@ -55,7 +55,9 @@ class Settings(BaseSettings):
     # français DISTINCTS au-delà duquel un diagnostic est écrit dans `error`.
     # OBSERVATION, jamais décision — aucun verdict ne le lit. Volontairement
     # permissif (3) pour faire apparaître les cas limites entre le portugais
-    # mesuré (1) et le français mesuré (9 à 15). 0 désactive le diagnostic.
+    # mesuré (1) et le français mesuré (8) ; table complète et reproductible
+    # dans le docstring de _count_french_exclusive_distinct et le CLAUDE.md
+    # du service. 0 désactive le diagnostic.
     LEXICAL_OBSERVATION_MIN_DISTINCT: int = 3
 
     # Redis (shared pool via common_utils.redis.cache_service — initialised in

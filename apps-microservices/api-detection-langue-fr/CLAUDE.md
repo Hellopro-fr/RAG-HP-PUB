@@ -114,7 +114,7 @@ Every other outcome — no variant, a failed or timed-out probe, ANY exception d
 - The rescued response's `url`/`analyzed_url` becomes the retained variant's **final** URL, which on the motivating case is a **different domain** (groupe-denis.com → ibyd.fr). This mirrors the existing homepage-fallback precedent (cache key stays the original domain, `analyzed_url` carries the target) — but it is the same shape as a cross-domain result-pairing bug previously fixed on the BO side. Verify what BO callers do with a cross-domain `analyzed_url` before trusting this path silently.
 - A `Check_nok_v2` produced through the **homepage-fallback branch** (the fallback's own `check_page_if_french` call, which returns before `[4]`/`[4bis]` run) gets **no rescue** — same false-negative class, outside this chantier's single insertion point. Documented as a known limit, not fixed here.
 
-Metric: `detection_variant_rescue_total{outcome=success|budget_exhausted|no_variant_french}`.
+Metric: `detection_variant_rescue_total{outcome=success|budget_exhausted|no_variant_french}` — only recorded once the probe loop is entered. The two early returns before the loop (budget `<= 0`, or `_generate_url_variants` producing no variants) increment no label at all, so a kill-switch-off rescue and a URL with no variant forms are both invisible to this counter, not counted under any outcome.
 
 ## Lexical-Signal Observation at Case 9 (inert)
 
@@ -137,9 +137,10 @@ At Case 9, once the count reaches `LEXICAL_OBSERVATION_MIN_DISTINCT`, a diagnost
 
 **Why inert.** The motivating false negative (automatismes.net — clean French prose, no `html lang`, no hreflang, no distinctive TLD, fastText confidently wrong) never reaches Case 8: its guard `soft_from_fasttext` requires that fastText itself said `fr`, which it didn't here. Widening that guard needs a threshold, and the only evidence for one so far is six short samples. `LEXICAL_OBSERVATION_MIN_DISTINCT=3` is an **observation** threshold — deliberately permissive, meant to surface borderline cases — distinct from the **activation** threshold under consideration (5), which is **not implemented**.
 
-**Two limits to know:**
+**Three limits to know:**
 - `mais` is in `FRENCH_EXCLUSIVE_STOPWORDS` but is ordinary Portuguese — which is why a threshold of 1 would be wrong (Portuguese alone scores 1, on that word).
 - A French page **without prose** (a bare product/brand catalogue) scores 0 — this mechanism can only ever rescue pages that contain written text.
+- The count only exists when an NLP verdict ran: `exclusive_distinct` is read out of `nlp_result['details']`, which is absent when NLP itself was unavailable. A Case 9 reached because NLP never ran publishes no count and carries no diagnostic — the census of "`Check_nok_v2` with a lexical note" therefore covers only the NLP-available subset of Case 9, not all of it. Sizing the activation threshold off that census without accounting for this undercounts the NLP-unavailable population.
 
 Spec: `docs/superpowers/specs/2026-08-10-detection-faux-negatifs-design.md` (§3's 2026-08-10 correction note carries the re-measurement).
 
@@ -241,7 +242,7 @@ When validation rejects, the service tries the domain's homepage once. If the ho
 | `INVALID_PAGE_TTL_SOFT_S` | `21600` (6h) | Cache TTL for `soft_404`. |
 | `STUB_PAGE_HOP_ENABLED` | `true` | One-hop follow of stub pages (meta-refresh or lone same-host link, visible text < `NLP_MIN_TEXT_LENGTH`) instead of rejecting them as `fetch_empty_content`. Never recursive; on hop-fetch failure the stub content flows on. `analyzed_url` discloses the hop target. |
 | `VARIANT_RESCUE_BUDGET_S` | `120` | Total clock budget for the post-verdict variant-rescue probes (`_variant_rescue`), checked BEFORE each variant and further capped by the item's remaining headroom under `_ITEM_WALL_CLOCK_S` (see "URL-Variant Fallback Gate"). Exceeded → original verdict unchanged. `0` disables (kill-switch). Default is an **estimate**, not measured on the VM. |
-| `LEXICAL_OBSERVATION_MIN_DISTINCT` | `3` | Threshold of distinct exclusively-French words above which Case 9 writes a diagnostic into `error`. Observation only — no verdict depends on it. `0` disables. |
+| `LEXICAL_OBSERVATION_MIN_DISTINCT` | `3` | Threshold of distinct exclusively-French words at or above which Case 9 writes a diagnostic into `error` (`>=`, inclusive). Observation only — no verdict depends on it. `0` disables (kill-switch). |
 
 ### Endpoint behavior
 
