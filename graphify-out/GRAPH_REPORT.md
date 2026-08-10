@@ -1,13 +1,13 @@
-# Graph Report - crawler-service + docs  (2026-08-10)
+# Graph Report - scoped rebuild (scope derived from graphify-out/graph.json)  (2026-08-10)
 
 ## Corpus Check
-- 13 files · ~0 words
+- 735 files · ~0 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 10764 nodes · 25331 edges · 222 communities detected
-- Extraction: 63% EXTRACTED · 37% INFERRED · 0% AMBIGUOUS · INFERRED: 9359 edges (avg confidence: 0.6)
-- Token cost: 0 input · 429,670 output
+- 10834 nodes · 25456 edges · 224 communities detected
+- Extraction: 63% EXTRACTED · 37% INFERRED · 0% AMBIGUOUS · INFERRED: 9381 edges (avg confidence: 0.6)
+- Token cost: 0 input · 0 output
 
 ## Community Hubs (Navigation)
 - [[_COMMUNITY_crawler-service Migration & Archive Types|crawler-service: Migration & Archive Types]]
@@ -232,9 +232,11 @@
 - [[_COMMUNITY_graphify-guide-en.md .githubworkflowsgraphify-cove...|graphify-guide-en.md: .github/workflows/graphify-cove...]]
 - [[_COMMUNITY_graphify-guide-en.md Limitation undirected graph, e...|graphify-guide-en.md: Limitation: undirected graph, e...]]
 - [[_COMMUNITY_graphify-guide-en.md PreToolUse hook on GlobGrep (n...|graphify-guide-en.md: PreToolUse hook on Glob|Grep (n...]]
+- [[_COMMUNITY_Community 264|Community 264]]
+- [[_COMMUNITY_Community 265|Community 265]]
 
 ## God Nodes (most connected - your core abstractions)
-1. `CrawlerManager` - 503 edges
+1. `CrawlerManager` - 516 edges
 2. `IncludeInArchive` - 381 edges
 3. `ReindexResponse` - 381 edges
 4. `CrawlStatus` - 381 edges
@@ -285,8 +287,8 @@ Cohesion: 0.05
 Nodes (102): CollectionName, Enum, CollectionNameGraph, Enum for the possible collection names.     The values correspond to the string, Enum for the possible collection names.     The values correspond to the string, # TODO:, get_llm_chat_response(), get_llm_chat_batch_response() (+94 more)
 
 ### Community 3 - "CrawlerManager Tests (manager & stash)"
-Cohesion: 0.01
-Nodes (694): str, DLQPropertiesAsync, create_dlq_headers(), create_dlq_message(), CrawlerManager, mock_cache_service(), TestStaleHandlerCounter, test_stale_handler_decrements_counter() (+686 more)
+Cohesion: 0.0
+Nodes (725): str, DLQPropertiesAsync, create_dlq_headers(), create_dlq_message(), CrawlerManager, mock_cache_service(), TestStaleHandlerCounter, test_stale_handler_decrements_counter() (+717 more)
 
 ### Community 86 - "crawler-service: test_admin_job_dump.py"
 Cohesion: 0.67
@@ -410,11 +412,11 @@ Nodes (257): Initializes the Redis connection pool.     Connects to Redis using 
 
 ### Community 9 - "Crawler Admin & Admission Control"
 Cohesion: 0.01
-Nodes (249): Sets a dictionary for a key, serializing it to JSON., set_json(), Prometheus metrics exposition endpoint., AdmissionController, FastAPI admission-control middleware.  Scope after the crawler carve-out refac, Atomic in-flight counter with a hard max.      Not a semaphore: acquire() does, Try to acquire a slot. Returns True on success, False if saturated., Release a slot. Defensive: does not go below zero. (+241 more)
+Nodes (250): Sets a dictionary for a key, serializing it to JSON., set_json(), Prometheus metrics exposition endpoint., AdmissionController, FastAPI admission-control middleware.  Scope after the crawler carve-out refac, Atomic in-flight counter with a hard max.      Not a semaphore: acquire() does, Try to acquire a slot. Returns True on success, False if saturated., Release a slot. Defensive: does not go below zero. (+242 more)
 
 ### Community 0 - "CrawlerManager Schemas, Archive & Reconcile"
 Cohesion: 0.0
-Nodes (1443): Gets a dictionary for a key, deserializing it from JSON., _count_files_in_dir(), _map_error_to_message(), Safely counts files in a directory, excluding Crawlee metadata., Read isError from _callback_payload.json in the crawl storage dir.     Returns, Flatten a dict/list payload into a list of (key, value) tuples using     PHP-st, Safely counts files in a directory, excluding Crawlee metadata., Publie une mise à jour du statut d'un job sur le canal Pub/Sub de Redis. (+1435 more)
+Nodes (1476): Gets a dictionary for a key, deserializing it from JSON., _count_files_in_dir(), _map_error_to_message(), Safely counts files in a directory, excluding Crawlee metadata., Read isError from _callback_payload.json in the crawl storage dir.     Returns, Flatten a dict/list payload into a list of (key, value) tuples using     PHP-st, Safely counts files in a directory, excluding Crawlee metadata., Publie une mise à jour du statut d'un job sur le canal Pub/Sub de Redis. (+1468 more)
 
 ### Community 58 - "common-utils: TestLuaScripts"
 Cohesion: 0.22
@@ -777,8 +779,8 @@ Cohesion: 0.29
 Nodes (3): app_with_admin_router(), Tests for /admin/redis-debug endpoint., Build a minimal FastAPI app with only the admin router mounted.
 
 ### Community 25 - "Crawler Auto-Stash Eligibility & Sweep"
-Cohesion: 0.03
-Nodes (103): _reconcile_locked sweep, _is_stash_eligible, Reconciliation Leader Election, Capacity Counter (crawl_jobs:running_count), Rationale: Sweep tars via create_task (no lock hold), Stash one crawl on behalf of the sweep. Swallows 409 (already         stashed /, Stash one crawl on behalf of the sweep. Swallows 409 (already         stashed /, Wipes any persistent state from a prior run of this crawl_id that         would (+95 more)
+Cohesion: 0.02
+Nodes (106): _reconcile_locked sweep, _is_stash_eligible, Reconciliation Leader Election, Capacity Counter (crawl_jobs:running_count), Rationale: Sweep tars via create_task (no lock hold), Stash one crawl on behalf of the sweep. Swallows 409 (already         stashed /, Stash one crawl on behalf of the sweep. Swallows 409 (already         stashed /, Wipes any persistent state from a prior run of this crawl_id that         would (+98 more)
 
 ### Community 90 - "superpowers: Spec: Stash Bind-Mount Pre-Flig..."
 Cohesion: 0.67
@@ -1168,6 +1170,14 @@ Nodes (1): Résout une URL relative en URL absolue.
 Cohesion: 1.0
 Nodes (1): Détermine si l'URL a un signal très fort de site français.                  Le
 
+### Community 264 - "Community 264"
+Cohesion: 1.0
+Nodes (1): Returns (error_message, failure_cause) for a subprocess exit code.          Re
+
+### Community 265 - "Community 265"
+Cohesion: 1.0
+Nodes (1): Free the disk-heavy Crawlee tree ({storage_path}/storage/: datasets,         re
+
 ## Ambiguous Edges - Review These
 - `security-auditor agent (proposed)` → `Removed agents @code-reviewer and @debugger, superseded by superpowers skills`  [AMBIGUOUS]
   docs/claude-code-team-guide-en.md · relation: conceptually_related_to
@@ -1223,7 +1233,7 @@ Nodes (1): Détermine si l'URL a un signal très fort de site français.        
   docs/superpowers/specs/2026-08-07-archived-status-repair-design.md · relation: rationale_for
 
 ## Knowledge Gaps
-- **3147 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+3142 more)
+- **3179 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+3174 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **Thin community `graphify-guide-en.md: Limitation: ID collision on sha...`** (1 nodes): `Creates a dictionary of headers for a DLQ message, compatible with both pika and`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -1484,6 +1494,10 @@ Nodes (1): Détermine si l'URL a un signal très fort de site français.        
 - **Thin community `graphify-guide-en.md: Limitation: undirected graph, e...`** (1 nodes): `Résout une URL relative en URL absolue.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `graphify-guide-en.md: PreToolUse hook on Glob|Grep (n...`** (1 nodes): `Détermine si l'URL a un signal très fort de site français.                  Le`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 264`** (1 nodes): `Returns (error_message, failure_cause) for a subprocess exit code.          Re`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 265`** (1 nodes): `Free the disk-heavy Crawlee tree ({storage_path}/storage/: datasets,         re`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 
 ## Suggested Questions
