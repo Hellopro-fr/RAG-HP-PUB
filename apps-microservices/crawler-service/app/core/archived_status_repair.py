@@ -30,6 +30,39 @@ SNAPSHOT_TOO_RECENT = "snapshot_too_recent"
 ARCHIVE_IN_PROGRESS = "archive_in_progress"
 
 
+def archive_freshness_verdict(log_mtime: Optional[float],
+                              snapshot_mtime: Optional[float]) -> Optional[str]:
+    """NO_SNAPSHOT / RUN_AFTER_ARCHIVE, or None when the archive postdates the tree.
+
+    `_status_snapshot.json` is written only on the real archiving path
+    (crawler_manager.py:2627). archive_crawl's two shortcut branches — local-tar
+    reuse (:2570-2578) and the GCS fallback (:2583-2594) — return before reaching
+    it, and _mark_as_archived (:2729-2741) never touches it. Its mtime therefore
+    answers "when was a tar actually produced", which is the only local evidence
+    of the attested tar's age. `archived_at` cannot serve: _mark_as_archived
+    rewrites it in BOTH shortcut branches, so it reads "just now" precisely when
+    the tar is old.
+
+    Both passes need this comparison and used to disagree about it: the repair
+    rejected on it, the destructive sweep never checked at all. Sharing one
+    predicate makes that divergence impossible to reintroduce — which is the
+    actual cause of the data-loss defect, not a DRY preference.
+
+    Returns the module's existing bucket constants rather than new strings: the
+    repair's dry-run already counts these two by name, and the sweep's per-tick
+    summary must agree with it.
+
+    Missing evidence rejects — absence of proof is not proof. Equal timestamps
+    reject too, for the same reason the .move-done guard uses a strict
+    comparison: the error leans the safe way.
+    """
+    if snapshot_mtime is None:
+        return NO_SNAPSHOT
+    if log_mtime is None or log_mtime >= snapshot_mtime:
+        return RUN_AFTER_ARCHIVE
+    return None
+
+
 def classify(
     crawl_id: Union[str, int],
     status: Optional[str],
@@ -79,10 +112,9 @@ def classify(
         return STASHED
     if str(crawl_id) not in verified_ids:
         return NOT_IN_GCS_LIST
-    if snapshot_mtime is None:
-        return NO_SNAPSHOT
-    if log_mtime is None or log_mtime >= snapshot_mtime:
-        return RUN_AFTER_ARCHIVE
+    freshness = archive_freshness_verdict(log_mtime, snapshot_mtime)
+    if freshness is not None:
+        return freshness
     if snapshot_age_seconds is None or snapshot_age_seconds <= min_snapshot_age_seconds:
         return SNAPSHOT_TOO_RECENT
     return None
