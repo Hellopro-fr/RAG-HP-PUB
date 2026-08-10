@@ -371,6 +371,8 @@ Three client-side prongs + one operator-side step prevent the connection-cap exh
 
 `max_connections=0` is clamped to 1. When the pool is exhausted, `redis-py` raises `ConnectionError("Too many connections")` — surfaces as a 500 to the API caller, points us at the leak source rather than silently growing.
 
+**Tuning the cap from the VM:** set **`CRAWLER_REDIS_MAX_CONNECTIONS`** in the shared `.env`, *not* `REDIS_MAX_CONNECTIONS` — docker-compose maps the namespaced name onto this service's `REDIS_MAX_CONNECTIONS` (`docker-compose.yml:1384`), same trick as `API_KEY_ADMIN_CRAWLER_SERVICE`. `cache_service` is a shared lib and 48 compose services receive `env_file: .env`, so a bare `REDIS_MAX_CONNECTIONS` there would also raise the cap on `api-recherche`, `api-classification`, `api-detection-langue-fr`, `content-extractor`, `api-gateway` and `image-comparison` (measured 2026-08-10). The other three `REDIS_*` vars in the table still have that property — namespace them the same way if you ever need to tune one for this service alone. Redis itself has room either way: `maxclients` 20000 against 32 connected clients (2026-08-10), so the cap is a per-replica concurrency limit and a leak detector, not a server-load guard.
+
 Client name: `crawler-py-{HOSTNAME or pid-N}`.
 
 #### Retry on reaped connections (2026-08-07)

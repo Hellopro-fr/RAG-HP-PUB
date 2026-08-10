@@ -1381,7 +1381,14 @@ services:
       - DATASET_CANONICAL_DEDUP_MIN_ROWS=${DATASET_CANONICAL_DEDUP_MIN_ROWS:-50}
       - REDIS_LOSS_THRESHOLD_MS=${REDIS_LOSS_THRESHOLD_MS:-60000}
       - PROGRESS_STALL_THRESHOLD_MS=${PROGRESS_STALL_THRESHOLD_MS:-600000}
-      - REDIS_MAX_CONNECTIONS=${REDIS_MAX_CONNECTIONS:-20}
+      # Pool cap: the code reads REDIS_MAX_CONNECTIONS, but the .env var is
+      # namespaced CRAWLER_REDIS_MAX_CONNECTIONS — cache_service is a shared lib
+      # and 48 services get env_file: .env, so a bare REDIS_MAX_CONNECTIONS there
+      # would also raise the cap on api-recherche, api-classification,
+      # api-detection-langue-fr, content-extractor, api-gateway and
+      # image-comparison, blunting the bounded pool's leak detection on services
+      # nobody has diagnosed. The three below still inherit from the shared .env.
+      - REDIS_MAX_CONNECTIONS=${CRAWLER_REDIS_MAX_CONNECTIONS:-20}
       - REDIS_SOCKET_TIMEOUT_S=${REDIS_SOCKET_TIMEOUT_S:-10}
       - REDIS_SOCKET_CONNECT_TIMEOUT_S=${REDIS_SOCKET_CONNECT_TIMEOUT_S:-5}
       - REDIS_HEALTH_CHECK_INTERVAL_S=${REDIS_HEALTH_CHECK_INTERVAL_S:-30}
