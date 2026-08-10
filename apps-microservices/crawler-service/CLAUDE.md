@@ -401,13 +401,26 @@ populations: the recovery stubs fixed forward by `2a12a098`, and the pre-existin
 | `ARCHIVED_STATUS_REPAIR_ENABLED` | `false` | deploy inert, read the dry-run, then flip |
 | `ARCHIVED_STATUS_REPAIR_MAX_PER_TICK` | `10` | low on purpose: `reconcile_leader_lock` has a 600s TTL and **no** heartbeat (`:3363`) |
 
-Six conditions, evaluated in order — `finished`, not stashed, id in `verified_in_gcs.list`,
-`_status_snapshot.json` present, `crawler.log` **older** than the snapshot, and
-`archive_lock:{id}` free. The freshness check is anchored on `crawler.log` and not
-on `_completion_marker.json`: `_cleanup_stale_state_for_relaunch` deletes the
-marker on every relaunch (`:3511`) while `_cleanup_local_data` keeps the log
-deliberately (`:2650-2653`). Anchoring on the marker was fail-open on re-crawled
-ids and would have made `/results` serve the previous generation's tar.
+Seven conditions, evaluated in order — `finished`, not stashed, id in `verified_in_gcs.list`,
+`_status_snapshot.json` present, `crawler.log` **older** than the snapshot, the snapshot itself at
+least `ARCHIVED_RECLEAN_MIN_AGE_SECONDS` (24h) old, and neither `archive_lock:{id}` nor
+`stash_lock:{id}` held. The first six live in the pure module; the lock probe is the caller's, run
+last so its Redis `EXISTS` is only paid for blobs that already passed the rest. The dry-run endpoint
+evaluates the same seven, or an operator would authorise something they did not inspect.
+
+Two of those conditions exist only because review found the holes, so do not relax them:
+
+- **`crawler.log` older than the snapshot**, not `_completion_marker.json`. The marker is deleted by
+  `_cleanup_stale_state_for_relaunch` on every relaunch (`:3511`), while `_cleanup_local_data` keeps
+  the log deliberately (`:2650-2653`). Anchoring on the marker was fail-open on re-crawled ids and
+  would have made `/results` serve the previous generation's tar with no error anywhere.
+- **Snapshot at least 24h old.** `archive_crawl` writes the snapshot before a tar that runs for
+  minutes; if that tar then fails, the snapshot's mtime stays fresh, the log stays older, the lock is
+  gone, and the freshness check is defeated **permanently**. The age gate is what closes that.
+
+The lock probe covers `stash_lock` too because the auto-stash sweep runs on a superset population in
+the same tick, dispatched a few lines earlier, and writes `stashed_at` only *after* its own tar — so
+the repair's fresh re-read would still read `finished` mid-stash.
 
 Dry-run: `GET /admin/archived-status-repair` — read-only, does not take
 `Depends(get_job_or_recover)`.
