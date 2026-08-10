@@ -251,6 +251,29 @@ async def test_unreadable_sidecar_skips_the_crawl(repair_on):
 
 
 @pytest.mark.asyncio
+async def test_recent_snapshot_is_not_repaired(repair_on):
+    """SNAPSHOT_TOO_RECENT (condition 6): a snapshot rewritten within
+    settings.ARCHIVED_RECLEAN_MIN_AGE_SECONDS (default 86400s) means an
+    archive is currently running or just failed mid-tar -- must not be
+    repaired yet. Built relative to time.time() (1h old), not the epoch-1970
+    constants _stat_map defaults to (200.0/100.0), which clear the age gate
+    by ~1.8e9 seconds by accident."""
+    mgr = CrawlerManager()
+    archived = []
+    now = time.time()
+    with patch.object(CrawlerManager, "_mark_as_archived", AsyncMock()) as mark, \
+         patch.object(CrawlerManager, "_archive_lock_held", AsyncMock(return_value=False)), \
+         patch("app.core.crawler_manager.os.path.getmtime",
+               side_effect=_stat_map(snapshot=now - 3600, log=now - 7200)), \
+         patch("app.core.crawler_manager.cache_service.get_json",
+               AsyncMock(return_value={"crawl_id": "6712", "status": "finished"})):
+        n = await mgr._repair_archived_status([_job()], {"6712"}, archived)
+    assert n == 0
+    mark.assert_not_awaited()
+    assert archived == []
+
+
+@pytest.mark.asyncio
 async def test_recrawled_job_is_not_repaired(repair_on):
     """crawler.log newer than the snapshot: a run finished after the archive."""
     mgr = CrawlerManager()
@@ -335,3 +358,31 @@ async def test_repaired_job_is_recleaned_in_the_same_tick(monkeypatch, tmp_path)
     assert actioned == 1, "the reclean must consume the job the repair pass just appended"
     assert not (root / "storage").exists()
     assert (root / "crawler.log").is_file(), "sidecars at the crawl-dir root are kept"
+
+
+def test_both_min_age_consumers_use_the_same_setting():
+    """The pass (_repair_archived_status) and the dry-run endpoint
+    (GET /admin/archived-status-repair) both call archived_status_repair.classify()
+    and must pass it the SAME min_snapshot_age_seconds, or an operator could
+    authorise a repair based on a dry-run report computed against a different
+    threshold than the pass will actually use. _reconcile_locked's os.uname()
+    call makes an end-to-end pin POSIX-only (can't run on this Windows box),
+    so this source check is the established substitute for wiring coverage --
+    same shape as test_reconcile_collects_finished_candidates above."""
+    from app.router import admin
+
+    repair_src = inspect.getsource(CrawlerManager._repair_archived_status)
+    endpoint_src = inspect.getsource(admin.archived_status_repair_dry_run)
+
+    for name, src in (
+        ("_repair_archived_status", repair_src),
+        ("archived_status_repair_dry_run (GET /admin/archived-status-repair)", endpoint_src),
+    ):
+        assert "ARCHIVED_RECLEAN_MIN_AGE_SECONDS" in src, (
+            f"{name} must pass settings.ARCHIVED_RECLEAN_MIN_AGE_SECONDS as "
+            "min_snapshot_age_seconds — the two consumers must not drift"
+        )
+        assert not re.search(r"min_snapshot_age_seconds\s*=\s*0\b", src), (
+            f"{name} must not hardcode min_snapshot_age_seconds=0 — the two "
+            "consumers must not drift"
+        )

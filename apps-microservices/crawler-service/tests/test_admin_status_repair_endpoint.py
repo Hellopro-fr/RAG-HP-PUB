@@ -6,6 +6,7 @@ Depends(get_job_or_recover) can write through its recovery path; this one must
 not, so the contract is asserted rather than assumed.
 """
 import json
+import time
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -236,6 +237,57 @@ def test_skipped_counter_reconciles_scanned(monkeypatch):
     total = (body["candidates_count"] + sum(body["rejected"].values())
              + body["unreadable_sidecars"] + body["skipped"])
     assert total == body["scanned"]
+
+
+def test_recent_snapshot_lands_in_snapshot_too_recent_bucket(monkeypatch):
+    """SNAPSHOT_TOO_RECENT (condition 6), end to end through the endpoint: a
+    snapshot rewritten within ARCHIVED_RECLEAN_MIN_AGE_SECONDS (default
+    86400s) means an archive is in flight or just failed mid-tar, so the blob
+    must land in rejected['snapshot_too_recent'] and NOT in candidates.
+    Self-contained (own app/fake redis) rather than the shared BLOBS/client
+    fixture, so the module-level _getmtime's fixed 200.0/100.0 pair — ~1.8e9
+    seconds old, clearing the age gate by accident — isn't reused here; the
+    mtimes are built relative to time.time() instead."""
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "API_KEY", None, raising=False)
+    from app.router.admin import router as AdminRouter
+    app = FastAPI()
+    app.include_router(AdminRouter)
+
+    now = time.time()
+    blob = {"crawl_id": "9001", "status": "finished", "storage_path": "/app/storage/9001"}
+
+    def _getmtime_recent(path):
+        if path.endswith("_status_snapshot.json"):
+            return now - 3600  # 1h old, well under the 86400s default
+        if path.endswith("crawler.log"):
+            return now - 7200  # older than the snapshot
+        raise FileNotFoundError(path)
+
+    fake = MagicMock()
+
+    async def _scan_iter(match=None, count=None):
+        yield "crawl_job:9001"
+
+    fake.scan_iter = _scan_iter
+    pipe = MagicMock()
+    pipe.get = MagicMock()
+    pipe.execute = AsyncMock(return_value=[json.dumps(blob)])
+    fake.pipeline = MagicMock(return_value=pipe)
+    fake.exists = AsyncMock(return_value=0)
+
+    from common_utils.redis import cache_service
+    monkeypatch.setattr(cache_service, "redis_client", fake, raising=False)
+
+    from app.core.crawler_manager import crawler_manager
+    with patch.object(type(crawler_manager), "_load_reclean_allowlist",
+                      return_value={"9001"}), \
+         patch("app.router.admin.os.path.getmtime", side_effect=_getmtime_recent):
+        body = TestClient(app).get("/admin/archived-status-repair").json()
+
+    assert body["candidates"] == []
+    assert body["candidates_count"] == 0
+    assert body["rejected"]["snapshot_too_recent"] == 1
 
 
 def test_does_not_depend_on_get_job_or_recover():
