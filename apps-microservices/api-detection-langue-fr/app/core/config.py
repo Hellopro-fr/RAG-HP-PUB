@@ -52,7 +52,8 @@ class Settings(BaseSettings):
     VARIANT_RESCUE_BUDGET_S: int = 120
 
     # Observation du signal lexical au Cas 9 : seuil de mots exclusivement
-    # français DISTINCTS au-delà duquel un diagnostic est écrit dans `error`.
+    # français DISTINCTS à partir duquel (compte atteint, `>=`) un diagnostic
+    # est écrit dans `error`.
     # OBSERVATION, jamais décision — aucun verdict ne le lit. Volontairement
     # permissif (3) pour faire apparaître les cas limites entre le portugais
     # mesuré (1) et le français mesuré (8) ; table complète et reproductible
