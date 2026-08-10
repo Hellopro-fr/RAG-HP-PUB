@@ -92,6 +92,35 @@ def _mtime_or_none(path: str) -> Optional[float]:
         return None
 
 
+def _move_done_is_fresh(done_mtime: Optional[float], stashed_at: Optional[str]) -> bool:
+    """True only when a .move-done marker provably belongs to the CURRENT stash.
+
+    The marker is named `{crawl_id}.move-done` and carries no trace of the attempt
+    that produced it, so on its own it cannot tell "my attempt, cut a moment ago"
+    from "an attempt four months ago". A marker written AFTER the current stash
+    began is necessarily this stash's; one written before belongs to an earlier one.
+
+    Both clocks are the same kernel's: the mtime comes from the host daemon's touch
+    on a bind-mounted results dir (docker-compose.yml:1361), stashed_at from
+    datetime.utcnow() in the container. No drift to compensate.
+
+    Strictly newer, on purpose: a stash and an archive inside the same second read
+    as stale, so we delete and re-request, and the daemon replays its idempotent
+    already-moved branch (tools/download_daemon.sh:86-91) -- one extra round trip,
+    correct outcome. The error leans the safe way.
+
+    Missing or unparseable evidence returns False: absence of proof is not proof.
+    """
+    if done_mtime is None or not stashed_at:
+        return False
+    try:
+        stashed_epoch = _parse_iso_naive_utc(stashed_at).replace(
+            tzinfo=timezone.utc).timestamp()
+    except (ValueError, TypeError):
+        return False
+    return done_mtime > stashed_epoch
+
+
 def _parse_iso_naive_utc(value: str) -> datetime:
     """Parse an ISO 8601 datetime string and return a NAIVE UTC datetime.
 
@@ -2381,6 +2410,41 @@ class CrawlerManager:
         request_path = os.path.join(req_dir, f"{crawl_id}.move-request")
         done_path = os.path.join(res_dir, f"{crawl_id}.move-done")
         error_path = os.path.join(res_dir, f"{crawl_id}.move-error")
+
+        # A pre-existing .move-done is honoured only if it provably belongs to THIS
+        # stash (see _move_done_is_fresh). A stale one is DELETED rather than merely
+        # ignored: the marker is tested twice -- the skip below and the poll loop --
+        # so leaving it on disk would move the bug three lines down instead of
+        # closing it. Deleting makes both tests correct without either needing to
+        # know about freshness.
+        stale_marker = False
+        try:
+            done_mtime = _mtime_or_none(done_path)
+        except OSError as e:
+            # Unreadable is not absent: we cannot prove the marker is ours.
+            logger.warning(f"STASH_MOVE_STALE_MARKER crawl_id={crawl_id} "
+                           f"reason=marker_unreadable detail={e}")
+            stale_marker = True
+        else:
+            if done_mtime is not None and not _move_done_is_fresh(
+                    done_mtime, job_info.get("stashed_at")):
+                logger.warning(
+                    f"STASH_MOVE_STALE_MARKER crawl_id={crawl_id} "
+                    f"reason=marker_older_than_stash done_mtime={done_mtime} "
+                    f"stashed_at={job_info.get('stashed_at')}")
+                stale_marker = True
+        if stale_marker:
+            try:
+                os.remove(done_path)
+                logger.info(f"Deleted stale .move-done for '{crawl_id}'; "
+                            f"the stash->archive move will be requested again.")
+            except FileNotFoundError:
+                pass  # gone already (daemon or another replica): normal flow is right
+            except OSError as e:
+                # Proceeding would mark archived without a move -- the very bug.
+                logger.error(f"Cannot delete stale .move-done for '{crawl_id}': {e}")
+                raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY,
+                                    detail={"error_code": "STASH_MOVE_STALE_MARKER"})
 
         # Reconcile a prior 504 limbo: if a previous attempt timed out but the
         # daemon completed the move afterwards, a .move-done is already present.
