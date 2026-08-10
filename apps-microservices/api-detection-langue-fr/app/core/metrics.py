@@ -103,3 +103,13 @@ ORPHANED_PROTOCOL_FUTURES = Counter(
     "detection_orphaned_protocol_futures_total",
     "Orphaned Playwright protocol callbacks drained by the loop exception handler",
 )
+
+# Issues du rattrapage par variante d'URL sur verdict inexploitable.
+# Valeurs de `outcome` : success, budget_exhausted, no_variant_french.
+# Sert notamment à réviser le défaut de VARIANT_RESCUE_BUDGET_S, qui est une
+# estimation non mesurée.
+VARIANT_RESCUE_OUTCOME = Counter(
+    "detection_variant_rescue_total",
+    "Outcomes of the URL-variant rescue attempted on an unusable verdict",
+    labelnames=("outcome",),
+)

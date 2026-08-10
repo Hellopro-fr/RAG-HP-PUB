@@ -26,8 +26,8 @@ from app.core.async_jobs import _JobsDisabled, _JobsUnavailable, _JobCapacityExc
 from app.core.domain_fr import DomainFR, domain_cache
 from app.core.config import settings
 from app.core.inflight_dedup import InflightDedup
-from app.core.metrics import VALIDATION_VERDICTS, HOMEPAGE_FALLBACK_TRIGGERED, ADMISSION_REJECTED, INFLIGHT_REQUESTS
-from app.services.redirect_tracker import fetch_html
+from app.core.metrics import VALIDATION_VERDICTS, HOMEPAGE_FALLBACK_TRIGGERED, ADMISSION_REJECTED, INFLIGHT_REQUESTS, VARIANT_RESCUE_OUTCOME
+from app.services.redirect_tracker import fetch_html, _generate_url_variants
 from app.services.language_detector import detect_challenge_page
 from app.services.page_validator import (
     validate as validate_page,
@@ -35,7 +35,7 @@ from app.services.page_validator import (
     find_stub_redirect_target,
     is_transient_http_status,
 )
-from app.services.scraper import ScrapeResult
+from app.services.scraper import ScrapeResult, scrape_html
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +85,108 @@ def _format_failure_detail(sink: Optional[dict]) -> Optional[str]:
     if not cause:
         return None
     return f"{(sink or {}).get('stage') or 'unknown'}: {cause}"
+
+
+# Verdicts qu'une AUTRE FORME d'URL peut réparer. Ils ont en commun d'être nés
+# d'un fetch RÉUSSI : la Phase 2 de fetch_html (permutation http/https,
+# www/apex) ne s'est donc jamais exécutée, alors que c'est précisément le cas
+# où elle répare. Les échecs de fetch ne figurent PAS ici — fetch_html a déjà
+# permuté les variantes pour eux.
+_VARIANT_RESCUE_METHODS = ('Check_nok_v2', 'fetch_empty_content')
+
+
+async def _variant_rescue(
+    url: str,
+    proxy_url: Optional[str],
+    mode: DetectionMode,
+    use_nlp_detection: bool,
+    forced_method: Optional[str],
+) -> Optional[DetectionResponse]:
+    """Re-teste les formes http/https et www/apex de `url`, rend le premier
+    verdict français obtenu.
+
+    Rend `None` — donc « garde le verdict d'origine » — dans TOUS les autres
+    cas : budget nul, aucune variante, sonde en échec, sonde en timeout, page
+    de challenge, aucune variante française. Un rattrapage ne doit jamais
+    dégrader un verdict : le transformer en `error` par un timeout serait pire
+    que le faux négatif qu'il corrige, puisqu'`error` n'est ni re-tenté en
+    Pass 2 ni porteur d'une cause.
+    """
+    budget = settings.VARIANT_RESCUE_BUDGET_S
+    if budget <= 0:
+        return None
+
+    variants = _generate_url_variants(url)
+    if not variants:
+        return None
+
+    deadline = time.monotonic() + budget
+    for variant in variants:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            logger.info(f"[VARIANT-RESCUE] budget épuisé pour {url}")
+            VARIANT_RESCUE_OUTCOME.labels(outcome="budget_exhausted").inc()
+            return None
+
+        try:
+            # Une SONDE, pas une cible primaire : un seul scrape_html, jamais la
+            # cascade de fetch_html (3 tentatives x ~85s ne tient dans aucun
+            # budget). Même patron que la sonde de confirmation du Cas 6
+            # (domain_fr.py:1460-1463). Le wait_for est borné par le RESTE du
+            # budget, pas par une constante : une variante lente ne peut donc
+            # pas le dépasser à elle seule.
+            fetch = await asyncio.wait_for(
+                scrape_html(variant, proxy=proxy_url or settings.APIFY_PROXY),
+                timeout=remaining,
+            )
+        except Exception as e:
+            # Y compris asyncio.TimeoutError : une sonde ratée n'est pas un
+            # échec de la détection, c'est l'absence d'un rattrapage.
+            # `Exception` et non `BaseException` : asyncio.CancelledError dérive
+            # de BaseException depuis Python 3.8 et doit continuer à remonter —
+            # un item annulé ne doit pas se présenter comme « aucune variante
+            # française ».
+            logger.info(f"[VARIANT-RESCUE] {variant} : sonde en échec ({e!r})")
+            continue
+
+        if not fetch or not fetch.html:
+            continue
+
+        challenge = detect_challenge_page(fetch.html)
+        if challenge:
+            logger.info(f"[VARIANT-RESCUE] {variant} : page {challenge}, ignorée")
+            continue
+
+        variant_final = fetch.final_url or variant
+        # validate_alternatives=False, en dur : la question posée est « CETTE
+        # forme d'URL est-elle française ? », pas « expose-t-elle une
+        # alternative française ? » — la chasse aux alternatives a déjà eu lieu
+        # sur la forme d'origine, avec le réglage de l'appelant. Sans ce faux,
+        # la boucle du Cas 6 ouvrirait des navigateurs supplémentaires HORS du
+        # budget (jusqu'à 120s par alternative), et l'annuler en pleine
+        # navigation ré-ouvrirait le flood de callbacks orphelins que le commentaire
+        # de domain_fr.py:1451-1459 documente.
+        detector = DomainFR(
+            homepage=variant_final,
+            forced_method=forced_method,
+            use_nlp_detection=use_nlp_detection,
+            original_homepage=url,
+            validate_alternatives=False,
+        )
+        candidate = await detector.check_page_if_french(fetch.html, mode)
+        if not candidate.ok:
+            continue
+
+        candidate.analyzed_url = variant_final
+        candidate.method = f"{candidate.method}+variant_rescue"
+        logger.info(
+            f"[VARIANT-RESCUE] OK {url} via {variant_final} ({candidate.method})"
+        )
+        VARIANT_RESCUE_OUTCOME.labels(outcome="success").inc()
+        return candidate
+
+    VARIANT_RESCUE_OUTCOME.labels(outcome="no_variant_french").inc()
+    return None
 
 
 _inflight_dedup = InflightDedup()
@@ -401,6 +503,20 @@ async def _detect_single_url(
 
     if stub_target_used and not result.analyzed_url:
         result.analyzed_url = stub_target_used
+
+    # [4bis] Rattrapage par variante d'URL. `not html_was_provided` est
+    # structurel : quand l'appelant fournit le HTML (crawler-service), aucun
+    # fetch ne lui est dû et le rattrapage n'a pas de sens.
+    if not html_was_provided and result.method in _VARIANT_RESCUE_METHODS:
+        rescued = await _variant_rescue(
+            url, proxy_url, mode, use_nlp_detection, forced_method,
+        )
+        if rescued:
+            result = rescued
+            # L'URL analysée devient la graine de l'entrée de cache, comme au
+            # repli homepage (`domain_cache.set(url, homepage, …)` ligne 339).
+            # La CLÉ reste le domaine d'origine.
+            effective_url = rescued.analyzed_url or effective_url
 
     if not html_was_provided:
         await domain_cache.set(url, effective_url, result.model_dump())

@@ -42,6 +42,22 @@ class Settings(BaseSettings):
     # de la rejeter en fetch_empty_content. Un seul saut, jamais récursif.
     STUB_PAGE_HOP_ENABLED: bool = True
 
+    # Rattrapage par variante d'URL sur verdict inexploitable (Check_nok_v2,
+    # fetch_empty_content). Budget horloge total des sondes, vérifié AVANT
+    # chaque variante ; dépassé, le verdict d'origine est rendu inchangé.
+    # 0 désactive le rattrapage (kill-switch). Le défaut de 120 s est une
+    # ESTIMATION : le coût réel d'une sonde n'a pas été mesuré sur la VM
+    # (spec 2026-08-10 §9.4) — le compteur detection_variant_rescue_total sert
+    # à le réviser.
+    VARIANT_RESCUE_BUDGET_S: int = 120
+
+    # Observation du signal lexical au Cas 9 : seuil de mots exclusivement
+    # français DISTINCTS au-delà duquel un diagnostic est écrit dans `error`.
+    # OBSERVATION, jamais décision — aucun verdict ne le lit. Volontairement
+    # permissif (3) pour faire apparaître les cas limites entre le portugais
+    # mesuré (1) et le français mesuré (9 à 15). 0 désactive le diagnostic.
+    LEXICAL_OBSERVATION_MIN_DISTINCT: int = 3
+
     # Redis (shared pool via common_utils.redis.cache_service — initialised in
     # main.py's lifespan; bridged to the process env there because cache_service
     # reads os.environ, not this Settings object). Pool tuning is env-only:
