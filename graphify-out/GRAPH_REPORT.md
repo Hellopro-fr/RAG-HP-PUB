@@ -1,13 +1,13 @@
-# Graph Report - scoped rebuild (scope derived from graphify-out/graph.json)  (2026-08-10)
+# Graph Report - api-detection-langue-fr + docs (incl. 2 backlog chantiers)  (2026-08-11)
 
 ## Corpus Check
-- 735 files · ~0 words
+- 23 files · ~0 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 10880 nodes · 25577 edges · 224 communities detected
-- Extraction: 63% EXTRACTED · 37% INFERRED · 0% AMBIGUOUS · INFERRED: 9410 edges (avg confidence: 0.6)
-- Token cost: 0 input · 0 output
+- 11155 nodes · 26328 edges · 223 communities detected
+- Extraction: 63% EXTRACTED · 37% INFERRED · 0% AMBIGUOUS · INFERRED: 9625 edges (avg confidence: 0.6)
+- Token cost: 0 input · 587,639 output
 
 ## Community Hubs (Navigation)
 - [[_COMMUNITY_crawler-service Migration & Archive Types|crawler-service: Migration & Archive Types]]
@@ -232,20 +232,19 @@
 - [[_COMMUNITY_graphify-guide-en.md .githubworkflowsgraphify-cove...|graphify-guide-en.md: .github/workflows/graphify-cove...]]
 - [[_COMMUNITY_graphify-guide-en.md Limitation undirected graph, e...|graphify-guide-en.md: Limitation: undirected graph, e...]]
 - [[_COMMUNITY_graphify-guide-en.md PreToolUse hook on GlobGrep (n...|graphify-guide-en.md: PreToolUse hook on Glob|Grep (n...]]
-- [[_COMMUNITY_Community 264|Community 264]]
-- [[_COMMUNITY_Community 265|Community 265]]
+- [[_COMMUNITY_superpowers Référence de suite AVANT chantier  7 éche|superpowers: Référence de suite AVANT chantier : 7 éche]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `CrawlerManager` - 530 edges
 2. `IncludeInArchive` - 381 edges
 3. `ReindexResponse` - 381 edges
 4. `CrawlStatus` - 381 edges
-5. `DetectionMode` - 300 edges
-6. `DomainFR` - 275 edges
+5. `DomainFR` - 318 edges
+6. `DetectionMode` - 300 edges
 7. `DetectionResponse` - 227 edges
-8. `BatchItem` - 176 edges
-9. `DebugAlternativesInfo` - 155 edges
-10. `ScrapeResult` - 155 edges
+8. `LanguageDetector` - 197 edges
+9. `BatchItem` - 176 edges
+10. `DebugAlternativesInfo` - 155 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `GeminiClient` --semantically_similar_to--> `gemini_client Gemini Infrastructure`  [INFERRED] [semantically similar]
@@ -257,7 +256,7 @@
 - `retry_on_error is what lets _disconnect_raise fall through to the retry     loo` --semantically_similar_to--> `WHY the retry must be explicit: redis-py defaults to Retry(NoBackoff(), 0) with an empty retry_on_error (verified 5.2.1), so the first command on a reaped socket raises ConnectionError and every cache_service helper swallows it into its default return (None/0/[]/False) — indistinguishable from a real answer; redis is unpinned so the default is whatever pip resolved`  [INFERRED] [semantically similar]
   libs/common-utils/tests/test_cache_service.py → apps-microservices/crawler-service/CLAUDE.md
 - `detect_challenge_page()` --semantically_similar_to--> `The crawler's hand-ported challenge classifier has drifted from the service's 9 families`  [EXTRACTED] [semantically similar]
-  D:\DevHellopro\Workspaces\RAG-HP-PUB\apps-microservices\api-detection-langue-fr\app\services\language_detector.py → docs/superpowers/references/2026-07-29-crawler-detection-seam-audit.md
+  apps-microservices/api-detection-langue-fr/app/services/language_detector.py → docs/superpowers/references/2026-07-29-crawler-detection-seam-audit.md
 
 ## Hyperedges (group relationships)
 - **Three independent paths keep the graph fresh** — graphify_auto_rebuild_workflow, graphify_scoped_hook, graphify_semantic_update_trigger [EXTRACTED 0.90]
@@ -279,6 +278,15 @@
 - **The six conditions of the repair predicate, each closing a distinct way the evidence can lie** — archived_repair_spec_rationale_cond1_status_finished, archived_repair_spec_rationale_cond2_not_stashed, archived_repair_spec_rationale_cond3_in_gcs_allowlist, archived_repair_spec_rationale_cond4_snapshot_present, archived_repair_spec_rationale_cond5_log_older_than_snapshot, archived_repair_spec_rationale_cond6_archive_lock_free, archived_repair_spec_predicate [EXTRACTED 1.00]
 - **The deployment safety interlock: the allowlist file arms two disjoint consumers, only one of which the repair flag controls** — archived_repair_spec_allowlist_evidence, archived_repair_spec_kill_switch, archived_repair_spec_rationale_residual_allowlist_arms_reclean, archived_repair_spec_deployment_sequence, archived_repair_spec_rationale_deploy_order_revised, archived_repair_spec_settings [EXTRACTED 0.95]
 - **What adversarial review changed: a fail-open freshness anchor, an overstated snapshot claim, a self-contradicting stat-error rule, and a deployment order that deleted before it measured** — archived_repair_spec_rationale_marker_anchor_refuted, archived_repair_spec_rationale_snapshot_not_proof_corrected, archived_repair_spec_rationale_stat_errors_fail_closed, archived_repair_spec_rationale_deploy_order_revised, archived_repair_spec_rationale_cond6_archive_lock_free [EXTRACTED 1.00]
+- **The rescue's effective budget is arbitrated by five constants at once (VARIANT_RESCUE_BUDGET_S, _ITEM_WALL_CLOCK_S, _RESCUE_MARGIN_S, _MIN_PROBE_S, JOB_MAX_S)** — detfr_v56_variant_rescue_effective_budget, detfr_v56_why_item_wall_clock_unenforced_on_detect, detfr_v56_why_min_probe_floor_80s, detfr_v56_variant_rescue_three_settings_footgun, detfr_v56_why_rescue_risks_the_whole_async_job [EXTRACTED 0.90]
+- **2026-08-11 async-job Redis resilience trio: submit 503, poll 503-vs-404, terminal-write deadline — and its operational cost** — detfr_v56_terminal_write_deadline_budget, detfr_v56_jobs_disabled_sole_headerless_503, detfr_v56_poll_503_vs_404_ping, detfr_v56_operational_cost_of_the_redis_retry_trio [EXTRACTED 0.90]
+- **Rattrapage par variante d'URL : verdict inexploitable après fetch réussi → sondes bornées par budget → premier verdict français gagne** — faux_neg_spec_volet_a_variant_rescue, faux_neg_plan_task1_volet_a, faux_neg_spec_rationale_successful_fetch_is_the_trap, faux_neg_spec_budget_setting_two_regimes, routes_variant_rescue, routes_detect_single_url, scraper_scrape_html, redirect_tracker_fetch_html, config_settings, apps_microservices_api_detection_langue_fr_tests_test_variant_rescue_py [EXTRACTED 1.00]
+- **Observation lexicale au Cas 9 : compte de mots exclusifs distincts publié dans details, diagnostic écrit dans error, aucun verdict changé** — faux_neg_spec_volet_b_lexical_observation, faux_neg_plan_task2_volet_b, faux_neg_spec_rationale_aggregate_signal_saturates_falsified, faux_neg_spec_two_thresholds_observation_3_activation_5, language_detector_languagedetector_count_french_exclusive_distinct, language_detector_languagedetector_compute_french_signal, domain_fr_domainfr_check_page_if_french, apps_microservices_api_detection_langue_fr_tests_test_lexical_observation_py [EXTRACTED 1.00]
+- **Lignée des chantiers de faux négatifs FR sur la matrice de décision (Case 2a hreflang, strip consent, soft-French lexical, seam audit crawler/détection)** — faux_neg_spec_doc, detection_softfr_v48_cas8_last_resort, detection_case2a_v48_case2a_rejection_gate, detection_consent_v48_data_nosnippet_selector, seam_audit_v49_audit_doc, failure_cause_spec_b1_cause_to_caller [INFERRED 0.80]
+- **Contrat de fraicheur du marqueur .move-done: le daemon hote ecrit le marqueur, le predicat le date contre stashed_at, le garde le supprime s'il ne peut pas etre prouve notre** — crawler_manager_crawlermanager_move_stash_to_archive, crawler_manager_move_done_is_fresh, download_daemon_process_move_requests, move_done_spec_freshness_rule_strict_newer, move_done_spec_why_delete_not_merely_ignore [INFERRED 0.80]
+- **Famille « une preuve n'en est une que si elle est plus recente que ce qu'elle pretend attester »: garde .move-done et reparation du statut archived partagent la meme regle de datation et le meme fail-closed** — move_done_spec_absence_of_proof_is_not_proof, archived_repair_spec_predicate, archived_repair_spec_rationale_marker_anchor_refuted, crawler_manager_mtime_or_none [INFERRED 0.70]
+- **The 2026-08-10 reclean freshness-guard chantier — spec, plan, task tracker, the shared predicate module, the destructive sweep and the two test suites that prove neutrality and the regression** — reclean_spec_design, reclean_plan_doc, reclean_tasks_tracker, app_core_archived_status_repair_py, crawler_manager_crawlermanager_reclean_archived_leftovers, apps_microservices_crawler_service_tests_test_archived_status_repair_py, apps_microservices_crawler_service_tests_test_crawler_manager_reclean_py [INFERRED 0.85]
+- **The data-loss chain the guard closes: archive_crawl's two no-re-tar branches (one of them deleting its temp download) mark archived via _mark_as_archived, the allowlist loader attests the old tar, and the sweep deletes the newer local tree** — reclean_spec_rationale_data_loss_chain, crawler_manager_crawlermanager_archive_crawl, crawler_manager_crawlermanager_mark_as_archived, crawler_manager_crawlermanager_cleanup_temp_download, crawler_manager_crawlermanager_load_reclean_allowlist, crawler_manager_crawlermanager_reclean_archived_leftovers [INFERRED 0.80]
 
 ## Communities
 
@@ -288,7 +296,7 @@ Nodes (102): CollectionName, Enum, CollectionNameGraph, Enum for the possible co
 
 ### Community 3 - "CrawlerManager Tests (manager & stash)"
 Cohesion: 0.0
-Nodes (745): str, DLQPropertiesAsync, create_dlq_headers(), create_dlq_message(), CrawlerManager, mock_cache_service(), TestStaleHandlerCounter, test_stale_handler_decrements_counter() (+737 more)
+Nodes (751): str, DLQPropertiesAsync, create_dlq_headers(), create_dlq_message(), CrawlerManager, mock_cache_service(), TestStaleHandlerCounter, test_stale_handler_decrements_counter() (+743 more)
 
 ### Community 86 - "crawler-service: test_admin_job_dump.py"
 Cohesion: 0.67
@@ -336,7 +344,7 @@ Nodes (63): GuardConfig, GuardMetrics, Prometheus metrics for MilvusConcurrencyG
 
 ### Community 6 - "Detection FR Scraper & Redirects"
 Cohesion: 0.01
-Nodes (387): Configuration de l'application, reconcile_running_jobs_count(), scheduled_archive_cleanup(), validation_exception_handler(), startup_event(), shutdown_event(), read_root(), Periodically checks the actual number of 'running' jobs in Redis and corrects (+379 more)
+Nodes (391): Configuration de l'application, reconcile_running_jobs_count(), scheduled_archive_cleanup(), validation_exception_handler(), startup_event(), shutdown_event(), read_root(), Periodically checks the actual number of 'running' jobs in Redis and corrects (+383 more)
 
 ### Community 104 - "crawler-service: redisClient.test.ts"
 Cohesion: 1.0
@@ -408,15 +416,15 @@ Nodes (2): RabbitMQConnection, Crée une connexion RabbitMQ avec un nombre limit
 
 ### Community 12 - "common-utils: Redis Cache Service"
 Cohesion: 0.01
-Nodes (257): Initializes the Redis connection pool.     Connects to Redis using the URL from, Closes the Redis connection pool., Atomically sets a key only if it does not already exist (SET NX).     Returns T, Sets a raw value for a key., Gets the raw string value of a key., Deletes a key from Redis., Gets all keys matching a given prefix using SCAN., Atomically increments a key's value by 1. (+249 more)
+Nodes (258): Initializes the Redis connection pool.     Connects to Redis using the URL from, Closes the Redis connection pool., Atomically sets a key only if it does not already exist (SET NX).     Returns T, Sets a raw value for a key., Gets the raw string value of a key., Deletes a key from Redis., Gets all keys matching a given prefix using SCAN., Atomically increments a key's value by 1. (+250 more)
 
 ### Community 9 - "Crawler Admin & Admission Control"
 Cohesion: 0.01
-Nodes (258): Sets a dictionary for a key, serializing it to JSON., set_json(), Prometheus metrics exposition endpoint., AdmissionController, FastAPI admission-control middleware.  Scope after the crawler carve-out refac, Atomic in-flight counter with a hard max.      Not a semaphore: acquire() does, Try to acquire a slot. Returns True on success, False if saturated., Release a slot. Defensive: does not go below zero. (+250 more)
+Nodes (261): Sets a dictionary for a key, serializing it to JSON., set_json(), Prometheus metrics exposition endpoint., AdmissionController, FastAPI admission-control middleware.  Scope after the crawler carve-out refac, Atomic in-flight counter with a hard max.      Not a semaphore: acquire() does, Try to acquire a slot. Returns True on success, False if saturated., Release a slot. Defensive: does not go below zero. (+253 more)
 
 ### Community 0 - "CrawlerManager Schemas, Archive & Reconcile"
 Cohesion: 0.0
-Nodes (1491): Gets a dictionary for a key, deserializing it from JSON., _count_files_in_dir(), _map_error_to_message(), Safely counts files in a directory, excluding Crawlee metadata., Read isError from _callback_payload.json in the crawl storage dir.     Returns, Flatten a dict/list payload into a list of (key, value) tuples using     PHP-st, Safely counts files in a directory, excluding Crawlee metadata., Publie une mise à jour du statut d'un job sur le canal Pub/Sub de Redis. (+1483 more)
+Nodes (1530): Gets a dictionary for a key, deserializing it from JSON., _count_files_in_dir(), _map_error_to_message(), Safely counts files in a directory, excluding Crawlee metadata., Read isError from _callback_payload.json in the crawl storage dir.     Returns, Flatten a dict/list payload into a list of (key, value) tuples using     PHP-st, Safely counts files in a directory, excluding Crawlee metadata., Publie une mise à jour du statut d'un job sur le canal Pub/Sub de Redis. (+1522 more)
 
 ### Community 58 - "common-utils: TestLuaScripts"
 Cohesion: 0.22
@@ -432,7 +440,7 @@ Nodes (104): _run_gcloud(), check_gcloud_auth(), gcloud_ls(), gcloud_download(),
 
 ### Community 8 - "Async Job Manager & Store"
 Cohesion: 0.02
-Nodes (244): Shared test fixtures.  Since the migration to the shared common_utils Redis po, Gracefully shut down all locally running crawlers on this replica., Gracefully shut down all locally running crawlers on this replica., metrics_endpoint(), root(), Prometheus metrics for api-detection-langue-fr.  Exposed at /metrics. Used to, _generate_url_variants(), Génère les variantes d'URL à essayer quand l'URL originale échoue.      Bascul (+236 more)
+Nodes (294): Shared test fixtures.  Since the migration to the shared common_utils Redis po, Gracefully shut down all locally running crawlers on this replica., Gracefully shut down all locally running crawlers on this replica., metrics_endpoint(), root(), Prometheus metrics for api-detection-langue-fr.  Exposed at /metrics. Used to, _generate_url_variants(), Génère les variantes d'URL à essayer quand l'URL originale échoue.      Bascul (+286 more)
 
 ### Community 94 - "crawler-service: crawler-service failure classif..."
 Cohesion: 0.67
@@ -491,8 +499,8 @@ Cohesion: 0.5
 Nodes (4): content-extractor-api-service Design Spec, boilerpy3 /clean Endpoint, HeaderFooterExtractor /extract Endpoint, Thin Wrapper Over libs/common-utils
 
 ### Community 14 - "Crawler <-> Detection Client Seam (docs)"
-Cohesion: 0.02
-Nodes (184): Regional Path Exclusion Design (2026-04-06), Multilingual Regional Path Duplicates, alternative_urls Exclusion List, Rationale: Apply exclusion at discovery and update-mode seeding, crawler-service, api-detection-langue-fr, robots.txt Total Block Detection & Bypass (2026-04-08), robots.txt Blanket Block (+176 more)
+Cohesion: 0.01
+Nodes (201): Regional Path Exclusion Design (2026-04-06), Multilingual Regional Path Duplicates, alternative_urls Exclusion List, Rationale: Apply exclusion at discovery and update-mode seeding, crawler-service, api-detection-langue-fr, robots.txt Total Block Detection & Bypass (2026-04-08), robots.txt Blanket Block (+193 more)
 
 ### Community 88 - "crawler-service: test_crawler_version.py"
 Cohesion: 0.67
@@ -523,8 +531,8 @@ Cohesion: 0.31
 Nodes (7): isBlanketBlock(), createMockRobotsFile(), testBlanketBlockDetection(), robots.txt Blanket Block Bypass (multi-path probe at startup; disable robots filtering; robots_txt_bypassed observability), WHY only blanket blocks bypassed: selective blocks (Disallow: /products/) are respected, not bypassed, robots.txt blanket-block bypass (isBlanketBlock multi-path probe; robots=undefined; robots_txt_bypassed observability), robots.txt blanket-block bypass: isBlanketBlock multi-path probe (Disallow:* / Disallow:/), startup-only, robots=undefined disables filtering, robots_txt_bypassed observability
 
 ### Community 75 - "crawler-service: test_admin_config.py"
-Cohesion: 0.33
-Nodes (2): TestArchiveMockE2E, Verifies that the bash script:         1. Finds the file.         2. Calls 'gclo
+Cohesion: 0.29
+Nodes (3): TestArchiveMockE2E, Verifies that the bash script:         1. Finds the file.         2. Calls 'gclo, Take the suite reference BEFORE any modification — a green test that does not cover the modified surface proves nothing, and a check without a baseline cannot separate what was introduced from what pre-existed. The full suite carries one known pre-existing failure (test_archive_mock_e2e.py::test_daemon_logic, a bash script under Windows) that must not be chased
 
 ### Community 17 - "Graph-RAG Rust Service Core"
 Cohesion: 0.02
@@ -548,7 +556,7 @@ Nodes (75): account-service SSO, account-service-backend, account-service-fronte
 
 ### Community 2 - "Detection Langue FR Core"
 Cohesion: 0.01
-Nodes (726): _normalize_url_for_dedup(), _homepage_of(), _is_homepage(), _ttl_from_verdict(), _build_challenge_error_msg(), _with_group(), _detect_single_url(), detect_french() (+718 more)
+Nodes (830): _normalize_url_for_dedup(), _homepage_of(), _is_homepage(), _ttl_from_verdict(), _build_challenge_error_msg(), _with_group(), _detect_single_url(), detect_french() (+822 more)
 
 ### Community 153 - "common-utils: __init__.py"
 Cohesion: 1.0
@@ -560,7 +568,7 @@ Nodes (1): Number of coalesced calls served from a shared future.
 
 ### Community 13 - "HTML Cleaning & Language Detection"
 Cohesion: 0.02
-Nodes (175): detect_challenge_page(), Détecte si le contenu HTML est une page de challenge/protection anti-bot     (C, Calcule un score basé sur la présence de mots fonctionnels français.         Re, Supprime les éléments HTML liés aux bannières cookies/consentement/RGPD., Nettoie le contenu HTML et extrait le texte visible.          Combine le meill, Détecte la langue par analyse NLP du contenu textuel visible., Calcule un score basé sur la présence de mots fonctionnels français.         Re, Supprime les éléments HTML liés aux bannières cookies/consentement/RGPD. (+167 more)
+Nodes (194): detect_challenge_page(), Détecte si le contenu HTML est une page de challenge/protection anti-bot     (C, Calcule un score basé sur la présence de mots fonctionnels français.         Re, Supprime les éléments HTML liés aux bannières cookies/consentement/RGPD., Nettoie le contenu HTML et extrait le texte visible.          Combine le meill, Détecte la langue par analyse NLP du contenu textuel visible., Calcule un score basé sur la présence de mots fonctionnels français.         Re, Nombre de mots exclusivement français DISTINCTS présents dans le texte. (+186 more)
 
 ### Community 158 - "api-detection-langue-fr: __init__.py"
 Cohesion: 1.0
@@ -568,7 +576,7 @@ Nodes (1): Normalise l'encodage du contenu HTML en UTF-8.          Reproduit le 
 
 ### Community 15 - "Detection FR Routes & Page Validation"
 Cohesion: 0.02
-Nodes (125): validate(), _is_redirect_to_home(), _detect_soft_404(), _visible_text_length(), Pure page validator for api-detection-langue-fr.  Classifies a ScrapeResult ag, Classify a ScrapeResult against the requested URL.      Order of checks:, Lightweight visible-text length for the thin-content threshold., _scrape() (+117 more)
+Nodes (127): validate(), _is_redirect_to_home(), _detect_soft_404(), _visible_text_length(), Pure page validator for api-detection-langue-fr.  Classifies a ScrapeResult ag, Classify a ScrapeResult against the requested URL.      Order of checks:, Lightweight visible-text length for the thin-content threshold., _scrape() (+119 more)
 
 ### Community 160 - "api-detection-langue-fr: __init__.py"
 Cohesion: 1.0
@@ -1112,7 +1120,7 @@ Nodes (4): _client(), test_version_defaults_to_unknown(), test_version_reads_env
 
 ### Community 24 - "Service Overviews (crawler + detection CLAUDE.md)"
 Cohesion: 0.02
-Nodes (111): api-detection-langue-fr Service, Tech Stack (Python/FastAPI/Camoufox), Camoufox Stealth Scraper (Chromium fallback), Redis Cache (cache_service pool), Async Batch Job API (/detect-batch-async), FIFO Job Queue (JOB_WORKER_CONCURRENCY), Idempotent Re-submit (client_job_id), Terminal-Write Hardening (2026-07-26 incident) (+103 more)
+Nodes (128): api-detection-langue-fr Service, Tech Stack (Python/FastAPI/Camoufox), Camoufox Stealth Scraper (Chromium fallback), Redis Cache (cache_service pool), Async Batch Job API (/detect-batch-async), FIFO Job Queue (JOB_WORKER_CONCURRENCY), Idempotent Re-submit (client_job_id), Terminal-Write Hardening (2026-07-26 incident) (+120 more)
 
 ### Community 254 - "crawler-service: DedupManager.test.ts"
 Cohesion: 1.0
@@ -1170,13 +1178,9 @@ Nodes (1): Résout une URL relative en URL absolue.
 Cohesion: 1.0
 Nodes (1): Détermine si l'URL a un signal très fort de site français.                  Le
 
-### Community 264 - "Community 264"
+### Community 267 - "superpowers: Référence de suite AVANT chantier : 7 éche"
 Cohesion: 1.0
-Nodes (1): Returns (error_message, failure_cause) for a subprocess exit code.          Re
-
-### Community 265 - "Community 265"
-Cohesion: 1.0
-Nodes (1): Free the disk-heavy Crawlee tree ({storage_path}/storage/: datasets,         re
+Nodes (2): Référence de suite AVANT chantier : 7 échecs préexistants + 1 erreur de collecte, à comparer et jamais compter comme introduits, PIÈGE D'OUTILLAGE : une erreur de collecte pytest préexistante INTERROMPT tout le run, si bien qu'aucune commande l'incluant n'est exploitable — la contourner par --ignore, ne pas la réparer (hors périmètre)
 
 ## Ambiguous Edges - Review These
 - `security-auditor agent (proposed)` → `Removed agents @code-reviewer and @debugger, superseded by superpowers skills`  [AMBIGUOUS]
@@ -1197,6 +1201,8 @@ Nodes (1): Free the disk-heavy Crawlee tree ({storage_path}/storage/: datasets, 
   docs/claude-code-team-guide-en.md · relation: conceptually_related_to
 - `._validate_alternative_urls()` → `One Challenge Detector, Three Consumers (45s poll / detect reclass / Case-6 guard)`  [AMBIGUOUS]
   docs/superpowers/specs/2026-07-25-detection-langue-fr-challenge-noscript-altprobe-design.md · relation: references
+- `._verify_bind_mount()` → `Pourquoi la date du fichier est digne de confiance: le mtime vient du touch du daemon sur le repertoire de resultats, stashed_at de datetime.utcnow() dans le conteneur, et ce repertoire est un bind mount sur le meme hote (docker-compose.yml:1361) — meme horloge noyau, pas de derive; ne pas confondre avec le volume des archives (:1352)`  [AMBIGUOUS]
+  docs/superpowers/specs/2026-08-10-move-done-freshness-guard-design.md · relation: conceptually_related_to
 - `stash_lock:{id} Redis lock` → `Out of scope: stashed stubs. Repairing them would mean fabricating a lost stashed_at, and /results on a stashed crawl triggers an unstash that DELETES the GCS copy — the same reason the reclean already excludes stashed leftovers`  [AMBIGUOUS]
   docs/superpowers/specs/2026-08-07-archived-status-repair-design.md · relation: conceptually_related_to
 - `graphify team guide (scoped hook, slash commands, edge honesty tags)` → `Layered Claude Code memory system (root CLAUDE.md, rules, agents, commands, service CLAUDE.md, personal, primer)`  [AMBIGUOUS]
@@ -1231,9 +1237,13 @@ Nodes (1): Free the disk-heavy Crawlee tree ({storage_path}/storage/: datasets, 
   docs/superpowers/specs/2026-08-07-archived-status-repair-design.md · relation: references
 - `Pure predicate module archived_status_repair.py — six conjoint conditions in a fixed evaluation order, no I/O, testable without Docker` → `DOC DRIFT to verify before trusting: spec and plan both describe SIX conditions (five in the pure module plus the caller's archive_lock probe). The shipped module carries a SEVENTH, a minimum snapshot age (SNAPSHOT_TOO_RECENT), and the caller's probe covers stash_lock too — added during implementation, documented only in the service CLAUDE.md`  [AMBIGUOUS]
   docs/superpowers/specs/2026-08-07-archived-status-repair-design.md · relation: rationale_for
+- `Défaut A — la variante d'URL n'est jamais tentée sur un fetch RÉUSSI` → `NON RÉSOLU : un des quatre domaines reste AMBIGU entre le défaut A et le défaut B ; le discriminant serait /detect-debug sur les deux formes — ne pas le compter comme un succès du volet A`  [AMBIGUOUS]
+  docs/superpowers/specs/2026-08-10-detection-faux-negatifs-design.md · relation: conceptually_related_to
+- `Défaut B — le signal lexical n'est pas consulté quand fastText se trompe avec assurance` → `NON RÉSOLU : un des quatre domaines reste AMBIGU entre le défaut A et le défaut B ; le discriminant serait /detect-debug sur les deux formes — ne pas le compter comme un succès du volet A`  [AMBIGUOUS]
+  docs/superpowers/specs/2026-08-10-detection-faux-negatifs-design.md · relation: conceptually_related_to
 
 ## Knowledge Gaps
-- **3196 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+3191 more)
+- **3234 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+3229 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **Thin community `graphify-guide-en.md: Limitation: ID collision on sha...`** (1 nodes): `Creates a dictionary of headers for a DLQ message, compatible with both pika and`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -1266,8 +1276,6 @@ Nodes (1): Free the disk-heavy Crawlee tree ({storage_path}/storage/: datasets, 
 - **Thin community `api-detection-langue-fr: INFLIGHT_REQUESTS Gauge Semanti...`** (2 nodes): `DLQ Manager UX Improvements (2026-04-11)`, `dlq-manager-service`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `common-utils: lua_scripts.py`** (2 nodes): `Crawler Monitor Dataset & Queue Insights (2026-04-12)`, `crawler-monitor-backend / frontend`
-  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `crawler-service: test_admin_config.py`** (6 nodes): `test_archive_mock_e2e.py`, `TestArchiveMockE2E`, `.setUp()`, `.tearDown()`, `.test_daemon_logic()`, `Verifies that the bash script:         1. Finds the file.         2. Calls 'gclo`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `common-utils: __init__.py`** (1 nodes): `Current admitted in-flight count (unsynchronized read for observability).`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -1495,9 +1503,7 @@ Nodes (1): Free the disk-heavy Crawlee tree ({storage_path}/storage/: datasets, 
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `graphify-guide-en.md: PreToolUse hook on Glob|Grep (n...`** (1 nodes): `Détermine si l'URL a un signal très fort de site français.                  Le`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 264`** (1 nodes): `Returns (error_message, failure_cause) for a subprocess exit code.          Re`
-  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 265`** (1 nodes): `Free the disk-heavy Crawlee tree ({storage_path}/storage/: datasets,         re`
+- **Thin community `superpowers: Référence de suite AVANT chantier : 7 éche`** (2 nodes): `Référence de suite AVANT chantier : 7 échecs préexistants + 1 erreur de collecte, à comparer et jamais compter comme introduits`, `PIÈGE D'OUTILLAGE : une erreur de collecte pytest préexistante INTERROMPT tout le run, si bien qu'aucune commande l'incluant n'est exploitable — la contourner par --ignore, ne pas la réparer (hors périmètre)`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 
 ## Suggested Questions
