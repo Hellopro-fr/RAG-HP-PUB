@@ -3,7 +3,7 @@ import logging
 import os
 from fastapi import FastAPI, Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
-from app.api.routes import router, _run_batch_core
+from app.api.routes import router, _run_batch_core, _MIN_PROBE_S
 # Import to ensure metric objects are registered with the default registry.
 from app.core import metrics  # noqa: F401
 from app.core.admission import AdmissionController
@@ -51,6 +51,27 @@ async def _redis_reconnect_loop() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Footgun guard: a budget strictly between 0 (explicit kill-switch, silent
+    # by design) and _MIN_PROBE_S INCLUSIVE disables the URL-variant rescue in
+    # practice. On the deployment platform (Linux, nanosecond monotonic
+    # clock), `remaining = deadline - time.monotonic()` in the pre-flight
+    # check is always strictly below the configured budget by the time it
+    # runs, even when budget == _MIN_PROBE_S — so the boundary value is dead
+    # there too, not just the open interval below it. (Windows' 15.625ms
+    # clock resolution masks this locally: remaining == budget, so the
+    # boundary looks live — never verify this by observing local behaviour.)
+    # The only meaningful settings are 0 (off) or strictly > _MIN_PROBE_S
+    # (on). Logged once at startup, not inside _variant_rescue (which would
+    # log once per item).
+    _rescue_budget = _settings.VARIANT_RESCUE_BUDGET_S
+    if 0 < _rescue_budget <= _MIN_PROBE_S:
+        logging.getLogger(__name__).warning(
+            f"VARIANT_RESCUE_BUDGET_S={_rescue_budget} <= _MIN_PROBE_S={_MIN_PROBE_S} "
+            "— le rattrapage par variante d'URL ne pourra jamais sonder une "
+            "seule variante à ce réglage (inerte, silencieusement). Mettre "
+            f"0 pour désactiver explicitement, ou strictement > {_MIN_PROBE_S} "
+            "pour qu'il agisse réellement."
+        )
     # cache_service reads REDIS_URL/SERVICE_NAME from the process env; bridge
     # the pydantic-settings value so a .env-file-only config keeps working,
     # and default the Redis client name for non-compose runs (bare uvicorn

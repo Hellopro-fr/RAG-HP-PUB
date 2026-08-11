@@ -42,6 +42,35 @@ class Settings(BaseSettings):
     # de la rejeter en fetch_empty_content. Un seul saut, jamais récursif.
     STUB_PAGE_HOP_ENABLED: bool = True
 
+    # Rattrapage par variante d'URL sur verdict inexploitable (Check_nok_v2,
+    # fetch_empty_content). Budget horloge total des sondes, vérifié AVANT
+    # chaque variante ; dépassé, le verdict d'origine est rendu inchangé.
+    # 0 désactive le rattrapage (kill-switch).
+    # 250 ne débride rien par item : le budget effectif reste le MINIMUM de
+    # cette valeur et de la marge restante de l'item (routes.py) — sur un item
+    # ordinaire, ça laisse juste le rattrapage utiliser une marge déjà là,
+    # jamais inutilisée jusqu'ici. Dimensionné pour que les 3 variantes
+    # restent atteignables au plancher _MIN_PROBE_S (80s) : 250 - 2*80 = 90 >=
+    # 80 (l'ancien 120 ne le permettait pas : 120-80=40 < 80, la 3e variante
+    # n'était jamais atteinte au pire cas). Ce que 250 augmente réellement,
+    # c'est l'horloge CUMULÉE par JOB asynchrone face à JOB_MAX_S, dont le
+    # dépassement jette tout le lot — le compteur à surveiller après
+    # activation est detection_variant_rescue_total (voir CLAUDE.md,
+    # "Job-level cost"). Valeur toujours une ESTIMATION, à réviser depuis ce
+    # compteur (spec 2026-08-10 §9.4) — le coût réel d'une sonde n'a pas été
+    # mesuré sur la VM.
+    VARIANT_RESCUE_BUDGET_S: int = 250
+
+    # Observation du signal lexical au Cas 9 : seuil de mots exclusivement
+    # français DISTINCTS à partir duquel (compte atteint, `>=`) un diagnostic
+    # est écrit dans `error`.
+    # OBSERVATION, jamais décision — aucun verdict ne le lit. Volontairement
+    # permissif (3) pour faire apparaître les cas limites entre le portugais
+    # mesuré (1) et le français mesuré (8) ; table complète et reproductible
+    # dans le docstring de _count_french_exclusive_distinct et le CLAUDE.md
+    # du service. 0 désactive le diagnostic.
+    LEXICAL_OBSERVATION_MIN_DISTINCT: int = 3
+
     # Redis (shared pool via common_utils.redis.cache_service — initialised in
     # main.py's lifespan; bridged to the process env there because cache_service
     # reads os.environ, not this Settings object). Pool tuning is env-only:

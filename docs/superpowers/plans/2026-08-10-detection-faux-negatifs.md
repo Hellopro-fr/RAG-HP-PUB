@@ -15,6 +15,29 @@
 - Volet B livré **en observation** : il expose et diagnostique, il ne décide pas.
 - Spec approuvée en l'état : `docs/superpowers/specs/2026-08-10-detection-faux-negatifs-design.md` (commit `a55defa1`).
 
+> **Note (2026-08-10, vague de fixes finale de revue).** Les chiffres lexicaux
+> cités dans les blocs de code ci-dessous (Step 3 de la Task 1, docstring de
+> `_count_french_exclusive_distinct`, section volet B de la Task 3 — « 9 à
+> 15 », `0.761`, et les affirmations d'agrégat qui vont avec) ont été
+> **supersédés pendant l'implémentation** : ils viennent d'extraits qui n'ont
+> pas été conservés mot pour mot et ne sont pas reproductibles sur ce dépôt.
+> Ces blocs ne sont PAS réécrits ici — un plan est un enregistrement de ce qui
+> a été demandé, pas un document vivant. Table faisant foi désormais (mesurée
+> deux fois indépendamment, implémenteur + relecteur, accord exact) :
+>
+> | Échantillon | signal agrégé (`french_signal`) | exclusifs distincts |
+> |---|---|---|
+> | FR (prose) | 1.000 | **8** |
+> | ES (prose) | 0.833 | 0 |
+> | PT (prose) | 0.814 | 1 (`mais`) |
+> | IT (prose) | 0.417 | 0 |
+> | EN (prose) | 0.000 | 0 |
+> | FR catalogue (sans prose) | 0.000 | 0 |
+>
+> Voir la note de correction du 2026-08-10 au §3 de la spec
+> (`docs/superpowers/specs/2026-08-10-detection-faux-negatifs-design.md`) pour
+> le détail et les conclusions inchangées.
+
 ---
 
 ## Structure des fichiers
@@ -65,7 +88,7 @@ Tout est dans `apps-microservices/api-detection-langue-fr/`.
 - [ ] Une variante servant une page de challenge est ignorée sans compter comme succès
 - [ ] Le résultat rattrapé est celui qui part au cache (`domain_cache.set` reçoit le `method` suffixé)
 
-**Verify:** `python -m pytest tests/test_variant_rescue.py -v` → 9 passed
+**Verify:** `python -m pytest tests/test_variant_rescue.py -v` → 10 passed
 
 **Steps:**
 
@@ -456,14 +479,18 @@ Dans `app/api/routes.py`, entre la ligne 403 (`result.analyzed_url = stub_target
 - [ ] **Step 8: Lancer les tests jusqu'au vert**
 
 Run: `python -m pytest tests/test_variant_rescue.py -v`
-Expected: 9 passed.
+Expected: 10 passed.
 
 Si `test_variante_francaise_rattrape` échoue avec `ok=False`, c'est que `HTML_FR` n'a pas convaincu le stack NLP présent dans le venv : **allonger la prose française**, ne pas affaiblir l'assertion. Le test doit prouver un rattrapage réel, pas un rattrapage stubé.
 
 - [ ] **Step 9: Vérifier l'absence de régression sur les routes**
 
-Run: `python -m pytest tests/test_routes_invalid_page.py tests/test_api.py tests/test_failure_detail_response.py -v`
-Expected: aucun échec NOUVEAU. Référence connue avant ce chantier : `tests/test_api.py` a une **erreur de collecte préexistante** et `tests/test_domain_fr.py` **7 échecs préexistants** — les comparer, ne pas les compter comme introduits.
+Run: `python -m pytest tests/test_routes_invalid_page.py tests/test_failure_detail_response.py -v`
+Expected: aucun échec NOUVEAU.
+
+**`tests/test_api.py` est volontairement absent de cette commande** : il porte une erreur de collecte **préexistante** (`ModuleNotFoundError: No module named 'app.main'` — le module s'appelle `main`, pas `app.main`), et une erreur de collecte **interrompt tout le run** pytest, si bien qu'aucune commande l'incluant n'est exploitable. Pour la suite entière : `python -m pytest tests/ -q --ignore=tests/test_api.py`. Ne pas réparer ce test, hors périmètre.
+
+La référence d'avant-chantier est relevée dans le ledger du chantier (`.superpowers/sdd/2026-08-10-detection-faux-negatifs/progress.md`, ligne `Baseline:`). La comparer, ne jamais compter un échec préexistant comme introduit.
 
 - [ ] **Step 10: Commit**
 
@@ -780,14 +807,14 @@ Dans `app/core/domain_fr.py`, remplacer le bloc `:1655-1665` (commentaire du Cas
 - [ ] **Step 6: Lancer les tests jusqu'au vert**
 
 Run: `python -m pytest tests/test_lexical_observation.py -v`
-Expected: 13 passed.
+Expected: 14 passed.
 
 Si `test_prose_francaise_au_dessus_du_seuil_dactivation_envisage` échoue, **allonger `FR_PROSE`** — c'est l'échantillon qui est trop court, pas le seuil qui est trop haut. Relever le compte réel de chaque échantillon et le noter en commentaire dans le test : c'est cette table qui servira à choisir le seuil d'activation.
 
 - [ ] **Step 7: Vérifier que le Cas 8 et le Cas 9 préexistants sont intacts**
 
 Run: `python -m pytest tests/test_soft_french_lexical.py tests/test_language_detector.py tests/test_domain_fr.py -v`
-Expected: `test_soft_french_lexical.py` et `test_language_detector.py` entièrement verts ; `test_domain_fr.py` avec ses **7 échecs préexistants** et pas un de plus. Comparer à la référence, ne pas les compter comme introduits.
+Expected: `test_soft_french_lexical.py` et `test_language_detector.py` entièrement verts ; `test_domain_fr.py` avec ses échecs **préexistants** et pas un de plus. La référence est dans le ledger du chantier (`.superpowers/sdd/2026-08-10-detection-faux-negatifs/progress.md`, ligne `Baseline:`) — la comparer, ne jamais compter un échec préexistant comme introduit.
 
 - [ ] **Step 8: Commit**
 
