@@ -1209,10 +1209,18 @@ async def submit_batch_async(request: AsyncBatchSubmitRequest, http_request: Req
     try:
         job_id, status_code = await jm.submit(request)
     except _JobsDisabled:
-        # permanent: NO Retry-After -> BO short-circuits
+        # permanent: NO Retry-After -> BO short-circuits. Must stay the ONLY
+        # header-less 503 — the BO discriminates by header presence.
         raise HTTPException(status_code=503, detail={"detail": "Async jobs disabled", "retryable": False})
     except _JobsUnavailable:
-        raise HTTPException(status_code=503, detail={"detail": "Job store unavailable", "retryable": False})
+        # transient (Redis restart, not the kill-switch): same Retry-After
+        # treatment as capacity below, so the BO retries instead of aborting.
+        ra = str(settings.ASYNC_SUBMIT_RETRY_AFTER_S)
+        raise HTTPException(
+            status_code=503,
+            detail={"detail": "Job store unavailable", "retryable": True, "retry_after_seconds": int(ra)},
+            headers={"Retry-After": ra},
+        )
     except _JobCapacityExceeded:
         ra = str(settings.ASYNC_SUBMIT_RETRY_AFTER_S)
         raise HTTPException(
@@ -1228,10 +1236,28 @@ async def submit_batch_async(request: AsyncBatchSubmitRequest, http_request: Req
 
 @router.get("/detect-batch-async/{job_id}", response_model=AsyncBatchStatusResponse)
 async def poll_batch_async(job_id: str, http_request: Request) -> AsyncBatchStatusResponse:
-    """Poll an async job. 404 if unknown/expired. Computes 'stale' on read."""
+    """Poll an async job. 404 if unknown/expired; 503+Retry-After if the job
+    store itself is unreadable (Redis blip — see JobManager.store_ping).
+    Computes 'stale' on read."""
     jm = http_request.app.state.job_manager
     rec = await jm.get_record(job_id)
     if not rec:
+        # JobStore.get() degrades BOTH "no such key" and "Redis read failed"
+        # to the same None (app/core/async_jobs.py). Ping to tell them apart:
+        # a ping failure means "illisible", not "absent" — 503+Retry-After
+        # (already handled correctly by the BO's poll loop) instead of 404
+        # (the ONLY poll code that breaks the BO's retry loop and discards
+        # the whole chunk). ponytail: the ping may borrow a different pool
+        # connection than the failed read, so a single poisoned connection
+        # can still read-fails-but-ping-succeeds -> 404 — this narrows the
+        # window, it does not close it.
+        if not await jm.store_ping():
+            ra = str(settings.ASYNC_SUBMIT_RETRY_AFTER_S)
+            raise HTTPException(
+                status_code=503,
+                detail={"detail": "Job store unavailable", "retryable": True, "retry_after_seconds": int(ra)},
+                headers={"Retry-After": ra},
+            )
         raise HTTPException(status_code=404, detail="Unknown or expired job_id")
     status = poll_status(rec, time.time(), settings.STALE_THRESHOLD_S)
     results = rec.get("results") if status in ("completed", "failed", "stale") else None
