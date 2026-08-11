@@ -113,6 +113,14 @@ class Settings(BaseSettings):
     ASYNC_SUBMIT_RETRY_AFTER_S: int = 15  # Retry-After on capacity 503
     ASYNC_POLL_HINT_MAX_S: int = 30       # upper bound on server poll_after_seconds hint
     SHUTDOWN_GRACE_S: int = 5             # bound on JobManager.shutdown() task drain
+    # Deadline (not attempt-count) budget for the terminal-write retry loop
+    # (JobManager._write_terminal). 60 = 2x REDIS_HEALTH_CHECK_INTERVAL_S/
+    # REDIS_RECONNECT_INTERVAL_S (30 each, common_utils pool) — a fast-fail
+    # Redis restart gets at least one full healing cycle of either mechanism
+    # before this gives up, and half of STALE_THRESHOLD_S (120) to spare.
+    # Actually clamped per-job to min(this, remaining JOB_MAX_S) —
+    # see JobManager._terminal_write_budget.
+    TERMINAL_WRITE_BUDGET_S: int = 60
 
     # Browser-op hardening (scraper teardown/launch/op timeouts)
     TEARDOWN_TIMEOUT_S: int = 10       # bound + abandon on browser/context/page close & playwright.stop

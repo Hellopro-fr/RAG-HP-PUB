@@ -315,12 +315,55 @@ async def test_terminal_write_retried_until_success():
 
 
 @pytest.mark.asyncio
+async def test_terminal_write_survives_past_three_fixed_attempts():
+    """R3 defect: the old loop was a FIXED 3 attempts (~1.5s of sleep total,
+    ~3.6s wall including the writes themselves) regardless of how much budget
+    was actually available — nowhere near enough to survive a fast-fail Redis
+    restart. With a deadline-based retry (TERMINAL_WRITE_BUDGET_S=5, JOB_MAX_S
+    left generous so the clamp doesn't shrink it below that), a write that
+    fails 4 times before succeeding on the 5th must still land — proving the
+    retry now honours the configured budget, not a hardcoded attempt count."""
+    store = _FlakyTerminalStore(FakeRedis(), fail_n=4)
+    jm = JobManager(store, _instant_runner, _settings(TERMINAL_WRITE_BUDGET_S=5, JOB_MAX_S=1500))
+    job_id, _ = await jm.submit(_req(["https://a.fr"]))
+    rec = await _wait_terminal(jm, job_id, timeout=10.0)
+    assert rec["status"] == "completed"
+    assert store.terminal_attempts == 5
+    await jm.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_terminal_write_budget_clamped_to_job_max_s_remainder():
+    """R3 central risk: _write_terminal must NEVER retry longer than what's
+    left of JOB_MAX_S. _worker_loop's asyncio.wait(timeout=JOB_MAX_S) races
+    the same clock as _run_job's `started` — a write still retrying when that
+    fires gets cancelled by _abandon_job, which overwrites a COMPLETED batch
+    with failed(job_timeout): worse than the stale 'running' this retry loop
+    exists to avoid. Pure unit on the clamp helper: JOB_MAX_S=10 with 7s
+    already elapsed leaves only 3s, well under the configured 60s budget."""
+    jm = JobManager(JobStore(client=FakeRedis()), _instant_runner, _settings(JOB_MAX_S=10))
+    started = time.time() - 7
+    budget = jm._terminal_write_budget(started)
+    assert 0 < budget <= 3.5, f"expected ~3s (10 - 7 elapsed), got {budget}"
+
+    # Job already past JOB_MAX_S (should not happen in practice — the
+    # watchdog would have fired — but the clamp must degrade to "try once,
+    # give up fast" rather than a negative/blocking budget).
+    started_over = time.time() - 999
+    assert jm._terminal_write_budget(started_over) == 0.0
+
+
+@pytest.mark.asyncio
 async def test_terminal_write_lost_is_loud(caplog):
     """Écriture terminale définitivement perdue : plus de `except: pass`
-    silencieux — un logger.error nomme le job et l'état résiduel."""
+    silencieux — un logger.error nomme le job et l'état résiduel.
+
+    TERMINAL_WRITE_BUDGET_S=2 : le retry est maintenant à échéance (R3), pas à
+    3 tentatives fixes — sans un petit budget explicite, ce test (qui échoue
+    à l'infini) dormirait le budget par défaut (60s) en temps réel."""
     import logging as _logging
     store = _FlakyTerminalStore(FakeRedis(), fail_n=99)
-    jm = JobManager(store, _instant_runner, _settings())
+    jm = JobManager(store, _instant_runner, _settings(TERMINAL_WRITE_BUDGET_S=2))
     def _lost_logged():
         return any("écriture terminale PERDUE" in r.message for r in caplog.records)
 

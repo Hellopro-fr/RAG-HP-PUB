@@ -25,7 +25,9 @@ class _JobsDisabled(Exception):
 
 
 class _JobsUnavailable(Exception):
-    """Redis unreachable / first write failed (permanent 503, not retryable)."""
+    """Redis unreachable / first write failed / claim_index blew up (transient
+    503 WITH Retry-After — a Redis restart is not the permanent kill-switch;
+    see _JobsDisabled, which must stay the only header-less 503)."""
 
 
 class _JobCapacityExceeded(Exception):
@@ -134,6 +136,12 @@ class JobManager:
     async def get_record(self, job_id: str) -> Optional[dict]:
         return await self._store.get(job_id)
 
+    async def store_ping(self) -> bool:
+        """Exception-safe (JobStore.ping) — lets the poll handler tell an
+        absent job_id apart from a Redis read failure that JobStore.get()
+        degrades to the same None."""
+        return await self._store.ping()
+
     async def _index_target_reusable(self, job_id: str) -> bool:
         """Un index d'idempotence n'est re-servi que si son job est encore
         vivant (pending/running non-stale) ou 'completed' (résultat
@@ -155,23 +163,31 @@ class JobManager:
         cjid = req.client_job_id
 
         # Idempotency claim FIRST (atomic SET NX). Existing -> return it, no spawn.
+        # try/except : claim_index (contrairement à get_index/delete_index/
+        # refresh_index_ttl juste au-dessus) n'attrape pas ses propres
+        # exceptions — une panne Redis tombant ici s'échapperait en 500, un
+        # code absent de DETECTION_TRANSIENT_CODES côté BO (jette dès la 1re
+        # tentative). On la convertit dans le même 503 rejouable que le ping.
         if cjid:
-            claimed = await self._store.claim_index(cjid, job_id, self._s.JOB_TTL_ACTIVE_S)
-            if not claimed:
-                existing = await self._store.get_index(cjid)
-                if existing and await self._index_target_reusable(existing):
-                    return existing, 200
-                # Job failed/stale/disparu : le contrat fail-fast dit « le
-                # caller re-soumet » — la re-soumission doit créer un NOUVEAU
-                # job, pas re-servir le cadavre pendant l'heure de TTL d'index
-                # (incident BO 2026-07-26 : relance du même script → poll d'un
-                # job failed → arrêt). 'completed' reste servi tel quel
-                # (idempotence de récupération du résultat).
-                await self._store.delete_index(cjid)
+            try:
                 claimed = await self._store.claim_index(cjid, job_id, self._s.JOB_TTL_ACTIVE_S)
                 if not claimed:
                     existing = await self._store.get_index(cjid)
-                    return (existing or job_id), 200
+                    if existing and await self._index_target_reusable(existing):
+                        return existing, 200
+                    # Job failed/stale/disparu : le contrat fail-fast dit « le
+                    # caller re-soumet » — la re-soumission doit créer un NOUVEAU
+                    # job, pas re-servir le cadavre pendant l'heure de TTL d'index
+                    # (incident BO 2026-07-26 : relance du même script → poll d'un
+                    # job failed → arrêt). 'completed' reste servi tel quel
+                    # (idempotence de récupération du résultat).
+                    await self._store.delete_index(cjid)
+                    claimed = await self._store.claim_index(cjid, job_id, self._s.JOB_TTL_ACTIVE_S)
+                    if not claimed:
+                        existing = await self._store.get_index(cjid)
+                        return (existing or job_id), 200
+            except Exception:
+                raise _JobsUnavailable()
 
         # Capacity reserve - synchronous, NO await between check and increment.
         from app.core.metrics import (
@@ -357,13 +373,37 @@ class JobManager:
             hb.cancel()
             await asyncio.gather(hb, return_exceptions=True)
 
-    async def _write_terminal(self, rec: dict, cjid: Optional[str]) -> bool:
-        """Écriture du record terminal = tout le travail du batch. Retentée
-        avec backoff : la perdre en silence (ancien `except: pass`) laissait
-        un job pourtant réussi bloqué 'running' → 'stale' au poll → le BO
-        jetait le batch entier."""
+    def _terminal_write_budget(self, started: float) -> float:
+        """Clamp le budget de retry de l'écriture terminale au reliquat de
+        JOB_MAX_S. `_worker_loop` attend le job avec `asyncio.wait(timeout=
+        JOB_MAX_S)` à partir du même instant que `started` (création de la
+        task _run_job) ; une écriture terminale encore en train de réessayer
+        quand ce délai expire se fait annuler par `_abandon_job`, qui écrase
+        un lot pourtant terminé en `failed(job_timeout)` — pire que le
+        `running` silencieux que ce retry existe pour éviter. D'où un `min`
+        avec le reliquat, jamais un budget nu."""
+        job_max_s = getattr(self._s, "JOB_MAX_S", 1500)
+        budget_s = getattr(self._s, "TERMINAL_WRITE_BUDGET_S", 60)
+        remaining = job_max_s - (time.time() - started)
+        return min(budget_s, max(0.0, remaining))
+
+    async def _write_terminal(self, rec: dict, cjid: Optional[str], budget_s: float) -> bool:
+        """Écriture du record terminal = tout le travail du batch. Réessayée
+        à échéance (deadline, backoff plafonné 0.5/1/2/4/8/8/…) plutôt qu'un
+        compte fixe de tentatives : 3 tentatives à backoff fixe s'épuisaient
+        en ~3.6s, pas assez pour survivre à un redémarrage Redis (le mode de
+        panne ordinaire que ce garde cible). La perdre en silence (ancien
+        `except: pass`) laissait un job pourtant réussi bloqué 'running' →
+        'stale' au poll → le BO jetait le batch entier. `budget_s` est déjà
+        clampé par l'appelant (`_terminal_write_budget`) au reliquat de
+        JOB_MAX_S — ne PAS relire self._s.JOB_MAX_S ici, la fenêtre a pu déjà
+        se réduire pendant l'attente du heartbeat avant cet appel."""
+        deadline = time.monotonic() + budget_s
         last_err: Optional[Exception] = None
-        for attempt in range(1, 4):
+        attempt = 0
+        backoff = 0.5
+        while True:
+            attempt += 1
             try:
                 await self._store.write(rec, self._s.JOB_RESULT_TTL_S)
                 if cjid:
@@ -373,10 +413,13 @@ class JobManager:
                 last_err = e
                 logger.warning(
                     f"[async-jobs] écriture terminale {rec.get('job_id')} "
-                    f"tentative {attempt}/3 échouée: {e}"
+                    f"tentative {attempt} échouée: {e}"
                 )
-                if attempt < 3:
-                    await asyncio.sleep(0.5 * attempt)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            await asyncio.sleep(min(backoff, remaining))
+            backoff = min(backoff * 2, 8)
         logger.error(
             f"[async-jobs] écriture terminale PERDUE pour {rec.get('job_id')} "
             f"(status={rec.get('status')}): {last_err} — le record restera sur "
@@ -411,8 +454,8 @@ class JobManager:
                 "results": [r.model_dump() for r in results],
                 "finished_at": time.time(), "last_activity": time.time(),
             })
-            await self._write_terminal(rec, cjid)
-            ASYNC_JOBS_TERMINAL.labels(status="completed").inc()
+            wrote = await self._write_terminal(rec, cjid, self._terminal_write_budget(started))
+            ASYNC_JOBS_TERMINAL.labels(status="completed" if wrote else "lost").inc()
             ASYNC_JOB_DURATION.observe(time.time() - started)
             logger.info(
                 f"[async-jobs] job {job_id} completed: {counts.success_count} ok, "
@@ -427,8 +470,8 @@ class JobManager:
             rec = await self._store.get(job_id) or rec
             rec.update({"status": "failed", "error": str(e),
                         "finished_at": time.time(), "last_activity": time.time()})
-            await self._write_terminal(rec, cjid)
-            ASYNC_JOBS_TERMINAL.labels(status="failed").inc()
+            wrote = await self._write_terminal(rec, cjid, self._terminal_write_budget(started))
+            ASYNC_JOBS_TERMINAL.labels(status="failed" if wrote else "lost").inc()
             logger.error(f"[async-jobs] job {job_id} failed: {e}")
 
     async def shutdown(self) -> None:

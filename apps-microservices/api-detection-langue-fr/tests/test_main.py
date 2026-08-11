@@ -75,6 +75,40 @@ async def test_disabled_503_no_retry_after():
 
 
 @pytest.mark.asyncio
+async def test_unavailable_503_has_retry_after():
+    """R1: Redis down at submit (ping fails -> _JobsUnavailable) must be
+    retryable, same treatment as capacity — a 2s Redis restart is not the
+    permanent kill-switch. _JobsDisabled (above) must stay the ONLY
+    header-less 503, since the BO discriminates by header presence."""
+    jm = JobManager(JobStore(client=FakeRedis(fail=True)), _runner, _settings())
+    app.state.job_manager = jm
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://t") as c:
+        r = await c.post("/api/v1/detect-batch-async", json={"items": [{"url": "https://a.fr"}]})
+        assert r.status_code == 503 and "retry-after" in {k.lower() for k in r.headers}
+        assert r.json()["detail"]["retryable"] is True
+
+
+@pytest.mark.asyncio
+async def test_poll_redis_down_returns_503_not_404():
+    """R2: poll must distinguish 'unknown job_id' (404, BO treats it as
+    permanently stale) from 'Redis unreadable right now' (503+Retry-After,
+    BO already retries this). JobStore.get() degrades both cases to the
+    same None — submit while Redis is healthy, then fail it before polling."""
+    fake = FakeRedis()
+    jm = JobManager(JobStore(client=fake), _runner, _settings())
+    app.state.job_manager = jm
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://t") as c:
+        r = await c.post("/api/v1/detect-batch-async", json={"items": [{"url": "https://a.fr"}]})
+        job_id = r.json()["job_id"]
+        await asyncio.gather(*list(jm._job_tasks.values()))
+        fake.fail = True  # simulate a Redis outage after the job completed
+        p = await c.get(f"/api/v1/detect-batch-async/{job_id}")
+        assert p.status_code == 503 and "retry-after" in {k.lower() for k in p.headers}
+
+
+@pytest.mark.asyncio
 async def test_lifespan_inits_shared_pool_and_bridges_redis_url(monkeypatch):
     """Lifespan must bridge settings.REDIS_URL into the process env (cache_service
     reads os.environ), init the shared pool at startup, and close it after the
