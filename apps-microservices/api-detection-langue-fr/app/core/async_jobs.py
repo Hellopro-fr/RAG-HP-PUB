@@ -186,7 +186,13 @@ class JobManager:
                     if not claimed:
                         existing = await self._store.get_index(cjid)
                         return (existing or job_id), 200
-            except Exception:
+            except Exception as e:
+                # Nommer l'exception avant de la reconvertir : un `except
+                # Exception` générique transforme aussi un VRAI bug (ex. un
+                # enregistrement mal formé qui explose dans ce bloc) en 503
+                # rejouable — le BO retentera 3x un défaut déterministe sans
+                # qu'aucune trace n'existe de la cause réelle.
+                logger.warning(f"[async-jobs] claim_index en échec pour client_job_id={cjid}: {e!r}")
                 raise _JobsUnavailable()
 
         # Capacity reserve - synchronous, NO await between check and increment.
@@ -373,19 +379,38 @@ class JobManager:
             hb.cancel()
             await asyncio.gather(hb, return_exceptions=True)
 
-    def _terminal_write_budget(self, started: float) -> float:
+    def _terminal_write_budget(self, started_mono: float) -> float:
         """Clamp le budget de retry de l'écriture terminale au reliquat de
         JOB_MAX_S. `_worker_loop` attend le job avec `asyncio.wait(timeout=
-        JOB_MAX_S)` à partir du même instant que `started` (création de la
-        task _run_job) ; une écriture terminale encore en train de réessayer
-        quand ce délai expire se fait annuler par `_abandon_job`, qui écrase
-        un lot pourtant terminé en `failed(job_timeout)` — pire que le
-        `running` silencieux que ce retry existe pour éviter. D'où un `min`
-        avec le reliquat, jamais un budget nu."""
-        job_max_s = getattr(self._s, "JOB_MAX_S", 1500)
-        budget_s = getattr(self._s, "TERMINAL_WRITE_BUDGET_S", 60)
-        remaining = job_max_s - (time.time() - started)
-        return min(budget_s, max(0.0, remaining))
+        JOB_MAX_S)` à partir du même instant que `started_mono` (création de
+        la task _run_job) ; une écriture terminale encore en train de
+        réessayer quand ce délai expire se fait annuler par `_abandon_job`,
+        qui écrase un lot pourtant terminé en `failed(job_timeout)` — pire
+        que le `running` silencieux que ce retry existe pour éviter. D'où un
+        `min` avec le reliquat, jamais un budget nu.
+
+        `started_mono` DOIT être `time.monotonic()`, pas `time.time()` : le
+        budget se compare au compte à rebours de `asyncio.wait(timeout=...)`,
+        qui arme sur l'horloge monotone de la boucle — un saut d'horloge
+        murale (NTP) gonflerait `remaining` dans le sens dangereux avec
+        `time.time()`.
+
+        LIMITE CONNUE (revue 2026-08-11) : ce budget ne borne QUE les
+        RE-tentatives — il décide si une nouvelle attente puis un nouvel
+        essai démarrent, jamais l'essai déjà en vol. Le pool partagé
+        (`common_utils/redis/cache_service.py`) enrobe chaque commande dans
+        son propre `Retry(ExponentialBackoff(cap=1.0), 3)` par-dessus
+        `socket_timeout=10s` — un seul appel à `write()` peut donc bloquer
+        plusieurs dizaines de secondes. Un budget clampé à quelques secondes
+        peut donc quand même rendre après JOB_MAX_S, laisser le watchdog de
+        `_worker_loop` se déclencher pendant ce temps, et `_abandon_job`
+        écraser un lot pourtant terminé — exactement le dommage que ce clamp
+        existe pour éviter. Strictement mieux qu'avant (aucun clamp), mais
+        PAS fermé. Ne PAS enrober l'écriture dans `wait_for` pour fermer ça :
+        annuler en pleine commande empoisonnerait la connexion du pool, le
+        même mode de panne déjà documenté plus haut pour `_stop_heartbeat`."""
+        remaining = self._s.JOB_MAX_S - (time.monotonic() - started_mono)
+        return min(self._s.TERMINAL_WRITE_BUDGET_S, max(0.0, remaining))
 
     async def _write_terminal(self, rec: dict, cjid: Optional[str], budget_s: float) -> bool:
         """Écriture du record terminal = tout le travail du batch. Réessayée
@@ -431,6 +456,12 @@ class JobManager:
         from app.core.metrics import ASYNC_JOBS_TERMINAL, ASYNC_JOB_DURATION
         progress = {"done": 0}
         started = time.time()
+        # Base séparée pour le clamp de _terminal_write_budget : le watchdog
+        # de _worker_loop (asyncio.wait(timeout=JOB_MAX_S)) arme sur
+        # l'horloge monotone au même instant que la création de cette task —
+        # started_mono suit exactement ce compte à rebours, pas une horloge
+        # murale qu'un saut NTP peut fausser (revue 2026-08-11).
+        started_mono = time.monotonic()
         rec = await self._store.get(job_id) or {"job_id": job_id}
         rec.update({"status": "running", "started_at": started, "last_activity": started})
         try:
@@ -454,7 +485,7 @@ class JobManager:
                 "results": [r.model_dump() for r in results],
                 "finished_at": time.time(), "last_activity": time.time(),
             })
-            wrote = await self._write_terminal(rec, cjid, self._terminal_write_budget(started))
+            wrote = await self._write_terminal(rec, cjid, self._terminal_write_budget(started_mono))
             ASYNC_JOBS_TERMINAL.labels(status="completed" if wrote else "lost").inc()
             ASYNC_JOB_DURATION.observe(time.time() - started)
             logger.info(
@@ -470,7 +501,7 @@ class JobManager:
             rec = await self._store.get(job_id) or rec
             rec.update({"status": "failed", "error": str(e),
                         "finished_at": time.time(), "last_activity": time.time()})
-            wrote = await self._write_terminal(rec, cjid, self._terminal_write_budget(started))
+            wrote = await self._write_terminal(rec, cjid, self._terminal_write_budget(started_mono))
             ASYNC_JOBS_TERMINAL.labels(status="failed" if wrote else "lost").inc()
             logger.error(f"[async-jobs] job {job_id} failed: {e}")
 

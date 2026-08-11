@@ -1236,7 +1236,9 @@ async def submit_batch_async(request: AsyncBatchSubmitRequest, http_request: Req
 
 @router.get("/detect-batch-async/{job_id}", response_model=AsyncBatchStatusResponse)
 async def poll_batch_async(job_id: str, http_request: Request) -> AsyncBatchStatusResponse:
-    """Poll an async job. 404 if unknown/expired. Computes 'stale' on read."""
+    """Poll an async job. 404 if unknown/expired; 503+Retry-After if the job
+    store itself is unreadable (Redis blip — see JobManager.store_ping).
+    Computes 'stale' on read."""
     jm = http_request.app.state.job_manager
     rec = await jm.get_record(job_id)
     if not rec:

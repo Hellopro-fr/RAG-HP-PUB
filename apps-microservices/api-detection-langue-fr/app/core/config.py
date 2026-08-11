@@ -110,16 +110,21 @@ class Settings(BaseSettings):
     JOB_RESULT_TTL_S: int = 3600          # 1h — terminal record TTL (BO must poll within this)
     STALE_THRESHOLD_S: int = 120          # no heartbeat beyond this -> poll reports 'stale'
     HEARTBEAT_INTERVAL_S: int = 5         # wall-clock heartbeat tick
-    ASYNC_SUBMIT_RETRY_AFTER_S: int = 15  # Retry-After on capacity 503
+    ASYNC_SUBMIT_RETRY_AFTER_S: int = 15  # Retry-After on capacity 503, and on the
+                                           # Redis-unavailable submit/poll 503s (_JobsUnavailable)
     ASYNC_POLL_HINT_MAX_S: int = 30       # upper bound on server poll_after_seconds hint
     SHUTDOWN_GRACE_S: int = 5             # bound on JobManager.shutdown() task drain
     # Deadline (not attempt-count) budget for the terminal-write retry loop
-    # (JobManager._write_terminal). 60 = 2x REDIS_HEALTH_CHECK_INTERVAL_S/
-    # REDIS_RECONNECT_INTERVAL_S (30 each, common_utils pool) — a fast-fail
-    # Redis restart gets at least one full healing cycle of either mechanism
-    # before this gives up, and half of STALE_THRESHOLD_S (120) to spare.
-    # Actually clamped per-job to min(this, remaining JOB_MAX_S) —
-    # see JobManager._terminal_write_budget.
+    # (JobManager._write_terminal). 60 = REDIS_HEALTH_CHECK_INTERVAL_S (the
+    # SHARED POOL's own setting, common_utils/redis/cache_service.py) +
+    # REDIS_RECONNECT_INTERVAL_S (THIS SERVICE's own lifespan reconnect
+    # loop, main.py — not a pool setting) at their 30s defaults each — a
+    # fast-fail Redis restart gets at least one full healing cycle of
+    # either mechanism before this gives up, and half of STALE_THRESHOLD_S
+    # (120) to spare. Clamped per-job to min(this, remaining JOB_MAX_S) —
+    # see JobManager._terminal_write_budget. Bounds RETRIES only, never a
+    # write attempt already in flight (see that method's docstring for the
+    # known residual gap under the shared pool's own per-command Retry).
     TERMINAL_WRITE_BUDGET_S: int = 60
 
     # Browser-op hardening (scraper teardown/launch/op timeouts)

@@ -14,7 +14,8 @@ from tests.test_async_jobs import FakeRedis
 def _settings(**over):
     base = dict(ASYNC_JOBS_ENABLED=True, MAX_ACTIVE_JOBS=2, JOB_TTL_ACTIVE_S=7200,
                 JOB_RESULT_TTL_S=3600, STALE_THRESHOLD_S=120, HEARTBEAT_INTERVAL_S=5,
-                SHUTDOWN_GRACE_S=2, ASYNC_SUBMIT_RETRY_AFTER_S=15, ASYNC_POLL_HINT_MAX_S=30)
+                SHUTDOWN_GRACE_S=2, ASYNC_SUBMIT_RETRY_AFTER_S=15, ASYNC_POLL_HINT_MAX_S=30,
+                JOB_MAX_S=1500, TERMINAL_WRITE_BUDGET_S=60)
     base.update(over)
     return types.SimpleNamespace(**base)
 
