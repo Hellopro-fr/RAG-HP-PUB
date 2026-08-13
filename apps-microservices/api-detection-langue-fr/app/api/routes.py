@@ -295,7 +295,20 @@ _MIN_PROBE_S = 80
 # Pass 2 entier plutôt qu'à une sonde de rattrapage (incident 2026-08-13 :
 # Pass 1 328s + 4 reprises séquentielles à 300s+2s chacune ≈ 1536s > JOB_MAX_S
 # 1500s → le job entier, y compris ses items DÉJÀ réussis, était jeté).
+#
+# Le plancher RÉEL n'est PAS 0 au-dessus de _ITEM_WALL_CLOCK_S : une fois ce
+# check passé, la boucle attend encore _PASS2_RETRY_GAP_S (2s) avant de lancer
+# la reprise, plus un tour de scheduling — ce temps est prélevé SUR cette
+# marge, pas en plus d'elle. Ne jamais la resserrer sous ~_PASS2_RETRY_GAP_S +
+# ce tour sans re-vérifier ce budget (revue 2026-08-13 : même famille de
+# dérive que celle documentée sur `deadline_monotonic`,
+# app/core/async_jobs.py `JobManager._run_job`).
 _PASS2_BUDGET_MARGIN_S = 15
+
+# Pause entre deux reprises Pass 2 (throttle de charge, indépendant des
+# budgets ci-dessus) — nommée pour être monkeypatchable isolément dans les
+# tests (tests/test_pass2_budget.py) sans mocker asyncio.sleep globalement.
+_PASS2_RETRY_GAP_S = 2
 
 
 def _normalize_url_for_dedup(url: str) -> str:
@@ -882,7 +895,16 @@ async def _run_batch_core(
         pass1_duration = round((time.time() - start_time) * 1000)
         logger.info(f"[BATCH][first_match] Pass 1 termine en {pass1_duration}ms")
 
-        # Pass 2 : retry séquentiel pour les groupes sans FR et ayant des fetch_failed
+        # Pass 2 : retry séquentiel pour les groupes sans FR et ayant des fetch_failed.
+        # Même garde de budget de job que la boucle séquentielle plus bas
+        # (deadline_monotonic) : ce mode est atteignable depuis le worker async
+        # (AsyncBatchSubmitRequest.mode accepte first_match, async_jobs.py
+        # forwarde req.mode tel quel) et rejoue exactement le même patron
+        # sleep(gap)+wait_for(_ITEM_WALL_CLOCK_S) sans aucun plafond total —
+        # sans cette garde, le même dépassement de JOB_MAX_S que l'incident
+        # 2026-08-13 s'y produirait tout aussi bien.
+        pass2_skipped_budget = 0
+        budget_exhausted = False
         for i, group_key in enumerate(group_order):
             if group_results[i].ok:
                 continue
@@ -890,9 +912,29 @@ async def _run_batch_core(
             if not retry_items:
                 continue
 
+            if budget_exhausted:
+                # Budget déjà épuisé par un groupe précédent : ces items
+                # gardent leur verdict Pass 1 sans même entrer dans la boucle
+                # interne (rien à vérifier, le temps ne remonte pas).
+                pass2_skipped_budget += len(retry_items)
+                continue
+
             logger.info(f"[BATCH][first_match] Pass 2 groupe '{group_key}': retry {len(retry_items)} item(s)")
-            for item in retry_items:
-                await asyncio.sleep(2)
+            for item_idx, item in enumerate(retry_items):
+                if deadline_monotonic is not None:
+                    remaining = deadline_monotonic - time.monotonic()
+                    required = _ITEM_WALL_CLOCK_S + _PASS2_BUDGET_MARGIN_S
+                    if remaining < required:
+                        budget_exhausted = True
+                        pass2_skipped_budget += len(retry_items) - item_idx
+                        logger.warning(
+                            f"[BATCH][first_match] Pass 2: budget de job insuffisant "
+                            f"({remaining:.0f}s restants < {required}s requis) — arrêt, "
+                            f"verdict Pass 1 conservé pour les reprises restantes"
+                        )
+                        break
+
+                await asyncio.sleep(_PASS2_RETRY_GAP_S)
                 try:
                     async with semaphore:
                         retry_result = await asyncio.wait_for(
@@ -910,6 +952,13 @@ async def _run_batch_core(
                     logger.warning(f"[BATCH][first_match] Pass 2 TIMEOUT groupe '{group_key}' {item.url} après {_ITEM_WALL_CLOCK_S}s")
                 except Exception as e:
                     logger.warning(f"[BATCH][first_match] Pass 2 ERROR groupe '{group_key}' {item.url}: {e}")
+
+        if pass2_skipped_budget:
+            PASS2_RETRY_SKIPPED_BUDGET.inc(pass2_skipped_budget)
+            logger.warning(
+                f"[BATCH][first_match] Pass 2: {pass2_skipped_budget} reprise(s) au total "
+                f"sautée(s) faute de budget de job"
+            )
 
         results = group_results
         success_count = sum(1 for r in results if r.ok)
@@ -982,7 +1031,7 @@ async def _run_batch_core(
 
             logger.info(f"[BATCH] Retry [{retry_num}/{len(failed_indices)}] {item.url}")
 
-            await asyncio.sleep(2)
+            await asyncio.sleep(_PASS2_RETRY_GAP_S)
 
             try:
                 async with semaphore:

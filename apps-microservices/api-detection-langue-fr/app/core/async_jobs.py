@@ -472,12 +472,37 @@ class JobManager:
         stop_hb = asyncio.Event()
         hb = asyncio.create_task(self._heartbeat(job_id, progress, stop_hb))
         # Échéance ABSOLUE (time.monotonic()) sur laquelle _run_batch_core borne
-        # ses reprises Pass 2 (deadline_monotonic) : même base que le watchdog
-        # de _worker_loop (asyncio.wait(timeout=JOB_MAX_S), armé sur started_mono
-        # à la création de CETTE task) et que _terminal_write_budget ci-dessus —
-        # les trois comptent à rebours depuis le même instant. time.monotonic,
-        # jamais time.time() : un saut NTP gonflerait le budget dans le sens
-        # dangereux, même raisonnement que _terminal_write_budget.
+        # ses reprises Pass 2 (deadline_monotonic). PAS le même instant que le
+        # watchdog de _worker_loop, malgré les apparences : `asyncio.wait(
+        # timeout=JOB_MAX_S)` arme son minuteur (`loop.call_later`) de façon
+        # SYNCHRONE au `create_task` du job, donc AVANT que le corps de CETTE
+        # task n'atteigne `started_mono` ci-dessus (revue 2026-08-13) — le
+        # watchdog expire donc TOUJOURS au plus tôt, jamais après.
+        # deadline_monotonic (calculé ici, sur started_mono) est par
+        # construction l'échéance la PLUS TARDIVE des deux : une dérive dans le
+        # sens DANGEREUX (mesurée à 0.05-0.09ms à vide, mais elle suit 1:1
+        # tout callback déjà en file avant la création de cette task).
+        #
+        # Ce qui rend ça sûr n'est donc PAS « même instant » mais la marge de
+        # la boucle Pass 2 : `required` y vaut _ITEM_WALL_CLOCK_S +
+        # _PASS2_BUDGET_MARGIN_S = 315s, alors que la pire consommation entre
+        # un check qui passe et l'expiration RÉELLE du watchdog est bornée par
+        # _PASS2_RETRY_GAP_S (2s) + le wait_for de la reprise (300s) = 302s —
+        # soit ~13s de marge, moins ce tour de scheduling. Ne PAS resserrer
+        # _PASS2_BUDGET_MARGIN_S sous ~_PASS2_RETRY_GAP_S + ce tour sans
+        # re-dériver cette marge.
+        #
+        # Contraste avec _terminal_write_budget juste au-dessus (même mesure,
+        # signe de sûreté OPPOSÉ) : celui-là SOUSTRAIT l'écoulé d'un budget
+        # fixe, donc une capture plus tardive de started_mono y donne un
+        # budget PLUS PETIT (sens sûr, dérive vers l'abandon prudent). Ici on
+        # ADDITIONNE started_mono à une base fixe, donc une capture plus
+        # tardive donne une échéance PLUS TARDIVE (sens dangereux, dérive vers
+        # moins de marge) — l'arithmétique inverse change le signe.
+        #
+        # time.monotonic, jamais time.time() : un saut NTP gonflerait le
+        # budget dans le sens dangereux, même raisonnement que
+        # _terminal_write_budget.
         deadline_monotonic = started_mono + self._s.JOB_MAX_S
         try:
             results, counts = await self._batch_runner(

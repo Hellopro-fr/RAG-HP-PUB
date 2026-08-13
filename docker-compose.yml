@@ -567,8 +567,10 @@ services:
       # 2026-04-20: reduced from defaults (10/12) after an OOM kill loop under real load:
       # 10 Camoufox x ~600 MB (ESTIMATE, never measured) > 4500m cgroup limit -> restarts=9,
       # dmesg WebExtensions OOM kills.
-      # 2026-08-13 RECURRENCE (MEASURED, RestartCount=2 on a 97-domain run): 6 Camoufox still
-      # hit the SAME 4500m ceiling. dmesg: CONSTRAINT_MEMCG (this container's OWN cgroup, not
+      # 2026-08-13 RECURRENCE (RestartCount=2 on a 97-domain run, MEASURED) at
+      # BROWSER_SEMAPHORE_SIZE=6 (a cap, not an observed live browser count — how many were
+      # actually alive at kill time was never measured): still hit the SAME 4500m ceiling.
+      # dmesg: CONSTRAINT_MEMCG (this container's OWN cgroup, not
       # host RAM — 96G total/29G free) killed `uvicorn` (PID 1) at anon-rss=1334 MiB, the
       # biggest task in the cgroup. So the margin was eaten on the PYTHON side, not the
       # browser side this time — the "~600 MB per Camoufox" figure above is still an ESTIMATE
