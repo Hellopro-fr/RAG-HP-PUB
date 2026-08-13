@@ -1,13 +1,13 @@
-# Graph Report - api-detection-langue-fr (Pass 2 job budget)  (2026-08-13)
+# Graph Report - api-detection-langue-fr (N1 text guard + N2 AWS WAF)  (2026-08-13)
 
 ## Corpus Check
-- 8 files · ~0 words
+- 4 files · ~0 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 11192 nodes · 26398 edges · 223 communities detected
-- Extraction: 63% EXTRACTED · 37% INFERRED · 0% AMBIGUOUS · INFERRED: 9645 edges (avg confidence: 0.61)
-- Token cost: 0 input · 113,671 output
+- 11244 nodes · 26561 edges · 223 communities detected
+- Extraction: 63% EXTRACTED · 37% INFERRED · 0% AMBIGUOUS · INFERRED: 9717 edges (avg confidence: 0.61)
+- Token cost: 0 input · 138,213 output
 
 ## Community Hubs (Navigation)
 - [[_COMMUNITY_crawler-service Migration & Archive Types|crawler-service: Migration & Archive Types]]
@@ -239,10 +239,10 @@
 2. `IncludeInArchive` - 381 edges
 3. `ReindexResponse` - 381 edges
 4. `CrawlStatus` - 381 edges
-5. `DomainFR` - 318 edges
+5. `DomainFR` - 333 edges
 6. `DetectionMode` - 300 edges
 7. `DetectionResponse` - 227 edges
-8. `LanguageDetector` - 197 edges
+8. `LanguageDetector` - 217 edges
 9. `BatchItem` - 176 edges
 10. `DebugAlternativesInfo` - 155 edges
 
@@ -500,7 +500,7 @@ Nodes (4): content-extractor-api-service Design Spec, boilerpy3 /clean Endpoint,
 
 ### Community 14 - "Crawler <-> Detection Client Seam (docs)"
 Cohesion: 0.01
-Nodes (201): Regional Path Exclusion Design (2026-04-06), Multilingual Regional Path Duplicates, alternative_urls Exclusion List, Rationale: Apply exclusion at discovery and update-mode seeding, crawler-service, api-detection-langue-fr, robots.txt Total Block Detection & Bypass (2026-04-08), robots.txt Blanket Block (+193 more)
+Nodes (202): Regional Path Exclusion Design (2026-04-06), Multilingual Regional Path Duplicates, alternative_urls Exclusion List, Rationale: Apply exclusion at discovery and update-mode seeding, crawler-service, api-detection-langue-fr, robots.txt Total Block Detection & Bypass (2026-04-08), robots.txt Blanket Block (+194 more)
 
 ### Community 88 - "crawler-service: test_crawler_version.py"
 Cohesion: 0.67
@@ -556,7 +556,7 @@ Nodes (75): account-service SSO, account-service-backend, account-service-fronte
 
 ### Community 2 - "Detection Langue FR Core"
 Cohesion: 0.01
-Nodes (861): _normalize_url_for_dedup(), _homepage_of(), _is_homepage(), _ttl_from_verdict(), _build_challenge_error_msg(), _with_group(), _detect_single_url(), detect_french() (+853 more)
+Nodes (900): _normalize_url_for_dedup(), _homepage_of(), _is_homepage(), _ttl_from_verdict(), _build_challenge_error_msg(), _with_group(), _detect_single_url(), detect_french() (+892 more)
 
 ### Community 153 - "common-utils: __init__.py"
 Cohesion: 1.0
@@ -568,15 +568,15 @@ Nodes (1): Number of coalesced calls served from a shared future.
 
 ### Community 13 - "HTML Cleaning & Language Detection"
 Cohesion: 0.02
-Nodes (194): detect_challenge_page(), Détecte si le contenu HTML est une page de challenge/protection anti-bot     (C, Calcule un score basé sur la présence de mots fonctionnels français.         Re, Supprime les éléments HTML liés aux bannières cookies/consentement/RGPD., Nettoie le contenu HTML et extrait le texte visible.          Combine le meill, Détecte la langue par analyse NLP du contenu textuel visible., Calcule un score basé sur la présence de mots fonctionnels français.         Re, Nombre de mots exclusivement français DISTINCTS présents dans le texte. (+186 more)
+Nodes (200): detect_challenge_page(), Détecte si le contenu HTML est une page de challenge/protection anti-bot     (C, Calcule un score basé sur la présence de mots fonctionnels français.         Re, Supprime les éléments HTML liés aux bannières cookies/consentement/RGPD., Nettoie le contenu HTML et extrait le texte visible.          Combine le meill, Détecte la langue par analyse NLP du contenu textuel visible., Calcule un score basé sur la présence de mots fonctionnels français.         Re, Nombre de mots exclusivement français DISTINCTS présents dans le texte. (+192 more)
 
 ### Community 158 - "api-detection-langue-fr: __init__.py"
 Cohesion: 1.0
-Nodes (1): Normalise l'encodage du contenu HTML en UTF-8.          Reproduit le comportem
+Nodes (1): Supprime les éléments HTML liés aux bannières cookies/consentement/RGPD.
 
 ### Community 15 - "Detection FR Routes & Page Validation"
 Cohesion: 0.02
-Nodes (127): validate(), _is_redirect_to_home(), _detect_soft_404(), _visible_text_length(), Pure page validator for api-detection-langue-fr.  Classifies a ScrapeResult ag, Classify a ScrapeResult against the requested URL.      Order of checks:, Lightweight visible-text length for the thin-content threshold., _scrape() (+119 more)
+Nodes (128): validate(), _is_redirect_to_home(), _detect_soft_404(), _visible_text_length(), Pure page validator for api-detection-langue-fr.  Classifies a ScrapeResult ag, Classify a ScrapeResult against the requested URL.      Order of checks:, Lightweight visible-text length for the thin-content threshold., _scrape() (+120 more)
 
 ### Community 160 - "api-detection-langue-fr: __init__.py"
 Cohesion: 1.0
@@ -1243,7 +1243,7 @@ Nodes (2): Référence de suite AVANT chantier : 7 échecs préexistants + 1 err
   docs/superpowers/specs/2026-08-10-detection-faux-negatifs-design.md · relation: conceptually_related_to
 
 ## Knowledge Gaps
-- **3256 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+3251 more)
+- **3265 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+3260 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **Thin community `graphify-guide-en.md: Limitation: ID collision on sha...`** (1 nodes): `Creates a dictionary of headers for a DLQ message, compatible with both pika and`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -1281,7 +1281,7 @@ Nodes (2): Référence de suite AVANT chantier : 7 échecs préexistants + 1 err
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `api-detection-langue-fr: __init__.py`** (1 nodes): `Number of coalesced calls served from a shared future.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `api-detection-langue-fr: __init__.py`** (1 nodes): `Normalise l'encodage du contenu HTML en UTF-8.          Reproduit le comportem`
+- **Thin community `api-detection-langue-fr: __init__.py`** (1 nodes): `Supprime les éléments HTML liés aux bannières cookies/consentement/RGPD.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `api-detection-langue-fr: __init__.py`** (1 nodes): `Test endpoint /health`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
