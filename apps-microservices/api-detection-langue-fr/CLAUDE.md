@@ -198,6 +198,16 @@ Under concurrent load the service applies multiple layers of protection.
 
 `'admission_rejected'` is in `DomainCache._NEVER_CACHE_METHODS` — service saturation must never be persisted as a domain answer.
 
+### fastText model is CLASS-scoped — never move it back to `self`
+
+`LanguageDetector._fasttext_model` (`app/services/language_detector.py`) is assigned **on the class**, deliberately. The `hasattr(self, '_fasttext_model')` guard above it reads through the MRO, so one process-wide copy serves every instance and no other line needs to change.
+
+Before 2026-08-13 the assignment was `self._fasttext_model = …`, which made the model **per-instance**: `DomainFR.__init__` builds a fresh `LanguageDetector` per instance, and `routes.py` builds a fresh `DomainFR` per batch item (`:606`), per variant of the post-verdict rescue (`:197`) and per homepage fallback (`:541`). Every item that reached NLP therefore re-read the model from disk into its own copy — N simultaneous copies at the batch's effective concurrency, plus ~100–150 synchronous disk reads per 98-domain run. The load also happens *before* the text-usability check, so a page whose cleaned text turns out unusable paid a full load too. Tests: `tests/test_language_detector.py::TestFasttextModelIsClassScoped` (both fail if the assignment reverts to `self`).
+
+Trade accepted: the model is now a **permanent** floor for the process lifetime instead of a transient per-item peak — one copy that never unloads, rather than N that do. Thread-safety is a non-issue here (fastText's `predict` is not thread-safe, but a repo-wide grep for `run_in_executor|to_thread|ThreadPool|threading` across `app/` and `main.py` returns zero hits, and uvicorn runs without `--workers`: one process, one event-loop thread, and `predict` never yields mid-call).
+
+**Per-copy size is NOT verified from the repo.** The path defaults to `models/lid.176.bin` (no `FASTTEXT_MODEL_PATH` setting exists, so the hardcoded default always wins) and compose mounts `/mnt/data/models/fasttext:/app/models`. Facebook's `lid.176.bin` is ~126 MB, but the compressed `lid.176.ftz` is <1 MB, and which file actually sits on the VM has never been checked — `ls -l /app/models/` settles it. Do not quote a megabyte figure for this fix without that line: at `.ftz` the saving is ~16 MB, at `.bin` it is ~1 GB at 8-way concurrency.
+
 **`INFLIGHT_REQUESTS` gauge semantic shift (2026-05-17):** previously "admitted requests in middleware"; now "active fetches at route level". Lower in absolute terms — cache HITs, `html_content` bypass calls, and dedup followers no longer contribute. Grafana panels referencing this gauge need a panel-description update only; data integrity is unchanged.
 
 **`ADMISSION_REJECTED{endpoint}` label cardinality (2026-05-17):**

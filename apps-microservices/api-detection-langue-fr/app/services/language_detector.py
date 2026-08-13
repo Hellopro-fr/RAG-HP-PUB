@@ -691,12 +691,18 @@ class LanguageDetector:
                 os.path.dirname(__file__), '..', '..', 'models', 'lid.176.bin'
             )
             
-            # Charger le modèle (lazy loading)
+            # Charger le modèle (lazy loading, porté par la CLASSE et non par l'instance)
+            # Stocké sur `self`, le modèle était rechargé pour CHAQUE LanguageDetector :
+            # DomainFR en construit un par instance (domain_fr.py) et routes.py construit
+            # un DomainFR par item de batch, par variante du rattrapage et par repli
+            # homepage. Autant de copies simultanées du modèle en mémoire — et autant de
+            # lectures disque synchrones — que d'items analysés en parallèle.
+            # `hasattr(self, ...)` consulte la classe : aucun autre changement nécessaire.
             if not hasattr(self, '_fasttext_model'):
                 if not os.path.exists(model_path):
                     logger.warning(f"Modèle fastText non trouvé: {model_path}")
                     return None
-                self._fasttext_model = fasttext.load_model(model_path)
+                LanguageDetector._fasttext_model = fasttext.load_model(model_path)
             
             # Extraire le texte visible via le pipeline de nettoyage centralisé
             text = self.clean_html_to_text(html)

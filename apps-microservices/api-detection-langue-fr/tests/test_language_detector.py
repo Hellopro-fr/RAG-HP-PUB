@@ -151,3 +151,76 @@ class TestNoscriptUnwrapFallback:
         text = self.detector.clean_html_to_text(html)
         assert text is not None
         assert "Abilitare" not in text
+
+
+# ---------------------------------------------------------------------------
+class TestFasttextModelIsClassScoped:
+    """Le modèle fastText est chargé une fois par PROCESS, pas par instance.
+
+    Régression 2026-08-13 : stocké sur `self`, le modèle était rechargé pour
+    chaque LanguageDetector. DomainFR en construit un par instance
+    (domain_fr.py) et routes.py construit un DomainFR par item de batch, par
+    variante du rattrapage et par repli homepage — soit autant de copies
+    simultanées du modèle en mémoire, et autant de lectures disque synchrones,
+    que d'items analysés en parallèle.
+    """
+
+    @staticmethod
+    def _purge_class_model():
+        # État porté par la classe : le purger avant ET après, sinon le faux
+        # modèle de ce test fuit vers ses voisins.
+        if '_fasttext_model' in LanguageDetector.__dict__:
+            delattr(LanguageDetector, '_fasttext_model')
+
+    def setup_method(self, method=None):
+        self._purge_class_model()
+
+    def teardown_method(self, method=None):
+        self._purge_class_model()
+
+    @staticmethod
+    def _fake_fasttext(monkeypatch):
+        """Installe un faux module fasttext et retourne la liste des chargements."""
+        import os
+        import sys
+        import types
+
+        loads = []
+
+        class _FakeModel:
+            def predict(self, text, k=3):
+                return (['__label__fr'], [0.99])
+
+        fake = types.ModuleType('fasttext')
+        fake.FastText = types.SimpleNamespace(eprint=lambda x: None)
+        fake.load_model = lambda path: (loads.append(path), _FakeModel())[1]
+        monkeypatch.setitem(sys.modules, 'fasttext', fake)
+        # Le modèle n'existe pas sur la machine de test.
+        monkeypatch.setattr(os.path, 'exists', lambda p: True)
+        return loads
+
+    def test_model_loaded_once_across_instances(self, monkeypatch):
+        loads = self._fake_fasttext(monkeypatch)
+        html = "<html><body>" + FRENCH_PARAGRAPH * 5 + "</body></html>"
+
+        first = LanguageDetector().detect_from_text_content_fasttext(html)
+        second = LanguageDetector().detect_from_text_content_fasttext(html)
+
+        # Les deux verdicts aboutissent : le partage ne casse pas la détection.
+        assert first is not None and second is not None
+        assert first['lang'] == 'fr' and second['lang'] == 'fr'
+        # Le point du test : un seul chargement pour deux instances.
+        assert len(loads) == 1, f"modèle chargé {len(loads)} fois au lieu d'une"
+
+    def test_model_object_shared_not_copied_per_instance(self, monkeypatch):
+        self._fake_fasttext(monkeypatch)
+        html = "<html><body>" + FRENCH_PARAGRAPH * 5 + "</body></html>"
+
+        loader, follower = LanguageDetector(), LanguageDetector()
+        loader.detect_from_text_content_fasttext(html)
+
+        # `follower` n'a jamais chargé : il voit le modèle à travers la classe,
+        # et rien n'est écrit dans son __dict__ d'instance.
+        assert follower._fasttext_model is loader._fasttext_model
+        assert '_fasttext_model' not in follower.__dict__
+        assert '_fasttext_model' not in loader.__dict__
