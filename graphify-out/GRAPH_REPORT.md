@@ -1,13 +1,13 @@
-# Graph Report - api-detection-langue-fr + docs (incl. 2 backlog chantiers)  (2026-08-11)
+# Graph Report - api-detection-langue-fr (Pass 2 job budget)  (2026-08-13)
 
 ## Corpus Check
-- 23 files · ~0 words
+- 8 files · ~0 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 11155 nodes · 26328 edges · 223 communities detected
-- Extraction: 63% EXTRACTED · 37% INFERRED · 0% AMBIGUOUS · INFERRED: 9625 edges (avg confidence: 0.6)
-- Token cost: 0 input · 587,639 output
+- 11192 nodes · 26398 edges · 223 communities detected
+- Extraction: 63% EXTRACTED · 37% INFERRED · 0% AMBIGUOUS · INFERRED: 9645 edges (avg confidence: 0.61)
+- Token cost: 0 input · 113,671 output
 
 ## Community Hubs (Navigation)
 - [[_COMMUNITY_crawler-service Migration & Archive Types|crawler-service: Migration & Archive Types]]
@@ -232,7 +232,7 @@
 - [[_COMMUNITY_graphify-guide-en.md .githubworkflowsgraphify-cove...|graphify-guide-en.md: .github/workflows/graphify-cove...]]
 - [[_COMMUNITY_graphify-guide-en.md Limitation undirected graph, e...|graphify-guide-en.md: Limitation: undirected graph, e...]]
 - [[_COMMUNITY_graphify-guide-en.md PreToolUse hook on GlobGrep (n...|graphify-guide-en.md: PreToolUse hook on Glob|Grep (n...]]
-- [[_COMMUNITY_superpowers Référence de suite AVANT chantier  7 éche|superpowers: Référence de suite AVANT chantier : 7 éche]]
+- [[_COMMUNITY_superpowers Faux-négatifs — suite de référence avant chantier|superpowers: Faux-négatifs — suite de référence avant chantier]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `CrawlerManager` - 530 edges
@@ -344,7 +344,7 @@ Nodes (63): GuardConfig, GuardMetrics, Prometheus metrics for MilvusConcurrencyG
 
 ### Community 6 - "Detection FR Scraper & Redirects"
 Cohesion: 0.01
-Nodes (391): Configuration de l'application, reconcile_running_jobs_count(), scheduled_archive_cleanup(), validation_exception_handler(), startup_event(), shutdown_event(), read_root(), Periodically checks the actual number of 'running' jobs in Redis and corrects (+383 more)
+Nodes (393): Configuration de l'application, reconcile_running_jobs_count(), scheduled_archive_cleanup(), validation_exception_handler(), startup_event(), shutdown_event(), read_root(), Periodically checks the actual number of 'running' jobs in Redis and corrects (+385 more)
 
 ### Community 104 - "crawler-service: redisClient.test.ts"
 Cohesion: 1.0
@@ -439,8 +439,8 @@ Cohesion: 0.02
 Nodes (104): _run_gcloud(), check_gcloud_auth(), gcloud_ls(), gcloud_download(), gcloud_delete(), gcloud_move(), extract_crawl_id(), classify_by_name() (+96 more)
 
 ### Community 8 - "Async Job Manager & Store"
-Cohesion: 0.02
-Nodes (294): Shared test fixtures.  Since the migration to the shared common_utils Redis po, Gracefully shut down all locally running crawlers on this replica., Gracefully shut down all locally running crawlers on this replica., metrics_endpoint(), root(), Prometheus metrics for api-detection-langue-fr.  Exposed at /metrics. Used to, _generate_url_variants(), Génère les variantes d'URL à essayer quand l'URL originale échoue.      Bascul (+286 more)
+Cohesion: 0.01
+Nodes (297): Shared test fixtures.  Since the migration to the shared common_utils Redis po, Gracefully shut down all locally running crawlers on this replica., Gracefully shut down all locally running crawlers on this replica., metrics_endpoint(), root(), Prometheus metrics for api-detection-langue-fr.  Exposed at /metrics. Used to, _generate_url_variants(), Génère les variantes d'URL à essayer quand l'URL originale échoue.      Bascul (+289 more)
 
 ### Community 94 - "crawler-service: crawler-service failure classif..."
 Cohesion: 0.67
@@ -556,7 +556,7 @@ Nodes (75): account-service SSO, account-service-backend, account-service-fronte
 
 ### Community 2 - "Detection Langue FR Core"
 Cohesion: 0.01
-Nodes (830): _normalize_url_for_dedup(), _homepage_of(), _is_homepage(), _ttl_from_verdict(), _build_challenge_error_msg(), _with_group(), _detect_single_url(), detect_french() (+822 more)
+Nodes (861): _normalize_url_for_dedup(), _homepage_of(), _is_homepage(), _ttl_from_verdict(), _build_challenge_error_msg(), _with_group(), _detect_single_url(), detect_french() (+853 more)
 
 ### Community 153 - "common-utils: __init__.py"
 Cohesion: 1.0
@@ -1178,7 +1178,7 @@ Nodes (1): Résout une URL relative en URL absolue.
 Cohesion: 1.0
 Nodes (1): Détermine si l'URL a un signal très fort de site français.                  Le
 
-### Community 267 - "superpowers: Référence de suite AVANT chantier : 7 éche"
+### Community 267 - "superpowers: Faux-négatifs — suite de référence avant chantier"
 Cohesion: 1.0
 Nodes (2): Référence de suite AVANT chantier : 7 échecs préexistants + 1 erreur de collecte, à comparer et jamais compter comme introduits, PIÈGE D'OUTILLAGE : une erreur de collecte pytest préexistante INTERROMPT tout le run, si bien qu'aucune commande l'incluant n'est exploitable — la contourner par --ignore, ne pas la réparer (hors périmètre)
 
@@ -1243,7 +1243,7 @@ Nodes (2): Référence de suite AVANT chantier : 7 échecs préexistants + 1 err
   docs/superpowers/specs/2026-08-10-detection-faux-negatifs-design.md · relation: conceptually_related_to
 
 ## Knowledge Gaps
-- **3234 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+3229 more)
+- **3256 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+3251 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **Thin community `graphify-guide-en.md: Limitation: ID collision on sha...`** (1 nodes): `Creates a dictionary of headers for a DLQ message, compatible with both pika and`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -1503,7 +1503,7 @@ Nodes (2): Référence de suite AVANT chantier : 7 échecs préexistants + 1 err
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `graphify-guide-en.md: PreToolUse hook on Glob|Grep (n...`** (1 nodes): `Détermine si l'URL a un signal très fort de site français.                  Le`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `superpowers: Référence de suite AVANT chantier : 7 éche`** (2 nodes): `Référence de suite AVANT chantier : 7 échecs préexistants + 1 erreur de collecte, à comparer et jamais compter comme introduits`, `PIÈGE D'OUTILLAGE : une erreur de collecte pytest préexistante INTERROMPT tout le run, si bien qu'aucune commande l'incluant n'est exploitable — la contourner par --ignore, ne pas la réparer (hors périmètre)`
+- **Thin community `superpowers: Faux-négatifs — suite de référence avant chantier`** (2 nodes): `Référence de suite AVANT chantier : 7 échecs préexistants + 1 erreur de collecte, à comparer et jamais compter comme introduits`, `PIÈGE D'OUTILLAGE : une erreur de collecte pytest préexistante INTERROMPT tout le run, si bien qu'aucune commande l'incluant n'est exploitable — la contourner par --ignore, ne pas la réparer (hors périmètre)`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 
 ## Suggested Questions
