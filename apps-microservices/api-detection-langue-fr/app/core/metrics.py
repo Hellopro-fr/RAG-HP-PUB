@@ -113,3 +113,16 @@ VARIANT_RESCUE_OUTCOME = Counter(
     "Outcomes of the URL-variant rescue attempted on an unusable verdict",
     labelnames=("outcome",),
 )
+
+# Batch Pass 2 sequential retries skipped because the remaining async-job
+# budget (JOB_MAX_S, checked via _run_batch_core's deadline_monotonic) could
+# not fit a full _ITEM_WALL_CLOCK_S retry (2026-08-13 incident: Pass 2 blowing
+# past JOB_MAX_S made the worker watchdog discard the WHOLE chunk, including
+# already-succeeded Pass 1 items). Dedicated counter rather than a new
+# VARIANT_RESCUE_OUTCOME label: different mechanism (job-level budget vs.
+# per-item rescue probes) — without it an operator can't tell "nothing left
+# to retry" from "ran out of time to retry".
+PASS2_RETRY_SKIPPED_BUDGET = Counter(
+    "detection_batch_pass2_retry_skipped_total",
+    "Batch Pass 2 sequential retries skipped for lack of remaining job budget",
+)

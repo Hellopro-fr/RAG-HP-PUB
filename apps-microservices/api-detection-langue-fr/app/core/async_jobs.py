@@ -471,9 +471,18 @@ class JobManager:
 
         stop_hb = asyncio.Event()
         hb = asyncio.create_task(self._heartbeat(job_id, progress, stop_hb))
+        # Échéance ABSOLUE (time.monotonic()) sur laquelle _run_batch_core borne
+        # ses reprises Pass 2 (deadline_monotonic) : même base que le watchdog
+        # de _worker_loop (asyncio.wait(timeout=JOB_MAX_S), armé sur started_mono
+        # à la création de CETTE task) et que _terminal_write_budget ci-dessus —
+        # les trois comptent à rebours depuis le même instant. time.monotonic,
+        # jamais time.time() : un saut NTP gonflerait le budget dans le sens
+        # dangereux, même raisonnement que _terminal_write_budget.
+        deadline_monotonic = started_mono + self._s.JOB_MAX_S
         try:
             results, counts = await self._batch_runner(
-                items, mode, opts, lambda done: progress.__setitem__("done", done)
+                items, mode, opts, lambda done: progress.__setitem__("done", done),
+                deadline_monotonic=deadline_monotonic,
             )
             await self._stop_heartbeat(hb, stop_hb)
             rec = await self._store.get(job_id) or rec

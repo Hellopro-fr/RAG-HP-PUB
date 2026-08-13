@@ -26,7 +26,7 @@ from app.core.async_jobs import _JobsDisabled, _JobsUnavailable, _JobCapacityExc
 from app.core.domain_fr import DomainFR, domain_cache
 from app.core.config import settings
 from app.core.inflight_dedup import InflightDedup
-from app.core.metrics import VALIDATION_VERDICTS, HOMEPAGE_FALLBACK_TRIGGERED, ADMISSION_REJECTED, INFLIGHT_REQUESTS, VARIANT_RESCUE_OUTCOME
+from app.core.metrics import VALIDATION_VERDICTS, HOMEPAGE_FALLBACK_TRIGGERED, ADMISSION_REJECTED, INFLIGHT_REQUESTS, VARIANT_RESCUE_OUTCOME, PASS2_RETRY_SKIPPED_BUDGET
 from app.services.redirect_tracker import fetch_html, _generate_url_variants
 from app.services.language_detector import detect_challenge_page
 from app.services.page_validator import (
@@ -283,6 +283,19 @@ _RESCUE_MARGIN_S = 15
 # une sonde entrée avec 30s restants était donc quasi certaine d'être annulée
 # en pleine navigation, exactement la condition que ce garde doit empêcher.
 _MIN_PROBE_S = 80
+
+# Marge minimale exigée, EN PLUS de _ITEM_WALL_CLOCK_S, avant de démarrer une
+# reprise de Pass 2 sur le budget de JOB restant (deadline_monotonic, passé
+# par le worker async — voir _run_batch_core). Une reprise a besoin de son
+# plafond ENTIER, jamais de « ce qu'il reste » : la démarrer avec moins
+# l'exposerait à une annulation en pleine navigation dès que le watchdog du
+# job (JOB_MAX_S, app/core/async_jobs.py) expire — exactement la condition
+# documentée des callbacks Playwright orphelins de ce service. Même
+# raisonnement que le plancher _MIN_PROBE_S ci-dessus, appliqué ici à l'item
+# Pass 2 entier plutôt qu'à une sonde de rattrapage (incident 2026-08-13 :
+# Pass 1 328s + 4 reprises séquentielles à 300s+2s chacune ≈ 1536s > JOB_MAX_S
+# 1500s → le job entier, y compris ses items DÉJÀ réussis, était jeté).
+_PASS2_BUDGET_MARGIN_S = 15
 
 
 def _normalize_url_for_dedup(url: str) -> str:
@@ -691,10 +704,20 @@ async def _run_batch_core(
     mode: DetectionMode,
     opts: BatchOpts,
     progress_cb: Optional[Callable[[int], None]] = None,
+    deadline_monotonic: Optional[float] = None,
 ) -> tuple[list[DetectionResponse], BatchCounts]:
     """Shared 2-pass batch orchestration. Used by the sync /detect-batch route
     (progress_cb=None) and the async worker (throttled progress_cb). Behavior is
-    identical to the former inline /detect-batch body."""
+    identical to the former inline /detect-batch body.
+
+    deadline_monotonic : échéance ABSOLUE (`time.monotonic()`) au-delà de
+    laquelle Pass 2 arrête de lancer de NOUVELLES reprises séquentielles —
+    jamais utilisée pour couper une reprise déjà en vol (voir
+    _PASS2_BUDGET_MARGIN_S). `None` (défaut) = comportement inchangé : c'est
+    le cas du chemin sync /detect-batch, qui n'a pas de JOB_MAX_S face auquel
+    se borner — invariant de non-régression, voir tests/test_pass2_budget.py.
+    Le worker asynchrone (app/core/async_jobs.py, JobManager._run_job) la
+    calcule depuis son propre départ de job (`started_mono`) + JOB_MAX_S."""
     items_to_process = items
 
     total_items = len(items_to_process)
@@ -935,8 +958,28 @@ async def _run_batch_core(
         logger.info(f"[BATCH] Pass 2: retry sequentiel de {len(failed_indices)} URLs en échec transitoire")
 
         retry_success = 0
+        skipped_budget = 0
         for retry_num, idx in enumerate(failed_indices, 1):
             item = items_to_process[idx]
+
+            # Budget de job (worker async uniquement — None sur le chemin
+            # sync /detect-batch, comportement inchangé). Un item non rejoué
+            # GARDE son verdict Pass 1 (résultat déjà en place dans `results`
+            # — rien à écrire ici) : jamais de troncature d'une reprise en
+            # vol, seulement un saut de celles qui ne tiendraient pas.
+            if deadline_monotonic is not None:
+                remaining = deadline_monotonic - time.monotonic()
+                required = _ITEM_WALL_CLOCK_S + _PASS2_BUDGET_MARGIN_S
+                if remaining < required:
+                    skipped_budget = len(failed_indices) - retry_num + 1
+                    logger.warning(
+                        f"[BATCH] Pass 2: budget de job insuffisant ({remaining:.0f}s "
+                        f"restants < {required}s requis) — {skipped_budget} reprise(s) "
+                        f"sautée(s), verdict Pass 1 conservé"
+                    )
+                    PASS2_RETRY_SKIPPED_BUDGET.inc(skipped_budget)
+                    break
+
             logger.info(f"[BATCH] Retry [{retry_num}/{len(failed_indices)}] {item.url}")
 
             await asyncio.sleep(2)
@@ -964,7 +1007,10 @@ async def _run_batch_core(
             except Exception as e:
                 logger.warning(f"[BATCH] Retry ERROR {item.url}: {e}")
 
-        logger.info(f"[BATCH] Pass 2 termine: {retry_success}/{len(failed_indices)} recuperes")
+        logger.info(
+            f"[BATCH] Pass 2 termine: {retry_success}/{len(failed_indices)} recuperes"
+            + (f", {skipped_budget} sautee(s) faute de budget" if skipped_budget else "")
+        )
 
     # Statistiques finales
     success_count = sum(1 for r in results if r.ok)

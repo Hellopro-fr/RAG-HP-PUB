@@ -47,7 +47,7 @@ async def test_watchdog_abandons_wedged_job_and_frees_queue():
     ran2 = asyncio.Event()
     state = {"first": True}
 
-    async def batch_runner(items, mode, opts, progress_cb):
+    async def batch_runner(items, mode, opts, progress_cb, deadline_monotonic=None):
         if state["first"]:
             state["first"] = False
             await hang.wait()            # job1 wedges forever
@@ -83,7 +83,7 @@ async def test_watchdog_race_naturally_completing_zombie_no_double_decrement():
     ran2 = asyncio.Event()
     state = {"first": True}
 
-    async def batch_runner(items, mode, opts, progress_cb):
+    async def batch_runner(items, mode, opts, progress_cb, deadline_monotonic=None):
         if state["first"]:
             state["first"] = False
             try:

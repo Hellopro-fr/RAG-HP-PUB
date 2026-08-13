@@ -29,7 +29,7 @@ def _req(items, client_job_id=None):
     )
 
 
-async def _instant_runner(items, mode, opts, cb):
+async def _instant_runner(items, mode, opts, cb, deadline_monotonic=None):
     cb(len(items))
     results = [DetectionResponse(ok=True, url=i.url, method="test") for i in items]
     return results, BatchCounts(success_count=len(items), failed_count=0, error_count=0)
@@ -61,7 +61,7 @@ async def test_submit_completes_with_authoritative_counts():
 async def test_idempotent_concurrent_submit_spawns_once():
     store = JobStore(client=FakeRedis())
     spawns = {"n": 0}
-    async def counting_runner(items, mode, opts, cb):
+    async def counting_runner(items, mode, opts, cb, deadline_monotonic=None):
         spawns["n"] += 1
         return await _instant_runner(items, mode, opts, cb)
     jm = JobManager(store, counting_runner, _settings())
@@ -79,7 +79,7 @@ async def test_idempotent_concurrent_submit_spawns_once():
 async def test_capacity_rejected_counts_pending_plus_running():
     """MAX_ACTIVE_JOBS borne pending+running : un job encore EN FILE compte."""
     gate = asyncio.Event()
-    async def gated_runner(items, mode, opts, cb):
+    async def gated_runner(items, mode, opts, cb, deadline_monotonic=None):
         await gate.wait()
         return await _instant_runner(items, mode, opts, cb)
     jm = JobManager(JobStore(client=FakeRedis()), gated_runner, _settings(MAX_ACTIVE_JOBS=1))
@@ -124,7 +124,7 @@ async def test_submit_claim_index_failure_is_retryable(caplog):
 @pytest.mark.asyncio
 async def test_shutdown_marks_running_failed():
     started = asyncio.Event()
-    async def hang_runner(items, mode, opts, cb):
+    async def hang_runner(items, mode, opts, cb, deadline_monotonic=None):
         started.set()
         await asyncio.sleep(60)
     jm = JobManager(JobStore(client=FakeRedis()), hang_runner, _settings())
@@ -142,7 +142,7 @@ async def test_jobs_run_serially_in_fifo_order():
     """JOB_WORKER_CONCURRENCY=1 : jamais 2 batches simultanés, ordre FIFO."""
     running = {"now": 0, "max": 0}
     order = []
-    async def tracking_runner(items, mode, opts, cb):
+    async def tracking_runner(items, mode, opts, cb, deadline_monotonic=None):
         running["now"] += 1
         running["max"] = max(running["max"], running["now"])
         order.append(items[0].url)
@@ -167,7 +167,7 @@ async def test_jobs_run_serially_in_fifo_order():
 async def test_worker_concurrency_two_runs_two_jobs():
     gate = asyncio.Event()
     running = {"now": 0, "max": 0}
-    async def gated_runner(items, mode, opts, cb):
+    async def gated_runner(items, mode, opts, cb, deadline_monotonic=None):
         running["now"] += 1
         running["max"] = max(running["max"], running["now"])
         await gate.wait()
@@ -199,7 +199,7 @@ async def test_queued_job_heartbeat_prevents_false_stale():
     BO le croirait mort (re-soumission en double)."""
     gate = asyncio.Event()
     started = asyncio.Event()
-    async def blocking_runner(items, mode, opts, cb):
+    async def blocking_runner(items, mode, opts, cb, deadline_monotonic=None):
         started.set()
         await gate.wait()
         return await _instant_runner(items, mode, opts, cb)
@@ -232,7 +232,7 @@ async def test_shutdown_marks_queued_job_failed():
     """Un job jamais démarré (encore en file) est marqué failed(service_shutdown)
     au shutdown — contrat fail-fast : le caller re-soumet."""
     started = asyncio.Event()
-    async def hang_runner(items, mode, opts, cb):
+    async def hang_runner(items, mode, opts, cb, deadline_monotonic=None):
         started.set()
         await asyncio.sleep(60)
     jm = JobManager(JobStore(client=FakeRedis()), hang_runner, _settings(MAX_ACTIVE_JOBS=8))
@@ -257,7 +257,7 @@ async def test_resubmit_after_failed_creates_new_job():
     re-soumission d'un cjid dont le job est failed doit créer un NOUVEAU job."""
     calls = {"n": 0}
 
-    async def fail_then_ok(items, mode, opts, cb):
+    async def fail_then_ok(items, mode, opts, cb, deadline_monotonic=None):
         calls["n"] += 1
         if calls["n"] == 1:
             raise RuntimeError("boom")
