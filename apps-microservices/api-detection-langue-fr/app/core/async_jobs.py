@@ -382,8 +382,17 @@ class JobManager:
     def _terminal_write_budget(self, started_mono: float) -> float:
         """Clamp le budget de retry de l'écriture terminale au reliquat de
         JOB_MAX_S. `_worker_loop` attend le job avec `asyncio.wait(timeout=
-        JOB_MAX_S)` à partir du même instant que `started_mono` (création de
-        la task _run_job) ; une écriture terminale encore en train de
+        JOB_MAX_S)`, armé au `create_task` de `_run_job` — AU PLUS TÔT,
+        jamais « au même instant » que `started_mono` (lu une ligne après,
+        dans `_run_job` ; précision revue 2026-08-13 — explication complète
+        au commentaire de `deadline_monotonic`, `_run_job`). Cet écart ne
+        menace PAS ce clamp : `remaining` ci-dessous SOUSTRAIT l'écoulé d'un
+        budget fixe, donc capturer `started_mono` un peu après le vrai
+        départ du watchdog ne fait que RÉDUIRE le budget rendu — sens sûr.
+        C'est l'inverse de `deadline_monotonic`, qui ADDITIONNE
+        `started_mono` à une base fixe et dérive donc dans le sens dangereux
+        pour ce même écart (même mesure, arithmétique opposée, signe de
+        sûreté opposé). Une écriture terminale encore en train de
         réessayer quand ce délai expire se fait annuler par `_abandon_job`,
         qui écrase un lot pourtant terminé en `failed(job_timeout)` — pire
         que le `running` silencieux que ce retry existe pour éviter. D'où un
@@ -456,11 +465,18 @@ class JobManager:
         from app.core.metrics import ASYNC_JOBS_TERMINAL, ASYNC_JOB_DURATION
         progress = {"done": 0}
         started = time.time()
-        # Base séparée pour le clamp de _terminal_write_budget : le watchdog
-        # de _worker_loop (asyncio.wait(timeout=JOB_MAX_S)) arme sur
-        # l'horloge monotone au même instant que la création de cette task —
-        # started_mono suit exactement ce compte à rebours, pas une horloge
-        # murale qu'un saut NTP peut fausser (revue 2026-08-11).
+        # Base séparée pour le clamp de _terminal_write_budget (et pour
+        # l'échéance Pass 2 plus bas). Le watchdog de _worker_loop
+        # (asyncio.wait(timeout=JOB_MAX_S)) arme son minuteur au create_task
+        # de CETTE task, donc AU PLUS TÔT — jamais « au même instant » que la
+        # ligne suivante, qui lit started_mono un peu après (précision revue
+        # 2026-08-13 ; explication complète et impact du sens de
+        # l'arithmétique au commentaire de `deadline_monotonic` plus bas).
+        # started_mono reste une base fiable ICI parce que
+        # _terminal_write_budget SOUSTRAIT l'écoulé d'un budget fixe :
+        # capturer started_mono un peu tard ne fait que RÉDUIRE ce budget
+        # (sens sûr) — pas une horloge murale, qu'un saut NTP fausserait dans
+        # le sens dangereux.
         started_mono = time.monotonic()
         rec = await self._store.get(job_id) or {"job_id": job_id}
         rec.update({"status": "running", "started_at": started, "last_activity": started})
