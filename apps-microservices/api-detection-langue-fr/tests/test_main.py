@@ -20,7 +20,7 @@ def _settings(**over):
     return types.SimpleNamespace(**base)
 
 
-async def _runner(items, mode, opts, cb):
+async def _runner(items, mode, opts, cb, deadline_monotonic=None):
     cb(len(items))
     return ([DetectionResponse(ok=True, url=i.url, method="test") for i in items],
             BatchCounts(len(items), 0, 0))
@@ -52,7 +52,7 @@ async def test_poll_unknown_404():
 
 @pytest.mark.asyncio
 async def test_capacity_503_has_retry_after():
-    async def slow(items, mode, opts, cb):
+    async def slow(items, mode, opts, cb, deadline_monotonic=None):
         await asyncio.sleep(0.3)
         return ([], BatchCounts(0, 0, 0))
     jm = JobManager(JobStore(client=FakeRedis()), slow, _settings(MAX_ACTIVE_JOBS=1))

@@ -547,6 +547,10 @@ services:
     container_name: api-detection-langue-fr-service
     profiles: [ "app" ] # Profile for the main application stack
     restart: unless-stopped
+    # In-flight chunk must survive a recreate (this service has otherwise had
+    # NO stop_grace_period -> Docker's 10s default). Same reasoning as
+    # document-echange-processor-service below (300s, worst-case batch drain).
+    stop_grace_period: 300s
     # TODO: à supprimer en PROD
     volumes:
       - ./apps-microservices/api-detection-langue-fr:/app:rw
@@ -560,13 +564,27 @@ services:
       # Client name du pool Redis partagé (common_utils cache_service)
       - SERVICE_NAME=api-detection-langue-fr-service
       # Capacity tuning — see docs/superpowers/specs/2026-04-20-detection-langue-fr-concurrency-defense-design.md § B.1
-      # Reduced from defaults (10/12) after observed OOM kill loop under real load:
-      # 10 Camoufox × ~600 MB > 4500m cgroup limit → restarts=9, dmesg WebExtensions OOM kills.
-      # New peak: 6 × ~600 MB ≈ 3.6 GB browsers + ~500 MB Python heap = fits with headroom.
-      # Trade: ~40% throughput reduction; BO + crawler-service handle 503 backpressure cleanly.
-      - BROWSER_SEMAPHORE_SIZE=6
+      # 2026-04-20: reduced from defaults (10/12) after an OOM kill loop under real load:
+      # 10 Camoufox x ~600 MB (ESTIMATE, never measured) > 4500m cgroup limit -> restarts=9,
+      # dmesg WebExtensions OOM kills.
+      # 2026-08-13 RECURRENCE (RestartCount=2 on a 97-domain run, MEASURED) at
+      # BROWSER_SEMAPHORE_SIZE=6 (a cap, not an observed live browser count — how many were
+      # actually alive at kill time was never measured): still hit the SAME 4500m ceiling.
+      # dmesg: CONSTRAINT_MEMCG (this container's OWN cgroup, not
+      # host RAM — 96G total/29G free) killed `uvicorn` (PID 1) at anon-rss=1334 MiB, the
+      # biggest task in the cgroup. So the margin was eaten on the PYTHON side, not the
+      # browser side this time — the "~600 MB per Camoufox" figure above is still an ESTIMATE
+      # (inherited from that first incident's comment), never measured; only the 1334 MiB
+      # uvicorn figure and the 4500m ceiling itself are measured (kernel dmesg). `docker
+      # inspect` showed OOMKilled=false/ExitCode=0 — that flag only describes the LAST
+      # restart, and 2 restarts had already overwritten the transition that mattered; never
+      # trust it alone. Fix: BROWSER_SEMAPHORE_SIZE 6->4 (more cgroup headroom for uvicorn)
+      # + mem_limit 4500m->6g below (crawler-service containers on this host already run at
+      # 6g) + stop_grace_period above (this service had none, so recreating it for this very
+      # fix would have SIGKILLed an in-flight chunk after Docker's 10s default).
+      - BROWSER_SEMAPHORE_SIZE=4
       - ADMISSION_MAX_SLOTS=8
-    mem_limit: 4500m
+    mem_limit: 6g
     cpus: 4
     healthcheck:
       # python:3.10-slim base image n'inclut pas curl → healthcheck cassé en boucle
