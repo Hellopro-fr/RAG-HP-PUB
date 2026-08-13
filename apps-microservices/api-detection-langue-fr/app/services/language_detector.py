@@ -100,6 +100,24 @@ def detect_challenge_page(html: str) -> Optional[str]:
     if imperva_count >= 2:
         return 'Imperva'
 
+    # --- AWS WAF Challenge (script CAPTCHA/challenge « Goku ») ---
+    # window.gokuProps (nom de code interne du script de génération de token
+    # AWS WAF Captcha/Challenge) et window.awsWafCookieDomainList (portée du
+    # cookie de session WAF injectée par ce même script) sont chacun assez
+    # rares pour être de bons indices, mais pas prouvés exclusifs seuls
+    # (cf. la leçon Turnstile ci-dessus : un composant peut apparaître sur un
+    # vrai site) — les 2 sont requis, comme Imperva (`:100`), pas 1 comme
+    # PerimeterX. Le seul échantillon de production dont on dispose porte les
+    # deux (N2, 2026-08-13, 324automatismes.net : status 202, 2397 chars de
+    # HTML, 0 caractère de texte visible), donc ce seuil ne coûte rien sur la
+    # preuve qu'on a.
+    aws_waf_indicators = [
+        'awswafcookiedomainlist',
+        'gokuprops',
+    ]
+    if sum(1 for p in aws_waf_indicators if p in html_lower) >= 2:
+        return 'AWS_WAF'
+
     # --- Rescaled WAF (interstitiel proof-of-work auto-résolvant) ---
     # Page "Verifying your browser" servie en HTTP 403 ; un Web Worker résout
     # le challenge PoW puis window.location.replace recharge la vraie page.

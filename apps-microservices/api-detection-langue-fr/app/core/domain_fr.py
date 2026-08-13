@@ -1126,6 +1126,25 @@ class DomainFR:
 
         return all_alternatives[:10]
     
+    @staticmethod
+    def _extract_visible_text_coarse(html: str) -> str:
+        """
+        Texte visible via un décapage volontairement GROSSIER (script, style,
+        meta, link, noscript retirés puis get_text) — plus grossier que
+        `LanguageDetector.clean_html_to_text` (qui retire en plus head/img/
+        svg/iframe/... et les bannières cookies). C'est ce décapage-ci, pas le
+        fin, qui sert d'oracle pour juger « page vide » : précédent Cas 2b
+        (TLD .fr, ci-dessous), généralisé aux Cas 2a/7/9 (N1, 2026-08-13,
+        sonde production automatismes.net — cf. CLAUDE.md).
+        """
+        try:
+            soup_check = BeautifulSoup(html, 'lxml')
+            for el in soup_check(['script', 'style', 'meta', 'link', 'noscript']):
+                el.decompose()
+            return soup_check.get_text(separator=' ', strip=True)
+        except Exception:
+            return ''
+
     async def check_page_if_french(
         self,
         content: str,
@@ -1244,7 +1263,16 @@ class DomainFR:
                 url=url,
                 method='Check_nok_forced'
             )
-        
+
+        # N1 : texte visible calculé UNE fois — sert d'oracle aux trois
+        # verdicts négatifs (Cas 2a, 7, 9 plus bas) qui ne peuvent pas
+        # conclure « pas français » sur une page qu'on n'a pas pu lire.
+        # Un verdict POSITIF sans texte reste légitime (nlp_skipped) : ce
+        # garde ne s'applique volontairement qu'aux rejets. Calculé après le
+        # bloc forced_method (qui retourne toujours avant d'y arriver) pour
+        # ne pas payer le parse lxml sur ce chemin.
+        visible_text = self._extract_visible_text_coarse(content)
+
         # Étape 3 : Détection langue HTML (balises <html lang>, meta, etc.)
         lang_result = self.language_detector.detect_combined(content, use_nlp=False)
         html_indicates_french = lang_result.get('detected') and lang_result.get('is_french')
@@ -1332,6 +1360,16 @@ class DomainFR:
                 # Si validate_alternatives est off, le cas 6 est sauté : on garde
                 # le rejet immédiat et son message plus clair.
                 if not (self.validate_alternatives and reliable_alternatives):
+                    # N1 : pas de verdict négatif sur une page qu'on n'a pas
+                    # pu lire — même garde que le Cas 2b juste au-dessus.
+                    if len(visible_text) < settings.NLP_MIN_TEXT_LENGTH:
+                        return DetectionResponse(
+                            ok=False,
+                            url=url,
+                            method='fetch_empty_content',
+                            alternative_urls=alternatives,
+                            error=f"TLD .fr mais contenu insuffisant ({len(visible_text)} caractères) — verdict non fiable sur texte vide"
+                        )
                     logger.info(
                         f"TLD .fr mais NLP détecte {nlp_lang} avec confiance {nlp_confidence:.3f} — rejet"
                     )
@@ -1355,14 +1393,6 @@ class DomainFR:
                 # c'est un signe que le site est inaccessible (502, erreur proxy, etc.).
                 # Ne PAS faire confiance au TLD dans ce cas.
                 if not nlp_available:
-                    try:
-                        soup_check = BeautifulSoup(content, 'lxml')
-                        for el in soup_check(['script', 'style', 'meta', 'link', 'noscript']):
-                            el.decompose()
-                        visible_text = soup_check.get_text(separator=' ', strip=True)
-                    except Exception:
-                        visible_text = ''
-
                     if len(visible_text) < settings.NLP_MIN_TEXT_LENGTH:
                         return DetectionResponse(
                             ok=False,
@@ -1569,6 +1599,15 @@ class DomainFR:
 
         # Cas 7 : NLP disponible mais ne confirme pas, malgré indicateurs HTML/URL
         if nlp_available and (html_indicates_french or url_indicates_french):
+            # N1 : pas de verdict négatif sur une page qu'on n'a pas pu lire.
+            if len(visible_text) < settings.NLP_MIN_TEXT_LENGTH:
+                return DetectionResponse(
+                    ok=False,
+                    url=url,
+                    method='fetch_empty_content',
+                    alternative_urls=alternatives,
+                    error=f"Indicateurs trouvés ({html_method or url_method}) mais contenu insuffisant ({len(visible_text)} caractères) — verdict non fiable sur texte vide"
+                )
             return DetectionResponse(
                 ok=False,
                 url=url,
@@ -1619,11 +1658,6 @@ class DomainFR:
                     french_signal = (nlp_result.get('details') or {}).get('french_signal')
 
                 if french_signal is None:
-                    soup_check = BeautifulSoup(content, 'lxml')
-                    for el in soup_check(['script', 'style', 'meta', 'link', 'noscript']):
-                        el.decompose()
-                    visible_text = soup_check.get_text(separator=' ', strip=True)
-
                     if len(visible_text) >= 50:
                         french_signal = self.language_detector._compute_french_signal(visible_text)
 
@@ -1689,6 +1723,24 @@ class DomainFR:
                 f"rattrapage candidat"
             )
             logger.info(f"[LEXICAL-OBS] {url} : {lexical_note}")
+
+        # N1 : pas de verdict négatif sur une page qu'on n'a pas pu lire —
+        # cas motivant de ce garde (sonde production 2026-08-13,
+        # automatismes.net-like : 0 caractère visible, Cas 9 sans texte).
+        # PAS de alternative_urls ici (contrairement aux Cas 2a/7) : le
+        # contrat documenté juste au-dessus (Cas 9) garde ce champ vide à
+        # dessein — crawler routes.ts + BO not_french_signal.php lisent
+        # « ok=false + alternatives non vides » comme un signal distinct de
+        # not_french. Les candidates viennent de <link>, que le décapage
+        # grossier retire du TEXTE mais pas du DOM : les exposer ici ferait
+        # publier « alternative FR trouvée » pour une page illisible.
+        if len(visible_text) < settings.NLP_MIN_TEXT_LENGTH:
+            return DetectionResponse(
+                ok=False,
+                url=url,
+                method='fetch_empty_content',
+                error=f"Aucun indicateur trouvé et contenu insuffisant ({len(visible_text)} caractères) — verdict non fiable sur texte vide"
+            )
 
         return DetectionResponse(
             ok=False,
@@ -1862,6 +1914,13 @@ class DomainFR:
     ) -> str:
         """Identifie le cas de decision applique pour le debug."""
         method = result.method
+
+        # Garde N1 (2026-08-13) : Cas 2a, 7 et 9 peuvent tous rendre
+        # `fetch_empty_content` au lieu de leur verdict habituel — sans ce
+        # court-circuit, `debug.decision` nommerait un cas (et un verdict
+        # NLP) que le code a justement refusé de trancher.
+        if method == 'fetch_empty_content':
+            return "No verdict: page fetched but visible text is below NLP_MIN_TEXT_LENGTH (N1 guard)"
 
         if nlp_confirms_french:
             return "Case 1: NLP confirms French"
