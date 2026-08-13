@@ -572,8 +572,20 @@ services:
       # actually alive at kill time was never measured): still hit the SAME 4500m ceiling.
       # dmesg: CONSTRAINT_MEMCG (this container's OWN cgroup, not
       # host RAM — 96G total/29G free) killed `uvicorn` (PID 1) at anon-rss=1334 MiB, the
-      # biggest task in the cgroup. So the margin was eaten on the PYTHON side, not the
-      # browser side this time — the "~600 MB per Camoufox" figure above is still an ESTIMATE
+      # biggest task in the cgroup. CORRECTION 2026-08-13 (review): an earlier version of
+      # this comment concluded "the margin was eaten on the PYTHON side, not the browser
+      # side" — that does NOT follow from its own evidence. The kernel picks the highest
+      # oom_score (~ per-TASK RSS), and Firefox spreads over a parent + N content processes,
+      # so a browser tree holding far more in TOTAL can present as several individually
+      # smaller tasks, none outranking a 1334 MiB uvicorn. And 1334 MiB is only ~30% of the
+      # 4500m ceiling: the other ~3.1 GB was elsewhere in the cgroup and is still
+      # UNATTRIBUTED. Victim selection says which task was largest, never which side held the
+      # majority. (The 6->4 semaphore cut below is if anything BETTER justified under this
+      # reading, since browsers are the likelier majority — right fix, wrong stated reason.)
+      # To attribute the rest: per-PID RssAnon + the cgroup's own memory.stat (anon vs file);
+      # summed VmRSS double-counts shared libxul pages the cgroup charges once, and
+      # /metrics' process_resident_memory_bytes is VmRSS, NOT comparable to a dmesg anon-rss.
+      # The "~600 MB per Camoufox" figure above is still an ESTIMATE
       # (inherited from that first incident's comment), never measured; only the 1334 MiB
       # uvicorn figure and the 4500m ceiling itself are measured (kernel dmesg). `docker
       # inspect` showed OOMKilled=false/ExitCode=0 — that flag only describes the LAST
