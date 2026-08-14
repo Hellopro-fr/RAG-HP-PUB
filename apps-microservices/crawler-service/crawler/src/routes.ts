@@ -768,6 +768,41 @@ router.addDefaultHandler(
                     verdictUnavailable = true;
                 }
 
+                // An unjudged homepage is a detection OUTAGE, not a result: `isEnqueuingLinks`
+                // stays false, so an initial crawl enqueues nothing and stores nothing. Shipping
+                // the default exit 2 for that made `_classify_exit_code(2)` answer (None, None)
+                // and the run report `finished` — a SUCCESS webhook for a run that produced no
+                // data. Exit 10 is the honest verdict.
+                //
+                // Placed after the try/catch so it converges the THREE homepage sites (:645 empty
+                // method, :715 technical method, :768 API error) without touching what each of
+                // them already writes — notably the reserved-string-avoiding `crawlErrorMessage`
+                // of :730. Being inside `if (isMainSite)` is also what makes exit 10 unreachable
+                // from the seven internal-page sites in the `else` below: killing a crawl because
+                // one internal page out of hundreds got no verdict would destroy the successful
+                // ones, so those keep counting-not-tuning.
+                //
+                // UPDATE MODE IS EXEMPT, deliberately. `context.homepageReady` is non-null only in
+                // update mode (main.ts:937, inside `if (crawlMode === 'update')`) and is exactly
+                // the guard on Phase-2 seeding (main.ts:1517), which seeds the previous crawl's
+                // URLs on a 120s timeout whether or not the homepage was judged — and those
+                // internal pages run their own detection (the `else` branch below). Stopping here
+                // would discard that work to punish a failure we cannot even scope: nothing in
+                // `DetectionLangueClient` tracks consecutive failures or service health, so the
+                // crawler cannot tell a GLOBAL outage from one bad URL. Initial-only is the half
+                // that the code we have can justify.
+                if (verdictUnavailable && !context.homepageReady) {
+                    context.stopReason = "detectionUnavailable";
+                    context.fatalExitCode = 10;
+                    log.error(`⛔ DETECTION UNAVAILABLE on homepage ${url} — no linguistic verdict, nothing to crawl — terminating (exit 10)`);
+                    await stopCrawler(crawler, "Detection unavailable: no linguistic verdict for the homepage");
+                    // No `return` — unlike :621/:651/:750, and like the proxy-wall breaker at
+                    // :426-430 (the other `fatalExitCode` setter in this handler). The
+                    // fall-through is what still reaches `recordUnjudgedUrls` (:1260), which the
+                    // previous chantier added for the homepage case on purpose; returning would
+                    // silently undo it.
+                }
+
             } else {
                 // INTERNAL PAGE LOGIC WITH FALLBACK
                 let methodOrError = manageFrenchDetectionMethod(targetDomain as string);

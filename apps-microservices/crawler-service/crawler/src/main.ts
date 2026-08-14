@@ -1146,6 +1146,9 @@ const mapStopReasonToMessage = (errorCode: string): string => {
         "PAYLOAD_READ_ERROR": "Erreur lecture payload",
         "interruptedShutdown": "Crawl interrompu lors de l'arrêt du service",
         "limitQueue": "File d'attente d'URLs trop volumineuse",
+        // Only reachable for the ok=true-but-empty-method homepage site (routes.ts:645):
+        // the other two set `context.crawlErrorMessage`, which wins at :1226.
+        "detectionUnavailable": "Service de détection de langue indisponible",
     };
 
     if (!errorCode) return "";
