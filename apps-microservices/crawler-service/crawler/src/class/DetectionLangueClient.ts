@@ -189,6 +189,58 @@ export class DetectionLangueClient {
     }
 
     /**
+     * Returns true if the method denotes a TECHNICAL FAILURE — the absence of a
+     * verdict — and false if it denotes a linguistic judgement. "The detection did
+     * not answer" must never be laundered into "the site is not French".
+     *
+     * Closed set, with each member's reachability on the crawler's own calls:
+     *   - `challenge_page`      REACHABLE — the service's challenge classifier runs
+     *                           on *provided* html, ahead of the decision matrix.
+     *   - `error`               REACHABLE — the service's generic exception handler
+     *                           answers HTTP 200 carrying this method.
+     *   - `fetch_empty_content` REACHABLE — the N1 guard returns it in place of a
+     *                           negative verdict on a page with no visible text.
+     *   - `admission_rejected`  **NOT REACHABLE TODAY.** The crawler always sends
+     *                           `html_content`, which bypasses the service's
+     *                           admission control, so no crawler call can observe
+     *                           it — do not read its presence here as evidence that
+     *                           production sees it. It is here on purpose: a
+     *                           service saturation is never a property of the site,
+     *                           and if a future change ever routes the crawler
+     *                           through admission, the silent laundering would come
+     *                           back with nobody re-reading this predicate. The
+     *                           service already classes it `_NEVER_CACHE_METHODS`.
+     *
+     * The service's other technical methods (`soft_404`, `redirected_to_home`,
+     * `http_error`, `http_error_transient`, `fetch_failed`) are deliberately absent:
+     * they are produced only inside `if not html_was_provided`, so they cannot reach
+     * the crawler. Do not add them "just in case" — the set has to stay readable as
+     * the verifiable claim it is.
+     *
+     * **Membership after `+`-split, NOT strict equality.** `method` is `+`-composed
+     * (`direct_match+langHtml+nlp_confirmed`, `…+variant_rescue`) and this predicate
+     * is handed the raw string, before any `extractPrimaryMethod` pass. Every member
+     * above is returned bare today, so equality would also work — the choice is
+     * about which way to be wrong when that stops being true. A composed technical
+     * method read as a verdict re-opens the false `not_french` stamp and the
+     * update-mode deletion claim (silent, destructive). A composed method wrongly
+     * read as technical only costs crawl budget on a non-French site (visible as a
+     * drop in `filtered_nonfr`, and it claims no deletion). Split-membership errs on
+     * the recoverable side, and it reads a part found *anywhere* in the split just
+     * as `extractPrimaryMethod` (`:170-176`) already does.
+     */
+    static isTechnicalFailureMethod(method: string): boolean {
+        if (!method) return false;
+        const TECHNICAL_FAILURE_METHODS = [
+            "challenge_page",
+            "error",
+            "fetch_empty_content",
+            "admission_rejected",
+        ];
+        return method.split("+").some((p) => TECHNICAL_FAILURE_METHODS.includes(p));
+    }
+
+    /**
      * Extract the language query parameter from a URL.
      * Used for session-based i18n sites where the homepage has ?lang=fr
      * (method: pattern_match_query) but internal pages don't carry the param.

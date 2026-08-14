@@ -81,10 +81,23 @@ Contraintes :
   `html_content`, donc il court-circuite l'admission) et figure là par précaution. Sans ce
   commentaire, un futur lecteur conclura que le crawler l'observe en production.
 - **Décider et documenter le traitement des méthodes composées.** `method` peut être
-  `+`-composé (`...+variant_rescue`). Regarder comment `extractPrimaryMethod` (`:170-176`)
-  split, et choisir explicitement entre égalité stricte et appartenance après split. Écrire
-  la raison dans le code : c'est le genre de détail qui se retourne quand une nouvelle
-  méthode composée apparaît, et §2 de la spec montre que ça arrive.
+  `+`-composé. Regarder comment `extractPrimaryMethod` (`:170-176`) split, et choisir
+  explicitement entre égalité stricte et appartenance après split. Écrire la raison dans le
+  code : c'est le genre de détail qui se retourne quand une nouvelle méthode composée
+  apparaît, et §2 de la spec montre que ça arrive.
+
+  > **Correction 2026-08-14** — une version antérieure de ce plan donnait `...+variant_rescue`
+  > comme exemple motivant. Il est **inatteignable** sur les appels du crawler, pour deux
+  > raisons indépendantes vérifiées : le rattrapage est gardé par
+  > `if not html_was_provided and ...` (`routes.py:621`) et le crawler envoie toujours
+  > `html_content` — le CLAUDE.md du service dit « crawler-service is immune » ; et le suffixe
+  > n'annote jamais qu'un verdict **`ok=True`** (`routes.py:205`, `:223`), donc il ne peut pas
+  > qualifier une défaillance technique. Conséquence pour la décision : **aucun chemin
+  > atteignable ne compose une méthode technique aujourd'hui**, donc le choix ne repose pas
+  > sur des données observées mais sur l'asymétrie des erreurs — égalité fausse rouvre le
+  > faux `not_french` et la revendication de suppression (silencieux, destructeur), split
+  > faux coûte du budget de crawl et se voit dans `filtered_nonfr`. Choisir le côté
+  > récupérable.
 - Ne modifier aucune méthode existante.
 
 **Tests** (`src/class/DetectionLangueClient.test.ts`) :
