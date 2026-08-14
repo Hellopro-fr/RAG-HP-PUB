@@ -16,8 +16,16 @@ fausse en l'état. Installer d'abord :
 
 ```bash
 cd apps-microservices/crawler-service/crawler
-PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm ci --no-audit --no-fund
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --no-audit --no-fund
 ```
+
+**`npm install`, PAS `npm ci`** — et ce n'est pas une négligence. Le `package-lock.json`
+présent localement **n'est pas suivi par git** et il est désynchronisé de `package.json`
+(`p-limit@3.1.0` verrouillé contre `p-limit@5.0.0` requis), donc `npm ci` échoue par
+conception en `EUSAGE`. Le Dockerfile (`npm install`, ligne 8) et la CI
+(`ci_services_crawler.yml:43-45`, avec le commentaire « pas de package-lock.json dans le
+repo — à remplacer par `npm ci` quand un lockfile sera committé ») font déjà ce choix.
+Rien n'est cassé : la commande ci-dessus est celle qui correspond à la CI.
 
 (`node_modules` est git-ignoré, la réinstallation est sans effet sur le dépôt. Les
 navigateurs sont inutiles ici : le test n'importe ni crawlee ni playwright.)
@@ -31,6 +39,11 @@ npx tsx --test src/class/DetectionLangueClient.test.ts
 
 `DetectionLangueClient.test.ts` n'importe pas crawlee : il tourne localement. Ne pas tenter
 de lancer le crawler entier — il exige Redis, un proxy Apify et un navigateur.
+
+**Base de référence mesurée le 2026-08-14, après installation :** `DetectionLangueClient.test.ts`
+rend **3 tests, 3 passés, 0 échec**, et `npx tsc --noEmit` ne sort **rien**. La référence est
+donc verte : tout échec observé après cette ligne est imputable au changement en cours, pas à
+l'existant. Citer cette base dans le rapport de tâche.
 
 **Si le test échoue encore après l'installation, l'établir comme préexistant avant de coder**
 — relever le message exact et le citer dans le rapport. Ne jamais attribuer à son propre
