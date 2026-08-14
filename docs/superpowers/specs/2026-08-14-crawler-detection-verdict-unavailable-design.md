@@ -158,11 +158,28 @@ compteur**. Elle est posée *avant* le garde du §4.2, donc la tâche 2 seule la
 recevoir un faux `not_french` sur le chemin non-`.fr` — le but affiché du chantier n'est pas
 atteint sans elle.
 
-Portée réelle, plus petite qu'il n'y paraît : `:702` est gardé par
-`if (!context.crawlErrorMessage)`, et un challenge non résolu a **déjà** posé son propre
-message en `:618` (`Site protégé par … (challenge non résolu)`). Le trou ne concerne donc que
-les méthodes techniques pour lesquelles rien n'a écrit avant : `error`,
-`fetch_empty_content`, `admission_rejected`.
+Portée réelle : l'affectation est gardée par `if (!context.crawlErrorMessage)`. Les méthodes
+exposées sont **quatre**, pas trois — `error`, `fetch_empty_content`, `admission_rejected`,
+**et `challenge_page`**.
+
+> **Correction 2026-08-14 (tâche 3).** Une version antérieure de ce §4.4bis excluait
+> `challenge_page` en disant qu'un challenge non résolu avait déjà posé son message en
+> `:618`. Deux erreurs, et elles se contredisaient avec le §4.4 de cette même spec.
+>
+> 1. **Ce n'est pas le message qui protège ce cas, c'est le `return`.** `:618` pose son
+>    message puis `:619-620` font `stopCrawler` + **`return`** : le contrôle n'atteint jamais
+>    l'affectation, donc le garde `if (!...)` n'est même pas consulté. Raisonner sur le garde
+>    était un contresens sur le mécanisme.
+> 2. **Et ce chemin ne couvre que le challenge détecté par le CRAWLER.** Quand c'est le
+>    *service* qui classe la page en `challenge_page` — ce qui arrive précisément pour les
+>    trois familles que la copie portée à la main du crawler ignore, celles que le §4.4
+>    énumère (`Rescaled_WAF`, `JS_PoW_bot_check`, `Squid_proxy_error`) — aucun message n'a été
+>    posé avant, et la page était donc bien tamponnée « Page non détectée en Français ».
+>
+> Autrement dit le §4.4 (« effet de bord gratuit : honorer le `challenge_page` du serveur
+> importe son classifieur ») et le §4.4bis se contredisaient : le premier disait que ces
+> familles arrivent bien au crawler, le second supposait qu'elles ne pouvaient pas atteindre
+> le message. Le premier avait raison.
 
 Ce n'est **pas** un changement de contrat : le fichier pose déjà des messages distincts en
 `:394` (`Erreur HTTP …`), `:583` et `:618`. Poser un message technique distinct suit ce motif
@@ -225,7 +242,42 @@ frappe, tout le crawl est perdu.
 **Risque** — la propagation se déclenchera aussi quand le verdict vient du TLD. L'injection
 est additive et seulement si absent, donc le rayon d'action est un paramètre de requête
 supplémentaire sur les URL internes — ce qui **change les clés de dédup** et la surface des
-paramètres `?`, à surveiller si `QM_TIER2_ENABLED` est actif.
+paramètres `?`.
+
+**Correction de ce paragraphe (2026-08-14).** « À surveiller si `QM_TIER2_ENABLED` est actif »
+sous-évaluait le rayon d'action : le vrai danger n'est **pas** derrière ce drapeau. L'arrêt
+`limitQuestionMark` vit dans un `postNavigationHook` inconditionnel
+(`functions.ts:901-910`) : `shouldStopForQuestionMark(context.countQuestionMark, …, 100)`
+termine le crawl avec `isError=limitQuestionMark`, et ses **deux** échappatoires valent `false`
+par défaut — `bypassQuestionMark` et `skipQuestionMark` (`context.ts:41-43`,
+`main.ts:104-106`). Le compteur, lui, s'incrémente sur `url.includes('?')` dans
+`routes.ts`, donc l'injection ajoutait un `?` à **chaque** page et l'arrêt tombait à la
+100ᵉ : en configuration par défaut, la propagation tuait le crawl des sites qu'elle devait
+sauver. Ce n'était pas une surveillance, c'était un correctif dû.
+
+**Correctif** — `DetectionLangueClient.stripInjectedLanguageParam(url, param)` (statique, pure)
+retire la paire clé+valeur **exacte** que nous avons injectée, et rend une URL sans `?` du tout
+s'il ne reste plus rien. `routes.ts` en dérive `facetUrl` une fois et le donne à **toute** la
+machinerie `?` : `trackQmHashStatsForUrl`, `countQuestionMark`, `recordVariant`,
+`recordQuestionMarkObservation`, et l'échantillon tier-2. Motif : cette machinerie mesure une
+explosion de l'espace des paramètres **produite par le site** ; compter un paramètre que le
+crawler a lui-même ajouté est une erreur de catégorie. Le reste du handler garde `url`, qui
+reste l'identité stockée et comptée de la page. Le match exact clé **et** valeur préserve le
+`?lang=de` du site, qui continue d'incrémenter le compteur.
+
+**Risque latent connu, non refermé — `QM_TIER2_ENABLED` (défaut `false`).** Lecture de chemin
+de code, **pas une observation** : aucun run ne l'a produit, rien n'est mesuré ici.
+`candidateParams()` (`questionMarkTier2.ts:37-46`) ne filtre que sur `decided`, `toRemove` et
+`toKeep` — **aucune liste blanche de langue**. Trié par fréquence décroissante, `lang` peut
+donc devenir le candidat de tête, et un verdict `same`-majoritaire le commite dans `toRemove`
+via `commitToRemoveParam`, qui **réécrit aussi la file** : le paramètre serait alors retiré en
+cours de crawl et le correctif ci-dessus annulé. Le `facetUrl` réduit l'exposition — `lang=fr`
+que nous injectons n'entre plus dans `paramFrequency` — mais ne la ferme pas : les pages
+portant le `?lang=de` du site l'y font entrer. Une liste blanche taillée pour exactement ça
+existe déjà un module plus loin, `MEANINGFUL_OPTIONAL_PARAMS` (`filterOnSeen.ts:10` :
+`lang`, `hl`, `devise`, `currency`, `region`) et tier-2 ne la consulte pas — noter au passage
+qu'elle ignore `locale` et `language`, deux des quatre clés qu'`extractLanguageQueryParam`
+accepte. Refermer avant toute activation de `QM_TIER2_ENABLED`.
 
 ## 6. Ancres re-vérifiées le 2026-08-14
 

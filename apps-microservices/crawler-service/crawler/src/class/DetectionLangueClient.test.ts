@@ -64,6 +64,74 @@ test('isTechnicalFailureMethod() is false for the technical methods left out of 
     }
 });
 
+test('extractPrimaryMethod() prefers an HTML method found anywhere in the "+"-split', () => {
+    // Why the `primaryMethod === "pattern_match_query"` gate on the ?lang=fr capture
+    // was dead code: the HTML method wins over position 0, so a session-i18n site that
+    // also declares <html lang="fr"> never reduced to pattern_match_query.
+    assert.equal(
+        DetectionLangueClient.extractPrimaryMethod('pattern_match_query+langHtml+nlp_confirmed'),
+        'langHtml',
+    );
+});
+
+const LANG_FR = { key: 'lang', value: 'fr' };
+
+test('stripInjectedLanguageParam() drops the "?" entirely when nothing else remains', () => {
+    // The whole point: the URL must stop matching `url.includes("?")` in routes.ts,
+    // or countQuestionMark still walks to the limitQuestionMark stop.
+    assert.equal(
+        DetectionLangueClient.stripInjectedLanguageParam('http://a.fr/index.php?lang=fr', LANG_FR),
+        'http://a.fr/index.php',
+    );
+});
+
+test('stripInjectedLanguageParam() keeps the other params when the URL has some', () => {
+    assert.equal(
+        DetectionLangueClient.stripInjectedLanguageParam('http://a.fr/p?id=3&lang=fr&page=2', LANG_FR),
+        'http://a.fr/p?id=3&page=2',
+    );
+});
+
+test('stripInjectedLanguageParam() leaves the site\'s OWN ?lang=de alone', () => {
+    // Exact key AND value match. A different value is the site's parameter, so it
+    // must still increment countQuestionMark and still reach the tier-1/tier-2 engines.
+    assert.equal(
+        DetectionLangueClient.stripInjectedLanguageParam('http://a.fr/p?lang=de', LANG_FR),
+        'http://a.fr/p?lang=de',
+    );
+});
+
+test('stripInjectedLanguageParam() is a no-op when no param was injected (null)', () => {
+    assert.equal(
+        DetectionLangueClient.stripInjectedLanguageParam('http://a.fr/p?id=3', null),
+        'http://a.fr/p?id=3',
+    );
+});
+
+test('stripInjectedLanguageParam() leaves a query-less URL byte-identical', () => {
+    // Bare origin on purpose: `new URL(u).toString()` would append a "/". Nothing we
+    // do not modify may be normalized — `url` is compared elsewhere as a raw string.
+    assert.equal(
+        DetectionLangueClient.stripInjectedLanguageParam('http://a.fr', LANG_FR),
+        'http://a.fr',
+    );
+});
+
+test('stripInjectedLanguageParam() keeps a URL whose query lacks the param', () => {
+    assert.equal(
+        DetectionLangueClient.stripInjectedLanguageParam('http://a.fr/p?id=3', LANG_FR),
+        'http://a.fr/p?id=3',
+    );
+});
+
+test('stripInjectedLanguageParam() returns an unparseable URL unchanged instead of throwing', () => {
+    // Runs on every page — a throw here would take down the handler.
+    assert.equal(
+        DetectionLangueClient.stripInjectedLanguageParam('not a url?lang=fr', LANG_FR),
+        'not a url?lang=fr',
+    );
+});
+
 test('isTechnicalFailureMethod() splits on "+" — a technical part anywhere wins', () => {
     assert.equal(DetectionLangueClient.isTechnicalFailureMethod('challenge_page+variant_rescue'), true);
     assert.equal(DetectionLangueClient.isTechnicalFailureMethod('direct_match+langHtml+nlp_confirmed'), false);

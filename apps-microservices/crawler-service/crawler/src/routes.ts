@@ -650,12 +650,18 @@ router.addDefaultHandler(
                                 return;
                             }
                             // For session-based i18n: extract ?lang=fr from start URL
-                            // so we can propagate it to discovered internal URLs
-                            if (primaryMethod === "pattern_match_query") {
-                                context.languageQueryParam = DetectionLangueClient.extractLanguageQueryParam(site);
-                                if (context.languageQueryParam) {
-                                    log.info(`Stored language query param: ${context.languageQueryParam.key}=${context.languageQueryParam.value} (will propagate to discovered URLs)`);
-                                }
+                            // so we can propagate it to discovered internal URLs.
+                            // Unconditional on purpose: gating this on
+                            // `primaryMethod === "pattern_match_query"` was dead code, because
+                            // extractPrimaryMethod prefers any HTML method found ANYWHERE in
+                            // the `+`-split, so `pattern_match_query+langHtml+nlp_confirmed`
+                            // reduces to `langHtml` and the test was never true. The helper
+                            // self-guards: it returns null unless the seed carries a
+                            // lang|locale|language|hl whose value matches /^fr/i.
+                            const languageQueryParam = DetectionLangueClient.extractLanguageQueryParam(site);
+                            if (languageQueryParam) {
+                                context.languageQueryParam = languageQueryParam;
+                                log.info(`Stored language query param: ${languageQueryParam.key}=${languageQueryParam.value} (will propagate to discovered URLs)`);
                             }
                             isEnqueuingLinks = true;
 
@@ -697,22 +703,34 @@ router.addDefaultHandler(
                             context.crawlErrorMessage = `Homepage non détectée en Français mais une alternative en Français a été trouvée : ${best.url} (fiabilité: ${best.reliability})`;
                         }
 
-                        // Default error message when no alternative found.
-                        // Cleared below if the URL-only fallback (checkUrl) succeeds.
-                        if (!context.crawlErrorMessage) {
-                            log.error(`[NOT_FRENCH] Homepage ${url} is NOT French and no French alternative was found.`);
-                            context.crawlErrorMessage = "Page non détectée en Français";
-                        }
-
                         // ok=false can also mean "the service could not judge this page"
                         // (challenge interstitial, internal error, no visible text). That is
                         // not a linguistic verdict, and it must not reach the URL-only
                         // fallback below: checkUrl accepts ANY .fr host with zero network
                         // work, so a technical failure on a .fr domain would be resurrected
-                        // as a French verdict on no evidence at all.
+                        // as a French verdict on no evidence at all. Decided BEFORE the
+                        // default message below, which now branches on it.
                         if (DetectionLangueClient.isTechnicalFailureMethod(detectResult.method)) {
                             verdictUnavailable = true;
                             log.warning(`[VERDICT_UNAVAILABLE] Detection returned no linguistic verdict for ${url} (method: ${detectResult.method}). Skipping the URL fallback.`);
+                        }
+
+                        // Default error message when no alternative found.
+                        // Cleared below if the URL-only fallback (checkUrl) succeeds.
+                        if (!context.crawlErrorMessage) {
+                            if (verdictUnavailable) {
+                                // The second laundering channel, and the one the BO acts on:
+                                // `not_french_signal.php` believes "Page non détectée en
+                                // Français" unconditionally, before any counter test. On a
+                                // technical failure that string is a permanent business
+                                // verdict about a page nobody managed to read, so name the
+                                // cause instead — same shape as `Erreur HTTP …` (:394) and
+                                // `Site protégé par … (challenge non résolu)` (:618).
+                                context.crawlErrorMessage = `Détection indisponible : aucun verdict linguistique (méthode : ${detectResult.method})`;
+                            } else {
+                                log.error(`[NOT_FRENCH] Homepage ${url} is NOT French and no French alternative was found.`);
+                                context.crawlErrorMessage = "Page non détectée en Français";
+                            }
                         }
 
                         // Only fall back to URL check if NLP didn't explicitly reject.
@@ -912,16 +930,30 @@ router.addDefaultHandler(
                     }
                 }
 
+                // The facet-relevant view of this URL: the same URL minus the language
+                // query param WE injected (transformRequestFunction, :1116). Every
+                // consumer below measures parameter-space explosion — a facet trap the
+                // SITE generates — so letting them see our own injection is a category
+                // error: they would be counting the crawler's behaviour as the site's.
+                // Not cosmetic — `shouldStopForQuestionMark` (functions.ts:907) ends the
+                // crawl with isError=limitQuestionMark at 100, and `bypassQuestionMark`
+                // AND `skipQuestionMark` both default to false (context.ts:41-43,
+                // main.ts:104-106), so that stop is live in the default configuration:
+                // on a session-i18n site the injection would stop the very crawl it was
+                // added to rescue. Derived once; the rest of the handler keeps `url`,
+                // which stays the stored + counted page identity.
+                const facetUrl = DetectionLangueClient.stripInjectedLanguageParam(url, context.languageQueryParam);
+
                 // Mirror `?` / `#` counters into StatsManager so they appear in the
                 // webhook payload (`filtered_qm` / `filtered_hash`). See qmHashTracker.ts.
-                trackQmHashStatsForUrl(url, context.statsManager);
+                trackQmHashStatsForUrl(facetUrl, context.statsManager);
 
                 // Track URLs with '?' and '#' for postNavigationHook limit checks
-                if (url.includes('?')) {
+                if (facetUrl.includes('?')) {
                     context.countQuestionMark++;
-                    if (QM_FACET_ENABLED) recordVariant(context.facetVariantCount, url);
+                    if (QM_FACET_ENABLED) recordVariant(context.facetVariantCount, facetUrl);
                     // Tier-1 observer (spec 2026-04-17). No-op when observation disabled.
-                    recordQuestionMarkObservation(url);
+                    recordQuestionMarkObservation(facetUrl);
 
                     // Phase-2 tier-2 per-param engine (spec 2026-06-16). Off unless QM_TIER2_ENABLED.
                     if (QM_TIER2_ENABLED && context.questionMarkObservationEnabled && storagePath) {
@@ -930,7 +962,7 @@ router.addDefaultHandler(
                             console.log(`[questionmark] Tier 2 activated at ${context.questionMarkObservations.domainSpecificCount} domain-specific ? URLs.`);
                         }
                         if (context.qmTier2.active && content) {
-                            await recordQmTier2Sample(url, content, context.contentExtractorClient);
+                            await recordQmTier2Sample(facetUrl, content, context.contentExtractorClient);
                             for (const p of Array.from(context.qmTier2.tally.keys())) {
                                 if (!context.qmTier2.decided.has(p) && maybeCommitParam(p)) {
                                     commitToRemoveParam(p, storagePath);

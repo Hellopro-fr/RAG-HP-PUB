@@ -270,6 +270,52 @@ export class DetectionLangueClient {
     }
 
     /**
+     * Remove from a URL the language query param **we injected ourselves**, so the
+     * `?`-counting machinery never observes it.
+     *
+     * Why (a category error, not a cosmetic detail): `transformRequestFunction`
+     * (`routes.ts:1116`) appends `context.languageQueryParam` to every discovered
+     * internal URL, so on a session-i18n site every page then loads carrying a `?`.
+     * The `?` machinery — `countQuestionMark`, the facet-variant cap, the tier-1
+     * observer, the tier-2 engine — exists to detect a faceted-navigation explosion,
+     * i.e. an unbounded parameter space *the site* generates. A parameter the crawler
+     * added is not a facet, so counting it measures our own behaviour, not the site's.
+     *
+     * And it is not merely noisy: `shouldStopForQuestionMark` (`functions.ts:907`) ends
+     * the crawl with `isError=limitQuestionMark` at 100 such pages, and BOTH of its
+     * escape hatches default to **false** — `bypassQuestionMark` and `skipQuestionMark`
+     * (`context.ts:41-43`, `main.ts:104-106`). The stop is therefore live in the default
+     * configuration, and without this strip the very sites the injection was written to
+     * rescue would stop early because of the rescue.
+     *
+     * Strips on an exact key AND value match only, so a site's own `?lang=de` still
+     * counts as the site's own parameter. (A site's own `?lang=fr` is byte-identical to
+     * our injection and cannot be told apart without carrying provenance per request —
+     * accepted: it costs at most the seed page out of a 100 budget.)
+     *
+     * Returns the URL with no `?` at all when nothing else remains, and returns the
+     * input **unchanged** for a null param, a query-less URL, an absent or
+     * different-valued param, and an unparseable URL — this runs on every page, so it
+     * must never throw.
+     */
+    static stripInjectedLanguageParam(
+        url: string,
+        param: { key: string; value: string } | null,
+    ): string {
+        if (!param || !url.includes("?")) return url;
+        try {
+            const urlObj = new URL(url);
+            if (urlObj.searchParams.get(param.key) !== param.value) return url;
+            // Two-arg delete: on the exotic `?lang=fr&lang=de` it drops only our pair.
+            urlObj.searchParams.delete(param.key, param.value);
+            return urlObj.toString();
+        } catch {
+            // Invalid URL — leave it alone; over-counting is safer than throwing here.
+            return url;
+        }
+    }
+
+    /**
      * Extract the first path segment from a URL.
      * Used to identify regional path prefixes for exclusion filtering.
      *

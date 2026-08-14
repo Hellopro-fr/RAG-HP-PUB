@@ -41,9 +41,15 @@ npx tsx --test src/class/DetectionLangueClient.test.ts
 de lancer le crawler entier — il exige Redis, un proxy Apify et un navigateur.
 
 **Base de référence mesurée le 2026-08-14, après installation :** `DetectionLangueClient.test.ts`
-rend **3 tests, 3 passés, 0 échec**, et `npx tsc --noEmit` ne sort **rien**. La référence est
+rend **16 tests, 16 passés, 0 échec**, et `npx tsc --noEmit` ne sort **rien**. La référence est
 donc verte : tout échec observé après cette ligne est imputable au changement en cours, pas à
 l'existant. Citer cette base dans le rapport de tâche.
+
+**Ce compte bouge à chaque tâche livrée — le relever, ne pas le citer de mémoire.** Il valait
+3 à l'écriture de ce plan ; les tâches 1 à 3 ont ajouté les leurs (prédicat
+`isTechnicalFailureMethod`, `extractPrimaryMethod`, puis `stripInjectedLanguageParam`), d'où 16.
+Une base périmée fait imputer à son propre changement un delta qui vient de la tâche
+précédente : mesurer la référence **avant** de coder, dans le même shell.
 
 **Si le test échoue encore après l'installation, l'établir comme préexistant avant de coder**
 — relever le message exact et le citer dans le rapport. Ne jamais attribuer à son propre
