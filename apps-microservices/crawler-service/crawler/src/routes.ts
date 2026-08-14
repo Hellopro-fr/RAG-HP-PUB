@@ -1267,12 +1267,35 @@ router.addDefaultHandler(
                      }
                 }
             } else if (verdictUnavailable) {
-                // No verdict was obtained, so there is nothing to conclude and nothing to
-                // record. Deliberately empty beyond this log: no `filtered_nonfr` (the BO
-                // reads it as isError='not_french'), no `nfr-{domain}` write, and no
+                // No verdict was obtained, so there is nothing to CONCLUDE — but the
+                // occurrence itself must be counted. Still forbidden here: `filtered_nonfr`
+                // (the BO reads it as isError='not_french'), the `nfr-{domain}` write, and
                 // `updateChecker.checkUrl` (it would answer isEligible=false and claim
                 // action:'deleted' on a page we never managed to read).
                 log.warning(`[VERDICT_UNAVAILABLE] No linguistic verdict for ${url} — not counted as non-French, not stored in nfr-, no eligibility claim.`);
+
+                // The PARTIAL outage is the dangerous band: enough pages judged that the
+                // dataset is non-empty and coverage stays above the BO's thresholds, the rest
+                // silently protected, on a run labelled healthy. Before this counter the only
+                // trace was the log line above — no counter, no message, no field — so nobody
+                // could count the class, which is how it survived. One increment here covers
+                // ALL TEN `verdictUnavailable` sites (:645 :715 :768 homepage, :825 :850 :857
+                // :869 :890 :925 :934 internal), because they all converge on this branch:
+                // every one of them leaves `isEnqueuingLinks` false, and the homepage exit-10
+                // guard at :794 deliberately falls through instead of returning.
+                //
+                // NOT `errors`: that counter fed the BO health guard and the two deletion
+                // caps, so incrementing it here would re-arm brakes that block ALL destructive
+                // processing — a different decision, out of scope (spec §7).
+                //
+                // No `crawlErrorMessage` either: it is ONE per-crawl slot (context.ts:88)
+                // that wins over everything at main.ts:1229 and is truncated to 250 chars, and
+                // most writers are unconditional — a per-page write from here would let the
+                // last unjudged internal page overwrite a graver, actionable cause (`Erreur
+                // HTTP …`, `Site protégé par … (challenge non résolu)`, or the homepage's own
+                // `Détection indisponible : …`). A per-crawl count is the right shape for a
+                // per-crawl field; the message stays owned by the homepage sites.
+                if (context.statsManager) await context.statsManager.increment("verdict_unavailable");
                 // ...but writing nothing is not enough: the BO's second pass subtracts
                 // "URLs Milvus holds" minus "URLs in the new dataset" and deactivates the
                 // remainder, so a page with no verdict is an orphan BY CONSTRUCTION.

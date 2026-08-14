@@ -1257,6 +1257,11 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
     const filtered_hash = await readStat("filtered_hash");
     const filtered_ext = await readStat("filtered_ext");
     const filtered_nonfr = await readStat("filtered_nonfr");
+    // Detection outage made countable: pages that got NO linguistic verdict. Distinct from
+    // filtered_nonfr by construction (routes.ts increments them on mutually exclusive
+    // branches), and deliberately NOT folded into `errors`. Name must stay byte-identical to
+    // the increment in routes.ts — statNameParity.test.ts pins that.
+    const verdict_unavailable = await readStat("verdict_unavailable");
     const filtered_duplicate = await readStat("filtered_duplicate");
     const filtered_pdf = await readStat("filtered_pdf");
     const dropped_cb = await readStat("dropped_cb");
@@ -1286,6 +1291,7 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         filtered_hash,
         filtered_ext,
         filtered_nonfr,
+        verdict_unavailable,
         filtered_duplicate,
         filtered_pdf,
         dropped_cb,

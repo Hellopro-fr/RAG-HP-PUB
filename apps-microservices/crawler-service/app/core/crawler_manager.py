@@ -383,6 +383,8 @@ class CrawlerManager:
             return ("Proxy bloqué — mur 403/anti-bot persistant", "proxy_blocked")
         elif exit_code == 9:
             return ("Domaine injoignable (DNS/connexion) — hôte mort", "domain_dead")
+        elif exit_code == 10:
+            return ("Service de détection de langue indisponible", "detection_unavailable")
         elif exit_code in (137, -9):
             return ("Processus tué (SIGKILL) - OOM Kill ou redémarrage forcé", "killed_oom_system")
         elif exit_code is not None and exit_code < 0:
