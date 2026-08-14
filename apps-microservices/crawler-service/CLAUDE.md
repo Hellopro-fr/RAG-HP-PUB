@@ -518,7 +518,153 @@ On HTTP 503, precedence for the retry wait time is **server `Retry-After` header
 
 Spec: `docs/superpowers/specs/2026-04-20-detection-langue-fr-concurrency-defense-design.md`.
 
-**Alternative-URL validation opt-out:** the homepage detect call (`routes.ts:473`, the crawler's only `mode:"complete"` call) sends `validateAlternatives: false` → POST body `validate_alternatives: false`. This stops the detection service from opening a browser to fetch/validate alternative-language URLs on the crawler's `html_content` calls (the OOM / `socket hang up` source). The crawler still receives parsed `alternative_urls` (hreflang prefixes) for Regional Path Exclusion. Internal-page detect calls use `mode:"simple"` and never trigger alt validation, so they need no flag.
+**Alternative-URL validation opt-out:** the homepage detect call (`routes.ts:626`, the crawler's only `mode:"complete"` call) sends `validateAlternatives: false` → POST body `validate_alternatives: false`. This stops the detection service from opening a browser to fetch/validate alternative-language URLs on the crawler's `html_content` calls (the OOM / `socket hang up` source). The crawler still receives parsed `alternative_urls` (hreflang prefixes) for Regional Path Exclusion. Internal-page detect calls use `mode:"simple"` and never trigger alt validation, so they need no flag.
+
+## Detection Verdict Unavailable ("no answer" ≠ "not French")
+
+A technical failure of the detection service is the **absence** of a verdict — a third state
+distinct from "French" (`isEnqueuingLinks`) and "not French" (the terminal `else`). Left to
+converge on the "not French" branch it became a business verdict.
+
+**The invariant, verbatim** (carried in the flag's own comment, `routes.ts:558-559`):
+
+> No technical failure may increment `filtered_nonfr`, write to `nfr-{domain}`, or call
+> `updateChecker.checkUrl`.
+
+**Why it exists:** BO reads `filtered_nonfr` as `isError='not_french'`, and in update mode
+`checkUrl(..., false)` answers `isEligible=false`, which claims `action:'deleted'` on a live
+French fiche. A detection outage during an update crawl was therefore emitting deletion
+claims against live French sites — the same class as **incident 1320-402** on the HTTP axis
+(63 anti-bot 403s → 59 false deletions), which is why `UpdateChecker.ts:174-192` lets only
+404/410 claim a deletion. That reasoning had never been extended to the detection axis.
+
+`let verdictUnavailable = false` (`routes.ts:569`) is set at **ten** sites: the three
+detection-API `catch` blocks (homepage, internal auto-detect, internal forced detect), the two
+unresolved-internal-challenge branches, the three `isTechnicalFailureMethod` gates (homepage
+`ok=false`, internal auto-detect `ok=false`, internal forced detect `ok=false`), and the two
+`ok=true`-but-unusable paths (empty `primaryMethod`, or a `manageFrenchDetectionMethod` write
+failure — `ok=true` *is* a French verdict, so sending it down the non-French branch is the
+same laundering with the verdict inverted). Its terminal branch (`:1233`) is an `else if`
+placed **before** the not-French `else` and is deliberately nothing but a
+`[VERDICT_UNAVAILABLE]` log: no counter, no dataset, no eligibility call.
+
+Non-regression outranks the feature. A genuinely non-French site (`Check_nok_v2`) keeps its
+counter, its `nfr-` write and its update-mode `checkUrl(..., false)` — the terminal `else`
+body was not touched.
+
+### `isTechnicalFailureMethod` — the closed set
+
+`DetectionLangueClient.isTechnicalFailureMethod(method)` returns true when the method means
+"we got no verdict", false when it means "we judged the language". Closed set, with each
+member's reachability **on the crawler's own calls**:
+
+| Method | Reachable from the crawler? |
+|---|---|
+| `challenge_page` | Yes — the service's challenge classifier runs on *provided* html, ahead of the decision matrix. |
+| `error` | Yes — the service's generic exception handler answers HTTP 200 carrying this method. |
+| `fetch_empty_content` | Yes — returned in place of a negative verdict on a page with no visible text. |
+| `admission_rejected` | **No, not today.** The crawler always sends `html_content`, which bypasses the service's admission control. Present *defensively*: service saturation is never a property of the site, and a future change routing the crawler through admission would silently re-open the laundering with nobody re-reading the predicate. Do not read its presence here as evidence that production observes it. |
+
+The service's other technical methods (`soft_404`, `redirected_to_home`, `http_error`,
+`http_error_transient`, `fetch_failed`) are deliberately **absent**: they are produced only
+inside `if not html_was_provided`, so they cannot reach the crawler. Do not add them "just in
+case" — the set has to stay readable as the verifiable claim it is.
+
+**Composed methods resolve by membership after splitting on `+`, not by strict equality.**
+Every member is returned bare today, so both options behave identically now; the choice is
+about which way to be wrong when that stops being true, i.e. **error asymmetry**. A composed
+technical method read as a verdict re-opens the false `not_french` stamp and the deletion
+claim — silent and destructive. A composed verdict wrongly read as technical only costs crawl
+budget on a non-French site, is visible as a drop in `filtered_nonfr`, and claims no
+deletion. Split-membership errs on the recoverable side, and it matches `extractPrimaryMethod`,
+which already reads a part found *anywhere* in the split.
+
+### Two message channels, and one reserved string
+
+`filtered_nonfr` is not the only channel to BO. `context.crawlErrorMessage` is assigned
+**before** the guard, and BO's `not_french_signal.php` (`crawl_is_not_french`) matches one
+exact string **unconditionally, before any counter test** — so the counter guard alone still
+delivered a false `not_french`. Both channels have to close together:
+
+| Path | Message |
+|---|---|
+| Technical failure | `Détection indisponible : aucun verdict linguistique (méthode : …)` (`routes.ts:729`) |
+| Genuine linguistic verdict | `Page non détectée en Français` (`routes.ts:732`) — **reserved, byte for byte** |
+
+**Anyone touching `"Page non détectée en Français"` must know the BO depends on it**: it is
+the only occurrence in code, and `crawl_is_not_french` returns true on that string alone. The
+technical message follows the three precedents already in this file — `Erreur HTTP …`
+(`:394`), the homepage-extraction failure (`:583`), `Site protégé par … (challenge non
+résolu)` (`:618`): French, cause first, no verdict.
+
+### `?lang=fr` propagation is now captured unconditionally
+
+The capture used to be gated on `primaryMethod === "pattern_match_query"`, which was **dead
+code**: `extractPrimaryMethod` prefers any HTML method found *anywhere* in the `+`-split, so
+`pattern_match_query+langHtml+nlp_confirmed` reduces to `langHtml` and the test was never
+true. `extractLanguageQueryParam(site)` is now called unconditionally in the `detectResult.ok`
+branch (`:661`); the helper self-guards, returning `null` unless the seed carries a
+`lang|locale|language|hl` whose value matches `/^fr/i`.
+
+**Consequence, accepted:** propagation now also fires when the verdict came from the TLD. The
+injection (`transformRequestFunction`, `:1116`) is additive and only-if-absent, so the blast
+radius is one extra query param on internal URLs — which **changes dedup keys**. The twin
+branch on the `checkUrl` path (`:752`) is left gated on purpose: `/check-url` returns bare
+tokens, so there the test is correct.
+
+### Our own injected param is exempt from the `?` machinery
+
+Injecting the param puts a `?` on **every** internal URL, `countQuestionMark` increments on
+any `?`, and `shouldStopForQuestionMark` (`functions.ts:907`) ends the crawl at 100 with
+`isError=limitQuestionMark`. Neither escape hatch defaults true (`bypassQuestionMark`,
+`skipQuestionMark` — `context.ts:41-43`, `main.ts:104-106`), so that stop is **live in the
+default configuration**: without the exemption, the propagation would have stopped early
+exactly the session-i18n crawls it was written to rescue.
+
+The fix is a **category** argument, not a workaround: that machinery detects faceted-navigation
+explosions — an unbounded parameter space *the site* generates. A parameter the crawler itself
+added is not a facet. `DetectionLangueClient.stripInjectedLanguageParam(url, param)` removes
+the exact key+value pair (and drops the `?` when the query empties), and one derived `facetUrl`
+(`routes.ts:945`) feeds all five consumers that measure the site's parameter space:
+
+1. `trackQmHashStatsForUrl` — the `filtered_qm` / `filtered_hash` stats mirror
+2. `context.countQuestionMark++` — the counter behind the 100 stop
+3. `recordVariant` — the facet-variant cap
+4. `recordQuestionMarkObservation` — the tier-1 observer
+5. `recordQmTier2Sample` — the tier-2 sampler
+
+Exact key **and** value match, so a site's own `?lang=de` still counts as the site's.
+
+**Two call sites deliberately keep the original `url`:**
+
+- the `#` block (`:975`) — stripping a query cannot change a fragment;
+- `context.seenBases.add(baseKeyAbsent(url))` (`:1024`) — **load-bearing.** `isFilterParam`
+  computes its keys from the real `request.url`, which *does* carry the injected param, so
+  stripping only the oracle side would break the key match and silently weaken the filter.
+
+**Known limitation, recorded rather than plumbed around:** with an exact key+value strip, a
+site's own `?lang=fr` is byte-identical to ours and cannot be told apart without per-request
+provenance, so the seed page is exempted too. The cost is that page only —
+`context.languageQueryParam` is assigned before the counter block, so the homepage's own param
+is stripped on its own pass. One URL out of a ~100 budget, on the page that motivated the
+injection. Provenance plumbing was judged not worth it.
+
+**Known risk, NOT closed — `QM_TIER2_ENABLED` (default `false`). This is code-path reading,
+with no run behind it; nothing here is measured.** `candidateParams()`
+(`questionMarkTier2.ts:37-46`) filters only on `decided`, `toRemove` and `toKeep` — **no
+language allowlist**. Sorted by descending frequency, `lang` can therefore become the top
+candidate, and a same-majority verdict commits it to `toRemove` via `commitToRemoveParam`,
+which also **rewrites the queue** — undoing the propagation mid-crawl. `facetUrl` reduces the
+exposure (the `lang=fr` we inject no longer enters `paramFrequency`) without closing it: pages
+carrying the site's own `?lang=de` still put `lang` there. An allowlist shaped for exactly this
+already exists one module over — `MEANINGFUL_OPTIONAL_PARAMS` (`filterOnSeen.ts:10`:
+`lang`, `hl`, `devise`, `currency`, `region`) — and tier-2 does not consult it; note also that
+it omits `locale` and `language`, two of the four keys `extractLanguageQueryParam` accepts.
+Close this before enabling `QM_TIER2_ENABLED`.
+
+Spec: `docs/superpowers/specs/2026-08-14-crawler-detection-verdict-unavailable-design.md`.
+Plan: `docs/superpowers/plans/2026-08-14-crawler-detection-verdict-unavailable.md`.
+Audit (findings A and B): `docs/superpowers/references/2026-07-29-crawler-detection-seam-audit.md`.
 
 ## Detection Backpressure (Auto-Adjusting Concurrency + Handler-Timeout Alignment)
 
@@ -671,6 +817,8 @@ Spec: `docs/superpowers/specs/2026-06-12-limitdiez-phase2-zero-touch` (Hellopro 
 ## Phase-2 limitQuestionMark (zero-touch)
 
 Auto-resolves domain-specific `?`-params per-parameter and never escalates `limitQuestionMark` to a human. On top of the shipped Tier-1 observer, a Tier-2 engine buffers each `?`-page's content, groups by "URL with param `p` removed", and when two members differ in `p` (value-vs-value, or value-vs-absent) it cleans both via the content-extractor `/clean` and compares (Jaccard). A param is committed to `toRemove` ONLY on same-majority (compared≥3, same/compared≥0.8) — the single destructive action; different-majority is ruled content-shaping and kept.
+
+**What the machinery observes is NOT `url`.** Since 2026-08-14 the counter, the tier-1 observer and the tier-2 sampler all read `facetUrl` — the page URL minus the language query param *we* injected. See "Detection Verdict Unavailable" § "Our own injected param is exempt from the `?` machinery", which also records the un-closed `lang`-in-`toRemove` risk to fix **before** enabling `QM_TIER2_ENABLED`.
 
 **How it works:**
 - The engine buffers one `{param_value, content}` entry per (base-URL, param) pair; when a 2nd distinct value of that param arrives for the same base, it cleans both pages via `/clean` (text mode) and classifies the pair as same/different/unusable. `/clean` failures or empty results count as unusable (no false vote).
