@@ -300,7 +300,18 @@ for success+stop and `'failure'` for failures, into the `crawler_webhook_dedup` 
 | 5 | Redis connection lost (Node-side sustained loss) | Status: `failed`, failure webhook with `failure_cause=redis_lost` |
 | 6 | Progress stall (no URL progress for threshold) | Status: `failed`, failure webhook with `failure_cause=progress_stalled` |
 | 7 | Update mode: domain changed (all/most URLs redirect off-domain) | Status: `failed`, failure webhook with `failure_cause=domain_changed` |
+| 8 | Proxy wall — persistent 403/anti-bot ratio (`TERMINAL_FAILURE_DETECT_ENABLED=true` only) | Status: `failed`, failure webhook with `failure_cause=proxy_blocked` |
+| 9 | Dead host — the seed URL returned no HTTP status at all (`TERMINAL_FAILURE_DETECT_ENABLED=true` only) | Status: `failed`, failure webhook with `failure_cause=domain_dead` |
+| 10 | Homepage got no linguistic verdict (detection outage) — **initial crawls only** | Status: `failed`, failure webhook with `failure_cause=detection_unavailable` |
 | Other | Failure | Status: `failed`, failure webhook |
+
+`is_success = (exit_code in (0, 2))` (`crawler_manager.py:1264`) is an **allowlist**, not an
+exclusion list. A new Node exit code is therefore `failed` + failure webhook from the moment Node
+starts emitting it, with nothing added on the Python side — which is why exit 10 changed the
+outcome in the Node commit alone, and the Python commit that followed only replaced the generic
+`unknown` label with `detection_unavailable`. Never "add" a code to that tuple to make it fail:
+adding one makes it *succeed*. `tests/test_classify_exit_code_detection_unavailable.py` pins the
+tuple in the source text, because `is_success` is a local and cannot be imported.
 
 ## Redis Loss / Progress Stall Detection
 
@@ -325,6 +336,9 @@ This is a cross-language contract between Python orchestrator and Marketplace BO
 | 5 | `redis_lost` | `RedisHealthMonitor` fired |
 | 6 | `progress_stalled` | `ProgressMonitor` fired |
 | 7 | `domain_changed` | Update crawl aborted: all/most seeded URLs redirect off-domain (relocated site). Homepage fast-path or external-redirect ratio breaker. Spec `docs/superpowers/specs/2026-06-09-external-redirect-breaker-design.md`. |
+| 8 | `proxy_blocked` | Proxy wall: 403/anti-bot share over `PROXY_WALL_RATIO` (`shouldTripProxyWall`, `crawler/src/terminalFailure.ts`). **BO auto-retires the domain on this cause.** |
+| 9 | `domain_dead` | Seed URL unreachable — DNS / connection-refused / cert / redirect-loop, i.e. HTTP status 0 (`isDeadHost`, same module). **BO auto-retires the domain on this cause.** |
+| 10 | `detection_unavailable` | Homepage got no linguistic verdict on an initial crawl. Retryable, non-terminal — see "Detection Verdict Unavailable" § "Exit 10". |
 | 137 / -9 | `killed_oom_system` | Process killed by OOM killer (SIGKILL) |
 | other negative | `signal_killed` | Killed by signal (non-OOM) |
 | other positive | `unknown` | Unexpected exit code |
@@ -518,7 +532,7 @@ On HTTP 503, precedence for the retry wait time is **server `Retry-After` header
 
 Spec: `docs/superpowers/specs/2026-04-20-detection-langue-fr-concurrency-defense-design.md`.
 
-**Alternative-URL validation opt-out:** the homepage detect call (`routes.ts:626`, the crawler's only `mode:"complete"` call) sends `validateAlternatives: false` → POST body `validate_alternatives: false`. This stops the detection service from opening a browser to fetch/validate alternative-language URLs on the crawler's `html_content` calls (the OOM / `socket hang up` source). The crawler still receives parsed `alternative_urls` (hreflang prefixes) for Regional Path Exclusion. Internal-page detect calls use `mode:"simple"` and never trigger alt validation, so they need no flag.
+**Alternative-URL validation opt-out:** the homepage detect call (`routes.ts:627`, the crawler's only `mode:"complete"` call) sends `validateAlternatives: false` → POST body `validate_alternatives: false`. This stops the detection service from opening a browser to fetch/validate alternative-language URLs on the crawler's `html_content` calls (the OOM / `socket hang up` source). The crawler still receives parsed `alternative_urls` (hreflang prefixes) for Regional Path Exclusion. Internal-page detect calls use `mode:"simple"` and never trigger alt validation, so they need no flag.
 
 ## Detection Verdict Unavailable ("no answer" ≠ "not French")
 
@@ -526,7 +540,7 @@ A technical failure of the detection service is the **absence** of a verdict —
 distinct from "French" (`isEnqueuingLinks`) and "not French" (the terminal `else`). Left to
 converge on the "not French" branch it became a business verdict.
 
-**The invariant, verbatim** (carried in the flag's own comment, `routes.ts:558-559`):
+**The invariant, verbatim** (carried in the flag's own comment, `routes.ts:559-560`):
 
 > No technical failure may increment `filtered_nonfr`, write to `nfr-{domain}`, or call
 > `updateChecker.checkUrl`.
@@ -538,19 +552,106 @@ claims against live French sites — the same class as **incident 1320-402** on 
 (63 anti-bot 403s → 59 false deletions), which is why `UpdateChecker.ts:174-192` lets only
 404/410 claim a deletion. That reasoning had never been extended to the detection axis.
 
-`let verdictUnavailable = false` (`routes.ts:569`) is set at **ten** sites: the three
+`let verdictUnavailable = false` (`routes.ts:570`) is set at **ten** sites: the three
 detection-API `catch` blocks (homepage, internal auto-detect, internal forced detect), the two
 unresolved-internal-challenge branches, the three `isTechnicalFailureMethod` gates (homepage
 `ok=false`, internal auto-detect `ok=false`, internal forced detect `ok=false`), and the two
 `ok=true`-but-unusable paths (empty `primaryMethod`, or a `manageFrenchDetectionMethod` write
 failure — `ok=true` *is* a French verdict, so sending it down the non-French branch is the
-same laundering with the verdict inverted). Its terminal branch (`:1233`) is an `else if`
-placed **before** the not-French `else` and is deliberately nothing but a
-`[VERDICT_UNAVAILABLE]` log: no counter, no dataset, no eligibility call.
+same laundering with the verdict inverted). Its terminal branch (`:1269`) is an `else if`
+placed **before** the not-French `else`. What it still refuses is what the invariant forbids: no
+`filtered_nonfr`, no `nfr-{domain}` dataset row, no eligibility call. What it does do is log
+`[VERDICT_UNAVAILABLE]`, increment the `verdict_unavailable` counter (`:1298`, see below) and
+append both URL identities to the `__unjudged_urls.json` sidecar (`:1318`, `unjudgedUrls.ts`) so
+the BO's orphan pass can put the page back on the recrawled side — `__`-prefixed precisely so
+`_count_files_in_dir` skips it and `stored_files_count` is unaffected.
 
 Non-regression outranks the feature. A genuinely non-French site (`Check_nok_v2`) keeps its
 counter, its `nfr-` write and its update-mode `checkUrl(..., false)` — the terminal `else`
 body was not touched.
+
+### Exit 10 — an unjudged homepage is a failed crawl, not a finished one
+
+An initial crawl whose **homepage** got no verdict enqueues nothing and stores nothing, yet it
+used to ship the default exit 2: `_classify_exit_code(2)` answers `(None, None)`, status becomes
+`finished`, and the **success** webhook fires. The run reported finished having produced no data.
+The guard at `routes.ts:794` sets `stopReason = "detectionUnavailable"` + `fatalExitCode = 10` and
+calls the existing `stopCrawler`; `gracefulShutdown('COMPLETED', context.fatalExitCode ?? 2)`
+(`main.ts:1781`) propagates it.
+
+- **Exit 10 occurs exactly once in the tree**, structurally inside `if (isMainSite)`. The seven
+  internal-page sites live in the mutually exclusive `else` and cannot reach it — killing a crawl
+  because one internal page out of hundreds got no verdict would destroy the successful ones.
+  Internal pages are *counted*, not fatal.
+- **Initial crawls only.** The guard is `verdictUnavailable && !context.homepageReady`.
+  `context.homepageReady` is non-null only in update mode (assigned at exactly one place,
+  `main.ts:937`, inside `if (crawlMode === 'update')`), and it is *literally* the guard on the work
+  being protected: Phase-2 seeding (`main.ts:1526`) seeds the previous crawl's URLs on a 120s race
+  whether or not the homepage was judged. Update crawls therefore behave byte-for-byte as before.
+  The reason is not caution — the internal pages run their own detection path, so an unjudged
+  homepage does not condemn the run, and stopping there would require inferring a **global** outage
+  from one URL. That information does not exist: `DetectionLangueClient` has no consecutive-failure
+  counter, no circuit state and no health probe.
+- **No `return` after `stopCrawler`**, unlike the three neighbouring homepage branches and like the
+  proxy wall at `:426-430`. The fall-through is what still reaches the counter and the
+  `__unjudged_urls.json` record.
+- **The Python side did not switch this on.** `is_success` is an allowlist (see "Exit Codes"), so
+  exit 10 was already `failed` + failure webhook before `detection_unavailable` existed; the Python
+  branch only replaced the `unknown` label with a named cause. Reading the two commits in order
+  suggests otherwise.
+- **The BO-visible message is Python's, not Node's.** `_send_failure_webhook` builds its params from
+  scratch and never opens the payload file, so on exit 10 the BO receives `_classify_exit_code`'s
+  `Service de détection de langue indisponible` — not the `Détection indisponible : aucun verdict
+  linguistique (méthode : …)` that `routes.ts:730` wrote, nor the
+  `ERROR_MAP["detectionUnavailable"]` fallback (`main.ts:1151`). Those two survive only in
+  `_callback_payload.json` (readable via `/admin/sidecar`) and on the update-mode path, which still
+  exits 2 and still uses the success webhook.
+
+**BO reception (verified read-only in the Marketplace repo).** `detection_unavailable` fails both
+auto-retirement allowlists (`['proxy_blocked','domain_dead']` —
+`script_process_detect_fiche_produit.php:112`, `script_process_update_crawling.php:205`), fails the
+`domain_changed` alert branch, and lands in `handleCrawlFailure` + `launchEnqueueCrawler`, i.e. a
+**relaunch**. Retryable and non-terminal, which was the audit's precondition for emitting the code
+at all. It is absent from `crawl_failure_cause_label` (`fonctions_scrapping.php:8917`), so mails
+read "Erreur crawler (code 10)" — `proxy_blocked` and `domain_dead` are absent from that map too,
+so this joins an existing gap rather than opening one.
+
+### The `verdict_unavailable` counter — making the *partial* outage countable
+
+Exit 10 covers the total outage. The dangerous band is the **partial** one: enough pages judged
+that the dataset is non-empty and coverage stays above the BO's thresholds, the rest silently
+protected, on a run labelled healthy. The verdict-unavailable guard made that class harmless but
+not *detectable* — the only trace was a log line, so nobody could count it, which is how it
+survived. One increment at `routes.ts:1298` covers **all ten** sites (they converge on the terminal
+`else if`; every one of them leaves `isEnqueuingLinks` false, and the homepage exit-10 guard falls
+through instead of returning). It is read back at `main.ts:1264` and shipped in the payload as
+`verdict_unavailable`. All three links are load-bearing: an increment that never reaches the
+payload is inert, which is the exact failure mode this chantier exists to close. `statNameParity.test.ts`
+pins the two spellings against drift.
+
+Deliberately **not** `errors`: that counter feeds the BO health guard and the two deletion caps, so
+incrementing it here would re-arm brakes that block *all* destructive processing. Different
+decision, out of scope. And deliberately no `crawlErrorMessage`: it is one per-crawl slot, wins
+over everything at `main.ts:1229` and is truncated to 250 chars, so a per-page write would let the
+last unjudged internal page overwrite a graver, actionable cause.
+
+**Two properties that will be misread unless read here:**
+
+- **It counts handler passes, not distinct URLs.** An OOM relaunch resumes with the `stats:{id}`
+  Redis hash intact, so a re-handled page counts twice. `filtered_nonfr` behaves identically — the
+  new counter is consistent with the one BO already reads, but it is not a URL count.
+- **It travels on the SUCCESS webhook only.** `_send_failure_webhook` builds its params from scratch
+  and never opens `_callback_payload.json`, and exit 10 routes there. So on a *total* outage the
+  counter never reaches BO; that case carries `exit_code=10` + `failure_cause=detection_unavailable`
+  instead, which is strictly more actionable than a count of 1. The partial outage — the case the
+  counter exists for — exits 2 and does travel. Every other counter has the same property on a
+  failure webhook, so this is pre-existing rather than introduced here. But
+  **`verdict_unavailable=0` on a *failed* crawl must never be read as "no unjudged pages".**
+
+BO does not persist it yet: `verdict_unavailable` is absent from the `crawl_events` payload
+whitelist (`fonctions_scrapping.php:763-772`) and from the `crawl_metrics` column map
+(`fonctions_crawl_metrics.php:144`), so today it is visible only in the webhook query string and in
+`_callback_payload.json`. Widening either is a one-line BO MEP, not done here.
 
 ### `isTechnicalFailureMethod` — the closed set
 
@@ -588,14 +689,18 @@ delivered a false `not_french`. Both channels have to close together:
 
 | Path | Message |
 |---|---|
-| Technical failure | `Détection indisponible : aucun verdict linguistique (méthode : …)` (`routes.ts:729`) |
-| Genuine linguistic verdict | `Page non détectée en Français` (`routes.ts:732`) — **reserved, byte for byte** |
+| Technical failure | `Détection indisponible : aucun verdict linguistique (méthode : …)` (`routes.ts:730`) |
+| Genuine linguistic verdict | `Page non détectée en Français` (`routes.ts:733`) — **reserved, byte for byte** |
+
+On an **initial** crawl the technical message no longer reaches BO at all: exit 10 routes the run
+to the failure webhook, whose `message_erreur_crawling` comes from `_classify_exit_code`. It still
+travels on the update-mode path (exempt from exit 10, success webhook). See § "Exit 10" above.
 
 **Anyone touching `"Page non détectée en Français"` must know the BO depends on it**: it is
 the only occurrence in code, and `crawl_is_not_french` returns true on that string alone. The
 technical message follows the three precedents already in this file — `Erreur HTTP …`
-(`:394`), the homepage-extraction failure (`:583`), `Site protégé par … (challenge non
-résolu)` (`:618`): French, cause first, no verdict.
+(`:395`), the homepage-extraction failure (`:584`), `Site protégé par … (challenge non
+résolu)` (`:619`): French, cause first, no verdict.
 
 ### `?lang=fr` propagation is now captured unconditionally
 
@@ -603,13 +708,13 @@ The capture used to be gated on `primaryMethod === "pattern_match_query"`, which
 code**: `extractPrimaryMethod` prefers any HTML method found *anywhere* in the `+`-split, so
 `pattern_match_query+langHtml+nlp_confirmed` reduces to `langHtml` and the test was never
 true. `extractLanguageQueryParam(site)` is now called unconditionally in the `detectResult.ok`
-branch (`:661`); the helper self-guards, returning `null` unless the seed carries a
+branch (`:662`); the helper self-guards, returning `null` unless the seed carries a
 `lang|locale|language|hl` whose value matches `/^fr/i`.
 
 **Consequence, accepted:** propagation now also fires when the verdict came from the TLD. The
-injection (`transformRequestFunction`, `:1116`) is additive and only-if-absent, so the blast
+injection (`transformRequestFunction`, `:1152`) is additive and only-if-absent, so the blast
 radius is one extra query param on internal URLs — which **changes dedup keys**. The twin
-branch on the `checkUrl` path (`:752`) is left gated on purpose: `/check-url` returns bare
+branch on the `checkUrl` path (`:754`) is left gated on purpose: `/check-url` returns bare
 tokens, so there the test is correct.
 
 ### Our own injected param is exempt from the `?` machinery
@@ -625,7 +730,7 @@ The fix is a **category** argument, not a workaround: that machinery detects fac
 explosions — an unbounded parameter space *the site* generates. A parameter the crawler itself
 added is not a facet. `DetectionLangueClient.stripInjectedLanguageParam(url, param)` removes
 the exact key+value pair (and drops the `?` when the query empties), and one derived `facetUrl`
-(`routes.ts:945`) feeds all five consumers that measure the site's parameter space:
+(`routes.ts:981`) feeds all five consumers that measure the site's parameter space:
 
 1. `trackQmHashStatsForUrl` — the `filtered_qm` / `filtered_hash` stats mirror
 2. `context.countQuestionMark++` — the counter behind the 100 stop
@@ -637,8 +742,8 @@ Exact key **and** value match, so a site's own `?lang=de` still counts as the si
 
 **Two call sites deliberately keep the original `url`:**
 
-- the `#` block (`:975`) — stripping a query cannot change a fragment;
-- `context.seenBases.add(baseKeyAbsent(url))` (`:1024`) — **load-bearing.** `isFilterParam`
+- the `#` block (`:1011`) — stripping a query cannot change a fragment;
+- `context.seenBases.add(baseKeyAbsent(url))` (`:1060`) — **load-bearing.** `isFilterParam`
   computes its keys from the real `request.url`, which *does* carry the injected param, so
   stripping only the oracle side would break the key match and silently weaken the filter.
 
@@ -664,6 +769,8 @@ Close this before enabling `QM_TIER2_ENABLED`.
 
 Spec: `docs/superpowers/specs/2026-08-14-crawler-detection-verdict-unavailable-design.md`.
 Plan: `docs/superpowers/plans/2026-08-14-crawler-detection-verdict-unavailable.md`.
+Spec (exit 10 + the counter): `docs/superpowers/specs/2026-08-14-crawler-detection-outage-visible-design.md`.
+Plan (exit 10 + the counter): `docs/superpowers/plans/2026-08-14-crawler-detection-outage-visible.md`.
 Audit (findings A and B): `docs/superpowers/references/2026-07-29-crawler-detection-seam-audit.md`.
 
 ## Detection Backpressure (Auto-Adjusting Concurrency + Handler-Timeout Alignment)
