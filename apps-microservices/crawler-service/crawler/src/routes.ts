@@ -36,6 +36,7 @@ import { recordQmTier2Sample, maybeCommitParam, commitToRemoveParam, maybeDefaul
 import { trackQmHashStatsForUrl } from "./qmHashTracker.js";
 import { classifyHttpStatus, pdfDatasetName, isPageClosedError } from "./httpStatusPolicy.js";
 import { shouldTripProxyWall, proxyWallConfig, terminalFailureDetectEnabled } from "./terminalFailure.js";
+import { recordUnjudgedUrls } from "./unjudgedUrls.js";
 import type { PageTimingEntry } from "./timing/types.js";
 
 export const router = createPlaywrightRouter();
@@ -1237,6 +1238,26 @@ router.addDefaultHandler(
                 // `updateChecker.checkUrl` (it would answer isEligible=false and claim
                 // action:'deleted' on a page we never managed to read).
                 log.warning(`[VERDICT_UNAVAILABLE] No linguistic verdict for ${url} — not counted as non-French, not stored in nfr-, no eligibility claim.`);
+                // ...but writing nothing is not enough: the BO's second pass subtracts
+                // "URLs Milvus holds" minus "URLs in the new dataset" and deactivates the
+                // remainder, so a page with no verdict is an orphan BY CONSTRUCTION.
+                // Record it so the BO can put it back on the recrawled side, exactly as
+                // it already does with `__collapsed_urls.json`.
+                //
+                // BOTH identities, because they can be two different rows in Milvus and
+                // only coincide when there was no redirect: `request.url` is the seeded
+                // identity Milvus holds (what UpdateChecker calls `originalUrl` when it
+                // emits deleted/redirected), `url` is the loaded identity a dataset row
+                // would have carried — and :540 marks the loaded URL as known, so the
+                // redirect destination may never be crawled on its own either. The
+                // sidecar dedupes, so the common case stores one entry.
+                //
+                // All ten `verdictUnavailable` sites converge here, homepage included: an
+                // unjudged homepage enqueues no links, so the crawl stores nothing and the
+                // BO stops at `insufficientData` (`stored_files_count <= 1`) long before
+                // the orphan pass — this sidecar is `__`-prefixed precisely so it cannot
+                // disturb that count.
+                recordUnjudgedUrls(targetDomain, [request.url, url]);
             } else {
                 log.warning(`Le site ${url} n'est pas en Français.`);
                 // Revive the (previously dead) filtered_nonfr counter → the terminal webhook

@@ -50,6 +50,7 @@ import { killBrowserProcesses } from "./browserKill.js";
 import { readUsableMemory } from "./cgroupMemory.js";
 import { createSharedRedisClient } from "./redisClient.js";
 import { buildHtmlIndex } from "./htmlIndex.js";
+import { ensureUnjudgedSidecar } from "./unjudgedUrls.js";
 import { repairQueueMetadata, recountQueueFromDisk } from "./queueRepair.js";
 import { isDrainedSample, isUnreconciledIdle, DRAIN_CONFIRM_SAMPLES, DRAIN_DISK_RECOUNT_ENABLED } from "./drainGuard.js";
 import { QUEUE_PURGE_ENABLED } from "./staleVariantSkip.js";
@@ -606,6 +607,14 @@ if (dropData) {
     // Load stats if resuming
     await context.statsManager.loadStateFromDisk();
 }
+
+// Create `__unjudged_urls.json` as `[]` now — AFTER the dropData drop above, which
+// would otherwise delete it. Its mere presence tells the BO "this crawler records
+// pages detection could not judge", which an absent file cannot: absent means
+// "crawler predates the fix, you cannot tell", empty means "detection answered for
+// every page, the orphan subtraction is safe". Written at startup so the
+// distinction survives a SIGKILL. Never clobbers an OOM relaunch's entries.
+ensureUnjudgedSidecar(domain);
 
 // --- HYBRID RESUME STRATEGY ---
 // Check if Redis already has data (Hot Resume)
