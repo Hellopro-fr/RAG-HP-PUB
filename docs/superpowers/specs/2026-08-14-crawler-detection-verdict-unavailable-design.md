@@ -149,16 +149,49 @@ copie portée à la main du crawler (`functions.ts:233-320`) ignore `Rescaled_WA
 `(403|401|406|429|503)` là où le service utilise `[45]\d{2}`. Ces familles sont **exactement**
 celles qui atteignent le chemin de blanchiment.
 
+### 4.4bis Le second canal : `crawlErrorMessage` (ajouté 2026-08-14 après la tâche 2)
+
+L'invariant du §4.1 ne nomme que trois écritures. Il en manquait une quatrième, et c'est
+celle que le §1 met en avant : `context.crawlErrorMessage = "Page non détectée en Français"`
+(`routes.ts:704`), que `not_french_signal.php` croit **sans condition, avant tout test de
+compteur**. Elle est posée *avant* le garde du §4.2, donc la tâche 2 seule laisse le BO
+recevoir un faux `not_french` sur le chemin non-`.fr` — le but affiché du chantier n'est pas
+atteint sans elle.
+
+Portée réelle, plus petite qu'il n'y paraît : `:702` est gardé par
+`if (!context.crawlErrorMessage)`, et un challenge non résolu a **déjà** posé son propre
+message en `:618` (`Site protégé par … (challenge non résolu)`). Le trou ne concerne donc que
+les méthodes techniques pour lesquelles rien n'a écrit avant : `error`,
+`fetch_empty_content`, `admission_rejected`.
+
+Ce n'est **pas** un changement de contrat : le fichier pose déjà des messages distincts en
+`:394` (`Erreur HTTP …`), `:583` et `:618`. Poser un message technique distinct suit ce motif
+existant. Et une fois `filtered_nonfr` non incrémenté (tâche 2) **et** le message distinct,
+les deux canaux se ferment ensemble — la branche compteur de `not_french_signal.php` ne peut
+plus se rabattre dessus, puisque le §1 de cet audit note qu'elle se déclenchait justement
+parce que `filtered_nonfr=1` et `nb_success_crawled=0`.
+
 ### 4.5 Cadrage à ne pas répéter
 
 L'audit corrige une affirmation de sa propre synthèse : il est **faux** qu'un site `.fr`
 muré par un WAF soit « crawlé de bout en bout avec l'interstitiel comme contenu de chaque
 page ». Le handler qui écrit dans le dataset principal n'a qu'un site d'appel, **à
 l'intérieur** de `if (isEnqueuingLinks)`. Les pages internes reçoivent aussi
-`challenge_page`, donc elles atterrissent dans `nfr-{domain}`. **Seule la homepage
+`challenge_page`, donc elles n'entrent pas dans le dataset principal. **Seule la homepage
 ressuscitée entre dans le plan de données RAG.** Les vrais dommages sont (1) le budget de
 crawl brûlé avec un rapport SUCCESS, et (2) le tampon `not_french` permanent sur le chemin
 non-`.fr` / détection-500. **Mener avec (2).**
+
+> **Correction 2026-08-14 — ce paragraphe contredisait le §4.1, et la tâche 2 l'a relevé.**
+> Une version antérieure disait que les pages internes « atterrissent dans `nfr-{domain}` »
+> et présentait cela comme le dénouement bénin. Or c'est exactement ce que l'invariant du
+> §4.1 **interdit**. La remarque de l'audit portait sur le *dataset principal* — elle
+> réfutait la thèse « des ordures dans le plan RAG » — et non sur une approbation des
+> écritures `nfr-`. Lu littéralement, ce §4.5 autorisait à n'implémenter que les pièces
+> (a)–(e) puis à **déclarer l'invariant fermé alors qu'il restait ouvert sur les pages
+> internes**, c'est-à-dire sur le volume : en mode MAJ, chacune est une revendication
+> `action:'deleted'`. L'invariant prime — une page interne sans verdict n'est écrite ni dans
+> `nfr-`, ni dans le compteur.
 
 ## 5. Constat B — la propagation `?lang=fr` est morte
 

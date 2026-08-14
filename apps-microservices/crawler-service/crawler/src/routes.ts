@@ -555,6 +555,18 @@ router.addDefaultHandler(
             const isMainSite = matchesMainSite(request.url, site);
             let frenchDetectionMethod: string | Error;
             let isEnqueuingLinks = false;
+            // No technical failure may increment `filtered_nonfr`, write to `nfr-{domain}`,
+            // or call `updateChecker.checkUrl`.
+            //
+            // That is the invariant this flag exists to enforce. "The detection did not
+            // answer" — API error, unresolved anti-bot challenge, page with no readable
+            // content — is the ABSENCE of a verdict, a third state distinct from both
+            // "French" (`isEnqueuingLinks`) and "not French" (the terminal `else`). Left
+            // to converge on the "not French" branch it becomes a business verdict: the
+            // BO reads `filtered_nonfr` as `isError='not_french'`, and in update mode
+            // `checkUrl(..., false)` answers `isEligible=false`, which claims
+            // `action:'deleted'` on a live French fiche.
+            let verdictUnavailable = false;
             let content = "";
             let title = "";
 
@@ -624,6 +636,12 @@ router.addDefaultHandler(
                         const primaryMethod = DetectionLangueClient.extractPrimaryMethod(detectResult.method);
                         if (!primaryMethod) {
                             log.error(`API returned ok=true but empty method for ${url}. Cannot store detection method.`);
+                            // ok=true is a FRENCH verdict; an empty method just makes it
+                            // unusable (nothing to store as forced_method). Falling through
+                            // with both flags false would send a page the service called
+                            // French into the "not French" branch — the laundering above,
+                            // with the verdict inverted.
+                            verdictUnavailable = true;
                         } else {
                             frenchDetectionMethod = manageFrenchDetectionMethod(targetDomain as string, primaryMethod);
                             if (frenchDetectionMethod instanceof Error) {
@@ -686,13 +704,24 @@ router.addDefaultHandler(
                             context.crawlErrorMessage = "Page non détectée en Français";
                         }
 
+                        // ok=false can also mean "the service could not judge this page"
+                        // (challenge interstitial, internal error, no visible text). That is
+                        // not a linguistic verdict, and it must not reach the URL-only
+                        // fallback below: checkUrl accepts ANY .fr host with zero network
+                        // work, so a technical failure on a .fr domain would be resurrected
+                        // as a French verdict on no evidence at all.
+                        if (DetectionLangueClient.isTechnicalFailureMethod(detectResult.method)) {
+                            verdictUnavailable = true;
+                            log.warning(`[VERDICT_UNAVAILABLE] Detection returned no linguistic verdict for ${url} (method: ${detectResult.method}). Skipping the URL fallback.`);
+                        }
+
                         // Only fall back to URL check if NLP didn't explicitly reject.
                         // When NLP analyzed the content and said "not French", a URL pattern
                         // like .fr TLD should not override that verdict.
                         const nlpRejected = detectResult.method.includes("nlp_not_confirmed")
                             || detectResult.method.includes("nlp_override");
 
-                        if (!nlpRejected) {
+                        if (!verdictUnavailable && !nlpRejected) {
                             const checkUrlResult = await detectionClient.checkUrl(url);
                             if (checkUrlResult.ok) {
                                 frenchDetectionMethod = manageFrenchDetectionMethod(targetDomain as string, checkUrlResult.method);
@@ -717,6 +746,7 @@ router.addDefaultHandler(
                 } catch (apiError: any) {
                     log.error(`Detection API error for main site ${url}: ${apiError.message}`);
                     context.crawlErrorMessage = `Erreur API de détection pour le site principal ${url}: ${apiError.message}`;
+                    verdictUnavailable = true;
                 }
 
             } else {
@@ -738,6 +768,7 @@ router.addDefaultHandler(
                         } else {
                             log.warning(`Challenge ${internalChallenge1} not resolved for internal page ${url}. Skipping.`);
                             isEnqueuingLinks = false;
+                            verdictUnavailable = true;
                         }
                     }
 
@@ -757,6 +788,20 @@ router.addDefaultHandler(
                                 methodOrError = manageFrenchDetectionMethod(targetDomain as string, primaryMethod);
                                 log.info(`Auto-detected and saved method: ${primaryMethod}`);
                             }
+                            if (methodOrError instanceof Error) {
+                                // ok=true is a FRENCH verdict; we merely failed to make it
+                                // usable (empty method, or the storage write failed). Without
+                                // this the page falls to the `Could not determine` branch
+                                // below and is filtered as non-French.
+                                verdictUnavailable = true;
+                            }
+                        } else if (DetectionLangueClient.isTechnicalFailureMethod(autoCheck.method)) {
+                            // Same invariant as the homepage gate, and the same reason not to
+                            // run the URL fallback below: checkUrl accepts any .fr host with
+                            // zero network work, so it would resurrect a technical failure as
+                            // a stored domain-wide method.
+                            verdictUnavailable = true;
+                            log.warning(`[VERDICT_UNAVAILABLE] Auto-detection returned no linguistic verdict for ${url} (method: ${autoCheck.method}). Skipping the URL fallback.`);
                         } else {
                             // Try URL check fallback
                             const checkUrlResult = await detectionClient.checkUrl(url);
@@ -767,6 +812,7 @@ router.addDefaultHandler(
                         }
                     } catch (apiError: any) {
                         log.error(`Detection API error during auto-detection for ${url}: ${apiError.message}`);
+                        verdictUnavailable = true;
                     }
                 }
 
@@ -787,35 +833,52 @@ router.addDefaultHandler(
                         } else {
                             log.warning(`Challenge ${internalChallenge2} not resolved for internal page ${url}. Skipping.`);
                             isEnqueuingLinks = false;
+                            verdictUnavailable = true;
                         }
                     }
 
-                    try {
-                        const needsNlp = DetectionLangueClient.requiresNlpValidation(frenchDetectionMethod);
+                    // Nothing readable to judge (unresolved challenge above, or a failed
+                    // auto-detection further up) ⇒ do not ask detection. Sending the
+                    // interstitial markup anyway is how `isEnqueuingLinks` was flipped back
+                    // to true on an ok=true answer about the challenge page itself.
+                    if (verdictUnavailable) {
+                        log.warning(`[VERDICT_UNAVAILABLE] Skipping detection for internal page ${url}: no verdict is obtainable from an unresolved challenge.`);
+                    } else {
+                        try {
+                            const needsNlp = DetectionLangueClient.requiresNlpValidation(frenchDetectionMethod);
 
-                        // When stored method is URL-based or NLP-only, forced_method cannot
-                        // validate HTML tags → use NLP to verify actual content instead.
-                        // When stored method is HTML-based, use forced_method for fast validation.
-                        _timing.detectStartAt = Date.now();
-                        const detectResult = await detectionClient.detect(url, content, {
-                            forcedMethod: needsNlp ? undefined : frenchDetectionMethod,
-                            mode: "simple",
-                            useNlpDetection: needsNlp,
-                            proxyUrl: proxyUrl ?? undefined,
-                        });
-                        _timing.detectEndAt = Date.now();
-                        _detectMethod = detectResult.method;
-                        _detectOk = detectResult.ok;
+                            // When stored method is URL-based or NLP-only, forced_method cannot
+                            // validate HTML tags → use NLP to verify actual content instead.
+                            // When stored method is HTML-based, use forced_method for fast validation.
+                            _timing.detectStartAt = Date.now();
+                            const detectResult = await detectionClient.detect(url, content, {
+                                forcedMethod: needsNlp ? undefined : frenchDetectionMethod,
+                                mode: "simple",
+                                useNlpDetection: needsNlp,
+                                proxyUrl: proxyUrl ?? undefined,
+                            });
+                            _timing.detectEndAt = Date.now();
+                            _detectMethod = detectResult.method;
+                            _detectOk = detectResult.ok;
 
-                        if (detectResult.ok) {
-                            isEnqueuingLinks = true;
+                            if (detectResult.ok) {
+                                isEnqueuingLinks = true;
+                            } else if (DetectionLangueClient.isTechnicalFailureMethod(detectResult.method)) {
+                                // Same invariant as the homepage gate: an internal page whose
+                                // detect failed technically has no verdict either. Internal
+                                // pages are the volume, and in update mode each one laundered
+                                // here is an `action:'deleted'` claim.
+                                verdictUnavailable = true;
+                                log.warning(`[VERDICT_UNAVAILABLE] Detection returned no linguistic verdict for internal page ${url} (method: ${detectResult.method}).`);
+                            }
+                            // No URL fallback after a clean rejection. The forced HTML detect
+                            // already analyzed the lang attribute; URL TLD/path signals cannot
+                            // override that verdict (aera-sa.fr/de/... leak case). API technical
+                            // failures are handled by the surrounding try/catch.
+                        } catch (apiError: any) {
+                            log.error(`Detection API error for internal page ${url}: ${apiError.message}`);
+                            verdictUnavailable = true;
                         }
-                        // No URL fallback after a clean rejection. The forced HTML detect
-                        // already analyzed the lang attribute; URL TLD/path signals cannot
-                        // override that verdict (aera-sa.fr/de/... leak case). API technical
-                        // failures are handled by the surrounding try/catch.
-                    } catch (apiError: any) {
-                        log.error(`Detection API error for internal page ${url}: ${apiError.message}`);
                     }
                 }
             }
@@ -1135,6 +1198,13 @@ router.addDefaultHandler(
                          console.warn("Failed to log blocked URLs via Redis:", e);
                      }
                 }
+            } else if (verdictUnavailable) {
+                // No verdict was obtained, so there is nothing to conclude and nothing to
+                // record. Deliberately empty beyond this log: no `filtered_nonfr` (the BO
+                // reads it as isError='not_french'), no `nfr-{domain}` write, and no
+                // `updateChecker.checkUrl` (it would answer isEligible=false and claim
+                // action:'deleted' on a page we never managed to read).
+                log.warning(`[VERDICT_UNAVAILABLE] No linguistic verdict for ${url} — not counted as non-French, not stored in nfr-, no eligibility claim.`);
             } else {
                 log.warning(`Le site ${url} n'est pas en Français.`);
                 // Revive the (previously dead) filtered_nonfr counter → the terminal webhook
