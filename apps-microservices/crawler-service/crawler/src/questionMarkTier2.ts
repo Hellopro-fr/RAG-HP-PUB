@@ -33,9 +33,14 @@ const paramValue = (url: string, p: string): string | null => {
     try { return new URL(url).searchParams.get(p); } catch { return null; }
 };
 
-// A language param must never become a tier-2 candidate: `toRemove` strips it from
-// newly-discovered links AND rewrites the already-queued ones, which undoes the `?lang=fr`
-// propagation mid-crawl on the very session-i18n sites it rescues. Candidates are ranked by
+// A language param must never become a tier-2 candidate. Three vectors, and it matters which:
+// `toRemove` rewrites the ALREADY-QUEUED URLs on disk (they lose `?lang=fr` with no
+// re-injection), it survives an OOM relaunch through the persisted decision, and — worst —
+// the consumption-time hook can skip a queued variant's handler entirely. It does NOT strip
+// newly-discovered links, contrary to an earlier version of this comment: in
+// `transformRequestFunction` the strip runs BEFORE the language injection, so those keep the
+// param. Net effect is still that the `?lang=fr` propagation is undone mid-crawl on the very
+// session-i18n sites it rescues. Candidates are ranked by
 // descending frequency with no language allowlist, so on a site serving its own `?lang=de`
 // (our own injected `lang=fr` is already exempt — routes.ts feeds `facetUrl`) `lang` can top
 // the list and a same-majority verdict commits it. Case-insensitive on purpose: erring wide

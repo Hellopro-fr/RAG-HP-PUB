@@ -591,11 +591,18 @@ services:
       # inspect` showed OOMKilled=false/ExitCode=0 — that flag only describes the LAST
       # restart, and 2 restarts had already overwritten the transition that mattered; never
       # trust it alone. Fix: BROWSER_SEMAPHORE_SIZE 6->4 (more cgroup headroom for uvicorn)
-      # + mem_limit 4500m->6g below (crawler-service containers on this host already run at
-      # 6g) + stop_grace_period above (this service had none, so recreating it for this very
+      # + mem_limit 4500m->6g below + stop_grace_period above (this service had none, so recreating it for this very
       # fix would have SIGKILLed an in-flight chunk after Docker's 10s default).
       - BROWSER_SEMAPHORE_SIZE=4
       - ADMISSION_MAX_SLOTS=8
+    # ⚠ Correction 2026-08-17 : ce commentaire justifiait le 6g par « crawler-service
+    # containers on this host already run at 6g ». Ce fichier ne le montre pas —
+    # `mem_limit` n'y apparaît qu'ICI, et le bloc crawler-service n'a AUCUNE limite
+    # mémoire (aucun docker-compose.override.yml non plus). L'affirmation était peut-être
+    # vraie du déploiement réel, mais elle était présentée comme lisible dans le dépôt
+    # alors qu'elle ne l'est pas. Le 6g reste justifié par la mesure du 08-13 (cgroup à
+    # 4500m atteint, victime uvicorn à anon-rss 1334 Mio) ; il n'a jamais eu besoin de la
+    # comparaison avec un voisin. Le vrai plafond du crawler reste À MESURER.
     mem_limit: 6g
     cpus: 4
     healthcheck:
