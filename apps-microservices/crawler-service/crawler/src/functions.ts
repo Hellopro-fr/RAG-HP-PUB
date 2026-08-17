@@ -53,6 +53,7 @@ import { isOverCap, QM_FACET_ENABLED, QM_FACET_CAP_K } from "./facetCap.js";
 import { pathBaseKey } from "./urlBase.js";
 import { filterParamCollapseTarget } from "./filterOnSeen.js";
 import { isDeadHost, terminalFailureDetectEnabled } from "./terminalFailure.js";
+import { decideUpdateHealth, updateHealthRates, updateHealthCoverage } from './updateHealthVerdict.js';
 
 /**
  * Constructs the Apify proxy URL based on the provided password.
@@ -1419,45 +1420,16 @@ export const generateUpdateReport = async (domain: string) => {
         const errors = await context.statsManager.getValue("errors");
         const redirects = await context.statsManager.getValue("redirects");
         const newUrls = await context.statsManager.getValue("new_urls");
-        
+        const accounted = await context.statsManager.getValue("accounted");
+
         const cb = context.config.circuitBreaker;
-        
-        // Calculate rates
-        const errorRate = processed > 0 ? errors / processed : 0;
-        const redirectRate = processed > 0 ? redirects / processed : 0;
-        const growthRate = cb.previousTotal > 0 ? newUrls / cb.previousTotal : 0;
 
-        let status = "HEALTHY";
-        let statusMessage = "Update progressing normally.";
+        const healthStats = { processed, errors, redirects, newUrls, accounted, previousTotal: cb.previousTotal };
+        const { errorRate, redirectRate, growthRate } = updateHealthRates(healthStats);
+        const verdict = decideUpdateHealth(healthStats, cb);
 
-        // Determine Health Status
-        if (cb.isMicroMode) {
-            if (cb.maxAbsErrors > 0 && errors >= cb.maxAbsErrors) { status = "CRITICAL"; statusMessage = `Max absolute errors reached (${errors})`; }
-            else if (cb.maxAbsRedirects > 0 && redirects >= cb.maxAbsRedirects) { status = "CRITICAL"; statusMessage = `Max absolute redirects reached (${redirects})`; }
-            else if (cb.maxAbsNew > 0 && newUrls >= cb.maxAbsNew) { status = "WARNING"; statusMessage = `High number of new URLs for small site (${newUrls})`; }
-        } else {
-            if (processed >= cb.minSample) {
-                if (cb.maxErrorRate > 0 && errorRate > cb.maxErrorRate) { status = "CRITICAL"; statusMessage = `Error rate too high (${(errorRate*100).toFixed(1)}%)`; }
-                else if (cb.maxRedirectRate > 0 && redirectRate > cb.maxRedirectRate) { status = "CRITICAL"; statusMessage = `Redirect rate too high (${(redirectRate*100).toFixed(1)}%)`; }
-                else if (cb.maxGrowthRate > 0 && growthRate > cb.maxGrowthRate) { status = "WARNING"; statusMessage = `Site growth high (${(growthRate*100).toFixed(1)}%)`; }
-            } else {
-                status = "PENDING_SAMPLE";
-                statusMessage = `Waiting for minimum sample (${processed}/${cb.minSample})`;
-            }
-        }
-
-        // Mass-deletion guard: 'errors' ≈ deleted candidates (UpdateChecker CASE 1/3).
-        // CASE 1 (permanent HTTP status) throws in routes.ts before 'processed' is
-        // incremented, so a mass-404 restructure never reaches min_sample. CASE 3
-        // ('not_eligible') does NOT share that property — it runs after the increment,
-        // so those URLs are in both counters. Either way this guard is corpus-relative
-        // and independent of 'processed', which is why it still holds
-        // (incident 636-389-1783326914).
-        if (cb.previousTotal > 0 && errors / cb.previousTotal > 0.5
-            && (status === "HEALTHY" || status === "PENDING_SAMPLE")) {
-            status = "SUSPECT";
-            statusMessage = `Deleted/error volume (${errors}) exceeds 50% of previous corpus (${cb.previousTotal})`;
-        }
+        let status = verdict.status;
+        let statusMessage = verdict.statusMessage;
 
         if (context.stopReason) {
             status = "ABORTED";
@@ -1467,7 +1439,7 @@ export const generateUpdateReport = async (domain: string) => {
         const report = {
             timestamp: new Date().toISOString(),
             domain: domain,
-            mode: cb.isMicroMode ? "MICRO" : "STANDARD",
+            mode: "GRADUATED",
             health: status,
             message: statusMessage,
             metrics: {
@@ -1475,20 +1447,25 @@ export const generateUpdateReport = async (domain: string) => {
                 errors,
                 redirects,
                 new_urls: newUrls,
+                accounted,
                 previous_total: cb.previousTotal
             },
             rates: {
                 error_rate: parseFloat(errorRate.toFixed(4)),
                 redirect_rate: parseFloat(redirectRate.toFixed(4)),
-                growth_rate: parseFloat(growthRate.toFixed(4))
+                growth_rate: parseFloat(growthRate.toFixed(4)),
+                coverage: parseFloat(updateHealthCoverage(healthStats).toFixed(4))
             },
             thresholds: {
                 min_sample: cb.minSample,
+                min_coverage: cb.minCoverage,
                 max_error_rate: cb.maxErrorRate,
                 max_redirect_rate: cb.maxRedirectRate,
                 max_growth_rate: cb.maxGrowthRate,
                 max_abs_errors: cb.maxAbsErrors,
-                max_abs_redirects: cb.maxAbsRedirects
+                max_abs_redirects: cb.maxAbsRedirects,
+                max_abs_new: cb.maxAbsNew,
+                disabled_signals: verdict.disabledSignals
             },
             jsonl_files: context.jsonlWriter ? context.jsonlWriter.getAllCounts() : {},
         };

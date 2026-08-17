@@ -160,6 +160,7 @@ context.config = {
         isMicroMode: false,
         previousTotal: 0,
         minSample: minSample,
+        minCoverage: 0.8,
         maxErrorRate: maxErrorRate,
         maxRedirectRate: maxRedirectRate,
         maxGrowthRate: maxGrowthRate,
