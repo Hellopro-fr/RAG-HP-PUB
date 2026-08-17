@@ -486,12 +486,28 @@ This is the one comment this plan is allowed to rewrite: the change makes the ol
 
 ```bash
 cd apps-microservices/crawler-service/crawler
-grep -c 'increment("accounted")' src/class/UpdateChecker.ts
-grep -n 'unverified_http_error' -A1 -B4 src/class/UpdateChecker.ts | grep -c accounted
+grep -c 'increment(.accounted.)' src/class/UpdateChecker.ts
+grep -n 'accounted\|unverified_http_error' src/class/UpdateChecker.ts
 npm test 2>&1 | tail -20
 ```
 
-Expected: `5`, then `0` (no `accounted` near the unverified branch), then tests pass.
+Expected: `5`; then a listing whose five `accounted` lines are `190`, `220`, `232`, `274`, `286`
+with the `unverified_http_error_` return sitting **between** the first two and inside neither
+block; then tests pass with **432** passing, 0 failing.
+
+> ⚠ **Two expected values in the first draft of this step were wrong, and both were wrong the same
+> way — asserted without being derived.**
+>
+> - The count used a pattern with literal `"`, which a bare command silently reduces to `0` (see
+>   Global Constraint 9). Dotted pattern instead.
+> - The second command was `grep -n 'unverified_http_error' -A1 -B4 … | grep -c accounted`,
+>   expecting `0`. It returns **`1`**: the `-B4` context bleeds backwards into the sibling
+>   `404`/`410` block, which legitimately contains an increment. The property being checked — that
+>   no increment sits inside the unverified branch — is not expressible as a context-grep count.
+>   Read the line listing and confirm the structure instead.
+>
+> Neither expected value was derived from a run before being written down. A `grep -c` expectation
+> is wrong as soon as the pattern or the context window touches a neighbouring block.
 
 - [ ] **Step 5: Commit**
 
