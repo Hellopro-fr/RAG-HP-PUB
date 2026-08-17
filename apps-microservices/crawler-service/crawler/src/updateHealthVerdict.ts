@@ -103,9 +103,15 @@ export function decideUpdateHealth(
         statusMessage = `Site growth high (${(growthRate * 100).toFixed(1)}%, ${newUrls} new URLs)`;
     }
 
-    // Mass-deletion guard, moved verbatim from functions.ts. Only HEALTHY and
-    // PENDING_SAMPLE are overridden: WARNING and CRITICAL already block and carry
-    // a more specific reason. Do NOT widen this.
+    // Mass-deletion guard, moved verbatim from functions.ts. 'errors' approximates
+    // deleted candidates, sourced from UpdateChecker CASE 1 (permanent HTTP status)
+    // and CASE 3 ('not_eligible'). CASE 1 throws in routes.ts before 'processed' is
+    // incremented, so a mass-404 restructure never reaches the sample floor. CASE 3
+    // does NOT share that property — it runs after the increment, so those URLs are
+    // counted in both 'errors' and 'processed'. Either way this guard holds because
+    // it is corpus-relative and independent of 'processed' (incident 636-389-1783326914).
+    // Only HEALTHY and PENDING_SAMPLE are overridden: WARNING and CRITICAL already
+    // block and carry a more specific reason. Do NOT widen this.
     if (previousTotal > 0 && errors / previousTotal > 0.5
         && (status === "HEALTHY" || status === "PENDING_SAMPLE")) {
         status = "SUSPECT";
