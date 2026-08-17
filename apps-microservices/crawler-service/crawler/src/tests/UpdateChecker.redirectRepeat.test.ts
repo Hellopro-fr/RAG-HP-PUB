@@ -90,5 +90,5 @@ test('regression: dataset redirect to NEW destination still counts + records onc
     assert.equal(r.action, 'redirected');
     assert.equal(writer._calls.length, 1);
     assert.equal(writer._calls[0][0], UpdateChecker.REDIRECTED_FILE);
-    assert.deepEqual(stats._calls, ['redirects'], 'genuinely-new redirect still feeds the counter');
+    assert.deepEqual(stats._calls, ['redirects', 'accounted'], 'genuinely-new redirect still feeds the counter');
 });

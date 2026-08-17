@@ -1447,9 +1447,12 @@ export const generateUpdateReport = async (domain: string) => {
         }
 
         // Mass-deletion guard: 'errors' ≈ deleted candidates (UpdateChecker CASE 1/3).
-        // A mass-404 restructure never trips the STANDARD breaker (errors don't count
-        // toward 'processed', so min_sample may never be reached) — flag it here so
-        // the BO health gate refuses the destructive apply (incident 636-389-1783326914).
+        // CASE 1 (permanent HTTP status) throws in routes.ts before 'processed' is
+        // incremented, so a mass-404 restructure never reaches min_sample. CASE 3
+        // ('not_eligible') does NOT share that property — it runs after the increment,
+        // so those URLs are in both counters. Either way this guard is corpus-relative
+        // and independent of 'processed', which is why it still holds
+        // (incident 636-389-1783326914).
         if (cb.previousTotal > 0 && errors / cb.previousTotal > 0.5
             && (status === "HEALTHY" || status === "PENDING_SAMPLE")) {
             status = "SUSPECT";

@@ -68,7 +68,7 @@ test('dataset 404: deleted event written, errors counted', async () => {
     assert.equal(r.reason, 'http_error_404');
     assert.equal(writer._calls.length, 1);
     assert.equal(writer._calls[0][0], UpdateChecker.DELETED_FILE);
-    assert.deepEqual(stats._calls, ['errors']);
+    assert.deepEqual(stats._calls, ['errors', 'accounted']);
 });
 
 test('dataset 410: deleted event written', async () => {
