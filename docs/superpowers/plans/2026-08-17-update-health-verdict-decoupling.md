@@ -64,7 +64,7 @@ Deliberately **not** touched: `routes.ts` (the circuit breaker keeps June's conf
 - [ ] The suite includes a positive control that fails if the module returns `HEALTHY` unconditionally.
 - [ ] `npm test` passes with no new failures.
 
-**Verify:** `cd apps-microservices/crawler-service/crawler && npm test` → all tests pass, including the 14 new ones from `updateHealthVerdict.test.ts`
+**Verify:** `cd apps-microservices/crawler-service/crawler && npm test` → all tests pass, including the 16 new ones from `updateHealthVerdict.test.ts`
 
 **Steps:**
 
