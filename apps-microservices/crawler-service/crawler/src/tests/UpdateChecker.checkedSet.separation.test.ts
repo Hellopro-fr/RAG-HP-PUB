@@ -55,8 +55,8 @@ test('checkUrl on the checked set does not starve the pushed set (regression)', 
     const url = 'https://example.com/produit/rampe-lite/';
 
     // source='dataset' + isFrenchContent=true → la branche la plus simple (action 'confirmed',
-    // sans écriture JSONL ni incrément de stats) : le seul effet observable de checkUrl est le
-    // claim sur checked:id. La preuve de non-affamement tient quelle que soit la branche prise.
+    // sans écriture JSONL, mais avec un incrément 'accounted') : l'effet observable pertinent est
+    // le claim sur checked:id. La preuve de non-affamement tient quelle que soit la branche prise.
     const r = await checker.checkUrl(url, url, 'dataset', 200, true);
     assert.equal(r.action, 'confirmed', 'a still-eligible dataset URL must be confirmed');
 
