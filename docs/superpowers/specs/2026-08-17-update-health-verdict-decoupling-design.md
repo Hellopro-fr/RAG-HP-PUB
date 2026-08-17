@@ -1,6 +1,6 @@
 # Update Health Verdict — Decoupling from the Circuit Breaker — Design
 
-**Date:** 2026-08-17 (revision 2 — revision 1 was refuted by verification, see § What revision 1 got wrong)
+**Date:** 2026-08-17 (revision 3 — revisions 1 and 2 were each refuted by verification; see § What earlier revisions got wrong)
 **Service:** `crawler-service` (Node/TS crawler) **+ Marketplace BO** (two files)
 **Scope:** two repos, two deployments, **hard ordering**. See § Deployment order.
 **Status:** Approved (design)
@@ -93,8 +93,15 @@ Two consequences:
 
 A rate referential already exists: `referentiel_seuils_cb`, read by
 `get_seuils_cb_pour_payload_crawler()` (`fonctions_crawl_metrics.php:430-467`) with a hardcoded
-fallback of 15/30/50 %. A review tool exists too, `script_revue_seuils_cb.php`. Any new tunable
-belongs there, not hardcoded in `context.ts`.
+fallback of 15/30/50 %. Any new tunable belongs there, not hardcoded in `context.ts`.
+
+⚠ `script_revue_seuils_cb.php` is **not** a replay tool — an earlier draft described it as one. It
+computes the **90th percentile** of the observed `error/redirect/growth` rate distribution over a
+window of `crawl_metrics` rows and proposes that as the new threshold; it never simulates whether a
+historical crawl would have tripped the breaker. It can also **write** to `referentiel_seuils_cb`
+(`source='auto_cron'` when the delta is small, `'manual'` under force-apply), so it is a live
+calibration path, not a read-only report. Its growth rate uses the `urls_new / urls_crawled` proxy,
+not `previous_total`.
 
 ## Options rejected
 
@@ -114,8 +121,16 @@ numbers against a referential that already owns them.
 ## Design
 
 The verdict answers one question: **was this crawl representative of the previously known
-population?** It is *not* a deletion-safety net — the BO already has one, applied after the
-HEALTHY test: `UPDATE_DELETED_CAP_ABS = 100` and `UPDATE_DELETED_CAP_PCT = 0.5` (`:644`, `:651`).
+population?** Safety belongs downstream — but only partly, and the qualification matters:
+
+- The BO has a **deletion** net, applied after the HEALTHY test: `UPDATE_DELETED_CAP_ABS = 100`
+  and `UPDATE_DELETED_CAP_PCT = 0.5` (`:644`, `:651`).
+- It has **none for redirections**, which the same gate governs. That is why § BO changes adds one,
+  as a prerequisite rather than an improvement.
+- And `Phase 2`'s `SUSPECT` guard **is** a deletion bound kept inside the verdict — the only
+  corpus-relative one. It is load-bearing, not vestigial: on `previousTotal = 12` with all 12 URLs
+  404, coverage is `1.0` so step 1 does not fire, and `errorRate` is 0 because `processed = 0`
+  (the permanent-status path throws before the increment). `SUSPECT` is the only thing left.
 
 ### Governing constraint: no run that passes today may newly fail
 
@@ -131,9 +146,18 @@ decision helper with unit tests.
 ```
 crawler/src/updateHealthVerdict.ts        NEW  — pure
 crawler/src/updateHealthVerdict.test.ts   NEW  — node:test
-crawler/src/functions.ts:1430-1462        replaced by a call
-crawler/src/class/UpdateChecker.ts        one new counter increment per dataset outcome
+crawler/src/functions.ts:1430-1457        replaced by a call
+crawler/src/class/UpdateChecker.ts        new `accounted` increment in 5 branches (see below)
 ```
+
+> ⚠ **The replaced range stops at 1457, not 1462.** Revision 2 wrote `1430-1462` while also stating
+> that the `ABORTED` override is retained — but `:1459-1462` **is** that override. An implementer
+> following the range would delete it, and a crawl stopped by the queue cap (`functions.ts:840`),
+> the circuit breaker, a blocked proxy (exit 8) or a dead domain (exit 9) would lose its `ABORTED`
+> verdict and be judged on partial counters. Concretely: `previousTotal = 6000`, queue cap hit at
+> 5000, `errors = 40` → error rate 0.7 %, no `SUSPECT`, verdict `HEALTHY` — deletions applied on a
+> crawl that saw 83 % of the corpus. `:1459-1462` stays in `generateUpdateReport`, applied **after**
+> the module returns.
 
 `npm test` is `node --import tsx --test src/**/*.test.ts` and runs locally — unlike the BO, this
 repo has a working runner.
@@ -175,17 +199,41 @@ itself **only true for CASE 1** (permanent HTTP status throws at `routes.ts:436`
 It names "CASE 1/3"; CASE 3 contradicts it. Fix that comment in the same change.
 
 The sound numerator is a **dedicated, dataset-scoped counter**, incremented exactly once per
-previously-known URL that reached a terminal decision:
+previously-known URL whose state the crawl actually **established**:
 
 ```
-accounted  — incremented once in each isFromDataset terminal branch of UpdateChecker.checkUrl
-             (confirmed alive | deleted | unverified | redirected off-dataset | redirect to a
-             confirmed dataset URL)
-coverage = accounted / previousTotal
+accounted  — incremented at the return of each of these five isFromDataset branches of
+             UpdateChecker.checkUrl:
+               :182-191  Case 1a — confirmed deleted (permanent HTTP status)
+               :206-219  Case 2a — redirect onto another dataset URL
+               :220-231  Case 2b — redirect off the dataset
+               :267-271  Case 3a — confirmed alive and eligible
+               :272-282  Case 3b — alive but not eligible (deletion candidate)
+coverage = accounted / previousTotal        (only when previousTotal > 0)
 ```
+
+⚠ **Branch `:192` — `unverified_http_error_*` — is deliberately EXCLUDED.** That branch handles
+401/403/407/429/5xx/0 on a dataset URL: it increments `errors` and records `action:'ignored'`, and
+its own comment (`:176-181`) says the page *may still be alive*. A 503 does not establish a state,
+so it must not count as accounted. Two consequences, both wanted:
+
+- a rate-limited or firewalled crawl (mass 429/503) gets **low** coverage → `PENDING_SAMPLE`,
+  which is exactly the collapsed-crawl verdict it deserves;
+- counting it instead — the simpler one-line placement at `:166`, before the case split — would
+  make such a crawl read as fully accounted and therefore `HEALTHY`. That is the same defect
+  `routes.ts:1269-1298` already guards against by refusing to call `checkUrl` at all when no
+  verdict could be reached (`verdictUnavailable`). This design follows that existing convention.
+
+Five explicit increments, not one blanket line: it is more edits, but it is the placement the
+codebase's own convention dictates, and it keeps `accounted` meaningful if a sixth branch is added
+later. Entry is already guarded against double-counting by the `PushedSet` claim at `:162-164`.
 
 This mirrors how `errors` is already correctly scoped in that class. It must **not** reuse
 `processed`.
+
+`minCoverage = 0.8`, taken from the BO's `UPDATE_RECONCILIATION_COVERAGE_MIN` (`:45`) so the two
+coverage notions in the system agree on a figure. Revision 2 used the symbol without ever giving it
+a value — the one number the whole design turns on.
 
 ⚠ `previousTotal = consolidationCounts.dataset` (`main.ts:979`) is the previous **Dataset**
 population — a strict subset of the previously-known corpus, which also includes
@@ -270,9 +318,16 @@ their message would lose the more specific reason. This matches `:1454` exactly;
 ### Report shape
 
 `functions.ts:1464-1491`. The BO reads `health`, `message`, `metrics.*` and `rates.*` — never
-`mode` nor `thresholds` (enumerated: `:618`, `:619`, `:625`, `:636`, `:639`, `:641`, `:706-707`).
-Note `rates.redirect_rate` **is** consumed, at `:625`, feeding
-`detecter_et_marquer_maintenance()` — so `rates` must keep its current keys and meaning.
+`mode` nor `thresholds`. Direct reads of the decoded report: `:618`, `:619`, `:636`, `:639`,
+`:641`, `:706`, `:707`. `rates.redirect_rate` is consumed one hop away, at `:625`, through the
+`$rates_update` extracted at `:618`, feeding `detecter_et_marquer_maintenance()` — so `rates` must
+keep its current keys and meaning.
+
+> ⚠ **The module takes raw counters and owns its own rate arithmetic.** It must NOT be fed the
+> report's `rates` object: `:1478-1480` publishes `parseFloat(rate.toFixed(4))`, while the verdict
+> at `:1440` compares the **unrounded** value. A module reading the rounded figure would evaluate
+> `0.15 > 0.15` as false where production evaluates `0.150049 > 0.15` as true — a silent behaviour
+> change at exactly the threshold. Rounding stays a publication concern.
 
 - `mode` — value becomes `"GRADUATED"`. Key retained.
 - `metrics.accounted`, `rates.coverage`, `thresholds.min_coverage`, `thresholds.max_abs_new` —
@@ -281,21 +336,89 @@ Note `rates.redirect_rate` **is** consumed, at `:625`, feeding
   `<= 0`. Without it a HEALTHY verdict is indistinguishable from a verdict whose checks were off.
 - Everything the BO reads — **unchanged**.
 
+> ⚠ **In-flight reports cross the deploy boundary.** The MAJ webhook is queued and offloaded, so a
+> report written by the *old* service can be consumed by the *new* BO. Any BO read of
+> `metrics.accounted` must therefore fall back to `metrics.processed`, **never to 0** — a `?? 0`
+> would make `0 >= 0.8 × previousTotal` false and silently skip a step for every in-flight run.
+
 Naming: the TS config key is `minCoverage`, the JSON field `min_coverage`, mirroring
 `minSample`/`min_sample`. Both spellings are intentional; do not unify them.
 
 ## BO changes
 
-Two, not one — revision 1 understated this:
+### 1. A redirect cap — the load-bearing one
 
-1. `script_process_update_crawling.php:637` stops blocking on `WARNING`. Growth does not qualify
-   the safety of a deletion, and the BO's own caps remain in force. (Inert until a growth rate is
-   re-enabled, but correct.)
-2. **The reconciliation coverage gate must move to the same numerator.** It currently requires
-   `processed >= 0.8 × previous_total` (`:698-707`). On exactly the population this design
-   unblocks — a genuine mass deletion, where `processed` is low because the pages are gone —
-   `processed`-only coverage still fails, so reconciliation stays skipped. It must consume
-   `metrics.accounted` instead.
+**This is a prerequisite, not an improvement.** Removing the sample gate opens a hole that nothing
+else closes.
+
+Run shape, all values live: `previousTotal = 40`, site refonte — 30 old fiche URLs `301` to new
+**internal** paths absent from the dataset, 8 alive and eligible, 2 return 404. Counters:
+`processed = 38`, `redirects = 30`, `errors = 2`, `accounted = 40`.
+
+- **Today:** `38 < 50` → `PENDING_SAMPLE` → the BO blocks.
+- **Under this design:** coverage `40/40 = 1.0` → step 1 skipped; error rate `2/38 = 5.3 %` and
+  `2 < 5` → step 2 skipped; step 3 skipped because `maxRedirectRate = 0`; step 4 likewise;
+  `SUSPECT` counts only `errors`, `2/40 = 5 %` → no. **Verdict `HEALTHY`, and the BO archives the
+  30 source URLs** (`:762-776`).
+
+Nothing downstream bounds that. `UPDATE_DELETED_CAP_ABS`/`_PCT` count `$tab_urls_supprime_list`
+only — deletions, and here there are 2. `detecter_et_marquer_maintenance()` returns `null`
+unconditionally (`MAINTENANCE_DETECT_ENABLED` is `false`). The external-redirect breaker counts
+only **off-domain** hosts (`externalRedirectBreaker.ts:3-6`), so an internal refonte never trips it.
+
+So: add caps mirroring the deletion pair, applied to the count the BO actually **applies**:
+
+```
+UPDATE_REDIRECTED_CAP_ABS = 100
+UPDATE_REDIRECTED_CAP_PCT = 0.5      // of metrics.previous_total
+```
+
+on `count($tab_urls_redirections)` — **not** on `metrics.redirects`. The crawler counter is
+structurally incomplete: `UpdateChecker.ts:205-219` writes the `REDIRECTED` row for a dataset URL
+redirecting onto another dataset URL but deliberately does **not** increment `redirects`
+(*"that counter feeds the circuit breaker"*), while the BO reads the file with no filter on
+`reason` (`:552-556`). Forty canonicalisation redirects therefore give `redirects = 0` and
+`redirect_rate = 0.0` against 40 archived sources. Any redirect bound built on `metrics.redirects`
+is inert for the population it must protect.
+
+**Measured blast radius** (613 `maj`/`FINISHED` rows in `crawl_metrics`, which stores the applied
+count at `:864` — unlike `update_crawling_history:848`, which stores the incomplete counter):
+0 redirects on 279 runs, 1-20 on 228, 21-100 on 73, 101-500 on **27**, above 500 on **6**, maximum
+**2 335**. The absolute cap would flag **33** runs, the percentage cap **3** (2 of them not caught
+by the absolute one) — **35 of 613, 5.7 %**.
+
+⚠ This is a **deliberate tightening**, and the only part of this change that is not a relaxation.
+The hole it closes already exists for the 538 large runs and has already fired: 33 runs applied
+more than 100 redirections with no bound at all. Stated plainly rather than folded into the
+relaxation claim. ⚠ The measured percentage uses `urls_crawled` as denominator because
+`previous_total` is not persisted; a grown site has `previous_total < urls_crawled`, so the real
+ratio is higher and **3 is a floor**.
+
+### 2. `WARNING` stops blocking
+
+`script_process_update_crawling.php:637` stops treating `WARNING` as a block. Growth does not
+qualify the safety of a deletion, and the deletion caps remain in force behind it.
+
+⚠ Consequence to accept knowingly: `WARNING` is the **only** severity the growth signal can
+produce (`:1442`), and `:637` is its **only** consumer. After this change, re-enabling
+`max_growth_rate` through `referentiel_seuils_cb` would have no destructive-gate effect at all. If
+growth is ever re-enabled, its consequence must be routed somewhere non-destructive — a trace line
+or the health mail — not left as a verdict nobody reads.
+
+### Not in this version: the reconciliation numerator
+
+Revision 2 proposed moving the reconciliation coverage gate (`:698-709`) from `processed` to
+`accounted`. **Withdrawn — it is not a relaxation, and it breaks in both directions:**
+
+- `previousTotal = 300`, 200 dataset URLs decided, 100 never dequeued, 500 new pages discovered →
+  `processed = 700`, `accounted = 200`. Today `700 >= 240` → reconciliation applied. Under the
+  proposal `200 >= 240` is false → **skipped**. A run that passes today newly fails.
+- `previousTotal = 12`, all 12 fiches 404 → `processed = 0` (the permanent-status path throws
+  before the increment), `accounted = 12`. Today `0 >= 9.6` is false → safely skipped. Under the
+  proposal `12 >= 9.6` is true → **reconciliation runs on a total wipe**, saved only by `SUSPECT`.
+
+It blocks large growing sites and unblocks mass-deletion ones. Deferred to its own decision with
+its own numbers.
 
 ## Deployment order
 
@@ -331,15 +454,26 @@ service package is the one that needs review, not the BO one.
 - redirects and growth at their production values (rate 0) → never `CRITICAL`/`WARNING`;
 - the `SUSPECT` guard overriding `HEALTHY` and `PENDING_SAMPLE`, and **not** overriding `WARNING`
   or `CRITICAL`;
+- the refonte shape from § BO changes (`previousTotal = 40`, 30 internal redirects, 2 errors) →
+  `HEALTHY`, asserted **deliberately**: it documents that the crawler verdict does *not* catch this
+  case and that the BO redirect cap is the thing that must;
 - a **positive control**: a metric set that must produce a non-HEALTHY verdict, so a module
   returning `HEALTHY` unconditionally cannot pass for the wrong reason.
+
+**The BO half has no unit test** — that repo has no runner, and the redirect cap lives in a file
+with `require`s, superglobals and queries. Its verification is therefore the package review plus
+the measured blast radius above (35 of 613). This asymmetry is the reason the crawler half carries
+the heavier test burden: it is the half that *can* be proven before deployment.
 
 ## Calibration limits — what this design does NOT rest on
 
 Stated plainly, because revision 1 overstated its evidence.
 
-1. **The formula was never replayed against history.** `previous_total` is not persisted by the BO
-   (`script_revue_seuils_cb.php:149`). Reconstructing it by self-joining `id_previous_crawl`
+1. **The formula was never replayed against history.** `previous_total` is not persisted. The
+   source is an explicit statement, not an inference from omission — `script_revue_seuils_cb.php:149`
+   reads *"Le crawler utilise (urls_new / previous_total) qui n'est pas stocké en crawl_metrics"* —
+   but it is a developer comment, and it scopes the claim to `crawl_metrics` only.
+   Reconstructing the value by self-joining `id_previous_crawl`
    failed: **74 of 80** measurable runs have no usable previous count. Only 2 resolved — 884
    (41/243, 0 errors) and 717 (37/187), both collapsed crawls, both agreeing with the design.
 2. **The `1448 ≈ 100 % coverage` row of revision 1 had no denominator** and has been removed from
@@ -351,16 +485,25 @@ Stated plainly, because revision 1 overstated its evidence.
    `shell.php` plus `context.ts` defaults. `referentiel_seuils_cb` is not readable through the
    available tooling (table not whitelisted), so the 15 % figure is the fallback constant, not a
    confirmed live value.
-5. What *was* measured, on 80 runs (the 54 unmeasurable ones all predate 2026-05-12, so this is
-   the whole current-regime population, not a convenience slice): under absolute caps, **64 of 80
-   (80 %)** would return HEALTHY. On the live slice since 01/08 (n=20): **13 HEALTHY, 6 WARNING,
-   1 CRITICAL** — and since production disables the growth signal, those **6 WARNING become
-   HEALTHY**, giving **19 of 20** unblocked.
+5. **The 80 % figure is a lower bound measured under a different formula, not this design's
+   result.** It was computed with the MICRO condition — absolute caps *alone*
+   (`errors >= 5` etc.) — whereas this design requires rate **and** absolute together, which is
+   strictly weaker. On 80 runs (the 54 unmeasurable ones all predate 2026-05-12, so this is the
+   whole current-regime population, not a convenience slice): **64 of 80** would return HEALTHY
+   under absolute caps alone. On the live slice since 01/08 (n=20): **13 HEALTHY, 6 WARNING,
+   1 CRITICAL** under that same formula. Applying the design's actual conditions, the 6 `WARNING`
+   become HEALTHY (step 4 needs `maxGrowthRate > 0`, and production sends 0) — and the single
+   `CRITICAL` was produced by `errors >= 5` alone, so under the conjunction it also needs
+   `errorRate > 0.15`, which was not checked. The honest statement is therefore **"at least 19 of
+   20, possibly 20 of 20"**, and the exact figure requires re-deriving the 80 rows under the
+   conjunction. Not done.
 
-## What revision 1 got wrong
+## What earlier revisions got wrong
 
 Kept deliberately: this list is the reason the design changed, and it is cheaper to read than to
-rediscover.
+rediscover. Every line was established by reading code, not by argument.
+
+**Revision 1:**
 
 | Claim | Verdict |
 |---|---|
@@ -369,23 +512,44 @@ rediscover.
 | `previousTotal` is the previously-known corpus | subset only (Dataset), not the corpus |
 | "the BO sends no thresholds today" | **FALSE** — `shell.php:134-147` sends three |
 | "service-first is strictly safe" | false — that is where the behaviour change lands |
-| the BO change is one line | two changes; the reconciliation gate must move too |
+| the BO change is one line | two changes, and not the two it named |
 | every threshold comparison carries `> 0 &&` | status-assigning ones do; `processed >= minSample` does not |
 | a threshold of 0 makes everything CRITICAL | inverted — the danger is `max()` **resurrecting** a disabled check |
 
-And one thing revision 2 got wrong before it was committed, caught by re-reading its own
-non-regression constraint: graduating the error threshold as
-`max(maxAbsErrors, maxErrorRate × previousTotal)` silently swaps the denominator from `processed`
-to `previousTotal`, which newly blocks any site that grew. Replaced by a conjunction, which adds a
-materiality condition instead of competing with the rate. See § Thresholds.
+**Revision 2:**
+
+| Claim | Verdict |
+|---|---|
+| graduate as `max(floor, rate × previousTotal)` | **REFUTED** — swaps the denominator from `processed`; newly blocks any grown site |
+| removing the sample gate leaves deletions and redirections bounded | **REFUTED** — redirections have **no** surviving bound; see § BO changes |
+| re-enabling `max_redirect_rate` later would bound redirects | **REFUTED** — `metrics.redirects` omits the dataset→dataset branch (`UpdateChecker.ts:205-219`) |
+| move the reconciliation gate to `accounted` | **REFUTED** — fails in both directions; withdrawn |
+| replace `functions.ts:1430-1462` | contradicted its own text — `:1459-1462` is the retained `ABORTED` override |
+| "the verdict is not a deletion-safety net" | `Phase 2`'s `SUSPECT` is one, and it is load-bearing |
+| 80 % / 19-of-20 measured for this design | measured under absolute caps **alone**; a lower bound |
+| `minCoverage` | **never given a value** — the one number the design turns on |
+
+Two ambiguities were also closed rather than left to an implementer: the module takes raw counters
+(not the rounded `rates` object), and the `accounted` increment sits in five named branches with the
+`unverified_http_error` one excluded.
 
 ## Follow-ups (out of scope)
 
 1. **Persist `previous_total` and `accounted` in the BO** so the next calibration is possible; and
-   register `min_coverage` in `referentiel_seuils_cb` rather than hardcoding it.
-2. `crawler-service/CLAUDE.md` documents neither the dual-mode breaker nor the health vocabulary,
+   register `min_coverage` and the two redirect caps in `referentiel_seuils_cb` rather than
+   hardcoding them.
+2. **The reconciliation coverage numerator** — withdrawn from this version with its two numeric
+   failure cases recorded under § BO changes. It is a real problem (reconciliation is skipped for
+   exactly the mass-deletion runs that need it) but it needs its own decision.
+3. **Re-derive the 80 rows under the conjunction** to replace the lower-bound figure in
+   § Calibration limits item 5 with the design's actual number.
+4. `crawler-service/CLAUDE.md` documents neither the dual-mode breaker nor the health vocabulary,
    though the BO depends on it. Add the verdict table beside the exit-code table.
-3. Read the live thresholds from the running service and compare against `context.ts` — limit 4
+5. Read the live thresholds from the running service and compare against `context.ts` — limit 4
    above.
-4. `id_previous_crawl` resolves for a small minority of BO rows, and some previous rows carry
+6. `id_previous_crawl` resolves for a small minority of BO rows, and some previous rows carry
    `urls_crawled = 0`. Noticed while measuring; not investigated.
+7. `errors` conflates *confirmed dead* with *could not tell*: the `unverified_http_error` branch
+   (`UpdateChecker.ts:192`) increments it while explicitly declining to claim a deletion. The error
+   threshold therefore fires on unreadable pages too. Pre-existing and unchanged by this design, so
+   not a regression — but it means a rate-limited crawl can reach `CRITICAL` for the wrong reason.
