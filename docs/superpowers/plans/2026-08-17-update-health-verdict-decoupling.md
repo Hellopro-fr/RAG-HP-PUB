@@ -678,13 +678,26 @@ if (!defined('UPDATE_REDIRECTED_CAP_PCT')) define('UPDATE_REDIRECTED_CAP_PCT', 0
 In the `else` of `if ($health_update !== "HEALTHY")`, after the existing deletion percentage check, add a second `if` at the same nesting level:
 
 ```php
-            if ($previous_total_update > 0
+            # Gardé par $appliquer_actions_destructives comme les deux caps absolus :
+            # sans cette garde, une co-brèche % écraserait la raison déjà posée par le
+            # cap suppressions et le mail n'annoncerait que les redirections.
+            if ($appliquer_actions_destructives && $previous_total_update > 0
                 && (count($tab_urls_redirections) / $previous_total_update) > UPDATE_REDIRECTED_CAP_PCT) {
                 $appliquer_actions_destructives = false;
                 $raison_blocage_destructif = "redirections " . count($tab_urls_redirections)
                     . " > " . (UPDATE_REDIRECTED_CAP_PCT * 100) . "% du corpus précédent ({$previous_total_update})";
             }
 ```
+
+> **Amended after Task 4's review.** The first draft of this step omitted the
+> `$appliquer_actions_destructives &&` guard, copying the deletion sibling without noticing that
+> the second check would then **overwrite** the reason string the first had set. A run breaching
+> both percentage caps would have reported only the redirect breach, dropping the deletion one
+> from the operator-facing mail — while the absolute pair, being guarded, blamed deletions
+> instead. Two destructive families sharing one reason string with no ordering discipline.
+> The guard makes attribution consistent. Making a co-breach report **both** causes is deferred:
+> `$raison_blocage_destructif` has four writers, two of them pre-existing, and the health-guard
+> mail reads it.
 
 - [ ] **Step 5: Add the absolute cap after the block**
 
