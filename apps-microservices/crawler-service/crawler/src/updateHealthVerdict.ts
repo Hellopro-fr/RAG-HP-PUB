@@ -106,10 +106,16 @@ export function decideUpdateHealth(
     // Mass-deletion guard, moved verbatim from functions.ts. 'errors' approximates
     // deleted candidates, sourced from UpdateChecker CASE 1 (permanent HTTP status)
     // and CASE 3 ('not_eligible'). CASE 1 throws in routes.ts before 'processed' is
-    // incremented, so a mass-404 restructure never reaches the sample floor. CASE 3
-    // does NOT share that property — it runs after the increment, so those URLs are
-    // counted in both 'errors' and 'processed'. Either way this guard holds because
-    // it is corpus-relative and independent of 'processed' (incident 636-389-1783326914).
+    // incremented, keeping 'processed' low — but it also increments 'accounted'
+    // (UpdateChecker.ts CASE 1, 404/410), and the sample gate above is a DISJUNCTION
+    // (processed OR coverage). A corpus that 404s in full still reaches
+    // coverage >= minCoverage on 'accounted' alone, so it clears the sample gate with
+    // processed=0: CASE 1's low 'processed' does NOT keep such a run out. CASE 3 does
+    // not share even that low-'processed' property either way — it runs after the
+    // increment, so those URLs are counted in both 'errors' and 'processed'. Either
+    // way, THIS guard — corpus-relative and independent of 'processed' — is what
+    // actually catches a mass-404 restructure (incident 636-389-1783326914); the
+    // sample gate above does not.
     // Only HEALTHY and PENDING_SAMPLE are overridden: WARNING and CRITICAL already
     // block and carry a more specific reason. Do NOT widen this.
     if (previousTotal > 0 && errors / previousTotal > 0.5
