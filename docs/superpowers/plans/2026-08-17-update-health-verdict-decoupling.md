@@ -807,7 +807,24 @@ git commit -m "feat(garde-sante): WARNING ne bloque plus les actions destructive
 - [ ] The description explains that the redirect cap is a deliberate tightening, with the 35-of-613 figure.
 - [ ] No file from the RAG repo is in the package.
 
-**Verify:** `powershell -File tools/verify_mep_package.ps1 -Package "<full path to the package folder>"` → no errors
+**Verify:** list the package folder and confirm it holds exactly `script/chatgpt/script_process_update_crawling.php` plus `description.txt`, then diff the packaged file byte-for-byte against the branch copy → identical
+
+> ⚠ **Two corrections to this task, found before dispatching it.**
+>
+> 1. `tools/verify_mep_package.ps1` does **not** exist in this repo — `BO/tools/` holds only
+>    `ext-audit` and `test_seterr.sh`. The original Verify command was unexecutable. Verification is
+>    therefore a listing plus a byte-for-byte diff against the branch copy.
+> 2. `BO/repertoire_test/MISE_EN_PRODUCTION` is a **symlink** to
+>    `D:/Document Hellopro/MISE EN PRODUCTION/rindra`, outside the repository. Packages are
+>    therefore **not git-tracked**, and the date folder does not exist inside a worktree at all. The
+>    package must be written to the real path, not to a worktree path, and it will never appear in a
+>    commit.
+>
+> **Sequencing:** this task runs **after** the final whole-branch review, not before. The package is
+> a delivered artefact: building it from a file the final review may still change would mean
+> rebuilding it, and two packages for one change leave no way to tell which is authoritative. Seven
+> packages were already deposited in the `17-08-2026` folder by other work, each doubled by a
+> `.rar` — match that convention.
 
 **Steps:**
 
