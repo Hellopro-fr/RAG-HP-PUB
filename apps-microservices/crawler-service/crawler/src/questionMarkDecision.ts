@@ -13,8 +13,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import { context } from "./context.js";
+import { LANGUAGE_PARAMS } from "./urlBase.js";
 
 const SAMPLE_CAP_PER_PARAM = 50;
+const LANGUAGE_PARAMS_LC = new Set(LANGUAGE_PARAMS.map((s) => s.toLowerCase()));
 
 /**
  * Record a URL's query parameters into the observation state.
@@ -130,6 +132,15 @@ export const writeQmDecisionFile = (storagePath: string, source: "tier2" | "defa
  * At startup, merge a previously committed addedToRemove into context.config.toRemove
  * (dedupe, case-insensitive), so OOM_RELAUNCH resumes with resolved params stripped.
  * Returns true if a decision file was loaded.
+ *
+ * Language params are dropped from the merge. This is the ONLY path by which a `lang` that
+ * tier-2 committed under an older build outlives its run: it is not gated by
+ * QM_TIER2_ENABLED, and it re-injects into `toRemove` before the homepage is ever
+ * re-detected — so the relaunched crawl would strip `?lang=fr` from the queue with the
+ * propagation switched off. `candidateParams()` cannot cover this: it guards sampling in a
+ * fresh run, not a value read back from disk.
+ * A human `--toremove lang` is untouched — that arrives via main.ts and is already in
+ * `present`, so this loop never reaches it.
  */
 export const readQmPersistedDecision = (storagePath: string): boolean => {
     const filePath = path.join(storagePath, QM_DECISION_FILE);
@@ -139,6 +150,10 @@ export const readQmPersistedDecision = (storagePath: string): boolean => {
         const added = Array.isArray(payload.addedToRemove) ? payload.addedToRemove : [];
         const present = new Set(context.config.toRemove.map((s) => s.toLowerCase()));
         for (const p of added) {
+            if (LANGUAGE_PARAMS_LC.has(p.toLowerCase())) {
+                console.warn(`[questionmark] Refusing to re-apply language param '${p}' from the persisted decision (would undo ?lang=fr propagation).`);
+                continue;
+            }
             if (!present.has(p.toLowerCase())) {
                 context.config.toRemove.push(p);
                 present.add(p.toLowerCase());

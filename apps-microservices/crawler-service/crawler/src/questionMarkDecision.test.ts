@@ -281,3 +281,16 @@ test("getQuestionMarkDecisionMode state machine", () => {
     context.questionMarkObservations.domainSpecificCount = 0;
     assert.equal(getQuestionMarkDecisionMode(undefined), "unused");
 });
+
+// The OOM-relaunch path: a `lang` committed by an older build is in the decision file, and this
+// merge is NOT gated by QM_TIER2_ENABLED. deepEqual pins both directions at once — the language
+// keys dropped AND the ordinary param still merged.
+test("readQmPersistedDecision refuses persisted language params, keeps the rest", () => {
+    resetQm();
+    const s = makeTmpStorage();
+    fs.writeFileSync(path.join(s, "_questionmark_decision.json"), JSON.stringify({ addedToRemove: ["lang", "HL", "locale", "language", "ref"], source: "tier2" }));
+    context.config.toRemove = [];
+    assert.equal(readQmPersistedDecision(s), true);
+    assert.deepEqual(context.config.toRemove, ["ref"]);
+    fs.rmSync(s, { recursive: true, force: true });
+});

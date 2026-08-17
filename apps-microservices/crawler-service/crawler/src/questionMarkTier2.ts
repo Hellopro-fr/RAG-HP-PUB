@@ -13,7 +13,7 @@ import { context } from "./context.js";
 import { ContentExtractorClient, ContentExtractorError } from "./class/ContentExtractorClient.js";
 import { normalizeForCompare, shingleSet, jaccard, classifyPair } from "./contentSimilarity.js";
 import type { PairVerdict } from "./contentSimilarity.js";
-import { baseKeyWithout, baseKeyAbsent, hasParam } from "./urlBase.js";
+import { baseKeyWithout, baseKeyAbsent, hasParam, LANGUAGE_PARAMS } from "./urlBase.js";
 
 const _require = createRequire(import.meta.url);
 
@@ -33,7 +33,16 @@ const paramValue = (url: string, p: string): string | null => {
     try { return new URL(url).searchParams.get(p); } catch { return null; }
 };
 
-/** Most-frequent-first candidate params, skipping decided / toRemove / toKeep; top-K. */
+// A language param must never become a tier-2 candidate: `toRemove` strips it from
+// newly-discovered links AND rewrites the already-queued ones, which undoes the `?lang=fr`
+// propagation mid-crawl on the very session-i18n sites it rescues. Candidates are ranked by
+// descending frequency with no language allowlist, so on a site serving its own `?lang=de`
+// (our own injected `lang=fr` is already exempt — routes.ts feeds `facetUrl`) `lang` can top
+// the list and a same-majority verdict commits it. Case-insensitive on purpose: erring wide
+// here costs at most one un-stripped cosmetic param; erring narrow costs the propagation.
+const LANGUAGE_PARAMS_LC = new Set(LANGUAGE_PARAMS.map((s) => s.toLowerCase()));
+
+/** Most-frequent-first candidate params, skipping language / decided / toRemove / toKeep; top-K. */
 const candidateParams = (): string[] => {
     const t = context.qmTier2;
     const toRemove = new Set(context.config.toRemove.map((s) => s.toLowerCase()));
@@ -41,6 +50,7 @@ const candidateParams = (): string[] => {
     return Array.from(context.questionMarkObservations.paramFrequency.entries())
         .sort((a, b) => b[1] - a[1])
         .map(([name]) => name)
+        .filter((name) => !LANGUAGE_PARAMS_LC.has(name.toLowerCase()))
         .filter((name) => !t.decided.has(name) && !toRemove.has(name.toLowerCase()) && !toKeep.has(name.toLowerCase()))
         .slice(0, CANDIDATE_TOP_K);
 };
@@ -135,7 +145,22 @@ export const maybeCommitParam = (p: string): boolean => {
     return false;
 };
 
-/** Append p to toRemove + addedToRemove + decided, rewrite the queue, persist. */
+/**
+ * Append p to toRemove + addedToRemove + decided, rewrite the queue, persist.
+ *
+ * DELIBERATELY carries no language guard of its own. It has exactly one caller
+ * (`routes.ts:1004`), which only ever passes a key of `context.qmTier2.tally`, and the tally
+ * is only ever keyed by `candidateParams()` inside `recordQmTier2Sample`. The tally is
+ * in-memory (`context.qmTier2` is never rehydrated from disk), so the clause in
+ * `candidateParams()` is upstream of every write and a guard here could not fire — it would
+ * be untestable dead code, and a test written against it would go green while proving nothing
+ * about the live path.
+ *
+ * The "a `lang` already committed survives the OOM relaunch" argument is real but does NOT
+ * land here: that path is `readQmPersistedDecision` (`questionMarkDecision.ts`), which merges
+ * the persisted `addedToRemove` straight into `context.config.toRemove` and never calls this
+ * function. That is where the second guard lives.
+ */
 export const commitToRemoveParam = (p: string, storagePath: string): void => {
     const t = context.qmTier2;
     if (context.config.toRemove.some((x) => x.toLowerCase() === p.toLowerCase())) {

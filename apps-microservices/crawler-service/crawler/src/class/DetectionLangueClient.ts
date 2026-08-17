@@ -1,5 +1,9 @@
 import axios, { AxiosInstance, AxiosError } from "axios";
 import pLimit from "p-limit";
+// Shared with the `?`-machinery, which must never strip these. Defined in urlBase.ts (not here)
+// because that module is dependency-free and therefore reachable from the createRequire/CJS
+// callers too — see the constant's own comment.
+import { LANGUAGE_PARAMS } from "../urlBase.js";
 
 // Local alias for the p-limit instance type. The installed p-limit version
 // exports its types via the `pLimit.Limit` namespace (CommonJS `export =`),
@@ -255,7 +259,6 @@ export class DetectionLangueClient {
     ): { key: string; value: string } | null {
         try {
             const urlObj = new URL(url);
-            const LANGUAGE_PARAMS = ["lang", "locale", "language", "hl"];
 
             for (const param of LANGUAGE_PARAMS) {
                 const value = urlObj.searchParams.get(param);

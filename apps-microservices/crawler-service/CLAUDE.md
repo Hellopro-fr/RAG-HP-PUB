@@ -754,18 +754,44 @@ provenance, so the seed page is exempted too. The cost is that page only —
 is stripped on its own pass. One URL out of a ~100 budget, on the page that motivated the
 injection. Provenance plumbing was judged not worth it.
 
-**Known risk, NOT closed — `QM_TIER2_ENABLED` (default `false`). This is code-path reading,
-with no run behind it; nothing here is measured.** `candidateParams()`
-(`questionMarkTier2.ts:37-46`) filters only on `decided`, `toRemove` and `toKeep` — **no
-language allowlist**. Sorted by descending frequency, `lang` can therefore become the top
-candidate, and a same-majority verdict commits it to `toRemove` via `commitToRemoveParam`,
-which also **rewrites the queue** — undoing the propagation mid-crawl. `facetUrl` reduces the
-exposure (the `lang=fr` we inject no longer enters `paramFrequency`) without closing it: pages
-carrying the site's own `?lang=de` still put `lang` there. An allowlist shaped for exactly this
-already exists one module over — `MEANINGFUL_OPTIONAL_PARAMS` (`filterOnSeen.ts:10`:
-`lang`, `hl`, `devise`, `currency`, `region`) — and tier-2 does not consult it; note also that
-it omits `locale` and `language`, two of the four keys `extractLanguageQueryParam` accepts.
-Close this before enabling `QM_TIER2_ENABLED`.
+### `lang` can no longer be elected for removal — CLOSED (2026-08-17)
+
+`candidateParams()` used to filter only on `decided` / `toRemove` / `toKeep` — **no language
+allowlist**. Sorted by descending frequency, `lang` could become the top tier-2 candidate, and a
+same-majority verdict committed it to `toRemove` via `commitToRemoveParam`, which also
+**rewrites the queue** — undoing the propagation mid-crawl. `facetUrl` reduced the exposure (the
+`lang=fr` *we* inject no longer enters `paramFrequency`) without closing it: pages carrying the
+site's own `?lang=de` still put `lang` there.
+
+`LANGUAGE_PARAMS` (`urlBase.ts`) is now the single definition of the four keys — `lang`,
+`locale`, `language`, `hl` — with **three** consumers: `extractLanguageQueryParam` (which elects
+them), `candidateParams()` (which now excludes them, case-insensitively) and
+`readQmPersistedDecision`.
+
+Two guards, because there are two paths, and the second is **not** the one you would guess:
+
+1. **`candidateParams()`** — closes tier-2 sampling. `commitToRemoveParam` deliberately has **no
+   guard of its own**: its only caller (`routes.ts:1004`) passes only keys of
+   `context.qmTier2.tally`, and the tally is only keyed by `candidateParams()` and never
+   rehydrated from disk, so a guard there could not fire. Untestable dead code, not defence.
+2. **`readQmPersistedDecision`** — this is where "a committed `lang` survives the OOM relaunch"
+   actually lands. That merge is **not gated by `QM_TIER2_ENABLED`** and runs at `main.ts:214`,
+   before the homepage is re-detected, so a `lang` written by an older build would be re-injected
+   into `toRemove` with the propagation switched off. A human `--toremove lang` is unaffected.
+
+**Inert with the flag off**, and the two halves are inert for *different* reasons: guard 1 sits
+behind the sole gate at `routes.ts:995`, so it is unreachable code; guard 2 sits on an ungated
+path, but its only input is `addedToRemove`, whose sole writer is `commitToRemoveParam`
+(`questionMarkTier2.ts:171`) inside that same gate — so with the flag never on, the list is
+always empty and the guard never fires.
+
+**Not** `MEANINGFUL_OPTIONAL_PARAMS` (`filterOnSeen.ts:10`): it serves a different filter, omits
+`locale` and `language` (two of the four keys), and carries `devise`/`currency`/`region`.
+And **not** next to `extractLanguageQueryParam`: `DetectionLangueClient` imports `p-limit@5`,
+which is ESM-only, while `questionMarkTier2` and `questionMarkDecision` are loaded through
+`createRequire` (CJS) by their siblings — that import fails with `ERR_INVALID_URL_SCHEME` (it
+broke `default at ceiling` when first tried). `urlBase.ts` is dependency-free, which is what
+makes it importable from both worlds.
 
 Spec: `docs/superpowers/specs/2026-08-14-crawler-detection-verdict-unavailable-design.md`.
 Plan: `docs/superpowers/plans/2026-08-14-crawler-detection-verdict-unavailable.md`.
@@ -925,7 +951,7 @@ Spec: `docs/superpowers/specs/2026-06-12-limitdiez-phase2-zero-touch` (Hellopro 
 
 Auto-resolves domain-specific `?`-params per-parameter and never escalates `limitQuestionMark` to a human. On top of the shipped Tier-1 observer, a Tier-2 engine buffers each `?`-page's content, groups by "URL with param `p` removed", and when two members differ in `p` (value-vs-value, or value-vs-absent) it cleans both via the content-extractor `/clean` and compares (Jaccard). A param is committed to `toRemove` ONLY on same-majority (compared≥3, same/compared≥0.8) — the single destructive action; different-majority is ruled content-shaping and kept.
 
-**What the machinery observes is NOT `url`.** Since 2026-08-14 the counter, the tier-1 observer and the tier-2 sampler all read `facetUrl` — the page URL minus the language query param *we* injected. See "Detection Verdict Unavailable" § "Our own injected param is exempt from the `?` machinery", which also records the un-closed `lang`-in-`toRemove` risk to fix **before** enabling `QM_TIER2_ENABLED`.
+**What the machinery observes is NOT `url`.** Since 2026-08-14 the counter, the tier-1 observer and the tier-2 sampler all read `facetUrl` — the page URL minus the language query param *we* injected. See "Detection Verdict Unavailable" § "Our own injected param is exempt from the `?` machinery", followed by § "`lang` can no longer be elected for removal" — that risk was closed on 2026-08-17, so `QM_TIER2_ENABLED` is no longer blocked on it.
 
 **How it works:**
 - The engine buffers one `{param_value, content}` entry per (base-URL, param) pair; when a 2nd distinct value of that param arrives for the same base, it cleans both pages via `/clean` (text mode) and classifies the pair as same/different/unusable. `/clean` failures or empty results count as unusable (no false vote).

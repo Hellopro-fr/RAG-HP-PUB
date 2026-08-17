@@ -119,3 +119,39 @@ test("B1 pass: /clean-match AND raw similar -> same (commits)", async () => {
     assert.equal(maybeCommitParam("ref"), true);
     delete process.env.QM_RAW_SAME_SIM;
 });
+
+// Language-param exclusion. `candidateParams` is not exported, so this drives it the way the
+// tests above do — through `recordQmTier2Sample`, seeding `paramFrequency` and reading back
+// `context.qmTier2.tally`. Exporting the function just to test it would test a different
+// surface than the one routes.ts calls.
+test("language params are never tier-2 candidates; a control param still is", async () => {
+    resetQm();
+    const SAME = "same long page content ".repeat(30);
+    // Every language key + two case variants, all ranked ABOVE the control, so without the
+    // guard they would be the top candidates. Values differ (de vs fr) with identical content
+    // => a same-majority verdict, i.e. exactly the commit-to-toRemove path.
+    const langKeys = ["lang", "locale", "language", "hl", "LANG", "Locale"];
+    context.questionMarkObservations.paramFrequency = new Map<string, number>([
+        ...langKeys.map((k) => [k, 99] as [string, number]),
+        ["ref", 1],
+    ]);
+    for (const k of langKeys) {
+        for (const b of ["a", "b", "c"]) {
+            await recordQmTier2Sample(`https://x.fr/${k}/${b}?${k}=de`, SAME, echo);
+            await recordQmTier2Sample(`https://x.fr/${k}/${b}?${k}=fr`, SAME, echo);
+        }
+    }
+    for (const k of langKeys) {
+        assert.equal(context.qmTier2.tally.get(k), undefined, `${k} must never be sampled`);
+        assert.equal(maybeCommitParam(k), false, `${k} must never commit`);
+    }
+    // Control, same run: a non-language param IS sampled and DOES commit. Without it this test
+    // would pass on an inert module, on an exclusion that swallows everything, or on a
+    // maybeCommitParam stubbed to a constant false.
+    for (const b of ["d", "e", "f"]) {
+        await recordQmTier2Sample(`https://x.fr/${b}?ref=1`, SAME, echo);
+        await recordQmTier2Sample(`https://x.fr/${b}?ref=9`, SAME, echo);
+    }
+    assert.equal(context.qmTier2.tally.get("ref")!.same, 3);
+    assert.equal(maybeCommitParam("ref"), true);
+});
