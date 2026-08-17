@@ -280,3 +280,81 @@ class TestChallengeResolvedStatus:
 
         assert result is not None
         assert result.status_code == 200
+
+
+class TestBrowsersUnclosedGauge:
+    """`BROWSERS_UNCLOSED` must be raised at the launch site of a real scrape,
+    and only come back down when that browser's close() is confirmed.
+
+    Reuses the mock stack above via a plain instance (not inheritance — that
+    would re-run the challenge tests under this class too).
+    """
+
+    _stack = TestChallengeResolvedStatus()
+    _REAL_HTML = TestChallengeResolvedStatus._REAL_HTML
+
+    def _mock_stack(self, page):
+        return self._stack._mock_stack(page)
+
+    def _mock_page(self, status, content_side_effect):
+        return self._stack._mock_page(status, content_side_effect)
+
+    async def _scrape(self, mock_browser, mock_pw):
+        from app.services import scraper
+        with patch.object(scraper, "_launch_browser", AsyncMock(return_value=(mock_browser, True))), \
+             patch.object(scraper, "async_playwright", return_value=mock_pw):
+            return await scraper.scrape_html(
+                "https://example.com", proxy="http://u:p@proxy:8000"
+            )
+
+    @pytest.mark.asyncio
+    async def test_successful_scrape_is_net_zero(self):
+        from app.core.metrics import BROWSERS_UNCLOSED
+
+        async def content_side_effect():
+            return self._REAL_HTML
+
+        mock_browser, mock_pw = self._mock_stack(self._mock_page(200, content_side_effect))
+        before = BROWSERS_UNCLOSED._value.get()
+        assert await self._scrape(mock_browser, mock_pw) is not None
+        assert BROWSERS_UNCLOSED._value.get() == before, (
+            "a launched-and-closed browser must not accumulate"
+        )
+
+    @pytest.mark.asyncio
+    async def test_browser_whose_close_is_skipped_stays_counted(self):
+        """`_teardown_targets` skips close() when the browser is already
+        disconnected — a dead driver pipe is no proof the detached Firefox
+        exited, so the launch stays counted."""
+        from app.core.metrics import BROWSERS_UNCLOSED
+
+        async def content_side_effect():
+            return self._REAL_HTML
+
+        mock_browser, mock_pw = self._mock_stack(self._mock_page(200, content_side_effect))
+        mock_browser.is_connected = MagicMock(return_value=False)
+
+        before = BROWSERS_UNCLOSED._value.get()
+        await self._scrape(mock_browser, mock_pw)
+        mock_browser.close.assert_not_awaited()
+        assert BROWSERS_UNCLOSED._value.get() == before + 1
+
+    @pytest.mark.asyncio
+    async def test_redirect_follow_is_counted_too(self):
+        """`scrape_html_with_redirects` (live path: RedirectTracker) launches its
+        own browser and must be counted at its own launch site."""
+        from app.services import scraper
+        from app.core.metrics import BROWSERS_UNCLOSED
+
+        async def content_side_effect():
+            return self._REAL_HTML
+
+        mock_browser, mock_pw = self._mock_stack(self._mock_page(200, content_side_effect))
+        before = BROWSERS_UNCLOSED._value.get()
+        with patch.object(scraper, "_launch_browser", AsyncMock(return_value=(mock_browser, True))), \
+             patch.object(scraper, "async_playwright", return_value=mock_pw):
+            result = await scraper.scrape_html_with_redirects(
+                "https://example.com", proxy="http://u:p@proxy:8000"
+            )
+        assert result["success"] is True
+        assert BROWSERS_UNCLOSED._value.get() == before

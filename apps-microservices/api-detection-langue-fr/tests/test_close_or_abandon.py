@@ -1,6 +1,9 @@
 import asyncio
 import gc
 import pytest
+from prometheus_client import REGISTRY
+
+from app.core.metrics import BROWSERS_UNCLOSED, TEARDOWN_ABANDONED
 from app.services.scraper import _close_or_abandon, _drain_orphan_exception
 
 
@@ -123,3 +126,114 @@ async def test_cancelled_task_does_not_raise():
     # drain callback the abandoned/caller-cancelled paths install.
     await asyncio.sleep(0)
     _drain_orphan_exception(t)  # must not raise
+
+
+# --- Abandonment is observable (2026-08-17) ----------------------------------
+# Before this, an abandon left exactly one WARNING line and no counter, so its
+# real frequency was unknowable. The gauge additionally makes the overlap
+# readable: browsers whose close() never returned stay counted while the
+# semaphore hands their slot to the next scrape.
+
+
+def _abandoned(op):
+    return TEARDOWN_ABANDONED.labels(op=op)._value.get()
+
+
+@pytest.mark.asyncio
+async def test_abandon_is_counted_by_op_family():
+    before = _abandoned("browser.close")
+
+    async def hangs():
+        await asyncio.Event().wait()
+
+    await _close_or_abandon(hangs(), timeout=0.01,
+                            what="browser.close https://example.fr/a")
+    # The URL must never become a label value: unbounded cardinality.
+    assert REGISTRY.get_sample_value(
+        "detect_teardown_abandoned_total",
+        {"op": "browser.close https://example.fr/a"},
+    ) is None
+    assert _abandoned("browser.close") == before + 1
+
+
+@pytest.mark.asyncio
+async def test_teardown_that_completes_is_not_counted():
+    """Opposite polarity of the test above: only abandons may be counted."""
+    before = _abandoned("context.close")
+
+    async def quick():
+        return None
+
+    await _close_or_abandon(quick(), timeout=5, what="context.close https://example.fr")
+    assert _abandoned("context.close") == before
+
+
+@pytest.mark.asyncio
+async def test_settled_browser_close_decrements_gauge_even_late():
+    """The gauge stays up while a browser.close is abandoned, and only comes
+    down when that close finally settles — which may be long after we walked
+    away from it."""
+    release = asyncio.Event()
+
+    async def hangs():
+        await release.wait()
+
+    BROWSERS_UNCLOSED.inc()  # stands in for the launch site
+    before = BROWSERS_UNCLOSED._value.get()
+
+    await _close_or_abandon(hangs(), timeout=0.01,
+                            what="browser.close https://example.fr")
+    assert BROWSERS_UNCLOSED._value.get() == before, (
+        "an abandoned browser.close must NOT be treated as a confirmed exit"
+    )
+
+    release.set()
+    await asyncio.sleep(0.05)  # let the orphan settle -> done-callback fires
+    assert BROWSERS_UNCLOSED._value.get() == before - 1
+
+
+@pytest.mark.asyncio
+async def test_browser_close_that_raises_does_not_decrement_the_gauge():
+    """A close that settles by RAISING is not a confirmed exit.
+
+    `browser.close()` only returns after the driver confirms the browser is dead
+    and its profile removed, so a `TargetClosedError` means the pipe died first
+    and nothing was confirmed. `_teardown_targets` already keeps a browser
+    counted when it SKIPS the close on `is_connected()` false, for that same
+    reason — both paths say "the pipe is dead", so both must behave alike.
+    Decrementing here would make the gauge under-report, i.e. err toward hiding
+    the overlap it exists to reveal.
+    """
+    async def raises():
+        raise RuntimeError("TargetClosedError: Target page, context or browser has been closed")
+
+    BROWSERS_UNCLOSED.inc()  # stands in for the launch site
+    before = BROWSERS_UNCLOSED._value.get()
+
+    await _close_or_abandon(raises(), timeout=1.0,
+                            what="browser.close https://example.fr")
+    await asyncio.sleep(0)  # let the done-callback run
+
+    assert BROWSERS_UNCLOSED._value.get() == before, (
+        "a browser.close that raised must stay counted — the browser's death "
+        "was never confirmed"
+    )
+
+    BROWSERS_UNCLOSED.dec()  # undo the stand-in so the suite stays balanced
+
+
+@pytest.mark.asyncio
+async def test_other_teardown_ops_never_touch_the_gauge():
+    """Every teardown op shares this drain callback; only browser.close means a
+    browser is done with."""
+    before = BROWSERS_UNCLOSED._value.get()
+
+    async def quick():
+        return None
+
+    for what in ("unroute_all https://example.fr",
+                 "context.close https://example.fr",
+                 "playwright.stop https://example.fr"):
+        await _close_or_abandon(quick(), timeout=5, what=what)
+
+    assert BROWSERS_UNCLOSED._value.get() == before

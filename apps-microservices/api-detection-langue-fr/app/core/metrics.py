@@ -41,10 +41,27 @@ INFLIGHT_REQUESTS = Gauge(
     "Current concurrent admitted requests",
 )
 
-# Queue depth on the Playwright browser semaphore.
-BROWSER_SEMAPHORE_WAITERS = Gauge(
-    "detect_browser_semaphore_waiters",
-    "Number of coroutines waiting on the browser semaphore",
+# Browser teardowns ABANDONED after TEARDOWN_TIMEOUT_S (`_close_or_abandon`,
+# app/services/scraper.py). `op` is the teardown operation family derived from
+# the call site's `what` string — unroute_all / context.close / browser.close /
+# playwright.stop — deliberately WITHOUT the URL, which would be unbounded
+# cardinality. Before this counter the only trace of an abandon was one WARNING
+# line, so its real frequency was unknowable.
+TEARDOWN_ABANDONED = Counter(
+    "detect_teardown_abandoned_total",
+    "Browser teardown coroutines abandoned after the teardown timeout",
+    labelnames=("op",),
+)
+
+# Browsers launched whose close() has not returned: in-flight scrapes, plus the
+# ones whose teardown was abandoned or skipped (browser.is_connected() already
+# false, so close() is never attempted). NOT a process count — this service has
+# no process bookkeeping at all, so "the browser exited" is only ever inferred
+# from close() returning. Sustained values above BROWSER_SEMAPHORE_SIZE mean
+# browsers are accumulating faster than their teardowns settle.
+BROWSERS_UNCLOSED = Gauge(
+    "detect_browsers_unclosed",
+    "Browsers launched whose close() has not returned (in-flight + abandoned/skipped teardowns)",
 )
 
 # Page-validation outcomes (after fetch, before DomainFR).

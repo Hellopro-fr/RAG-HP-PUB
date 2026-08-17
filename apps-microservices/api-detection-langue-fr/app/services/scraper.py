@@ -10,7 +10,7 @@ from typing import Optional
 from urllib.parse import urlparse
 
 from app.core.config import settings
-from app.core.metrics import BROWSER_LAUNCH_DURATION
+from app.core.metrics import BROWSER_LAUNCH_DURATION, BROWSERS_UNCLOSED, TEARDOWN_ABANDONED
 
 try:
     from playwright.async_api import async_playwright
@@ -310,6 +310,16 @@ async def _inject_cookie_consent(context, url: str) -> None:
         pass
 
 
+def _teardown_op(what: str) -> str:
+    """Operation family of a teardown `what` string, for use as a metric label.
+
+    `what` is built at the call site as "<op> <url>"; the URL must never reach a
+    label (unbounded cardinality), so only the leading op survives:
+    unroute_all / context.close / browser.close / playwright.stop.
+    """
+    return what.split(" ", 1)[0] or "unknown"
+
+
 def _drain_orphan_exception(fut: asyncio.Future, what: str = "") -> None:
     """Read a teardown task's exception once it completes, whichever path got there.
 
@@ -318,10 +328,27 @@ def _drain_orphan_exception(fut: asyncio.Future, what: str = "") -> None:
     A cancelled task must be skipped: `.exception()` re-raises CancelledError.
     Attached as a done-callback so it also covers the caller-cancelled path
     (see `_close_or_abandon`), not just the abandoned-after-timeout one.
+
+    Also the ONLY place `BROWSERS_UNCLOSED` comes back down: a `browser.close`
+    that settles WITHOUT RAISING — now or long after we stopped waiting for it —
+    is the single observable we have that the browser is done. An abandoned close
+    never settles, so the gauge stays up, which is the whole point.
+
+    A close that settles by RAISING does not come down, and that is deliberate.
+    `browser.close()` only returns after the driver confirms the browser is dead
+    and its profile removed; a `TargetClosedError` means the pipe died first, so
+    nothing was confirmed. This is the same reasoning `_teardown_targets` uses to
+    keep a browser counted when it SKIPS the close on `is_connected()` false — a
+    dead driver pipe is not proof the detached Firefox exited. Both paths say the
+    same thing, so both must be treated the same way. Decrementing here would
+    make the gauge under-report, i.e. err toward hiding the very overlap it
+    exists to reveal.
     """
     if fut.cancelled():
         return
     exc = fut.exception()
+    if _teardown_op(what) == "browser.close" and exc is None:
+        BROWSERS_UNCLOSED.dec()
     if exc is not None:
         logger.debug(f"teardown failed ({what}): {exc!r}")
 
@@ -331,9 +358,31 @@ async def _close_or_abandon(coro, timeout: float, what: str = "") -> None:
 
     A close() on a dead browser pipe ignores asyncio cancellation, so wait_for
     (cancel-then-await) would itself hang. asyncio.wait() returns on timeout
-    WITHOUT cancelling; we simply stop waiting and leave the task detached (its
-    OS process is already gone, so it leaks nothing meaningful). This lets the
-    caller escape `finally` and release its semaphore slot.
+    WITHOUT cancelling; we simply stop waiting and leave the task detached. This
+    lets the caller escape `finally` and release its semaphore slot.
+
+    What abandoning costs (corrected 2026-08-17 — an earlier version of this
+    docstring claimed "its OS process is already gone, so it leaks nothing
+    meaningful", which was a belief, not a fact): abandoning a `browser.close`
+    means the browser's death was never confirmed, and neither was the removal
+    of its profile directory. This service tracks no PID and never kills
+    anything, and `p.stop()` only closes the driver pipe then waits for the
+    driver to exit on its own — the driver gives itself 30s before a hard exit,
+    ignores SIGINT, and launches Firefox DETACHED, so even killing the driver
+    would not kill the browser. An abandoned teardown can therefore leave a live
+    browser behind. How many, and how often, is NOT known — hence the
+    `TEARDOWN_ABANDONED` counter here and the `BROWSERS_UNCLOSED` gauge.
+
+    Do NOT "fix" this by raising the timeout. The cost is FOUR sequential awaits
+    on one scrape path — `unroute_all`, `context.close`, `browser.close`, then
+    `playwright.stop` — so raising 10s to 30s turns a 40s worst case into 120s,
+    exactly the stall abandoning exists to avoid. (Corrected 2026-08-17: an
+    earlier wording said "all five abandon sites, a pool of 4". Both numbers were
+    beside the point — five is the file-level count of call sites, of which the
+    two `p.stop()` ones are mutually exclusive, and the pool size never enters the
+    multiplication at all. The conclusion held; the arithmetic did not, and it had
+    been copied into four notes.) Deciding otherwise needs the per-browser
+    resident cost and the real abandon frequency, neither of which is measured.
 
     The drain callback is attached BEFORE the await, so all three ways this
     can end are covered: fast failure (done before timeout, exception read via
@@ -345,6 +394,7 @@ async def _close_or_abandon(coro, timeout: float, what: str = "") -> None:
     t.add_done_callback(partial(_drain_orphan_exception, what=what))
     done, _pending = await asyncio.wait({t}, timeout=timeout)
     if not done:
+        TEARDOWN_ABANDONED.labels(op=_teardown_op(what)).inc()
         logger.warning(f"scraper teardown abandoned after {timeout}s: {what}")
 
 
@@ -360,6 +410,11 @@ async def _teardown_targets(page, context, browser, url: str) -> None:
 
     Runs inside a `finally`: never let anything propagate, or the original
     scrape error would be masked.
+
+    Note for `BROWSERS_UNCLOSED`: when `browser.is_connected()` is already false
+    the close is skipped, so nothing ever settles and the gauge stays up for that
+    browser — deliberately. A dead driver pipe is no evidence that the detached
+    Firefox process exited.
     """
     try:
         # Drain in-flight route callbacks before tearing down the page.
@@ -440,6 +495,9 @@ async def scrape_html(
         p = await async_playwright().start()
         try:
             browser, is_camoufox = await _launch_browser(p, playwright_proxy)
+            # Counted here, decremented only when its close() settles
+            # (`_drain_orphan_exception`) — an abandoned teardown keeps it up.
+            BROWSERS_UNCLOSED.inc()
             context = None
             page = None
             try:
@@ -645,6 +703,7 @@ async def scrape_html_with_redirects(
             p = await async_playwright().start()
             try:
                 browser, is_camoufox = await _launch_browser(p, playwright_proxy)
+                BROWSERS_UNCLOSED.inc()  # see scrape_html's launch site
                 context = None
                 page = None
                 try:
