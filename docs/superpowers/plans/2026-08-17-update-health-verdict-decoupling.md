@@ -30,6 +30,9 @@ These bind every task. A reviewer may reject work on any one of them.
 6. **Minimal diff.** Every changed line must trace to this plan. Preserve unrelated lines character-for-character, including indentation. `functions.ts` uses 4 spaces; `UpdateChecker.ts` uses 4 spaces; the BO PHP file uses 4 spaces in this region — match the file you are in, do not reformat.
 7. **Never remove a comment** unless this plan says the change makes it factually wrong (Task 2 does, once).
 8. **Local verification only.** `npm test` for the crawler; `php -l` for the BO. Nothing else runs locally — there is no BO test runner, no local DB, no local crawler.
+9. **Two traps in how this environment reports verification output**, both measured on 2026-08-17. A **bare single command** in the Bash tool is passed through a rewriter; the same command inside a multi-line script is not.
+   - `php -l <file>` alone prints `ok <path>` instead of `No syntax errors detected`. That is a **truthful** pass — validated against a deliberately broken file, which returns the full `Parse error` and exit 255. Do **not** re-run it through PowerShell, and do not read `ok` as "unverifiable".
+   - `grep -c '…"…"…' <file>` alone returns **`0`** even when matches exist, because the literal double quotes are lost. That is a **false negative**. Never use a bare `grep` as a verification command, and never treat a bare `grep` as proof of an absence.
 
 ---
 
@@ -400,7 +403,13 @@ git commit -m "feat(crawler): pure update-health-verdict module with disjunctive
 - [ ] The comment at `functions.ts:1449-1452` no longer claims that CASE 3 errors bypass `processed`.
 - [ ] `npm test` still passes.
 
-**Verify:** `cd apps-microservices/crawler-service/crawler && grep -c 'increment("accounted")' src/class/UpdateChecker.ts` → `5`, then `npm test` → passes
+**Verify:** `cd apps-microservices/crawler-service/crawler && grep -c 'increment(.accounted.)' src/class/UpdateChecker.ts` → `5`, then `npm test` → passes
+
+> ⚠ The pattern deliberately uses `.` where the source has literal `"`. A **bare single**
+> `grep -c 'increment("accounted")' <file>` in the Bash tool returns **`0` with exit 1** even when
+> five occurrences exist — the rewriter that handles single commands loses the literal double
+> quotes. The dotted pattern returns `5` under both invocation forms. Confirmed against the
+> dedicated Grep tool: five hits, at `:190`, `:220`, `:232`, `:274`, `:286`.
 
 **Steps:**
 
