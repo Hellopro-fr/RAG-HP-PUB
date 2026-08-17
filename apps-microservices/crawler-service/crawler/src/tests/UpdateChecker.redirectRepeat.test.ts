@@ -70,7 +70,7 @@ test('dataset redirect to existing dataset URL: recorded in jsonl, no redirects 
     assert.equal(writer._calls[0][0], UpdateChecker.REDIRECTED_FILE);
     assert.equal(writer._calls[0][1].url, OLD);
     assert.equal(writer._calls[0][1].destination, NEW);
-    assert.ok(!stats._calls.includes('redirects'), 'must NOT feed the circuit breaker');
+    assert.deepEqual(stats._calls, ['accounted'], 'must NOT feed the circuit breaker, but IS accounted for exactly once');
 });
 
 test('non-dataset redirect to existing dataset URL: recorded in jsonl, no redirects counter', async () => {

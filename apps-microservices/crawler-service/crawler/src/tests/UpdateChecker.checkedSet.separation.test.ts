@@ -45,9 +45,10 @@ test('checkUrl on the checked set does not starve the pushed set (regression)', 
     const redis = makeKeyAwareRedis();
     const pushedSet = new PushedSet(redis as any, 'id');                              // clé pushed:id
     const checkedSet = new PushedSet(redis as any, 'id', { keyPrefix: 'checked' });   // clé checked:id
+    const stats = makeMockStatsManager();
     const checker = new UpdateChecker(
         makeMockConsolidator() as any,
-        makeMockStatsManager() as any,
+        stats as any,
         makeMockJsonlWriter() as any,
         checkedSet,
     );
@@ -59,6 +60,7 @@ test('checkUrl on the checked set does not starve the pushed set (regression)', 
     // le claim sur checked:id. La preuve de non-affamement tient quelle que soit la branche prise.
     const r = await checker.checkUrl(url, url, 'dataset', 200, true);
     assert.equal(r.action, 'confirmed', 'a still-eligible dataset URL must be confirmed');
+    assert.deepEqual(stats._calls, ['accounted'], 'Case 3a (confirmed, still eligible) must increment accounted exactly once');
 
     // La garde d'écriture dataset s'exécute ensuite sur pushed:id — elle doit GAGNER
     // le claim (l'URL n'a jamais été réclamée sur pushed:id) → pushData s'exécuterait.
