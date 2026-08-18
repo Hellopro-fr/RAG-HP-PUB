@@ -12,6 +12,13 @@ GIT_DIR=$(git rev-parse --git-dir 2>/dev/null)
 [ -d "$GIT_DIR/rebase-merge" ] && exit 0
 [ -d "$GIT_DIR/rebase-apply" ] && exit 0
 
+# A worktree is a transient branch checkout: rebuilding the graph there dirties
+# TRACKED files (graph.json, GRAPH_REPORT.md) and produces a graph OF THE BRANCH,
+# which can then be committed into it and conflict on a 47k-line JSON. The graph
+# belongs to the main checkout. --git-dir and --git-common-dir differ only in a
+# worktree. Added 2026-08-18 after measuring both meps-app trees dirty at once.
+[ "$(git rev-parse --git-dir)" != "$(git rev-parse --git-common-dir)" ] && exit 0
+
 # No graph yet, nothing to rebuild.
 [ -f graphify-out/graph.json ] || exit 0
 
