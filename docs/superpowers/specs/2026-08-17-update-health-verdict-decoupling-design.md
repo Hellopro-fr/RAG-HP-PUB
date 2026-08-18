@@ -130,7 +130,16 @@ population?** Safety belongs downstream — but only partly, and the qualificati
 - And `Phase 2`'s `SUSPECT` guard **is** a deletion bound kept inside the verdict — the only
   corpus-relative one. It is load-bearing, not vestigial: on `previousTotal = 12` with all 12 URLs
   404, coverage is `1.0` so step 1 does not fire, and `errorRate` is 0 because `processed = 0`
-  (the permanent-status path throws before the increment). `SUSPECT` is the only thing left.
+  (the permanent-status path throws before the increment). `SUSPECT` is the only thing left
+  **inside the verdict**.
+
+> ⚠ Scoped to the whole system that last sentence is too strong, and the final review caught it. For a
+> corpus that 404s in full, the BO's own deletion caps evaluate the real filtered deletion list — 1000
+> URLs, every one `reason=http_error_404` — independently of the `health` field, and would block all seven
+> destructive families even if the verdict had stayed `HEALTHY`. `SUSPECT` is the **sole** backstop only
+> for shapes where `errors` is inflated by non-GONE codes (`401/403/407/429/5xx`), which never enter the
+> BO's deletion numerator. Two independent nets, not one — which is better than this spec claimed, but the
+> claim was still wrong.
 
 ### Governing constraint: no run that passes today may newly fail
 
@@ -390,9 +399,15 @@ by the absolute one) — **35 of 613, 5.7 %**.
 ⚠ This is a **deliberate tightening**, and the only part of this change that is not a relaxation.
 The hole it closes already exists for the 538 large runs and has already fired: 33 runs applied
 more than 100 redirections with no bound at all. Stated plainly rather than folded into the
-relaxation claim. ⚠ The measured percentage uses `urls_crawled` as denominator because
-`previous_total` is not persisted; a grown site has `previous_total < urls_crawled`, so the real
-ratio is higher and **3 is a floor**.
+relaxation claim. ⚠ The measured percentage uses `urls_crawled` as denominator because `previous_total` is not
+persisted. **The bias direction is not uniform, and an earlier draft of this section got it backwards.**
+A site that GREW has `previous_total < urls_crawled`, so the real ratio exceeds the proxy and 3 is a
+floor. A site that SHRANK has `previous_total > urls_crawled`, so the real ratio is *below* the proxy and
+3 is a **ceiling**. The refonte shapes this cap exists to catch are the shrinking kind — the worked
+example above has `previous_total = 40` against 38 crawled — so **for the target population 3 is nearer a
+ceiling than a floor, and must not be read as a safe lower bound.** The deployed cap always divides by the
+real `metrics.previous_total`, so no run is mis-gated by the proxy; only the estimate of how many runs the
+cap newly flags is affected.
 
 ### 2. `WARNING` stops blocking
 
@@ -553,3 +568,15 @@ Two ambiguities were also closed rather than left to an implementer: the module 
    (`UpdateChecker.ts:192`) increments it while explicitly declining to claim a deletion. The error
    threshold therefore fires on unreadable pages too. Pre-existing and unchanged by this design, so
    not a regression — but it means a rate-limited crawl can reach `CRITICAL` for the wrong reason.
+8. **`PushedSet.tryClaim` fails open on a Redis error** (`PushedSet.ts:58-68` — the catch branch
+   returns `true`, i.e. proceed). It is the guard that stops a URL being counted twice, so under a
+   Redis fault every counter `checkUrl` touches can double-count — `accounted` included. This design
+   is what makes it **consequential**: an inflated `accounted` inflates coverage, and coverage now
+   decides whether a thin-sample crawl reads `HEALTHY` instead of `PENDING_SAMPLE`, which unblocks
+   deletions. The final review ruled it deferrable **as a tracked item, not a silent drop**, because
+   the trigger is narrow and the BO's deletion and redirect caps remain as a second, independent net.
+   ⚠ And it settles a contradiction between two reviewers: `StatsManager.getValue` returning `0` on a
+   Redis error does **not** neutralise this. The two are separate Redis calls at separate times — a
+   crawl-time write versus a report-time read — so a blip that hits `tryClaim` and self-heals before
+   the report is read leaves the inflated value to flow through untouched. Both reviewers were right
+   about their own path; the unsafe one is not cancelled by the safe one.
