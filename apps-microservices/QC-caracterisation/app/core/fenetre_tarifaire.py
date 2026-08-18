@@ -1,0 +1,55 @@
+"""Fenêtres de facturation DeepSeek.
+
+Les bornes sont fixées **en UTC** par le fournisseur
+(https://api-docs.deepseek.com/quick_start/pricing). Depuis le 16-08-2026 16:00 UTC,
+les heures pleines sont facturées le **double** des heures creuses :
+
+    heures pleines : 01:00-04:00 et 06:00-10:00 UTC
+    heures creuses : tout le reste (17 h sur 24), moitié prix
+
+Comparaison en UTC, jamais en heure locale. Les bornes étant fixées en UTC, un test
+écrit en Europe/Paris se décale d'une heure à chaque changement d'heure : mesuré, le
+créneau « 22h-6h Paris » contient 3 heures pleines en été (3, 4, 5) et 3 **autres** en
+hiver (2, 3, 4), sans qu'une seule ligne de code ne change. C'est le défaut que ce
+module existe pour éviter.
+
+Ce module est volontairement **sans dépendance** : il est importé par les deux
+consumers du service et doit rester testable hors Docker (`aio_pika` n'est pas
+installable dans l'environnement de test local). Si un troisième service en a besoin,
+le remonter dans `libs/common-utils` plutôt que de le dupliquer.
+
+Limite connue : `datetime.now(timezone.utc)` lit l'horloge système du conteneur. Si
+elle est fausse, la fenêtre est fausse. La garde ne perd aucun message dans ce cas —
+elle suspend ou reprend au mauvais moment, ce qui est un coût, pas une panne.
+"""
+
+from datetime import datetime, timezone
+from typing import Optional
+
+# (heure de début incluse, heure de fin exclue), en UTC
+FENETRES_PLEINES = ((1, 4), (6, 10))
+
+
+def _heure_utc(maintenant: Optional[datetime] = None) -> int:
+    if maintenant is None:
+        maintenant = datetime.now(timezone.utc)
+    return maintenant.astimezone(timezone.utc).hour
+
+
+def est_heure_pleine(maintenant: Optional[datetime] = None) -> bool:
+    """True si l'instant tombe dans une fenêtre facturée au tarif double.
+
+    :param maintenant: instant à tester ; par défaut l'heure UTC courante.
+        N'est passé que par les tests — le code de production ne le fournit jamais.
+    """
+    heure = _heure_utc(maintenant)
+    return any(debut <= heure < fin for debut, fin in FENETRES_PLEINES)
+
+
+def libelle_fenetre(maintenant: Optional[datetime] = None) -> str:
+    """Libellé lisible de la fenêtre en cours, destiné aux logs."""
+    heure = _heure_utc(maintenant)
+    for debut, fin in FENETRES_PLEINES:
+        if debut <= heure < fin:
+            return f"heures pleines {debut:02d}:00-{fin:02d}:00 UTC (tarif double)"
+    return "heures creuses (moitié prix)"

@@ -7,6 +7,7 @@ from aio_pika.abc import AbstractIncomingMessage
 
 from common_utils.autres.DLQPropertiesAsync import DLQPropertiesAsync as DLQProperties
 from app.core.credentials import settings
+from app.core.fenetre_tarifaire import est_heure_pleine, libelle_fenetre
 from app.messaging.publisher import Publisher
 from app.core.caracterisation_produit import CaracterisationProduitGenerator
 from app.core.api_client import HelloProAPIClient
@@ -17,6 +18,10 @@ logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 3
 RETRY_TTL_MS = 30000
+# Pas de la boucle d'attente pendant une fenêtre pleine. 60 s suffisent : la reprise
+# n'a pas besoin d'être à la seconde près, et une attente courte évite de tenir la
+# boucle éveillée pour rien pendant 3 à 4 h.
+ATTENTE_FENETRE_PLEINE_S = 60
 
 
 class Consumer:
@@ -163,10 +168,44 @@ class Consumer:
         await self.connect()
         logger.info(f"👂 QC-Caracterisation: En attente sur {self.queue_name} (streaming)")
         logger.info(f"🚀 Configuration: max_concurrency={settings.MAX_CONCURRENCY}")
-        async with self.queue.iterator() as queue_iter:
-            async for message in queue_iter:
-                asyncio.create_task(self._process_with_semaphore(message))
-                logger.info(f"📨 Message reçu - Tâches: {len(self._active_tasks)}/{settings.MAX_CONCURRENCY}")
+        while True:
+            # Pendant les heures pleines DeepSeek, on se DÉTACHE de la file au lieu de
+            # refuser les messages. Les deux autres approches sont mortelles ici :
+            #   - un nack les enverrait en DLQ en 90 s (RETRY_TTL_MS 30 s x MAX_RETRIES 3) ;
+            #   - les garder non-ackés heurterait x-consumer-timeout (7 200 000 ms = 2 h),
+            #     alors qu'une fenêtre pleine dure 3 à 4 h.
+            # Détaché, le consumer laisse les messages en READY. Vérifié le 18-08-2026 sur
+            # rbmq2 : aucune policy (ni user ni operator) sur le broker, et la file porte
+            # auto_delete=false / durable=true — donc rien n'expire et rien ne disparaît.
+            if est_heure_pleine():
+                logger.info(
+                    f"⏸️  DeepSeek en {libelle_fenetre()} : consommation suspendue, "
+                    f"les messages restent en file"
+                )
+                while est_heure_pleine():
+                    await asyncio.sleep(ATTENTE_FENETRE_PLEINE_S)
+                logger.info(f"▶️  Retour en {libelle_fenetre()} : reprise de la consommation")
+
+            async with self.queue.iterator() as queue_iter:
+                async for message in queue_iter:
+                    if est_heure_pleine():
+                        # Ce message-ci est déjà sorti de l'itérateur, donc unacked : on le
+                        # remet en file EXPLICITEMENT. Le faire ici plutôt que de compter
+                        # sur le requeue automatique du broker à l'annulation du consumer
+                        # (comportement AMQP correct, mais implicite) ; requeue=True ne
+                        # passe pas par le dead-letter-exchange, donc pas de DLQ, et le
+                        # requeue direct ne crée pas de x-death : le compteur de retry
+                        # n'est pas touché.
+                        # Les messages encore dans le buffer de prefetch sont eux repris
+                        # par la sortie du `async with`, qui fait basic_cancel puis
+                        # nack(requeue=True) — vérifié dans le source d'aio_pika.
+                        await message.nack(requeue=True)
+                        logger.info(
+                            f"⏸️  Bascule en {libelle_fenetre()} : détachement de la file"
+                        )
+                        break
+                    asyncio.create_task(self._process_with_semaphore(message))
+                    logger.info(f"📨 Message reçu - Tâches: {len(self._active_tasks)}/{settings.MAX_CONCURRENCY}")
 
     async def close(self):
         if self._active_tasks:

@@ -7,6 +7,7 @@ from aio_pika.abc import AbstractIncomingMessage
 
 from common_utils.autres.DLQPropertiesAsync import DLQPropertiesAsync as DLQProperties
 from app.core.credentials import settings
+from app.core.fenetre_tarifaire import est_heure_pleine, libelle_fenetre
 from app.core.caracterisation_produit import CaracterisationProduitGenerator
 from app.core.api_client import HelloProAPIClient
 from app.schemas.question_caracteristique import RequestProcessus
@@ -16,6 +17,8 @@ logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 3
 RETRY_TTL_MS = 30000
+# Pas de la boucle d'attente pendant une fenêtre pleine (voir consumer.py).
+ATTENTE_FENETRE_PLEINE_S = 60
 
 
 class ConsumerBO:
@@ -174,10 +177,33 @@ class ConsumerBO:
         await self.connect()
         logger.info(f"👂 QC-Caracterisation-BO: En attente sur {self.queue_name} (streaming)")
         logger.info(f"🚀 Configuration: max_concurrency={settings.MAX_CONCURRENCY}")
-        async with self.queue.iterator() as queue_iter:
-            async for message in queue_iter:
-                asyncio.create_task(self._process_with_semaphore(message))
-                logger.info(f"📨 Message BO reçu - Tâches actives: {len(self._active_tasks)}/{settings.MAX_CONCURRENCY}")
+        while True:
+            # Voir consumer.py pour le raisonnement complet : on se détache de la file
+            # pendant les heures pleines DeepSeek. Ni nack (DLQ en 90 s) ni attente
+            # message en main (x-consumer-timeout de 2 h contre 3-4 h de fenêtre).
+            if est_heure_pleine():
+                logger.info(
+                    f"⏸️  DeepSeek en {libelle_fenetre()} : consommation BO suspendue, "
+                    f"les messages restent en file"
+                )
+                while est_heure_pleine():
+                    await asyncio.sleep(ATTENTE_FENETRE_PLEINE_S)
+                logger.info(f"▶️  Retour en {libelle_fenetre()} : reprise de la consommation BO")
+
+            async with self.queue.iterator() as queue_iter:
+                async for message in queue_iter:
+                    if est_heure_pleine():
+                        # Ce message est déjà sorti de l'itérateur (donc unacked) : on le
+                        # remet en file explicitement, sans dépendre du requeue implicite
+                        # du broker. Le buffer de prefetch restant est repris par la sortie
+                        # du `async with`. Voir consumer.py pour le détail.
+                        await message.nack(requeue=True)
+                        logger.info(
+                            f"⏸️  Bascule en {libelle_fenetre()} : détachement de la file BO"
+                        )
+                        break
+                    asyncio.create_task(self._process_with_semaphore(message))
+                    logger.info(f"📨 Message BO reçu - Tâches actives: {len(self._active_tasks)}/{settings.MAX_CONCURRENCY}")
 
     async def close(self):
         if self._active_tasks:
