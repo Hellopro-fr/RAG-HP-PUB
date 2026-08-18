@@ -580,3 +580,18 @@ Two ambiguities were also closed rather than left to an implementer: the module 
    crawl-time write versus a report-time read — so a blip that hits `tryClaim` and self-heals before
    the report is read leaves the inflated value to flow through untouched. Both reviewers were right
    about their own path; the unsafe one is not cancelled by the safe one.
+   ⚠ **But the reachability is much narrower than the finding implied, and this was checked
+   first-hand afterwards.** `StatsManager.increment` (`:67-77`) also catches its Redis error, logs it
+   and **returns 0 without writing** — so during a Redis *outage* the counter does not grow at all and
+   coverage UNDER-counts, which is the safe direction. Inflation therefore requires a per-command
+   interleaving: `sAdd` failing while `hIncrBy` succeeds, on the same Redis. It additionally requires
+   the same URL to enter `checkUrl` twice, i.e. a Crawlee retry of that request. And it is **not
+   silent**: `tryClaim`'s catch emits `console.error` *and* `monitor.onError('pushed', e)`, which is
+   the main reason deferral is safe — the condition announces itself.
+   How little it takes once triggered, though: with `previousTotal = 40`, `processed = 30` and a true
+   `accounted = 30` (coverage 0.75), just **two** double-counted URLs read as 0.80 and clear the gate.
+   Preferred fix, cheaper than changing the fail-open policy every counter depends on: derive
+   `accounted` from a **set cardinality** (`SADD` + `SCARD` on a per-crawl key) instead of a counter.
+   Double-counting then becomes structurally impossible, and a failed `SADD` leaves the member absent
+   — under-count, the safe direction. A mere `accounted <= previousTotal` sanity clamp is weaker: it
+   catches inflation past the corpus size but not 0.75 reading as 0.80.
