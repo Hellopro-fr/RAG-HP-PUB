@@ -23,11 +23,68 @@ elle est fausse, la fenêtre est fausse. La garde ne perd aucun message dans ce 
 elle suspend ou reprend au mauvais moment, ce qui est un coût, pas une panne.
 """
 
+import logging
+import os
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Tuple
 
-# (heure de début incluse, heure de fin exclue), en UTC
-FENETRES_PLEINES = ((1, 4), (6, 10))
+logger = logging.getLogger(__name__)
+
+# (heure de début incluse, heure de fin exclue), en UTC — la grille DeepSeek.
+FENETRES_PAR_DEFAUT = ((1, 4), (6, 10))
+
+# Nom de la variable d'environnement qui peut surcharger la grille, au format
+# "1-4,6-10". Deux usages : ajuster sans rebuild d'image si DeepSeek change ses
+# horaires, et forcer une fenêtre courte pour tester la garde contre un vrai broker
+# sans attendre 1 h du matin.
+VAR_ENV_FENETRES = "DEEPSEEK_FENETRES_PLEINES"
+
+
+def parser_fenetres(brut: Optional[str]) -> Tuple[Tuple[int, int], ...]:
+    """Analyse une grille au format "1-4,6-10". Retombe sur le défaut si invalide.
+
+    Ne lève JAMAIS : une variable d'environnement mal écrite ne doit pas empêcher le
+    service de démarrer. Elle est signalée dans les logs et ignorée.
+    """
+    if not brut or not brut.strip():
+        return FENETRES_PAR_DEFAUT
+
+    fenetres = []
+    for morceau in brut.split(","):
+        morceau = morceau.strip()
+        if not morceau:
+            continue
+        try:
+            debut_txt, fin_txt = morceau.split("-")
+            debut, fin = int(debut_txt), int(fin_txt)
+        except ValueError:
+            logger.warning(
+                "%s : segment '%s' illisible (attendu « debut-fin »), grille par "
+                "défaut conservée", VAR_ENV_FENETRES, morceau
+            )
+            return FENETRES_PAR_DEFAUT
+        if not (0 <= debut < fin <= 24):
+            logger.warning(
+                "%s : segment '%s' hors bornes (0 <= debut < fin <= 24), grille par "
+                "défaut conservée", VAR_ENV_FENETRES, morceau
+            )
+            return FENETRES_PAR_DEFAUT
+        fenetres.append((debut, fin))
+
+    if not fenetres:
+        return FENETRES_PAR_DEFAUT
+    return tuple(fenetres)
+
+
+# Résolue une seule fois au chargement : la grille ne change pas en cours de vie du
+# processus, et la relire à chaque message serait un appel système par appel LLM.
+FENETRES_PLEINES = parser_fenetres(os.environ.get(VAR_ENV_FENETRES))
+
+if FENETRES_PLEINES != FENETRES_PAR_DEFAUT:
+    logger.warning(
+        "Grille tarifaire SURCHARGÉE par %s : %s (défaut : %s)",
+        VAR_ENV_FENETRES, FENETRES_PLEINES, FENETRES_PAR_DEFAUT,
+    )
 
 
 def _heure_utc(maintenant: Optional[datetime] = None) -> int:

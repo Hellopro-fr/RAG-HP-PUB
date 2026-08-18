@@ -88,6 +88,19 @@ retry n'est pas touché). Ceux encore dans le buffer de prefetch le sont par la 
 Effet attendu : 8 546 des 46 707 appels mensuels sortaient en heures pleines, soit
 **131,76 USD/mois**. Contrepartie assumée : ces caractérisations sont décalées de 3 à 4 h.
 
+### Surcharger la grille horaire
+
+La variable d'environnement **`DEEPSEEK_FENETRES_PLEINES`** remplace la grille, au format
+`"1-4,6-10"` (heure de début incluse, heure de fin exclue, en UTC). Absente, la grille
+DeepSeek s'applique. Une valeur illisible est **ignorée avec un avertissement** — jamais
+une exception, sinon le conteneur mourrait à l'import et `restart: unless-stopped` le
+relancerait en boucle. Toute surcharge active est signalée en `WARNING` au démarrage.
+
+Deux usages : ajuster sans rebuild si DeepSeek change ses horaires, et forcer une fenêtre
+courte pour **tester la garde contre un vrai broker** sans attendre 1 h du matin.
+
+    DEEPSEEK_FENETRES_PLEINES=0-24   # tout est heure pleine : la garde suspend en permanence
+
 ⚠️ La boucle elle-même n'est **pas** couverte par les tests : `aio_pika` exige un vrai
 broker et n'est pas installable dans l'environnement de test local. Seules les bornes le
 sont (`tests/test_fenetre_tarifaire.py`, balayage des 24 heures).

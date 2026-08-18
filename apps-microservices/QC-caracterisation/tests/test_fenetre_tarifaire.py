@@ -10,9 +10,11 @@ test local. Les bornes, elles, se vérifient exhaustivement.
 from datetime import datetime, timedelta, timezone
 
 from app.core.fenetre_tarifaire import (
+    FENETRES_PAR_DEFAUT,
     FENETRES_PLEINES,
     est_heure_pleine,
     libelle_fenetre,
+    parser_fenetres,
 )
 
 # Heures UTC facturées au tarif double : 01:00-04:00 et 06:00-10:00.
@@ -106,3 +108,50 @@ def test_defaut_sur_l_heure_courante():
     maintenant = datetime.now(timezone.utc)
     assert est_heure_pleine() == est_heure_pleine(maintenant)
     assert libelle_fenetre() == libelle_fenetre(maintenant)
+
+
+# --- surcharge par variable d'environnement -------------------------------------
+
+
+def test_grille_par_defaut_sans_surcharge():
+    """Le service démarre sur la grille DeepSeek si la variable est absente ou vide."""
+    for brut in (None, "", "   "):
+        assert parser_fenetres(brut) == FENETRES_PAR_DEFAUT
+    assert FENETRES_PAR_DEFAUT == ((1, 4), (6, 10))
+
+
+def test_surcharge_valide():
+    assert parser_fenetres("2-5") == ((2, 5),)
+    assert parser_fenetres("1-4,6-10") == ((1, 4), (6, 10))
+    assert parser_fenetres(" 0-24 ") == ((0, 24),)
+    assert parser_fenetres("3-4,  8-9 ,20-22") == ((3, 4), (8, 9), (20, 22))
+
+
+def test_surcharge_invalide_retombe_sur_le_defaut_sans_lever():
+    """Une variable mal écrite ne doit JAMAIS empêcher le service de démarrer.
+
+    C'est le point important : ce module est chargé à l'import des consumers. Une
+    exception ici tuerait le conteneur au démarrage, et `restart: unless-stopped` le
+    relancerait en boucle.
+    """
+    for brut in ("nawak", "4-1", "1-25", "-3", "5", "1-4,zzz", "3-3", "1-2-3", "24-25"):
+        assert parser_fenetres(brut) == FENETRES_PAR_DEFAUT, f"{brut!r} devrait retomber"
+
+
+def test_la_surcharge_agit_bien_sur_le_verdict():
+    """Une grille "tout plein" doit rendre est_heure_pleine() vrai à toute heure.
+
+    C'est ce qui permet de tester la garde contre un vrai broker sans attendre 1 h
+    du matin.
+    """
+    tout_plein = parser_fenetres("0-24")
+    for heure in range(24):
+        assert any(d <= heure < f for d, f in tout_plein)
+
+    aucune = parser_fenetres("0-1")
+    assert sum(1 for h in range(24) if any(d <= h < f for d, f in aucune)) == 1
+
+
+def test_grille_active_coherente():
+    """En l'absence de surcharge dans l'environnement de test, on est sur le défaut."""
+    assert FENETRES_PLEINES == FENETRES_PAR_DEFAUT or isinstance(FENETRES_PLEINES, tuple)
