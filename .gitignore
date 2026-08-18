@@ -188,3 +188,9 @@ graphify-out/.needs_update
 **/graphify-out/.needs_update
 
 bash.exe.stackdump*:Zone.Identifier
+
+# Worktrees created by EnterWorktree: a full copy of the repo, placed inside it.
+# Without this rule a neighbouring session's entire working tree is exposed to a
+# `git add -A` run by another session. Previously covered only by .git/info/exclude,
+# which is local: it does not travel to a second machine or a fresh clone.
+.claude/worktrees/
