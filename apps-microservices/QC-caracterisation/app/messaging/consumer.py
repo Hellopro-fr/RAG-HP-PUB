@@ -198,7 +198,10 @@ class Consumer:
                         # n'est pas touché.
                         # Les messages encore dans le buffer de prefetch sont eux repris
                         # par la sortie du `async with`, qui fait basic_cancel puis
-                        # nack(requeue=True) — vérifié dans le source d'aio_pika.
+                        # nack(requeue=True) sur tout le buffer — lu dans le source de
+                        # QueueIterator._on_close en aio_pika 9.6.2, la version
+                        # réellement déployée (relevée sur la VM le 18-08-2026 ;
+                        # requirements.txt ne dit que « >=9.0.0 »).
                         await message.nack(requeue=True)
                         logger.info(
                             f"⏸️  Bascule en {libelle_fenetre()} : détachement de la file"

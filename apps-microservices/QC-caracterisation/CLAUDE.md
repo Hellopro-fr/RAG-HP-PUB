@@ -74,6 +74,12 @@ et les files sont `durable=true` / `auto_delete=false` — donc rien n'expire et
 disparaît pendant la suspension. **Si une policy `message-ttl` ou `expires` était ajoutée
 un jour sur ces files, cette garde deviendrait destructrice** : le vérifier avant.
 
+Vérifié sur **aio_pika 9.6.2**, la version réellement déployée sur la VM (relevée le
+18-08-2026 ; `requirements.txt` ne dit que `>=9.0.0`). Le `QueueIterator._on_close` de
+cette version est identique à celui de 10.0.1 : `basic_cancel` puis
+`nack(requeue=True, multiple=False)` sur tout le buffer de prefetch. L'horloge de la VM
+a été relevée juste à la seconde le même jour.
+
 Le message déjà sorti de l'itérateur au moment de la bascule est remis en file par un
 `nack(requeue=True)` explicite (pas de dead-letter, pas de `x-death`, donc le compteur de
 retry n'est pas touché). Ceux encore dans le buffer de prefetch le sont par la sortie du
