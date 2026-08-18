@@ -68,7 +68,7 @@ test('dataset 404: deleted event written, errors counted', async () => {
     assert.equal(r.reason, 'http_error_404');
     assert.equal(writer._calls.length, 1);
     assert.equal(writer._calls[0][0], UpdateChecker.DELETED_FILE);
-    assert.deepEqual(stats._calls, ['errors']);
+    assert.deepEqual(stats._calls, ['errors', 'accounted']);
 });
 
 test('dataset 410: deleted event written', async () => {
@@ -104,4 +104,14 @@ test('non-dataset error: unchanged (ignored, non_dataset_error, no error counter
     assert.equal(r.reason, 'non_dataset_error');
     assert.equal(writer._calls.length, 0);
     assert.deepEqual(stats._calls, []);
+});
+
+test('dataset 200, no longer eligible (not_eligible): deleted event written, errors + accounted counted', async () => {
+    const { checker, stats, writer } = makeChecker();
+    const r = await checker.checkUrl(URL404, URL404, 'dataset', 200, false);
+    assert.equal(r.action, 'deleted');
+    assert.equal(r.reason, 'not_eligible');
+    assert.equal(writer._calls.length, 1);
+    assert.equal(writer._calls[0][0], UpdateChecker.DELETED_FILE);
+    assert.deepEqual(stats._calls, ['errors', 'accounted']);
 });

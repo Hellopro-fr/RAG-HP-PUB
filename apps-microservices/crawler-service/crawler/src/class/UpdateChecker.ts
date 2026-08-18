@@ -187,6 +187,7 @@ export class UpdateChecker {
                         reason: `http_error_${httpStatus}`,
                     };
                     await this.writeJsonl(UpdateChecker.DELETED_FILE, result);
+                    await this.statsManager.increment("accounted");
                     return result;
                 }
                 return { action: 'ignored', url: originalUrl, source, reason: `unverified_http_error_${httpStatus}` };
@@ -216,6 +217,7 @@ export class UpdateChecker {
                         destination: loadedUrl,
                         reason: 'redirect_to_existing',
                     });
+                    await this.statsManager.increment("accounted");
                     return { action: 'confirmed', url: originalUrl, source, reason: 'redirect_to_existing' };
                 } else {
                     // Redirect to a URL NOT in Dataset → track the redirection
@@ -227,6 +229,7 @@ export class UpdateChecker {
                         destination: loadedUrl,
                     };
                     await this.writeJsonl(UpdateChecker.REDIRECTED_FILE, result);
+                    await this.statsManager.increment("accounted");
                     return result;
                 }
             } else {
@@ -268,6 +271,7 @@ export class UpdateChecker {
             // Dataset URL, 2xx, same URL → check if still eligible
             if (this.isEligible(loadedUrl, isFrenchContent)) {
                 // Confirmed: URL is still valid in Dataset
+                await this.statsManager.increment("accounted");
                 return { action: 'confirmed', url: originalUrl, source };
             } else {
                 // No longer eligible → mark as deleted
@@ -279,6 +283,7 @@ export class UpdateChecker {
                     reason: 'not_eligible',
                 };
                 await this.writeJsonl(UpdateChecker.DELETED_FILE, result);
+                await this.statsManager.increment("accounted");
                 return result;
             }
         } else {
