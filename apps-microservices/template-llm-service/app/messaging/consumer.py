@@ -9,6 +9,7 @@ from collections import defaultdict
 from template_llm_service.messaging.publisher import Publisher
 from template_llm_service.core.processor import classify_page_template_batch
 from common_utils.autres.DLQProperties import DLQProperties
+from common_utils.autres.fenetre_tarifaire import est_heure_pleine, libelle_fenetre
 
 # --- Configuration du Batching ---
 # Détermine le nombre maximum de messages à traiter en un seul batch.
@@ -23,12 +24,20 @@ BATCH_TIMEOUT_SECONDS = 2.0
 MAX_RETRIES = 3 # Nombre de tentatives avant d'envoyer à la DLQ finale
 RETRY_TTL_MS = 30000 # 30 secondes d'attente avant une nouvelle tentative
 
+# Pas de la boucle qui surveille la fenêtre tarifaire DeepSeek. 60 s suffisent : la
+# reprise n'a pas besoin d'être à la seconde près, et une vérification courte évite de
+# tenir la boucle éveillée pour rien pendant 3 à 4 h.
+ATTENTE_FENETRE_PLEINE_S = 60
+
 class Consumer:
     def __init__(self, connection: aio_pika.RobustConnection, publisher: Publisher):
         self.connection = connection
         self.publisher = publisher
         self.message_buffer = asyncio.Queue()
-        
+        # Tag de l'abonnement, indispensable pour pouvoir s'en détacher pendant les
+        # fenêtres chères de DeepSeek. `queue.consume()` le retourne ; il était jeté.
+        self._consumer_tag = None
+
         # Noms des composants RabbitMQ
         self.exchange_name = 'processed_data_exchange'
         self.routing_key = 'data.ready_for_templating'
@@ -190,12 +199,53 @@ class Consumer:
         """Démarre le consumer et la tâche de traitement de batch."""
         channel = await self.connection.channel()
         await channel.set_qos(prefetch_count=BATCH_SIZE)
-        
+
         queue = await self._setup_queues(channel)
-        
+
         # Démarrer la tâche de fond qui traitera les batches
         asyncio.create_task(self.batch_processor())
-        
+
         # Commencer à consommer les messages et à les mettre dans le buffer
         print("👂 template-llm-service: En attente de messages...")
-        await queue.consume(self._on_message)
+        logging.info("💰 Fenêtre tarifaire DeepSeek au démarrage : %s", libelle_fenetre())
+        await self._boucle_fenetre_tarifaire(queue)
+
+    async def _boucle_fenetre_tarifaire(self, queue):
+        """S'abonne / se désabonne de la file selon la fenêtre tarifaire DeepSeek.
+
+        Ce service ne pioche pas dans sa file : il s'y ABONNE, et `_on_message` ne fait
+        que déposer le message dans `self.message_buffer`. On ne peut donc pas rendre les
+        messages un par un comme un consumer à itérateur — on annule l'abonnement, et le
+        `batch_processor` finit tranquillement ce qu'il a en tampon.
+
+        Le tampon est borné par le prefetch (BATCH_SIZE), donc au pire 16 messages sont
+        traités au tarif double à chaque bascule — mesuré à ~1,6 % du volume quotidien.
+        Le vider en `nack` a été essayé puis ABANDONNÉ : `nack()` lève
+        `MessageProcessError` sur un message déjà acquitté, donc l'opération court contre
+        le `batch_processor` qui acquitte au même moment.
+
+        ⚠️ Les erreurs de canal et de connexion ne sont PAS attrapées, volontairement.
+        `main.py` les traite déjà (`except (AMQPConnectionError,
+        ChannelInvalidStateError)`) en reconstruisant connexion + consumer. Une première
+        version les avalait et retentait : après une coupure, `queue` restait attachée au
+        canal mort et la boucle retentait à l'infini — service muet, rien en DLQ, aucune
+        alerte. C'est pourquoi cette boucle est AWAITÉE ici et non lancée en
+        `create_task()` : sinon l'exception mourrait dans une tâche orpheline.
+
+        Prouvé contre un vrai broker (RabbitMQ 3.12.1, aio_pika 9.6.2) :
+        `tests/test_integration_garde_callback.py`.
+        """
+        while True:
+            if est_heure_pleine():
+                if self._consumer_tag is not None:
+                    await queue.cancel(self._consumer_tag)
+                    self._consumer_tag = None
+                    logging.warning(
+                        "⏸️  DeepSeek en %s : abonnement à %s ANNULÉ, les messages "
+                        "restent en file (vérification toutes les %ss)",
+                        libelle_fenetre(), self.queue_name, ATTENTE_FENETRE_PLEINE_S)
+            elif self._consumer_tag is None:
+                self._consumer_tag = await queue.consume(self._on_message)
+                logging.info("▶️  %s : réabonnement à %s (tag %s)",
+                             libelle_fenetre(), self.queue_name, self._consumer_tag)
+            await asyncio.sleep(ATTENTE_FENETRE_PLEINE_S)

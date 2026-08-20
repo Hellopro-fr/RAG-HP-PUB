@@ -1,0 +1,66 @@
+name: ci libs common-utils
+
+# Runs the pytest suite of libs/common-utils.
+#
+# WHY THIS EXISTS: as of 20-08-2026 this repo has FOUR CI workflows, all Go / Node /
+# TypeScript, and NO Python CI at all — while libs/common-utils alone holds 112 tests
+# across 23 files that never run automatically. A test that never runs is debt, not a
+# guarantee. This library is imported by 75+ services (see
+# .claude/rules/impact-awareness.md), so a regression here propagates further than
+# anywhere else in the repo: it is the most useful of the missing suites.
+
+on:
+  # ENFORCEMENT IS STAGED OFF FOR NOW.
+  #
+  # Turning Python CI on would light up suites nobody has looked at in months, on
+  # services this change does not touch, and that is not a call for a single
+  # contributor to make. Until the team decides, this workflow only runs on manual
+  # trigger (`workflow_dispatch`) — you can run it yourself from the Actions tab, but
+  # teammate PRs will never see it. Same staging pattern as the graphify workflows.
+  #
+  # TO FULLY ACTIVATE:
+  #   1. Run it manually once from the Actions tab and read the result.
+  #   2. Uncomment the `pull_request` + `push` blocks below.
+  #   3. Commit on main / features/poc.
+  workflow_dispatch:
+
+  # --- ACTIVATE BY UNCOMMENTING BELOW ONCE THE TEAM AGREES ---
+  # pull_request:
+  #   branches:
+  #     - main
+  #     - features/poc
+  #   paths:
+  #     - 'libs/common-utils/**'
+  # push:
+  #   branches:
+  #     - main
+  #     - features/poc
+  #   paths:
+  #     - 'libs/common-utils/**'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # The service images run Python 3.10; keep CI on the same minor version so a
+          # syntax or stdlib difference cannot pass here and fail in production.
+          python-version: '3.10'
+
+      - name: Install the library and test tooling
+        run: |
+          python -m pip install --upgrade pip
+          # setup.py declares only redis; the test suite also reaches for these.
+          # Declared here rather than in setup.py to keep the runtime dependency
+          # surface of a 75+ consumer library unchanged.
+          python -m pip install pytest pytest-asyncio fakeredis
+          python -m pip install -e libs/common-utils
+
+      - name: Run the suite
+        run: python -m pytest libs/common-utils/tests -q

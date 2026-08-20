@@ -137,6 +137,14 @@ docker-compose.override.yml
 apps-microservices/opti-moteur-front/app/data/*.json
 !apps-microservices/opti-moteur-front/app/data/.gitkeep
 
+# QC-fabricant-reference : `fichiers/stopper.json` est l'interrupteur d'arret manuel du
+# service, cree AUTOMATIQUEMENT et vide par `utils.check_stopper()` (utils.py:223-224)
+# des qu'il n'existe pas. Lancer `pytest tests/` suffit donc a le faire apparaitre --
+# constate le 20-08-2026, alors que le CLAUDE.md du service annonce ses tests comme
+# « sans I/O ». C'est un artefact local : le Dockerfile ne copie pas ce dossier, il le
+# cree vide (`RUN mkdir -p /app/fichiers`).
+apps-microservices/QC-fabricant-reference/fichiers/
+
 # Logs folder
 ./logs/
 .claude/settings.local.json

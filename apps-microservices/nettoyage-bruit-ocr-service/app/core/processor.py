@@ -92,6 +92,42 @@ def _run_async_in_thread(coro):
     finally:
         loop.close()
 
+def sanitize_json_escapes(json_string: str) -> str:
+    """Double les antislashs qui n'introduisent pas une échappement JSON valide.
+
+    Les réponses du LLM contiennent parfois des séquences comme `\\e`, `\\s`, `\\a`
+    (« R.C.S. Strasbourg\\sSIRET ») qui font échouer `json.loads`. On ne touche pas aux
+    échappements légitimes (`\\"`, `\\\\`, `\\/`, `\\b`, `\\f`, `\\n`, `\\r`, `\\t`, `\\u`).
+
+    Extraite le 20-08-2026 : la regex était en ligne dans `_process_single_message`, et
+    `tests/test_processor.py` en gardait une **copie** avec le commentaire « Reproduces
+    the sanitization logic from processor.py ». Deux copies qui pouvaient diverger sans
+    qu'aucun de ces 15 tests ne rougisse. Comportement inchangé, un seul exemplaire.
+    """
+    return re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', json_string)
+
+
+def parse_llm_json(json_string: str) -> dict:
+    """Assainit puis parse la reponse du LLM, avec repli sur `{"contenu": "ok"}`.
+
+    Le repli existe pour ne PAS perdre un document a cause d'un JSON malforme : « ok »
+    signifie en aval « rien a nettoyer », donc le texte d'origine passe tel quel plutot
+    que de partir en DLQ. Il reste des cas ou l'assainissement ne suffit pas (un `\\\\`
+    deja echappe suivi d'un caractere invalide), d'ou le try/except.
+
+    Extraite le 20-08-2026, meme raison que `sanitize_json_escapes` : cette logique
+    etait en ligne dans `_process_single_message` et `tests/test_processor.py` en gardait
+    une seconde copie (« Reproduces the full parse logic from processor.py »).
+    Comportement inchange.
+    """
+    json_string = sanitize_json_escapes(json_string)
+    try:
+        return json.loads(json_string)
+    except json.JSONDecodeError as je:
+        logger.warning("JSON parse failed after escape sanitization: %s", je)
+        return {"contenu": "ok"}
+
+
 async def _process_single_message(document_item: dict) -> dict:
     """Votre fonction ASYNC existante - AUCUN CHANGEMENT."""
     output_message = {}
@@ -133,12 +169,7 @@ async def _process_single_message(document_item: dict) -> dict:
         match = re.search(r'\{.*\}', raw_text, re.DOTALL)
         if match:
             json_string = match.group(0)
-            json_string = re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', json_string)
-            try:
-                parsed_json = json.loads(json_string)
-            except json.JSONDecodeError as je:
-                logger.warning("JSON parse failed after escape sanitization: %s", je)
-                parsed_json = {"contenu": "ok"}
+            parsed_json = parse_llm_json(json_string)
             contenu = parsed_json.get("contenu")
             if not contenu:
                 cleaned_text = ""

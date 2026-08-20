@@ -10,6 +10,7 @@ import traceback
 from nettoyage_bruit_ocr_service.messaging.publisher import Publisher
 from nettoyage_bruit_ocr_service.core.processor import nettoyer_bruits_ocr
 from common_utils.autres.DLQProperties import DLQProperties
+from common_utils.autres.fenetre_tarifaire import est_heure_pleine, libelle_fenetre
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +18,11 @@ MAX_RETRIES = 3
 RETRY_TTL_MS = 30000
 BATCH_SIZE = 1
 BATCH_TIMEOUT_SECONDS = 0.5
+
+# Pas de la boucle qui surveille la fenetre tarifaire DeepSeek. 60 s suffisent : la
+# reprise n'a pas besoin d'etre a la seconde pres, et une verification courte evite de
+# tenir la boucle eveillee pour rien pendant 3 a 4 h.
+ATTENTE_FENETRE_PLEINE_S = 60
 
 class Consumer:
     def __init__(self, connection: aio_pika.RobustConnection, publisher: Publisher):
@@ -34,6 +40,9 @@ class Consumer:
 
         self.consumer_channel = None
         self._keep_alive_task = None
+        # Tag de l'abonnement, indispensable pour s'en detacher pendant les fenetres
+        # cheres de DeepSeek. `queue.consume()` le retourne ; il etait jete.
+        self._consumer_tag = None
 
         logger.info("Consumer initialise.")
 
@@ -247,7 +256,47 @@ class Consumer:
         logger.debug("Queue: %s", queue.name)
 
         logger.info("Nettoyage-bruit-ocr-service: En attente de messages...")
-        await queue.consume(self._on_message)
+        logger.info("Fenetre tarifaire DeepSeek au demarrage : %s", libelle_fenetre())
+        await self._boucle_fenetre_tarifaire(queue)
+
+    async def _boucle_fenetre_tarifaire(self, queue):
+        """S'abonne / se desabonne de la file selon la fenetre tarifaire DeepSeek.
+
+        DeepSeek facture le double sur 01:00-04:00 et 06:00-10:00 UTC. Ce service ne
+        pioche pas dans sa file : il s'y ABONNE, et `_on_message` ne fait que deposer le
+        message dans `self.message_buffer`. On annule donc l'abonnement, et le
+        `batch_processor` finit ce qu'il a en tampon.
+
+        Ici le tampon vaut AU PLUS 1 message (`prefetch_count=1`), donc la fuite est d'un
+        seul message par bascule. Le vider en `nack` a ete essaye puis ABANDONNE :
+        `nack()` leve `MessageProcessError` sur un message deja acquitte, donc
+        l'operation court contre le `batch_processor` qui acquitte au meme moment.
+
+        ATTENTION : les erreurs de canal et de connexion ne sont PAS attrapees,
+        volontairement. `main.py` les traite deja en reconstruisant connexion +
+        consumer. Une premiere version les avalait et retentait : apres une coupure,
+        `queue` restait attachee au canal mort et la boucle retentait a l'infini --
+        service muet, rien en DLQ, aucune alerte. C'est pourquoi cette boucle est
+        AWAITEE ici et non lancee en `create_task()`.
+
+        Prouve contre un vrai broker (RabbitMQ 3.12.1, aio_pika 9.6.2) :
+        `apps-microservices/template-llm-service/tests/test_integration_garde_callback.py`
+        (meme forme de consumer, meme boucle).
+        """
+        while True:
+            if est_heure_pleine():
+                if self._consumer_tag is not None:
+                    await queue.cancel(self._consumer_tag)
+                    self._consumer_tag = None
+                    logger.warning(
+                        "DeepSeek en %s : abonnement a %s ANNULE, les messages restent "
+                        "en file (verification toutes les %ss)",
+                        libelle_fenetre(), self.queue_name, ATTENTE_FENETRE_PLEINE_S)
+            elif self._consumer_tag is None:
+                self._consumer_tag = await queue.consume(self._on_message)
+                logger.info("%s : reabonnement a %s (tag %s)",
+                            libelle_fenetre(), self.queue_name, self._consumer_tag)
+            await asyncio.sleep(ATTENTE_FENETRE_PLEINE_S)
 
     async def stop(self):
         """Arret propre du consumer."""
