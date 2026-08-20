@@ -47,7 +47,12 @@ ROUTING = 'test.garde.start'
 
 RETRY_TTL_MS = 30000          # identique au service
 MAX_CONCURRENCY = 10          # prefetch_count identique au service
-NB_MESSAGES = 12              # > prefetch pour exercer le buffer
+# Il en faut BIEN PLUS que le prefetch. Depuis que ce test exerce la boucle reelle, le
+# traitement est CONCURRENT (`create_task`, comme en production) et non plus sequentiel :
+# les premiers messages partent tous en vol d'un coup. Avec 12 messages et un prefetch
+# de 10, il n'en restait aucun en file au moment de la bascule et le garde-fou
+# anti-faux-vert refusait le test -- a juste titre, il n'y avait rien a suspendre.
+NB_MESSAGES = 30
 DUREE_TRAITEMENT_S = 0.4      # simule la duree d'un appel LLM
 BASCULE_APRES = 3             # nb de messages traites avant de forcer l'heure pleine
 
@@ -95,26 +100,39 @@ async def compter(connexion, nom):
 
 
 async def consommer(queue, traites, arret):
-    """COPIE FIDELE de la boucle posee dans consumer.py / consumer_bo.py."""
-    while not arret.is_set():
-        if est_heure_pleine():
-            while est_heure_pleine() and not arret.is_set():
-                await asyncio.sleep(0.2)      # sleep(60) en production
-            if arret.is_set():
-                return
-        async with queue.iterator() as it:
-            async for message in it:
-                if est_heure_pleine():
-                    await message.nack(requeue=True)
-                    break
-                # un appel DeepSeek reel dure des dizaines de secondes ; on simule
-                # une duree non nulle, sinon la file se vide avant qu'on ait pu basculer
-                # et le test ne prouve rien (constate : 12/12 traites avant la bascule).
-                await asyncio.sleep(DUREE_TRAITEMENT_S)
-                traites.append(message.body.decode())
-                await message.ack()
-                if arret.is_set():
-                    return
+    """Exerce la BOUCLE REELLE du service : `Consumer.consommer_avec_garde`.
+
+    Ce test rejouait auparavant une copie de cette boucle (« COPIE FIDELE de la boucle
+    posee dans consumer.py »). Une copie peut rester verte alors que le code livre a
+    change : la boucle a donc ete extraite dans une methode, que ce test appelle.
+
+    Seuls le predicat horaire et le traitement sont injectes :
+      - `est_heure_pleine` est remplace dans le module du consumer, pour pouvoir
+        basculer a la demande sans attendre 1 h du matin ;
+      - `sur_message` simule un appel LLM d'une duree NON NULLE. Sans cela la file se
+        vide avant la bascule et le test ne prouve rien (constate le 18-08-2026 :
+        12/12 traites avant la bascule, test vert sans avoir rien suspendu).
+    """
+    from app.messaging import consumer as mod
+
+    mod.est_heure_pleine = est_heure_pleine          # predicat pilote par le test
+    mod.libelle_fenetre = lambda *_a, **_k: 'fenetre de test'
+    mod.ATTENTE_FENETRE_PLEINE_S = 0.2               # 60 s en production
+
+    async def traiter(message):
+        await asyncio.sleep(DUREE_TRAITEMENT_S)
+        traites.append(message.body.decode())
+        await message.ack()
+
+    taches = set()
+
+    def sur_message(message):
+        t = asyncio.create_task(traiter(message))
+        taches.add(t)
+        t.add_done_callback(taches.discard)
+
+    instance = mod.Consumer.__new__(mod.Consumer)     # pas de connexion reelle requise
+    await instance.consommer_avec_garde(queue, sur_message)
 
 
 async def main():

@@ -6,8 +6,8 @@ import aio_pika
 from aio_pika.abc import AbstractIncomingMessage
 
 from common_utils.autres.DLQPropertiesAsync import DLQPropertiesAsync as DLQProperties
+from common_utils.autres.fenetre_tarifaire import est_heure_pleine, libelle_fenetre
 from app.core.credentials import settings
-from app.core.fenetre_tarifaire import est_heure_pleine, libelle_fenetre
 from app.core.caracterisation_produit import CaracterisationProduitGenerator
 from app.core.api_client import HelloProAPIClient
 from app.schemas.question_caracteristique import RequestProcessus
