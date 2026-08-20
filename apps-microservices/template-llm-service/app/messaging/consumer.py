@@ -207,7 +207,13 @@ class Consumer:
 
         # Commencer à consommer les messages et à les mettre dans le buffer
         print("👂 template-llm-service: En attente de messages...")
-        logging.info("💰 Fenêtre tarifaire DeepSeek au démarrage : %s", libelle_fenetre())
+        # print() et non logging : ce service n'appelle NI basicConfig NI setup_logging,
+        # donc le niveau racine reste WARNING et tout logging.info() est muet. Constaté
+        # en production le 20-08-2026 : cette ligne et celle du réabonnement ci-dessous
+        # n'apparaissaient pas dans `docker compose logs`, alors que
+        # nettoyage-bruit-ocr-service les affichait — lui configure le logging dans son
+        # main.py. Le reste de ce fichier utilise déjà print() pour la même raison.
+        print(f"💰 Fenêtre tarifaire DeepSeek au démarrage : {libelle_fenetre()}")
         await self._boucle_fenetre_tarifaire(queue)
 
     async def _boucle_fenetre_tarifaire(self, queue):
@@ -240,12 +246,16 @@ class Consumer:
                 if self._consumer_tag is not None:
                     await queue.cancel(self._consumer_tag)
                     self._consumer_tag = None
-                    logging.warning(
-                        "⏸️  DeepSeek en %s : abonnement à %s ANNULÉ, les messages "
-                        "restent en file (vérification toutes les %ss)",
-                        libelle_fenetre(), self.queue_name, ATTENTE_FENETRE_PLEINE_S)
+                    # print() et non logging : cf. start_consuming(). La SUSPENSION en
+                    # logging.warning() aurait été visible, mais pas le RÉABONNEMENT en
+                    # logging.info() -- on aurait donc vu le service s'arrêter sans
+                    # jamais le voir reprendre, alors que « il ne se réabonne pas » est
+                    # précisément le risque de ce design.
+                    print(f"⏸️  DeepSeek en {libelle_fenetre()} : abonnement à "
+                          f"{self.queue_name} ANNULÉ, les messages restent en file "
+                          f"(vérification toutes les {ATTENTE_FENETRE_PLEINE_S}s)")
             elif self._consumer_tag is None:
                 self._consumer_tag = await queue.consume(self._on_message)
-                logging.info("▶️  %s : réabonnement à %s (tag %s)",
-                             libelle_fenetre(), self.queue_name, self._consumer_tag)
+                print(f"▶️  {libelle_fenetre()} : réabonnement à {self.queue_name} "
+                      f"(tag {self._consumer_tag})")
             await asyncio.sleep(ATTENTE_FENETRE_PLEINE_S)
