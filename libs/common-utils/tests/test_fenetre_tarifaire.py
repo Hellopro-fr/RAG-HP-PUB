@@ -1,15 +1,21 @@
-"""Tests de la fenêtre tarifaire DeepSeek.
+"""Fenêtres de facturation DeepSeek : bornes UTC, surcharge, et innocuité de l'import.
 
-Ce module est le seul morceau de la garde qui soit testable hors Docker : la boucle
-consommer/suspendre de `start_consuming()` dépend du comportement réel de
-`aio_pika.QueueIterator` (cycle consume → basic_cancel → nack) qu'aucun mock ne
-reproduit fidèlement, et `aio_pika` n'est pas installable dans l'environnement de
-test local. Les bornes, elles, se vérifient exhaustivement.
+Ces tests sont **synchrones et sans dépendance**, volontairement : `pytest-asyncio`
+n'est déclaré dans aucun `requirements*.txt` de ce dépôt et aucun `asyncio_mode` n'est
+configuré, donc un `@pytest.mark.asyncio` serait muet ou en erreur selon ce qui traîne
+dans l'environnement.
+
+La mécanique RabbitMQ de la garde qui utilise ce module n'est pas testée ici : elle
+dépend du comportement réel d'`aio_pika`, et elle l'est contre un vrai broker dans
+`QC-caracterisation/tests/test_integration_garde_broker.py` et
+`test_integration_garde_callback.py`.
 """
 
+import importlib
+import sys
 from datetime import datetime, timedelta, timezone
 
-from app.core.fenetre_tarifaire import (
+from common_utils.autres.fenetre_tarifaire import (
     FENETRES_PAR_DEFAUT,
     FENETRES_PLEINES,
     est_heure_pleine,
@@ -23,6 +29,30 @@ HEURES_PLEINES_ATTENDUES = {1, 2, 3, 6, 7, 8, 9}
 
 def _utc(heure, minute=0):
     return datetime(2026, 8, 18, heure, minute, tzinfo=timezone.utc)
+
+
+# --- innocuité de l'import : le test qui protège 4 conteneurs ---------------------
+
+
+def test_imports_without_heavy_optional_deps(monkeypatch):
+    """Garde de non-régression : ce module doit s'importer avec la seule stdlib.
+
+    Il est importé **à l'import du consumer** par des services qui n'installent ni
+    `prometheus_client`, ni `redis`, ni `pika` — nettoyage-bruit-ocr-service notamment.
+    S'il vivait sous `concurrency`, dont l'`__init__` importe le garde Milvus, ces
+    conteneurs mourraient au démarrage et `restart: unless-stopped` les relancerait en
+    boucle. Même leçon que `autres/graceful.py` (commit f74c83fc).
+    """
+    for mod in ("prometheus_client", "pika", "redis", "aio_pika", "pymilvus"):
+        monkeypatch.setitem(sys.modules, mod, None)  # rend `import mod` levant
+    monkeypatch.delitem(sys.modules, "common_utils.autres.fenetre_tarifaire", raising=False)
+    recharge = importlib.import_module("common_utils.autres.fenetre_tarifaire")
+    assert hasattr(recharge, "est_heure_pleine")
+    assert hasattr(recharge, "libelle_fenetre")
+    assert hasattr(recharge, "parser_fenetres")
+
+
+# --- les bornes ------------------------------------------------------------------
 
 
 def test_les_24_heures_utc():
@@ -110,7 +140,7 @@ def test_defaut_sur_l_heure_courante():
     assert libelle_fenetre() == libelle_fenetre(maintenant)
 
 
-# --- surcharge par variable d'environnement -------------------------------------
+# --- surcharge par variable d'environnement --------------------------------------
 
 
 def test_grille_par_defaut_sans_surcharge():

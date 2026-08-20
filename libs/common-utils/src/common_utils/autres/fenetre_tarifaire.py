@@ -1,4 +1,4 @@
-"""Fenêtres de facturation DeepSeek.
+"""Fenêtres de facturation DeepSeek — heures pleines / heures creuses.
 
 Les bornes sont fixées **en UTC** par le fournisseur
 (https://api-docs.deepseek.com/quick_start/pricing). Depuis le 16-08-2026 16:00 UTC,
@@ -13,14 +13,22 @@ créneau « 22h-6h Paris » contient 3 heures pleines en été (3, 4, 5) et 3 **
 hiver (2, 3, 4), sans qu'une seule ligne de code ne change. C'est le défaut que ce
 module existe pour éviter.
 
-Ce module est volontairement **sans dépendance** : il est importé par les deux
-consumers du service et doit rester testable hors Docker (`aio_pika` n'est pas
-installable dans l'environnement de test local). Si un troisième service en a besoin,
-le remonter dans `libs/common-utils` plutôt que de le dupliquer.
+Vit dans ``autres`` — un namespace package **sans ``__init__.py`` et sans dépendance
+hors stdlib** — et non dans ``rabbitmq`` ou ``concurrency``, pour la même raison que
+``autres/graceful.py`` : le ``__init__`` de ``concurrency`` importe le garde de
+concurrence Milvus (``prometheus_client``/``redis``), que des services comme
+nettoyage-bruit-ocr-service **n'installent pas**. Or ce module est importé **à l'import
+du consumer** : un import en cascade tuerait le conteneur au démarrage, et
+``restart: unless-stopped`` le relancerait en boucle.
 
-Limite connue : `datetime.now(timezone.utc)` lit l'horloge système du conteneur. Si
+Consommateurs au 20-08-2026 : QC-caracterisation (2 consumers), QC-fabricant-reference,
+template-llm-service, nettoyage-bruit-ocr-service.
+
+Limite connue : ``datetime.now(timezone.utc)`` lit l'horloge système du conteneur. Si
 elle est fausse, la fenêtre est fausse. La garde ne perd aucun message dans ce cas —
-elle suspend ou reprend au mauvais moment, ce qui est un coût, pas une panne.
+elle suspend ou reprend au mauvais moment, ce qui est un coût, pas une panne. Avec
+19 replicas au total, chacun lit sa propre horloge : une dérive sur un hôte fait
+consommer au tarif double sans qu'aucun log ne le signale.
 """
 
 import logging
@@ -37,6 +45,10 @@ FENETRES_PAR_DEFAUT = ((1, 4), (6, 10))
 # "1-4,6-10". Deux usages : ajuster sans rebuild d'image si DeepSeek change ses
 # horaires, et forcer une fenêtre courte pour tester la garde contre un vrai broker
 # sans attendre 1 h du matin.
+#
+# ⚠️ Pour être lisible dans un conteneur, elle doit figurer dans le bloc
+# ``environment:`` du service dans docker-compose.yml : ces services n'ont pas
+# d'``env_file``.
 VAR_ENV_FENETRES = "DEEPSEEK_FENETRES_PLEINES"
 
 
