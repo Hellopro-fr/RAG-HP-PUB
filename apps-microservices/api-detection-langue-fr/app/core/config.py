@@ -129,8 +129,22 @@ class Settings(BaseSettings):
 
     # Browser-op hardening (scraper teardown/launch/op timeouts)
     TEARDOWN_TIMEOUT_S: int = 10       # bound + abandon on browser/context/page close & playwright.stop
-    BROWSER_OP_TIMEOUT_S: int = 30     # context default timeout (new_page/content/route/add_cookies)
+    # Corrigé 2026-08-19 : ce réglage était annoncé « context default timeout
+    # (new_page/content/route/add_cookies) ». Faux sur les quatre.
+    # `BrowserContext.set_default_timeout` ne régit que « all methods accepting
+    # a timeout option », et AUCUNE de ces quatre n'accepte de `timeout`
+    # (signatures du playwright installé + doc 1.58.2 : new_context, new_page,
+    # add_cookies, route, content → aucun paramètre timeout). Les deux seules
+    # méthodes du chemin qui en acceptent — `goto` et `wait_for_load_state` —
+    # reçoivent déjà un timeout explicite de scraper.py, donc ce réglage ne
+    # bornait RIEN. Il borne désormais ces appels via `scraper._await_or_raise`.
+    BROWSER_OP_TIMEOUT_S: int = 30     # bound on new_context/add_cookies/new_page/route/content
     BROWSER_LAUNCH_TIMEOUT_S: int = 45 # wrap Camoufox + Chromium launch
+    # Attente d'un permis du pool navigateurs. Cette attente est facturée au
+    # budget de l'item (le sémaphore de LOT, lui, est pris hors du wait_for :
+    # routes.py:826 vs :828), donc sans borne un item peut épuiser ses 300 s
+    # sans avoir lancé un seul navigateur — et rendre `error` sans étape.
+    BROWSER_POOL_WAIT_S: int = 60
     JOB_MAX_S: int = 1500  # worker abandons a job exceeding this (< DETECTION_ASYNC_MAX_WAIT_S=1800 caller budget)
 
     class Config:

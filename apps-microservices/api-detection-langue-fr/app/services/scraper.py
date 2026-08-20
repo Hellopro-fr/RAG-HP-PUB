@@ -95,7 +95,54 @@ def build_proxy_url(base_proxy: str, session_id: Optional[str] = None, country: 
 # Taille configurable via BROWSER_SEMAPHORE_SIZE env var (défaut: 10).
 # Chaque Camoufox/Chromium consomme ~300-500 MB — ne pas dépasser la capacité du container.
 _BROWSER_SEMAPHORE_SIZE = int(os.getenv("BROWSER_SEMAPHORE_SIZE", "10"))
-_BROWSER_SEMAPHORE = asyncio.Semaphore(_BROWSER_SEMAPHORE_SIZE)
+
+
+class _BoundedBrowserSemaphore:
+    """Sémaphore de navigateurs dont l'ATTENTE est bornée.
+
+    Pourquoi : ce permis est pris à l'INTÉRIEUR du `wait_for` de l'item
+    (`routes.py:828`), alors que le sémaphore de lot est pris à l'extérieur
+    (`:826`). Avec `ADMISSION_MAX_SLOTS` (8) au-dessus de
+    `BROWSER_SEMAPHORE_SIZE` (4), les items en excès attendent donc ICI, sur
+    leur propre budget — un item pouvait épuiser ses 300 s sans lancer un seul
+    navigateur, et ne rapporter qu'un `error` sans étape.
+
+    L'attente n'est PAS annulée à l'échéance, pour la raison qui vaut déjà pour
+    `_close_or_abandon` : un permis accordé dans le même tick qu'une annulation
+    serait perdu sur une version de Python dont `Semaphore.acquire` ne le rend
+    pas. CPython 3.12 le rend (`self._value += 1` dans sa branche
+    `CancelledError`) — l'image est `python:3.10-slim` et ce code ne doit pas
+    dépendre de laquelle. On laisse donc l'acquisition courir, et un
+    done-callback rend au pool le permis accordé trop tard.
+    """
+
+    def __init__(self, size: int) -> None:
+        self._sem = asyncio.Semaphore(size)
+
+    async def __aenter__(self) -> None:
+        t = asyncio.ensure_future(self._sem.acquire())
+        done, _pending = await asyncio.wait(
+            {t}, timeout=settings.BROWSER_POOL_WAIT_S
+        )
+        if not done:
+            t.add_done_callback(self._release_if_granted)
+            raise TimeoutError(
+                f"Timeout pool navigateurs — aucun créneau libre après "
+                f"{settings.BROWSER_POOL_WAIT_S}s"
+            )
+        t.result()  # ne pas masquer un échec réel de l'acquisition
+        return None
+
+    async def __aexit__(self, *_exc) -> None:
+        self._sem.release()
+
+    def _release_if_granted(self, fut: asyncio.Future) -> None:
+        """Un permis accordé après qu'on a cessé d'attendre retourne au pool."""
+        if not fut.cancelled() and fut.exception() is None:
+            self._sem.release()
+
+
+_BROWSER_SEMAPHORE = _BoundedBrowserSemaphore(_BROWSER_SEMAPHORE_SIZE)
 
 
 # Pool de User-Agents réalistes — rotation aléatoire à chaque requête
@@ -321,7 +368,14 @@ def _teardown_op(what: str) -> str:
 
 
 def _drain_orphan_exception(fut: asyncio.Future, what: str = "") -> None:
-    """Read a teardown task's exception once it completes, whichever path got there.
+    """Read an abandoned task's exception once it completes, whichever path got there.
+
+    Used by BOTH non-cancelling bounds: `_close_or_abandon` (teardown) and
+    `_await_or_raise` (setup calls with no native timeout, added 2026-08-19).
+    The `BROWSERS_UNCLOSED` clause below is gated on `_teardown_op(what) ==
+    "browser.close"`, so the setup call sites — `playwright.start`,
+    `new_context`, `cookie_consent`, `new_page`, `resource_blocking`,
+    `page.content` — never touch that gauge.
 
     Without this, asyncio logs "Task exception was never retrieved" when the
     task is garbage-collected — the log flood observed in prod on 2026-08-03.
@@ -350,7 +404,7 @@ def _drain_orphan_exception(fut: asyncio.Future, what: str = "") -> None:
     if _teardown_op(what) == "browser.close" and exc is None:
         BROWSERS_UNCLOSED.dec()
     if exc is not None:
-        logger.debug(f"teardown failed ({what}): {exc!r}")
+        logger.debug(f"tâche abandonnée en échec ({what}): {exc!r}")
 
 
 async def _close_or_abandon(coro, timeout: float, what: str = "") -> None:
@@ -396,6 +450,40 @@ async def _close_or_abandon(coro, timeout: float, what: str = "") -> None:
     if not done:
         TEARDOWN_ABANDONED.labels(op=_teardown_op(what)).inc()
         logger.warning(f"scraper teardown abandoned after {timeout}s: {what}")
+
+
+async def _await_or_raise(coro, timeout: float, what: str):
+    """Borne un `await` qui n'a AUCUN timeout natif, et rend son résultat.
+
+    Frère de `_close_or_abandon`, même forme NON ANNULANTE et pour la même
+    raison : `asyncio.wait` laisse la tâche en dépassement continuer au lieu de
+    l'annuler. Annuler un appel Playwright en pleine conversation protocolaire
+    est précisément ce qui a orphelinné le callback de `page.goto` et produit le
+    flood « Future exception was never retrieved » — une borne ne doit pas
+    rouvrir ça.
+
+    Différence avec `_close_or_abandon` : ici il y a un résultat à livrer, donc
+    on LÈVE quand le budget est épuisé.
+
+    Le message contient délibérément « Timeout » :
+    `redirect_tracker._VARIANT_POINTLESS_ERRORS` teste ce jeton pour décider si
+    les variantes d'URL valent la peine. Un navigateur qui ne répond pas n'est
+    pas réparé en basculant http/https ou www — sans le jeton, chacun de ces
+    échecs réarmerait trois navigations supplémentaires.
+
+    Pourquoi ces appels en ont besoin : aucune de `Browser.new_context`,
+    `BrowserContext.new_page`, `BrowserContext.add_cookies`, `Page.route` ni
+    `Page.content` n'accepte de `timeout` (signatures du playwright installé), et
+    `set_default_timeout` ne régit que « all methods accepting a timeout
+    option » — il n'en bornait donc aucune.
+    """
+    t = asyncio.ensure_future(coro)
+    t.add_done_callback(partial(_drain_orphan_exception, what=what))
+    done, _pending = await asyncio.wait({t}, timeout=timeout)
+    if not done:
+        logger.warning(f"scraper étape abandonnée après {timeout}s: {what}")
+        raise TimeoutError(f"Timeout {what} — pas de réponse après {timeout}s")
+    return t.result()
 
 
 async def _teardown_targets(page, context, browser, url: str) -> None:
@@ -492,7 +580,15 @@ async def scrape_html(
         return None
 
     async with _BROWSER_SEMAPHORE:
-        p = await async_playwright().start()
+        # Résiduel assumé, même arbitrage que `_close_or_abandon` : un driver
+        # qui finit par démarrer APRÈS l'abandon n'est pas récupéré (`p.stop()`
+        # ne sera jamais appelé). Annuler serait pire — c'est le mode d'échec
+        # qui a produit le flood de callbacks orphelins.
+        p = await _await_or_raise(
+            async_playwright().start(),
+            settings.BROWSER_OP_TIMEOUT_S,
+            f"playwright.start {url}",
+        )
         try:
             browser, is_camoufox = await _launch_browser(p, playwright_proxy)
             # Counted here, decremented only when its close() settles
@@ -512,16 +608,39 @@ async def scrape_html(
                 if not is_camoufox:
                     context_options['user_agent'] = random.choice(_USER_AGENTS)
 
-                context = await browser.new_context(**context_options)
+                # Ces quatre appels n'acceptent aucun timeout natif et
+                # `set_default_timeout` ne les régit pas (cf. config.py) : sans
+                # `_await_or_raise` ils étaient les seuls awaits du chemin que
+                # rien ne bornait, et un blocage y consommait les 300 s de
+                # l'item sans laisser d'étape. Les affectations restent
+                # incrémentales : `finally` a besoin de `context`/`page` pour
+                # démonter ce qui existe déjà.
+                context = await _await_or_raise(
+                    browser.new_context(**context_options),
+                    settings.BROWSER_OP_TIMEOUT_S,
+                    f"new_context {url}",
+                )
                 context.set_default_timeout(settings.BROWSER_OP_TIMEOUT_S * 1000)
 
                 # Injection cookie de consentement (comme crawler-service)
-                await _inject_cookie_consent(context, url)
+                await _await_or_raise(
+                    _inject_cookie_consent(context, url),
+                    settings.BROWSER_OP_TIMEOUT_S,
+                    f"cookie_consent {url}",
+                )
 
-                page = await context.new_page()
+                page = await _await_or_raise(
+                    context.new_page(),
+                    settings.BROWSER_OP_TIMEOUT_S,
+                    f"new_page {url}",
+                )
 
                 # Blocage des ressources lourdes (comme crawler-service)
-                await _setup_resource_blocking(page)
+                await _await_or_raise(
+                    _setup_resource_blocking(page),
+                    settings.BROWSER_OP_TIMEOUT_S,
+                    f"resource_blocking {url}",
+                )
 
                 # Navigation en deux phases :
                 # Phase 1 : domcontentloaded avec timeout réduit à 30s
@@ -554,8 +673,18 @@ async def scrape_html(
                 content = None
                 for content_attempt in range(3):
                     try:
-                        content = await page.content()
+                        content = await _await_or_raise(
+                            page.content(),
+                            settings.BROWSER_OP_TIMEOUT_S,
+                            f"page.content {url}",
+                        )
                         break
+                    except TimeoutError:
+                        # Un content() qui ne répond pas n'est PAS « contenu vide
+                        # ou trop court » : le laisser remonter, sinon le
+                        # _record_failure('content', …) plus bas publierait une
+                        # cause fausse pour un blocage navigateur.
+                        raise
                     except Exception as content_e:
                         if 'navigating and changing the content' in str(content_e):
                             logger.warning(f"Page en navigation pour {url}, attente 1s (tentative {content_attempt + 1}/3)")
@@ -585,14 +714,25 @@ async def scrape_html(
                         while (_time.time() - poll_start) < poll_timeout:
                             await page.wait_for_timeout(poll_interval * 1000)
 
+                            # Bornés : la garde du `while` ne se réévalue qu'ENTRE
+                            # deux tours, donc un content() bloqué ici rendait la
+                            # boucle — et son plafond de 45 s — inopérante.
                             try:
-                                content = await page.content()
+                                content = await _await_or_raise(
+                                    page.content(),
+                                    settings.BROWSER_OP_TIMEOUT_S,
+                                    f"page.content (poll challenge) {url}",
+                                )
                             except Exception as poll_e:
                                 # Le contexte peut être détruit pendant une navigation
                                 logger.debug(f"Erreur content() pendant polling challenge pour {url}: {poll_e}")
                                 await page.wait_for_timeout(1000)
                                 try:
-                                    content = await page.content()
+                                    content = await _await_or_raise(
+                                        page.content(),
+                                        settings.BROWSER_OP_TIMEOUT_S,
+                                        f"page.content (poll retry) {url}",
+                                    )
                                 except Exception:
                                     continue
 
@@ -610,7 +750,11 @@ async def scrape_html(
                                     pass
                                 # Re-extraire le contenu final
                                 try:
-                                    content = await page.content()
+                                    content = await _await_or_raise(
+                                        page.content(),
+                                        settings.BROWSER_OP_TIMEOUT_S,
+                                        f"page.content (post-challenge) {url}",
+                                    )
                                 except Exception:
                                     pass
                                 break
@@ -700,7 +844,13 @@ async def scrape_html_with_redirects(
     is_camoufox = False
     try:
         async with _BROWSER_SEMAPHORE:
-            p = await async_playwright().start()
+            # Même résiduel assumé que dans scrape_html : un driver qui démarre
+            # après l'abandon n'est pas récupéré.
+            p = await _await_or_raise(
+                async_playwright().start(),
+                settings.BROWSER_OP_TIMEOUT_S,
+                f"playwright.start (redirects) {url}",
+            )
             try:
                 browser, is_camoufox = await _launch_browser(p, playwright_proxy)
                 BROWSERS_UNCLOSED.inc()  # see scrape_html's launch site
@@ -717,13 +867,31 @@ async def scrape_html_with_redirects(
                     if not is_camoufox:
                         context_options['user_agent'] = random.choice(_USER_AGENTS)
 
-                    context = await browser.new_context(**context_options)
+                    # Mêmes bornes que scrape_html : aucun de ces quatre appels
+                    # n'a de timeout natif (cf. config.py:BROWSER_OP_TIMEOUT_S).
+                    context = await _await_or_raise(
+                        browser.new_context(**context_options),
+                        settings.BROWSER_OP_TIMEOUT_S,
+                        f"new_context (redirects) {url}",
+                    )
                     context.set_default_timeout(settings.BROWSER_OP_TIMEOUT_S * 1000)
 
-                    await _inject_cookie_consent(context, url)
+                    await _await_or_raise(
+                        _inject_cookie_consent(context, url),
+                        settings.BROWSER_OP_TIMEOUT_S,
+                        f"cookie_consent (redirects) {url}",
+                    )
 
-                    page = await context.new_page()
-                    await _setup_resource_blocking(page)
+                    page = await _await_or_raise(
+                        context.new_page(),
+                        settings.BROWSER_OP_TIMEOUT_S,
+                        f"new_page (redirects) {url}",
+                    )
+                    await _await_or_raise(
+                        _setup_resource_blocking(page),
+                        settings.BROWSER_OP_TIMEOUT_S,
+                        f"resource_blocking (redirects) {url}",
+                    )
 
                     # Capturer les redirections via événement response
                     def on_response(response):

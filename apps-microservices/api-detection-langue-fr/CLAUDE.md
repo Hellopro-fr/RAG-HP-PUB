@@ -237,6 +237,7 @@ Spec: `docs/superpowers/specs/2026-05-17-detection-langue-fr-crawler-admission-c
 | Variable | Default | Purpose |
 |---|---|---|
 | `BROWSER_SEMAPHORE_SIZE` | `10` | Max concurrent Camoufox/Chromium instances |
+| `BROWSER_POOL_WAIT_S` | `60` | Bound on the wait for a browser permit (see "Bounded setup awaits" below) |
 | `CAMOUFOX_ENABLED` | `true` | Use Camoufox; `false` falls back to Chromium |
 | `ADMISSION_ENABLED` | `true` | Kill switch for admission middleware |
 | `ADMISSION_MAX_SLOTS` | `12` | Production endpoint in-flight limit |
@@ -245,6 +246,58 @@ Spec: `docs/superpowers/specs/2026-05-17-detection-langue-fr-crawler-admission-c
 | `INFLIGHT_DEDUP_ENABLED` | `true` | Kill switch for URL dedup |
 
 Callers MUST use the shared contract: `libs/common-utils/src/common_utils/detection_client.py` (Python) or mirror its env vars (`DETECTION_MAX_CONCURRENCY`, `DETECTION_REQUEST_TIMEOUT_S`, `DETECTION_MAX_RETRIES`, `DETECTION_BACKOFF_BASE_S`) in other languages.
+
+### Bounded setup awaits (2026-08-19)
+
+**`BROWSER_OP_TIMEOUT_S` used to bound nothing at all.** It was applied as
+`context.set_default_timeout(...)`, and `BrowserContext.set_default_timeout` governs only
+"all methods accepting a `timeout` option" — **none** of `Browser.new_context`,
+`BrowserContext.new_page`, `BrowserContext.add_cookies`, `Page.route` or `Page.content`
+accepts one (verified against the installed playwright's signatures and the 1.58.2 docs).
+The two methods on the path that DO accept one, `goto` and `wait_for_load_state`, already
+receive an explicit timeout from `scraper.py`. The setting's old comment claimed the
+opposite and is corrected in `config.py`.
+
+Those five calls plus `async_playwright().start()` and the wait for a browser permit were
+therefore the only awaits on the scrape path with **no bound whatsoever** — the per-item
+300s `wait_for` in `routes.py` was the sole thing catching them, and it reports
+`method='error'` with no stage, which is why timed-out rows carry an empty `Cause` column
+in the BO's crawling report.
+
+`_await_or_raise` (`app/services/scraper.py`) now bounds each of them at
+`BROWSER_OP_TIMEOUT_S`, and `_BoundedBrowserSemaphore` bounds the permit wait at
+`BROWSER_POOL_WAIT_S`. Both keep `_close_or_abandon`'s **non-cancelling** shape
+(`asyncio.wait`, drain callback attached before the await): cancelling a Playwright call
+mid-protocol is what orphaned `page.goto`'s callback and produced the
+"Future exception was never retrieved" flood. `_await_or_raise` raises instead of
+abandoning silently, because it has a result to deliver.
+
+- **Every message contains the token `Timeout`, deliberately.**
+  `redirect_tracker._VARIANT_POINTLESS_ERRORS` tests for it to decide whether URL variants
+  are worth trying; a browser that will not answer is not repaired by switching
+  http/https or www, so without the token each such failure would re-arm **three** extra
+  navigations. `tests/test_await_or_raise.py` pins this against the real constant.
+- **Stage attribution comes for free**: the raise reaches `redirect_tracker._derive_failure`,
+  which publishes `stage='browser'` with the exception text as `cause` — so
+  `failure_detail` now names the step (`new_context`, `new_page`, `page.content`,
+  `playwright.start`, `cookie_consent`, `resource_blocking`, browser-pool wait) with no
+  schema change and no BO-side change.
+- **A permit granted after we stopped waiting is returned to the pool** by a done-callback.
+  Without it every failed wait would shrink the pool by one for the process lifetime.
+  Deliberately not relying on `Semaphore.acquire`'s own cancellation handling: CPython
+  3.12 hands the permit back, the image is `python:3.10-slim`, and this code must not
+  depend on which.
+- **Residual, assumed:** a `playwright.start` that completes after being abandoned is not
+  reclaimed (`p.stop()` is never called) — same trade `_close_or_abandon` already makes
+  for browsers. `page.content` inside the challenge-poll loop is bounded too: the `while`
+  guard only re-evaluates between iterations, so a hung read there made the 45s poll
+  ceiling inoperative.
+- **NOT bounded, on purpose:** the inflight-dedup follower's `await fut`
+  (`app/core/inflight_dedup.py`). It is unbounded in itself but inherits the leader's own
+  item ceiling — when the leader is cancelled, `coalesce` sets the exception on the shared
+  future and every follower wakes. Bounding it independently would only matter if the
+  per-item ceiling were raised or removed, and would need a caller-injected timeout to
+  keep the primitive pure.
 
 ### Method values added by the carve-out
 
