@@ -2153,6 +2153,10 @@ services:
       RABBITMQ_URL: ${RABBITMQ_URL}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
       HP_TOKEN: ${HP_TOKEN}
+      # Surcharge optionnelle de la grille horaire DeepSeek, au format "1-4,6-10" (UTC).
+      # Vide ou absente = grille par defaut. Ce service n'a pas d'env_file, donc sans
+      # cette ligne la variable serait INATTEIGNABLE dans le conteneur.
+      DEEPSEEK_FENETRES_PLEINES: ${DEEPSEEK_FENETRES_PLEINES:-}
     volumes:
       - /mnt/data/docker/images/generation-question-caracteristiques/qc-caracterisation:/app/tracking
     deploy:
@@ -2171,6 +2175,10 @@ services:
       RABBITMQ_URL: ${RABBITMQ_URL}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
       HP_TOKEN: ${HP_TOKEN}
+      # Surcharge optionnelle de la grille horaire DeepSeek, au format "1-4,6-10" (UTC).
+      # Vide ou absente = grille par defaut. Ce service n'a pas d'env_file, donc sans
+      # cette ligne la variable serait INATTEIGNABLE dans le conteneur.
+      DEEPSEEK_FENETRES_PLEINES: ${DEEPSEEK_FENETRES_PLEINES:-}
     volumes:
       - /mnt/data/docker/images/generation-question-caracteristiques/qc-fabricant-reference:/app/tracking
     deploy:
