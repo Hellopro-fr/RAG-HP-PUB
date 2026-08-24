@@ -89,7 +89,11 @@ test('strict comparison preserved: exactly at the threshold does not trip', () =
         CFG,
     );
     assert.equal(justOver.trip, true);
-    assert.match(justOver.reason, /15\.0%/);
+    // Both the rate and the threshold render at .toFixed(1) now, so a bare
+    // /15\.0%/ would pass even if the RATE render broke (the threshold's own
+    // "15.0%" would still satisfy it). Anchor right after the opening paren so
+    // this can only match the rate side.
+    assert.match(justOver.reason, /too high \(15\.0% > /);
 });
 
 test('maxErrorRate = 0 disables the signal (routes.ts `> 0` semantics)', () => {

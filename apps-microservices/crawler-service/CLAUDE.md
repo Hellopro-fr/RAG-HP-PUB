@@ -121,6 +121,10 @@ computed in the pure `errorRateBreaker.ts` over `processed + errors_unprocessed`
 
 ⚠ **`updateHealthVerdict.ts` still computes `errors / processed`** for the report the BO reads.
 Same arithmetic, opposite stakes — deliberately out of scope, see §8.1 of that spec.
+`updateHealthVerdict.ts` also emits the same `Error rate too high (` prefix as the fixed path in
+`errorRateBreaker.ts` — one occurrence in each file. That prefix is no longer a unique
+fingerprint of the corrected formula: grepping production logs for it, the exact method behind
+this lot's 69-run measurement, now silently mixes results from both formulas.
 
 ⚠ **Micro mode is dead code.** `cb.isMicroMode` is never set true (`main.ts`, the assignment is
 commented out), so `maxAbsErrors` / `maxAbsRedirects` / `maxAbsNew` are inert here. Do not wake it

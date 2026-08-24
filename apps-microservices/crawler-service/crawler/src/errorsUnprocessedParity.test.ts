@@ -10,6 +10,14 @@ import path from "node:path";
  *
  * Source-text assertions on purpose: UpdateChecker's CASE 1 needs a live
  * StatsManager; a fake would only prove the fake agrees with itself.
+ *
+ * ⚠ Still source-text, not a data-flow proof. The patterns below close the
+ * two defeats found in adversarial review (a renamed/nulled read, and an
+ * unanchored decoy match) — they do not execute routes.ts or trace
+ * `errorsUnprocessed` through a real request. A proof-grade version would
+ * need the three counters (`errors`, `processed`, `errorsUnprocessed`)
+ * threaded through a testable seam that routes.ts calls into instead of
+ * computing inline — a design change, out of scope here.
  */
 const src = (f: string) => fs.readFileSync(path.join(import.meta.dirname, f), "utf-8");
 
@@ -27,14 +35,28 @@ test("errors_unprocessed: UpdateChecker writes the name the breaker will read", 
         'routes.ts must getValue("errors_unprocessed") — a name mismatch reads a field nobody writes, i.e. a denominator silently back to `processed`',
     );
 
-    // Reading the counter is not enough — it must reach the breaker call itself.
-    // Substituting errorsUnprocessed: 0 (or dropping the field) at the call site
-    // reverts the denominator to `processed` and leaves the suite green, because
-    // `npm test` runs tsx (transpile-only); only `npm run build` type-checks.
+    // Reading the counter is not enough — it must actually reach the breaker
+    // call. Two defeats surfaced in review: (A) rename the read and hardcode
+    // the value (`const errorsUnprocessedRead = await …; const errorsUnprocessed = 0;`)
+    // — tsconfig.json sets noUnusedLocals: false, so even `npm run build`
+    // misses the orphaned binding, not just `npm test`'s transpile-only tsx;
+    // (B) an unanchored regex satisfied by any decoy occurrence of the object
+    // shape (a comment, or an unrelated destructure) — worse, a future helper
+    // that omits the field would turn `attempts` into NaN and silently stop
+    // the breaker from ever tripping, a louder bug an unanchored match is
+    // equally blind to. The two assertions below close both: the first is
+    // anchored to the actual call site and rejects a value substitution
+    // (`errorsUnprocessed:` fails to match); the second requires the bound
+    // name to resolve to the Redis read, not a hardcoded literal.
     assert.match(
         routes,
-        /\{ errors, processed, errorsUnprocessed \}/,
-        'routes.ts must pass errorsUnprocessed INTO the breaker — reading it and not passing it reverts the denominator to `processed`, and tsx does not type-check',
+        /shouldTripErrorRateBreaker\(\s*\{[^}]*\berrorsUnprocessed\b\s*[,}]/s,
+        'routes.ts must pass errorsUnprocessed as a property INTO the shouldTripErrorRateBreaker(...) call — reading the counter and not forwarding it (or substituting a value) reverts the denominator to `processed`',
+    );
+    assert.match(
+        routes,
+        /const\s+errorsUnprocessed\s*=\s*await[^;]*getValue\("errors_unprocessed"\)/,
+        'the errorsUnprocessed binding passed to the breaker must itself resolve to context.statsManager.getValue("errors_unprocessed") — a renamed read paired with a hardcoded errorsUnprocessed would pass the call-site assertion alone and defeat the parity fix',
     );
 });
 
