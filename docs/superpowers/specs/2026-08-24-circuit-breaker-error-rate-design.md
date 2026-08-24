@@ -147,8 +147,17 @@ récupère — entre 0 et 31 — pas s'il faut le faire.
 ## 5. Ce que la spec propose
 
 **Un seul changement, celui qui est prouvé** : que `errorRate` compte au dénominateur **toutes les
-tentatives**, pas seulement celles qui ont franchi le contrôle de statut. Par symétrie exacte avec le
-mur de proxy du même fichier — même défaut, même remède, déjà écrit.
+tentatives**, pas seulement celles qui ont franchi le contrôle de statut.
+
+⚠ **La symétrie avec le mur de proxy n'est PAS exacte** — la première rédaction de cette spec
+l'affirmait, à tort. Les deux disjoncteurs voisins ont un numérateur **disjoint de `processed`
+par construction** (`shouldTripProxyWall(blocked, blocked + processedOk, …)`,
+`shouldTripExternalRedirectBreaker(external, processed, …)`). `errors` est un **mélange** :
+`UpdateChecker.ts:175` (erreur HTTP) contourne `processed`, `UpdateChecker.ts:278` (2xx non
+éligible) y est **déjà compté**. Écrire `processed + errors` diluerait donc le taux précisément
+sur les runs dont le taux est déjà juste — cela affaiblirait une garde qui fonctionne pour en
+réparer une qui est cassée. Le dénominateur est `processed + errors_unprocessed`, un **nouveau
+compteur** qui n'isole que la moitié hors-livre.
 
 ⚠ **Direction du changement, énoncée franchement** : un dénominateur plus grand ⇒ des taux plus bas
 ⇒ **moins d'arrêts**. Ce n'est pas la direction « sûre » par défaut : des runs qui s'arrêtaient vont
@@ -203,3 +212,37 @@ Le `CLAUDE.md` du service — **1013 lignes** — ne mentionne **ni** « circuit
 verrouillé 121 domaines n'est documenté nulle part dans les instructions du service, alors que son
 voisin, le disjoncteur de redirection externe, a sa spec citée dans le tableau des codes de sortie.
 ⇒ Le lot d'implémentation ajoute cette section, dans le même commit que le correctif.
+
+---
+
+## 8. Ce que ce lot ne répare pas, et qu'il faut savoir avant de le lire comme un succès
+
+### 8.1 Le MÊME défaut vit dans le verdict de santé — hors périmètre, à dessein
+
+`updateHealthVerdict.ts:69` calcule `errorRate: stats.processed > 0 ? stats.errors / stats.processed : 0`
+— **le même dénominateur défectueux**, sur le même couple de compteurs. Ce taux part dans
+`_update_report.json`, que `script_process_update_crawling.php` lit par clé, et il décide du statut
+`CRITICAL` qui gouverne les plafonds de suppression du BO.
+
+**Il n'est délibérément pas corrigé ici**, pour trois raisons :
+
+1. Le corriger **desserrerait** la détection de `CRITICAL` — moins de verdicts critiques, donc plus
+   d'actions destructives appliquées. C'est une décision produit, pas un calibrage.
+2. Le lot du 2026-08-17 a rendu ce module *prouvablement non régressif* avec 16 tests, dont un
+   (`updateHealthRates matches the pre-change definitions`) **épingle explicitement la formule
+   actuelle**. La changer, c'est changer un contrat épinglé exprès.
+3. Le disjoncteur, lui, ne décide de rien d'utile : un run arrêté sur 722 % n'est pas protégé, il
+   est tiré au sort. Les deux défauts sont arithmétiquement identiques et leurs **enjeux sont
+   opposés**.
+
+### 8.2 Conséquence : ce lot tarit le VERROU, pas le blocage des suppressions
+
+Un run marginal qui ne s'arrête plus va **se terminer**. Il n'écrit alors plus de ligne `FAILED`,
+donc plus de verrou permanent via `est_domaine_deja_en_cours()` — **c'est le gain, et c'est le
+préjudice rapporté**. Mais son rapport portera toujours le taux calculé à l'ancienne
+(§8.1) : si ce taux dépasse 15 %, le verdict reste `CRITICAL` et le BO retient les actions
+destructives. ⇒ **Le domaine cesse d'être verrouillé ; ses suppressions ne s'appliquent pas pour
+autant.** Annoncer « les 23 runs marginaux sont récupérés » serait faux.
+
+⚠ À vérifier côté BO avant toute communication sur ce point : que `CRITICAL` retient bien les
+actions (et non seulement `PENDING_SAMPLE`). Non vérifié à la date de cette spec.
