@@ -462,6 +462,10 @@ router.addDefaultHandler(
                     else if (cb.maxAbsNew > 0 && newUrls >= cb.maxAbsNew) abortReason = `Too many new URLs for small site (${newUrls} >= ${cb.maxAbsNew})`;
                 } else {
                     // --- STANDARD MODE (Rate Limits) ---
+                    // Keep this wrapper: it is the ONLY minSample gate for the redirect and
+                    // growth branches below — neither re-checks it. shouldTripErrorRateBreaker
+                    // re-checks the gate for itself only, so deleting this as "redundant" would
+                    // let those two branches fire below the sample size, i.e. ADD stops.
                     if (processed >= cb.minSample) {
                         // The error rate lives in a pure, tested module because its
                         // denominator is not `processed`: an HTTP error never reaches
