@@ -4,14 +4,14 @@
     {
       "id": 0,
       "subject": "Task 1: Correct the spec before implementing",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** Remove the one false claim in the design authority and record the two findings the implementer needs, so nobody builds `errors + processed` from the letter of §5.\n\n**Files:**\n- Modify: `docs/superpowers/specs/2026-08-24-circuit-breaker-error-rate-design.md` (§5, and a new §8)\n\n**Acceptance Criteria:**\n- [ ] §5 no longer claims exact symmetry with the proxy wall; it names the mixture and the new counter\n- [ ] A new §8 records that `updateHealthVerdict.ts:69` carries the same defect and is deliberately out of scope, with the reason\n- [ ] §8 states the honest limitation: this fix stops the lock, it does not by itself make the marginal runs' deletions apply\n- [ ] No claim in the spec now contradicts the \"What the exploration established\" section of the plan\n\n**Verify:** `grep -c 'symétrie exacte' docs/superpowers/specs/2026-08-24-circuit-breaker-error-rate-design.md` → `0`\n\n```json:metadata\n{\"files\": [\"docs/superpowers/specs/2026-08-24-circuit-breaker-error-rate-design.md\"], \"verifyCommand\": \"grep -c 'symétrie exacte' docs/superpowers/specs/2026-08-24-circuit-breaker-error-rate-design.md\", \"acceptanceCriteria\": [\"the exact-symmetry claim is gone from §5\", \"§8 records updateHealthVerdict.ts:69 as the same defect, out of scope, with the reason\", \"§8 states that the fix stops the lock but not the withholding of deletions\"], \"modelTier\": \"standard\"}\n```",
       "activeForm": "Correcting the spec"
     },
     {
       "id": 1,
       "subject": "Task 2: The pure decision module",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         0
       ],
@@ -21,7 +21,7 @@
     {
       "id": 2,
       "subject": "Task 3: The errors_unprocessed counter",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         0
       ],
@@ -31,7 +31,7 @@
     {
       "id": 3,
       "subject": "Task 4: Wire it, and document the mechanism",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         1,
         2
