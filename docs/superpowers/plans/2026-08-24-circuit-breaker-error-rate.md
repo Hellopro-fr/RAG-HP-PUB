@@ -644,7 +644,7 @@ MSG
 
 **Files:**
 - Modify: `apps-microservices/crawler-service/crawler/src/routes.ts` (import at ~`:33`, block `:449-467`)
-- Modify: `apps-microservices/crawler-service/crawler/src/errorsUnprocessedParity.test.ts` (restore the read-side assertion — see Step 4b)
+- Modify: `apps-microservices/crawler-service/crawler/src/errorsUnprocessedParity.test.ts` (restore the read-side assertion — see Step 3b)
 - Modify: `apps-microservices/crawler-service/CLAUDE.md` (new section after `## Update Mode …`, ~`:83`)
 
 **Acceptance Criteria:**
