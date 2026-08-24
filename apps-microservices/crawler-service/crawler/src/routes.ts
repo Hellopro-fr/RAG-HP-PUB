@@ -31,6 +31,7 @@ import { baseKeyAbsent } from "./urlBase.js";
 import { recordTier2Sample, maybeCommitTier2, tier2Evidence, maybeDefaultAtCeiling as maybeDefaultDiezAtCeiling } from "./diezTier2.js";
 import { routeDiezOutcome } from "./diezHookGate.js";
 import { shouldTripExternalRedirectBreaker } from "./externalRedirectBreaker.js";
+import { shouldTripErrorRateBreaker } from "./errorRateBreaker.js";
 import { recordQuestionMarkObservation } from "./questionMarkDecision.js";
 import { recordQmTier2Sample, maybeCommitParam, commitToRemoveParam, maybeDefaultAtCeiling, QM_TIER2_TRIGGER } from "./questionMarkTier2.js";
 import { trackQmHashStatsForUrl } from "./qmHashTracker.js";
@@ -450,7 +451,8 @@ router.addDefaultHandler(
                 const redirects = await context.statsManager.getValue("redirects");
                 const newUrls = await context.statsManager.getValue("new_urls");
                 const processed = await context.statsManager.getValue("processed");
-                
+                const errorsUnprocessed = await context.statsManager.getValue("errors_unprocessed");
+
                 let abortReason = "";
 
                 if (cb.isMicroMode) {
@@ -460,13 +462,27 @@ router.addDefaultHandler(
                     else if (cb.maxAbsNew > 0 && newUrls >= cb.maxAbsNew) abortReason = `Too many new URLs for small site (${newUrls} >= ${cb.maxAbsNew})`;
                 } else {
                     // --- STANDARD MODE (Rate Limits) ---
+                    // Keep this wrapper: it is the ONLY minSample gate for the redirect and
+                    // growth branches below — neither re-checks it. shouldTripErrorRateBreaker
+                    // re-checks the gate for itself only, so deleting this as "redundant" would
+                    // let those two branches fire below the sample size, i.e. ADD stops.
                     if (processed >= cb.minSample) {
-                        const errorRate = errors / processed;
+                        // The error rate lives in a pure, tested module because its
+                        // denominator is not `processed`: an HTTP error never reaches
+                        // that counter. See errorRateBreaker.ts — 12 of 69 stopped runs
+                        // in the 2026-08-10 batch reported a rate above 100%.
+                        const errorBreaker = shouldTripErrorRateBreaker(
+                            { errors, processed, errorsUnprocessed },
+                            cb,
+                        );
+                        // Left inline on purpose: this branch is disabled in production
+                        // (the BO launcher sends max_redirect_rate = 0) and the spec puts
+                        // it out of scope. Do not "harmonise" it with the line above.
                         const redirectRate = redirects / processed;
-                        
-                        if (cb.maxErrorRate > 0 && errorRate > cb.maxErrorRate) abortReason = `Error rate too high (${(errorRate*100).toFixed(1)}% > ${(cb.maxErrorRate*100)}%)`;
+
+                        if (errorBreaker.trip) abortReason = errorBreaker.reason;
                         else if (cb.maxRedirectRate > 0 && redirectRate > cb.maxRedirectRate) abortReason = `Redirect rate too high (${(redirectRate*100).toFixed(1)}% > ${(cb.maxRedirectRate*100)}%)`;
-                        
+
                         // Check growth relative to previous total
                         if (cb.maxGrowthRate > 0 && cb.previousTotal > 0 && (newUrls / cb.previousTotal) > cb.maxGrowthRate) {
                             abortReason = `Site growth too fast (> ${(cb.maxGrowthRate*100)}% of previous size)`;

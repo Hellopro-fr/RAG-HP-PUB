@@ -173,6 +173,13 @@ export class UpdateChecker {
         if (isHttpError) {
             if (isFromDataset) {
                 await this.statsManager.increment("errors");
+                // Off-book half of `errors`: this URL threw on the HTTP status policy
+                // (routes.ts) or exhausted its retries (failedRequestHandler), so it
+                // never reached increment("processed"). The error-rate breaker needs it
+                // in its denominator, or the ratio is not a proportion — see
+                // errorRateBreaker.ts. CASE 3 below is NOT counted here: a 2xx
+                // not_eligible URL is already inside `processed`.
+                await this.statsManager.increment("errors_unprocessed");
                 // A deletion claim requires a server verdict that the resource is
                 // GONE: 404/410 only. 401/403/407/429/5xx/status-0 are blocks or
                 // outages — the page may be alive (incident 1320-402: 63 anti-bot

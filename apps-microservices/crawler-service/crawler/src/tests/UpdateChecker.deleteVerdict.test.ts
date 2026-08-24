@@ -68,7 +68,7 @@ test('dataset 404: deleted event written, errors counted', async () => {
     assert.equal(r.reason, 'http_error_404');
     assert.equal(writer._calls.length, 1);
     assert.equal(writer._calls[0][0], UpdateChecker.DELETED_FILE);
-    assert.deepEqual(stats._calls, ['errors', 'accounted']);
+    assert.deepEqual(stats._calls, ['errors', 'errors_unprocessed', 'accounted']);
 });
 
 test('dataset 410: deleted event written', async () => {
@@ -84,7 +84,7 @@ test('dataset 403 (anti-bot block): NO deleted event, still counts as error', as
     assert.equal(r.action, 'ignored');
     assert.equal(r.reason, 'unverified_http_error_403');
     assert.equal(writer._calls.length, 0, 'no deleted event for a block');
-    assert.deepEqual(stats._calls, ['errors'], 'error still feeds health/circuit-breaker');
+    assert.deepEqual(stats._calls, ['errors', 'errors_unprocessed'], 'error still feeds health/circuit-breaker');
 });
 
 test('dataset 429/500/503/status-0: NO deleted event', async () => {
