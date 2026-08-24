@@ -1,12 +1,12 @@
-# Graph Report - detection + crawler-service + docs (seam chantiers)  (2026-08-17)
+# Graph Report - detection + crawler-service + docs (update health verdict)  (2026-08-24)
 
 ## Corpus Check
-- 30 files · ~0 words
+- 17 files · ~0 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 11500 nodes · 27278 edges · 223 communities detected
-- Extraction: 64% EXTRACTED · 36% INFERRED · 0% AMBIGUOUS · INFERRED: 9841 edges (avg confidence: 0.61)
+- 11619 nodes · 27581 edges · 223 communities detected
+- Extraction: 64% EXTRACTED · 36% INFERRED · 0% AMBIGUOUS · INFERRED: 9903 edges (avg confidence: 0.61)
 - Token cost: 0 input · 0 output
 
 ## Community Hubs (Navigation)
@@ -244,7 +244,7 @@
 7. `DetectionResponse` - 227 edges
 8. `LanguageDetector` - 223 edges
 9. `BatchItem` - 176 edges
-10. `DebugAlternativesInfo` - 155 edges
+10. `ScrapeResult` - 156 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `GeminiClient` --semantically_similar_to--> `gemini_client Gemini Infrastructure`  [INFERRED] [semantically similar]
@@ -297,6 +297,9 @@
 - **Chaîne de visibilité du compteur : incrément sur les dix sites (routes.ts) → StatsManager → relecture main.ts → charge du webhook → liste blanche BO. Chaque maillon est porteur : un compteur qui n'atteint pas la charge est inerte, et c'est exactement le mode d'échec que ce chantier existe pour fermer** — outage_vis_spec_rationale_compteur_panne_partielle, outage_vis_spec_rationale_liste_blanche_webhook, outage_vis_plan_tache3_compteur, class_statsmanager_statsmanager, crawler_src_routes_ts, crawler_src_main_ts, apps_microservices_crawler_service_crawler_src_statnameparity_test_ts [INFERRED 0.75]
 - **Layered defence against one wedged fetch: L1 self-aborting teardown in the scraper, L2 worker watchdog in async_jobs, plus the routes sub-fixes — planned and specified as one chantier** — async_hang_plan_task1_l1_teardown, async_hang_plan_task2_l2_watchdog, async_hang_plan_task3_routes_subfixes, detection_hang_v46_l1_self_aborting_teardown, detection_hang_v46_l2_worker_watchdog [INFERRED 0.80]
 - **The 2026-08-17 correction of the abandon-cost claim, propagated to all three documents that carried it, plus the helper it describes** — async_hang_plan_rationale_correction_20260817_abandon_cost, async_hang_spec_v59_correction_abandon_leaves_live_browser, teardown_plan_v59_correction_abandon_cost_unmeasured, scraper_close_or_abandon [INFERRED 0.85]
+- **The interlocking invariants that shape every formula in this design: strict relaxation (no run passing today may newly fail), the sample gate as a DISJUNCTION rather than a replacement, the error test as a CONJUNCTION rather than a max() that would swap the denominator, and zero-means-disabled as the reason the rate guard must lead each conjunction.** — update_health_spec_rationale_governing_constraint_strict_relaxation, update_health_spec_rationale_disjunction_not_replacement, update_health_spec_rationale_conjunction_not_max, update_health_spec_rationale_zero_means_disabled, update_health_spec_evaluation_order, updatehealthverdict_decideupdatehealth [INFERRED 0.85]
+- **The BO half and its hard ordering: the redirect cap is a precondition rather than an improvement, it must count the applied list and never the incomplete crawler counter, WARNING stops blocking, and the two deployments leave a window in which mass internal-redirect archiving is possible.** — update_health_spec_bo_redirect_cap, update_health_spec_rationale_redirect_cap_is_a_precondition, update_health_spec_rationale_redirect_cap_not_metrics_redirects, update_health_spec_bo_warning_stops_blocking, update_health_plan_task4_bo_redirect_cap, update_health_plan_task5_warning_stops_blocking, update_health_plan_deployment_gate_window [EXTRACTED 1.00]
+- **The refuted-claim ledger kept deliberately in both documents: sixteen dead claims from revisions 1 and 2, plus four corrections found during execution - a mis-described calibration tool, a line range that would have deleted the ABORTED override, two grep expectations asserted without being derived from a run, a missing guard on the percentage cap, and a verification script that does not exist.** — update_health_spec_selfcorrection_revision1_refuted, update_health_spec_selfcorrection_revision2_refuted, update_health_spec_selfcorrection_script_revue_seuils_not_replay_tool, update_health_spec_rationale_aborted_override_retained_range_1457, update_health_plan_selfcorrection_grep_expected_values_underived, update_health_plan_selfcorrection_pct_cap_missing_guard, update_health_plan_selfcorrection_mep_tooling_absent_and_symlink [INFERRED 0.80]
 
 ## Communities
 
@@ -354,7 +357,7 @@ Nodes (63): GuardConfig, GuardMetrics, Prometheus metrics for MilvusConcurrencyG
 
 ### Community 6 - "Detection FR Scraper & Redirects"
 Cohesion: 0.01
-Nodes (430): Configuration de l'application, reconcile_running_jobs_count(), scheduled_archive_cleanup(), validation_exception_handler(), startup_event(), shutdown_event(), read_root(), Periodically checks the actual number of 'running' jobs in Redis and corrects (+422 more)
+Nodes (470): Configuration de l'application, reconcile_running_jobs_count(), scheduled_archive_cleanup(), validation_exception_handler(), startup_event(), shutdown_event(), read_root(), Periodically checks the actual number of 'running' jobs in Redis and corrects (+462 more)
 
 ### Community 104 - "crawler-service: redisClient.test.ts"
 Cohesion: 1.0
@@ -534,7 +537,7 @@ Nodes (16): Archive Pre-flight Disk Space Check (2026-04-18), Rationale: Diagnos
 
 ### Community 1 - "Crawler Engine Core (main/functions)"
 Cohesion: 0.0
-Nodes (798): verify_api_key(), Verifies the API key if API_KEY is configured in settings.     If API_KEY is not, resetContextState(), makeTmpStorage(), classifyFragment(), recordClassification(), maybeCommitDecision(), writeDecisionFile() (+790 more)
+Nodes (863): verify_api_key(), Verifies the API key if API_KEY is configured in settings.     If API_KEY is not, resetContextState(), makeTmpStorage(), classifyFragment(), recordClassification(), maybeCommitDecision(), writeDecisionFile() (+855 more)
 
 ### Community 60 - "Crawler Engine Core (main/functions)"
 Cohesion: 0.31
@@ -566,7 +569,7 @@ Nodes (75): account-service SSO, account-service-backend, account-service-fronte
 
 ### Community 2 - "Detection Langue FR Core"
 Cohesion: 0.01
-Nodes (910): _normalize_url_for_dedup(), _homepage_of(), _is_homepage(), _ttl_from_verdict(), _build_challenge_error_msg(), _with_group(), _detect_single_url(), detect_french() (+902 more)
+Nodes (911): _normalize_url_for_dedup(), _homepage_of(), _is_homepage(), _ttl_from_verdict(), _build_challenge_error_msg(), _with_group(), _detect_single_url(), detect_french() (+903 more)
 
 ### Community 153 - "common-utils: __init__.py"
 Cohesion: 1.0
@@ -1130,7 +1133,7 @@ Nodes (4): _client(), test_version_defaults_to_unknown(), test_version_reads_env
 
 ### Community 24 - "Service Overviews (crawler + detection CLAUDE.md)"
 Cohesion: 0.02
-Nodes (153): api-detection-langue-fr Service, Tech Stack (Python/FastAPI/Camoufox), Camoufox Stealth Scraper (Chromium fallback), Redis Cache (cache_service pool), Async Batch Job API (/detect-batch-async), FIFO Job Queue (JOB_WORKER_CONCURRENCY), Idempotent Re-submit (client_job_id), Terminal-Write Hardening (2026-07-26 incident) (+145 more)
+Nodes (158): api-detection-langue-fr Service, Tech Stack (Python/FastAPI/Camoufox), Camoufox Stealth Scraper (Chromium fallback), Redis Cache (cache_service pool), Async Batch Job API (/detect-batch-async), FIFO Job Queue (JOB_WORKER_CONCURRENCY), Idempotent Re-submit (client_job_id), Terminal-Write Hardening (2026-07-26 incident) (+150 more)
 
 ### Community 254 - "crawler-service: DedupManager.test.ts"
 Cohesion: 1.0
@@ -1255,9 +1258,13 @@ Nodes (2): Référence de suite AVANT chantier : 7 échecs préexistants + 1 err
   docs/superpowers/specs/2026-08-10-detection-faux-negatifs-design.md · relation: conceptually_related_to
 - `Défaut B — le signal lexical n'est pas consulté quand fastText se trompe avec assurance` → `NON RÉSOLU : un des quatre domaines reste AMBIGU entre le défaut A et le défaut B ; le discriminant serait /detect-debug sur les deux formes — ne pas le compter comme un succès du volet A`  [AMBIGUOUS]
   docs/superpowers/specs/2026-08-10-detection-faux-negatifs-design.md · relation: conceptually_related_to
+- `statNameParity.test.ts` → `Report shape - the BO reads health, message, metrics.* and rates.*, never mode nor thresholds; rates.redirect_rate is consumed one hop away feeding the maintenance detector, so rates must keep its current keys and meaning. mode becomes the literal GRADUATED, key retained. New and additive: metrics.accounted, rates.coverage, thresholds.min_coverage, thresholds.max_abs_new, thresholds.disabled_signals - the last one because without it a HEALTHY verdict is indistinguishable from a verdict whose checks were off. Naming: TS key minCoverage, JSON field min_coverage; both spellings intentional, do not unify.`  [AMBIGUOUS]
+  docs/superpowers/specs/2026-08-17-update-health-verdict-decoupling-design.md · relation: conceptually_related_to
+- `reportLiteral()` → `Report shape - the BO reads health, message, metrics.* and rates.*, never mode nor thresholds; rates.redirect_rate is consumed one hop away feeding the maintenance detector, so rates must keep its current keys and meaning. mode becomes the literal GRADUATED, key retained. New and additive: metrics.accounted, rates.coverage, thresholds.min_coverage, thresholds.max_abs_new, thresholds.disabled_signals - the last one because without it a HEALTHY verdict is indistinguishable from a verdict whose checks were off. Naming: TS key minCoverage, JSON field min_coverage; both spellings intentional, do not unify.`  [AMBIGUOUS]
+  docs/superpowers/specs/2026-08-17-update-health-verdict-decoupling-design.md · relation: conceptually_related_to
 
 ## Knowledge Gaps
-- **3325 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+3320 more)
+- **3355 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+3350 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **Thin community `graphify-guide-en.md: Limitation: ID collision on sha...`** (1 nodes): `Creates a dictionary of headers for a DLQ message, compatible with both pika and`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
