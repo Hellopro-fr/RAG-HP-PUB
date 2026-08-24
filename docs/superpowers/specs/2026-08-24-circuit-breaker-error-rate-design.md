@@ -161,7 +161,8 @@ compteur** qui n'isole que la moitié hors-livre.
 
 ⚠ **Direction du changement, énoncée franchement** : un dénominateur plus grand ⇒ des taux plus bas
 ⇒ **moins d'arrêts**. Ce n'est pas la direction « sûre » par défaut : des runs qui s'arrêtaient vont
-désormais se terminer, et un run qui se termine applique ses actions destructives. Ce qui rend le
+désormais se terminer, et un run qui se termine applique ses actions destructives — sauf pour le
+sous-ensemble que borne le §8.2, où le verdict de santé les retient quand même. Ce qui rend le
 changement acceptable n'est pas sa direction mais son **fondement** : un disjoncteur qui décide sur un
 nombre supérieur à 100 % ne protège rien — il tire au hasard. Les garde-fous en aval restent en place
 (verdict de santé, garde de couverture, plafonds du BO, et depuis le 20/08 le filtre des orphelines
@@ -244,5 +245,21 @@ préjudice rapporté**. Mais son rapport portera toujours le taux calculé à l'
 destructives. ⇒ **Le domaine cesse d'être verrouillé ; ses suppressions ne s'appliquent pas pour
 autant.** Annoncer « les 23 runs marginaux sont récupérés » serait faux.
 
-⚠ À vérifier côté BO avant toute communication sur ce point : que `CRITICAL` retient bien les
-actions (et non seulement `PENDING_SAMPLE`). Non vérifié à la date de cette spec.
+**Mesuré côté BO, avec témoin positif contre un grep menteur** : `BO/script/chatgpt/script_process_update_crawling.php:713`
+retient les actions destructives par une **liste blanche**, pas par un test par verdict :
+
+```php
+if (!in_array($health_update, ["HEALTHY", "WARNING"], true)) {
+    $appliquer_actions_destructives = false;
+    $raison_blocage_destructif = "health={$health_update} (" . ($sante_update["message"] ?? "") . ")";
+```
+
+`CRITICAL` n'apparaît **nulle part** dans ce fichier (0 occurrence) ; témoin positif `HEALTHY` = 5,
+la recherche fonctionne donc. Tout verdict hors des deux valeurs admises — `CRITICAL` compris, ainsi
+qu'une clé absente ou vide — prend la branche négative : **`CRITICAL` retient les actions destructives
+par la même ligne que `PENDING_SAMPLE`**.
+
+⚠ **Ce que cette mesure ne couvre pas** : `$appliquer_reconciliation` (`:804`) n'est **pas** gouverné
+par le verdict de santé — seulement par un ratio de couverture `processed / previous_total`. Cette
+famille d'archivage/réconciliation est indépendante de toute cette question : §8.2 ne doit pas se
+lire comme « tout est retenu ».
