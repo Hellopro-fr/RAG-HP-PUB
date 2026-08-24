@@ -101,6 +101,16 @@ breaker as a soft signal.
 
 Confirmed on production via `GET /admin/job/{crawl_id}` (2026-08-24), not from source alone.
 
+⚠ **`maxErrorRate` is not a constant.** The BO launcher (`Marketplace/BO/admin/repertoire_test/moulinettes_interne/scrapping_produit_ia/tools/crawler/shell.php:131-138`)
+reads it from the `referentiel_seuils_cb` referential via `get_seuils_cb_pour_payload_crawler()`,
+with a hardcoded fallback if the table is unavailable. `0.15` is what production currently sends,
+not a guarantee the code makes.
+
+**Operator escape hatch:** `?bypasscberrors=1` on the launcher sets `max_error_rate = 0`
+(`shell.php:143-145`), which the breaker correctly reads as "signal disabled" (see the
+`maxErrorRate = 0` branch above). This is the documented way out of the lockout this section
+describes — write it down here, or it lives nowhere.
+
 **Sample gate:** `processed >= minSample` (50). Deliberately **not** widened to total attempts —
 widening it would make the breaker evaluate runs it never evaluated, i.e. add stops.
 

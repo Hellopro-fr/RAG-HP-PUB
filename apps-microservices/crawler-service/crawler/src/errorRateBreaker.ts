@@ -70,7 +70,7 @@ export function shouldTripErrorRateBreaker(
             rate,
             attempts,
             // Prefix is load-bearing: production logs are grepped on it.
-            reason: `Error rate too high (${(rate * 100).toFixed(1)}% > ${cfg.maxErrorRate * 100}%, `
+            reason: `Error rate too high (${(rate * 100).toFixed(1)}% > ${(cfg.maxErrorRate * 100).toFixed(0)}%, `
                 + `${stats.errors} errors / ${attempts} attempts)`,
         };
     }

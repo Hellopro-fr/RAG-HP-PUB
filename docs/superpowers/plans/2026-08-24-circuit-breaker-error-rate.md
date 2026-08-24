@@ -493,7 +493,8 @@ MSG
 - [ ] It is added at **exactly one** site — `UpdateChecker.ts` CASE 3 must stay untouched
 - [ ] `errors` itself is unchanged: same sites, same conditions, same count
 - [ ] The counter goes through `StatsManager` (Redis), **not** a `context`-local field — `errors` and `processed` are cumulative across restarts, and mixing a process-local counter into their ratio would corrupt it after any restart
-- [ ] A parity test pins that the name written in `UpdateChecker.ts` is the name read in `routes.ts`
+- [ ] A parity test pins the write side only — that `UpdateChecker.ts` increments the name `errors_unprocessed`
+  - The read side (`routes.ts` calling `getValue("errors_unprocessed")`) is deliberately deferred to **Task 4's Step 3b**: `routes.ts` has no read of this counter until that task wires it, so an assertion on the read side here could not pass.
 - [ ] `npm test` green
 
 **Verify:** `cd apps-microservices/crawler-service/crawler && npm test` → `fail 0`; and `grep -c 'increment("errors_unprocessed")' src/class/UpdateChecker.ts` → `1`
@@ -525,16 +526,13 @@ const src = (f: string) => fs.readFileSync(path.join(import.meta.dirname, f), "u
 
 test("errors_unprocessed: UpdateChecker writes the name routes.ts reads", () => {
     const checker = src("class/UpdateChecker.ts");
-    const routes = src("routes.ts");
 
     assert.ok(
         checker.includes('increment("errors_unprocessed")'),
         'UpdateChecker.ts must increment "errors_unprocessed" — without it the denominator is `processed` again',
     );
-    assert.ok(
-        routes.includes('getValue("errors_unprocessed")'),
-        'routes.ts must getValue("errors_unprocessed") — a name mismatch reads a field nobody writes',
-    );
+    // Read-side assertion (routes.ts getValue("errors_unprocessed")) deferred to
+    // Task 4 Step 3b — routes.ts has no read of this counter until that task wires it.
 });
 
 test("errors_unprocessed is written ONCE, on the HTTP-error branch only", () => {
@@ -659,7 +657,7 @@ MSG
 - [ ] `npm test` green
 - [ ] All three files in **one** commit — the spec requires the doc section to ship with the fix
 
-**Verify:** `cd apps-microservices/crawler-service/crawler && npm test` → `fail 0`; and `grep -c 'errors / processed' src/routes.ts` → `0`; and `grep -c 'getValue("errors_unprocessed")' src/errorsUnprocessedParity.test.ts` → `1`
+**Verify:** `cd apps-microservices/crawler-service/crawler && npm test` → `fail 0`; and `grep -c 'errors / processed' src/routes.ts` → `0`; and `grep -c 'getValue("errors_unprocessed")' src/errorsUnprocessedParity.test.ts` → `2`
 
 ⚠ **Why the parity test is in this task's file list.** Task 3 wrote the counter but could not pin that anyone *reads* it — `routes.ts` had no read until now, so the assertion was removed from Task 3 and deferred here. **This task is the only place it can pass, and the only place that will remember it.** Dropping it leaves the write/read name agreement unpinned, which is the precise defect the parity test exists to prevent: a counter incremented into one field while the breaker reads a permanently-absent other, i.e. a denominator silently equal to `processed` again — the bug this whole lot repairs, restored in a form that looks fixed.
 

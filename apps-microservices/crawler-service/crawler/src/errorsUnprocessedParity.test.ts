@@ -26,6 +26,16 @@ test("errors_unprocessed: UpdateChecker writes the name the breaker will read", 
         routes.includes('getValue("errors_unprocessed")'),
         'routes.ts must getValue("errors_unprocessed") — a name mismatch reads a field nobody writes, i.e. a denominator silently back to `processed`',
     );
+
+    // Reading the counter is not enough — it must reach the breaker call itself.
+    // Substituting errorsUnprocessed: 0 (or dropping the field) at the call site
+    // reverts the denominator to `processed` and leaves the suite green, because
+    // `npm test` runs tsx (transpile-only); only `npm run build` type-checks.
+    assert.match(
+        routes,
+        /\{ errors, processed, errorsUnprocessed \}/,
+        'routes.ts must pass errorsUnprocessed INTO the breaker — reading it and not passing it reverts the denominator to `processed`, and tsx does not type-check',
+    );
 });
 
 test("errors_unprocessed is written ONCE, on the HTTP-error branch only", () => {

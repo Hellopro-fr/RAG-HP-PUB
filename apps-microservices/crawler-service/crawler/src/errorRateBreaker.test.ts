@@ -25,7 +25,7 @@ test('the impossible rate becomes a proportion: 722% measured → 87.8%', () => 
     assert.equal(r.trip, true); // still far above 15% — the fix does not rescue this one
 });
 
-test('the rate can NEVER exceed 1, whatever the mixture', () => {
+test('the rate can NEVER exceed 1, whatever the legal mixture', () => {
     // e_on <= processed is the invariant; sweep the whole legal space.
     for (let processed = 0; processed <= 40; processed += 8) {
         for (let eOff = 0; eOff <= 40; eOff += 8) {
