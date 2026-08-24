@@ -646,6 +646,7 @@ MSG
 
 **Files:**
 - Modify: `apps-microservices/crawler-service/crawler/src/routes.ts` (import at ~`:33`, block `:449-467`)
+- Modify: `apps-microservices/crawler-service/crawler/src/errorsUnprocessedParity.test.ts` (restore the read-side assertion — see Step 4b)
 - Modify: `apps-microservices/crawler-service/CLAUDE.md` (new section after `## Update Mode …`, ~`:83`)
 
 **Acceptance Criteria:**
@@ -653,11 +654,14 @@ MSG
 - [ ] `redirectRate` stays inline and unchanged — its branch is disabled in production (`maxRedirectRate` arrives as `0.0`) and the spec puts it out of scope
 - [ ] The `if (processed >= cb.minSample)` wrapper is kept, so the redirect and growth branches keep their existing gate
 - [ ] `cb` is passed straight to the pure function (structural typing: it already carries `minSample` and `maxErrorRate`)
+- [ ] **The read-side parity assertion is restored** in `errorsUnprocessedParity.test.ts`, and the docblock sentence saying it is deferred is removed — this task is the "later" that sentence points at
 - [ ] `CLAUDE.md` gains a section naming the breaker, its three thresholds, the two that arrive disabled, the exit-code consequence, and the dead micro mode
 - [ ] `npm test` green
-- [ ] Both files in **one** commit — the spec requires the doc section to ship with the fix
+- [ ] All three files in **one** commit — the spec requires the doc section to ship with the fix
 
-**Verify:** `cd apps-microservices/crawler-service/crawler && npm test` → `fail 0`; and `grep -c 'errors / processed' src/routes.ts` → `0`
+**Verify:** `cd apps-microservices/crawler-service/crawler && npm test` → `fail 0`; and `grep -c 'errors / processed' src/routes.ts` → `0`; and `grep -c 'getValue("errors_unprocessed")' src/errorsUnprocessedParity.test.ts` → `1`
+
+⚠ **Why the parity test is in this task's file list.** Task 3 wrote the counter but could not pin that anyone *reads* it — `routes.ts` had no read until now, so the assertion was removed from Task 3 and deferred here. **This task is the only place it can pass, and the only place that will remember it.** Dropping it leaves the write/read name agreement unpinned, which is the precise defect the parity test exists to prevent: a counter incremented into one field while the breaker reads a permanently-absent other, i.e. a denominator silently equal to `processed` again — the bug this whole lot repairs, restored in a form that looks fixed.
 
 **Steps:**
 
@@ -717,10 +721,26 @@ and replace those four lines with:
 
 Leave the growth check that follows exactly as it is, inside the same wrapper.
 
+- [ ] **Step 3b: Restore the read-side parity assertion**
+
+`routes.ts` now reads the counter, so the assertion Task 3 could not make becomes provable. In `apps-microservices/crawler-service/crawler/src/errorsUnprocessedParity.test.ts`, the first test currently pins only the write side. Re-add the read side to it:
+
+```ts
+    const routes = src("routes.ts");
+    assert.ok(
+        routes.includes('getValue("errors_unprocessed")'),
+        'routes.ts must getValue("errors_unprocessed") — a name mismatch reads a field nobody writes, i.e. a denominator silently back to `processed`',
+    );
+```
+
+Then remove the docblock sentence stating the read-side assertion is deferred until `routes.ts` reads the counter — it is no longer deferred, and a stale "later" in a test file is how a deferral becomes permanent.
+
 - [ ] **Step 4: Run the suite**
 
 Run: `cd apps-microservices/crawler-service/crawler && npm test 2>&1 | tail -20`
 Expected: `fail 0`, same total as after Task 3
+
+Then prove the restored assertion can fail: temporarily rename the read in `routes.ts` to `getValue("errors_unprocessed_typo")`, re-run, confirm that assertion goes red, and revert. Show both runs in your report — an assertion nobody has seen fail is not a guard.
 
 - [ ] **Step 5: Add the missing `CLAUDE.md` section**
 
