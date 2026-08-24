@@ -110,6 +110,38 @@ contre `reason: not_eligible`. Accessibles par `GET /crawling-service/admin/data
 
 ⚠ **Sans cette mesure, on ne peut pas savoir si réparer le dénominateur résout 23 arrêts ou zéro.**
 
+### 4.1 La mesure est BLOQUÉE PAR CONCEPTION — mesuré le 24/08
+
+`GET /admin/dataset/{crawl_id}?kind=update` rend **404** sur ces runs :
+*« Dataset not on local disk (crawl may be stashed/archived — this endpoint is deliberately
+side-effect-free ; use /unstash or /results to restore cold data) »*. Vérifié y compris sur un run
+terminé **deux heures plus tôt** : les datasets refroidissent vite.
+
+⇒ Obtenir la composition de `errors` exige `/unstash` ou `/results`, qui **ont des effets de bord**
+(`/results` tamponne `downloaded_at` et désarchive). **C'est une décision d'exploitation, pas une
+lecture** : elle ne se prend pas au passage d'une investigation.
+
+### 4.2 Ce qu'on peut BORNER sans restaurer quoi que ce soit
+
+Si le dénominateur devient « toutes les tentatives », le taux corrigé d'un run vaut au mieux
+`e / (processed + e)`, soit **`r / (1 + r)`** — le cas où **toutes** les erreurs contournaient
+`processed`. La bascule sous 15 % se situe donc à **r = 17,65 %**.
+
+Appliqué aux 69 taux réellement mesurés :
+
+| Hypothèse | Runs repassant sous 15 % |
+|---|---|
+| **Borne haute** — toutes les erreurs contournaient `processed` | **31 sur 69 (45 %)** |
+| **Borne basse** — aucune ne contournait (tout `not_eligible`) | **0** |
+
+⚠ **Et dans TOUS les cas, quel que soit le mélange** : les **12** runs cessent d'annoncer un taux
+impossible. Le maximum mesuré sur les 69 est **722 %** — il deviendrait 88 %. (Mon premier échantillon
+de 5 runs donnait 228 % comme maximum : le balayage complet montre bien pire.)
+
+⇒ **Le correctif se justifie sans attendre la mesure du §4** : 12 runs ont été arrêtés par un nombre
+qui n'est pas une proportion. Ce que la mesure décide, c'est **combien** de runs marginaux il
+récupère — entre 0 et 31 — pas s'il faut le faire.
+
 ---
 
 ## 5. Ce que la spec propose
