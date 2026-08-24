@@ -4,13 +4,9 @@ import fs from "node:fs";
 import path from "node:path";
 
 /**
- * `errors_unprocessed` is written in UpdateChecker.ts and will be read back in
+ * `errors_unprocessed` is written in UpdateChecker.ts and read back in
  * routes.ts by NAME, through a Redis hash — nothing type-checks that the two
- * literals agree. This file pins the WRITE side only: routes.ts has no reader
- * yet (that lands when the breaker is wired in), so there is nothing to check
- * agreement against. The matching read-side assertion — `routes.includes('getValue("errors_unprocessed")')`
- * — is carried forward as an explicit acceptance criterion for that wiring
- * task, not dropped.
+ * literals agree. This file pins both sides.
  *
  * Source-text assertions on purpose: UpdateChecker's CASE 1 needs a live
  * StatsManager; a fake would only prove the fake agrees with itself.
@@ -23,6 +19,12 @@ test("errors_unprocessed: UpdateChecker writes the name the breaker will read", 
     assert.ok(
         checker.includes('increment("errors_unprocessed")'),
         'UpdateChecker.ts must increment "errors_unprocessed" — without it the denominator is `processed` again',
+    );
+
+    const routes = src("routes.ts");
+    assert.ok(
+        routes.includes('getValue("errors_unprocessed")'),
+        'routes.ts must getValue("errors_unprocessed") — a name mismatch reads a field nobody writes, i.e. a denominator silently back to `processed`',
     );
 });
 

@@ -81,6 +81,41 @@ When `crawl_mode=update`, the service validates and restores data from the previ
 3. **Node.js safety net** (`main.ts`): If URL consolidation produces 0 URLs in update mode, exits with code 4 (mapped to failure webhook).
 4. **Post-crawl cleanup** (`_monitor_process`): Deletes restored data for archived previous crawls after the update crawl completes.
 
+## Circuit Breaker (Update Mode Rate Guards)
+
+`routes.ts` — "Circuit Breaker Check (Dual-Mode)". Armed only in update mode (`main.ts`). On fire
+it sets `context.stopReason = "circuitBreaker"` and stops the crawler. **It sets no fatal exit
+code**: the run exits 2, which the service classifies as **success**, and the stop webhook carries
+`isError = "circuitBreaker"`. BO-side that becomes an `update_crawling_history` row in `FAILED`,
+and `est_domaine_deja_en_cours()` tests `status IN ('PENDING','RUNNING','FAILED','STOPPED')` with
+**no date bound** — so a trip locks its domain out of every future update. Do not treat this
+breaker as a soft signal.
+
+**Three thresholds, from `job.params`:**
+
+| Param | Production value | Effect |
+|---|---|---|
+| `maxErrorRate` | `0.15` | the **only** live branch |
+| `maxRedirectRate` | `0.0` | **disabled** — a `0` disables its branch (`> 0` guards) |
+| `maxGrowthRate` | `0.0` | **disabled**, same reason |
+
+Confirmed on production via `GET /admin/job/{crawl_id}` (2026-08-24), not from source alone.
+
+**Sample gate:** `processed >= minSample` (50). Deliberately **not** widened to total attempts —
+widening it would make the breaker evaluate runs it never evaluated, i.e. add stops.
+
+**The error rate is not `errors / processed`.** `errors` mixes URLs that bypassed the `processed`
+counter (HTTP error → throw) with URLs already inside it (2xx, no longer eligible). The rate is
+computed in the pure `errorRateBreaker.ts` over `processed + errors_unprocessed`. Spec:
+`docs/superpowers/specs/2026-08-24-circuit-breaker-error-rate-design.md`.
+
+⚠ **`updateHealthVerdict.ts` still computes `errors / processed`** for the report the BO reads.
+Same arithmetic, opposite stakes — deliberately out of scope, see §8.1 of that spec.
+
+⚠ **Micro mode is dead code.** `cb.isMicroMode` is never set true (`main.ts`, the assignment is
+commented out), so `maxAbsErrors` / `maxAbsRedirects` / `maxAbsNew` are inert here. Do not wake it
+up as a side effect — reviving inert code changes behaviour, it does not repair it.
+
 ## Regional Path Exclusion
 
 Prevents crawling duplicate French regional variants (e.g., `/fr-BE/`, `/fr-CA/`) when one French path (e.g., `/fr-FR/`) has been selected.
