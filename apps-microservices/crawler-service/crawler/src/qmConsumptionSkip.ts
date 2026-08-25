@@ -10,6 +10,13 @@ import { filterParamCollapseTarget } from "./filterOnSeen.js";
 
 const _require = createRequire(import.meta.url);
 const QM_COLLAPSED_CAP = 200;
+/** Budget for the ADMITTED origin only (filter_on_seen) — separate from the shared 200
+ * above so facet_cap/qm_strip (audit-only, never read by the BO) can never starve the one
+ * channel collapsed_seen_base.jsonl carries. Sized on measurement: the largest collapsible
+ * population found on a single domain was 2,884 URLs, and the BO-side cap consuming this
+ * file is set to 4000 on that basis — a lower crawler-side ceiling would make that cap
+ * unreachable. */
+const SEEN_BASE_COLLAPSED_CAP = 4000;
 
 /** Re-apply the live config strip to a URL (toRemove + skip/diez/per-class via processUrl). */
 export const qmConsumptionStrip = (url: string): string => {
@@ -30,22 +37,62 @@ export const qmConsumptionStrip = (url: string): string => {
     }
 };
 
+/** Where a skipnav collapse target came from — the two branches do NOT prove the same
+ * thing, so the caller must be able to tell them apart. 'none' = neither decided, and
+ * the target is then the URL itself (a degenerate entry: never usable downstream). */
+export type CollapseVia = 'qm_strip' | 'filter_on_seen' | 'none';
+
 /** Best-effort collapse target for a request flagged skipNavigation on disk (D1).
- * Mirrors the D1 flag deciders in main.ts: processUrl-strip first, filter-on-seen second. */
-export const skipnavCollapseTarget = (url: string, seenBases: Set<string>): string => {
+ * Mirrors the D1 flag deciders in main.ts: processUrl-strip first, filter-on-seen second.
+ * Reports WHICH branch decided: a toRemove strip is content-proven (QM tier-2 committed
+ * it on a Jaccard majority), filter-on-seen is structural (the base was in seenBases).
+ * Collapsing them under one label would let a consumer act on the weaker evidence while
+ * believing it had the stronger. */
+export const skipnavCollapseTarget = (
+    url: string,
+    seenBases: Set<string>,
+): { target: string; via: CollapseVia } => {
     const stripped = qmConsumptionStrip(url);
-    if (stripped !== url) return stripped;
+    if (stripped !== url) return { target: stripped, via: 'qm_strip' };
     const t = filterParamCollapseTarget(url, seenBases);
-    return t ?? url;
+    if (t) return { target: t, via: 'filter_on_seen' };
+    return { target: url, via: 'none' };
 };
 
 /** Skip iff the strip changed the URL AND its stripped form is already known. */
 export const shouldSkipDequeued = (url: string, strippedUrl: string, isKnown: boolean): boolean =>
     strippedUrl !== url && isKnown;
 
-/** Record a collapsed candidate (route-loss audit). param = the single removed query key, else "". */
-export const recordQmCollapsed = (collapsed: string, base: string): void => {
-    if (context.qmCollapsed.length >= QM_COLLAPSED_CAP) return;
+/** Which decider produced a collapse — carries the proof strength downstream. */
+export type CollapseOrigin = 'qm_strip' | 'facet_cap' | 'filter_on_seen';
+/** When it fired — 'prenav' covers three deciders, 'filter_on_seen' covers two moments,
+ * so neither field can be derived from the other. */
+export type CollapseGate = 'prenav' | 'dequeue' | 'enqueue';
+
+const foldSlash = (u: string): string => u.replace(/\/+$/, "");
+
+/** Record a collapsed candidate (route-loss audit). param = the single removed query key,
+ * else "". Refuses a DEGENERATE entry (base === collapsed modulo trailing slash): it would
+ * mean "this fiche is a duplicate of itself", and a consumer applying it would retire the
+ * fiche with no replacement. Counts what the cap refuses so a truncated collection cannot
+ * be read as an exhaustive one. */
+export const recordQmCollapsed = (
+    collapsed: string,
+    base: string,
+    origin: CollapseOrigin,
+    gate: CollapseGate,
+): void => {
+    if (foldSlash(collapsed) === foldSlash(base)) return;
+    const isSeenBase = origin === 'filter_on_seen';
+    const cap = isSeenBase ? SEEN_BASE_COLLAPSED_CAP : QM_COLLAPSED_CAP;
+    const countForOrigin = context.qmCollapsed.filter((r) =>
+        isSeenBase ? r.origin === 'filter_on_seen' : r.origin !== 'filter_on_seen').length;
+    if (countForOrigin >= cap) {
+        // Only filter_on_seen feeds truncated_by_cap: it is the sole origin the BO reads,
+        // so a facet_cap/qm_strip refusal never cost the admitted channel anything.
+        if (isSeenBase) context.qmCollapsedRejected++;
+        return;
+    }
     let param = "";
     try {
         const c = new URL(collapsed).searchParams;
@@ -53,5 +100,5 @@ export const recordQmCollapsed = (collapsed: string, base: string): void => {
         const removed = [...c.keys()].filter((k) => !b.has(k));
         if (removed.length === 1) param = removed[0];
     } catch { /* keep "" */ }
-    context.qmCollapsed.push({ collapsed, base, param });
+    context.qmCollapsed.push({ collapsed, base, param, origin, gate });
 };

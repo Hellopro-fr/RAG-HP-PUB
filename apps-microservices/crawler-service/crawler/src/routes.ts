@@ -26,7 +26,7 @@ import { matchesMainSite } from "./isMainSite.js";
 import { applyPerClassStrip, perClassEnabled, stripActionAnchor, actionAnchorStripEnabled } from "./diezClassify.js";
 import { qmConsumptionStrip, shouldSkipDequeued, recordQmCollapsed, skipnavCollapseTarget } from "./qmConsumptionSkip.js";
 import { recordVariant, isOverCap, QM_FACET_ENABLED, QM_FACET_CAP_K } from "./facetCap.js";
-import { isFilterParam } from "./filterOnSeen.js";
+import { filterParamCollapseTarget } from "./filterOnSeen.js";
 import { baseKeyAbsent } from "./urlBase.js";
 import { recordTier2Sample, maybeCommitTier2, tier2Evidence, maybeDefaultAtCeiling as maybeDefaultDiezAtCeiling } from "./diezTier2.js";
 import { routeDiezOutcome } from "./diezHookGate.js";
@@ -242,7 +242,13 @@ router.addDefaultHandler(
         // before the loadedUrl use below. Clean handled path (no error machinery).
         if (request.skipNavigation) {
             if (context.statsManager) await context.statsManager.increment("purged_skipnav");
-            recordQmCollapsed(request.url, skipnavCollapseTarget(request.url, context.seenBases));
+            const _skipnav = skipnavCollapseTarget(request.url, context.seenBases);
+            // via === 'none' : aucun décideur n'a tranché, le target est l'URL elle-même.
+            // Rien à enregistrer — recordQmCollapsed le refuserait de toute façon, mais
+            // l'écrire ici dit POURQUOI il n'y a rien à dire.
+            if (_skipnav.via !== 'none') {
+                recordQmCollapsed(request.url, _skipnav.target, _skipnav.via, 'dequeue');
+            }
             return;
         }
 
@@ -265,7 +271,7 @@ router.addDefaultHandler(
         if (qmStripped !== url && context.dedupManager) {
             const known = (await context.dedupManager.isKnownBatch([qmStripped])).has(qmStripped);
             if (shouldSkipDequeued(url, qmStripped, known)) {
-                recordQmCollapsed(url, qmStripped);
+                recordQmCollapsed(url, qmStripped, 'qm_strip', 'dequeue');
                 return;
             }
         }
@@ -1243,9 +1249,18 @@ router.addDefaultHandler(
                         // Queue-purge #2: filter-on-seen-base — drop a discovered variant whose
                         // param removal yields a base already crawled (structural, no content
                         // comparison; R1 allowlist protects lang/currency/etc.).
-                        if (QM_FACET_ENABLED && isFilterParam(request.url, context.seenBases)) {
-                            logBlocked('filter-on-seen', request.url);
-                            return false;
+                        // The target is RECORDED, not just logged: a queue rejection that leaves
+                        // a fiche active in the BO must be a declared event, not a log line.
+                        // recordQmCollapsed is synchronous (an array push), so the Crawlee
+                        // contract at :1063-1065 — transformRequestFunction MUST be synchronous
+                        // — is not in play here.
+                        if (QM_FACET_ENABLED) {
+                            const _fosTarget = filterParamCollapseTarget(request.url, context.seenBases);
+                            if (_fosTarget !== null) {
+                                recordQmCollapsed(request.url, _fosTarget, 'filter_on_seen', 'enqueue');
+                                logBlocked('filter-on-seen', request.url);
+                                return false;
+                            }
                         }
 
                         // 4. Pre-Crawl Deduplication (SYNCHRONOUS via pre-built Set)

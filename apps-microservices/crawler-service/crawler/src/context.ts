@@ -8,6 +8,9 @@ import { TimingRecorder } from "./class/TimingRecorder.js";
 import { DetectionLangueClient } from "./class/DetectionLangueClient.js";
 import { ContentExtractorClient } from "./class/ContentExtractorClient.js";
 import { PlaywrightCrawler } from "crawlee";
+// Type-only: qmConsumptionSkip.ts imports `context` at the value level, so a value-level
+// import here would be circular. `import type` is erased at compile time — no cycle.
+import type { CollapseOrigin, CollapseGate } from "./qmConsumptionSkip.js";
 
 export const context = {
     dedupManager: null as DedupManager | null,
@@ -150,7 +153,14 @@ export const context = {
     // Phase-2 QM collapsed-param audit (spec 2026-06-29). In-memory, per-crawl.
     // Populated by the consumption skip (Part C): a queued ?param= variant that
     // collapsed onto an already-seen base = a route-loss candidate to re-crawl-audit.
-    qmCollapsed: [] as Array<{ collapsed: string; base: string; param: string }>,
+    qmCollapsed: [] as Array<{ collapsed: string; base: string; param: string; origin: CollapseOrigin; gate: CollapseGate }>,
+    // Entrées `filter_on_seen` refusées par SEEN_BASE_COLLAPSED_CAP — SEUL l'origine admise
+    // est comptée ici (qmConsumptionSkip.ts) : c'est ce compteur qui alimente
+    // `truncated_by_cap` dans collapsed_seen_base.jsonl, et un plafond muet sur CE canal se
+    // lirait comme « il n'y avait rien de plus » à retirer côté BO. Les refus facet_cap/
+    // qm_strip (cap QM_COLLAPSED_CAP, partagé) ne sont pas comptés ici : ils ne nourrissent
+    // jamais ce fichier.
+    qmCollapsedRejected: 0,
     // Queue-purge #1: per-base distinct query-signature counter (facet cap). In-memory.
     facetVariantCount: new Map<string, Set<string>>(),
     // Queue-purge #2: normalized bases (baseKeyAbsent) already crawled — the seen oracle.
