@@ -1053,6 +1053,46 @@ Read-only introspection surface so incidents can be investigated **over the gate
 
 **Build/deploy:** `./tools/build_crawler.sh [--up [N]]` — stamps `GIT_COMMIT`/`BUILD_DATE` (verify with `GET /version`), `--up` scales to N replicas (default 7) with `--no-deps` + nginx reload; sync the Redis capacity key separately via `scale_crawlers.sh N`. The heartbeat lines in `tools/upload_daemon.sh`/`download_daemon.sh` require a daemon restart to take effect.
 
+## Queue collapses that the BO consumes (`collapsed_seen_base.jsonl`)
+
+`isFilterParam` drops a `?param` variant when removing the param yields a base already in
+`seenBases`. It fires at THREE sites, and `seenBases` is preloaded from the previous
+crawl's dataset (`main.ts:741`) before the first fetch, so the oracle is full from the
+start:
+
+| Gate | Site | Hits |
+|---|---|---|
+| `prenav` | `functions.ts:894-898` | URLs seeded from the previous dataset — the ones carrying BO fiches |
+| `dequeue` | `routes.ts:243-253` | URLs already queued on disk (resume, OOM relaunch, 2nd segment) |
+| `enqueue` | `routes.ts:1249-1263` | links discovered on a page |
+
+None of the three fetches, so none produces a dataset row, a `redirected` line or a
+`deleted` line. Left as-is, the BO sees the variant as an orphan and its
+"active orphans retained" filter keeps the fiche alive forever.
+
+`collapsed_seen_base.jsonl` (in `storage/datasets/update-{domain}/`, update mode only)
+declares those collapses so the BO can retire the fiche. **Admission criterion: the base
+was crawled.** `origin === 'filter_on_seen'` only.
+
+- `facet_cap` is EXCLUDED — it is structural too, but it records `pathBaseKey(url)`, a base
+  it never verified. Admitting it would let the BO retire a fiche in favour of a base
+  nobody observed.
+- `qm_strip` is EXCLUDED — content-proven, but by a different mechanism, against Redis
+  dedup rather than `seenBases`.
+- A degenerate row (`base === collapsed` modulo trailing slash) is refused at both ends: it
+  would mean "this fiche duplicates itself", and applying it would retire the fiche with no
+  replacement.
+
+⚠ This file never carries `action: 'redirected'`. At the rejection point there is no
+`loadedUrl` (see `functions.ts:870-871`), so there is NO proof of a 301 — writing one would
+fabricate an event never observed. And the BO's redirect handler has a rename branch that
+rewrites `url_sfpi`/`url_psi`, which on this population produces duplicates instead of
+retirements. See the spec (Hellopro planning repo,
+`docs/superpowers/specs/2026-08-24-collapse-structurel-tracable-design.md` §3).
+
+⚠ `QM_COLLAPSED_CAP = 200` truncates the collection. The summary line carries
+`truncated_by_cap` — a consumer must not read 200 rows as an exhaustive population.
+
 ## Conventions
 
 - Nginx handles path stripping; routers have no prefix. Crawler spawned as child process by `crawler_manager`.
