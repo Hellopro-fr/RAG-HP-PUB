@@ -56,9 +56,30 @@ export const skipnavCollapseTarget = (
 export const shouldSkipDequeued = (url: string, strippedUrl: string, isKnown: boolean): boolean =>
     strippedUrl !== url && isKnown;
 
-/** Record a collapsed candidate (route-loss audit). param = the single removed query key, else "". */
-export const recordQmCollapsed = (collapsed: string, base: string): void => {
-    if (context.qmCollapsed.length >= QM_COLLAPSED_CAP) return;
+/** Which decider produced a collapse — carries the proof strength downstream. */
+export type CollapseOrigin = 'qm_strip' | 'facet_cap' | 'filter_on_seen';
+/** When it fired — 'prenav' covers three deciders, 'filter_on_seen' covers two moments,
+ * so neither field can be derived from the other. */
+export type CollapseGate = 'prenav' | 'dequeue' | 'enqueue';
+
+const foldSlash = (u: string): string => u.replace(/\/+$/, "");
+
+/** Record a collapsed candidate (route-loss audit). param = the single removed query key,
+ * else "". Refuses a DEGENERATE entry (base === collapsed modulo trailing slash): it would
+ * mean "this fiche is a duplicate of itself", and a consumer applying it would retire the
+ * fiche with no replacement. Counts what the cap refuses so a truncated collection cannot
+ * be read as an exhaustive one. */
+export const recordQmCollapsed = (
+    collapsed: string,
+    base: string,
+    origin: CollapseOrigin,
+    gate: CollapseGate,
+): void => {
+    if (foldSlash(collapsed) === foldSlash(base)) return;
+    if (context.qmCollapsed.length >= QM_COLLAPSED_CAP) {
+        context.qmCollapsedRejected++;
+        return;
+    }
     let param = "";
     try {
         const c = new URL(collapsed).searchParams;
@@ -66,5 +87,5 @@ export const recordQmCollapsed = (collapsed: string, base: string): void => {
         const removed = [...c.keys()].filter((k) => !b.has(k));
         if (removed.length === 1) param = removed[0];
     } catch { /* keep "" */ }
-    context.qmCollapsed.push({ collapsed, base, param });
+    context.qmCollapsed.push({ collapsed, base, param, origin, gate });
 };

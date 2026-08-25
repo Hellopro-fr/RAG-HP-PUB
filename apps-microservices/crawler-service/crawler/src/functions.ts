@@ -877,7 +877,7 @@ export const startCrawler = async (
                 if (!context.dedupManager) return;
                 const known = (await context.dedupManager.isKnownBatch([stripped])).has(stripped);
                 if (shouldSkipDequeued(request.url, stripped, known)) {
-                    recordQmCollapsed(request.url, stripped);
+                    recordQmCollapsed(request.url, stripped, 'qm_strip', 'prenav');
                     throw new StaleVariantSkip(request.url, stripped);
                 }
             },
@@ -886,14 +886,14 @@ export const startCrawler = async (
             // BEFORE page.goto (mirrors the Component A zero-fetch skip above).
             async ({ request }) => {
                 if (QM_FACET_ENABLED && isOverCap(context.facetVariantCount, request.url, QM_FACET_CAP_K)) {
-                    recordQmCollapsed(request.url, pathBaseKey(request.url));
+                    recordQmCollapsed(request.url, pathBaseKey(request.url), 'facet_cap', 'prenav');
                     throw new StaleVariantSkip(request.url, pathBaseKey(request.url));
                 }
                 // Queue-purge #2: filter-on-seen-base. A committed-live seenBases entry
                 // means the base was already crawled — drop this filtered view zero-fetch.
                 const target = filterParamCollapseTarget(request.url, context.seenBases);
                 if (QM_FACET_ENABLED && target) {
-                    recordQmCollapsed(request.url, target);
+                    recordQmCollapsed(request.url, target, 'filter_on_seen', 'prenav');
                     throw new StaleVariantSkip(request.url, target);
                 }
             },

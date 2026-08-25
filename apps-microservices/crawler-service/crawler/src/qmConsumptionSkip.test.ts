@@ -8,6 +8,7 @@ const reset = () => {
     context.config.toRemove = ["q"]; context.config.toKeep = [];
     context.config.skipQuestionMark = false; context.config.skipDiez = false;
     context.qmCollapsed = [];
+    context.qmCollapsedRejected = 0;
 };
 
 test("qmConsumptionStrip removes committed toRemove param", () => {
@@ -22,10 +23,34 @@ test("shouldSkipDequeued: stripped + already-seen base -> skip", () => {
     assert.equal(shouldSkipDequeued("https://x.fr/c", "https://x.fr/c", true), false);
 });
 
-test("recordQmCollapsed pushes capped candidate with param", () => {
+test("recordQmCollapsed carries origin and gate", () => {
     reset();
-    recordQmCollapsed("https://x.fr/c?q=a", "https://x.fr/c");
-    assert.deepEqual(context.qmCollapsed, [{ collapsed: "https://x.fr/c?q=a", base: "https://x.fr/c", param: "q" }]);
+    recordQmCollapsed("https://x.fr/c?q=a", "https://x.fr/c", "qm_strip", "prenav");
+    assert.deepEqual(context.qmCollapsed, [{
+        collapsed: "https://x.fr/c?q=a", base: "https://x.fr/c", param: "q",
+        origin: "qm_strip", gate: "prenav",
+    }]);
+});
+
+test("recordQmCollapsed refuses a degenerate entry (base === collapsed)", () => {
+    reset();
+    recordQmCollapsed("https://x.fr/c", "https://x.fr/c", "filter_on_seen", "dequeue");
+    assert.deepEqual(context.qmCollapsed, []);
+});
+
+test("recordQmCollapsed folds the trailing slash before judging degeneracy", () => {
+    reset();
+    recordQmCollapsed("https://x.fr/c/", "https://x.fr/c", "filter_on_seen", "dequeue");
+    assert.deepEqual(context.qmCollapsed, []);
+});
+
+test("recordQmCollapsed counts what the cap refuses", () => {
+    reset();
+    for (let i = 0; i < 205; i++) {
+        recordQmCollapsed(`https://x.fr/c${i}?q=a`, `https://x.fr/c${i}`, "filter_on_seen", "enqueue");
+    }
+    assert.equal(context.qmCollapsed.length, 200);
+    assert.equal(context.qmCollapsedRejected, 5);
 });
 
 test("skipnavCollapseTarget: strip decides -> via qm_strip", () => {

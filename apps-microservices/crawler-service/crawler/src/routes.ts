@@ -243,7 +243,12 @@ router.addDefaultHandler(
         if (request.skipNavigation) {
             if (context.statsManager) await context.statsManager.increment("purged_skipnav");
             const _skipnav = skipnavCollapseTarget(request.url, context.seenBases);
-            recordQmCollapsed(request.url, _skipnav.target);
+            // via === 'none' : aucun décideur n'a tranché, le target est l'URL elle-même.
+            // Rien à enregistrer — recordQmCollapsed le refuserait de toute façon, mais
+            // l'écrire ici dit POURQUOI il n'y a rien à dire.
+            if (_skipnav.via !== 'none') {
+                recordQmCollapsed(request.url, _skipnav.target, _skipnav.via, 'dequeue');
+            }
             return;
         }
 
@@ -266,7 +271,7 @@ router.addDefaultHandler(
         if (qmStripped !== url && context.dedupManager) {
             const known = (await context.dedupManager.isKnownBatch([qmStripped])).has(qmStripped);
             if (shouldSkipDequeued(url, qmStripped, known)) {
-                recordQmCollapsed(url, qmStripped);
+                recordQmCollapsed(url, qmStripped, 'qm_strip', 'dequeue');
                 return;
             }
         }

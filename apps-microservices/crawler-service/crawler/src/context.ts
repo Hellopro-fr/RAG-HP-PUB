@@ -150,7 +150,10 @@ export const context = {
     // Phase-2 QM collapsed-param audit (spec 2026-06-29). In-memory, per-crawl.
     // Populated by the consumption skip (Part C): a queued ?param= variant that
     // collapsed onto an already-seen base = a route-loss candidate to re-crawl-audit.
-    qmCollapsed: [] as Array<{ collapsed: string; base: string; param: string }>,
+    qmCollapsed: [] as Array<{ collapsed: string; base: string; param: string; origin: string; gate: string }>,
+    // Entrées refusées par QM_COLLAPSED_CAP. Un plafond muet se lit comme « il n'y avait
+    // rien de plus » — ce compteur est ce qui empêche cette lecture en aval.
+    qmCollapsedRejected: 0,
     // Queue-purge #1: per-base distinct query-signature counter (facet cap). In-memory.
     facetVariantCount: new Map<string, Set<string>>(),
     // Queue-purge #2: normalized bases (baseKeyAbsent) already crawled — the seen oracle.
