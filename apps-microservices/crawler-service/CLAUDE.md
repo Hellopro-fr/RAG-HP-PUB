@@ -1043,7 +1043,7 @@ Read-only introspection surface so incidents can be investigated **over the gate
 | `GET /admin/job/{crawl_id}` | raw Redis blob (failure_cause, exit_code, oom count…; secrets redacted) + 5 ownership locks with TTL + `stats:{id}` hash |
 | `GET /admin/config` | effective settings (secrets masked) + whitelisted Node env (DIEZ_/QM_/TIMING_…) |
 | `GET /admin/dataset/{crawl_id}?kind=&offset=&limit=&content_chars=` | dataset sampling, newest first, **no side effects** (never unstashes, never stamps `downloaded_at`) |
-| `GET /admin/sidecar/{crawl_id}?name=` | one of 13 whitelisted sidecars (`_callback_payload.json`, `_diez/_questionmark_*`, `_exit_reason.json`, `timing-summary.json`…) |
+| `GET /admin/sidecar/{crawl_id}?name=` | one of the whitelisted sidecar filenames (`_SIDECAR_WHITELIST` in `app/router/admin.py`; e.g. `_callback_payload.json`, `_diez/_questionmark_*`, `_exit_reason.json`, `timing-summary.json`…) |
 | `GET /admin/daemon-state` | GCS daemons liveness/backlog: `.daemon-heartbeat` age per marker dir, pending files, `dead_letter/`, `*.error` contents |
 | `GET /admin/storage-dirs?offset=&limit=&sizes=` | per-crawl `/app/storage` dir inventory + `crawl_job` Redis join (status/stashed_at) — the leftover hunt: `has_storage_subtree` on a stashed/archived crawl = disk the cleanup missed; `sizes=true` = recursive sizes under a 60s budget |
 | `GET /capacity` | now also carries a `disk` block (storage/archives/stash `used_pct` + `high_water_pct`) |
