@@ -242,7 +242,8 @@ router.addDefaultHandler(
         // before the loadedUrl use below. Clean handled path (no error machinery).
         if (request.skipNavigation) {
             if (context.statsManager) await context.statsManager.increment("purged_skipnav");
-            recordQmCollapsed(request.url, skipnavCollapseTarget(request.url, context.seenBases));
+            const _skipnav = skipnavCollapseTarget(request.url, context.seenBases);
+            recordQmCollapsed(request.url, _skipnav.target);
             return;
         }
 

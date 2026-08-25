@@ -28,18 +28,43 @@ test("recordQmCollapsed pushes capped candidate with param", () => {
     assert.deepEqual(context.qmCollapsed, [{ collapsed: "https://x.fr/c?q=a", base: "https://x.fr/c", param: "q" }]);
 });
 
+test("skipnavCollapseTarget: strip decides -> via qm_strip", () => {
+    reset();
+    const r = skipnavCollapseTarget("https://x.fr/c?q=a", new Set<string>());
+    assert.deepEqual(r, { target: "https://x.fr/c", via: "qm_strip" });
+});
+
+test("skipnavCollapseTarget: seenBases decides -> via filter_on_seen", () => {
+    reset();
+    context.config.toRemove = [];              // le strip ne peut plus trancher
+    const seen = new Set<string>([baseKeyAbsent("https://x.fr/c")]);
+    const r = skipnavCollapseTarget("https://x.fr/c?cat=3", seen);
+    assert.equal(r.via, "filter_on_seen");
+    assert.ok(r.target.startsWith("https://x.fr/c"));
+});
+
+test("skipnavCollapseTarget: nothing decides -> via none, target unchanged", () => {
+    reset();
+    context.config.toRemove = [];
+    const r = skipnavCollapseTarget("https://x.fr/c?cat=3", new Set<string>());
+    assert.deepEqual(r, { target: "https://x.fr/c?cat=3", via: "none" });
+});
+
 test("skipnavCollapseTarget: live strip changes the URL -> stripped form", () => {
     reset();
-    assert.equal(skipnavCollapseTarget("https://x.fr/c?q=batterie&z=2", new Set()), "https://x.fr/c?z=2");
+    const r = skipnavCollapseTarget("https://x.fr/c?q=batterie&z=2", new Set());
+    assert.equal(r.target, "https://x.fr/c?z=2");
 });
 
 test("skipnavCollapseTarget: strip no-op but filter-on-seen matches -> seen base", () => {
     reset();
     const seen = new Set<string>([ baseKeyAbsent("https://x.fr/c") ]);
-    assert.equal(skipnavCollapseTarget("https://x.fr/c?f_place=47", seen), baseKeyAbsent("https://x.fr/c"));
+    const r = skipnavCollapseTarget("https://x.fr/c?f_place=47", seen);
+    assert.equal(r.target, baseKeyAbsent("https://x.fr/c"));
 });
 
 test("skipnavCollapseTarget: neither strip nor filter-on-seen -> url itself", () => {
     reset();
-    assert.equal(skipnavCollapseTarget("https://x.fr/c?f_place=47", new Set()), "https://x.fr/c?f_place=47");
+    const r = skipnavCollapseTarget("https://x.fr/c?f_place=47", new Set());
+    assert.equal(r.target, "https://x.fr/c?f_place=47");
 });

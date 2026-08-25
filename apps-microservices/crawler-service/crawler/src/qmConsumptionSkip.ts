@@ -30,13 +30,26 @@ export const qmConsumptionStrip = (url: string): string => {
     }
 };
 
+/** Where a skipnav collapse target came from — the two branches do NOT prove the same
+ * thing, so the caller must be able to tell them apart. 'none' = neither decided, and
+ * the target is then the URL itself (a degenerate entry: never usable downstream). */
+export type CollapseVia = 'qm_strip' | 'filter_on_seen' | 'none';
+
 /** Best-effort collapse target for a request flagged skipNavigation on disk (D1).
- * Mirrors the D1 flag deciders in main.ts: processUrl-strip first, filter-on-seen second. */
-export const skipnavCollapseTarget = (url: string, seenBases: Set<string>): string => {
+ * Mirrors the D1 flag deciders in main.ts: processUrl-strip first, filter-on-seen second.
+ * Reports WHICH branch decided: a toRemove strip is content-proven (QM tier-2 committed
+ * it on a Jaccard majority), filter-on-seen is structural (the base was in seenBases).
+ * Collapsing them under one label would let a consumer act on the weaker evidence while
+ * believing it had the stronger. */
+export const skipnavCollapseTarget = (
+    url: string,
+    seenBases: Set<string>,
+): { target: string; via: CollapseVia } => {
     const stripped = qmConsumptionStrip(url);
-    if (stripped !== url) return stripped;
+    if (stripped !== url) return { target: stripped, via: 'qm_strip' };
     const t = filterParamCollapseTarget(url, seenBases);
-    return t ?? url;
+    if (t) return { target: t, via: 'filter_on_seen' };
+    return { target: url, via: 'none' };
 };
 
 /** Skip iff the strip changed the URL AND its stripped form is already known. */
