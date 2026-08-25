@@ -88,7 +88,7 @@ export function LeadPopup({
       // utilisateurs (cf. docs/tracking-hub.md §8).
       pushHubEvent('hub_guide_popup_view', 'guide', {
         form_id: 'guide',
-        entry_point: 'popup_scroll',
+        hub_entry_point: 'popup_scroll',
         trigger_section_id: data.triggerSectionId,
       });
     };
@@ -108,7 +108,7 @@ export function LeadPopup({
     if (!emailValid || lead.submitting) return;
     pushHubEvent('hub_form_email_submit', 'guide', {
       form_id: 'guide',
-      entry_point: 'popup_scroll',
+      hub_entry_point: 'popup_scroll',
     });
     // APPEL 1 — sans coordonnées. Le passage de phase ferme ce grand modal et
     // ouvre le petit (coordonnées ou téléchargement).
@@ -121,7 +121,7 @@ export function LeadPopup({
     if (lead.phase !== 'download') {
       pushHubEvent('hub_form_abandon', 'guide', {
         form_id: 'guide',
-        entry_point: 'popup_scroll',
+        hub_entry_point: 'popup_scroll',
         last_step_name: lead.phase,
       });
     }

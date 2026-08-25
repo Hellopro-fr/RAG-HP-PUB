@@ -10,9 +10,15 @@ D'où GA4 (A) avant GTM (B), et publication (D) seulement après recette (C).
 **Décisions déjà prises** (2026-08-06) : le paramètre s'appelle `email_check_result` (et non
 `result`), et `hub_form_submission` sera marqué key event à l'étape E.
 
+**Révision du 2026-08-24 — le quota GA4 est presque plein.** Cette étape demandait 11
+dimensions ; il n'en reste que **3 disponibles** (47 créées sur 50, portée Événement).
+Le plan a été refait en conséquence : 3 à créer, 4 déjà couvertes, 4 abandonnées,
+2 renvoyées vers BigQuery. Le raisonnement complet est en annexe, à la fin de ce
+document — le lire avant de s'écarter de la liste ci-dessous.
+
 ---
 
-# A. GA4 — déclarer les 11 dimensions
+# A. GA4 — déclarer les 3 dimensions
 
 **A1.** Ouvrir <https://analytics.google.com> → sélectionner la propriété **G-DQTV4SHNME**.
 
@@ -20,35 +26,53 @@ D'où GA4 (A) avant GTM (B), et publication (D) seulement après recette (C).
 
 **A3.** Colonne « Affichage des données » → **Définitions personnalisées**.
 
-**A4.** Onglet **Dimensions personnalisées** → compter les lignes existantes.
-La limite est de **50** dimensions de portée Événement. On en ajoute 11.
-→ Si le total dépasserait 50, **s'arrêter et me le dire**.
+**A4.** Onglet **Dimensions personnalisées** → vérifier le compteur via **Informations sur
+les quotas** (en haut à droite). Au 2026-08-24 : **47 créées sur 50** en portée Événement.
+→ S'il reste moins de 3 emplacements, **s'arrêter** : il faudra d'abord archiver des
+dimensions mortes avec l'équipe analytics (cf. annexe).
 
 **A5.** Bouton bleu **Créer des dimensions personnalisées**, en haut à droite.
-Pour chaque ligne du tableau : remplir les 3 champs, **Enregistrer**, puis recommencer.
+Pour chaque ligne : remplir les 3 champs, **Enregistrer**, puis recommencer.
 
-| Nom de la dimension | Portée | Paramètre d'événement |
-|---|---|---|
-| HUB – Groupe | Événement | `hub_group` |
-| HUB – Page ID | Événement | `hub_page_id` |
-| HUB – URI page | Événement | `hub_page_uri` |
-| HUB – Emplacement CTA | Événement | `entry_point` |
-| HUB – Étape | Événement | `step_name` |
-| HUB – Étape (id métier) | Événement | `step_id` |
-| HUB – Chemin de conversion | Événement | `lead_path` |
-| HUB – Contact connu | Événement | `user_known_status` |
-| HUB – Verdict e-mail | Événement | `email_check_result` |
-| HUB – Bloc source | Événement | `source_block` |
-| HUB – Déclencheur téléchargement | Événement | `download_trigger` |
+| Nom de la dimension | Portée | Paramètre d'événement | Ce qu'elle permet |
+|---|---|---|---|
+| HUB – Groupe | Événement | `hub_group` | Séparer les tunnels `projet` / `guide` / `engagement`. `hub_guide_download` est émis par les DEUX : sans elle, le tunnel guide paraît deux fois plus performant. |
+| HUB – Emplacement CTA | Événement | `hub_entry_point` | Savoir laquelle des 6 portes convertit (`hero`, `banner_guide`, `cta_final`, `bloc_thematique`, `popup_scroll`, `sticky_mobile`). C'est la dimension qui décide de ce qu'on garde. |
+| HUB – Chemin de conversion | Événement | `hub_lead_path` | Distinguer `complet` (vrai lead), `reconnu` (lead sans nouvelles coordonnées) et `deja_converti` (re-téléchargement, **pas** une conversion). Sans elle, on surestime. |
+
+**Convention de préfixe** (arbitrée le 2026-08-24, à l'occasion de cette création) :
+
+- **préfixe `hub_`** → paramètre PROPRE au HUB, dimension GA4 dédiée ;
+- **sans préfixe** → paramètre DÉLIBÉRÉMENT partagé avec le funnel devis historique
+  (`step_name`, `step_index`, `user_known_status`), dont la dimension existe depuis 2022.
+
+Le préfixe rend visible, dans la liste GA4, ce qui appartient au HUB. Le code applique la
+même règle (`lib/analytics/hub.ts`, interface `HubEventParams`), et un test la verrouille.
 
 ⚠️ Le champ **Paramètre d'événement** doit être saisi **exactement** comme ci-dessus :
 minuscules, underscores, sans espace. Une faute de frappe donne une dimension toujours vide,
 sans aucun message d'erreur.
 
-**A6.** Dans la liste, chercher **`page_template`**.
-- Présente → rien à faire.
-- Absente → la créer : nom `Type de page`, portée Événement, paramètre `page_template`.
-Sans elle, impossible de séparer les pages HUB (`page_hub`) des pages conseils.
+**A6. Ne rien créer pour ces quatre-là — elles existent déjà.**
+
+| Paramètre poussé par le HUB | Dimension existante | Créée le |
+|---|---|---|
+| `step_name` | `step_name` — « Etapes des différents tunnel (contact, devis, …) » | 26 oct. 2022 |
+| `step_index` | `step_index` — « Etapes des différents tunnels (contact, devis) » | 26 oct. 2022 |
+| `user_known_status` | `user_known_status` — « Statut user (connu ou non) » | 26 oct. 2022 |
+| `page_template` | `page_template` — « Template de page » | 26 oct. 2022 |
+
+Ce n'est pas une coïncidence : `lib/analytics/hub.ts` reprend délibérément le vocabulaire
+du funnel devis historique (`questionStepName()` produit `1ere-question`, `2eme-question`…
+comme `pushQuoteFormFunnel`). Ces quatre dimensions sont donc exploitables **dès la
+publication, sans consommer d'emplacement**.
+
+`page_template` est la plus importante des quatre : c'est elle qui isole les pages HUB
+(`page_hub`) du reste du site dans tous les rapports.
+
+⚠️ **Ne pas les recréer sous un autre nom.** GA4 refuserait le doublon de paramètre, et un
+second essai « HUB – Étape » sur `step_name` échouerait — ou pire, consommerait un
+emplacement pour rien s'il visait un paramètre légèrement différent.
 
 ---
 
@@ -138,8 +162,16 @@ et le DebugView restera vide (les événements seront quand même visibles dans 
 | 4 | Parcours HUB complet | Tag Assistant → liste des événements | aucun `quote_form_funnel`, `quote_funnel_validation`, `Popup_Appel_Offre`, `eec.add` |
 
 **C5.** Vérifier dans DebugView qu'un `hub_form_submission` porte bien ses paramètres :
-`hub_group`, `hub_page_id`, `hub_page_uri`, `lead_path`, `user_known_status`,
+`hub_group`, `hub_page_id`, `hub_page_uri`, `hub_lead_path`, `user_known_status`,
 `product_category5` (avec un **underscore**, pas un point).
+
+⚠️ **C5bis — le contrôle qui attrape la panne silencieuse.** Sur ce même événement,
+vérifier que le nom du paramètre est bien `hub_lead_path` et **non** `lead_path`, et
+`hub_entry_point` et **non** `entry_point`. GA4 rattache une valeur à sa dimension par
+correspondance STRICTE de nom : une divergence ne produit aucune erreur, seulement une
+dimension à `(not set)` pour toujours. C'est exactement le piège qu'on a évité le
+2026-08-24, les dimensions ayant été créées avec le préfixe alors que le code envoyait
+encore les noms courts.
 
 **C6.** Le reste des 36 scénarios est dans `docs/tracking-hub-recette.csv`. Me dire quand
 l'étape D est faite : je les rejoue tous et je te donne le verdict ligne par ligne.
@@ -181,8 +213,14 @@ décomposable par nom d'événement, et le marquage est réversible à tout mome
 5. `hub_email_check`
 6. `hub_form_submission`
 
-Segmentation : dimension **HUB – Page ID**, pour comparer les 3 verticales dans un seul
-rapport.
+Segmentation : dimension standard **Chemin de page + chaîne de requête**, pour comparer les
+3 verticales dans un seul rapport. (Et non « HUB – Page ID », abandonnée le 2026-08-24 :
+elle faisait doublon avec cette dimension standard, que GA4 fournit sans consommer de
+quota. Les trois chemins sont `/lancer-elevage-poules-pondeuses-1000-projet.html`,
+`/ouvrir-food-truck-1001-projet.html`, `/ouvrir-laverie-automatique-1002-projet.html`.)
+
+Pour ne garder que les pages HUB, ajouter un filtre **`page_template` = `page_hub`** —
+c'est le rôle de cette dimension, qui existait déjà dans la propriété.
 
 ⚠️ **Huit événements commencent par `hub_form_`, un seul est la conversion.** Dans la liste
 alphabétique, `hub_form_submission` voisine avec `hub_form_email_submit` et
@@ -198,3 +236,76 @@ Le défaut de 2 mois fait perdre la première cohorte d'un POC jugé à 3 mois.
   **pas** `hub_form_email_submit` ;
 - conversion de la pop-up → compter en **sessions** ou **utilisateurs**, jamais en nombre
   d'événements (`sessionStorage` est par onglet, GA4 compte à travers les onglets).
+
+---
+
+# Annexe — pourquoi 3 dimensions et non 11
+
+> Ajoutée le 2026-08-24, après avoir constaté que la propriété était à **47 dimensions
+> créées sur 50** en portée Événement, avant toute intervention HUB.
+
+## Le raisonnement
+
+Le plan initial demandait 11 dimensions. Trois emplacements restaient. Plutôt que de
+sacrifier huit mesures, on a repris la liste ligne à ligne — et il s'est avéré qu'elle
+contenait des redondances qu'un quota confortable avait laissées passer.
+
+**Quatre paramètres étaient déjà couverts** (`step_name`, `step_index`,
+`user_known_status`, `page_template`), parce que le code HUB reprend délibérément le
+vocabulaire du funnel devis historique. Gratuit.
+
+**Trois étaient des doublons** :
+
+- `hub_page_id` et `hub_page_uri` répètent la dimension standard **Chemin de page**, que
+  GA4 fournit nativement. Un paramètre personnalisé ne se justifie que pour ce que GA4 ne
+  peut pas déduire seul — l'URL, il la connaît.
+- `step_id` (id métier : `budget`, `vehicule`…) répond à « quelle question fait fuir »,
+  quand `step_name` répond à « quelle position fait fuir ». La seconde formulation se
+  compare entre les trois verticales, la première non. On garde celle qui se compare.
+- `email_check_result` est le verdict brut du serveur, `user_known_status` sa traduction
+  métier. La seconde existe déjà et est gratuite.
+
+**Deux sont partis en BigQuery** : `source_block` (quel bloc envoie du trafic vers les
+articles) et `download_trigger` (le téléchargement automatique fonctionne-t-il). Ce sont
+des questions d'analyse ponctuelle, pas de pilotage quotidien.
+
+**Restaient exactement trois** : `hub_group`, `hub_entry_point`, `hub_lead_path`.
+(Les deux derniers s'appelaient `entry_point` et `lead_path` jusqu'à leur création
+en GA4 : le préfixe a été ajouté à ce moment-là, et répercuté dans le code.)
+
+## Pourquoi BigQuery change la donne
+
+L'export BigQuery est **actif** sur cette propriété (projet `big-query-ga4-387913`).
+Chaque événement y est exporté avec son champ `event_params`, qui contient **tous** les
+paramètres, sans notion de quota ni de déclaration préalable.
+
+La non-rétroactivité des dimensions ne concerne donc que l'**interface** GA4. Les 26
+paramètres HUB seront intégralement disponibles en SQL dès la publication, y compris ceux
+qu'on renonce à déclarer.
+
+D'où la règle qui a guidé l'arbitrage : **déclarer ce dont a besoin quelqu'un qui ouvre
+GA4 et clique ; laisser à BigQuery ce dont a besoin quelqu'un qui écrit du SQL.**
+
+## Ce qu'on a écarté, et pourquoi
+
+Deux dimensions existantes étaient sémantiquement réutilisables : `funnel_context` (« de
+quel tunnel s'agit-il ? La valeur est basée sur le point de départ » — très proche
+d'`hub_entry_point`) et `form_type` (proche de `form_id`).
+
+Écartées volontairement. Réutiliser une dimension, c'est verser ses valeurs dans le même
+seau que le funnel devis historique : tout rapport existant qui ne filtre pas par nom
+d'événement se met à mélanger HUB et legacy. On gagne un emplacement et on abîme un
+tableau de bord dont quelqu'un d'autre dépend. Le compte tombant juste sans cela, le
+risque n'avait pas lieu d'être pris.
+
+## Le sujet qui reste ouvert
+
+**47 dimensions sur 50, ce n'est pas tenable durablement** — le prochain projet sera
+bloqué pour de bon. Plusieurs semblent liées à des parcours anciens (`add_to_cart_type`,
+`add_to_cart_wording`, `characteristic_infos`, `contains_form`, `optimize_experiment_id` et
+`optimize_variant_id` — Google Optimize est arrêté depuis 2023).
+
+L'archivage d'une dimension libère son emplacement. Mais c'est un ménage à mener avec
+l'équipe qui les a créées, pas une décision à prendre dans l'urgence d'une mise en ligne :
+archiver une dimension encore utilisée casse silencieusement les rapports qui s'en servent.
+À porter comme un sujet à part entière.

@@ -142,13 +142,13 @@ export function useGuideLead(
         // environnements (vérifié en recette le 2026-08-05, e-mail connu).
         if (!withCoordinates) {
           // Succès dès l'appel 1 ⇒ le serveur connaissait déjà le contact.
-          pushHubEvent('hub_email_check', 'guide', { email_check_result:'known', entry_point: from });
+          pushHubEvent('hub_email_check', 'guide', { email_check_result:'known', hub_entry_point: from });
         }
         pushHubEvent('hub_form_submission', 'guide', {
           form_id: 'guide',
           id_page_hub: idPageHub,
-          entry_point: from,
-          lead_path: withCoordinates ? 'complet' : 'reconnu',
+          hub_entry_point: from,
+          hub_lead_path: withCoordinates ? 'complet' : 'reconnu',
           user_known_status: withCoordinates ? 'Unknown' : 'Known',
         });
         // Marque le drapeau UNIQUEMENT après un enregistrement réel (201) : un
@@ -163,7 +163,7 @@ export function useGuideLead(
         // `result:'unknown'` vaut AUSSI « étape coordonnées affichée » : c'est la
         // même branche qui change de phase. Pas de `hub_form_coordinates_view`,
         // qui serait le même instant sous un second nom.
-        pushHubEvent('hub_email_check', 'guide', { email_check_result:'unknown', entry_point: from });
+        pushHubEvent('hub_email_check', 'guide', { email_check_result:'unknown', hub_entry_point: from });
         setPhase('coordinates');
         setSubmitting(false);
         return;
@@ -171,7 +171,7 @@ export function useGuideLead(
       console.error('[useGuideLead] réponse inattendue', res.status, corps);
       pushHubEvent('hub_form_error', 'guide', {
         form_id: 'guide',
-        entry_point: from,
+        hub_entry_point: from,
         error_stage: withCoordinates ? 'coordinates' : 'email',
         http_status: res.status,
       });
@@ -183,7 +183,7 @@ export function useGuideLead(
       // inattendue : une coupure et un bug d'API ne se corrigent pas pareil.
       pushHubEvent('hub_form_error', 'guide', {
         form_id: 'guide',
-        entry_point: from,
+        hub_entry_point: from,
         error_stage: withCoordinates ? 'coordinates' : 'email',
         http_status: 0,
       });

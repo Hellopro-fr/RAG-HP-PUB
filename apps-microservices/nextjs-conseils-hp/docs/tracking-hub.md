@@ -111,7 +111,7 @@ répond 201 — et **un lead laverie est créé**. Avant ce correctif, il n'en e
 aucun : les leads sont rappelés selon le projet consulté, ce visiteur n'aurait
 jamais été contacté sur ce projet-là.
 
-Conséquence pour l'analyse : `lead_path: 'reconnu'` va mécaniquement augmenter.
+Conséquence pour l'analyse : `hub_lead_path: 'reconnu'` va mécaniquement augmenter.
 Ce n'est pas une dérive, c'est le signal « déjà client d'un autre projet HUB »,
 qui n'était pas mesurable auparavant.
 Le cookie `hub_lead=1` signifie « ce navigateur a déjà soumis un lead ». Au clic sur un CTA
@@ -127,7 +127,7 @@ Trois événements sont donc explicitement ABSENTS de ce parcours :
 | `hub_form_view` | le dialog s'ouvre, mais **aucun formulaire n'est présenté** — compter cette vue écraserait le taux de conversion du tunnel guide |
 
 Ce qui est émis : `hub_guide_shortcut`, puis `hub_guide_download` avec
-`lead_path: 'deja_converti'`. Sans cette séparation, deux erreurs symétriques étaient
+`hub_lead_path: 'deja_converti'`. Sans cette séparation, deux erreurs symétriques étaient
 possibles — compter chaque re-téléchargement comme une conversion, ou n'émettre aucun
 événement et perdre le signal d'usage du guide.
 
@@ -200,7 +200,7 @@ re-téléchargement par quelqu'un de déjà converti.
 ces événements côté tracking a été retirée avec le comportement qu'elle compensait.
 
 Les seuls événements émis, `hub_guide_shortcut` et `hub_guide_download`
-(`lead_path: 'deja_converti'`), gardent le re-téléchargement mesurable sans le
+(`hub_lead_path: 'deja_converti'`), gardent le re-téléchargement mesurable sans le
 faire entrer dans l'entonnoir.
 
 ### 3.7ter Tous les paramètres sont poussés à chaque événement
@@ -234,9 +234,16 @@ Cette convention est aussi celle du funnel devis legacy (`pushQuoteFormFunnel`
 émet déjà `1ere-question`) : un seul vocabulaire dans le conteneur.
 
 L'information métier n'est pas perdue — elle part dans **`step_id`**
-(`budget`, `volume`, `delai`…). Les deux dimensions répondent à deux questions
+(`budget`, `volume`, `delai`…). Les deux paramètres répondent à deux questions
 différentes : `step_name` à « à quelle position décroche-t-on, toutes pages
 confondues », `step_id` à « quelle question tue le tunnel sur CETTE page ».
+
+⚠️ **Seul `step_name` est déclaré en dimension GA4** (il l'était déjà, depuis le
+funnel devis de 2022). `step_id` reste envoyé dans l'événement mais n'est
+interrogeable qu'en **BigQuery** : le quota de la propriété était à 47/50 au
+2026-08-24, et entre deux formulations de la même question, on a gardé celle qui
+se compare d'une verticale à l'autre. Cf. l'annexe de
+`docs/tracking-hub-gtm-runbook.md`.
 
 `last_step_name` de `hub_form_abandon` suit le même vocabulaire, sans quoi
 abandons et affichages ne se croiseraient pas dans un même rapport.
@@ -291,8 +298,8 @@ Un `gtag` direct contourne le Consent Mode du conteneur.
 | Paramètre | Source | Exemple |
 |---|---|---|
 | `hub_group` | `projet` \| `guide` \| `engagement` | `projet` |
-| `hub_page_id` | `page.id` | `1000` |
-| `hub_page_uri` | `hubCanonicalPath(page)` — URI **publique**, pas la route interne | `/lancer-elevage-poules-pondeuses-1000-projet.html` |
+| `hub_page_id` | `page.id` — ⚠️ envoyé mais **non déclaré** en dimension : doublon du **Chemin de page** standard | `1000` |
+| `hub_page_uri` | `hubCanonicalPath(page)` — URI **publique**, pas la route interne. ⚠️ Même remarque | `/lancer-elevage-poules-pondeuses-1000-projet.html` |
 | `id_page_hub` | id effectif de l'appel API | `1000` / `2000` |
 | `session_id` | `getHpSessionId()` — **helper existant réutilisé** | `session_1785854120765_a1b2c3d4e` |
 | `product.category5` | lu du dataLayer, comme `getCategory5()` | `Élevage-avicole` |
@@ -422,7 +429,7 @@ première collecte, changer coûte une reprise de tous les segments.
 | 1 | `lib/analytics/hub.ts` + tests unitaires | rien — mais le socle est testable sans navigateur |
 | 2 | Tunnel projet (§3, events 1-11) | combien de projets, où ça décroche |
 | 3 | `hub_email_check` + `hub_form_submission` + `hub_form_abandon` sur les deux tunnels | part de contacts déjà connus, étape qui tue le tunnel |
-| 4 | Tunnel guide avec `entry_point` et `hub_guide_shortcut` | quelle porte convertit, usage réel du guide |
+| 4 | Tunnel guide avec `hub_entry_point` et `hub_guide_shortcut` | quelle porte convertit, usage réel du guide |
 | 5 | `hub_article_click` | si le HUB alimente les pages conseils |
 | 6 | Conteneur GTM + GA4 + recette 30 tests | les chiffres sont fiables |
 
@@ -434,6 +441,6 @@ répond à « pourquoi », et ne se justifie qu'une fois du volume observé.
 ## 11. Reporté, hors périmètre tracking
 
 - **Barre sticky mobile** : icône de téléchargement pour un bouton qui ouvre le questionnaire.
-  Revu plus tard ; `entry_point = sticky_mobile` reste prévu dans le plan.
+  Revu plus tard ; `hub_entry_point = sticky_mobile` reste prévu dans le plan.
 - **PDF du guide** : `/seo_masterclass_detailed.pdf` (résidu du prototype Lovable) sera
   remplacé quand l'équipe aura terminé le livre. Aucun impact sur le plan.
