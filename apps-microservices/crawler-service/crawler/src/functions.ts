@@ -1421,6 +1421,10 @@ export const generateUpdateReport = async (domain: string) => {
         const redirects = await context.statsManager.getValue("redirects");
         const newUrls = await context.statsManager.getValue("new_urls");
         const accounted = await context.statsManager.getValue("accounted");
+        // The breaker's denominator is `processed + errors_unprocessed`, not `processed`
+        // (errorRateBreaker.ts). Reporting only `processed` leaves the number that decided a stop
+        // unreproducible once the dataset is archived — the state /admin/dataset returns 404 on.
+        const errorsUnprocessed = await context.statsManager.getValue("errors_unprocessed");
 
         const cb = context.config.circuitBreaker;
 
@@ -1448,6 +1452,7 @@ export const generateUpdateReport = async (domain: string) => {
                 redirects,
                 new_urls: newUrls,
                 accounted,
+                errors_unprocessed: errorsUnprocessed,
                 previous_total: cb.previousTotal
             },
             rates: {
