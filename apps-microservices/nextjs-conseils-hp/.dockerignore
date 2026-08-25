@@ -4,6 +4,10 @@ node_modules
 .gitignore
 .env*.local
 .DS_Store
+desktop.ini
+# Voir .gitignore : résidus NTFS des copies depuis Windows. Exclus de l'image
+# même s'ils traînent encore dans l'arbre de travail.
+*:Zone.Identifier
 coverage
 __tests__
 *.log

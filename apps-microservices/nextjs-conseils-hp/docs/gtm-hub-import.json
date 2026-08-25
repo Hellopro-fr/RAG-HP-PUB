@@ -1,0 +1,226 @@
+{
+  "exportFormatVersion": 2,
+  "containerVersion": {
+    "container": {
+      "publicId": "GTM-PBBSTMC",
+      "name": "Hellopro",
+      "usageContext": ["WEB"]
+    },
+    "variable": [
+      { "name": "DL - hub_group", "type": "v", "parameter": [
+        { "type": "INTEGER", "key": "dataLayerVersion", "value": "2" },
+        { "type": "BOOLEAN", "key": "setDefaultValue", "value": "false" },
+        { "type": "TEMPLATE", "key": "name", "value": "hub_group" } ] },
+      { "name": "DL - hub_page_id", "type": "v", "parameter": [
+        { "type": "INTEGER", "key": "dataLayerVersion", "value": "2" },
+        { "type": "BOOLEAN", "key": "setDefaultValue", "value": "false" },
+        { "type": "TEMPLATE", "key": "name", "value": "hub_page_id" } ] },
+      { "name": "DL - hub_page_uri", "type": "v", "parameter": [
+        { "type": "INTEGER", "key": "dataLayerVersion", "value": "2" },
+        { "type": "BOOLEAN", "key": "setDefaultValue", "value": "false" },
+        { "type": "TEMPLATE", "key": "name", "value": "hub_page_uri" } ] },
+      { "name": "DL - id_page_hub", "type": "v", "parameter": [
+        { "type": "INTEGER", "key": "dataLayerVersion", "value": "2" },
+        { "type": "BOOLEAN", "key": "setDefaultValue", "value": "false" },
+        { "type": "TEMPLATE", "key": "name", "value": "id_page_hub" } ] },
+      { "name": "DL - session_id", "type": "v", "parameter": [
+        { "type": "INTEGER", "key": "dataLayerVersion", "value": "2" },
+        { "type": "BOOLEAN", "key": "setDefaultValue", "value": "false" },
+        { "type": "TEMPLATE", "key": "name", "value": "session_id" } ] },
+      { "name": "DL - form_id", "type": "v", "parameter": [
+        { "type": "INTEGER", "key": "dataLayerVersion", "value": "2" },
+        { "type": "BOOLEAN", "key": "setDefaultValue", "value": "false" },
+        { "type": "TEMPLATE", "key": "name", "value": "form_id" } ] },
+      { "name": "DL - entry_point", "type": "v", "parameter": [
+        { "type": "INTEGER", "key": "dataLayerVersion", "value": "2" },
+        { "type": "BOOLEAN", "key": "setDefaultValue", "value": "false" },
+        { "type": "TEMPLATE", "key": "name", "value": "entry_point" } ] },
+      { "name": "DL - step_name", "type": "v", "parameter": [
+        { "type": "INTEGER", "key": "dataLayerVersion", "value": "2" },
+        { "type": "BOOLEAN", "key": "setDefaultValue", "value": "false" },
+        { "type": "TEMPLATE", "key": "name", "value": "step_name" } ] },
+      { "name": "DL - step_id", "type": "v", "parameter": [
+        { "type": "INTEGER", "key": "dataLayerVersion", "value": "2" },
+        { "type": "BOOLEAN", "key": "setDefaultValue", "value": "false" },
+        { "type": "TEMPLATE", "key": "name", "value": "step_id" } ] },
+      { "name": "DL - step_index", "type": "v", "parameter": [
+        { "type": "INTEGER", "key": "dataLayerVersion", "value": "2" },
+        { "type": "BOOLEAN", "key": "setDefaultValue", "value": "false" },
+        { "type": "TEMPLATE", "key": "name", "value": "step_index" } ] },
+      { "name": "DL - step_total", "type": "v", "parameter": [
+        { "type": "INTEGER", "key": "dataLayerVersion", "value": "2" },
+        { "type": "BOOLEAN", "key": "setDefaultValue", "value": "false" },
+        { "type": "TEMPLATE", "key": "name", "value": "step_total" } ] },
+      { "name": "DL - answer_label", "type": "v", "parameter": [
+        { "type": "INTEGER", "key": "dataLayerVersion", "value": "2" },
+        { "type": "BOOLEAN", "key": "setDefaultValue", "value": "false" },
+        { "type": "TEMPLATE", "key": "name", "value": "answer_label" } ] },
+      { "name": "DL - email_check_result", "type": "v", "parameter": [
+        { "type": "INTEGER", "key": "dataLayerVersion", "value": "2" },
+        { "type": "BOOLEAN", "key": "setDefaultValue", "value": "false" },
+        { "type": "TEMPLATE", "key": "name", "value": "email_check_result" } ] },
+      { "name": "DL - user_known_status", "type": "v", "parameter": [
+        { "type": "INTEGER", "key": "dataLayerVersion", "value": "2" },
+        { "type": "BOOLEAN", "key": "setDefaultValue", "value": "false" },
+        { "type": "TEMPLATE", "key": "name", "value": "user_known_status" } ] },
+      { "name": "DL - lead_path", "type": "v", "parameter": [
+        { "type": "INTEGER", "key": "dataLayerVersion", "value": "2" },
+        { "type": "BOOLEAN", "key": "setDefaultValue", "value": "false" },
+        { "type": "TEMPLATE", "key": "name", "value": "lead_path" } ] },
+      { "name": "DL - steps_answered", "type": "v", "parameter": [
+        { "type": "INTEGER", "key": "dataLayerVersion", "value": "2" },
+        { "type": "BOOLEAN", "key": "setDefaultValue", "value": "false" },
+        { "type": "TEMPLATE", "key": "name", "value": "steps_answered" } ] },
+      { "name": "DL - last_step_name", "type": "v", "parameter": [
+        { "type": "INTEGER", "key": "dataLayerVersion", "value": "2" },
+        { "type": "BOOLEAN", "key": "setDefaultValue", "value": "false" },
+        { "type": "TEMPLATE", "key": "name", "value": "last_step_name" } ] },
+      { "name": "DL - last_step_index", "type": "v", "parameter": [
+        { "type": "INTEGER", "key": "dataLayerVersion", "value": "2" },
+        { "type": "BOOLEAN", "key": "setDefaultValue", "value": "false" },
+        { "type": "TEMPLATE", "key": "name", "value": "last_step_index" } ] },
+      { "name": "DL - error_stage", "type": "v", "parameter": [
+        { "type": "INTEGER", "key": "dataLayerVersion", "value": "2" },
+        { "type": "BOOLEAN", "key": "setDefaultValue", "value": "false" },
+        { "type": "TEMPLATE", "key": "name", "value": "error_stage" } ] },
+      { "name": "DL - http_status", "type": "v", "parameter": [
+        { "type": "INTEGER", "key": "dataLayerVersion", "value": "2" },
+        { "type": "BOOLEAN", "key": "setDefaultValue", "value": "false" },
+        { "type": "TEMPLATE", "key": "name", "value": "http_status" } ] },
+      { "name": "DL - download_trigger", "type": "v", "parameter": [
+        { "type": "INTEGER", "key": "dataLayerVersion", "value": "2" },
+        { "type": "BOOLEAN", "key": "setDefaultValue", "value": "false" },
+        { "type": "TEMPLATE", "key": "name", "value": "download_trigger" } ] },
+      { "name": "DL - trigger_section_id", "type": "v", "parameter": [
+        { "type": "INTEGER", "key": "dataLayerVersion", "value": "2" },
+        { "type": "BOOLEAN", "key": "setDefaultValue", "value": "false" },
+        { "type": "TEMPLATE", "key": "name", "value": "trigger_section_id" } ] },
+      { "name": "DL - article_url", "type": "v", "parameter": [
+        { "type": "INTEGER", "key": "dataLayerVersion", "value": "2" },
+        { "type": "BOOLEAN", "key": "setDefaultValue", "value": "false" },
+        { "type": "TEMPLATE", "key": "name", "value": "article_url" } ] },
+      { "name": "DL - article_id", "type": "v", "parameter": [
+        { "type": "INTEGER", "key": "dataLayerVersion", "value": "2" },
+        { "type": "BOOLEAN", "key": "setDefaultValue", "value": "false" },
+        { "type": "TEMPLATE", "key": "name", "value": "article_id" } ] },
+      { "name": "DL - source_block", "type": "v", "parameter": [
+        { "type": "INTEGER", "key": "dataLayerVersion", "value": "2" },
+        { "type": "BOOLEAN", "key": "setDefaultValue", "value": "false" },
+        { "type": "TEMPLATE", "key": "name", "value": "source_block" } ] },
+      { "name": "DL - product.category5", "type": "v", "parameter": [
+        { "type": "INTEGER", "key": "dataLayerVersion", "value": "2" },
+        { "type": "BOOLEAN", "key": "setDefaultValue", "value": "false" },
+        { "type": "TEMPLATE", "key": "name", "value": "product.category5" } ] }
+    ],
+    "trigger": [
+      {
+        "name": "HUB - tous les evenements",
+        "type": "CUSTOM_EVENT",
+        "customEventFilter": [
+          {
+            "type": "MATCH_REGEX",
+            "parameter": [
+              { "type": "TEMPLATE", "key": "arg0", "value": "{{_event}}" },
+              { "type": "TEMPLATE", "key": "arg1", "value": "^hub_" }
+            ]
+          }
+        ]
+      }
+    ],
+    "tag": [
+      {
+        "name": "GA4 - HUB events",
+        "type": "gaawe",
+        "parameter": [
+          { "type": "TEMPLATE", "key": "eventName", "value": "{{Event}}" },
+          { "type": "BOOLEAN", "key": "sendEcommerceData", "value": "false" },
+          { "type": "TEMPLATE", "key": "measurementIdOverride", "value": "G-DQTV4SHNME" },
+          {
+            "type": "LIST",
+            "key": "eventSettingsTable",
+            "list": [
+              { "type": "MAP", "map": [
+                { "type": "TEMPLATE", "key": "parameter", "value": "hub_group" },
+                { "type": "TEMPLATE", "key": "parameterValue", "value": "{{DL - hub_group}}" } ] },
+              { "type": "MAP", "map": [
+                { "type": "TEMPLATE", "key": "parameter", "value": "hub_page_id" },
+                { "type": "TEMPLATE", "key": "parameterValue", "value": "{{DL - hub_page_id}}" } ] },
+              { "type": "MAP", "map": [
+                { "type": "TEMPLATE", "key": "parameter", "value": "hub_page_uri" },
+                { "type": "TEMPLATE", "key": "parameterValue", "value": "{{DL - hub_page_uri}}" } ] },
+              { "type": "MAP", "map": [
+                { "type": "TEMPLATE", "key": "parameter", "value": "id_page_hub" },
+                { "type": "TEMPLATE", "key": "parameterValue", "value": "{{DL - id_page_hub}}" } ] },
+              { "type": "MAP", "map": [
+                { "type": "TEMPLATE", "key": "parameter", "value": "session_id" },
+                { "type": "TEMPLATE", "key": "parameterValue", "value": "{{DL - session_id}}" } ] },
+              { "type": "MAP", "map": [
+                { "type": "TEMPLATE", "key": "parameter", "value": "form_id" },
+                { "type": "TEMPLATE", "key": "parameterValue", "value": "{{DL - form_id}}" } ] },
+              { "type": "MAP", "map": [
+                { "type": "TEMPLATE", "key": "parameter", "value": "entry_point" },
+                { "type": "TEMPLATE", "key": "parameterValue", "value": "{{DL - entry_point}}" } ] },
+              { "type": "MAP", "map": [
+                { "type": "TEMPLATE", "key": "parameter", "value": "step_name" },
+                { "type": "TEMPLATE", "key": "parameterValue", "value": "{{DL - step_name}}" } ] },
+              { "type": "MAP", "map": [
+                { "type": "TEMPLATE", "key": "parameter", "value": "step_id" },
+                { "type": "TEMPLATE", "key": "parameterValue", "value": "{{DL - step_id}}" } ] },
+              { "type": "MAP", "map": [
+                { "type": "TEMPLATE", "key": "parameter", "value": "step_index" },
+                { "type": "TEMPLATE", "key": "parameterValue", "value": "{{DL - step_index}}" } ] },
+              { "type": "MAP", "map": [
+                { "type": "TEMPLATE", "key": "parameter", "value": "step_total" },
+                { "type": "TEMPLATE", "key": "parameterValue", "value": "{{DL - step_total}}" } ] },
+              { "type": "MAP", "map": [
+                { "type": "TEMPLATE", "key": "parameter", "value": "answer_label" },
+                { "type": "TEMPLATE", "key": "parameterValue", "value": "{{DL - answer_label}}" } ] },
+              { "type": "MAP", "map": [
+                { "type": "TEMPLATE", "key": "parameter", "value": "email_check_result" },
+                { "type": "TEMPLATE", "key": "parameterValue", "value": "{{DL - email_check_result}}" } ] },
+              { "type": "MAP", "map": [
+                { "type": "TEMPLATE", "key": "parameter", "value": "user_known_status" },
+                { "type": "TEMPLATE", "key": "parameterValue", "value": "{{DL - user_known_status}}" } ] },
+              { "type": "MAP", "map": [
+                { "type": "TEMPLATE", "key": "parameter", "value": "lead_path" },
+                { "type": "TEMPLATE", "key": "parameterValue", "value": "{{DL - lead_path}}" } ] },
+              { "type": "MAP", "map": [
+                { "type": "TEMPLATE", "key": "parameter", "value": "steps_answered" },
+                { "type": "TEMPLATE", "key": "parameterValue", "value": "{{DL - steps_answered}}" } ] },
+              { "type": "MAP", "map": [
+                { "type": "TEMPLATE", "key": "parameter", "value": "last_step_name" },
+                { "type": "TEMPLATE", "key": "parameterValue", "value": "{{DL - last_step_name}}" } ] },
+              { "type": "MAP", "map": [
+                { "type": "TEMPLATE", "key": "parameter", "value": "last_step_index" },
+                { "type": "TEMPLATE", "key": "parameterValue", "value": "{{DL - last_step_index}}" } ] },
+              { "type": "MAP", "map": [
+                { "type": "TEMPLATE", "key": "parameter", "value": "error_stage" },
+                { "type": "TEMPLATE", "key": "parameterValue", "value": "{{DL - error_stage}}" } ] },
+              { "type": "MAP", "map": [
+                { "type": "TEMPLATE", "key": "parameter", "value": "http_status" },
+                { "type": "TEMPLATE", "key": "parameterValue", "value": "{{DL - http_status}}" } ] },
+              { "type": "MAP", "map": [
+                { "type": "TEMPLATE", "key": "parameter", "value": "download_trigger" },
+                { "type": "TEMPLATE", "key": "parameterValue", "value": "{{DL - download_trigger}}" } ] },
+              { "type": "MAP", "map": [
+                { "type": "TEMPLATE", "key": "parameter", "value": "trigger_section_id" },
+                { "type": "TEMPLATE", "key": "parameterValue", "value": "{{DL - trigger_section_id}}" } ] },
+              { "type": "MAP", "map": [
+                { "type": "TEMPLATE", "key": "parameter", "value": "article_url" },
+                { "type": "TEMPLATE", "key": "parameterValue", "value": "{{DL - article_url}}" } ] },
+              { "type": "MAP", "map": [
+                { "type": "TEMPLATE", "key": "parameter", "value": "article_id" },
+                { "type": "TEMPLATE", "key": "parameterValue", "value": "{{DL - article_id}}" } ] },
+              { "type": "MAP", "map": [
+                { "type": "TEMPLATE", "key": "parameter", "value": "source_block" },
+                { "type": "TEMPLATE", "key": "parameterValue", "value": "{{DL - source_block}}" } ] },
+              { "type": "MAP", "map": [
+                { "type": "TEMPLATE", "key": "parameter", "value": "product_category5" },
+                { "type": "TEMPLATE", "key": "parameterValue", "value": "{{DL - product.category5}}" } ] }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
