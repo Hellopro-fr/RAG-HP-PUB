@@ -36,12 +36,14 @@ test("recordQmCollapsed refuses a degenerate entry (base === collapsed)", () => 
     reset();
     recordQmCollapsed("https://x.fr/c", "https://x.fr/c", "filter_on_seen", "dequeue");
     assert.deepEqual(context.qmCollapsed, []);
+    assert.equal(context.qmCollapsedRejected, 0);
 });
 
 test("recordQmCollapsed folds the trailing slash before judging degeneracy", () => {
     reset();
     recordQmCollapsed("https://x.fr/c/", "https://x.fr/c", "filter_on_seen", "dequeue");
     assert.deepEqual(context.qmCollapsed, []);
+    assert.equal(context.qmCollapsedRejected, 0);
 });
 
 test("recordQmCollapsed counts what the cap refuses", () => {
