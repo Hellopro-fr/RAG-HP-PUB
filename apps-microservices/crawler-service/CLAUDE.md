@@ -792,7 +792,7 @@ Exact key **and** value match, so a site's own `?lang=de` still counts as the si
 **Two call sites deliberately keep the original `url`:**
 
 - the `#` block (`:1011`) — stripping a query cannot change a fragment;
-- `context.seenBases.add(baseKeyAbsent(url))` (`:1060`) — **load-bearing.** `isFilterParam`
+- `context.seenBases.add(baseKeyAbsent(url))` (`:1060`) — **load-bearing.** `filterParamCollapseTarget`
   computes its keys from the real `request.url`, which *does* carry the injected param, so
   stripping only the oracle side would break the key match and silently weaken the filter.
 
@@ -1055,10 +1055,11 @@ Read-only introspection surface so incidents can be investigated **over the gate
 
 ## Queue collapses that the BO consumes (`collapsed_seen_base.jsonl`)
 
-`isFilterParam` drops a `?param` variant when removing the param yields a base already in
-`seenBases`. It fires at THREE sites, and `seenBases` is preloaded from the previous
-crawl's dataset (`main.ts:741`) before the first fetch, so the oracle is full from the
-start:
+`filterParamCollapseTarget` drops a `?param` variant when removing the param yields a base
+already in `seenBases` (the dequeue gate calls it indirectly, through
+`skipnavCollapseTarget`). It fires at THREE sites, and `seenBases` is preloaded from the
+previous crawl's dataset (`main.ts:741`) before the first fetch, so the oracle is full from
+the start:
 
 | Gate | Site | Hits |
 |---|---|---|
@@ -1083,6 +1084,12 @@ was crawled.** `origin === 'filter_on_seen'` only.
   would mean "this fiche duplicates itself", and applying it would retire the fiche with no
   replacement.
 
+⚠ **`param` is diagnostic only.** It is filled only when removing the collapsed URL down to
+its base removes exactly ONE query key. A multi-select facet — `?portfolioCats=147&portfolioCats=12`,
+the very shape the target population is drawn from — removes two keys and leaves `param`
+`""`. `url` and `base` carry the decision; a consumer must never use `param` as a validity
+test, nor as a facet-allowlist check, nor assume it is non-empty.
+
 ⚠ This file never carries `action: 'redirected'`. At the rejection point there is no
 `loadedUrl` (see `functions.ts:870-871`), so there is NO proof of a 301 — writing one would
 fabricate an event never observed. And the BO's redirect handler has a rename branch that
@@ -1090,8 +1097,31 @@ rewrites `url_sfpi`/`url_psi`, which on this population produces duplicates inst
 retirements. See the spec (Hellopro planning repo,
 `docs/superpowers/specs/2026-08-24-collapse-structurel-tracable-design.md` §3).
 
-⚠ `QM_COLLAPSED_CAP = 200` truncates the collection. The summary line carries
-`truncated_by_cap` — a consumer must not read 200 rows as an exhaustive population.
+⚠ **Two separate caps, only one of which this file ever sees.** `SEEN_BASE_COLLAPSED_CAP =
+4000` truncates the `filter_on_seen` channel — the only origin admitted into this file —
+sized from the largest collapsible population measured on one domain (2,884 URLs) and the
+BO-side cap set at 4000 on that basis. The pre-existing `QM_COLLAPSED_CAP = 200` still caps
+`facet_cap`/`qm_strip` combined, but those two never reach this file, so their refusals are
+not counted here. The summary line's `truncated_by_cap` counts only `filter_on_seen`
+refusals — a consumer must not read a run as exhaustive just because that field is 0, and
+must treat a nonzero value as "this run lost admitted rows to the cap".
+
+⚠ **Multi-segment append — this is NOT one summary per file.** The sidecar is opened in
+append mode, and `context.qmCollapsed` starts EMPTY at the top of every new segment (OOM
+relaunch, resume, a second segment) — relaunch cleanup does not delete this file, so an
+earlier segment's rows stay underneath. One file can legitimately hold SEVERAL summary
+lines, each scoped to its own segment, and the SAME `url` twice (a request in flight when
+the OOM hit landed, re-dispatched in the next segment). A consumer must: **sum** `written`
+across every summary line, treat `truncated_by_cap > 0` on **any** summary line as
+truncation (not just the last one), and **dedupe rows by `url`**. A run that admits zero
+rows but had the cap refuse some produces a file whose only line is that summary.
+
+⚠ **Vocabulary collision, BO side.** The BO already reads a file named `__collapsed_urls.json`
+where "collapsed" means *alive, protect from deletion*. This channel's "collapsed" means the
+opposite: *retire*. The two populations are disjoint by construction (a URL that was never
+fetched cannot be in the current live dataset), so there is no data hazard today — but
+whoever writes the BO-side consumer of `collapsed_seen_base.jsonl` must not reuse the same
+word for both meanings.
 
 ## Conventions
 

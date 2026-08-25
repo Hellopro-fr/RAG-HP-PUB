@@ -46,13 +46,48 @@ test("recordQmCollapsed folds the trailing slash before judging degeneracy", () 
     assert.equal(context.qmCollapsedRejected, 0);
 });
 
-test("recordQmCollapsed counts what the cap refuses", () => {
+test("recordQmCollapsed admits filter_on_seen past the shared 200 cap (its own budget is 4000)", () => {
     reset();
     for (let i = 0; i < 205; i++) {
         recordQmCollapsed(`https://x.fr/c${i}?q=a`, `https://x.fr/c${i}`, "filter_on_seen", "enqueue");
     }
+    assert.equal(context.qmCollapsed.length, 205);
+    assert.equal(context.qmCollapsedRejected, 0);
+});
+
+test("recordQmCollapsed refuses facet_cap at the shared 200 cap without moving truncated_by_cap's counter", () => {
+    reset();
+    for (let i = 0; i < 205; i++) {
+        recordQmCollapsed(`https://x.fr/f${i}?a=1`, `https://x.fr/f${i}`, "facet_cap", "prenav");
+    }
     assert.equal(context.qmCollapsed.length, 200);
+    // The point of this test: a facet_cap refusal must NOT feed truncated_by_cap — only
+    // filter_on_seen (the admitted channel) is allowed to move this counter.
+    assert.equal(context.qmCollapsedRejected, 0);
+});
+
+test("recordQmCollapsed counts filter_on_seen rejections once its OWN 4000 cap is hit", () => {
+    reset();
+    for (let i = 0; i < 4005; i++) {
+        recordQmCollapsed(`https://x.fr/s${i}?q=a`, `https://x.fr/s${i}`, "filter_on_seen", "enqueue");
+    }
+    assert.equal(context.qmCollapsed.filter((r) => r.origin === "filter_on_seen").length, 4000);
     assert.equal(context.qmCollapsedRejected, 5);
+});
+
+test("recordQmCollapsed caps facet_cap and qm_strip together under the SAME shared 200", () => {
+    reset();
+    for (let i = 0; i < 100; i++) {
+        recordQmCollapsed(`https://x.fr/f${i}?a=1`, `https://x.fr/f${i}`, "facet_cap", "prenav");
+    }
+    for (let i = 0; i < 150; i++) {
+        recordQmCollapsed(`https://x.fr/q${i}?a=1`, `https://x.fr/q${i}`, "qm_strip", "prenav");
+    }
+    // 100 facet_cap admitted + only 100 of 150 qm_strip admitted = 200 total (shared cap).
+    assert.equal(context.qmCollapsed.length, 200);
+    assert.equal(context.qmCollapsed.filter((r) => r.origin === "facet_cap").length, 100);
+    assert.equal(context.qmCollapsed.filter((r) => r.origin === "qm_strip").length, 100);
+    assert.equal(context.qmCollapsedRejected, 0);
 });
 
 test("skipnavCollapseTarget: strip decides -> via qm_strip", () => {

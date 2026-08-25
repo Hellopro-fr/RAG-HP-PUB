@@ -26,7 +26,7 @@ import { matchesMainSite } from "./isMainSite.js";
 import { applyPerClassStrip, perClassEnabled, stripActionAnchor, actionAnchorStripEnabled } from "./diezClassify.js";
 import { qmConsumptionStrip, shouldSkipDequeued, recordQmCollapsed, skipnavCollapseTarget } from "./qmConsumptionSkip.js";
 import { recordVariant, isOverCap, QM_FACET_ENABLED, QM_FACET_CAP_K } from "./facetCap.js";
-import { isFilterParam, filterParamCollapseTarget } from "./filterOnSeen.js";
+import { filterParamCollapseTarget } from "./filterOnSeen.js";
 import { baseKeyAbsent } from "./urlBase.js";
 import { recordTier2Sample, maybeCommitTier2, tier2Evidence, maybeDefaultAtCeiling as maybeDefaultDiezAtCeiling } from "./diezTier2.js";
 import { routeDiezOutcome } from "./diezHookGate.js";
@@ -1256,7 +1256,7 @@ router.addDefaultHandler(
                         // — is not in play here.
                         if (QM_FACET_ENABLED) {
                             const _fosTarget = filterParamCollapseTarget(request.url, context.seenBases);
-                            if (_fosTarget) {
+                            if (_fosTarget !== null) {
                                 recordQmCollapsed(request.url, _fosTarget, 'filter_on_seen', 'enqueue');
                                 logBlocked('filter-on-seen', request.url);
                                 return false;

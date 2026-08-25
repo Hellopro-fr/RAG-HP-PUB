@@ -10,6 +10,13 @@ import { filterParamCollapseTarget } from "./filterOnSeen.js";
 
 const _require = createRequire(import.meta.url);
 const QM_COLLAPSED_CAP = 200;
+/** Budget for the ADMITTED origin only (filter_on_seen) — separate from the shared 200
+ * above so facet_cap/qm_strip (audit-only, never read by the BO) can never starve the one
+ * channel collapsed_seen_base.jsonl carries. Sized on measurement: the largest collapsible
+ * population found on a single domain was 2,884 URLs, and the BO-side cap consuming this
+ * file is set to 4000 on that basis — a lower crawler-side ceiling would make that cap
+ * unreachable. */
+const SEEN_BASE_COLLAPSED_CAP = 4000;
 
 /** Re-apply the live config strip to a URL (toRemove + skip/diez/per-class via processUrl). */
 export const qmConsumptionStrip = (url: string): string => {
@@ -76,8 +83,14 @@ export const recordQmCollapsed = (
     gate: CollapseGate,
 ): void => {
     if (foldSlash(collapsed) === foldSlash(base)) return;
-    if (context.qmCollapsed.length >= QM_COLLAPSED_CAP) {
-        context.qmCollapsedRejected++;
+    const isSeenBase = origin === 'filter_on_seen';
+    const cap = isSeenBase ? SEEN_BASE_COLLAPSED_CAP : QM_COLLAPSED_CAP;
+    const countForOrigin = context.qmCollapsed.filter((r) =>
+        isSeenBase ? r.origin === 'filter_on_seen' : r.origin !== 'filter_on_seen').length;
+    if (countForOrigin >= cap) {
+        // Only filter_on_seen feeds truncated_by_cap: it is the sole origin the BO reads,
+        // so a facet_cap/qm_strip refusal never cost the admitted channel anything.
+        if (isSeenBase) context.qmCollapsedRejected++;
         return;
     }
     let param = "";

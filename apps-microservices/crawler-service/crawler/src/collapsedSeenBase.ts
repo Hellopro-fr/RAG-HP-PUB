@@ -11,9 +11,10 @@
  * invitation to widen it.
  */
 import { context } from "./context.js";
+import type { CollapseOrigin, CollapseGate } from "./qmConsumptionSkip.js";
 
 export type CollapsedRow = {
-    collapsed: string; base: string; param: string; origin: string; gate: string;
+    collapsed: string; base: string; param: string; origin: CollapseOrigin; gate: CollapseGate;
 };
 
 const foldSlash = (u: string): string => u.replace(/\/+$/, "");
@@ -33,7 +34,7 @@ export const COLLAPSED_SEEN_BASE_FILE = "collapsed_seen_base.jsonl";
 export const writeCollapsedSeenBase = async (timestamp: string): Promise<number> => {
     const writer = context.jsonlWriter;
     if (!writer) return 0;
-    const rows = selectSeenBaseRows(context.qmCollapsed as CollapsedRow[]);
+    const rows = selectSeenBaseRows(context.qmCollapsed);
     try {
         for (const r of rows) {
             await writer.writeLine(COLLAPSED_SEEN_BASE_FILE, {

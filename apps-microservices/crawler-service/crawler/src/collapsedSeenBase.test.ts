@@ -3,8 +3,9 @@ import assert from "node:assert/strict";
 import type { JsonlWriter } from "./class/JsonlWriter.js";
 import { context } from "./context.js";
 import { COLLAPSED_SEEN_BASE_FILE, selectSeenBaseRows, writeCollapsedSeenBase } from "./collapsedSeenBase.js";
+import type { CollapseOrigin, CollapseGate } from "./qmConsumptionSkip.js";
 
-const row = (origin: string, gate = "prenav") => ({
+const row = (origin: CollapseOrigin, gate: CollapseGate = "prenav") => ({
     collapsed: "https://x.fr/p?cat=1", base: "https://x.fr/p", param: "cat", origin, gate,
 });
 
