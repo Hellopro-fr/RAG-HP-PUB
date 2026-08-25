@@ -249,15 +249,20 @@ export function DownloadStep({
         <p className="mt-1 text-sm text-muted-foreground">{download.subtitle}</p>
       )}
 
-      <div className="relative mx-auto mt-5 h-64 w-48">
-        <Image
-          src={download.image.src}
-          alt={download.image.alt}
-          fill
-          sizes="160px"
-          className="object-contain"
-        />
-      </div>
+      {/* Couverture optionnelle : une page dont les visuels ne sont pas encore
+          livrés n'a pas de champ `image`. Le bloc entier disparaît plutôt que de
+          réserver une zone vide. */}
+      {download.image && (
+        <div className="relative mx-auto mt-5 h-64 w-48">
+          <Image
+            src={download.image.src}
+            alt={download.image.alt}
+            fill
+            sizes="160px"
+            className="object-contain"
+          />
+        </div>
+      )}
 
       {download.note && (
         <p className="mx-auto mt-5 max-w-sm text-sm text-muted-foreground">{download.note}</p>
@@ -265,7 +270,10 @@ export function DownloadStep({
 
       <a
         href={download.fileUrl ?? '#'}
-        download
+        // `download` nu → le navigateur reprend le nom du chemin. Avec un nom
+        // explicite, le chemin reste en kebab-case ASCII et le visiteur reçoit
+        // quand même un fichier au titre éditorial.
+        download={download.fileName ?? true}
         onClick={() =>
           pushHubEvent('hub_guide_download', group, {
             download_trigger: 'manual',

@@ -163,6 +163,7 @@ export function HubTemplate({ page, headerCategories = [] }: HubTemplateProps) {
         guide={page.guideDialog}
         leadPopup={page.leadPopup}
         guideIdPageHub={guideIdPageHub(page.id)}
+        pageId={page.id}
       />
     </div>
   );

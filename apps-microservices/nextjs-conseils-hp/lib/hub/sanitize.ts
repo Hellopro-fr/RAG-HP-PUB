@@ -31,6 +31,17 @@ const ALLOWED_TAGS = new Set([
   'li',
   'p',
   'span',
+  /**
+   * `h3` autorisé depuis le 2026-08-07 : le bloc éditorial « Camion ou remorque »
+   * de la page food truck se décompose en deux sous-parties nommées. Sans cette
+   * entrée, les balises étaient retirées et le texte des sous-titres se fondait
+   * dans le paragraphe suivant — la hiérarchie disparaissait en silence.
+   *
+   * Le titre d'un bloc éditorial étant un `h2`, `h3` est le seul niveau qui s'y
+   * emboîte correctement. Ne pas ajouter `h2` : ça permettrait à une donnée de
+   * créer une section de même rang que le bloc qui la contient.
+   */
+  'h3',
 ]);
 
 /** Balises dont le CONTENU doit disparaître, pas seulement la balise. */

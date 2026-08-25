@@ -34,6 +34,8 @@ vi.mock('@/components/hub/PhoneFieldLazy', () => ({
 const data = listHubPages()[0].leadPopup;
 const guide = listHubPages()[0].guideDialog;
 const ID_PAGE_HUB = guideIdPageHub(listHubPages()[0].id);
+/** Id du PROJET — portée du drapeau « déjà converti », distinct de l'id du tunnel. */
+const PAGE_ID = listHubPages()[0].id;
 
 const IMAGE = { src: '/images/hub/x/popup.png', alt: 'Guide' };
 
@@ -41,7 +43,10 @@ type MockResponse = { status: number; body: unknown };
 
 function stubFetch(responses: MockResponse[]) {
   let i = 0;
-  const fn = vi.fn(async () => {
+  // Signature calquée sur `fetch` — cf. AssistantForm.test.tsx : sans elle,
+  // `mock.calls[0][1]` ne compile pas (tuple d'arguments vide).
+  const fn = vi.fn(async (...args: Parameters<typeof fetch>) => {
+    void args;
     const r = responses[Math.min(i, responses.length - 1)];
     i += 1;
     return { status: r.status, ok: r.status < 400, json: async () => r.body } as Response;
@@ -65,7 +70,12 @@ function renderOpen(
 
   const fetchMock = stubFetch(fetchResponses);
   const result = render(
-    <LeadPopup data={{ ...data, ...overrides }} guide={guide} idPageHub={ID_PAGE_HUB} />
+    <LeadPopup
+      data={{ ...data, ...overrides }}
+      guide={guide}
+      idPageHub={ID_PAGE_HUB}
+      pageId={PAGE_ID}
+    />
   );
   fireEvent.scroll(window);
   return { ...result, fetchMock };
@@ -82,25 +92,40 @@ function submitEmailStep() {
 afterEach(() => {
   vi.restoreAllMocks();
   document.cookie = 'hub_lead=; path=/; max-age=0';
+  /**
+   * ⚠️ INDISPENSABLE. `LeadPopup` écrit `hubLeadPopupSeen` dans `sessionStorage`
+   * dès qu'elle s'affiche, et sort immédiatement si le drapeau est déjà posé —
+   * c'est ce qui garantit une seule apparition par session en production. En
+   * test, `sessionStorage` survit d'un cas à l'autre : sans ce nettoyage, le
+   * premier test qui ouvre la pop-up empêche TOUS les suivants de l'ouvrir, et
+   * ils échouent en cascade sur « Unable to find role=dialog ».
+   */
+  sessionStorage.clear();
+  // Les sections déclencheuses créées par `renderOpen` sont ajoutées au body,
+  // hors du conteneur que React Testing Library nettoie.
+  document.querySelectorAll('body > section').forEach((el) => el.remove());
 });
 
 describe('LeadPopup', () => {
   it('reste fermée au montage', () => {
-    render(<LeadPopup data={data} guide={guide} idPageHub={ID_PAGE_HUB} />);
+    render(<LeadPopup data={data} guide={guide} idPageHub={ID_PAGE_HUB} pageId={PAGE_ID} />);
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
   it('s’ouvre après avoir dépassé la section déclencheuse', async () => {
     renderOpen();
     await waitFor(() => expect(screen.getByRole('dialog')).toBeDefined());
-    expect(screen.getByText(data.title)).toBeDefined();
+    // `getAllByText` et non `getByText` : le titre est rendu DEUX fois, en `h2`
+    // visible et dans le `DialogTitle` en `sr-only` que Radix exige pour nommer
+    // la boîte de dialogue. Les deux occurrences sont voulues.
+    expect(screen.getAllByText(data.title).length).toBeGreaterThan(0);
   });
 
   it('ne réserve pas la colonne image quand aucun visuel n’est livré', async () => {
     renderOpen({ image: undefined });
     await waitFor(() => expect(screen.getByRole('dialog')).toBeDefined());
     const grid = document.body.querySelector('[class*="sm:grid-cols-"]');
-    expect(grid?.className).not.toContain('140px');
+    expect(grid?.className).not.toContain('190px');
     expect(grid?.className).toContain('sm:grid-cols-1');
   });
 
@@ -123,7 +148,9 @@ describe('LeadPopup', () => {
     renderOpen({ image: IMAGE });
     await waitFor(() => expect(screen.getByRole('dialog')).toBeDefined());
     const grid = document.body.querySelector('[class*="sm:grid-cols-"]');
-    expect(grid?.className).toContain('140px');
+    // 190px et non 140px : la colonne du livre a été élargie, le titre du modal
+    // se cassant à un mot par ligne dans l'ancienne largeur.
+    expect(grid?.className).toContain('190px');
     expect(screen.getByAltText('Guide')).toBeDefined();
   });
 

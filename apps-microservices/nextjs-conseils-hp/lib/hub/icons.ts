@@ -29,9 +29,11 @@ import {
   Search,
   SearchCheck,
   ShieldCheck,
+  Truck,
   UserRoundCheck,
   Users,
   Users2,
+  UtensilsCrossed,
   Wallet,
   Wrench,
 } from 'lucide-react';
@@ -88,6 +90,11 @@ export const HUB_ICONS = {
   search: Search,
   'search-check': SearchCheck,
   shield: ShieldCheck,
+  // Ajoutées le 2026-08-07 pour la page food truck (1001). Le registre a été
+  // volontairement réduit à ce qui sert : on n'ajoute une icône qu'au moment où
+  // une donnée la demande, jamais « au cas où ».
+  truck: Truck,
+  utensils: UtensilsCrossed,
   'user-check': UserRoundCheck,
   users: Users,
   'users-group': Users2,

@@ -71,7 +71,7 @@ valeur fournie.
 
 ---
 
-## 1002 — Laverie automatique ⏳ en attente de contenu
+## 1002 — Laverie automatique ✅ appliquée
 
 | Champ | Valeur |
 |---|---|

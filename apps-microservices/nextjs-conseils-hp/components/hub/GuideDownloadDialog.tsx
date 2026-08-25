@@ -44,11 +44,15 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export function GuideDownloadDialog({
   data,
   idPageHub,
+  pageId,
   autoOpenOnMount = false,
   autoOpenEntryPoint,
 }: {
   data: HubGuideDialog;
+  /** `id_page_hub` du TUNNEL guide — ce qui part à l'API. */
   idPageHub: number;
+  /** Id du PROJET — portée du drapeau « déjà converti » (cf. `HubOverlays`). */
+  pageId: number;
   /**
    * Emplacement du CTA à rejouer avec `autoOpenOnMount`.
    *
@@ -74,7 +78,7 @@ export function GuideDownloadDialog({
   const [entryPoint, setEntryPoint] = useState<HubEntryPoint>('banner_guide');
   // Visiteur déjà converti (cookie posé) : re-téléchargement, pas une conversion.
   const [alreadyConverted, setAlreadyConverted] = useState(false);
-  const lead = useGuideLead(idPageHub, entryPoint);
+  const lead = useGuideLead(idPageHub, entryPoint, pageId);
   const { reset } = lead;
 
   useEffect(() => {
@@ -89,11 +93,12 @@ export function GuideDownloadDialog({
       reset();
       setEmailError('');
       setOpen(true);
-      // Visiteur reconnu (drapeau 30j) → écran de téléchargement DIRECT. On ne
+      // Visiteur déjà converti SUR CE PROJET (drapeau 30j, cf. leadEmailCookie :
+      // la portée est par `id_page_hub`) → écran de téléchargement DIRECT. On ne
       // stocke plus l'e-mail, donc aucun ré-enregistrement : on affiche juste le
       // remerciement et on rafraîchit le drapeau (fenêtre glissante de 30 j).
-      if (isLeadKnown()) {
-        markLeadKnown();
+      if (isLeadKnown(pageId)) {
+        markLeadKnown(pageId);
         lead.setPhase('download');
         setAlreadyConverted(true);
         // RACCOURCI : aucun formulaire, aucun appel API. `hub_guide_shortcut`

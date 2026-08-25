@@ -27,12 +27,20 @@ vi.mock('@/components/hub/PhoneFieldLazy', () => ({
 
 const data = listHubPages()[0].guideDialog;
 const ID_PAGE_HUB = guideIdPageHub(listHubPages()[0].id);
+/**
+ * Id du PROJET — portée du drapeau « déjà converti », distinct de l'id du TUNNEL
+ * guide envoyé à l'API. Cf. `lib/hub/leadEmailCookie.ts`.
+ */
+const PAGE_ID = listHubPages()[0].id;
 
 type MockResponse = { status: number; body: unknown };
 
 function stubFetch(responses: MockResponse[]) {
   let i = 0;
-  const fn = vi.fn(async () => {
+  // Signature calquée sur `fetch` — cf. AssistantForm.test.tsx : sans elle,
+  // `mock.calls[0][1]` ne compile pas (tuple d'arguments vide).
+  const fn = vi.fn(async (...args: Parameters<typeof fetch>) => {
+    void args;
     const r = responses[Math.min(i, responses.length - 1)];
     i += 1;
     return { status: r.status, ok: r.status < 400, json: async () => r.body } as Response;
@@ -65,13 +73,13 @@ afterEach(() => {
 describe('GuideDownloadDialog', () => {
   it('reste fermé au montage', () => {
     stubFetch([{ status: 200, body: {} }]);
-    render(<GuideDownloadDialog data={data} idPageHub={ID_PAGE_HUB} />);
+    render(<GuideDownloadDialog data={data} idPageHub={ID_PAGE_HUB} pageId={PAGE_ID} />);
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
   it('s’ouvre sur l’événement et démarre par l’étape e-mail seule', async () => {
     stubFetch([{ status: 200, body: {} }]);
-    render(<GuideDownloadDialog data={data} idPageHub={ID_PAGE_HUB} />);
+    render(<GuideDownloadDialog data={data} idPageHub={ID_PAGE_HUB} pageId={PAGE_ID} />);
     await open();
     expect(screen.getByLabelText(data.fields.email)).toBeDefined();
     expect(screen.queryByLabelText(data.fields.name)).toBeNull();
@@ -79,7 +87,7 @@ describe('GuideDownloadDialog', () => {
 
   it('refuse un e-mail invalide sans appel réseau', async () => {
     const fetchMock = stubFetch([{ status: 200, body: {} }]);
-    render(<GuideDownloadDialog data={data} idPageHub={ID_PAGE_HUB} />);
+    render(<GuideDownloadDialog data={data} idPageHub={ID_PAGE_HUB} pageId={PAGE_ID} />);
     await open();
     fireEvent.change(screen.getByLabelText(data.fields.email), {
       target: { value: 'pas-un-email' },
@@ -97,7 +105,7 @@ describe('GuideDownloadDialog', () => {
       { status: 200, body: { statut: 'coordonnees_requises' } },
       { status: 201, body: { statut: 'enregistre', id_demande: 42, contact_connu: 0 } },
     ]);
-    render(<GuideDownloadDialog data={data} idPageHub={ID_PAGE_HUB} />);
+    render(<GuideDownloadDialog data={data} idPageHub={ID_PAGE_HUB} pageId={PAGE_ID} />);
     await open();
     submitEmailStep();
 
@@ -141,7 +149,7 @@ describe('GuideDownloadDialog', () => {
     const fetchMock = stubFetch([
       { status: 201, body: { statut: 'enregistre', id_demande: 7, contact_connu: 1 } },
     ]);
-    render(<GuideDownloadDialog data={data} idPageHub={ID_PAGE_HUB} />);
+    render(<GuideDownloadDialog data={data} idPageHub={ID_PAGE_HUB} pageId={PAGE_ID} />);
     await open();
     submitEmailStep();
 
@@ -152,7 +160,7 @@ describe('GuideDownloadDialog', () => {
 
   it('bloque l’étape coordonnées si le téléphone est invalide', async () => {
     stubFetch([{ status: 200, body: { statut: 'coordonnees_requises' } }]);
-    render(<GuideDownloadDialog data={data} idPageHub={ID_PAGE_HUB} />);
+    render(<GuideDownloadDialog data={data} idPageHub={ID_PAGE_HUB} pageId={PAGE_ID} />);
     await open();
     submitEmailStep();
     await waitFor(() => expect(screen.getByLabelText(data.fields.name)).toBeDefined());
@@ -175,9 +183,10 @@ describe('GuideDownloadDialog', () => {
    * SANS aucun appel réseau (on ne stocke plus l'e-mail, donc pas de ré-envoi).
    */
   it('va directement au téléchargement si le lead est connu, sans appel réseau', async () => {
-    markLeadKnown();
+    // Le drapeau est posé sur le PROJET, pas sur le tunnel : `PAGE_ID`.
+    markLeadKnown(PAGE_ID);
     const fetchMock = stubFetch([{ status: 200, body: {} }]);
-    render(<GuideDownloadDialog data={data} idPageHub={ID_PAGE_HUB} />);
+    render(<GuideDownloadDialog data={data} idPageHub={ID_PAGE_HUB} pageId={PAGE_ID} />);
     await open();
 
     await waitFor(() => expect(screen.getByText(data.download.title)).toBeDefined());
@@ -194,7 +203,7 @@ describe('GuideDownloadDialog', () => {
     });
     globalThis.fetch = vi.fn(() => pending) as unknown as typeof fetch;
 
-    render(<GuideDownloadDialog data={data} idPageHub={ID_PAGE_HUB} />);
+    render(<GuideDownloadDialog data={data} idPageHub={ID_PAGE_HUB} pageId={PAGE_ID} />);
     await open();
     fireEvent.change(screen.getByLabelText(data.fields.email), {
       target: { value: 'jean@exemple.fr' },

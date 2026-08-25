@@ -41,7 +41,9 @@ const FONT_SIZE_CLASS =
   /(?:^|[\s:'"`])(?:(?:sm|md|lg|xl|2xl):)?text-(?:xs|sm|base|lg|[2-9]?xl|\[[^\]]*(?:px|rem|em)\])(?=$|[\s'"`])/;
 
 /** Ouverture de balise titre avec son attribut `className`, sur une ou plusieurs lignes. */
-const HEADING_TAG = /<(h[1-4])\b[^>]*className=(?:"([^"]*)"|\{`([^`]*)`\})/gs;
+// Pas de drapeau `s` : le motif ne contient aucun `.`, il était donc sans effet,
+// et il exige `target: es2018` alors que le projet est en ES2017.
+const HEADING_TAG = /<(h[1-4])\b[^>]*className=(?:"([^"]*)"|\{`([^`]*)`\})/g;
 
 function hubFiles(): string[] {
   return readdirSync(HUB_DIR)

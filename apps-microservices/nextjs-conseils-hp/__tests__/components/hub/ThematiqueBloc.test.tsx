@@ -187,10 +187,21 @@ describe('ThematiqueBloc', () => {
     expect(screen.queryByRole('button', { name: /Lire l’article|Lire l'article/i })).toBeNull();
   });
 
+  /**
+   * ⚠️ Layout `overlay-*` OBLIGATOIRE ici, et pas le `grid` de `base()` : seules
+   * les cartes latérales des layouts overlay (`InfoCard`) rendent une
+   * description. Les cartes de `grid`/`carousel` (`ArticleCard`) n'affichent que
+   * le visuel, le titre et le lien — c'est l'invariant que `registry.test.ts`
+   * fait respecter côté données. Ces deux tests visaient donc une combinaison
+   * qui n'existe pas, et échouaient sur « Unable to find an element with the
+   * text ».
+   */
   it('rend descriptionHtml en HTML et description en texte', () => {
     render(
       <ThematiqueBloc
         data={base({
+          layout: 'overlay-left',
+          overlay: { title: 'T', bullets: [] },
           cards: [
             { title: 'HTML', descriptionHtml: 'Apport de <strong>20 %</strong>.' },
             { title: 'Texte', description: 'Description simple.' },
@@ -207,6 +218,9 @@ describe('ThematiqueBloc', () => {
     const { container } = render(
       <ThematiqueBloc
         data={base({
+          // Layout overlay pour la même raison que le test précédent.
+          layout: 'overlay-left',
+          overlay: { title: 'T', bullets: [] },
           cards: [
             {
               title: 'XSS',

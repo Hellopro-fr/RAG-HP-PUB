@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { EditoSection } from '@/components/hub/EditoSection';
+import type { HubEdito } from '@/types/hub';
 
 describe('EditoSection', () => {
   it('porte son id comme ancre et rend le titre en h2', () => {
@@ -141,9 +142,15 @@ describe('EditoSection', () => {
     );
 
     // Le titre (`h2`) est exclu : ce test contrôle la typographie du CORPS.
-    const blocks = Array.from(
-      container.querySelectorAll('section > div > *:not(h2):not(ul), li')
-    );
+    // Repère = parent du `h2`, et non `section > div > …` : `HubSection` ajoute
+    // son propre conteneur de largeur, un sélecteur qui compte les niveaux se
+    // casse au premier ajustement de gabarit (c'est arrivé).
+    const root = container.querySelector('h2')?.parentElement;
+    if (!root) throw new Error('titre h2 introuvable');
+    const blocks = [
+      ...Array.from(root.children).filter((el) => !['H2', 'UL'].includes(el.tagName)),
+      ...Array.from(container.querySelectorAll('li')),
+    ];
     expect(blocks.length).toBeGreaterThan(0);
     for (const block of blocks) {
       expect(block.className, block.textContent ?? '').toContain('text-base');
@@ -168,5 +175,80 @@ describe('EditoSection', () => {
   it('n’affiche rien de superflu quand seuls le titre et une liste vide existent', () => {
     const { container } = render(<EditoSection data={{ id: 'e', title: 'T', items: [] }} />);
     expect(container.querySelectorAll('li')).toHaveLength(0);
+  });
+
+  /* --------------------------------------------- Position de la liste --- */
+
+  /**
+   * Ordre des blocs de corps, titre exclu — 'ul' pour la liste à puces.
+   *
+   * On part du PARENT DU `h2` plutôt que d'un `section > div > …` : `HubSection`
+   * enveloppe déjà ses enfants dans un conteneur de largeur, et un sélecteur qui
+   * compte les niveaux se casse au premier ajustement de gabarit. C'est ce qui
+   * avait mis le test de typographie ci-dessus au rouge.
+   */
+  const bodyOrder = (container: HTMLElement) => {
+    const root = container.querySelector('h2')?.parentElement;
+    if (!root) throw new Error('titre h2 introuvable');
+    return Array.from(root.children)
+      .filter((el) => el.tagName !== 'H2')
+      .map((el) => el.tagName.toLowerCase());
+  };
+
+  /**
+   * RÉGRESSION (constatée à l'écran le 2026-08-24, pages 1001 et 1002) : quand
+   * l'intro annonce la liste par un deux-points, les paragraphes de `bodyHtml`
+   * s'intercalaient entre l'annonce et la liste.
+   */
+  it('place la liste juste après l’intro quand itemsPosition vaut after-intro', () => {
+    const { container } = render(
+      <EditoSection
+        data={{
+          id: 'e',
+          title: 'T',
+          intro: 'Les ordres de grandeur sont les suivants :',
+          items: ['Petit format', 'Grand format'],
+          bodyHtml: '<p>Complément.</p>',
+          itemsPosition: 'after-intro',
+        }}
+      />
+    );
+    expect(bodyOrder(container)).toEqual(['p', 'ul', 'div']);
+  });
+
+  /**
+   * Défaut inchangé : l'édito « Pourquoi lancer un élevage » de la page 1000 en
+   * dépend, sa liste y conclut les paragraphes du corps.
+   */
+  it('place la liste après le corps par défaut', () => {
+    // Typé, PAS `as const` : celui-ci rendrait `items` readonly, incompatible
+    // avec le `string[]` de HubEdito.
+    const data: HubEdito = {
+      id: 'e',
+      title: 'T',
+      intro: 'Intro.',
+      items: ['A'],
+      bodyHtml: '<p>Corps.</p>',
+    };
+
+    const { container } = render(<EditoSection data={data} />);
+    expect(bodyOrder(container)).toEqual(['p', 'div', 'ul']);
+
+    const explicite = render(<EditoSection data={{ ...data, itemsPosition: 'after-body' }} />);
+    expect(bodyOrder(explicite.container)).toEqual(['p', 'div', 'ul']);
+  });
+
+  /**
+   * `itemsPosition` n'a de sens que si les deux champs coexistent : sans
+   * `bodyHtml`, la liste n'a qu'une position possible et le réglage ne doit rien
+   * casser.
+   */
+  it('reste sans effet quand bodyHtml est absent', () => {
+    const { container } = render(
+      <EditoSection
+        data={{ id: 'e', title: 'T', intro: 'Intro.', items: ['A'], itemsPosition: 'after-intro' }}
+      />
+    );
+    expect(bodyOrder(container)).toEqual(['p', 'ul']);
   });
 });

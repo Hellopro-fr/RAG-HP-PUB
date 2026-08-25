@@ -39,14 +39,18 @@ export function LeadPopup({
   data,
   guide,
   idPageHub,
+  pageId,
 }: {
   data: HubLeadPopup;
   /** Données du guide, réutilisées pour les étapes coordonnées + téléchargement. */
   guide: HubGuideDialog;
+  /** `id_page_hub` du TUNNEL guide — ce qui part à l'API. */
   idPageHub: number;
+  /** Id du PROJET — portée du drapeau « déjà converti » (cf. `HubOverlays`). */
+  pageId: number;
 }) {
   const [open, setOpen] = useState(false);
-  const lead = useGuideLead(idPageHub, 'popup_scroll');
+  const lead = useGuideLead(idPageHub, 'popup_scroll', pageId);
   const { reset } = lead;
 
   useEffect(() => {
@@ -71,9 +75,11 @@ export function LeadPopup({
       } catch {
         /* stockage indisponible : la pop-up réapparaîtra au rechargement */
       }
-      // Visiteur déjà connu (drapeau en cookie) → on ne le dérange pas : aucune
-      // pop-up, aucun remerciement, aucun téléchargement déclenché.
-      if (isLeadKnown()) return;
+      // Visiteur déjà converti SUR CE PROJET (drapeau en cookie) → on ne le
+      // dérange pas : aucune pop-up, aucun remerciement, aucun téléchargement.
+      // La portée est bien par page : converti sur l'élevage, il doit quand même
+      // voir la pop-up laverie, sinon aucun lead laverie n'est jamais créé.
+      if (isLeadKnown(pageId)) return;
       setOpen(true);
       // Impression de la pop-up. ⚠️ `sessionStorage` étant propre à l'ONGLET, un
       // visiteur qui ouvre la page dans trois onglets produit trois impressions
@@ -91,8 +97,9 @@ export function LeadPopup({
     return () => window.removeEventListener('scroll', onScroll);
     // Plus de `eslint-disable exhaustive-deps` ici : il couvrait les appels à
     // `lead.*` de l'ancienne branche « visiteur reconnu », supprimée depuis.
-    // L'effet ne dépend plus que de `data.triggerSectionId`.
-  }, [data.triggerSectionId]);
+    // `pageId` figure bien dans les dépendances — le drapeau « déjà converti »
+    // est lu par projet, l'effet doit donc être rejoué s'il change.
+  }, [data.triggerSectionId, pageId]);
 
   const emailValid = EMAIL_RE.test(lead.email);
 

@@ -13,7 +13,11 @@ async function renderJsonLd(slug: string): Promise<Record<string, unknown>[]> {
   const element = await HubHead({ params: Promise.resolve({ hubSlug: slug }) });
   if (element === null) return [];
   const html = renderToStaticMarkup(element);
-  const matches = [...html.matchAll(/<script type="application\/ld\+json">(.*?)<\/script>/gs)];
+  // `[\s\S]` plutôt que `.` + drapeau `s` : le JSON-LD contient des sauts de
+  // ligne, mais `s` exige `target: es2018` alors que le projet est en ES2017.
+  const matches = [
+    ...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g),
+  ];
   return matches.map((m) => JSON.parse(m[1].replace(/\\u003c/g, '<')));
 }
 

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { ValueProps } from '@/components/hub/ValueProps';
 import { listHubPages } from '@/data/hub';
+import { HUB_SECTION_IDS } from '@/lib/hub/anchors';
 
 const data = listHubPages()[0].valueProps;
 
@@ -13,7 +14,10 @@ function collapsibleOf(container: HTMLElement, index: number) {
 describe('ValueProps', () => {
   it('porte l’ancre du sommaire et rend titre, sous-titre et phrase de clôture', () => {
     const { container } = render(<ValueProps data={data} />);
-    expect(container.querySelector('section#intro-hub')).not.toBeNull();
+    // Ancre lue depuis la constante et non écrite en dur : elle s'appelait
+    // `intro-hub`, renommée quand les préfixes d'implémentation ont été bannis
+    // des ancres publiques. Le test était resté sur l'ancien nom.
+    expect(container.querySelector(`section#${HUB_SECTION_IDS.valueProps}`)).not.toBeNull();
     expect(screen.getByText(data.title)).toBeDefined();
     expect(screen.getByText(data.subtitle)).toBeDefined();
     expect(screen.getByText(data.closing)).toBeDefined();

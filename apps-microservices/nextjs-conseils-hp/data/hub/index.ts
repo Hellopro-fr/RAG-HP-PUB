@@ -1,5 +1,7 @@
 import type { HubPage } from '@/types/hub';
 import { lancerElevagePoulesPondeuses } from './lancer-elevage-poules-pondeuses';
+import { ouvrirFoodTruck } from './ouvrir-food-truck';
+import { ouvrirLaverieAutomatique } from './ouvrir-laverie-automatique';
 
 /**
  * Registry des pages HUB — source de vérité unique du contenu.
@@ -20,6 +22,8 @@ import { lancerElevagePoulesPondeuses } from './lancer-elevage-poules-pondeuses'
  */
 export const HUB_PAGES = {
   1000: lancerElevagePoulesPondeuses,
+  1001: ouvrirFoodTruck,
+  1002: ouvrirLaverieAutomatique,
 } satisfies Record<number, HubPage>;
 
 /** Récupère une page par son id d'URL. `null` si l'id est inconnu → 404. */

@@ -41,11 +41,23 @@ export function HubOverlays({
   guide,
   leadPopup,
   guideIdPageHub,
+  pageId,
 }: {
   guide: HubGuideDialog;
   leadPopup: HubLeadPopup;
   /** `id_page_hub` du parcours guide (partagé par le dialog et la pop-up). */
   guideIdPageHub: number;
+  /**
+   * Id de la PAGE, distinct de `guideIdPageHub` — il sert de portée au drapeau
+   * « déjà converti » (cf. `lib/hub/leadEmailCookie.ts`).
+   *
+   * Les deux ne peuvent pas être confondus : le premier identifie un TUNNEL
+   * auprès de l'API (les leads guide sont volontairement séparés des leads
+   * projet), le second identifie un PROJET côté visiteur. Le drapeau suit le
+   * projet, sinon remplir le questionnaire ne dispenserait pas du formulaire
+   * guide sur la même page.
+   */
+  pageId: number;
 }) {
   const [guideArmed, setGuideArmed] = useState(false);
   const [popupArmed, setPopupArmed] = useState(false);
@@ -82,11 +94,19 @@ export function HubOverlays({
         <GuideDownloadDialog
           data={guide}
           idPageHub={guideIdPageHub}
+          pageId={pageId}
           autoOpenOnMount
           autoOpenEntryPoint={guideEntryPoint}
         />
       )}
-      {popupArmed && <LeadPopup data={leadPopup} guide={guide} idPageHub={guideIdPageHub} />}
+      {popupArmed && (
+        <LeadPopup
+          data={leadPopup}
+          guide={guide}
+          idPageHub={guideIdPageHub}
+          pageId={pageId}
+        />
+      )}
     </>
   );
 }

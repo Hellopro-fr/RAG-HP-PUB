@@ -20,7 +20,7 @@ import { pushHubEvent, pushHubEventOnce, questionStepName } from '@/lib/analytic
 import type { HubAssistant } from '@/types/hub';
 
 /**
- * Questionnaire du hero — « Recevez votre plan projet personnalisé ».
+ * Questionnaire du hero — « Parlez de votre projet à un conseiller ».
  *
  * Branché sur `POST /api/demande` (spec `spec_hub/hub_formulaire.txt`) : parcours
  * questionnaire → e-mail (APPEL 1) → coordonnées (APPEL 2) → succès. L'étape
@@ -38,6 +38,14 @@ import type { HubAssistant } from '@/types/hub';
  * Components — le couplage est volontaire et documenté.
  */
 export const ASSISTANT_DIALOG_EVENT = 'hp:open-assistant-dialog';
+
+/**
+ * Remplissage minimal de la barre de progression, en pourcentage.
+ *
+ * Sert à l'écran d'entrée (bloc inline du hero) et de plancher au calcul du
+ * dialog, pour que la barre ne soit jamais visuellement vide.
+ */
+const MIN_PROGRESS_PCT = 8;
 
 /** Ouvre le questionnaire depuis n'importe où (client uniquement). */
 export function openAssistantDialog() {
@@ -93,8 +101,20 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
   const isContact = step === data.steps.length;
   const isCoordinates = step === data.steps.length + 1;
   const current = step < data.steps.length ? data.steps[step] : null;
-  // 100% au succès quel que soit le chemin (e-mail reconnu = 1 seul appel).
-  const progressPct = submitted ? 100 : (step / totalSteps) * 100;
+  /**
+   * 100% au succès quel que soit le chemin (e-mail reconnu = 1 seul appel).
+   *
+   * Le reste est calé sur `MIN_PROGRESS_PCT` plutôt que de partir de zéro : une
+   * barre entièrement vide ne se lit pas comme une barre de progression, elle se
+   * lit comme un filet décoratif. Un amorçage visible dit « le parcours a
+   * commencé » et donne au premier clic un déplacement perceptible.
+   *
+   * L'amorce est prise SUR la course, pas ajoutée par-dessus : la progression
+   * reste monotone et n'atteint 100% qu'à l'écran de succès.
+   */
+  const progressPct = submitted
+    ? 100
+    : MIN_PROGRESS_PCT + (step / totalSteps) * (100 - MIN_PROGRESS_PCT);
 
   /**
    * Écran courant en libellé GÉNÉRIQUE — sert à `hub_form_abandon`, à `step_name`
@@ -211,8 +231,15 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
           user_known_status: withCoordinates ? 'Unknown' : 'Known',
           steps_answered: answeredCount(),
         });
-        // Marque le drapeau « lead connu » (jamais l'e-mail) après un 201 réel.
-        markLeadKnown();
+        /**
+         * Marque le drapeau « lead connu » (jamais l'e-mail) après un 201 réel.
+         *
+         * Ici `idPageHub` EST l'id de la page (le questionnaire ne subit pas le
+         * décalage de `guideIdPageHub`) : c'est donc bien la portée « projet »
+         * attendue par le cookie. Remplir le questionnaire dispense ainsi du
+         * formulaire guide sur la même page — et sur elle seule.
+         */
+        markLeadKnown(idPageHub);
         setSubmitted(true); // succès : le bouton disparaît, on ne réactive pas.
         return;
       }
@@ -406,8 +433,16 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
               Question 1/{totalSteps}
             </span>
           </div>
+          {/* Amorce fixe et non `progressPct` : ce bloc est l'écran d'entrée du
+              hero, et la pastille à côté annonce « Question 1/N ». Le lier à
+              l'avancement du dialog les désynchroniserait à la réouverture du
+              questionnaire, la barre affichant un avancement que la pastille
+              contredit. */}
           <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-muted">
-            <div className="h-full rounded-full bg-cta transition-all duration-500" style={{ width: '0%' }} />
+            <div
+              className="h-full rounded-full bg-cta transition-all duration-500"
+              style={{ width: `${MIN_PROGRESS_PCT}%` }}
+            />
           </div>
         </div>
 
@@ -823,15 +858,20 @@ function Success({ data }: { data: HubAssistant }) {
       <Confetti />
       <h3 className="text-xl font-bold text-foreground sm:text-2xl">{success.title}</h3>
 
-      <div className="relative mx-auto mt-5 h-64 w-48">
-        <Image
-          src={success.image.src}
-          alt={success.image.alt}
-          fill
-          sizes="160px"
-          className="object-contain"
-        />
-      </div>
+      {/* Couverture optionnelle : une page dont les visuels ne sont pas encore
+          livrés n'a pas de champ `image`. Le bloc disparaît plutôt que de
+          réserver une zone vide. */}
+      {success.image && (
+        <div className="relative mx-auto mt-5 h-64 w-48">
+          <Image
+            src={success.image.src}
+            alt={success.image.alt}
+            fill
+            sizes="160px"
+            className="object-contain"
+          />
+        </div>
+      )}
 
       <p className="mx-auto mt-5 max-w-sm text-sm leading-relaxed text-muted-foreground">
         {success.subtitle}
@@ -839,7 +879,8 @@ function Success({ data }: { data: HubAssistant }) {
 
       <a
         href={success.fileUrl ?? '#'}
-        download
+        // Nom d'enregistrement explicite — cf. `GuideSteps.DownloadStep`.
+        download={success.fileName ?? true}
         onClick={() =>
           pushHubEvent('hub_guide_download', 'projet', { download_trigger: 'manual' })
         }

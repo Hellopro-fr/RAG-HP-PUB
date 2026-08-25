@@ -80,6 +80,16 @@ describe('registry HUB', () => {
     expect(pages.length).toBeGreaterThan(0);
   });
 
+  /**
+   * Garde-fou contre un `collectImages` qui renverrait vide par erreur : les
+   * contrôles d'images par page passeraient alors tous, à vide. Assertion portée
+   * au niveau du registre, car une page donnée peut légitimement ne déclarer
+   * aucune image tant que ses visuels ne sont pas livrés.
+   */
+  it('au moins une page déclare des images', () => {
+    expect(pages.some((p) => collectImages(p).length > 0)).toBe(true);
+  });
+
   it('la clé du registry est égale à l’id de la page', () => {
     for (const [key, page] of Object.entries(HUB_PAGES)) {
       expect(page.id).toBe(Number(key));
@@ -213,8 +223,12 @@ describe.each(pages.map((page) => [page.slug, page] as const))('page HUB « %s �
   /* -------------------------------------------------------------- Images --- */
 
   it('déclare toutes ses images sous /images/hub/<slug>/ avec un alt non vide', () => {
+    // ⚠️ Pas de « au moins une image » ici : une page dont les visuels ne sont
+    // pas encore livrés en déclare zéro, et c'est le comportement voulu (règle
+    // du modèle : jamais de chemin inventé). Le garde-fou contre un
+    // `collectImages` qui renverrait vide par erreur est déplacé au niveau du
+    // registre — voir « au moins une page déclare des images ».
     const images = collectImages(page);
-    expect(images.length).toBeGreaterThan(0);
     for (const image of images) {
       expect(image.src, `src: ${image.src}`).toMatch(new RegExp(`^/images/hub/${page.slug}/`));
       expect(image.alt.trim(), `alt vide pour ${image.src}`).not.toBe('');

@@ -31,7 +31,19 @@ export type GuideLeadPhase = 'email' | 'coordinates' | 'download';
  * Passé en argument plutôt que fixé dans le hook : le dialog est ouvert par un
  * événement `window`, donc l'emplacement n'est connu qu'au moment du clic.
  */
-export function useGuideLead(idPageHub: number, entryPoint: HubEntryPoint) {
+export function useGuideLead(
+  idPageHub: number,
+  entryPoint: HubEntryPoint,
+  /**
+   * Id du PROJET, portée du drapeau « déjà converti ».
+   *
+   * Distinct d'`idPageHub`, qui identifie le TUNNEL guide auprès de l'API (les
+   * leads guide sont volontairement séparés des leads projet, cf.
+   * `guideIdPageHub`). Le drapeau, lui, suit le projet : sinon remplir le
+   * questionnaire ne dispenserait pas du formulaire guide sur la même page.
+   */
+  pageId: number
+) {
   /**
    * ⚠️ Lu via un ref, pas via la closure.
    *
@@ -142,7 +154,7 @@ export function useGuideLead(idPageHub: number, entryPoint: HubEntryPoint) {
         // Marque le drapeau UNIQUEMENT après un enregistrement réel (201) : un
         // 200 (coordonnées requises, rien écrit) ne doit pas « reconnaître » le
         // visiteur au prochain passage. On ne stocke PAS l'e-mail (cf. cookie).
-        markLeadKnown();
+        markLeadKnown(pageId);
         setPhase('download');
         setSubmitting(false);
         return;

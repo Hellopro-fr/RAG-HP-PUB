@@ -715,7 +715,8 @@ l'inventaire exhaustif des points de mesure ; un `dataLayer.push` éparpillé, n
   les événements. `hub_guide_download` est émis par les DEUX tunnels — le
   questionnaire offre aussi le guide.
 
-**Raccourci « lead déjà connu »** (cookie `hub_lead=1`, cf. `lib/hub/leadEmailCookie.ts`) :
+**Raccourci « lead déjà connu SUR CETTE PAGE »** (cookie `hub_lead`, liste
+d'`id_page_hub`, cf. `lib/hub/leadEmailCookie.ts`) :
 `GuideDownloadDialog` va directement à l'écran de téléchargement, **sans formulaire
 et sans appel API**. Ce parcours émet `hub_guide_shortcut` puis `hub_guide_download`
 (`lead_path: 'deja_converti'`) — et surtout **ni `hub_form_view`, ni `hub_email_check`,
@@ -731,8 +732,17 @@ components/hub/
   HubHero.tsx            image priority (LCP), h1, features — slot `formSlot`
   ValueProps.tsx         'use client' — rotation décorative, 4 descriptions TOUJOURS rendues
   ThematiqueBloc.tsx     la brique réutilisable — layouts overlay-left/right, grid, carousel
+                         ⚠️ `grid` n'est plus utilisé par AUCUNE page depuis le
+                         2026-08-07 (les blocs de cartes sont tous en `carousel`).
+                         Le code du layout reste en place, mais il n'est plus
+                         couvert que par ThematiqueBloc.test.tsx : le vérifier à
+                         l'écran avant de le remettre en service sur une page.
   Banners.tsx            AccompagnementBanner + GuideCta (même gabarit)
-  RessourcesGrid.tsx / GrandesEtapes.tsx / EditoSection.tsx
+  RessourcesGrid.tsx / GrandesEtapes.tsx
+  EditoSection.tsx       ordre : intro → bodyHtml → items → note. Quand l'intro
+                         ANNONCE la liste (elle finit par « : »), poser
+                         `itemsPosition: 'after-intro'` dans les données, sinon
+                         le corps s'intercale entre l'annonce et la liste.
   HowItWorks.tsx / AccompagnementSplit.tsx / FinalCta.tsx
   AssistantForm.tsx      'use client' — étape 1 inline dans le hero, suite en dialog
   GuideDownloadDialog.tsx / LeadPopup.tsx / StickyCta.tsx   'use client' — surcouches
@@ -762,8 +772,10 @@ un enfant client, les dialogs sont joints par **événement window** :
 **une seule fois** par `HubTemplate`.
 
 **Deux invariants SEO à ne pas casser :**
-- Le carrousel équipements est en **scroll-snap CSS**, sans JS : les 7 cartes sont
-  dans le HTML initial. Ne pas le remplacer par embla ou équivalent.
+- Les carrousels de blocs thématiques (équipements, réglementation) sont en
+  **scroll-snap CSS**, sans JS : toutes les cartes sont dans le HTML initial. Ne
+  pas les remplacer par embla ou équivalent — c'est ce qui rend les liens du
+  maillage interne visibles au crawl sans exécution de script.
 - `ValueProps` rend **toujours** les 4 descriptions ; la rotation ne change que
   l'accent visuel. Ne jamais revenir à un `max-h-0` qui sort le texte du rendu utile.
 
@@ -812,14 +824,24 @@ Objectif : valider la rentabilité du workflow, pas livrer une V1.
   (ex. 1000 → 2000), distinct du projet pour séparer les leads en stats.
   La route `/api/demande` rend `reponses`/`adresse` optionnels et déclare
   `civilite`/`pays`. `fileUrl` du PDF encore à `'#'` (asset à livrer).
-- **Lead connu (drapeau cookie)** : après un enregistrement réel (**201**), on pose
-  un cookie **drapeau** 30 j (`lib/hub/leadEmailCookie.ts`, `hub_lead=1`) — **jamais
-  l'e-mail** (le mail ne part que dans le corps de `POST /api/demande`, pas dans un
-  cookie renvoyé à chaque requête). Tant que le drapeau existe :
+- **Lead connu (drapeau cookie), PAR PROJET** : après un enregistrement réel
+  (**201**), on ajoute l'`id_page_hub` à un cookie 30 j
+  (`lib/hub/leadEmailCookie.ts`, `hub_lead=1000.1002` — des ids de PAGE, pas de
+  tunnel : les deux tunnels d'une même page partagent le drapeau) — **jamais l'e-mail** (le
+  mail ne part que dans le corps de `POST /api/demande`, pas dans un cookie
+  renvoyé à chaque requête). Tant que l'id figure dans la liste :
   `GuideDownloadDialog` va **directement** à l'écran de téléchargement (sans appel,
   puisqu'on n'a plus l'e-mail à ré-envoyer) ; `LeadPopup` **ne s'affiche pas** au
   scroll. Le questionnaire projet (`AssistantForm`) **n'a PAS** ce raccourci :
-  l'étape e-mail y est **toujours** affichée. API : `markLeadKnown()` / `isLeadKnown()`.
+  l'étape e-mail y est **toujours** affichée.
+  API : `markLeadKnown(idPageHub)` / `isLeadKnown(idPageHub)`.
+  ⚠️ **La portée par projet n'est pas un détail** (corrigée le 2026-08-24) : le
+  drapeau valait `1`, sans notion de page. Un visiteur converti sur l'élevage
+  obtenait ensuite le guide laverie sans laisser son e-mail, donc **sans qu'aucun
+  lead laverie ne soit créé** — alors que les leads sont rappelés selon le projet
+  consulté. Ne pas re-globaliser ce drapeau pour « épargner un champ » au
+  visiteur : le champ coûte moins cher que le contact perdu, et l'API reconnaît
+  l'adresse (201 immédiat, pas de coordonnées redemandées).
 - **Téléchargement auto** : `lib/hub/useAutoDownload.ts` déclenche le download à
   l'affichage de l'écran de remerciement (guide, pop-up, projet). **No-op tant que
   `fileUrl = '#'`** ; cross-origin nécessitera `Content-Disposition: attachment`.

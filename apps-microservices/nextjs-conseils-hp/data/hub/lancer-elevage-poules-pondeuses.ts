@@ -262,7 +262,11 @@ export const lancerElevagePoulesPondeuses: HubPage = {
       id: 'reglementation-demarches',
       tag: 'Réglementation & démarches',
       tagIcon: 'scale',
-      layout: 'grid',
+      // `carousel` et non `grid` (2026-08-07) : en grille, 4 cartes se répartissent
+      // en 3 + 1, et la dernière ligne à moitié vide déséquilibre le bloc. Le
+      // carrousel garde une piste pleine quel que soit le nombre de cartes.
+      // Uniformisé sur toutes les pages HUB — voir la page 1001.
+      layout: 'carousel',
       intro:
         'Anticipez les obligations administratives pour sécuriser votre projet et éviter les erreurs dès le départ.',
       cards: [
@@ -609,7 +613,7 @@ export const lancerElevagePoulesPondeuses: HubPage = {
      -------------------------------------------------------------------------- */
 
   assistant: {
-    cardTitle: 'Recevez votre plan projet personnalisé',
+    cardTitle: 'Parlez de votre projet à un conseiller',
     ctaLabel: "Démarrer l'étude du projet",
     reassurance: 'Un guide de démarrage vous sera envoyé immédiatement après validation.',
     steps: [
@@ -692,8 +696,10 @@ export const lancerElevagePoulesPondeuses: HubPage = {
         alt: 'Guide complet — Lancer votre élevage de poules pondeuses',
       },
       downloadLabel: 'Télécharger à nouveau le guide',
-      // PDF de test (même origine → téléchargement forcé OK). À remplacer par l'URL réelle.
-      fileUrl: '/seo_masterclass_detailed.pdf',
+      // Chemin en kebab-case ASCII, nom d'enregistrement éditorial : cf.
+      // `fileName` dans `types/hub.ts`. Le fichier vit dans `public/guides/`.
+      fileUrl: '/guides/lancer-elevage-poules-pondeuses.pdf',
+      fileName: 'Livre blanc - Lancer son élevage de poules pondeuses.pdf',
     },
   },
 
@@ -730,8 +736,10 @@ export const lancerElevagePoulesPondeuses: HubPage = {
         alt: 'Guide complet — Lancer votre élevage de poules pondeuses',
       },
       buttonLabel: 'Télécharger à nouveau le guide',
-      // PDF de test (même origine → téléchargement forcé OK). À remplacer par l'URL réelle.
-      fileUrl: '/seo_masterclass_detailed.pdf',
+      // Chemin en kebab-case ASCII, nom d'enregistrement éditorial : cf.
+      // `fileName` dans `types/hub.ts`. Le fichier vit dans `public/guides/`.
+      fileUrl: '/guides/lancer-elevage-poules-pondeuses.pdf',
+      fileName: 'Livre blanc - Lancer son élevage de poules pondeuses.pdf',
     },
   },
 

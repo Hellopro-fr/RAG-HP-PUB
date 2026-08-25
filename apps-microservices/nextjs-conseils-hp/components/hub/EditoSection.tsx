@@ -22,6 +22,33 @@ const PROSE = `${PROSE_SCALE} text-foreground`;
  * à exprimer proprement en texte plat sans mettre du JSX dans les données.
  */
 export function EditoSection({ data }: { data: HubEdito }) {
+  /**
+   * Liste à puces. Extraite dans une variable parce qu'elle est rendue à l'UNE
+   * ou l'AUTRE de deux positions (cf. `itemsPosition` dans `types/hub.ts`), et
+   * qu'un `<ul>` dupliqué dans le JSX finirait par diverger à la première
+   * retouche de style.
+   */
+  const list =
+    data.items && data.items.length > 0 ? (
+      <ul className="mt-4 space-y-2">
+        {data.items.map((item) => (
+          <li key={item} className={`flex items-start gap-2.5 ${PROSE}`}>
+            {/* Pastille en noir : elle était bleue, seule touche de couleur
+                d'un bloc autrement monochrome. */}
+            <span
+              aria-hidden
+              className="mt-[0.55rem] h-1.5 w-1.5 shrink-0 rounded-full bg-foreground"
+            />
+            <span dangerouslySetInnerHTML={{ __html: sanitizeHubHtml(item) }} />
+          </li>
+        ))}
+      </ul>
+    ) : null;
+
+  // `after-body` par défaut : c'est l'ordre historique, celui dont dépend
+  // l'édito « Pourquoi lancer un élevage » de la page 1000.
+  const listAfterIntro = data.itemsPosition === 'after-intro';
+
   return (
     <HubSection id={data.id} compact>
       <div className="mx-auto max-w-3xl">
@@ -43,28 +70,20 @@ export function EditoSection({ data }: { data: HubEdito }) {
           />
         )}
 
+        {listAfterIntro && list}
+
+        {/* `[&_h3]` : sous-titres du corps éditorial (cf. `sanitize.ts`). Taille de
+            titre de carte plutôt que de section — ils s'emboîtent SOUS le `h2` du
+            bloc, ils ne doivent pas rivaliser avec lui. `mt-6` les décolle du
+            paragraphe précédent, `space-y-4` ne suffisant pas à marquer la rupture. */}
         {data.bodyHtml && (
           <div
-            className={`mt-4 space-y-4 ${PROSE} [&_li]:ml-5 [&_li]:list-disc [&_ul]:space-y-3`}
+            className={`mt-4 space-y-4 ${PROSE} [&_h3]:mt-6 [&_h3]:text-lg [&_h3]:font-bold [&_h3]:leading-snug [&_li]:ml-5 [&_li]:list-disc [&_ul]:space-y-3`}
             dangerouslySetInnerHTML={{ __html: sanitizeHubHtml(data.bodyHtml) }}
           />
         )}
 
-        {data.items && data.items.length > 0 && (
-          <ul className="mt-4 space-y-2">
-            {data.items.map((item) => (
-              <li key={item} className={`flex items-start gap-2.5 ${PROSE}`}>
-                {/* Pastille en noir : elle était bleue, seule touche de couleur
-                    d'un bloc autrement monochrome. */}
-                <span
-                  aria-hidden
-                  className="mt-[0.55rem] h-1.5 w-1.5 shrink-0 rounded-full bg-foreground"
-                />
-                <span dangerouslySetInnerHTML={{ __html: sanitizeHubHtml(item) }} />
-              </li>
-            ))}
-          </ul>
-        )}
+        {!listAfterIntro && list}
 
         {data.note && (
           // Même typographie que le reste ; c'est le cadre qui distingue l'encart,

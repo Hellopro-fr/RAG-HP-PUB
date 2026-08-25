@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { HubTemplate } from '@/components/hub/HubTemplate';
 import { listHubPages } from '@/data/hub';
+import { HUB_SECTION_IDS } from '@/lib/hub/anchors';
 
 // Convention du projet : next/image est mocké par fichier de test.
 vi.mock('next/image', () => ({
@@ -147,7 +148,10 @@ describe('HubTemplate', () => {
 
   it('affiche le badge et le sous-titre du hero', () => {
     render(<HubTemplate page={page} />);
-    expect(screen.getByText(page.hero.badge)).toBeDefined();
+    // `getAllByText` : sur la page 1000, `hero.badge` et
+    // `accompagnementBanner.tag` valent tous deux « Accompagnement gratuit ».
+    // Le libellé apparaît donc légitimement deux fois dans la page.
+    expect(screen.getAllByText(page.hero.badge).length).toBeGreaterThan(0);
     expect(screen.getByText(page.hero.subtitle)).toBeDefined();
   });
 
@@ -203,7 +207,12 @@ describe('HubTemplate', () => {
   it('place la FAQ et le CTA final en fin de page', () => {
     const { container } = render(<HubTemplate page={page} />);
     const html = container.innerHTML;
-    expect(html.indexOf('id="cta-final"')).toBeGreaterThan(html.indexOf('id="nos-ressources"'));
-    expect(html.indexOf('id="faq"')).toBeGreaterThan(html.indexOf('id="cta-final"'));
+    // Ancres lues depuis la constante : `cta-final` a été renommé
+    // `etre-accompagne` lors du bannissement des préfixes d'implémentation, et
+    // ce test était resté sur l'ancien nom — `indexOf` renvoyait donc -1, ce qui
+    // faisait passer la comparaison pour un problème d'ordre.
+    const pos = (id: string) => html.indexOf(`id="${id}"`);
+    expect(pos(HUB_SECTION_IDS.finalCta)).toBeGreaterThan(pos(HUB_SECTION_IDS.ressources));
+    expect(pos(HUB_SECTION_IDS.faq)).toBeGreaterThan(pos(HUB_SECTION_IDS.finalCta));
   });
 });

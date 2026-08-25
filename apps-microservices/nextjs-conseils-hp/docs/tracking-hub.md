@@ -97,7 +97,23 @@ sans cet événement.
 
 ### 3.3 Le raccourci `hub_lead=1` ne produit pas de lead
 
-**Implémenté** (`lib/hub/leadEmailCookie.ts`, API `isLeadKnown()` / `markLeadKnown()`).
+**Implémenté** (`lib/hub/leadEmailCookie.ts`, API `isLeadKnown(pageId)` /
+`markLeadKnown(pageId)`).
+
+⚠️ **Portée par PROJET depuis le 2026-08-24.** Le cookie `hub_lead` contient la
+liste des **ids de PAGE** déjà convertis (ex. `1000.1002`) et non plus un simple
+`1`. Ce sont bien les ids de page, pas ceux du tunnel guide (`guideIdPageHub`,
+décalés de 1000) : les deux tunnels d'une même page partagent le drapeau, sinon
+remplir le questionnaire ne dispenserait pas du formulaire guide juste à côté.
+Un visiteur converti sur l'élevage se voit donc
+redemander son e-mail sur la laverie — un seul champ, l'API le reconnaît et
+répond 201 — et **un lead laverie est créé**. Avant ce correctif, il n'en existait
+aucun : les leads sont rappelés selon le projet consulté, ce visiteur n'aurait
+jamais été contacté sur ce projet-là.
+
+Conséquence pour l'analyse : `lead_path: 'reconnu'` va mécaniquement augmenter.
+Ce n'est pas une dérive, c'est le signal « déjà client d'un autre projet HUB »,
+qui n'était pas mesurable auparavant.
 Le cookie `hub_lead=1` signifie « ce navigateur a déjà soumis un lead ». Au clic sur un CTA
 guide, `GuideDownloadDialog` va directement à l'écran de téléchargement : pas d'étape e-mail,
 **pas d'appel API**, donc **aucun nouveau lead**.

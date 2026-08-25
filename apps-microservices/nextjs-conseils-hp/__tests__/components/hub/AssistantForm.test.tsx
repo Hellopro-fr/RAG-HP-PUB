@@ -34,7 +34,11 @@ type MockResponse = { status: number; body: unknown };
 /** File d'attente de réponses `fetch` — la dernière est répétée si épuisée. */
 function stubFetch(responses: MockResponse[]) {
   let i = 0;
-  const fn = vi.fn(async () => {
+  // Signature calquée sur `fetch` : sans elle, `vi.fn` infère un tuple d'arguments
+  // VIDE, et les assertions qui lisent `mock.calls[0][1]` — l'objet `RequestInit`
+  // portant le payload — ne compilent pas.
+  const fn = vi.fn(async (...args: Parameters<typeof fetch>) => {
+    void args;
     const r = responses[Math.min(i, responses.length - 1)];
     i += 1;
     return {
@@ -229,7 +233,7 @@ describe('AssistantForm', () => {
    * cookie, l'étape e-mail est TOUJOURS affichée.
    */
   it('affiche toujours l’étape e-mail, même pour un lead connu', async () => {
-    markLeadKnown();
+    markLeadKnown(ID_PAGE_HUB);
     const { short, fetchMock } = renderShort([{ status: 200, body: { statut: 'coordonnees_requises' } }]);
 
     await waitFor(() => expect(screen.getByLabelText(short.contact.label)).toBeDefined());

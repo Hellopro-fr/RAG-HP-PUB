@@ -108,10 +108,19 @@ export function ThematiqueBloc({
   );
 }
 
-/** Carte pleine hauteur : photo en fond, dégradé, titre et puces. */
+/**
+ * Carte pleine hauteur : photo en fond, dégradé, titre et puces.
+ *
+ * ⚠️ `h-full` est nécessaire, pas décoratif. En `overlay-left` la carte est un
+ * enfant DIRECT de la grille et le `stretch` par défaut suffit ; en
+ * `overlay-right` elle est enveloppée dans un `<div class="lg:order-2">` (ajouté
+ * pour l'ordre mobile). Le wrapper s'étire, l'article non : sans `h-full` il
+ * retombait sur `min-h-[440px]` et la carte était visiblement plus courte que la
+ * colonne de cartes en face. `min-h` reste un plancher pour les blocs peu fournis.
+ */
 function OverlayCard({ data }: { data: HubOverlayCard }) {
   return (
-    <article className="relative min-h-[440px] overflow-hidden rounded-2xl border border-border bg-neutral-900 shadow-sm">
+    <article className="relative h-full min-h-[440px] overflow-hidden rounded-2xl border border-border bg-neutral-900 shadow-sm">
       {data.image && (
         // `fill` : la boîte impose la hauteur, les dimensions d'origine
         // n'entrent pas en jeu. Voir le commentaire de HubImage.

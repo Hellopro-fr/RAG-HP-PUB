@@ -222,8 +222,8 @@ export interface HubGrandeEtape {
  * contenu SEO met systématiquement en gras les chiffres clés et les intitulés de
  * puce au milieu des phrases.
  *
- * Ordre de rendu : `intro` → `bodyHtml` → `items` → `note`. Pour plusieurs
- * paragraphes, utiliser `bodyHtml` avec des `<p>`.
+ * Ordre de rendu par défaut : `intro` → `bodyHtml` → `items` → `note`. Pour
+ * plusieurs paragraphes, utiliser `bodyHtml` avec des `<p>`.
  */
 export interface HubEdito {
   /** ex. 'edito-budget' */
@@ -233,6 +233,23 @@ export interface HubEdito {
   /** Liste à puces */
   items?: string[];
   bodyHtml?: string;
+  /**
+   * Où placer `items` quand `intro` ET `bodyHtml` sont tous deux présents.
+   *
+   * `'after-body'` (défaut) : la liste conclut la section — c'est le cas de
+   * l'édito « Pourquoi lancer un élevage » de la page 1000, où le dernier
+   * paragraphe du corps introduit la liste.
+   *
+   * `'after-intro'` : la liste est annoncée par l'introduction, qui se termine
+   * alors par un deux-points. Sans ce réglage, les paragraphes du corps
+   * s'intercalent entre l'annonce et la liste — constaté à l'écran le
+   * 2026-08-24 sur les blocs budget des pages 1001 et 1002, où l'intro se
+   * terminait par « … sont les suivants : » suivie de deux paragraphes.
+   *
+   * Aucun effet si l'un des deux champs manque : il n'y a alors qu'une seule
+   * position possible.
+   */
+  itemsPosition?: 'after-intro' | 'after-body';
   /** Encart de fin de section */
   note?: string;
 }
@@ -353,12 +370,27 @@ export interface HubAssistant {
     title: string;
     /** Texte descriptif sous la couverture du guide. */
     subtitle: string;
-    /** Couverture du guide affichée sur l'écran de remerciement. */
-    image: HubImage;
+    /**
+     * Couverture du guide affichée sur l'écran de remerciement.
+     * OPTIONNELLE depuis le 2026-08-07 : une page dont les visuels ne sont pas
+     * encore livrés ne doit pas déclarer un chemin inventé — `registry.test.ts`
+     * vérifie que toute image déclarée existe sur le disque.
+     */
+    image?: HubImage;
     /** Bouton de téléchargement du guide (outline). */
     downloadLabel: string;
     /** URL du PDF. Design-only : peut rester '#'. */
     fileUrl?: string;
+    /**
+     * Nom sous lequel le visiteur enregistre le fichier, s'il doit différer du
+     * nom présent dans l'URL.
+     *
+     * Sépare deux besoins qu'on avait tendance à confondre : le CHEMIN, qui doit
+     * rester en kebab-case ASCII pour ne pas dépendre d'un encodage d'URL, et le
+     * NOM LISIBLE côté visiteur, où l'on veut des espaces, des accents et une
+     * formulation éditoriale (« Livre blanc - … »).
+     */
+    fileName?: string;
   };
 }
 
@@ -393,10 +425,13 @@ export interface HubGuideDialog {
     subtitle?: string;
     /** Texte sous la couverture (ex. « Vous pouvez aussi le récupérer… »). */
     note?: string;
-    image: HubImage;
+    /** Couverture du guide. Optionnelle — cf. `HubAssistant.success.image`. */
+    image?: HubImage;
     buttonLabel: string;
     /** URL du PDF. Design-only : peut rester '#' tant que le fichier n'est pas livré. */
     fileUrl?: string;
+    /** Nom d'enregistrement côté visiteur — cf. `HubAssistant.success.fileName`. */
+    fileName?: string;
   };
 }
 
