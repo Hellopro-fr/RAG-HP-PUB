@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from graphify_plan_update import (  # noqa: E402
     ScopeIndex,
     build_plan,
-    classify_paths,
+    classify_paths,    never_extracted,
 )
 
 PASSED = 0
@@ -108,6 +108,40 @@ plan3 = build_plan(new_code)
 check("code nouveau -> hook insuffisant", plan3[0].hook_covers, False)
 
 check("rien a faire -> plan vide", build_plan({}), [])
+
+
+# --- never_extracted -------------------------------------------------------
+# Garde-fou : un fichier commite AVANT le repere n'apparait dans aucun diff, il
+# reste donc invisible pour toujours. Mesure du 2026-08-05 : 187 fichiers du
+# scope dans cet etat, dont un chantier spec+plan entier dont le successeur
+# n'avait plus aucune cible de lignage.
+
+ne_scope = make_scope([
+    "apps-microservices/crawler-service/main.py",
+    "libs/common-utils/setup.py",
+])
+
+
+def fake_ls_files(tracked):
+    """Neutralise _git pour ne pas dependre de l'etat reel du depot."""
+    import graphify_plan_update as mod
+    mod._git = lambda *a: (chr(10).join(tracked) if a and a[0] == "ls-files" else "")
+
+
+fake_ls_files([
+    "apps-microservices/crawler-service/main.py",     # deja dans le graphe
+    "apps-microservices/crawler-service/nouveau.py",  # jamais extrait
+    "apps-microservices/api-ingestion/main.py",       # aire hors graphe
+    "graphify-out/graph.json",                        # toujours exclu
+    "apps-microservices/crawler-service/logo.png",    # extension ignoree
+])
+check("jamais extrait: seul le fichier absent du graphe est signale",
+      never_extracted(ne_scope),
+      {"apps-microservices/crawler-service": ["apps-microservices/crawler-service/nouveau.py"]})
+
+fake_ls_files(["apps-microservices/crawler-service/main.py", "libs/common-utils/setup.py"])
+check("jamais extrait: rien a signaler quand tout est connu",
+      never_extracted(ne_scope), {})
 
 print(f"\n  {PASSED} passes, {FAILED} echecs")
 sys.exit(1 if FAILED else 0)

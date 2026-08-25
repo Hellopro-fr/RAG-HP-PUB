@@ -1,5 +1,9 @@
 import axios, { AxiosInstance, AxiosError } from "axios";
 import pLimit from "p-limit";
+// Shared with the `?`-machinery, which must never strip these. Defined in urlBase.ts (not here)
+// because that module is dependency-free and therefore reachable from the createRequire/CJS
+// callers too — see the constant's own comment.
+import { LANGUAGE_PARAMS } from "../urlBase.js";
 
 // Local alias for the p-limit instance type. The installed p-limit version
 // exports its types via the `pLimit.Limit` namespace (CommonJS `export =`),
@@ -189,6 +193,58 @@ export class DetectionLangueClient {
     }
 
     /**
+     * Returns true if the method denotes a TECHNICAL FAILURE — the absence of a
+     * verdict — and false if it denotes a linguistic judgement. "The detection did
+     * not answer" must never be laundered into "the site is not French".
+     *
+     * Closed set, with each member's reachability on the crawler's own calls:
+     *   - `challenge_page`      REACHABLE — the service's challenge classifier runs
+     *                           on *provided* html, ahead of the decision matrix.
+     *   - `error`               REACHABLE — the service's generic exception handler
+     *                           answers HTTP 200 carrying this method.
+     *   - `fetch_empty_content` REACHABLE — the N1 guard returns it in place of a
+     *                           negative verdict on a page with no visible text.
+     *   - `admission_rejected`  **NOT REACHABLE TODAY.** The crawler always sends
+     *                           `html_content`, which bypasses the service's
+     *                           admission control, so no crawler call can observe
+     *                           it — do not read its presence here as evidence that
+     *                           production sees it. It is here on purpose: a
+     *                           service saturation is never a property of the site,
+     *                           and if a future change ever routes the crawler
+     *                           through admission, the silent laundering would come
+     *                           back with nobody re-reading this predicate. The
+     *                           service already classes it `_NEVER_CACHE_METHODS`.
+     *
+     * The service's other technical methods (`soft_404`, `redirected_to_home`,
+     * `http_error`, `http_error_transient`, `fetch_failed`) are deliberately absent:
+     * they are produced only inside `if not html_was_provided`, so they cannot reach
+     * the crawler. Do not add them "just in case" — the set has to stay readable as
+     * the verifiable claim it is.
+     *
+     * **Membership after `+`-split, NOT strict equality.** `method` is `+`-composed
+     * (`direct_match+langHtml+nlp_confirmed`, `…+variant_rescue`) and this predicate
+     * is handed the raw string, before any `extractPrimaryMethod` pass. Every member
+     * above is returned bare today, so equality would also work — the choice is
+     * about which way to be wrong when that stops being true. A composed technical
+     * method read as a verdict re-opens the false `not_french` stamp and the
+     * update-mode deletion claim (silent, destructive). A composed method wrongly
+     * read as technical only costs crawl budget on a non-French site (visible as a
+     * drop in `filtered_nonfr`, and it claims no deletion). Split-membership errs on
+     * the recoverable side, and it reads a part found *anywhere* in the split just
+     * as `extractPrimaryMethod` (`:170-176`) already does.
+     */
+    static isTechnicalFailureMethod(method: string): boolean {
+        if (!method) return false;
+        const TECHNICAL_FAILURE_METHODS = [
+            "challenge_page",
+            "error",
+            "fetch_empty_content",
+            "admission_rejected",
+        ];
+        return method.split("+").some((p) => TECHNICAL_FAILURE_METHODS.includes(p));
+    }
+
+    /**
      * Extract the language query parameter from a URL.
      * Used for session-based i18n sites where the homepage has ?lang=fr
      * (method: pattern_match_query) but internal pages don't carry the param.
@@ -203,7 +259,6 @@ export class DetectionLangueClient {
     ): { key: string; value: string } | null {
         try {
             const urlObj = new URL(url);
-            const LANGUAGE_PARAMS = ["lang", "locale", "language", "hl"];
 
             for (const param of LANGUAGE_PARAMS) {
                 const value = urlObj.searchParams.get(param);
@@ -215,6 +270,52 @@ export class DetectionLangueClient {
             // Invalid URL — ignore
         }
         return null;
+    }
+
+    /**
+     * Remove from a URL the language query param **we injected ourselves**, so the
+     * `?`-counting machinery never observes it.
+     *
+     * Why (a category error, not a cosmetic detail): `transformRequestFunction`
+     * (`routes.ts:1116`) appends `context.languageQueryParam` to every discovered
+     * internal URL, so on a session-i18n site every page then loads carrying a `?`.
+     * The `?` machinery — `countQuestionMark`, the facet-variant cap, the tier-1
+     * observer, the tier-2 engine — exists to detect a faceted-navigation explosion,
+     * i.e. an unbounded parameter space *the site* generates. A parameter the crawler
+     * added is not a facet, so counting it measures our own behaviour, not the site's.
+     *
+     * And it is not merely noisy: `shouldStopForQuestionMark` (`functions.ts:907`) ends
+     * the crawl with `isError=limitQuestionMark` at 100 such pages, and BOTH of its
+     * escape hatches default to **false** — `bypassQuestionMark` and `skipQuestionMark`
+     * (`context.ts:41-43`, `main.ts:104-106`). The stop is therefore live in the default
+     * configuration, and without this strip the very sites the injection was written to
+     * rescue would stop early because of the rescue.
+     *
+     * Strips on an exact key AND value match only, so a site's own `?lang=de` still
+     * counts as the site's own parameter. (A site's own `?lang=fr` is byte-identical to
+     * our injection and cannot be told apart without carrying provenance per request —
+     * accepted: it costs at most the seed page out of a 100 budget.)
+     *
+     * Returns the URL with no `?` at all when nothing else remains, and returns the
+     * input **unchanged** for a null param, a query-less URL, an absent or
+     * different-valued param, and an unparseable URL — this runs on every page, so it
+     * must never throw.
+     */
+    static stripInjectedLanguageParam(
+        url: string,
+        param: { key: string; value: string } | null,
+    ): string {
+        if (!param || !url.includes("?")) return url;
+        try {
+            const urlObj = new URL(url);
+            if (urlObj.searchParams.get(param.key) !== param.value) return url;
+            // Two-arg delete: on the exotic `?lang=fr&lang=de` it drops only our pair.
+            urlObj.searchParams.delete(param.key, param.value);
+            return urlObj.toString();
+        } catch {
+            // Invalid URL — leave it alone; over-counting is safer than throwing here.
+            return url;
+        }
     }
 
     /**

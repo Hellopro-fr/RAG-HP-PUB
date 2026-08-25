@@ -547,6 +547,10 @@ services:
     container_name: api-detection-langue-fr-service
     profiles: [ "app" ] # Profile for the main application stack
     restart: unless-stopped
+    # In-flight chunk must survive a recreate (this service has otherwise had
+    # NO stop_grace_period -> Docker's 10s default). Same reasoning as
+    # document-echange-processor-service below (300s, worst-case batch drain).
+    stop_grace_period: 300s
     # TODO: à supprimer en PROD
     volumes:
       - ./apps-microservices/api-detection-langue-fr:/app:rw
@@ -560,13 +564,46 @@ services:
       # Client name du pool Redis partagé (common_utils cache_service)
       - SERVICE_NAME=api-detection-langue-fr-service
       # Capacity tuning — see docs/superpowers/specs/2026-04-20-detection-langue-fr-concurrency-defense-design.md § B.1
-      # Reduced from defaults (10/12) after observed OOM kill loop under real load:
-      # 10 Camoufox × ~600 MB > 4500m cgroup limit → restarts=9, dmesg WebExtensions OOM kills.
-      # New peak: 6 × ~600 MB ≈ 3.6 GB browsers + ~500 MB Python heap = fits with headroom.
-      # Trade: ~40% throughput reduction; BO + crawler-service handle 503 backpressure cleanly.
-      - BROWSER_SEMAPHORE_SIZE=6
+      # 2026-04-20: reduced from defaults (10/12) after an OOM kill loop under real load:
+      # 10 Camoufox x ~600 MB (ESTIMATE, never measured) > 4500m cgroup limit -> restarts=9,
+      # dmesg WebExtensions OOM kills.
+      # 2026-08-13 RECURRENCE (RestartCount=2 on a 97-domain run, MEASURED) at
+      # BROWSER_SEMAPHORE_SIZE=6 (a cap, not an observed live browser count — how many were
+      # actually alive at kill time was never measured): still hit the SAME 4500m ceiling.
+      # dmesg: CONSTRAINT_MEMCG (this container's OWN cgroup, not
+      # host RAM — 96G total/29G free) killed `uvicorn` (PID 1) at anon-rss=1334 MiB, the
+      # biggest task in the cgroup. CORRECTION 2026-08-13 (review): an earlier version of
+      # this comment concluded "the margin was eaten on the PYTHON side, not the browser
+      # side" — that does NOT follow from its own evidence. The kernel picks the highest
+      # oom_score (~ per-TASK RSS), and Firefox spreads over a parent + N content processes,
+      # so a browser tree holding far more in TOTAL can present as several individually
+      # smaller tasks, none outranking a 1334 MiB uvicorn. And 1334 MiB is only ~30% of the
+      # 4500m ceiling: the other ~3.1 GB was elsewhere in the cgroup and is still
+      # UNATTRIBUTED. Victim selection says which task was largest, never which side held the
+      # majority. (The 6->4 semaphore cut below is if anything BETTER justified under this
+      # reading, since browsers are the likelier majority — right fix, wrong stated reason.)
+      # To attribute the rest: per-PID RssAnon + the cgroup's own memory.stat (anon vs file);
+      # summed VmRSS double-counts shared libxul pages the cgroup charges once, and
+      # /metrics' process_resident_memory_bytes is VmRSS, NOT comparable to a dmesg anon-rss.
+      # The "~600 MB per Camoufox" figure above is still an ESTIMATE
+      # (inherited from that first incident's comment), never measured; only the 1334 MiB
+      # uvicorn figure and the 4500m ceiling itself are measured (kernel dmesg). `docker
+      # inspect` showed OOMKilled=false/ExitCode=0 — that flag only describes the LAST
+      # restart, and 2 restarts had already overwritten the transition that mattered; never
+      # trust it alone. Fix: BROWSER_SEMAPHORE_SIZE 6->4 (more cgroup headroom for uvicorn)
+      # + mem_limit 4500m->6g below + stop_grace_period above (this service had none, so recreating it for this very
+      # fix would have SIGKILLed an in-flight chunk after Docker's 10s default).
+      - BROWSER_SEMAPHORE_SIZE=4
       - ADMISSION_MAX_SLOTS=8
-    mem_limit: 4500m
+    # ⚠ Correction 2026-08-17 : ce commentaire justifiait le 6g par « crawler-service
+    # containers on this host already run at 6g ». Ce fichier ne le montre pas —
+    # `mem_limit` n'y apparaît qu'ICI, et le bloc crawler-service n'a AUCUNE limite
+    # mémoire (aucun docker-compose.override.yml non plus). L'affirmation était peut-être
+    # vraie du déploiement réel, mais elle était présentée comme lisible dans le dépôt
+    # alors qu'elle ne l'est pas. Le 6g reste justifié par la mesure du 08-13 (cgroup à
+    # 4500m atteint, victime uvicorn à anon-rss 1334 Mio) ; il n'a jamais eu besoin de la
+    # comparaison avec un voisin. Le vrai plafond du crawler reste À MESURER.
+    mem_limit: 6g
     cpus: 4
     healthcheck:
       # python:3.10-slim base image n'inclut pas curl → healthcheck cassé en boucle
@@ -1381,7 +1418,14 @@ services:
       - DATASET_CANONICAL_DEDUP_MIN_ROWS=${DATASET_CANONICAL_DEDUP_MIN_ROWS:-50}
       - REDIS_LOSS_THRESHOLD_MS=${REDIS_LOSS_THRESHOLD_MS:-60000}
       - PROGRESS_STALL_THRESHOLD_MS=${PROGRESS_STALL_THRESHOLD_MS:-600000}
-      - REDIS_MAX_CONNECTIONS=${REDIS_MAX_CONNECTIONS:-20}
+      # Pool cap: the code reads REDIS_MAX_CONNECTIONS, but the .env var is
+      # namespaced CRAWLER_REDIS_MAX_CONNECTIONS — cache_service is a shared lib
+      # and 48 services get env_file: .env, so a bare REDIS_MAX_CONNECTIONS there
+      # would also raise the cap on api-recherche, api-classification,
+      # api-detection-langue-fr, content-extractor, api-gateway and
+      # image-comparison, blunting the bounded pool's leak detection on services
+      # nobody has diagnosed. The three below still inherit from the shared .env.
+      - REDIS_MAX_CONNECTIONS=${CRAWLER_REDIS_MAX_CONNECTIONS:-20}
       - REDIS_SOCKET_TIMEOUT_S=${REDIS_SOCKET_TIMEOUT_S:-10}
       - REDIS_SOCKET_CONNECT_TIMEOUT_S=${REDIS_SOCKET_CONNECT_TIMEOUT_S:-5}
       - REDIS_HEALTH_CHECK_INTERVAL_S=${REDIS_HEALTH_CHECK_INTERVAL_S:-30}
@@ -1395,6 +1439,15 @@ services:
       - STASH_SAFETY_TIMEOUT_SECONDS=${STASH_SAFETY_TIMEOUT_SECONDS:-172800}
       - STASH_DISK_HIGH_WATER_PCT=${STASH_DISK_HIGH_WATER_PCT:-85}
       - STASH_MAX_PER_SWEEP=${STASH_MAX_PER_SWEEP:-5}
+      # The two archival gates, pinned here ON PURPOSE. ARCHIVED_RECLEAN_ENABLED
+      # defaults to True in code (app/core/config.py:110) and its body runs
+      # shutil.rmtree on a crawl's storage/ subtree with no undo, so until today
+      # the only thing holding it back was an unversioned override in the VM's
+      # .env — invisible, and lost the moment a recreate drops it. These lines
+      # invert that: absent any override, compose supplies false. Never change
+      # these defaults to true; arm per-environment via the .env instead.
+      - ARCHIVED_RECLEAN_ENABLED=${ARCHIVED_RECLEAN_ENABLED:-false}
+      - ARCHIVED_STATUS_REPAIR_ENABLED=${ARCHIVED_STATUS_REPAIR_ENABLED:-false}
       - TIMING_ENABLED=${TIMING_ENABLED:-true}
       - TIMING_SAMPLE_INTERVAL_MS=${TIMING_SAMPLE_INTERVAL_MS:-5000}
     deploy:
@@ -2100,6 +2153,10 @@ services:
       RABBITMQ_URL: ${RABBITMQ_URL}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
       HP_TOKEN: ${HP_TOKEN}
+      # Surcharge optionnelle de la grille horaire DeepSeek, au format "1-4,6-10" (UTC).
+      # Vide ou absente = grille par defaut. Ce service n'a pas d'env_file, donc sans
+      # cette ligne la variable serait INATTEIGNABLE dans le conteneur.
+      DEEPSEEK_FENETRES_PLEINES: ${DEEPSEEK_FENETRES_PLEINES:-}
     volumes:
       - /mnt/data/docker/images/generation-question-caracteristiques/qc-caracterisation:/app/tracking
     deploy:
@@ -2118,6 +2175,10 @@ services:
       RABBITMQ_URL: ${RABBITMQ_URL}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
       HP_TOKEN: ${HP_TOKEN}
+      # Surcharge optionnelle de la grille horaire DeepSeek, au format "1-4,6-10" (UTC).
+      # Vide ou absente = grille par defaut. Ce service n'a pas d'env_file, donc sans
+      # cette ligne la variable serait INATTEIGNABLE dans le conteneur.
+      DEEPSEEK_FENETRES_PLEINES: ${DEEPSEEK_FENETRES_PLEINES:-}
     volumes:
       - /mnt/data/docker/images/generation-question-caracteristiques/qc-fabricant-reference:/app/tracking
     deploy:

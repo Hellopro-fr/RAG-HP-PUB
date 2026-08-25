@@ -26,8 +26,8 @@ from app.core.async_jobs import _JobsDisabled, _JobsUnavailable, _JobCapacityExc
 from app.core.domain_fr import DomainFR, domain_cache
 from app.core.config import settings
 from app.core.inflight_dedup import InflightDedup
-from app.core.metrics import VALIDATION_VERDICTS, HOMEPAGE_FALLBACK_TRIGGERED, ADMISSION_REJECTED, INFLIGHT_REQUESTS
-from app.services.redirect_tracker import fetch_html
+from app.core.metrics import VALIDATION_VERDICTS, HOMEPAGE_FALLBACK_TRIGGERED, ADMISSION_REJECTED, INFLIGHT_REQUESTS, VARIANT_RESCUE_OUTCOME, PASS2_RETRY_SKIPPED_BUDGET
+from app.services.redirect_tracker import fetch_html, _generate_url_variants
 from app.services.language_detector import detect_challenge_page
 from app.services.page_validator import (
     validate as validate_page,
@@ -35,7 +35,7 @@ from app.services.page_validator import (
     find_stub_redirect_target,
     is_transient_http_status,
 )
-from app.services.scraper import ScrapeResult
+from app.services.scraper import ScrapeResult, scrape_html
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +54,7 @@ async def _fetch_with_admission(
     url: str,
     proxy_url: Optional[str],
     endpoint_label: str,
+    error_sink: Optional[dict] = None,
 ):
     """Acquire a prod admission slot, run fetch_html, release.
 
@@ -72,10 +73,177 @@ async def _fetch_with_admission(
         raise _AdmissionRejected
     INFLIGHT_REQUESTS.inc()
     try:
-        return await fetch_html(url, proxy_url)
+        return await fetch_html(url, proxy_url, error_sink=error_sink)
     finally:
         INFLIGHT_REQUESTS.dec()
         await _prod_admission.release()
+
+
+def _format_failure_detail(sink: Optional[dict]) -> Optional[str]:
+    """Formate le sink d'échec en chaîne publiable, ou None si rien n'a été capturé."""
+    cause = (sink or {}).get('cause')
+    if not cause:
+        return None
+    return f"{(sink or {}).get('stage') or 'unknown'}: {cause}"
+
+
+# Verdicts qu'une AUTRE FORME d'URL peut réparer. Ils ont en commun d'être nés
+# d'un fetch RÉUSSI : la Phase 2 de fetch_html (permutation http/https,
+# www/apex) ne s'est donc jamais exécutée, alors que c'est précisément le cas
+# où elle répare. Les échecs de fetch ne figurent PAS ici — fetch_html a déjà
+# permuté les variantes pour eux.
+_VARIANT_RESCUE_METHODS = ('Check_nok_v2', 'fetch_empty_content')
+
+
+async def _variant_rescue(
+    url: str,
+    proxy_url: Optional[str],
+    mode: DetectionMode,
+    use_nlp_detection: bool,
+    forced_method: Optional[str],
+    elapsed_s: float,
+) -> Optional[DetectionResponse]:
+    """Re-teste les formes http/https et www/apex de `url`, rend le premier
+    verdict français obtenu.
+
+    Rend `None` — donc « garde le verdict d'origine » — dans TOUS les autres
+    cas : budget nul ou épuisé par l'item, aucune variante, sonde en échec,
+    sonde en timeout, exception QUELCONQUE pendant l'analyse d'une variante,
+    page invalide, page de challenge, aucune variante française. Un
+    rattrapage ne doit jamais dégrader un verdict : le transformer en `error`
+    par un timeout ou une exception serait pire que le faux négatif qu'il
+    corrige, puisqu'`error` n'est ni re-tenté en Pass 2 ni porteur d'une cause.
+
+    `elapsed_s` = temps déjà écoulé pour CET item (fetch primaire + validation
+    + stub-hop éventuel) : le budget effectif est plafonné par ce qu'il reste
+    avant _ITEM_WALL_CLOCK_S, pas seulement par VARIANT_RESCUE_BUDGET_S — sans
+    ça, un item déjà proche des 300s du wait_for() appelant se ferait pousser
+    par-dessus par le rattrapage lui-même.
+    """
+    budget = min(
+        settings.VARIANT_RESCUE_BUDGET_S,
+        _ITEM_WALL_CLOCK_S - elapsed_s - _RESCUE_MARGIN_S,
+    )
+    if budget <= 0:
+        return None
+
+    variants = _generate_url_variants(url)
+    if not variants:
+        return None
+
+    deadline = time.monotonic() + budget
+    for idx, variant in enumerate(variants):
+        remaining = deadline - time.monotonic()
+        if remaining < _MIN_PROBE_S:
+            if idx == 0:
+                # Rien à imputer aux sondes : aucune n'a encore tourné. Le
+                # déficit vient du temps déjà brûlé par l'item lui-même
+                # (fetch primaire + validation + stub-hop, `elapsed_s`) avant
+                # même d'entrer dans cette boucle — message distinct pour ne
+                # pas laisser croire à une sonde lente.
+                logger.info(
+                    f"[VARIANT-RESCUE] budget épuisé pour {url} avant la "
+                    f"1re sonde (item déjà à {elapsed_s:.1f}s d'écoulé)"
+                )
+            else:
+                logger.info(f"[VARIANT-RESCUE] budget épuisé pour {url}")
+            VARIANT_RESCUE_OUTCOME.labels(outcome="budget_exhausted").inc()
+            return None
+
+        try:
+            # Une SONDE, pas une cible primaire : un seul scrape_html, jamais la
+            # cascade de fetch_html (3 tentatives x ~85s ne tient dans aucun
+            # budget). Même patron que la sonde de confirmation du Cas 6
+            # (domain_fr.py:1460-1463). Le wait_for est borné par le RESTE du
+            # budget, pas par une constante : une variante lente ne peut donc
+            # pas le dépasser à elle seule. `timeout=int(remaining)` fait
+            # aussi suivre la borne de navigation INTERNE de scrape_html
+            # (nav_timeout = min(timeout, 30), scraper.py) sur le temps
+            # RÉELLEMENT disponible plutôt que sur son défaut de 90s.
+            fetch = await asyncio.wait_for(
+                scrape_html(
+                    variant, timeout=int(remaining),
+                    proxy=proxy_url or settings.APIFY_PROXY,
+                ),
+                timeout=remaining,
+            )
+
+            if not fetch or not fetch.html:
+                continue
+
+            if settings.INVALID_PAGE_DETECTION_ENABLED and validate_page(
+                fetch, requested_url=variant
+            ) != ValidationVerdict.VALID:
+                # Le primaire rejette http_error/soft_404/redirected_to_home —
+                # une variante ne doit pas ouvrir une porte que le chemin
+                # normal ferme (ex. 404/500 au corps français, faux-positif).
+                logger.info(f"[VARIANT-RESCUE] {variant} : page invalide, ignorée")
+                continue
+
+            challenge = detect_challenge_page(fetch.html)
+            if challenge:
+                logger.info(f"[VARIANT-RESCUE] {variant} : page {challenge}, ignorée")
+                continue
+
+            variant_final = fetch.final_url or variant
+            # validate_alternatives=False, en dur : la question posée est « CETTE
+            # forme d'URL est-elle française ? », pas « expose-t-elle une
+            # alternative française ? » — la chasse aux alternatives a déjà eu lieu
+            # sur la forme d'origine, avec le réglage de l'appelant. Sans ce faux,
+            # la boucle du Cas 6 ouvrirait des navigateurs supplémentaires HORS du
+            # budget (jusqu'à 120s par alternative), et l'annuler en pleine
+            # navigation ré-ouvrirait le flood de callbacks orphelins que le commentaire
+            # de domain_fr.py:1451-1459 documente.
+            detector = DomainFR(
+                homepage=variant_final,
+                forced_method=forced_method,
+                use_nlp_detection=use_nlp_detection,
+                original_homepage=url,
+                validate_alternatives=False,
+            )
+            candidate = await detector.check_page_if_french(fetch.html, mode)
+            if not candidate.ok:
+                continue
+
+            # La chasse aux alternatives a déjà eu lieu sur la forme D'ORIGINE,
+            # avec le réglage validate_alternatives de l'appelant — c'est
+            # exactement l'argument derrière le validate_alternatives=False
+            # forcé ci-dessus. Mais ce flag ne gate QUE la validation :
+            # detect_alternative_languages tourne quand même (gaté sur
+            # `mode == COMPLETE`, pas sur validate_alternatives) et résout ses
+            # candidats contre self.homepage, qui pour une sonde est l'hôte de
+            # la VARIANTE — les laisser fuiter exposerait des
+            # alternative_urls sur un domaine possiblement différent, sans le
+            # signaler. BO script_launch_crawl_csv.php branche sur la seule
+            # PRÉSENCE de ce champ pour lancer un crawl sur l'URL qu'il
+            # contient : les vider ici complète ce que
+            # validate_alternatives=False avait déjà pour but.
+            candidate.alternative_urls = []
+            candidate.analyzed_url = variant_final
+            candidate.method = f"{candidate.method}+variant_rescue"
+            logger.info(
+                f"[VARIANT-RESCUE] OK {url} via {variant_final} ({candidate.method})"
+            )
+            VARIANT_RESCUE_OUTCOME.labels(outcome="success").inc()
+            return candidate
+        except Exception as e:
+            # Le try couvre TOUTE l'analyse de la variante (fetch + validation +
+            # DomainFR/NLP), pas seulement le fetch : check_page_if_french tourne
+            # BeautifulSoup et le stack NLP sur du HTML tiers arbitraire, et une
+            # exception qui s'en échapperait remonterait jusqu'au handler batch
+            # générique, qui transforme le Check_nok_v2 d'origine en method='error'
+            # — exactement la dégradation que ce helper promet de ne jamais causer.
+            # Y compris asyncio.TimeoutError : une sonde ratée n'est pas un
+            # échec de la détection, c'est l'absence d'un rattrapage.
+            # `Exception` et non `BaseException` : asyncio.CancelledError dérive
+            # de BaseException depuis Python 3.8 et doit continuer à remonter —
+            # un item annulé ne doit pas se présenter comme « aucune variante
+            # française ».
+            logger.info(f"[VARIANT-RESCUE] {variant} : sonde en échec ({e!r})")
+            continue
+
+    VARIANT_RESCUE_OUTCOME.labels(outcome="no_variant_french").inc()
+    return None
 
 
 _inflight_dedup = InflightDedup()
@@ -88,6 +256,59 @@ _PASS2_RETRYABLE_METHODS = (
     'fetch_failed', 'challenge_page', 'admission_rejected',
     'http_error_transient', 'fetch_empty_content',
 )
+
+# Plafond horloge par item, imposé par les quatre wait_for() du batch ci-dessus
+# (Pass 1 process_single/process_group, Pass 2 séquentiel/first_match) qui
+# transforment déjà un dépassement en method='error' ("Timeout global item
+# (300s)"). Une seule constante remplace les quatre littéraux dupliqués — le
+# rattrapage [4bis] doit connaître ce même plafond pour ne pas pousser un item
+# par-dessus.
+_ITEM_WALL_CLOCK_S = 300
+
+# Marge retirée du temps restant avant de lancer le rattrapage : celui-ci doit
+# se terminer confortablement avant le wait_for(_ITEM_WALL_CLOCK_S) de
+# l'appelant, jamais pile à la limite.
+_RESCUE_MARGIN_S = 15
+
+# Sous ce seuil, une sonde a plus de chances d'être annulée en pleine
+# navigation que de répondre — et une navigation annulée est la condition des
+# callbacks de protocole orphelins documentée par domain_fr.py:1451-1459.
+#
+# Dérivation (scraper.py, scrape_html) — délibérément le PIRE cas, puisque
+# c'est exactement ce que ce plancher existe pour empêcher :
+#   settings.BROWSER_LAUNCH_TIMEOUT_S (45s, lancement Camoufox/Chromium, AVANT
+#   toute navigation) + jusqu'à 30s de domcontentloaded (nav_timeout =
+#   min(timeout, 30)) + la phase networkidle (bonus ~5s) + marge ≈ 80s.
+# L'ancienne valeur (30) était déjà INFÉRIEURE au seul lancement navigateur —
+# une sonde entrée avec 30s restants était donc quasi certaine d'être annulée
+# en pleine navigation, exactement la condition que ce garde doit empêcher.
+_MIN_PROBE_S = 80
+
+# Marge minimale exigée, EN PLUS de _ITEM_WALL_CLOCK_S, avant de démarrer une
+# reprise de Pass 2 sur le budget de JOB restant (deadline_monotonic, passé
+# par le worker async — voir _run_batch_core). Une reprise a besoin de son
+# plafond ENTIER, jamais de « ce qu'il reste » : la démarrer avec moins
+# l'exposerait à une annulation en pleine navigation dès que le watchdog du
+# job (JOB_MAX_S, app/core/async_jobs.py) expire — exactement la condition
+# documentée des callbacks Playwright orphelins de ce service. Même
+# raisonnement que le plancher _MIN_PROBE_S ci-dessus, appliqué ici à l'item
+# Pass 2 entier plutôt qu'à une sonde de rattrapage (incident 2026-08-13 :
+# Pass 1 328s + 4 reprises séquentielles à 300s+2s chacune ≈ 1536s > JOB_MAX_S
+# 1500s → le job entier, y compris ses items DÉJÀ réussis, était jeté).
+#
+# Le plancher RÉEL n'est PAS 0 au-dessus de _ITEM_WALL_CLOCK_S : une fois ce
+# check passé, la boucle attend encore _PASS2_RETRY_GAP_S (2s) avant de lancer
+# la reprise, plus un tour de scheduling — ce temps est prélevé SUR cette
+# marge, pas en plus d'elle. Ne jamais la resserrer sous ~_PASS2_RETRY_GAP_S +
+# ce tour sans re-vérifier ce budget (revue 2026-08-13 : même famille de
+# dérive que celle documentée sur `deadline_monotonic`,
+# app/core/async_jobs.py `JobManager._run_job`).
+_PASS2_BUDGET_MARGIN_S = 15
+
+# Pause entre deux reprises Pass 2 (throttle de charge, indépendant des
+# budgets ci-dessus) — nommée pour être monkeypatchable isolément dans les
+# tests (tests/test_pass2_budget.py) sans mocker asyncio.sleep globalement.
+_PASS2_RETRY_GAP_S = 2
 
 
 def _normalize_url_for_dedup(url: str) -> str:
@@ -168,6 +389,7 @@ async def _detect_single_url(
     validate_alternatives: bool = True,
 ) -> DetectionResponse:
     """Pipeline de détection FR pour une URL unique."""
+    t0 = time.monotonic()  # budget du rattrapage [4bis] = ce qui reste du plafond batch
     effective_url = url
     html_was_provided = html_content is not None
     fetch_result: Optional[ScrapeResult] = None
@@ -187,21 +409,27 @@ async def _detect_single_url(
 
         # [2] Fetch HTML (admission gate inside dedup leader; followers wait
         # on leader's future and do NOT acquire a slot).
+        fetch_sink: dict = {}
         if _INFLIGHT_DEDUP_ENABLED and not force_refresh:
             dedup_key = _normalize_url_for_dedup(url)
             fetch_result = await _inflight_dedup.coalesce(
                 dedup_key,
-                lambda: _fetch_with_admission(url, proxy_url, "/api/v1/detect"),
+                lambda: _fetch_with_admission(url, proxy_url, "/api/v1/detect", error_sink=fetch_sink),
             )
         else:
             fetch_result = await _fetch_with_admission(
-                url, proxy_url, "/api/v1/detect"
+                url, proxy_url, "/api/v1/detect", error_sink=fetch_sink
             )
 
         if not fetch_result:
+            # Limite connue : sous INFLIGHT_DEDUP_ENABLED, seul le leader
+            # exécute la lambda ci-dessus et remplit fetch_sink — un follower
+            # sur la même URL reçoit failure_detail=None (même cause, publiée
+            # par le leader). Ne pas tenter de partager le sink entre coroutines.
             return DetectionResponse(
                 ok=False, url=url, method='fetch_failed',
-                error='Impossible de récupérer le contenu HTML'
+                error='Impossible de récupérer le contenu HTML',
+                failure_detail=_format_failure_detail(fetch_sink),
             )
 
         html_content = fetch_result.html
@@ -387,6 +615,36 @@ async def _detect_single_url(
     if stub_target_used and not result.analyzed_url:
         result.analyzed_url = stub_target_used
 
+    # [4bis] Rattrapage par variante d'URL. `not html_was_provided` est
+    # structurel : quand l'appelant fournit le HTML (crawler-service), aucun
+    # fetch ne lui est dû et le rattrapage n'a pas de sens.
+    if not html_was_provided and result.method in _VARIANT_RESCUE_METHODS:
+        rescued = await _variant_rescue(
+            url, proxy_url, mode, use_nlp_detection, forced_method,
+            time.monotonic() - t0,
+        )
+        if rescued:
+            result = rescued
+            # L'URL analysée devient la graine de l'entrée de cache. PAS
+            # « comme au repli homepage » (l'ancienne formulation ici était
+            # fausse) : le résultat du repli homepage reste TOUJOURS sur le
+            # même hôte que le domaine d'origine (sa propre racine), donc ne
+            # sème jamais de seconde clé — le vrai miroir est la redirection
+            # cross-domaine ORDINAIRE du fetch primaire (`effective_url =
+            # final_url` ci-dessus, quand le domaine change en cours de
+            # Phase 1). `domain_cache.set(url, effective_url, …)` (plus bas)
+            # sème alors DEUX clés Redis dès que le domaine change :
+            # `fr_detect:{domaine d'origine}` et `fr_detect:{domaine cible}`
+            # (DomainCache.set, domain_fr.py:136-139, sur
+            # `result_domain != input_domain`) — la seconde à `ok=True`/30j,
+            # avec un payload dont `requested_url` nomme quand même le
+            # domaine D'ORIGINE. La CLÉ ne reste donc PAS le domaine
+            # d'origine pour un rattrapage cross-domaine : c'est exactement
+            # le même comportement que la redirection ordinaire, pas un ajout
+            # de ce rattrapage — voir le known-limit correspondant dans le
+            # CLAUDE.md du service.
+            effective_url = rescued.analyzed_url or effective_url
+
     if not html_was_provided:
         await domain_cache.set(url, effective_url, result.model_dump())
 
@@ -459,10 +717,20 @@ async def _run_batch_core(
     mode: DetectionMode,
     opts: BatchOpts,
     progress_cb: Optional[Callable[[int], None]] = None,
+    deadline_monotonic: Optional[float] = None,
 ) -> tuple[list[DetectionResponse], BatchCounts]:
     """Shared 2-pass batch orchestration. Used by the sync /detect-batch route
     (progress_cb=None) and the async worker (throttled progress_cb). Behavior is
-    identical to the former inline /detect-batch body."""
+    identical to the former inline /detect-batch body.
+
+    deadline_monotonic : échéance ABSOLUE (`time.monotonic()`) au-delà de
+    laquelle Pass 2 arrête de lancer de NOUVELLES reprises séquentielles —
+    jamais utilisée pour couper une reprise déjà en vol (voir
+    _PASS2_BUDGET_MARGIN_S). `None` (défaut) = comportement inchangé : c'est
+    le cas du chemin sync /detect-batch, qui n'a pas de JOB_MAX_S face auquel
+    se borner — invariant de non-régression, voir tests/test_pass2_budget.py.
+    Le worker asynchrone (app/core/async_jobs.py, JobManager._run_job) la
+    calcule depuis son propre départ de job (`started_mono`) + JOB_MAX_S."""
     items_to_process = items
 
     total_items = len(items_to_process)
@@ -557,13 +825,13 @@ async def _run_batch_core(
             await asyncio.sleep(min(index * 0.5, max_stagger))
         async with semaphore:
             try:
-                return await asyncio.wait_for(_process_item_core(item), timeout=300)
+                return await asyncio.wait_for(_process_item_core(item), timeout=_ITEM_WALL_CLOCK_S)
             except asyncio.TimeoutError:
                 count = await _increment_count()
-                logger.error(f"[BATCH] [{count}/{total_items}] TIMEOUT {item.url} après 300s")
+                logger.error(f"[BATCH] [{count}/{total_items}] TIMEOUT {item.url} après {_ITEM_WALL_CLOCK_S}s")
                 return DetectionResponse(
                     ok=False, url=item.url, method='error',
-                    error='Timeout global item (300s)'
+                    error=f'Timeout global item ({_ITEM_WALL_CLOCK_S}s)'
                 )
 
     # =========================================================================
@@ -604,11 +872,11 @@ async def _run_batch_core(
             for item in group_items:
                 try:
                     async with semaphore:
-                        result = await asyncio.wait_for(_process_item_core(item), timeout=300)
+                        result = await asyncio.wait_for(_process_item_core(item), timeout=_ITEM_WALL_CLOCK_S)
                 except asyncio.TimeoutError:
                     result = DetectionResponse(
                         ok=False, url=item.url, method='error',
-                        error='Timeout global item (300s)')
+                        error=f'Timeout global item ({_ITEM_WALL_CLOCK_S}s)')
                 last_result = result
                 if result.ok:
                     return (_with_group(result, group_key), [])
@@ -627,7 +895,16 @@ async def _run_batch_core(
         pass1_duration = round((time.time() - start_time) * 1000)
         logger.info(f"[BATCH][first_match] Pass 1 termine en {pass1_duration}ms")
 
-        # Pass 2 : retry séquentiel pour les groupes sans FR et ayant des fetch_failed
+        # Pass 2 : retry séquentiel pour les groupes sans FR et ayant des fetch_failed.
+        # Même garde de budget de job que la boucle séquentielle plus bas
+        # (deadline_monotonic) : ce mode est atteignable depuis le worker async
+        # (AsyncBatchSubmitRequest.mode accepte first_match, async_jobs.py
+        # forwarde req.mode tel quel) et rejoue exactement le même patron
+        # sleep(gap)+wait_for(_ITEM_WALL_CLOCK_S) sans aucun plafond total —
+        # sans cette garde, le même dépassement de JOB_MAX_S que l'incident
+        # 2026-08-13 s'y produirait tout aussi bien.
+        pass2_skipped_budget = 0
+        budget_exhausted = False
         for i, group_key in enumerate(group_order):
             if group_results[i].ok:
                 continue
@@ -635,14 +912,34 @@ async def _run_batch_core(
             if not retry_items:
                 continue
 
+            if budget_exhausted:
+                # Budget déjà épuisé par un groupe précédent : ces items
+                # gardent leur verdict Pass 1 sans même entrer dans la boucle
+                # interne (rien à vérifier, le temps ne remonte pas).
+                pass2_skipped_budget += len(retry_items)
+                continue
+
             logger.info(f"[BATCH][first_match] Pass 2 groupe '{group_key}': retry {len(retry_items)} item(s)")
-            for item in retry_items:
-                await asyncio.sleep(2)
+            for item_idx, item in enumerate(retry_items):
+                if deadline_monotonic is not None:
+                    remaining = deadline_monotonic - time.monotonic()
+                    required = _ITEM_WALL_CLOCK_S + _PASS2_BUDGET_MARGIN_S
+                    if remaining < required:
+                        budget_exhausted = True
+                        pass2_skipped_budget += len(retry_items) - item_idx
+                        logger.warning(
+                            f"[BATCH][first_match] Pass 2: budget de job insuffisant "
+                            f"({remaining:.0f}s restants < {required}s requis) — arrêt, "
+                            f"verdict Pass 1 conservé pour les reprises restantes"
+                        )
+                        break
+
+                await asyncio.sleep(_PASS2_RETRY_GAP_S)
                 try:
                     async with semaphore:
                         retry_result = await asyncio.wait_for(
                             _process_item_core(item, force_refresh_override=True),
-                            timeout=300,
+                            timeout=_ITEM_WALL_CLOCK_S,
                         )
                     if retry_result.ok:
                         group_results[i] = _with_group(retry_result, group_key)
@@ -652,9 +949,16 @@ async def _run_batch_core(
                         group_results[i] = _with_group(retry_result, group_key)
                         break
                 except asyncio.TimeoutError:
-                    logger.warning(f"[BATCH][first_match] Pass 2 TIMEOUT groupe '{group_key}' {item.url} après 300s")
+                    logger.warning(f"[BATCH][first_match] Pass 2 TIMEOUT groupe '{group_key}' {item.url} après {_ITEM_WALL_CLOCK_S}s")
                 except Exception as e:
                     logger.warning(f"[BATCH][first_match] Pass 2 ERROR groupe '{group_key}' {item.url}: {e}")
+
+        if pass2_skipped_budget:
+            PASS2_RETRY_SKIPPED_BUDGET.inc(pass2_skipped_budget)
+            logger.warning(
+                f"[BATCH][first_match] Pass 2: {pass2_skipped_budget} reprise(s) au total "
+                f"sautée(s) faute de budget de job"
+            )
 
         results = group_results
         success_count = sum(1 for r in results if r.ok)
@@ -703,11 +1007,31 @@ async def _run_batch_core(
         logger.info(f"[BATCH] Pass 2: retry sequentiel de {len(failed_indices)} URLs en échec transitoire")
 
         retry_success = 0
+        skipped_budget = 0
         for retry_num, idx in enumerate(failed_indices, 1):
             item = items_to_process[idx]
+
+            # Budget de job (worker async uniquement — None sur le chemin
+            # sync /detect-batch, comportement inchangé). Un item non rejoué
+            # GARDE son verdict Pass 1 (résultat déjà en place dans `results`
+            # — rien à écrire ici) : jamais de troncature d'une reprise en
+            # vol, seulement un saut de celles qui ne tiendraient pas.
+            if deadline_monotonic is not None:
+                remaining = deadline_monotonic - time.monotonic()
+                required = _ITEM_WALL_CLOCK_S + _PASS2_BUDGET_MARGIN_S
+                if remaining < required:
+                    skipped_budget = len(failed_indices) - retry_num + 1
+                    logger.warning(
+                        f"[BATCH] Pass 2: budget de job insuffisant ({remaining:.0f}s "
+                        f"restants < {required}s requis) — {skipped_budget} reprise(s) "
+                        f"sautée(s), verdict Pass 1 conservé"
+                    )
+                    PASS2_RETRY_SKIPPED_BUDGET.inc(skipped_budget)
+                    break
+
             logger.info(f"[BATCH] Retry [{retry_num}/{len(failed_indices)}] {item.url}")
 
-            await asyncio.sleep(2)
+            await asyncio.sleep(_PASS2_RETRY_GAP_S)
 
             try:
                 async with semaphore:
@@ -715,7 +1039,7 @@ async def _run_batch_core(
                     # batch entier (le Pass 1 est borné, le Pass 2 doit l'être).
                     retry_result = await asyncio.wait_for(
                         _process_item_core(item, force_refresh_override=True),
-                        timeout=300,
+                        timeout=_ITEM_WALL_CLOCK_S,
                     )
                 if retry_result.method not in _PASS2_RETRYABLE_METHODS:
                     results[idx] = retry_result
@@ -728,11 +1052,14 @@ async def _run_batch_core(
                     logger.warning(f"[BATCH] Retry ECHEC {item.url} ({retry_result.method})")
 
             except asyncio.TimeoutError:
-                logger.warning(f"[BATCH] Retry TIMEOUT {item.url} après 300s")
+                logger.warning(f"[BATCH] Retry TIMEOUT {item.url} après {_ITEM_WALL_CLOCK_S}s")
             except Exception as e:
                 logger.warning(f"[BATCH] Retry ERROR {item.url}: {e}")
 
-        logger.info(f"[BATCH] Pass 2 termine: {retry_success}/{len(failed_indices)} recuperes")
+        logger.info(
+            f"[BATCH] Pass 2 termine: {retry_success}/{len(failed_indices)} recuperes"
+            + (f", {skipped_budget} sautee(s) faute de budget" if skipped_budget else "")
+        )
 
     # Statistiques finales
     success_count = sum(1 for r in results if r.ok)
@@ -848,7 +1175,8 @@ async def detect_french_debug(request: DetectionRequest) -> DebugDetectionRespon
 
         if not html_content:
             fetched_by = 'api'
-            fetch_result = await fetch_html(request.url, request.proxy_url)
+            debug_fetch_sink: dict = {}
+            fetch_result = await fetch_html(request.url, request.proxy_url, error_sink=debug_fetch_sink)
             if not fetch_result:
                 from app.models.schemas import (
                     DebugInfo, DebugFetchInfo, DebugCleaningInfo,
@@ -860,7 +1188,8 @@ async def detect_french_debug(request: DetectionRequest) -> DebugDetectionRespon
                         ok=False,
                         url=request.url,
                         method='fetch_failed',
-                        error='Impossible de recuperer le contenu HTML'
+                        error='Impossible de recuperer le contenu HTML',
+                        failure_detail=_format_failure_detail(debug_fetch_sink),
                     ),
                     debug=DebugInfo(
                         fetch=DebugFetchInfo(fetched_by='api', raw_html_length=0, raw_html_preview=''),
@@ -975,10 +1304,18 @@ async def submit_batch_async(request: AsyncBatchSubmitRequest, http_request: Req
     try:
         job_id, status_code = await jm.submit(request)
     except _JobsDisabled:
-        # permanent: NO Retry-After -> BO short-circuits
+        # permanent: NO Retry-After -> BO short-circuits. Must stay the ONLY
+        # header-less 503 — the BO discriminates by header presence.
         raise HTTPException(status_code=503, detail={"detail": "Async jobs disabled", "retryable": False})
     except _JobsUnavailable:
-        raise HTTPException(status_code=503, detail={"detail": "Job store unavailable", "retryable": False})
+        # transient (Redis restart, not the kill-switch): same Retry-After
+        # treatment as capacity below, so the BO retries instead of aborting.
+        ra = str(settings.ASYNC_SUBMIT_RETRY_AFTER_S)
+        raise HTTPException(
+            status_code=503,
+            detail={"detail": "Job store unavailable", "retryable": True, "retry_after_seconds": int(ra)},
+            headers={"Retry-After": ra},
+        )
     except _JobCapacityExceeded:
         ra = str(settings.ASYNC_SUBMIT_RETRY_AFTER_S)
         raise HTTPException(
@@ -994,10 +1331,28 @@ async def submit_batch_async(request: AsyncBatchSubmitRequest, http_request: Req
 
 @router.get("/detect-batch-async/{job_id}", response_model=AsyncBatchStatusResponse)
 async def poll_batch_async(job_id: str, http_request: Request) -> AsyncBatchStatusResponse:
-    """Poll an async job. 404 if unknown/expired. Computes 'stale' on read."""
+    """Poll an async job. 404 if unknown/expired; 503+Retry-After if the job
+    store itself is unreadable (Redis blip — see JobManager.store_ping).
+    Computes 'stale' on read."""
     jm = http_request.app.state.job_manager
     rec = await jm.get_record(job_id)
     if not rec:
+        # JobStore.get() degrades BOTH "no such key" and "Redis read failed"
+        # to the same None (app/core/async_jobs.py). Ping to tell them apart:
+        # a ping failure means "illisible", not "absent" — 503+Retry-After
+        # (already handled correctly by the BO's poll loop) instead of 404
+        # (the ONLY poll code that breaks the BO's retry loop and discards
+        # the whole chunk). ponytail: the ping may borrow a different pool
+        # connection than the failed read, so a single poisoned connection
+        # can still read-fails-but-ping-succeeds -> 404 — this narrows the
+        # window, it does not close it.
+        if not await jm.store_ping():
+            ra = str(settings.ASYNC_SUBMIT_RETRY_AFTER_S)
+            raise HTTPException(
+                status_code=503,
+                detail={"detail": "Job store unavailable", "retryable": True, "retry_after_seconds": int(ra)},
+                headers={"Retry-After": ra},
+            )
         raise HTTPException(status_code=404, detail="Unknown or expired job_id")
     status = poll_status(rec, time.time(), settings.STALE_THRESHOLD_S)
     results = rec.get("results") if status in ("completed", "failed", "stale") else None

@@ -50,6 +50,7 @@ import { killBrowserProcesses } from "./browserKill.js";
 import { readUsableMemory } from "./cgroupMemory.js";
 import { createSharedRedisClient } from "./redisClient.js";
 import { buildHtmlIndex } from "./htmlIndex.js";
+import { ensureUnjudgedSidecar } from "./unjudgedUrls.js";
 import { repairQueueMetadata, recountQueueFromDisk } from "./queueRepair.js";
 import { isDrainedSample, isUnreconciledIdle, DRAIN_CONFIRM_SAMPLES, DRAIN_DISK_RECOUNT_ENABLED } from "./drainGuard.js";
 import { QUEUE_PURGE_ENABLED } from "./staleVariantSkip.js";
@@ -159,6 +160,7 @@ context.config = {
         isMicroMode: false,
         previousTotal: 0,
         minSample: minSample,
+        minCoverage: 0.8,
         maxErrorRate: maxErrorRate,
         maxRedirectRate: maxRedirectRate,
         maxGrowthRate: maxGrowthRate,
@@ -606,6 +608,14 @@ if (dropData) {
     // Load stats if resuming
     await context.statsManager.loadStateFromDisk();
 }
+
+// Create `__unjudged_urls.json` as `[]` now — AFTER the dropData drop above, which
+// would otherwise delete it. Its mere presence tells the BO "this crawler records
+// pages detection could not judge", which an absent file cannot: absent means
+// "crawler predates the fix, you cannot tell", empty means "detection answered for
+// every page, the orphan subtraction is safe". Written at startup so the
+// distinction survives a SIGKILL. Never clobbers an OOM relaunch's entries.
+ensureUnjudgedSidecar(domain);
 
 // --- HYBRID RESUME STRATEGY ---
 // Check if Redis already has data (Hot Resume)
@@ -1137,6 +1147,9 @@ const mapStopReasonToMessage = (errorCode: string): string => {
         "PAYLOAD_READ_ERROR": "Erreur lecture payload",
         "interruptedShutdown": "Crawl interrompu lors de l'arrêt du service",
         "limitQueue": "File d'attente d'URLs trop volumineuse",
+        // Only reachable for the ok=true-but-empty-method homepage site (routes.ts:645):
+        // the other two set `context.crawlErrorMessage`, which wins at :1226.
+        "detectionUnavailable": "Service de détection de langue indisponible",
     };
 
     if (!errorCode) return "";
@@ -1245,6 +1258,11 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
     const filtered_hash = await readStat("filtered_hash");
     const filtered_ext = await readStat("filtered_ext");
     const filtered_nonfr = await readStat("filtered_nonfr");
+    // Detection outage made countable: pages that got NO linguistic verdict. Distinct from
+    // filtered_nonfr by construction (routes.ts increments them on mutually exclusive
+    // branches), and deliberately NOT folded into `errors`. Name must stay byte-identical to
+    // the increment in routes.ts — statNameParity.test.ts pins that.
+    const verdict_unavailable = await readStat("verdict_unavailable");
     const filtered_duplicate = await readStat("filtered_duplicate");
     const filtered_pdf = await readStat("filtered_pdf");
     const dropped_cb = await readStat("dropped_cb");
@@ -1274,6 +1292,7 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         filtered_hash,
         filtered_ext,
         filtered_nonfr,
+        verdict_unavailable,
         filtered_duplicate,
         filtered_pdf,
         dropped_cb,

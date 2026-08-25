@@ -142,8 +142,29 @@ async def get_job_or_recover(crawl_id: str) -> dict:
 
     # State keys can persist safely — the distributed lock (crawl_lock:{id}) is separate.
     # TTL 7 days: recovered orphan jobs should not persist in Redis indefinitely.
-    logger.info(f"Successfully recovered job '{crawl_id}' from storage with status '{final_status}'. Re-indexing in Redis.")
-    await cache_service.set_json(job_key, recovered_data, ttl=604800)
+    #
+    # SET NX, never a plain SET: cache_service.get_json returns None both when the
+    # key is absent AND when the read merely errored (it swallows the exception),
+    # so reaching this point does not prove the blob is gone. An unconditional
+    # write turned that phantom miss into data loss — the disk view cannot express
+    # 'archived' or 'stashed_at' (the completion marker only carries
+    # finished/failed/stopped), so a live archived blob came back as a bare
+    # 'finished' and get_results_archive skipped its GCS branch: /results 404 from
+    # then on, and the 7-day TTL made the damage recur after expiry.
+    indexed = await cache_service.set_json_nx(job_key, recovered_data, ttl=604800)
+
+    if indexed:
+        logger.info(f"Successfully recovered job '{crawl_id}' from storage with status '{final_status}'. Re-indexing in Redis.")
+    else:
+        # set_json_nx returns False both when the key exists and when the write
+        # itself errored — do not claim to know which. Either way nothing was
+        # overwritten, which is the point.
+        logger.warning(
+            f"Recovered job '{crawl_id}' from storage with status '{final_status}' but did NOT "
+            f"index it: a blob is already present, or the SET NX failed (a cache_service error "
+            f"would precede this line). Nothing overwritten; serving the disk view for this "
+            f"request only."
+        )
 
     return recovered_data
 

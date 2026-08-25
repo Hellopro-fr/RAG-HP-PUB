@@ -1,0 +1,8 @@
+# Les scripts shell de ce depot partent dans des conteneurs Linux (Dockerfile de
+# chaque microservice) et servent de hooks git. Un CRLF y rend le shebang
+# introuvable : le noyau cherche un interpreteur nomme "/bin/bash\r".
+#
+# Mesure du 2026-08-18 : 34 des 50 .sh suivis etaient en CRLF dans l'arbre de
+# travail alors que les 50 blobs sont en LF. Le CRLF venait du checkout
+# (core.autocrlf=true au niveau systeme), et il etait INVISIBLE a git status.
+*.sh text eol=lf

@@ -57,6 +57,7 @@ export const context = {
             
             // Standard Mode Settings (> 50 URLs)
             minSample: 50,
+            minCoverage: 0.8,
             maxErrorRate: 0.15,     // 15%
             maxRedirectRate: 0.30,  // 30%
             maxGrowthRate: 0.50,    // 50%

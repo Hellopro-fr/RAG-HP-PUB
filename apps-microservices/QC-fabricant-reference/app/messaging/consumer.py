@@ -6,6 +6,7 @@ from typing import Set
 import aio_pika
 from aio_pika.abc import AbstractIncomingMessage
 from common_utils.autres.DLQPropertiesAsync import DLQPropertiesAsync as DLQProperties
+from common_utils.autres.fenetre_tarifaire import est_heure_pleine, libelle_fenetre
 
 from app.core.api_client import HelloProAPIClient
 from app.core.credentials import settings
@@ -18,6 +19,10 @@ logger = logging.getLogger(__name__)
 MAX_RETRIES = 3
 RETRY_TTL_MS = 30000
 SERVICE_NAME = "qc-fabricant-reference"
+# Pas de la boucle d'attente pendant une fenêtre pleine. 60 s suffisent : la reprise
+# n'a pas besoin d'être à la seconde près, et une attente courte évite de tenir la
+# boucle éveillée pour rien pendant 3 à 4 h.
+ATTENTE_FENETRE_PLEINE_S = 60
 
 
 class Consumer:
@@ -201,14 +206,44 @@ class Consumer:
             self._active_tasks.discard(task)
 
     async def start_consuming(self):
+        """Consomme la file, en se DETACHANT pendant les fenetres cheres de DeepSeek.
+
+        Se detacher plutot que refuser : un `nack(requeue=False)` partirait en DLQ en
+        90 s (RETRY_TTL_MS 30 s x MAX_RETRIES 3), et garder un message non-acke
+        heurterait le `x-consumer-timeout` de 2 h alors qu'une fenetre pleine dure 3 a
+        4 h. Detache, le consumer laisse les messages en READY et rien n'expire.
+
+        Le `while True` est indispensable : sans lui, le test serait evalue une seule
+        fois au demarrage du conteneur et plus jamais ensuite.
+        """
         await self.connect()
         logger.info(f"👂 QC-Fabricant-Reference: En attente sur {self.queue_name} (streaming)")
         logger.info(f"🚀 Configuration: max_concurrency={settings.MAX_CONCURRENCY}")
-        async with self.queue.iterator() as queue_iter:
-            async for message in queue_iter:
-                asyncio.create_task(self._process_with_semaphore(message))
-                logger.info(
-                    f"📨 Message recu - Taches actives: {len(self._active_tasks)}/{settings.MAX_CONCURRENCY}")
+        logger.info(f"💰 Fenetre tarifaire DeepSeek au demarrage : {libelle_fenetre()}")
+        while True:
+            if est_heure_pleine():
+                logger.warning(
+                    f"⏸️  DeepSeek en {libelle_fenetre()} : consommation SUSPENDUE, "
+                    f"les messages restent en file (verification toutes les "
+                    f"{ATTENTE_FENETRE_PLEINE_S}s)")
+                while est_heure_pleine():
+                    await asyncio.sleep(ATTENTE_FENETRE_PLEINE_S)
+                logger.info(f"▶️  Retour en {libelle_fenetre()} : reprise de la consommation")
+            async with self.queue.iterator() as queue_iter:
+                async for message in queue_iter:
+                    if est_heure_pleine():
+                        # Ce message est deja sorti de l'iterateur : on le rend
+                        # explicitement (requeue, donc ni DLQ ni compteur x-death).
+                        # Ceux encore dans le buffer de prefetch le sont par la sortie
+                        # du `async with`, qui fait basic_cancel puis nack(requeue=True).
+                        await message.nack(requeue=True)
+                        logger.warning(
+                            f"⏸️  Bascule en {libelle_fenetre()} : message remis en file, "
+                            f"detachement de {self.queue_name}")
+                        break
+                    asyncio.create_task(self._process_with_semaphore(message))
+                    logger.info(
+                        f"📨 Message recu - Taches actives: {len(self._active_tasks)}/{settings.MAX_CONCURRENCY}")
 
     async def close(self):
         if self._active_tasks:

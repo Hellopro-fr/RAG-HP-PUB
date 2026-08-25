@@ -100,6 +100,24 @@ def detect_challenge_page(html: str) -> Optional[str]:
     if imperva_count >= 2:
         return 'Imperva'
 
+    # --- AWS WAF Challenge (script CAPTCHA/challenge « Goku ») ---
+    # window.gokuProps (nom de code interne du script de génération de token
+    # AWS WAF Captcha/Challenge) et window.awsWafCookieDomainList (portée du
+    # cookie de session WAF injectée par ce même script) sont chacun assez
+    # rares pour être de bons indices, mais pas prouvés exclusifs seuls
+    # (cf. la leçon Turnstile ci-dessus : un composant peut apparaître sur un
+    # vrai site) — les 2 sont requis, comme Imperva (`:100`), pas 1 comme
+    # PerimeterX. Le seul échantillon de production dont on dispose porte les
+    # deux (N2, 2026-08-13, 324automatismes.net : status 202, 2397 chars de
+    # HTML, 0 caractère de texte visible), donc ce seuil ne coûte rien sur la
+    # preuve qu'on a.
+    aws_waf_indicators = [
+        'awswafcookiedomainlist',
+        'gokuprops',
+    ]
+    if sum(1 for p in aws_waf_indicators if p in html_lower) >= 2:
+        return 'AWS_WAF'
+
     # --- Rescaled WAF (interstitiel proof-of-work auto-résolvant) ---
     # Page "Verifying your browser" servie en HTTP 403 ; un Web Worker résout
     # le challenge PoW puis window.location.replace recharge la vraie page.
@@ -315,7 +333,33 @@ class LanguageDetector:
         # Normaliser avec un multiplicateur réduit (×10 au lieu de ×20)
         # Si >10% de mots français pondérés → signal fort
         return min(1.0, french_ratio * 10)
-    
+
+    def _count_french_exclusive_distinct(self, text: str) -> int:
+        """Nombre de mots exclusivement français DISTINCTS présents dans le texte.
+
+        Discriminant délibérément séparé du score agrégé de
+        `_compute_french_signal`, qui SATURE et ne peut donc pas discriminer
+        les langues romanes : mesuré le 2026-08-10 sur les échantillons de
+        `tests/test_lexical_observation.py` (reproductible, contrairement aux
+        chiffres du §3 de la spec, mesurés sur des extraits non conservés —
+        ne pas les traiter comme reproductibles ici), il vaut FR 1.0, ES
+        0.833, PT 0.814, IT 0.417 — l'espagnol dépasse largement le plancher
+        0.3 que lit le Cas 8. Le compte de mots exclusifs distincts, sur les
+        mêmes échantillons, sépare nettement : FR 8, ES 0, IT 0, PT 1
+        (`mais`), EN 0, catalogue sans prose 0.
+
+        Distincts et non occurrences : un menu répétant « le » vingt fois n'est
+        pas plus français qu'une phrase le contenant une fois.
+
+        OBSERVATION uniquement — aucun verdict ne lit cette valeur pour décider.
+        """
+        words = re.findall(r'\b\w+\b', text.lower())
+        # Même plancher que _compute_french_signal (:300-301) : sous 10 mots,
+        # aucun compte n'est significatif.
+        if len(words) < 10:
+            return 0
+        return len({w for w in words if w in self.FRENCH_EXCLUSIVE_STOPWORDS})
+
     def _remove_cookie_consent_elements(self, soup: BeautifulSoup) -> None:
         """
         Supprime les éléments HTML liés aux bannières cookies/consentement/RGPD.
@@ -606,6 +650,7 @@ class LanguageDetector:
                 'langdetect': {'lang': langdetect_result, 'confidence': round(langdetect_confidence, 3)} if langdetect_result else None,
                 'langid': {'lang': langid_result, 'confidence': round(langid_confidence, 3)} if langid_result else None,
                 'french_signal': round(french_signal, 3),
+                'french_exclusive_distinct': self._count_french_exclusive_distinct(text),
                 'weighted_scores': {k: round(v, 3) for k, v in results.items()}
             }
             
@@ -646,12 +691,18 @@ class LanguageDetector:
                 os.path.dirname(__file__), '..', '..', 'models', 'lid.176.bin'
             )
             
-            # Charger le modèle (lazy loading)
+            # Charger le modèle (lazy loading, porté par la CLASSE et non par l'instance)
+            # Stocké sur `self`, le modèle était rechargé pour CHAQUE LanguageDetector :
+            # DomainFR en construit un par instance (domain_fr.py) et routes.py construit
+            # un DomainFR par item de batch, par variante du rattrapage et par repli
+            # homepage. Autant de copies simultanées du modèle en mémoire — et autant de
+            # lectures disque synchrones — que d'items analysés en parallèle.
+            # `hasattr(self, ...)` consulte la classe : aucun autre changement nécessaire.
             if not hasattr(self, '_fasttext_model'):
                 if not os.path.exists(model_path):
                     logger.warning(f"Modèle fastText non trouvé: {model_path}")
                     return None
-                self._fasttext_model = fasttext.load_model(model_path)
+                LanguageDetector._fasttext_model = fasttext.load_model(model_path)
             
             # Extraire le texte visible via le pipeline de nettoyage centralisé
             text = self.clean_html_to_text(html)
@@ -684,7 +735,11 @@ class LanguageDetector:
                         for l, s in zip(labels, scores)
                     ]
                 },
-                'french_signal': round(french_signal, 3)
+                'french_signal': round(french_signal, 3),
+                # Observation : discriminant non saturant, voir
+                # _count_french_exclusive_distinct. Additif — aucun lecteur
+                # existant de `details` n'en dépend.
+                'french_exclusive_distinct': self._count_french_exclusive_distinct(text),
             }
             
             # Confiance finale basée sur fastText uniquement

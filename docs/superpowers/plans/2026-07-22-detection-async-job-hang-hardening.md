@@ -92,14 +92,28 @@ async def _close_or_abandon(coro, timeout: float, what: str = "") -> None:
 
     A close() on a dead browser pipe ignores asyncio cancellation, so wait_for
     (cancel-then-await) would itself hang. asyncio.wait() returns on timeout
-    WITHOUT cancelling; we simply stop waiting and leave the task detached (its
-    OS process is already gone, so it leaks nothing meaningful). This lets the
+    WITHOUT cancelling; we simply stop waiting and leave the task detached
+    (what that costs: see the 2026-08-17 correction below). This lets the
     caller escape `finally` and release its semaphore slot."""
     t = asyncio.ensure_future(coro)
     done, _pending = await asyncio.wait({t}, timeout=timeout)
     if not done:
         logger.warning(f"scraper teardown abandoned after {timeout}s: {what}")
 ```
+
+> **Correction 2026-08-17.** The docstring above shipped claiming the detached
+> task's "OS process is already gone, so it leaks nothing meaningful". That was a
+> belief, not a measurement, and it is false: this service contains no process
+> management at all (no kill, no wait, no PID tracked), `p.stop()` only closes
+> the driver pipe and waits for the driver to exit by itself, and the driver
+> launches Firefox DETACHED. An abandoned `browser.close` therefore confirms
+> neither the browser's death nor the removal of its profile directory. The
+> abandon itself is still the right trade — raising `TEARDOWN_TIMEOUT_S` is not
+> (FOUR sequential awaits on one scrape path — `unroute_all`, `context.close`,
+> `browser.close`, `playwright.stop` — so 10s→30s turns a 40s worst case into
+> 120s) — but its frequency was unknowable until `detect_teardown_abandoned_total`
+> and `detect_browsers_unclosed` were added. Nobody has measured how many
+> browsers survive an abandon; do not write a number here.
 
 - [ ] **Step 5: Bound Camoufox + Chromium launch** — in `_launch_browser`, change the Camoufox `timeout=45` to `timeout=settings.BROWSER_LAUNCH_TIMEOUT_S`, and wrap the Chromium fallback launch (currently `browser = await playwright_instance.chromium.launch(...)`) in `asyncio.wait_for`:
 

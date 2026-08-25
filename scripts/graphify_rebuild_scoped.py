@@ -170,6 +170,71 @@ def _load_labels(communities: dict) -> dict:
     return {cid: f"Community {cid}" for cid in communities}
 
 
+def _preserve_and_place(graph, prior_nodes) -> dict:
+    """Keep the committed partition; place only nodes that lack a community.
+
+    This replaces a full `cluster(graph)` on every commit. Louvain renumbers
+    communities each run, while labels.json is keyed by community id and
+    `_load_labels` re-attaches names by that id -- so the names silently land on
+    whatever topic now holds the number. The docstring above once claimed labels
+    "survive rebuilds"; only the file survived, never the mapping.
+
+    Measured 2026-08-07 on this repo: a single hook run moved **81% of nodes**
+    (8324 of 10281) to a different community id, which invalidated every human
+    label at once -- e.g. the 747 nodes labelled "Detection Langue FR Core" (c3)
+    became c2, "Crawler Engine Core".
+
+    `prior_nodes` is the graph.json node list as read from disk BEFORE the AST
+    merge, because re-extracted files come back from `extract()` without a
+    community attribute and must keep the one they already had rather than be
+    re-placed. Nodes in the prior list that no longer exist are ignored.
+
+    Falls back to real clustering only when there is no prior partition at all
+    (the first ever build).
+    """
+    from collections import Counter, defaultdict
+
+    prior = {
+        n["id"]: n["community"]
+        for n in prior_nodes
+        if n.get("community") is not None and n["id"] in graph
+    }
+    if not prior:
+        from graphify.cluster import cluster
+
+        return cluster(graph)
+
+    for nid, community in prior.items():
+        graph.nodes[nid]["community"] = community
+
+    unplaced = [n for n in graph.nodes() if graph.nodes[n].get("community") is None]
+    for _ in range(12):
+        moved = 0
+        for node in unplaced:
+            votes = Counter(
+                graph.nodes[m]["community"]
+                for m in graph.neighbors(node)
+                if graph.nodes[m].get("community") is not None
+            )
+            if votes:
+                graph.nodes[node]["community"] = votes.most_common(1)[0][0]
+                moved += 1
+        unplaced = [n for n in unplaced if graph.nodes[n].get("community") is None]
+        if not moved:
+            break
+
+    # Whatever is still unreachable gets a fresh id rather than a wrong one.
+    nxt = max(prior.values()) + 1
+    for node in unplaced:
+        graph.nodes[node]["community"] = nxt
+        nxt += 1
+
+    out = defaultdict(list)
+    for node, data in graph.nodes(data=True):
+        out[data["community"]].append(node)
+    return dict(out)
+
+
 def main() -> int:
     changed = _collect_changed()
     if not changed:
@@ -211,7 +276,7 @@ def main() -> int:
 
     from graphify.extract import extract
     from graphify.build import build_from_json
-    from graphify.cluster import cluster, score_all
+    from graphify.cluster import score_all  # cluster() now only in _preserve_and_place
     from graphify.analyze import god_nodes, surprising_connections, suggest_questions
     from graphify.report import generate
     from graphify.export import to_json
@@ -251,7 +316,9 @@ def main() -> int:
     }
 
     graph = build_from_json(merged)
-    communities = cluster(graph)
+    # Preserve the committed partition: a full cluster() here renumbers every
+    # community and silently moves labels.json onto the wrong topics.
+    communities = _preserve_and_place(graph, existing.get("nodes", []))
     cohesion = score_all(graph, communities)
     gods = god_nodes(graph)
     surprises = surprising_connections(graph, communities)

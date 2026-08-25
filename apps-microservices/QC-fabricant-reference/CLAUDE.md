@@ -37,7 +37,7 @@ QC-fabricant-reference/
       credentials.py             # pydantic-settings
     messaging/consumer.py        # qc.fabricant_reference.start
     schemas/fabricant_reference.py
-  tests/                         # 51 tests, sans I/O
+  tests/                         # 58 tests, sans I/O
 ```
 
 ## Messaging
@@ -94,6 +94,31 @@ Les coûts sont journalisés via `llm_tracking` (`type_ia = 2`, `id_process = 31
 - Reprise : une ligne dans `produit_fabricant_reference` = produit déjà traité.
 - Déduplication par catégorie locale au réplica (set in-memory) → `replicas: 1`.
 - Arrêt manuel via `fichiers/stopper.json`, tracking par run dans `tracking/`.
+
+## Fenetre tarifaire DeepSeek (heures creuses)
+
+DeepSeek facture les heures pleines **au double**, sur des bornes fixees **en UTC** :
+`01:00-04:00` et `06:00-10:00`. Le consumer **se detache de sa file** pendant ces
+fenetres (`common_utils.autres.fenetre_tarifaire`), puis reprend tout seul.
+
+Se detacher plutot que refuser : un `nack(requeue=False)` partirait en DLQ en 90 s
+(`RETRY_TTL_MS` 30 s x `MAX_RETRIES` 3), et garder un message non-acke heurterait le
+`x-consumer-timeout` de 2 h alors qu'une fenetre pleine dure 3 a 4 h. Detache, le
+consumer laisse les messages en `READY` et rien n'expire.
+
+Effet mesure le 20-08-2026 sur `id_process = 31`, part `/v2/index.php` de ce service :
+23,74 $ sur 30 jours, dont **4,62 $ au tarif double** -> ~2,31 $/mois recuperables.
+Contrepartie : les extractions sont decalees de 3 a 4 h.
+
+Surcharge : `DEEPSEEK_FENETRES_PLEINES="1-4,6-10"` (UTC, debut inclus / fin exclue).
+Une valeur illisible est ignoree avec un avertissement -- jamais une exception, sinon le
+conteneur mourrait a l'import et `restart: unless-stopped` le relancerait en boucle.
+Le bloc `environment:` de ce service la declare explicitement : il n'a pas d'`env_file`,
+donc sans cela la variable serait inatteignable dans le conteneur.
+
+Bornes couvertes par `libs/common-utils/tests/test_fenetre_tarifaire.py` (13 tests) ;
+mecanique broker couverte par les tests d'integration de QC-caracterisation et de
+template-llm-service (meme forme de boucle).
 
 ## Dependencies on Other Services
 

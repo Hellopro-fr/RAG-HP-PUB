@@ -190,8 +190,8 @@ async def _close_or_abandon(coro, timeout: float, what: str = "") -> None:
 
     A close() on a dead browser pipe ignores asyncio cancellation, so wait_for
     (cancel-then-await) would itself hang. asyncio.wait() returns on timeout
-    WITHOUT cancelling; we simply stop waiting and leave the task detached (its
-    OS process is already gone, so it leaks nothing meaningful). This lets the
+    WITHOUT cancelling; we simply stop waiting and leave the task detached
+    (what that costs: see the 2026-08-17 correction below). This lets the
     caller escape `finally` and release its semaphore slot.
 
     Either way the exception is DRAINED — asyncio.wait() does not retrieve
@@ -208,6 +208,23 @@ async def _close_or_abandon(coro, timeout: float, what: str = "") -> None:
     logger.warning(f"scraper teardown abandoned after {timeout}s: {what}")
     t.add_done_callback(_drain_orphan_exception)
 ```
+
+> **Correction 2026-08-17.** The docstring transcribed above claimed the detached
+> task's "OS process is already gone, so it leaks nothing meaningful". False, and
+> never measured: this service has no process management whatsoever (no kill, no
+> wait, no PID tracked), `p.stop()` only closes the driver pipe then waits for the
+> driver to exit on its own, and the driver launches Firefox DETACHED. An
+> abandoned `browser.close` confirms neither the browser's death nor the deletion
+> of its profile directory, so an abandon can leave a live browser behind — how
+> many, and how often, nobody knows. That is what
+> `detect_teardown_abandoned_total{op}` and `detect_browsers_unclosed` were added
+> to make observable (2026-08-17). The abandon stays; do NOT raise
+> `TEARDOWN_TIMEOUT_S` to "fix" it — FOUR sequential awaits on one scrape path
+> (`unroute_all`, `context.close`, `browser.close`, `playwright.stop`), so 10s→30s
+> turns a 40s worst case into 120s, the very stall abandoning exists to avoid.
+> (The number of call sites and the pool size do NOT enter this multiplication;
+> an earlier wording said "five abandon sites … on a pool of 4" and both were
+> beside the point.)
 
 - [ ] **Step 4: Run the tests to verify they pass**
 

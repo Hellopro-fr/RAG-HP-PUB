@@ -300,7 +300,18 @@ for success+stop and `'failure'` for failures, into the `crawler_webhook_dedup` 
 | 5 | Redis connection lost (Node-side sustained loss) | Status: `failed`, failure webhook with `failure_cause=redis_lost` |
 | 6 | Progress stall (no URL progress for threshold) | Status: `failed`, failure webhook with `failure_cause=progress_stalled` |
 | 7 | Update mode: domain changed (all/most URLs redirect off-domain) | Status: `failed`, failure webhook with `failure_cause=domain_changed` |
+| 8 | Proxy wall — persistent 403/anti-bot ratio (`TERMINAL_FAILURE_DETECT_ENABLED=true` only) | Status: `failed`, failure webhook with `failure_cause=proxy_blocked` |
+| 9 | Dead host — the seed URL returned no HTTP status at all (`TERMINAL_FAILURE_DETECT_ENABLED=true` only) | Status: `failed`, failure webhook with `failure_cause=domain_dead` |
+| 10 | Homepage got no linguistic verdict (detection outage) — **initial crawls only** | Status: `failed`, failure webhook with `failure_cause=detection_unavailable` |
 | Other | Failure | Status: `failed`, failure webhook |
+
+`is_success = (exit_code in (0, 2))` (`crawler_manager.py:1264`) is an **allowlist**, not an
+exclusion list. A new Node exit code is therefore `failed` + failure webhook from the moment Node
+starts emitting it, with nothing added on the Python side — which is why exit 10 changed the
+outcome in the Node commit alone, and the Python commit that followed only replaced the generic
+`unknown` label with `detection_unavailable`. Never "add" a code to that tuple to make it fail:
+adding one makes it *succeed*. `tests/test_classify_exit_code_detection_unavailable.py` pins the
+tuple in the source text, because `is_success` is a local and cannot be imported.
 
 ## Redis Loss / Progress Stall Detection
 
@@ -325,6 +336,9 @@ This is a cross-language contract between Python orchestrator and Marketplace BO
 | 5 | `redis_lost` | `RedisHealthMonitor` fired |
 | 6 | `progress_stalled` | `ProgressMonitor` fired |
 | 7 | `domain_changed` | Update crawl aborted: all/most seeded URLs redirect off-domain (relocated site). Homepage fast-path or external-redirect ratio breaker. Spec `docs/superpowers/specs/2026-06-09-external-redirect-breaker-design.md`. |
+| 8 | `proxy_blocked` | Proxy wall: 403/anti-bot share over `PROXY_WALL_RATIO` (`shouldTripProxyWall`, `crawler/src/terminalFailure.ts`). **BO auto-retires the domain on this cause.** |
+| 9 | `domain_dead` | Seed URL unreachable — DNS / connection-refused / cert / redirect-loop, i.e. HTTP status 0 (`isDeadHost`, same module). **BO auto-retires the domain on this cause.** |
+| 10 | `detection_unavailable` | Homepage got no linguistic verdict on an initial crawl. Retryable, non-terminal — see "Detection Verdict Unavailable" § "Exit 10". |
 | 137 / -9 | `killed_oom_system` | Process killed by OOM killer (SIGKILL) |
 | other negative | `signal_killed` | Killed by signal (non-OOM) |
 | other positive | `unknown` | Unexpected exit code |
@@ -371,7 +385,72 @@ Three client-side prongs + one operator-side step prevent the connection-cap exh
 
 `max_connections=0` is clamped to 1. When the pool is exhausted, `redis-py` raises `ConnectionError("Too many connections")` — surfaces as a 500 to the API caller, points us at the leak source rather than silently growing.
 
+**Tuning the cap from the VM:** set **`CRAWLER_REDIS_MAX_CONNECTIONS`** in the shared `.env`, *not* `REDIS_MAX_CONNECTIONS` — docker-compose maps the namespaced name onto this service's `REDIS_MAX_CONNECTIONS` (`docker-compose.yml:1384`), same trick as `API_KEY_ADMIN_CRAWLER_SERVICE`. `cache_service` is a shared lib and 48 compose services receive `env_file: .env`, so a bare `REDIS_MAX_CONNECTIONS` there would also raise the cap on `api-recherche`, `api-classification`, `api-detection-langue-fr`, `content-extractor`, `api-gateway` and `image-comparison` (measured 2026-08-10). The other three `REDIS_*` vars in the table still have that property — namespace them the same way if you ever need to tune one for this service alone. Redis itself has room either way: `maxclients` 20000 against 32 connected clients (2026-08-10), so the cap is a per-replica concurrency limit and a leak detector, not a server-load guard.
+
 Client name: `crawler-py-{HOSTNAME or pid-N}`.
+
+#### Retry on reaped connections (2026-08-07)
+
+The server-side reap below is what makes this mandatory. The pool keeps handing out sockets Redis has already closed, and `health_check_interval` only turns the failure into a failed PING — it does not heal it. `init_redis_pool` therefore passes an explicit `retry=Retry(ExponentialBackoff(cap=1.0, base=0.05), 3)` plus `retry_on_error=[ConnectionError, TimeoutError]`; the second is required, or `_disconnect_raise` re-raises before the retry loop gets a second attempt.
+
+Without them redis-py builds `Retry(NoBackoff(), 0)` with an empty `retry_on_error` (verified on redis-py 5.2.1), so the first command on a reaped socket raises `ConnectionError: Connection closed by server.` — and **every `cache_service` helper swallows it into its default return value** (`None`, `0`, `[]`, `False`), which no caller can distinguish from a real answer. `redis` is unpinned (`requirements.txt`, and `common-utils/setup.py` says `redis>=5.0.0`), so passing the retry explicitly also makes the behaviour independent of whatever pip resolved at image build time.
+
+`_with_retry` (`crawler_manager.py:61`) does **not** cover this: the `cache_service` helpers catch `Exception` internally, so the wrapper never sees a `RedisConnectionError`. The only error that reaches it is the builtin `ConnectionError("Redis is not connected.")` raised when the client is `None` — an `OSError` subclass.
+
+#### Disk recovery must not clobber (2026-08-07)
+
+Because `get_json` returns `None` on both "absent" and "read errored", `get_job_or_recover` (`app/router/crawler.py`) could not tell a missing blob from an unanswered one. It rebuilt an 8-field stub from disk and wrote it with `set_json`, destroying the live blob: the completion marker only ever carries `finished`/`failed`/`stopped`, so `archived` and `stashed_at` are unrepresentable on disk, and `get_results_archive` then skipped its GCS branch → `/results` 404. The 7-day TTL (the only TTL among the 23 writers of `crawl_job:`) made it recur after expiry. Measured on PROD before the fix: 345 recoveries over 3 days across 266 crawl_ids, `finished` in 345 cases out of 345.
+
+The write is now `set_json_nx(..., ttl=604800)` — an existing blob wins, a genuinely absent one is still indexed, and the refusal is logged at WARNING. **12 endpoints depend on `get_job_or_recover`** (8 in `router/crawler.py`, 4 in `router/admin.py`), **8 of them GET** — including `GET /status/{crawl_id}`, which the BO polls. A read-only-looking call is a write path.
+
+#### Archived-status repair (2026-08-07)
+
+`_repair_archived_status`, in `_reconcile_locked` just before the reclean, flips
+`finished` blobs back to `archived` when their tar is listed in the GCS allowlist.
+It exists because `get_results_archive` branches on `status == 'archived'`
+(`:1651`), so a blob that lost that status 404s forever on `/results`. Two
+populations: the recovery stubs fixed forward by `2a12a098`, and the pre-existing
+"legacy stuck at finished" of `:2517-2518`.
+
+| setting | default | note |
+|---|---|---|
+| `ARCHIVED_STATUS_REPAIR_ENABLED` | `false` | deploy inert, read the dry-run, then flip |
+| `ARCHIVED_STATUS_REPAIR_MAX_PER_TICK` | `10` | low on purpose: `reconcile_leader_lock` has a 600s TTL and **no** heartbeat (`:3363`) |
+
+Seven conditions, evaluated in order — `finished`, not stashed, id in `verified_in_gcs.list`,
+`_status_snapshot.json` present, `crawler.log` **older** than the snapshot, the snapshot itself at
+least `ARCHIVED_RECLEAN_MIN_AGE_SECONDS` (24h) old, and neither `archive_lock:{id}` nor
+`stash_lock:{id}` held. The first six live in the pure module; the lock probe is the caller's, run
+last so its Redis `EXISTS` is only paid for blobs that already passed the rest. The dry-run endpoint
+evaluates the same seven, or an operator would authorise something they did not inspect.
+
+Two of those conditions exist only because review found the holes, so do not relax them:
+
+- **`crawler.log` older than the snapshot**, not `_completion_marker.json`. The marker is deleted by
+  `_cleanup_stale_state_for_relaunch` on every relaunch (`:3511`), while `_cleanup_local_data` keeps
+  the log deliberately (`:2650-2653`). Anchoring on the marker was fail-open on re-crawled ids and
+  would have made `/results` serve the previous generation's tar with no error anywhere.
+- **Snapshot at least 24h old.** `archive_crawl` writes the snapshot before a tar that runs for
+  minutes; if that tar then fails, the snapshot's mtime stays fresh, the log stays older, the lock is
+  gone, and the freshness check is defeated **permanently**. The age gate is what closes that.
+
+The lock probe covers `stash_lock` too because the auto-stash sweep runs on a superset population in
+the same tick, dispatched a few lines earlier, and writes `stashed_at` only *after* its own tar — so
+the repair's fresh re-read would still read `finished` mid-stash.
+
+Dry-run: `GET /admin/archived-status-repair` — read-only, does not take
+`Depends(get_job_or_recover)`.
+
+**Kill switch.** `rm /app/archives/verified_in_gcs.list` — the `verified_in_gcs.list` file is re-read
+every tick, so it disarms in ≤ 300s with no restart. Turning
+`ARCHIVED_STATUS_REPAIR_ENABLED` off does **not** stop `_reclean_archived_leftovers`;
+they are disjoint settings. And note that merely *creating* that allowlist arms the
+reclean for the ~2398 already-`archived` crawls that still carry a `storage/`
+subtree. The sweep is **already active today** (`ARCHIVED_RECLEAN_ENABLED=true` by default), held back only by the absent allowlist file — set it to `false` **before** creating the allowlist if you want to defer the deletion.
+Neither the status flip nor the `rmtree` has a reverse.
+
+Spec: `docs/superpowers/specs/2026-08-07-archived-status-repair-design.md`.
+Plan: `docs/superpowers/plans/2026-08-07-archived-status-repair.md`.
 
 ### Node side (crawler subprocess)
 
@@ -392,6 +471,8 @@ Client name: `crawler-node-{crawlId}`. Monitor attached as `'shared'`.
 - `CONFIG REWRITE` — persists to `redis.conf` so the setting survives restart.
 
 These complement the client-side keepalive — TCP-half-open conns left behind by SIGKILL'd Node processes are reaped automatically.
+
+Measured 2026-08-07 via `GET /admin/redis-debug`: `timeout=300`, `tcp-keepalive=300` (not the `60` the script sets — re-run `--apply-timeout` if the documented value is wanted). Crawler connections were observed idling at 264s and 276s, i.e. routinely within seconds of the reap line, and one replica's pool held 7 connection objects while Redis saw a single live connection under that replica's name. Keepalive cannot prevent the reap in any case: Redis's `timeout` counts command idleness (`lastinteraction`), not TCP packets. The reap is intended — the client-side retry above is what makes it harmless.
 
 ### Diagnostic tools
 
@@ -451,7 +532,272 @@ On HTTP 503, precedence for the retry wait time is **server `Retry-After` header
 
 Spec: `docs/superpowers/specs/2026-04-20-detection-langue-fr-concurrency-defense-design.md`.
 
-**Alternative-URL validation opt-out:** the homepage detect call (`routes.ts:473`, the crawler's only `mode:"complete"` call) sends `validateAlternatives: false` → POST body `validate_alternatives: false`. This stops the detection service from opening a browser to fetch/validate alternative-language URLs on the crawler's `html_content` calls (the OOM / `socket hang up` source). The crawler still receives parsed `alternative_urls` (hreflang prefixes) for Regional Path Exclusion. Internal-page detect calls use `mode:"simple"` and never trigger alt validation, so they need no flag.
+**Alternative-URL validation opt-out:** the homepage detect call (`routes.ts:627`, the crawler's only `mode:"complete"` call) sends `validateAlternatives: false` → POST body `validate_alternatives: false`. This stops the detection service from opening a browser to fetch/validate alternative-language URLs on the crawler's `html_content` calls (the OOM / `socket hang up` source). The crawler still receives parsed `alternative_urls` (hreflang prefixes) for Regional Path Exclusion. Internal-page detect calls use `mode:"simple"` and never trigger alt validation, so they need no flag.
+
+## Detection Verdict Unavailable ("no answer" ≠ "not French")
+
+A technical failure of the detection service is the **absence** of a verdict — a third state
+distinct from "French" (`isEnqueuingLinks`) and "not French" (the terminal `else`). Left to
+converge on the "not French" branch it became a business verdict.
+
+**The invariant, verbatim** (carried in the flag's own comment, `routes.ts:559-560`):
+
+> No technical failure may increment `filtered_nonfr`, write to `nfr-{domain}`, or call
+> `updateChecker.checkUrl`.
+
+**Why it exists:** BO reads `filtered_nonfr` as `isError='not_french'`, and in update mode
+`checkUrl(..., false)` answers `isEligible=false`, which claims `action:'deleted'` on a live
+French fiche. A detection outage during an update crawl was therefore emitting deletion
+claims against live French sites — the same class as **incident 1320-402** on the HTTP axis
+(63 anti-bot 403s → 59 false deletions), which is why `UpdateChecker.ts:174-192` lets only
+404/410 claim a deletion. That reasoning had never been extended to the detection axis.
+
+`let verdictUnavailable = false` (`routes.ts:570`) is set at **ten** sites: the three
+detection-API `catch` blocks (homepage, internal auto-detect, internal forced detect), the two
+unresolved-internal-challenge branches, the three `isTechnicalFailureMethod` gates (homepage
+`ok=false`, internal auto-detect `ok=false`, internal forced detect `ok=false`), and the two
+`ok=true`-but-unusable paths (empty `primaryMethod`, or a `manageFrenchDetectionMethod` write
+failure — `ok=true` *is* a French verdict, so sending it down the non-French branch is the
+same laundering with the verdict inverted). Its terminal branch (`:1269`) is an `else if`
+placed **before** the not-French `else`. What it still refuses is what the invariant forbids: no
+`filtered_nonfr`, no `nfr-{domain}` dataset row, no eligibility call. What it does do is log
+`[VERDICT_UNAVAILABLE]`, increment the `verdict_unavailable` counter (`:1298`, see below) and
+append both URL identities to the `__unjudged_urls.json` sidecar (`:1318`, `unjudgedUrls.ts`) so
+the BO's orphan pass can put the page back on the recrawled side — `__`-prefixed precisely so
+`_count_files_in_dir` skips it and `stored_files_count` is unaffected.
+
+Non-regression outranks the feature. A genuinely non-French site (`Check_nok_v2`) keeps its
+counter, its `nfr-` write and its update-mode `checkUrl(..., false)` — the terminal `else`
+body was not touched.
+
+### Exit 10 — an unjudged homepage is a failed crawl, not a finished one
+
+An initial crawl whose **homepage** got no verdict enqueues nothing and stores nothing, yet it
+used to ship the default exit 2: `_classify_exit_code(2)` answers `(None, None)`, status becomes
+`finished`, and the **success** webhook fires. The run reported finished having produced no data.
+The guard at `routes.ts:794` sets `stopReason = "detectionUnavailable"` + `fatalExitCode = 10` and
+calls the existing `stopCrawler`; `gracefulShutdown('COMPLETED', context.fatalExitCode ?? 2)`
+(`main.ts:1781`) propagates it.
+
+- **Exit 10 occurs exactly once in the tree**, structurally inside `if (isMainSite)`. The seven
+  internal-page sites live in the mutually exclusive `else` and cannot reach it — killing a crawl
+  because one internal page out of hundreds got no verdict would destroy the successful ones.
+  Internal pages are *counted*, not fatal.
+- **Initial crawls only.** The guard is `verdictUnavailable && !context.homepageReady`.
+  `context.homepageReady` is non-null only in update mode (assigned at exactly one place,
+  `main.ts:937`, inside `if (crawlMode === 'update')`), and it is *literally* the guard on the work
+  being protected: Phase-2 seeding (`main.ts:1526`) seeds the previous crawl's URLs on a 120s race
+  whether or not the homepage was judged. Update crawls therefore behave byte-for-byte as before.
+  The reason is not caution — the internal pages run their own detection path, so an unjudged
+  homepage does not condemn the run, and stopping there would require inferring a **global** outage
+  from one URL. That information does not exist: `DetectionLangueClient` has no consecutive-failure
+  counter, no circuit state and no health probe.
+- **No `return` after `stopCrawler`**, unlike the three neighbouring homepage branches and like the
+  proxy wall at `:426-430`. The fall-through is what still reaches the counter and the
+  `__unjudged_urls.json` record.
+- **The Python side did not switch this on.** `is_success` is an allowlist (see "Exit Codes"), so
+  exit 10 was already `failed` + failure webhook before `detection_unavailable` existed; the Python
+  branch only replaced the `unknown` label with a named cause. Reading the two commits in order
+  suggests otherwise.
+- **The BO-visible message is Python's, not Node's.** `_send_failure_webhook` builds its params from
+  scratch and never opens the payload file, so on exit 10 the BO receives `_classify_exit_code`'s
+  `Service de détection de langue indisponible` — not the `Détection indisponible : aucun verdict
+  linguistique (méthode : …)` that `routes.ts:730` wrote, nor the
+  `ERROR_MAP["detectionUnavailable"]` fallback (`main.ts:1151`). Those two survive only in
+  `_callback_payload.json` (readable via `/admin/sidecar`) and on the update-mode path, which still
+  exits 2 and still uses the success webhook.
+
+**BO reception (verified read-only in the Marketplace repo).** `detection_unavailable` fails both
+auto-retirement allowlists (`['proxy_blocked','domain_dead']` —
+`script_process_detect_fiche_produit.php:112`, `script_process_update_crawling.php:205`), fails the
+`domain_changed` alert branch, and lands in `handleCrawlFailure` + `launchEnqueueCrawler`, i.e. a
+**relaunch**. Retryable and non-terminal, which was the audit's precondition for emitting the code
+at all. It is absent from `crawl_failure_cause_label` (`fonctions_scrapping.php:8917`), so mails
+read "Erreur crawler (code 10)" — `proxy_blocked` and `domain_dead` are absent from that map too,
+so this joins an existing gap rather than opening one.
+
+### The `verdict_unavailable` counter — making the *partial* outage countable
+
+Exit 10 covers the total outage. The dangerous band is the **partial** one: enough pages judged
+that the dataset is non-empty and coverage stays above the BO's thresholds, the rest silently
+protected, on a run labelled healthy. The verdict-unavailable guard made that class harmless but
+not *detectable* — the only trace was a log line, so nobody could count it, which is how it
+survived. One increment at `routes.ts:1298` covers **all ten** sites (they converge on the terminal
+`else if`; every one of them leaves `isEnqueuingLinks` false, and the homepage exit-10 guard falls
+through instead of returning). It is read back at `main.ts:1264` and shipped in the payload as
+`verdict_unavailable`. All three links are load-bearing: an increment that never reaches the
+payload is inert, which is the exact failure mode this chantier exists to close. `statNameParity.test.ts`
+pins the two spellings against drift.
+
+Deliberately **not** `errors`: that counter feeds the BO health guard and the two deletion caps, so
+incrementing it here would re-arm brakes that block *all* destructive processing. Different
+decision, out of scope. And deliberately no `crawlErrorMessage`: it is one per-crawl slot, wins
+over everything at `main.ts:1229` and is truncated to 250 chars, so a per-page write would let the
+last unjudged internal page overwrite a graver, actionable cause.
+
+**Two properties that will be misread unless read here:**
+
+- **It counts handler passes, not distinct URLs.** An OOM relaunch resumes with the `stats:{id}`
+  Redis hash intact, so a re-handled page counts twice. `filtered_nonfr` behaves identically — the
+  new counter is consistent with the one BO already reads, but it is not a URL count.
+- **It travels on the SUCCESS webhook only.** `_send_failure_webhook` builds its params from scratch
+  and never opens `_callback_payload.json`, and exit 10 routes there. So on a *total* outage the
+  counter never reaches BO; that case carries `exit_code=10` + `failure_cause=detection_unavailable`
+  instead, which is strictly more actionable than a count of 1. The partial outage — the case the
+  counter exists for — exits 2 and does travel. Every other counter has the same property on a
+  failure webhook, so this is pre-existing rather than introduced here. But
+  **`verdict_unavailable=0` on a *failed* crawl must never be read as "no unjudged pages".**
+
+BO does not persist it yet: `verdict_unavailable` is absent from the `crawl_events` payload
+whitelist (`fonctions_scrapping.php:763-772`) and from the `crawl_metrics` column map
+(`fonctions_crawl_metrics.php:144`), so today it is visible only in the webhook query string and in
+`_callback_payload.json`. Widening either is a one-line BO MEP, not done here.
+
+### `isTechnicalFailureMethod` — the closed set
+
+`DetectionLangueClient.isTechnicalFailureMethod(method)` returns true when the method means
+"we got no verdict", false when it means "we judged the language". Closed set, with each
+member's reachability **on the crawler's own calls**:
+
+| Method | Reachable from the crawler? |
+|---|---|
+| `challenge_page` | Yes — the service's challenge classifier runs on *provided* html, ahead of the decision matrix. |
+| `error` | Yes — the service's generic exception handler answers HTTP 200 carrying this method. |
+| `fetch_empty_content` | Yes — returned in place of a negative verdict on a page with no visible text. |
+| `admission_rejected` | **No, not today.** The crawler always sends `html_content`, which bypasses the service's admission control. Present *defensively*: service saturation is never a property of the site, and a future change routing the crawler through admission would silently re-open the laundering with nobody re-reading the predicate. Do not read its presence here as evidence that production observes it. |
+
+The service's other technical methods (`soft_404`, `redirected_to_home`, `http_error`,
+`http_error_transient`, `fetch_failed`) are deliberately **absent**: they are produced only
+inside `if not html_was_provided`, so they cannot reach the crawler. Do not add them "just in
+case" — the set has to stay readable as the verifiable claim it is.
+
+**Composed methods resolve by membership after splitting on `+`, not by strict equality.**
+Every member is returned bare today, so both options behave identically now; the choice is
+about which way to be wrong when that stops being true, i.e. **error asymmetry**. A composed
+technical method read as a verdict re-opens the false `not_french` stamp and the deletion
+claim — silent and destructive. A composed verdict wrongly read as technical only costs crawl
+budget on a non-French site, is visible as a drop in `filtered_nonfr`, and claims no
+deletion. Split-membership errs on the recoverable side, and it matches `extractPrimaryMethod`,
+which already reads a part found *anywhere* in the split.
+
+### Two message channels, and one reserved string
+
+`filtered_nonfr` is not the only channel to BO. `context.crawlErrorMessage` is assigned
+**before** the guard, and BO's `not_french_signal.php` (`crawl_is_not_french`) matches one
+exact string **unconditionally, before any counter test** — so the counter guard alone still
+delivered a false `not_french`. Both channels have to close together:
+
+| Path | Message |
+|---|---|
+| Technical failure | `Détection indisponible : aucun verdict linguistique (méthode : …)` (`routes.ts:730`) |
+| Genuine linguistic verdict | `Page non détectée en Français` (`routes.ts:733`) — **reserved, byte for byte** |
+
+On an **initial** crawl the technical message no longer reaches BO at all: exit 10 routes the run
+to the failure webhook, whose `message_erreur_crawling` comes from `_classify_exit_code`. It still
+travels on the update-mode path (exempt from exit 10, success webhook). See § "Exit 10" above.
+
+**Anyone touching `"Page non détectée en Français"` must know the BO depends on it**: it is
+the only occurrence in code, and `crawl_is_not_french` returns true on that string alone. The
+technical message follows the three precedents already in this file — `Erreur HTTP …`
+(`:395`), the homepage-extraction failure (`:584`), `Site protégé par … (challenge non
+résolu)` (`:619`): French, cause first, no verdict.
+
+### `?lang=fr` propagation is now captured unconditionally
+
+The capture used to be gated on `primaryMethod === "pattern_match_query"`, which was **dead
+code**: `extractPrimaryMethod` prefers any HTML method found *anywhere* in the `+`-split, so
+`pattern_match_query+langHtml+nlp_confirmed` reduces to `langHtml` and the test was never
+true. `extractLanguageQueryParam(site)` is now called unconditionally in the `detectResult.ok`
+branch (`:662`); the helper self-guards, returning `null` unless the seed carries a
+`lang|locale|language|hl` whose value matches `/^fr/i`.
+
+**Consequence, accepted:** propagation now also fires when the verdict came from the TLD. The
+injection (`transformRequestFunction`, `:1152`) is additive and only-if-absent, so the blast
+radius is one extra query param on internal URLs — which **changes dedup keys**. The twin
+branch on the `checkUrl` path (`:754`) is left gated on purpose: `/check-url` returns bare
+tokens, so there the test is correct.
+
+### Our own injected param is exempt from the `?` machinery
+
+Injecting the param puts a `?` on **every** internal URL, `countQuestionMark` increments on
+any `?`, and `shouldStopForQuestionMark` (`functions.ts:907`) ends the crawl at 100 with
+`isError=limitQuestionMark`. Neither escape hatch defaults true (`bypassQuestionMark`,
+`skipQuestionMark` — `context.ts:41-43`, `main.ts:104-106`), so that stop is **live in the
+default configuration**: without the exemption, the propagation would have stopped early
+exactly the session-i18n crawls it was written to rescue.
+
+The fix is a **category** argument, not a workaround: that machinery detects faceted-navigation
+explosions — an unbounded parameter space *the site* generates. A parameter the crawler itself
+added is not a facet. `DetectionLangueClient.stripInjectedLanguageParam(url, param)` removes
+the exact key+value pair (and drops the `?` when the query empties), and one derived `facetUrl`
+(`routes.ts:981`) feeds all five consumers that measure the site's parameter space:
+
+1. `trackQmHashStatsForUrl` — the `filtered_qm` / `filtered_hash` stats mirror
+2. `context.countQuestionMark++` — the counter behind the 100 stop
+3. `recordVariant` — the facet-variant cap
+4. `recordQuestionMarkObservation` — the tier-1 observer
+5. `recordQmTier2Sample` — the tier-2 sampler
+
+Exact key **and** value match, so a site's own `?lang=de` still counts as the site's.
+
+**Two call sites deliberately keep the original `url`:**
+
+- the `#` block (`:1011`) — stripping a query cannot change a fragment;
+- `context.seenBases.add(baseKeyAbsent(url))` (`:1060`) — **load-bearing.** `isFilterParam`
+  computes its keys from the real `request.url`, which *does* carry the injected param, so
+  stripping only the oracle side would break the key match and silently weaken the filter.
+
+**Known limitation, recorded rather than plumbed around:** with an exact key+value strip, a
+site's own `?lang=fr` is byte-identical to ours and cannot be told apart without per-request
+provenance, so the seed page is exempted too. The cost is that page only —
+`context.languageQueryParam` is assigned before the counter block, so the homepage's own param
+is stripped on its own pass. One URL out of a ~100 budget, on the page that motivated the
+injection. Provenance plumbing was judged not worth it.
+
+### `lang` can no longer be elected for removal — CLOSED (2026-08-17)
+
+`candidateParams()` used to filter only on `decided` / `toRemove` / `toKeep` — **no language
+allowlist**. Sorted by descending frequency, `lang` could become the top tier-2 candidate, and a
+same-majority verdict committed it to `toRemove` via `commitToRemoveParam`, which also
+**rewrites the queue** — undoing the propagation mid-crawl. `facetUrl` reduced the exposure (the
+`lang=fr` *we* inject no longer enters `paramFrequency`) without closing it: pages carrying the
+site's own `?lang=de` still put `lang` there.
+
+`LANGUAGE_PARAMS` (`urlBase.ts`) is now the single definition of the four keys — `lang`,
+`locale`, `language`, `hl` — with **three** consumers: `extractLanguageQueryParam` (which elects
+them), `candidateParams()` (which now excludes them, case-insensitively) and
+`readQmPersistedDecision`.
+
+Two guards, because there are two paths, and the second is **not** the one you would guess:
+
+1. **`candidateParams()`** — closes tier-2 sampling. `commitToRemoveParam` deliberately has **no
+   guard of its own**: its only caller (`routes.ts:1004`) passes only keys of
+   `context.qmTier2.tally`, and the tally is only keyed by `candidateParams()` and never
+   rehydrated from disk, so a guard there could not fire. Untestable dead code, not defence.
+2. **`readQmPersistedDecision`** — this is where "a committed `lang` survives the OOM relaunch"
+   actually lands. That merge is **not gated by `QM_TIER2_ENABLED`** and runs at `main.ts:214`,
+   before the homepage is re-detected, so a `lang` written by an older build would be re-injected
+   into `toRemove` with the propagation switched off. A human `--toremove lang` is unaffected.
+
+**Inert with the flag off**, and the two halves are inert for *different* reasons: guard 1 sits
+behind the sole gate at `routes.ts:995`, so it is unreachable code; guard 2 sits on an ungated
+path, but its only input is `addedToRemove`, whose sole writer is `commitToRemoveParam`
+(`questionMarkTier2.ts:171`) inside that same gate — so with the flag never on, the list is
+always empty and the guard never fires.
+
+**Not** `MEANINGFUL_OPTIONAL_PARAMS` (`filterOnSeen.ts:10`): it serves a different filter, omits
+`locale` and `language` (two of the four keys), and carries `devise`/`currency`/`region`.
+And **not** next to `extractLanguageQueryParam`: `DetectionLangueClient` imports `p-limit@5`,
+which is ESM-only, while `questionMarkTier2` and `questionMarkDecision` are loaded through
+`createRequire` (CJS) by their siblings — that import fails with `ERR_INVALID_URL_SCHEME` (it
+broke `default at ceiling` when first tried). `urlBase.ts` is dependency-free, which is what
+makes it importable from both worlds.
+
+Spec: `docs/superpowers/specs/2026-08-14-crawler-detection-verdict-unavailable-design.md`.
+Plan: `docs/superpowers/plans/2026-08-14-crawler-detection-verdict-unavailable.md`.
+Spec (exit 10 + the counter): `docs/superpowers/specs/2026-08-14-crawler-detection-outage-visible-design.md`.
+Plan (exit 10 + the counter): `docs/superpowers/plans/2026-08-14-crawler-detection-outage-visible.md`.
+Audit (findings A and B): `docs/superpowers/references/2026-07-29-crawler-detection-seam-audit.md`.
 
 ## Detection Backpressure (Auto-Adjusting Concurrency + Handler-Timeout Alignment)
 
@@ -604,6 +950,8 @@ Spec: `docs/superpowers/specs/2026-06-12-limitdiez-phase2-zero-touch` (Hellopro 
 ## Phase-2 limitQuestionMark (zero-touch)
 
 Auto-resolves domain-specific `?`-params per-parameter and never escalates `limitQuestionMark` to a human. On top of the shipped Tier-1 observer, a Tier-2 engine buffers each `?`-page's content, groups by "URL with param `p` removed", and when two members differ in `p` (value-vs-value, or value-vs-absent) it cleans both via the content-extractor `/clean` and compares (Jaccard). A param is committed to `toRemove` ONLY on same-majority (compared≥3, same/compared≥0.8) — the single destructive action; different-majority is ruled content-shaping and kept.
+
+**What the machinery observes is NOT `url`.** Since 2026-08-14 the counter, the tier-1 observer and the tier-2 sampler all read `facetUrl` — the page URL minus the language query param *we* injected. See "Detection Verdict Unavailable" § "Our own injected param is exempt from the `?` machinery", followed by § "`lang` can no longer be elected for removal" — that risk was closed on 2026-08-17, so `QM_TIER2_ENABLED` is no longer blocked on it.
 
 **How it works:**
 - The engine buffers one `{param_value, content}` entry per (base-URL, param) pair; when a 2nd distinct value of that param arrives for the same base, it cleans both pages via `/clean` (text mode) and classifies the pair as same/different/unusable. `/clean` failures or empty results count as unusable (no false vote).

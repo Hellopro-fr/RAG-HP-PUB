@@ -131,6 +131,50 @@ def _generate_url_variants(url: str) -> List[str]:
     return list(variants)
 
 
+async def _check_domain_header_footer(guard, collection: Collection, domain: str) -> Dict[str, bool]:
+    """
+    Vérifie la présence d'un header et d'un footer POUR LE DOMAINE.
+
+    C'est une propriété du domaine, et elle doit être interrogée comme telle.
+    Auparavant `has_header`/`has_footer` sortaient en effet de bord de la requête
+    par URL de `_check_urls_batch` : ils n'étaient vrais que si l'URL exacte
+    portant l'enregistrement figurait dans la liste vérifiée. Or l'ingestion
+    attache le header/footer à une page quelconque du site — mesuré le
+    2026-08-10 : les deux enregistrements de `ld-packaging.fr` vivent sur
+    `/emballage-boites-carton-sur-mesure/`, celui de `cables-acier.fr` sur
+    `/conditions-generales-de-vente`. Un domaine dont cette page n'était pas
+    dans le lot était donc déclaré sans header/footer alors qu'il en avait,
+    ce qui bloquait son archivage indéfiniment côté BO.
+
+    `domaine` est un champ scalaire filtrable de `siteweb_2`, et le BO envoie un
+    domaine nu : mesuré sur les 4588 domaines `est_migre_rag = 1`, aucun ne porte
+    `www.`, ni schéma, ni slash — les deux formats concordent, aucune
+    normalisation n'est nécessaire.
+
+    Volontairement SANS filtre `chunk_number == 1` : il sert à dédupliquer un
+    comptage d'URLs, pas à tester une existence, et rien ne garantit que les
+    enregistrements header/footer le portent — l'ajouter risquerait de filtrer
+    précisément ce qu'on cherche, en silence.
+    """
+    domain_escaped = domain.replace("\\", "\\\\").replace("'", "\\'")
+    expr = (f"domaine == '{domain_escaped}' "
+            f"and {FILTER_FIELD_NAME} in ['header', 'footer']")
+
+    async with guard.slot():
+        results = await asyncio.to_thread(
+            collection.query,
+            expr=expr,
+            output_fields=[FILTER_FIELD_NAME],
+            consistency_level="Strong"
+        )
+
+    page_types = {entity.get(FILTER_FIELD_NAME, "") for entity in results}
+    return {
+        "has_header": 'header' in page_types,
+        "has_footer": 'footer' in page_types,
+    }
+
+
 async def _check_urls_batch(guard, collection: Collection, urls_to_check: List[str]) -> Dict:
     """
     Vérifie une liste d'URLs dans Milvus avec tolérance de normalisation.
@@ -138,17 +182,19 @@ async def _check_urls_batch(guard, collection: Collection, urls_to_check: List[s
     Chaque URL est étendue en plusieurs variantes (slash/www) pour retrouver
     les entrées présentes sous une forme légèrement différente.
 
+    Les entrées header/footer restent exclues du comptage des URLs trouvées,
+    mais cette fonction ne rapporte PLUS leur présence : c'est une propriété du
+    domaine, servie par `_check_domain_header_footer`. Rendre ici un booléen
+    calculé sur un périmètre d'URLs invitait à le lire comme un verdict sur le
+    domaine — c'était le bug.
+
     Retourne:
     - found_urls: Set[str] - URLs originales trouvées (hors header/footer)
     - found_urls_page_type: Dict[str, str] - mapping URL originale → page_type
-    - has_header: bool
-    - has_footer: bool
     """
     found_urls: Set[str] = set()
     found_urls_page_type: Dict[str, str] = {}
     found_urls_exact: Dict[str, bool] = {}
-    has_header = False
-    has_footer = False
 
     # Mapping variante → URLs originales qui ont généré cette variante
     variant_to_originals: Dict[str, Set[str]] = {}
@@ -186,11 +232,6 @@ async def _check_urls_batch(guard, collection: Collection, urls_to_check: List[s
                 url_found = entity[URL_FIELD_NAME]
                 page_type = entity.get(FILTER_FIELD_NAME, "")
 
-                if page_type == 'header':
-                    has_header = True
-                elif page_type == 'footer':
-                    has_footer = True
-
                 # On considère trouvé si ce n'est pas header/footer.
                 # L'URL trouvée peut être une variante : on marque comme trouvées
                 # toutes les URLs originales qui ont généré cette variante.
@@ -216,8 +257,6 @@ async def _check_urls_batch(guard, collection: Collection, urls_to_check: List[s
     return {
         "found_urls": found_urls,
         "found_urls_page_type": found_urls_page_type,
-        "has_header": has_header,
-        "has_footer": has_footer
     }
 
 
@@ -290,9 +329,13 @@ async def check_urls_existence(http_request: Request, request: CheckUrlsRequest)
         if not urls:
             missing_urls_by_domain[domain] = []
             if request.report_header_footer:
+                # Même sans URL à vérifier, la présence d'un header/footer reste
+                # une propriété du domaine : la renvoyer en dur à False était le
+                # même faux-négatif que celui corrigé plus bas.
+                hf = await _check_domain_header_footer(guard, collection, domain)
                 header_footer_status[domain] = HeaderFooterStatus(
-                    has_header=False,
-                    has_footer=False
+                    has_header=hf["has_header"],
+                    has_footer=hf["has_footer"]
                 )
             continue
 
@@ -313,9 +356,15 @@ async def check_urls_existence(http_request: Request, request: CheckUrlsRequest)
             total_found += len(found_urls)
 
             if request.report_header_footer:
+                # Requête distincte, scopée au domaine : le header/footer d'un
+                # site est attaché à une page arbitraire, donc il ne peut pas
+                # être déduit du lot d'URLs vérifié (voir
+                # _check_domain_header_footer). Une requête de plus par domaine,
+                # et seulement quand le rapport est demandé.
+                hf = await _check_domain_header_footer(guard, collection, domain)
                 header_footer_status[domain] = HeaderFooterStatus(
-                    has_header=result["has_header"],
-                    has_footer=result["has_footer"]
+                    has_header=hf["has_header"],
+                    has_footer=hf["has_footer"]
                 )
 
             # Agréger found_urls_page_type par domaine

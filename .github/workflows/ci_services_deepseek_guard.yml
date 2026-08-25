@@ -1,0 +1,94 @@
+name: ci services deepseek guard
+
+# Runs the pytest suites of the four services that carry the DeepSeek off-peak guard:
+# QC-caracterisation, QC-fabricant-reference, template-llm-service and
+# nettoyage-bruit-ocr-service.
+#
+# WHY THIS EXISTS: this repo has no Python CI (see ci_libs_common_utils.yml for the
+# full reasoning). The guard suspends consumption during DeepSeek's peak-price windows,
+# so the failure mode it must never have is a service that stops consuming and never
+# resumes — silent, with nothing in the DLQ. That is exactly what the integration test
+# proves, and it needs a real broker.
+#
+# The broker below is a throwaway RabbitMQ service container, so the integration tests
+# actually RUN instead of being skipped for ever. Note that `services:` has no
+# precedent in this repo (zero occurrences as of 20-08-2026) — it is standard GitHub
+# Actions, but it is new here, which is one more reason this workflow starts disarmed.
+
+on:
+  # ENFORCEMENT IS STAGED OFF FOR NOW — see ci_libs_common_utils.yml for why.
+  #
+  # TO FULLY ACTIVATE:
+  #   1. Run it manually once from the Actions tab and read the result.
+  #   2. Uncomment the `pull_request` + `push` blocks below.
+  #   3. Commit on main / features/poc.
+  workflow_dispatch:
+
+  # --- ACTIVATE BY UNCOMMENTING BELOW ONCE THE TEAM AGREES ---
+  # pull_request:
+  #   branches:
+  #     - main
+  #     - features/poc
+  #   paths:
+  #     - 'apps-microservices/QC-caracterisation/**'
+  #     - 'apps-microservices/QC-fabricant-reference/**'
+  #     - 'apps-microservices/template-llm-service/**'
+  #     - 'apps-microservices/nettoyage-bruit-ocr-service/**'
+  #     - 'libs/common-utils/src/common_utils/autres/fenetre_tarifaire.py'
+  # push:
+  #   branches:
+  #     - main
+  #     - features/poc
+  #   paths:
+  #     - 'apps-microservices/QC-caracterisation/**'
+  #     - 'apps-microservices/QC-fabricant-reference/**'
+  #     - 'apps-microservices/template-llm-service/**'
+  #     - 'apps-microservices/nettoyage-bruit-ocr-service/**'
+  #     - 'libs/common-utils/src/common_utils/autres/fenetre_tarifaire.py'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      rabbitmq:
+        # Same major version as the production broker (rbmq2 runs 3.13.7; 3.12 is what
+        # the guard was validated against locally on 20-08-2026).
+        image: rabbitmq:3.12-management
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # Presence of this variable is what un-skips the integration tests. It is
+      # deliberately a DEDICATED name, never the real RABBITMQ_URL.
+      RABBITMQ_URL_TEST: amqp://guest:guest@localhost:5672/
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # Matches the service images.
+          python-version: '3.10'
+
+      - name: Install test tooling
+        run: |
+          python -m pip install --upgrade pip
+          # aio-pika PINNED to the version actually deployed on the VM (checked
+          # 18-08-2026). requirements.txt only says ">=9.0.0", and the guard depends on
+          # QueueIterator._on_close doing basic_cancel then nack(requeue=True) — pinning
+          # is what makes this test meaningful.
+          python -m pip install pytest "aio-pika==9.6.2"
+
+      - name: Run every suite, one verdict
+        # This script also skips the integration tests cleanly when no broker is
+        # available, so it is the same command developers run locally.
+        run: bash scripts/test_garde_deepseek.sh

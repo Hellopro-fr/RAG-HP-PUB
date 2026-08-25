@@ -41,10 +41,27 @@ INFLIGHT_REQUESTS = Gauge(
     "Current concurrent admitted requests",
 )
 
-# Queue depth on the Playwright browser semaphore.
-BROWSER_SEMAPHORE_WAITERS = Gauge(
-    "detect_browser_semaphore_waiters",
-    "Number of coroutines waiting on the browser semaphore",
+# Browser teardowns ABANDONED after TEARDOWN_TIMEOUT_S (`_close_or_abandon`,
+# app/services/scraper.py). `op` is the teardown operation family derived from
+# the call site's `what` string — unroute_all / context.close / browser.close /
+# playwright.stop — deliberately WITHOUT the URL, which would be unbounded
+# cardinality. Before this counter the only trace of an abandon was one WARNING
+# line, so its real frequency was unknowable.
+TEARDOWN_ABANDONED = Counter(
+    "detect_teardown_abandoned_total",
+    "Browser teardown coroutines abandoned after the teardown timeout",
+    labelnames=("op",),
+)
+
+# Browsers launched whose close() has not returned: in-flight scrapes, plus the
+# ones whose teardown was abandoned or skipped (browser.is_connected() already
+# false, so close() is never attempted). NOT a process count — this service has
+# no process bookkeeping at all, so "the browser exited" is only ever inferred
+# from close() returning. Sustained values above BROWSER_SEMAPHORE_SIZE mean
+# browsers are accumulating faster than their teardowns settle.
+BROWSERS_UNCLOSED = Gauge(
+    "detect_browsers_unclosed",
+    "Browsers launched whose close() has not returned (in-flight + abandoned/skipped teardowns)",
 )
 
 # Page-validation outcomes (after fetch, before DomainFR).
@@ -102,4 +119,27 @@ ASYNC_JOB_CAPACITY_REJECTED = Counter(
 ORPHANED_PROTOCOL_FUTURES = Counter(
     "detection_orphaned_protocol_futures_total",
     "Orphaned Playwright protocol callbacks drained by the loop exception handler",
+)
+
+# Issues du rattrapage par variante d'URL sur verdict inexploitable.
+# Valeurs de `outcome` : success, budget_exhausted, no_variant_french.
+# Sert notamment à réviser le défaut de VARIANT_RESCUE_BUDGET_S, qui est une
+# estimation non mesurée.
+VARIANT_RESCUE_OUTCOME = Counter(
+    "detection_variant_rescue_total",
+    "Outcomes of the URL-variant rescue attempted on an unusable verdict",
+    labelnames=("outcome",),
+)
+
+# Batch Pass 2 sequential retries skipped because the remaining async-job
+# budget (JOB_MAX_S, checked via _run_batch_core's deadline_monotonic) could
+# not fit a full _ITEM_WALL_CLOCK_S retry (2026-08-13 incident: Pass 2 blowing
+# past JOB_MAX_S made the worker watchdog discard the WHOLE chunk, including
+# already-succeeded Pass 1 items). Dedicated counter rather than a new
+# VARIANT_RESCUE_OUTCOME label: different mechanism (job-level budget vs.
+# per-item rescue probes) — without it an operator can't tell "nothing left
+# to retry" from "ran out of time to retry".
+PASS2_RETRY_SKIPPED_BUDGET = Counter(
+    "detection_batch_pass2_retry_skipped_total",
+    "Batch Pass 2 sequential retries skipped for lack of remaining job budget",
 )
