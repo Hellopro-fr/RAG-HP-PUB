@@ -71,7 +71,7 @@ export function CoordinatesStep({
   lead: GuideLead;
   /** Préfixe des `id`/`name` (évite toute collision entre les 2 points d'entrée). */
   idPrefix: string;
-  /** Emplacement d'origine — dimension `entry_point` du tracking. */
+  /** Emplacement d'origine — dimension `hub_entry_point` du tracking. */
   entryPoint: HubEntryPoint;
   onBack?: () => void;
 }) {
@@ -93,7 +93,7 @@ export function CoordinatesStep({
           if (!lead.coordinatesValid || lead.submitting) return;
           pushHubEvent('hub_form_coordinates_submit', 'guide', {
             form_id: 'guide',
-            entry_point: entryPoint,
+            hub_entry_point: entryPoint,
           });
           void lead.send(true);
         }}
@@ -235,8 +235,8 @@ export function DownloadStep({
   useEffect(() => {
     pushHubEvent('hub_guide_download', group, {
       download_trigger: 'auto',
-      entry_point: entryPoint,
-      lead_path: leadPath,
+      hub_entry_point: entryPoint,
+      hub_lead_path: leadPath,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -277,8 +277,8 @@ export function DownloadStep({
         onClick={() =>
           pushHubEvent('hub_guide_download', group, {
             download_trigger: 'manual',
-            entry_point: entryPoint,
-            lead_path: leadPath,
+            hub_entry_point: entryPoint,
+            hub_lead_path: leadPath,
           })
         }
         className="mt-6 inline-flex h-10 items-center justify-center gap-2 rounded-lg px-4 text-sm font-medium text-muted-foreground transition hover:text-cta"

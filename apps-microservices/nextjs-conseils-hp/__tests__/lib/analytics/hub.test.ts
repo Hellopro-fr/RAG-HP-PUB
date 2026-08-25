@@ -129,17 +129,50 @@ describe('pushHubEvent — nettoyage des paramètres', () => {
 
   it('transmet les paramètres métier sans les renommer', () => {
     pushHubEvent('hub_form_submission', 'guide', {
-      lead_path: 'reconnu',
+      hub_lead_path: 'reconnu',
       user_known_status: 'Known',
       id_page_hub: 2000,
-      entry_point: 'popup_scroll',
+      hub_entry_point: 'popup_scroll',
     });
     expect(dl()[0]).toMatchObject({
-      lead_path: 'reconnu',
+      hub_lead_path: 'reconnu',
       user_known_status: 'Known',
       id_page_hub: 2000,
-      entry_point: 'popup_scroll',
+      hub_entry_point: 'popup_scroll',
     });
+  });
+
+  /**
+   * Convention de nommage arbitrée le 2026-08-24 : le préfixe `hub_` distingue
+   * les paramètres PROPRES au HUB (dimension GA4 dédiée) de ceux DÉLIBÉRÉMENT
+   * partagés avec le funnel devis historique (dimension commune créée en 2022).
+   *
+   * GA4 fait une correspondance STRICTE sur le nom : préfixer un paramètre
+   * partagé le détacherait de sa dimension, dé-préfixer un paramètre HUB le
+   * verserait dans un rapport qui ne l'attend pas. Aucun des deux ne produit
+   * d'erreur — d'où ce test.
+   */
+  it('respecte la convention de préfixe hub_', () => {
+    const DEDIES = ['hub_entry_point', 'hub_lead_path'];
+    const PARTAGES = ['step_name', 'step_index', 'user_known_status'];
+
+    pushHubEvent('hub_form_submission', 'guide', {
+      hub_entry_point: 'popup_scroll',
+      hub_lead_path: 'complet',
+      step_name: '1ere-question',
+      step_index: 0,
+      user_known_status: 'Known',
+    });
+
+    const pousse = dl()[0];
+    for (const cle of DEDIES) {
+      expect(pousse, `${cle} manquant`).toHaveProperty(cle);
+      expect(pousse[cle.replace(/^hub_/, '')], `${cle} pousse AUSSI sa version non préfixée`).toBeUndefined();
+    }
+    for (const cle of PARTAGES) {
+      expect(pousse, `${cle} manquant`).toHaveProperty(cle);
+      expect(pousse[`hub_${cle}`], `${cle} ne doit PAS être préfixé`).toBeUndefined();
+    }
   });
 });
 

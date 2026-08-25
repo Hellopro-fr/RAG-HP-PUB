@@ -70,10 +70,26 @@ export type HubEntryPoint =
  *
  * `answer_label` est admis : les réponses au questionnaire sont des choix FERMÉS
  * définis dans `data/hub/`, pas de la saisie libre.
+ *
+ * ⚠️ CONVENTION DE NOMMAGE (arbitrée le 2026-08-24, avec l'équipe analytics).
+ * Le préfixe n'est pas cosmétique, il dit à quel seau GA4 la valeur appartient :
+ *
+ *  - **préfixe `hub_`** → paramètre PROPRE au HUB. Sa dimension GA4 lui est
+ *    dédiée (`hub_group`, `hub_entry_point`, `hub_lead_path`).
+ *  - **sans préfixe** → paramètre DÉLIBÉRÉMENT partagé avec le funnel devis
+ *    historique, dont la dimension GA4 existe depuis 2022 : `step_name`,
+ *    `step_index`, `user_known_status`. Les valeurs se mélangent dans la même
+ *    dimension, et c'est voulu — un seul rapport couvre les deux périmètres.
+ *
+ * Ne pas préfixer un paramètre partagé (il cesserait d'alimenter sa dimension),
+ * ne pas dé-préfixer un paramètre HUB (il polluerait un rapport existant).
+ * GA4 fait une correspondance STRICTE sur le nom : une divergence ne produit
+ * aucune erreur, seulement une dimension éternellement vide.
  */
 export interface HubEventParams {
   form_id?: 'assistant' | 'guide';
-  entry_point?: HubEntryPoint;
+  /** Dimension GA4 dédiée `hub_entry_point` — cf. convention ci-dessus. */
+  hub_entry_point?: HubEntryPoint;
   /**
    * Position de l'étape en libellé GÉNÉRIQUE : `1ere-question`, `2eme-question`…
    * (plus `email` et `coordinates`). Voir `questionStepName`.
@@ -97,8 +113,10 @@ export interface HubEventParams {
    * ambiguë, et un nom de dimension est figé dès son enregistrement.
    */
   email_check_result?: 'known' | 'unknown';
+  /** Sans préfixe : dimension PARTAGÉE avec le funnel devis (créée en 2022). */
   user_known_status?: 'Known' | 'Unknown';
-  lead_path?: 'complet' | 'reconnu' | 'deja_converti';
+  /** Dimension GA4 dédiée `hub_lead_path` — cf. convention ci-dessus. */
+  hub_lead_path?: 'complet' | 'reconnu' | 'deja_converti';
   steps_answered?: number;
   last_step_name?: string;
   last_step_index?: number;
@@ -123,7 +141,7 @@ export interface HubEventParams {
  */
 const HUB_PARAM_KEYS = Object.keys({
   form_id: 0,
-  entry_point: 0,
+  hub_entry_point: 0,
   step_name: 0,
   step_id: 0,
   step_index: 0,
@@ -131,7 +149,7 @@ const HUB_PARAM_KEYS = Object.keys({
   answer_label: 0,
   email_check_result: 0,
   user_known_status: 0,
-  lead_path: 0,
+  hub_lead_path: 0,
   steps_answered: 0,
   last_step_name: 0,
   last_step_index: 0,

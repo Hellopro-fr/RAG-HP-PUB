@@ -719,7 +719,7 @@ l'inventaire exhaustif des points de mesure ; un `dataLayer.push` éparpillé, n
 d'`id_page_hub`, cf. `lib/hub/leadEmailCookie.ts`) :
 `GuideDownloadDialog` va directement à l'écran de téléchargement, **sans formulaire
 et sans appel API**. Ce parcours émet `hub_guide_shortcut` puis `hub_guide_download`
-(`lead_path: 'deja_converti'`) — et surtout **ni `hub_form_view`, ni `hub_email_check`,
+(`hub_lead_path: 'deja_converti'`) — et surtout **ni `hub_form_view`, ni `hub_email_check`,
 ni `hub_form_submission`** : un re-téléchargement n'est pas une conversion, et une
 vue de formulaire jamais présenté écraserait le taux du tunnel guide.
 

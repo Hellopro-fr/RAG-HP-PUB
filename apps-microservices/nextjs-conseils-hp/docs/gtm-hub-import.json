@@ -31,10 +31,10 @@
         { "type": "INTEGER", "key": "dataLayerVersion", "value": "2" },
         { "type": "BOOLEAN", "key": "setDefaultValue", "value": "false" },
         { "type": "TEMPLATE", "key": "name", "value": "form_id" } ] },
-      { "name": "DL - entry_point", "type": "v", "parameter": [
+      { "name": "DL - hub_entry_point", "type": "v", "parameter": [
         { "type": "INTEGER", "key": "dataLayerVersion", "value": "2" },
         { "type": "BOOLEAN", "key": "setDefaultValue", "value": "false" },
-        { "type": "TEMPLATE", "key": "name", "value": "entry_point" } ] },
+        { "type": "TEMPLATE", "key": "name", "value": "hub_entry_point" } ] },
       { "name": "DL - step_name", "type": "v", "parameter": [
         { "type": "INTEGER", "key": "dataLayerVersion", "value": "2" },
         { "type": "BOOLEAN", "key": "setDefaultValue", "value": "false" },
@@ -63,10 +63,10 @@
         { "type": "INTEGER", "key": "dataLayerVersion", "value": "2" },
         { "type": "BOOLEAN", "key": "setDefaultValue", "value": "false" },
         { "type": "TEMPLATE", "key": "name", "value": "user_known_status" } ] },
-      { "name": "DL - lead_path", "type": "v", "parameter": [
+      { "name": "DL - hub_lead_path", "type": "v", "parameter": [
         { "type": "INTEGER", "key": "dataLayerVersion", "value": "2" },
         { "type": "BOOLEAN", "key": "setDefaultValue", "value": "false" },
-        { "type": "TEMPLATE", "key": "name", "value": "lead_path" } ] },
+        { "type": "TEMPLATE", "key": "name", "value": "hub_lead_path" } ] },
       { "name": "DL - steps_answered", "type": "v", "parameter": [
         { "type": "INTEGER", "key": "dataLayerVersion", "value": "2" },
         { "type": "BOOLEAN", "key": "setDefaultValue", "value": "false" },
@@ -158,8 +158,8 @@
                 { "type": "TEMPLATE", "key": "parameter", "value": "form_id" },
                 { "type": "TEMPLATE", "key": "parameterValue", "value": "{{DL - form_id}}" } ] },
               { "type": "MAP", "map": [
-                { "type": "TEMPLATE", "key": "parameter", "value": "entry_point" },
-                { "type": "TEMPLATE", "key": "parameterValue", "value": "{{DL - entry_point}}" } ] },
+                { "type": "TEMPLATE", "key": "parameter", "value": "hub_entry_point" },
+                { "type": "TEMPLATE", "key": "parameterValue", "value": "{{DL - hub_entry_point}}" } ] },
               { "type": "MAP", "map": [
                 { "type": "TEMPLATE", "key": "parameter", "value": "step_name" },
                 { "type": "TEMPLATE", "key": "parameterValue", "value": "{{DL - step_name}}" } ] },
@@ -182,8 +182,8 @@
                 { "type": "TEMPLATE", "key": "parameter", "value": "user_known_status" },
                 { "type": "TEMPLATE", "key": "parameterValue", "value": "{{DL - user_known_status}}" } ] },
               { "type": "MAP", "map": [
-                { "type": "TEMPLATE", "key": "parameter", "value": "lead_path" },
-                { "type": "TEMPLATE", "key": "parameterValue", "value": "{{DL - lead_path}}" } ] },
+                { "type": "TEMPLATE", "key": "parameter", "value": "hub_lead_path" },
+                { "type": "TEMPLATE", "key": "parameterValue", "value": "{{DL - hub_lead_path}}" } ] },
               { "type": "MAP", "map": [
                 { "type": "TEMPLATE", "key": "parameter", "value": "steps_answered" },
                 { "type": "TEMPLATE", "key": "parameterValue", "value": "{{DL - steps_answered}}" } ] },

@@ -40,7 +40,7 @@ export function openGuideDialog(entryPoint: HubEntryPoint = DEFAULT_GUIDE_ENTRY_
  * Centralisé ici parce que DEUX écouteurs le lisent : celui de `HubOverlays` (qui
  * arme le montage paresseux) et celui du dialog lui-même. La forme du `detail`
  * doit rester décrite à un seul endroit, sinon l'un des deux dérive en silence et
- * la dimension `entry_point` devient fausse sans que rien ne le signale.
+ * la dimension `hub_entry_point` devient fausse sans que rien ne le signale.
  */
 export function readGuideEntryPoint(event?: Event): HubEntryPoint {
   const detail = (event as CustomEvent<{ entryPoint?: HubEntryPoint }> | undefined)?.detail;

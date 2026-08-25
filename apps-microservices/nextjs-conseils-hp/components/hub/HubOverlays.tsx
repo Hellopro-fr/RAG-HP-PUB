@@ -66,7 +66,7 @@ export function HubOverlays({
    *
    * Il doit être capté ICI : le chunk du dialog se charge en async, son propre
    * écouteur n'existe pas encore et manque donc l'événement d'origine. Sans cette
-   * capture, le rejeu au montage perdrait `entry_point` et attribuerait au
+   * capture, le rejeu au montage perdrait `hub_entry_point` et attribuerait au
    * bandeau le premier clic de chaque visiteur — la majorité des ouvertures.
    */
   const [guideEntryPoint, setGuideEntryPoint] =

@@ -227,7 +227,7 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
         pushHubEvent('hub_form_submission', 'projet', {
           form_id: 'assistant',
           id_page_hub: idPageHub,
-          lead_path: withCoordinates ? 'complet' : 'reconnu',
+          hub_lead_path: withCoordinates ? 'complet' : 'reconnu',
           user_known_status: withCoordinates ? 'Unknown' : 'Known',
           steps_answered: answeredCount(),
         });
@@ -302,7 +302,7 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
         observer.disconnect();
         pushHubEventOnce(`form_view:${idPageHub}`, 'hub_form_view', 'projet', {
           form_id: 'assistant',
-          entry_point: 'hero',
+          hub_entry_point: 'hero',
           step_name: questionStepName(0),
           step_id: data.steps[0]?.id,
           step_index: 0,

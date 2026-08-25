@@ -57,7 +57,7 @@ export function GuideDownloadDialog({
    * Emplacement du CTA à rejouer avec `autoOpenOnMount`.
    *
    * ⚠️ INDISPENSABLE au montage paresseux. Le rejeu appelle le handler SANS
-   * événement : sans cette prop, `entry_point` retomberait sur la valeur par
+   * événement : sans cette prop, `hub_entry_point` retomberait sur la valeur par
    * défaut et le PREMIER clic guide de chaque visiteur — donc la majorité des
    * ouvertures — serait attribué au bandeau, quel que soit le CTA réellement
    * cliqué. Erreur invisible : la dimension serait remplie, simplement fausse.
@@ -74,7 +74,7 @@ export function GuideDownloadDialog({
 }) {
   const [open, setOpen] = useState(false);
   const [emailError, setEmailError] = useState('');
-  // Emplacement du CTA qui a ouvert le dialog — dimension `entry_point`.
+  // Emplacement du CTA qui a ouvert le dialog — dimension `hub_entry_point`.
   const [entryPoint, setEntryPoint] = useState<HubEntryPoint>('banner_guide');
   // Visiteur déjà converti (cookie posé) : re-téléchargement, pas une conversion.
   const [alreadyConverted, setAlreadyConverted] = useState(false);
@@ -111,14 +111,14 @@ export function GuideDownloadDialog({
         // vues sans suite possible et écraserait son taux de conversion.
         pushHubEvent('hub_guide_shortcut', 'guide', {
           form_id: 'guide',
-          entry_point: from,
-          lead_path: 'deja_converti',
+          hub_entry_point: from,
+          hub_lead_path: 'deja_converti',
         });
       } else {
         setAlreadyConverted(false);
         pushHubEvent('hub_form_view', 'guide', {
           form_id: 'guide',
-          entry_point: from,
+          hub_entry_point: from,
           // Le dialog s'ouvre DIRECTEMENT sur l'écran e-mail : pas de
           // `hub_form_email_view`, il serait simultané avec celui-ci.
         });
@@ -142,7 +142,7 @@ export function GuideDownloadDialog({
     if (lead.submitting) return;
     pushHubEvent('hub_form_email_submit', 'guide', {
       form_id: 'guide',
-      entry_point: entryPoint,
+      hub_entry_point: entryPoint,
     });
     // APPEL 1 — sans coordonnées.
     void lead.send(false);
@@ -156,7 +156,7 @@ export function GuideDownloadDialog({
         if (!next && lead.phase !== 'download') {
           pushHubEvent('hub_form_abandon', 'guide', {
             form_id: 'guide',
-            entry_point: entryPoint,
+            hub_entry_point: entryPoint,
             last_step_name: lead.phase,
           });
         }
