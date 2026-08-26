@@ -94,7 +94,13 @@ function Banner({ id, tag, tagIcon, title, text, ctaLabel, ctaIcon, image, actio
             </p>
             <div className="mt-4 w-full sm:col-start-2 sm:row-start-1 sm:mt-0 sm:w-auto sm:justify-self-end">
               {action === 'assistant' ? (
-                <AssistantButton label={ctaLabel} icon={ctaIcon} />
+                // `banner_accompagnement` : ce bandeau ouvre le QUESTIONNAIRE,
+                // pas le guide — d'où une valeur distincte de `banner_guide`.
+                <AssistantButton
+                  label={ctaLabel}
+                  icon={ctaIcon}
+                  entryPoint="banner_accompagnement"
+                />
               ) : (
                 <GuideButton
                   label={ctaLabel}

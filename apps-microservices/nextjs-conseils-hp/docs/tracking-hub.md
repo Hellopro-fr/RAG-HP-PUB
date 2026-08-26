@@ -429,7 +429,7 @@ première collecte, changer coûte une reprise de tous les segments.
 | 1 | `lib/analytics/hub.ts` + tests unitaires | rien — mais le socle est testable sans navigateur |
 | 2 | Tunnel projet (§3, events 1-11) | combien de projets, où ça décroche |
 | 3 | `hub_email_check` + `hub_form_submission` + `hub_form_abandon` sur les deux tunnels | part de contacts déjà connus, étape qui tue le tunnel |
-| 4 | Tunnel guide avec `hub_entry_point` et `hub_guide_shortcut` | quelle porte convertit, usage réel du guide |
+| 4 | Les DEUX tunnels avec `hub_entry_point` et `hub_guide_shortcut` | quelle porte convertit, usage réel du guide |
 | 5 | `hub_article_click` | si le HUB alimente les pages conseils |
 | 6 | Conteneur GTM + GA4 + recette 30 tests | les chiffres sont fiables |
 
@@ -441,6 +441,7 @@ répond à « pourquoi », et ne se justifie qu'une fois du volume observé.
 ## 11. Reporté, hors périmètre tracking
 
 - **Barre sticky mobile** : icône de téléchargement pour un bouton qui ouvre le questionnaire.
-  Revu plus tard ; `hub_entry_point = sticky_mobile` reste prévu dans le plan.
+  Revu plus tard ; `hub_entry_point = sticky_mobile` est désormais réellement émis
+  (corrigé le 2026-08-25, cf. ci-dessous).
 - **PDF du guide** : `/seo_masterclass_detailed.pdf` (résidu du prototype Lovable) sera
   remplacé quand l'équipe aura terminé le livre. Aucun impact sur le plan.

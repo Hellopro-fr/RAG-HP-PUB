@@ -171,6 +171,7 @@ function OverlayCard({ data }: { data: HubOverlayCard }) {
                 icon="arrow-right"
                 iconPosition="end"
                 variant="solid"
+                entryPoint="bloc_thematique"
               />
             )}
           </div>
@@ -248,6 +249,7 @@ function InfoCard({ data }: { data: HubInfoCard }) {
                 icon="arrow-right"
                 iconPosition="end"
                 variant="row"
+                entryPoint="bloc_thematique"
               />
             )}
           </div>
@@ -268,7 +270,13 @@ function InfoCard({ data }: { data: HubInfoCard }) {
 function ArticleLink({ href }: { href?: string }) {
   if (!href) {
     return (
-      <AssistantButton label="Être accompagné" variant="link" icon="arrow-right" iconPosition="end" />
+      <AssistantButton
+        label="Être accompagné"
+        variant="link"
+        icon="arrow-right"
+        iconPosition="end"
+        entryPoint="bloc_thematique"
+      />
     );
   }
   return (

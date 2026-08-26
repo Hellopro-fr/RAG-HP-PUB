@@ -16,7 +16,17 @@ import { Confetti } from './Confetti';
 import { useAutoDownload } from '@/lib/hub/useAutoDownload';
 import { markLeadKnown } from '@/lib/hub/leadEmailCookie';
 import { isValidPhone } from '@/lib/hub/validation';
-import { pushHubEvent, pushHubEventOnce, questionStepName } from '@/lib/analytics/hub';
+import {
+  pushHubEvent,
+  pushHubEventOnce,
+  questionStepName,
+  type HubEntryPoint,
+} from '@/lib/analytics/hub';
+import {
+  ASSISTANT_DIALOG_EVENT,
+  DEFAULT_ASSISTANT_ENTRY_POINT,
+  readAssistantEntryPoint,
+} from '@/lib/hub/assistantDialogEvent';
 import type { HubAssistant } from '@/types/hub';
 
 /**
@@ -37,7 +47,15 @@ import type { HubAssistant } from '@/types/hub';
  * la page d'ouvrir le questionnaire sans prop drilling à travers des Server
  * Components — le couplage est volontaire et documenté.
  */
-export const ASSISTANT_DIALOG_EVENT = 'hp:open-assistant-dialog';
+/**
+ * Ré-exports de compatibilité.
+ *
+ * L'événement d'ouverture et son opener vivent désormais dans
+ * `lib/hub/assistantDialogEvent.ts` — un module sans dépendance UI, pour que les
+ * boutons déclencheurs n'aient pas à importer tout le corps du questionnaire
+ * (cf. le même découpage côté guide).
+ */
+export { ASSISTANT_DIALOG_EVENT, openAssistantDialog } from '@/lib/hub/assistantDialogEvent';
 
 /**
  * Remplissage minimal de la barre de progression, en pourcentage.
@@ -46,12 +64,6 @@ export const ASSISTANT_DIALOG_EVENT = 'hp:open-assistant-dialog';
  * dialog, pour que la barre ne soit jamais visuellement vide.
  */
 const MIN_PROGRESS_PCT = 8;
-
-/** Ouvre le questionnaire depuis n'importe où (client uniquement). */
-export function openAssistantDialog() {
-  if (typeof window === 'undefined') return;
-  window.dispatchEvent(new CustomEvent(ASSISTANT_DIALOG_EVENT));
-}
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -78,6 +90,20 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
   // Verrou anti double-soumission (§11) + message d'erreur technique (§7/§9).
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  /**
+   * Emplacement du CTA qui a ouvert le parcours — dimension `hub_entry_point`.
+   *
+   * `hero` par défaut : le questionnaire commence par son bloc inline du hero, et
+   * c'est de là que part un visiteur qui n'a cliqué sur aucun CTA. Les six autres
+   * portes posent leur propre valeur via l'événement d'ouverture.
+   *
+   * ⚠️ Volontairement HORS de `reset()`. Un `reset()` remet le parcours à zéro,
+   * pas la provenance : le gestionnaire d'ouverture repose la valeur juste après,
+   * et l'effacer ici ferait perdre l'emplacement sur les abandons.
+   */
+  const [entryPoint, setEntryPoint] = useState<HubEntryPoint>(
+    DEFAULT_ASSISTANT_ENTRY_POINT
+  );
 
   /* ------------------------------------------------------------ tracking ---
    * Plan : `docs/tracking-hub.md`. Tout passe par `pushHubEvent` — aucun
@@ -227,6 +253,11 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
         pushHubEvent('hub_form_submission', 'projet', {
           form_id: 'assistant',
           id_page_hub: idPageHub,
+          // L'emplacement d'origine manquait ici jusqu'au 2026-08-25 : la
+          // conversion partait sans dire quel CTA l'avait provoquée, alors que
+          // six portes ouvrent ce questionnaire. La dimension `hub_entry_point`
+          // était donc borgne sur ce tunnel, et exploitable sur le seul guide.
+          hub_entry_point: entryPoint,
           hub_lead_path: withCoordinates ? 'complet' : 'reconnu',
           user_known_status: withCoordinates ? 'Unknown' : 'Known',
           steps_answered: answeredCount(),
@@ -276,8 +307,11 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
   };
 
   useEffect(() => {
-    const handler = () => {
+    const handler = (event: Event) => {
       reset();
+      // Emplacement du CTA qui vient d'ouvrir le dialog. Posé AVANT `setForceOpen`
+      // pour être disponible dès le premier rendu ouvert, donc dès `hub_form_step`.
+      setEntryPoint(readAssistantEntryPoint(event));
       setClosing(false); // annule une fermeture en cours si on rouvre aussitôt
       setForceOpen(true);
     };
@@ -302,6 +336,10 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
         observer.disconnect();
         pushHubEventOnce(`form_view:${idPageHub}`, 'hub_form_view', 'projet', {
           form_id: 'assistant',
+          // `'hero'` EN DUR, et non `entryPoint` : cet événement est l'impression
+          // du bloc inline du hero, pas l'ouverture du dialog. Il se produit au
+          // scroll, avant tout clic — y mettre l'emplacement d'un CTA cliqué
+          // ensuite daterait l'impression d'une intention qui n'existait pas.
           hub_entry_point: 'hero',
           step_name: questionStepName(0),
           step_id: data.steps[0]?.id,
@@ -406,6 +444,7 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
 
     pushHubEvent('hub_form_step', 'projet', {
       form_id: 'assistant',
+      hub_entry_point: entryPoint,
       // Générique (`2eme-question`…) pour rester comparable d'une page à l'autre ;
       // l'id métier de la question part à côté, dans `step_id`.
       step_name: name,
@@ -495,6 +534,9 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
             if (!submitted) {
               pushHubEvent('hub_form_abandon', 'projet', {
                 form_id: 'assistant',
+                // Savoir QUEL CTA génère des abandons vaut autant que savoir
+                // lequel convertit : c'est le même arbitrage, pris à l'envers.
+                hub_entry_point: entryPoint,
                 // Même vocabulaire générique que `step_name` : c'est ce qui permet
                 // de croiser abandons et affichages dans un seul rapport.
                 last_step_name: screenName(),

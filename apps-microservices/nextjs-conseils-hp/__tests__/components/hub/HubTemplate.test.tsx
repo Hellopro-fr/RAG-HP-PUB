@@ -28,7 +28,10 @@ vi.mock('@/components/conseil/ScrollToTopButton', () => ({
 // ce test reste un test de COMPOSITION (ordre et présence des sections).
 vi.mock('@/components/hub/AssistantForm', () => ({
   AssistantForm: () => <div data-testid="assistant-form" />,
+  // Ré-export de `lib/hub/assistantDialogEvent` dans le vrai module : le mock
+  // doit le fournir aussi, sinon les déclencheurs cassent au rendu.
   openAssistantDialog: () => {},
+  ASSISTANT_DIALOG_EVENT: 'hp:open-assistant-dialog',
 }));
 vi.mock('@/components/hub/HubSectionNav', () => ({
   HubSectionNav: () => <nav data-testid="section-nav" />,
