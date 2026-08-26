@@ -308,6 +308,46 @@ describe('AssistantForm', () => {
     expect(conversion?.hub_entry_point).toBe('hero');
   });
 
+  /**
+   * RÉGRESSION (constatée en recette le 2026-08-25). L'emplacement fuyait d'un
+   * parcours à l'autre : après une ouverture par CTA abandonnée, une conversion
+   * partie du bloc inline du hero restait attribuée au CTA précédent.
+   *
+   * Le dialog s'ouvre de DEUX façons — par événement, qui pose l'emplacement, ou
+   * par le hero où `step > 0` suffit et n'émet rien. Seul `reset()` peut donc
+   * garantir qu'un nouveau parcours reparte du bon défaut.
+   */
+  it('ne conserve pas l’emplacement du parcours précédent', async () => {
+    const short = { ...data, steps: [data.steps[0]] };
+    stubFetch([{ status: 201, body: { statut: 'enregistre', contact_connu: 1 } }]);
+    render(<AssistantForm data={short} idPageHub={ID_PAGE_HUB} />);
+
+    // 1. Ouverture par un CTA, puis abandon (fermeture au clavier).
+    openAssistantDialog('banner_accompagnement');
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    // 2. Parcours depuis le bloc inline du hero — aucun événement d'ouverture.
+    fireEvent.click(screen.getByText(short.steps[0].options[0]));
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(short.ctaLabel, 'i') }));
+
+    const rouvert = await screen.findByRole('dialog');
+    const dans = within(rouvert);
+    await waitFor(() => expect(dans.getByLabelText(short.contact.label)).toBeDefined());
+    fireEvent.change(dans.getByLabelText(short.contact.label), {
+      target: { value: 'jean@exemple.fr' },
+    });
+    fireEvent.click(
+      dans.getByRole('button', { name: new RegExp(short.contact.submitLabel, 'i') })
+    );
+
+    await waitFor(() => {
+      const conversion = dl().find((e) => e.event === 'hub_form_submission');
+      expect(conversion?.hub_entry_point).toBe('hero');
+    });
+  });
+
   it('bloque l’étape coordonnées si le téléphone est invalide', async () => {
     const { short } = renderShort([{ status: 200, body: { statut: 'coordonnees_requises' } }]);
     await waitFor(() => expect(screen.getByLabelText(short.contact.label)).toBeDefined());
