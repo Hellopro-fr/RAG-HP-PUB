@@ -1,0 +1,32 @@
+name: 'PR gate — prod (sécurité + CI)'
+
+# Required check sur les PR `features/poc → prod` (branch protection). Bloque le merge — donc le CD —
+# si vulnérabilité CRITICAL. C'est le gate sécu concret de CD2.b (le CD ne se déclenche qu'au merge sur prod).
+# À enrichir progressivement : jobs CI par service changé (ci_services_*) + tests E2E en required checks additionnels.
+
+on:
+  pull_request:
+    branches: [prod]
+
+permissions:
+  contents: read
+
+jobs:
+  trivy-critical:
+    name: 'Trivy CRITICAL (bloquant)'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Trivy filesystem scan (deps + config)
+        uses: aquasecurity/trivy-action@18f2510ee396bbf400402947b394f2dd8c87dbb0 # v0.29.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+          format: table
+
+  # TODO CD2.b (progressif) — required checks additionnels :
+  #  - ci_services_<service> (lint/test) sur les services modifiés (détection via paths-filter/matrix)
+  #  - tests E2E d'intégration
