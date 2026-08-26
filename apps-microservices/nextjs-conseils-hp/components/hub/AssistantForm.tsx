@@ -279,10 +279,9 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
         /**
          * Marque le drapeau « lead connu » (jamais l'e-mail) après un 201 réel.
          *
-         * Ici `idPageHub` EST l'id de la page (le questionnaire ne subit pas le
-         * décalage de `guideIdPageHub`) : c'est donc bien la portée « projet »
-         * attendue par le cookie. Remplir le questionnaire dispense ainsi du
-         * formulaire guide sur la même page — et sur elle seule.
+         * `idPageHub` est l'id de la page, donc la portée attendue par le
+         * cookie. Remplir le questionnaire dispense ainsi du formulaire guide
+         * sur la même page — et sur elle seule.
          */
         markLeadKnown(idPageHub);
         setSubmitted(true); // succès : le bouton disparaît, on ne réactive pas.

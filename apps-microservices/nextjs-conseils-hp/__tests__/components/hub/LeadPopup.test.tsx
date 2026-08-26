@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { LeadPopup } from '@/components/hub/LeadPopup';
-import { listHubPages, guideIdPageHub } from '@/data/hub';
+import { listHubPages } from '@/data/hub';
 import type { HubLeadPopup } from '@/types/hub';
 
 vi.mock('next/image', () => ({
@@ -33,9 +33,8 @@ vi.mock('@/components/hub/PhoneFieldLazy', () => ({
 
 const data = listHubPages()[0].leadPopup;
 const guide = listHubPages()[0].guideDialog;
-const ID_PAGE_HUB = guideIdPageHub(listHubPages()[0].id);
-/** Id du PROJET — portée du drapeau « déjà converti », distinct de l'id du tunnel. */
-const PAGE_ID = listHubPages()[0].id;
+/** Id de la page — celui de l'URL, identique pour les deux tunnels. */
+const ID_PAGE_HUB = listHubPages()[0].id;
 
 const IMAGE = { src: '/images/hub/x/popup.png', alt: 'Guide' };
 
@@ -70,12 +69,7 @@ function renderOpen(
 
   const fetchMock = stubFetch(fetchResponses);
   const result = render(
-    <LeadPopup
-      data={{ ...data, ...overrides }}
-      guide={guide}
-      idPageHub={ID_PAGE_HUB}
-      pageId={PAGE_ID}
-    />
+    <LeadPopup data={{ ...data, ...overrides }} guide={guide} idPageHub={ID_PAGE_HUB} />
   );
   fireEvent.scroll(window);
   return { ...result, fetchMock };
@@ -108,7 +102,7 @@ afterEach(() => {
 
 describe('LeadPopup', () => {
   it('reste fermée au montage', () => {
-    render(<LeadPopup data={data} guide={guide} idPageHub={ID_PAGE_HUB} pageId={PAGE_ID} />);
+    render(<LeadPopup data={data} guide={guide} idPageHub={ID_PAGE_HUB} />);
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 

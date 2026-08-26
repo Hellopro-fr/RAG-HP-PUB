@@ -1,8 +1,9 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { isLeadKnown, markLeadKnown } from '@/lib/hub/leadEmailCookie';
 
-const ELEVAGE = 2000;
-const LAVERIE = 2002;
+// Ids de PAGE — ceux de l'URL. Un seul identifiant par page depuis le 2026-08-25.
+const ELEVAGE = 1000;
+const LAVERIE = 1002;
 
 afterEach(() => {
   document.cookie = 'hub_lead=; path=/; max-age=0';
