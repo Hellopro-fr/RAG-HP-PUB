@@ -51,12 +51,27 @@ export type HubEventName =
 
 export type HubGroup = 'projet' | 'guide' | 'engagement';
 
-/** Emplacement d'où le parcours a été ouvert. Décisif pour le tunnel guide : 5 portes. */
+/**
+ * Emplacement d'où le parcours a été ouvert — dimension `hub_entry_point`.
+ *
+ * Le type est PARTAGÉ par les deux tunnels, et c'est voulu : un même bouton peut
+ * ouvrir l'un ou l'autre selon la page, et un rapport « quel emplacement
+ * convertit » n'a de sens que si le vocabulaire est commun.
+ *
+ * Répartition actuelle :
+ *  - questionnaire (projet) : `hero`, `bloc_thematique`, `banner_accompagnement`,
+ *    `nos_ressources`, `sticky_mobile`
+ *  - guide : `banner_guide`, `cta_final`, `bloc_thematique`, `popup_scroll`
+ */
 export type HubEntryPoint =
   | 'hero'
   | 'banner_guide'
+  /** Bandeau « Faites-vous accompagner » — ouvre le QUESTIONNAIRE, pas le guide. */
+  | 'banner_accompagnement'
   | 'cta_final'
   | 'bloc_thematique'
+  /** Liens « Être accompagné » du bloc ressources. */
+  | 'nos_ressources'
   | 'popup_scroll'
   | 'sticky_mobile';
 

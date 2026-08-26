@@ -85,6 +85,7 @@ export function RessourcesGrid({ data }: { data: HubRessources }) {
                     variant="link"
                     icon="arrow-right"
                     iconPosition="end"
+                    entryPoint="nos_ressources"
                   />
                 )}
               </div>

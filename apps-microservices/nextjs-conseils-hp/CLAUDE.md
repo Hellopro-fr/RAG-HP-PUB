@@ -715,6 +715,16 @@ l'inventaire exhaustif des points de mesure ; un `dataLayer.push` éparpillé, n
   les événements. `hub_guide_download` est émis par les DEUX tunnels — le
   questionnaire offre aussi le guide.
 
+**`hub_entry_point` — les DEUX tunnels le portent** (depuis le 2026-08-25). Chacun a
+son module d'événement (`lib/hub/guideDialogEvent.ts`, `lib/hub/assistantDialogEvent.ts`)
+qui transporte l'emplacement dans le `detail`, parce qu'il n'existe qu'UNE instance de
+chaque dialog : la provenance ne peut pas être fixée à la construction. Les déclencheurs
+(`GuideButton`, `AssistantButton`) l'exigent en prop — le rendre optionnel garantirait
+qu'on l'oublie sur un bouton et que ses conversions soient attribuées ailleurs, en
+silence. ⚠️ Ne PAS importer un dialog depuis `triggers.tsx` ou `StickyCta.tsx` : ces
+boutons sont rendus dès le chargement, ça annulerait le découpage de bundle. C'est toute
+la raison d'être de ces deux modules minuscules.
+
 **Raccourci « lead déjà connu SUR CETTE PAGE »** (cookie `hub_lead`, liste
 d'`id_page_hub`, cf. `lib/hub/leadEmailCookie.ts`) :
 `GuideDownloadDialog` va directement à l'écran de téléchargement, **sans formulaire
