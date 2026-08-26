@@ -1,0 +1,33 @@
+name: 'Deploy GKE — product-processor-service (pilote CD shadow)'
+
+# PILOTE CD shadow GKE (CD1). Déclenché MANUELLEMENT (workflow_dispatch) pour valider le rail E2E :
+# WIF github-deployer -> build runner -> push AR -> Connect Gateway -> kubectl set image -> rollout.
+# Cible = product-processor-service (consumer shadow idle, broker DEV) -> bump image = zéro impact prod.
+# Context build = RACINE (Dockerfile COPY libs/common-utils + le service).
+
+on:
+  # Modèle cible : la branche `prod` (créée depuis features/poc, alimentée par PR + gates)
+  # est LE déclencheur CD. Un merge de PR poc→prod = push sur prod → déclenche le déploiement.
+  # Shadow aujourd'hui (zéro impact VM), prod réelle après cutover. Path-filter = ce service
+  # + le wrapper lui-même (PAS le réutilisable deploy-gke-service.yml -> évite le mass-trigger F-HP-CI-001).
+  push:
+    branches: [prod]
+    paths:
+      - 'apps-microservices/product-processor-service/**'
+      - '.github/workflows/deploy-gke-product-processor.yml'
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/deploy-gke-service.yml
+    with:
+      service_name: product-processor-service
+      dockerfile: apps-microservices/product-processor-service/Dockerfile
+      build_context: .
+      deployment: product-processor-service
+      container: product-processor-service
+      namespace: apps-microservices
