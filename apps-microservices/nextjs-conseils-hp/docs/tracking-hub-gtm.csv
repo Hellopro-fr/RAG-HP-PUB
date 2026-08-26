@@ -1,0 +1,43 @@
+Bloc;Element;Configuration;Remarque
+Verification prealable;Tag de configuration G-DQTV4SHNME;CONFIRME le 2026-08-05 : se declenche bien sur conseils.hellopro.fr et pas seulement sur www;Plus de blocage - les evenements HUB partiront
+Verification prealable;Dimension page_template;Verifier qu'elle est enregistree comme dimension personnalisee dans G-DQTV4SHNME;Sans elle impossible de segmenter les pages HUB
+Verification prealable;Quota de dimensions;Compter les dimensions event-scoped deja utilisees dans G-DQTV4SHNME (limite 50);Ce plan en demande 10
+Verification prealable;page_view vers G-DQTV4SHNME;Verifier si le tag de configuration a deja "Envoyer un evenement de page vue" coche;Si oui rien a faire - si non l'activer
+Double property;Contexte;G-J3925VE86T est CONSERVEE - il faut seulement que le page_view parte AUSSI vers G-DQTV4SHNME;Aucune suppression - on ajoute une destination
+Double property;Risque a controler;DOUBLE page_view sur une meme propriete si le gtag de la page ET un tag GTM envoient tous deux la page vue;Le code fait gtag('config','G-J3925VE86T') dans GtmFooterScripts lignes 62-64 - ce gtag n'alimente QUE G-J3925VE86T donc pas de conflit avec G-DQTV4SHNME
+Double property;Test obligatoire;DebugView de G-DQTV4SHNME : EXACTEMENT UN page_view par chargement de page;A verifier sur une page conseils ET sur une page HUB avant mise en ligne
+Double property;Perimetre du changement;Le tag de configuration s'applique a TOUT conseils.hellopro.fr - pas seulement aux pages HUB;C'est le point de vigilance principal - tester d'abord sur un environnement de preprod si disponible
+Declencheur;HUB - tous evenements;Type: Custom Event / Nom: ^hub_ / Cocher "utiliser la correspondance d'expression reguliere";Un seul declencheur pour les 20 evenements
+Tag;GA4 - HUB events;Type: GA4 Event / ID de mesure: G-DQTV4SHNME / Nom de l'evenement: {{Event}} / Declencheur: HUB - tous evenements;UN SEUL tag - 20 tags auraient le meme comportement
+Variable dataLayer;DL - hub_group;hub_group;projet | guide | engagement - present sur TOUS les evenements
+Variable dataLayer;DL - hub_page_id;hub_page_id;1000 | 1001 | 1002
+Variable dataLayer;DL - hub_page_uri;hub_page_uri;URI PUBLIQUE ex. /lancer-elevage-poules-pondeuses-1000-projet.html - PAS la route interne /hub/<slug>-<id> et PAS de nom d'hote (sinon localhost + ngrok + prod = 3 valeurs pour une meme page)
+Variable dataLayer;DL - step_id;step_id;id metier de la question (budget|volume|delai) - complete step_name sans le remplacer
+Variable dataLayer;DL - id_page_hub;id_page_hub;1000 (projet) / 2000 (guide) - decalage guideIdPageHub
+Variable dataLayer;DL - session_id;session_id;reutilise getHpSessionId() existant - fenetre glissante 30 min
+Variable dataLayer;DL - form_id;form_id;assistant | guide
+Variable dataLayer;DL - hub_entry_point;hub_entry_point;hero | banner_guide | cta_final | bloc_thematique | popup_scroll | sticky_mobile
+Variable dataLayer;DL - step_name;step_name;GENERIQUE: 1ere-question | 2eme-question | 3eme-question | 4eme-question | email | coordinates - JAMAIS l'id metier (sinon les 3 pages ne sont pas comparables dans un meme entonnoir)
+Variable dataLayer;DL - step_index;step_index;0-based
+Variable dataLayer;DL - step_total;step_total;
+Variable dataLayer;DL - result;result;known | unknown - pour hub_email_check
+Variable dataLayer;DL - user_known_status;user_known_status;Known | Unknown - issu de la REPONSE serveur et JAMAIS du cookie
+Variable dataLayer;DL - hub_lead_path;hub_lead_path;complet | reconnu | deja_converti
+Variable dataLayer;DL - steps_answered;steps_answered;
+Variable dataLayer;DL - answer_label;answer_label;libelle du choix - choix ferme donc pas de PII
+Variable dataLayer;DL - last_step_name;last_step_name;pour hub_form_abandon
+Variable dataLayer;DL - error_stage;error_stage;email | coordinates
+Variable dataLayer;DL - http_status;http_status;
+Variable dataLayer;DL - download_trigger;download_trigger;auto | manual
+Variable dataLayer;DL - article_url;article_url;
+Variable dataLayer;DL - article_id;article_id;extrait du slug -(\d+).html
+Variable dataLayer;DL - source_block;source_block;id du bloc thematique | ressources | grandes-etapes
+Variable dataLayer;DL - product_category5;product.category5;ATTENTION cle dataLayer avec un point mais parametre GA4 nomme product_category5 (le point est invalide en GA4)
+Parametres du tag;Mapping;Mapper chaque variable ci-dessus en parametre d'evenement du tag GA4;Ne PAS remapper page_template ni le bloc user - deja lus comme variables de page
+Admin GA4;Dimensions personnalisees A CREER;hub_group / hub_entry_point / hub_lead_path;3 dimensions event-scoped - quota a 47/50 le 2026-08-24 (cf. annexe du runbook)
+Admin GA4;Dimensions personnalisees DEJA EXISTANTES;step_name / step_index / user_known_status / page_template;creees en 2022 pour le funnel devis - le HUB reutilise leurs noms volontairement
+Admin GA4;Parametres NON declares;hub_page_id / hub_page_uri / step_id / email_check_result / source_block / download_trigger / article_id / article_url / trigger_section_id / etc.;envoyes dans l'evenement et exploitables en BigQuery uniquement
+Admin GA4;Key event hub_form_submission;A ARBITRER - le marquer l'ajoute au total conversions de la propriete;Voir tracking-hub.md 7.2 - seul vrai vecteur de contamination des rapports existants
+Admin GA4;Exploration entonnoir;hub_form_view > hub_form_start > hub_form_step > hub_form_email_submit > hub_email_check > hub_form_submission segmentee par hub_page_id;ATTENTION 8 evenements commencent par hub_form_ et un seul est la conversion - verifier deux fois la derniere etape de l'entonnoir
+Admin GA4;Conservation des donnees;Verifier la duree de conservation (defaut 2 mois pour les explorations);Un POC juge a 3 mois avec 2 mois de conservation perd sa premiere cohorte
+Consentement;Verification;Le tag doit rester couvert par le Consent Mode du conteneur (analytics_storage);Sous refus les pushs ont lieu mais GA4 ne transmet pas - le POC sous-estime du taux de refus

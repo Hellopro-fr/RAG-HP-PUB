@@ -15,6 +15,13 @@ interface BreadcrumbItem {
 
 interface GtmFooterScriptsProps {
   breadcrumb: BreadcrumbItem[];
+  /**
+   * Valeur poussée dans `page_template` (dimension GTM/GA4 de type de page).
+   * Défaut 'conseils' — les pages HUB « projet » passent 'hub' pour être
+   * isolables dans les rapports. Changement additif : aucun appelant existant
+   * n'est impacté.
+   */
+  pageTemplate?: string;
 }
 
 function toGtmSlug(label: string): string {
@@ -42,12 +49,12 @@ function buildUserCategoryScript(breadcrumb: BreadcrumbItem[]): string {
   return `(function(){function getCookie(n){var c=document.cookie.split(';');for(var i=0;i<c.length;i++){var p=c[i].trim().split('=');if(p[0]===n)return decodeURIComponent(p.slice(1).join('='));}return '';}var email=getCookie('email_preremplissage_di');var logged=(email!==''&&email!=='${MD5_EMPTY}')||getCookie('id_societe')!=='';window.dataLayer=window.dataLayer||[];dataLayer.push({"user":{"visitorId":"","visitorLoginState":logged?"logged":"unlogged","visitorType":"","visitorCountry":"","visitorDepartment":"/","visitorJob":"/","visitorNewsletterSub":"","visitorCompanyStatus":"/"},"product":${JSON.stringify(product)}});})();`;
 }
 
-export function GtmFooterScripts({ breadcrumb }: GtmFooterScriptsProps) {
+export function GtmFooterScripts({ breadcrumb, pageTemplate = 'conseils' }: GtmFooterScriptsProps) {
   const userCategoryScript = buildUserCategoryScript(breadcrumb);
   return (
     <>
       {/* Step 6 — page_template (en premier) */}
-      <script dangerouslySetInnerHTML={{ __html: `window.dataLayer=window.dataLayer||[];dataLayer.push({"page_template":"conseils"});` }} />
+      <script dangerouslySetInnerHTML={{ __html: `window.dataLayer=window.dataLayer||[];dataLayer.push({"page_template":${JSON.stringify(pageTemplate)}});` }} />
       {/* Step 7 — user + catégories (détection session + fil d'ariane) */}
       <script dangerouslySetInnerHTML={{ __html: userCategoryScript }} />
       {/* Step 8 — chargement GTM (révèle la page via fin du async-hide) */}

@@ -1,0 +1,37 @@
+#;Groupe;Scenario;Action;Attendu;Statut;Constate le 2026-08-07
+1;Socle;Chargement de page;Charger la page 1000;page_template=page_hub / product.category1=Agriculture / product.category5=Elevage-avicole;OK;page_template=page_hub - hub_page_id=1000 - hub_page_uri=/lancer-elevage-poules-pondeuses-1000-projet.html
+2;Socle;Consentement refuse;Cliquer "Continuer sans accepter";consent update avec les 4 signaux en denied;OK;les 4 signaux passent en denied
+3;Socle;page_view double property;DebugView de G-DQTV4SHNME sur une page HUB;EXACTEMENT UN page_view par chargement - ni zero ni deux;A TESTER MANUELLEMENT;necessite GTM publie + acces DebugView
+4;Socle;Non-regression conseils;DebugView de G-DQTV4SHNME sur une page conseils;EXACTEMENT UN page_view et page_template=conseils;A TESTER MANUELLEMENT;necessite GTM publie + acces DebugView
+5;Projet;Impression formulaire;Scroller jusqu'au hero;1 x hub_form_view - jamais 2;OK;1 seul - hub_entry_point=hero - step_name=1ere-question
+6;Projet;Demarrage;Cocher la 1ere reponse;1 x hub_form_start avec answer_label exact;OK;step_name=1ere-question / step_id=projet / answer_label="Creation d'un premier elevage"
+7;Projet;Etapes;Derouler les 4 questions;hub_form_step avec step_name distincts;OK;2eme-question/volume - 3eme-question/budget - 4eme-question/delai (generique + step_id metier)
+8;Projet;Retour arriere;Cliquer "Retour" puis re-avancer;PAS de 2e hub_form_step pour la meme etape;OK;aucun doublon
+9;Projet;Ecran e-mail;Terminer la 4e question;1 x hub_form_email_view;OK;1 seul
+10;Projet;Aiguillage inconnu;Soumettre un e-mail inconnu;hub_form_email_submit puis hub_email_check email_check_result=unknown;OK;verifie sur le tunnel guide (meme code) - voir #21
+11;Projet;Aiguillage connu;Soumettre un e-mail deja en base;email_check_result=known / hub_lead_path=reconnu / AUCUN coordinates_submit;OK;conforme - aucune etape coordonnees
+12;Projet;(supprime);Scenario obsolete;skipEmailStep n'existe plus - l'etape e-mail est TOUJOURS affichee;SANS OBJET;retire du code par le pull du 2026-08-05
+13;Projet;Cookie != verite serveur;Rejouer 11 depuis un navigateur vierge;user_known_status=Known malgre l'absence de cookie;OK;la valeur vient bien de la reponse serveur
+14;Projet;Conversion complete;Completer les coordonnees;hub_form_submission / hub_group=projet / id_page_hub=1000;OK;verifie le 2026-08-05 (hub_lead_path=complet) et le 2026-08-07 (hub_lead_path=reconnu)
+15;Projet;PDF depuis le tunnel projet;Ecran de remerciement projet;hub_guide_download avec hub_group=projet;OK;hub_group=projet / download_trigger=auto
+16;Projet;Anti-double-comptage;Cliquer 2x rapidement sur soumettre;1 SEUL hub_form_submission;A TESTER MANUELLEMENT;impossible a simuler de facon fiable dans l'onglet automatise
+17;Projet;Abandon;Fermer le dialog avant conversion;hub_form_abandon / AUCUN hub_form_submission;OK;last_step_name=email / last_step_index=4 / aucune conversion
+18;Projet;Erreur technique;Simuler une reponse 500;hub_form_error http_status=500 / AUCUNE conversion;NON TESTE;la soumission simulee n'a pas atteint send() - a rejouer manuellement
+19;Guide;Portes d'entree;Ouvrir le dialog depuis les 4 emplacements;hub_entry_point correct pour chacune;OK;banner_guide / cta_final / bloc_thematique / popup_scroll - 4/4
+20;Guide;Ouverture = ecran e-mail;Ouvrir le dialog guide;1 x hub_form_view et AUCUN hub_form_email_view;OK;conforme sur les 4 portes
+21;Guide;Conversion guide;Completer le parcours guide;hub_form_submission / hub_group=guide / id_page_hub=2000;OK;email_check=unknown puis coordinates_submit puis submission (2000, complet, Unknown)
+22;Guide;Erreur technique;Simuler une 500 pendant le parcours guide;hub_form_error avec hub_group=guide;NON TESTE;meme limite que #18
+23;Guide;Abandon aux coordonnees;Fermer le dialog guide en cours;hub_form_abandon last_step_name=coordinates;NON TESTE;le dialog guide ne se ferme pas dans l'onglet automatise (clic et Echap non traites)
+24;Guide;Raccourci deja converti;Cookie hub_lead contenant l'id de CETTE page puis clic CTA guide;hub_guide_shortcut + hub_guide_download / AUCUNE conversion / AUCUN appel API;OK;hub_guide_shortcut + hub_guide_download hub_lead_path=deja_converti - 0 appel API - 0 hub_form_submission
+25;Guide;Pas de conversion fantome;Rejouer 24 trois fois;3 x hub_guide_download et TOUJOURS 0 conversion;PARTIEL;0 conversion sur les 3 passages (le point critique est OK). 1 seul hub_guide_download car le dialog ne s'est pas ferme entre les passages - a reconfirmer manuellement
+26;Guide;Telechargement auto puis manuel;Ecran de remerciement puis clic sur le lien;download_trigger=auto puis manual;OK;les deux emis avec le bon hub_group
+27;Guide;Pop-up une fois par onglet;Scroller puis recharger;1 seul hub_guide_popup_view par onglet;A TESTER MANUELLEMENT;necessite un scroll reel
+28;Guide;Pop-up nouvel onglet;Rouvrir l'URL dans un nouvel onglet;hub_guide_popup_view se declenche A NOUVEAU;A TESTER MANUELLEMENT;necessite un scroll reel
+29;Transverse;Separation des tunnels;Les 2 parcours dans la meme session;2 x hub_form_submission / meme session_id / id_page_hub 1000 puis 2000;PARTIEL;chaque tunnel valide separement (1000 et 2000). Un seul session_id par session verifie. A rejouer sans rechargement entre les deux
+30;Transverse;Groupe sur tous les events;Inspecter chaque push;hub_group present sur 100% des evenements;OK;100% - idem hub_page_uri
+31;Transverse;Evenement supprime;Inspecter tout le parcours;AUCUN hub_form_coordinates_view;OK;absent
+32;Transverse;Non-contamination;Parcours HUB complet;AUCUN evenement du vocabulaire devis;OK;aucun quote_form_funnel / quote_funnel_validation / Popup_Appel_Offre / eec.add
+33;Transverse;Absence de PII;Inspecter tous les pushes;aucune donnee personnelle;OK;aucune cle interdite - aucune valeur saisie retrouvee - ancien champ "result" absent
+34;Transverse;Maillage;Cliquer un lien "Lire l'article";hub_article_click avec article_id et source_block;OK;article_id=5297 / source_block=budget-financement / hub_group=engagement
+35;Transverse;Multi-pages;Rejouer sur les pages 1001 et 1002;memes evenements avec hub_page_id et hub_page_uri differents;BLOQUE;les pages 1001 et 1002 n'existent pas encore
+36;Transverse;Nommage GA4;Inspecter le tag dans DebugView;le parametre s'appelle product_category5 et non product.category5;A TESTER MANUELLEMENT;necessite GTM publie - le mapping est fait dans le tag importe

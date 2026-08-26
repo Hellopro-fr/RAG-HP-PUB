@@ -41,8 +41,12 @@ export function getHpSessionId(): string {
   return sessionId;
 }
 
-/** Lit `product.category5` depuis le dataLayer (poussé par GtmFooterScripts), comme le legacy. */
-function getCategory5(): string {
+/**
+ * Lit `product.category5` depuis le dataLayer (poussé par GtmFooterScripts), comme le legacy.
+ * Exporté pour `lib/analytics/hub.ts` : dupliquer cette lecture ferait deux endroits à
+ * corriger le jour où la forme du push change.
+ */
+export function getCategory5(): string {
   if (typeof window === 'undefined') return '';
   const dl = (window as DataLayerWindow).dataLayer ?? [];
   const entry = dl.find(

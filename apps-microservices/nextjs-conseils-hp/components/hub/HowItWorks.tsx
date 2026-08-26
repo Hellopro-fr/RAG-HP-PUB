@@ -1,0 +1,56 @@
+import { ChevronRight } from 'lucide-react';
+import { HubSection, HubIcon } from './primitives';
+import { CARD_BODY, CARD_TITLE, SECTION_TITLE } from './typography';
+import { HUB_SECTION_IDS } from '@/lib/hub/anchors';
+import type { HubHowItWorks as HubHowItWorksData } from '@/types/hub';
+
+/**
+ * Parcours en étapes numérotées, séparées par un chevron.
+ *
+ * Le numéro fait partie du TITRE (« 1. Vous décrivez votre projet ») : c'est ce
+ * qui rend l'ordre lisible dans le texte lui-même, y compris pour un lecteur
+ * d'écran qui parcourt les titres. Un gros chiffre décoratif à côté de l'icône ne
+ * porte pas la même information.
+ *
+ * Le chevron pivote : vertical en colonne (mobile), horizontal en ligne (desktop).
+ * Il est purement décoratif, d'où `aria-hidden` — la numérotation et le `<ol>`
+ * suffisent à exprimer la séquence.
+ */
+export function HowItWorks({ data }: { data: HubHowItWorksData }) {
+  return (
+    <HubSection id={HUB_SECTION_IDS.howItWorks}>
+      <div className="mx-auto max-w-3xl text-center">
+        {/* Hors plan de titres (2026-08-07) : section de service, sans mot-clé
+            métier. Apparence inchangée. */}
+        <p className={`${SECTION_TITLE} text-foreground`}>{data.title}</p>
+      </div>
+
+      <ol className="mt-10 flex flex-col items-stretch gap-5 lg:flex-row">
+        {data.steps.map((step, index) => (
+          <li key={step.title} className="flex flex-col items-stretch gap-5 lg:flex-1 lg:flex-row">
+            <div className="flex-1 rounded-2xl border border-border bg-card p-6 shadow-sm">
+              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <HubIcon name={step.icon} className="h-6 w-6" />
+              </span>
+              {/* Étapes hors plan de titres, comme la section qui les contient.
+                  L'ordre reste porté par le `<ol>` et la numérotation du texte. */}
+              <p className={`mt-5 ${CARD_TITLE} text-foreground`}>
+                {index + 1}. {step.title}
+              </p>
+              <p className={`mt-2 ${CARD_BODY} text-muted-foreground`}>{step.desc}</p>
+            </div>
+
+            {index < data.steps.length - 1 && (
+              <span
+                aria-hidden
+                className="flex items-center justify-center text-muted-foreground"
+              >
+                <ChevronRight className="h-6 w-6 rotate-90 lg:rotate-0" />
+              </span>
+            )}
+          </li>
+        ))}
+      </ol>
+    </HubSection>
+  );
+}
