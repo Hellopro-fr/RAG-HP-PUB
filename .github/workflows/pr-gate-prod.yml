@@ -1,8 +1,10 @@
 name: 'PR gate — prod (sécurité + CI)'
 
 # Required check sur les PR `features/poc → prod` (branch protection). Bloque le merge — donc le CD —
-# si vulnérabilité CRITICAL. C'est le gate sécu concret de CD2.b (le CD ne se déclenche qu'au merge sur prod).
-# À enrichir progressivement : jobs CI par service changé (ci_services_*) + tests E2E en required checks additionnels.
+# si vulnérabilité CRITICAL. Gate sécu de CD2.b (le CD ne se déclenche qu'au merge sur prod).
+# ⚠️ Trivy via CLI direct (install.sh) et NON via aquasecurity/trivy-action : la v0.29.0 du composite
+#    référence setup-trivy@v0.2.2 (tag supprimé upstream fin 2024) -> "Unable to resolve action". Le CLI
+#    est self-contained et immunisé. (Dette mineure : install.sh non épinglé -> pin possible à une release trivy.)
 
 on:
   pull_request:
@@ -10,23 +12,37 @@ on:
 
 permissions:
   contents: read
+  packages: read
 
 jobs:
   trivy-critical:
     name: 'Trivy CRITICAL (bloquant)'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - name: Trivy filesystem scan (deps + config)
-        uses: aquasecurity/trivy-action@18f2510ee396bbf400402947b394f2dd8c87dbb0 # v0.29.0
-        with:
-          scan-type: fs
-          scan-ref: .
-          severity: CRITICAL
-          ignore-unfixed: true
-          exit-code: '1'
-          format: table
 
-  # TODO CD2.b (progressif) — required checks additionnels :
-  #  - ci_services_<service> (lint/test) sur les services modifiés (détection via paths-filter/matrix)
-  #  - tests E2E d'intégration
+      - name: Cache Trivy DB
+        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0
+        with:
+          path: ~/.cache/trivy
+          key: trivy-db-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            trivy-db-${{ runner.os }}-
+
+      - name: Install Trivy CLI
+        run: curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b "$RUNNER_TEMP/bin"
+
+      - name: Trivy filesystem scan (CRITICAL bloquant)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}   # auth ghcr pour le pull de la DB Trivy (anti rate-limit)
+        run: |
+          "$RUNNER_TEMP/bin/trivy" fs \
+            --scanners vuln,misconfig,secret \
+            --severity CRITICAL \
+            --ignore-unfixed \
+            --exit-code 1 \
+            --no-progress \
+            .
+
+  # TODO CD2.b (progressif) — required checks additionnels : ci_services_<service> (par service changé) + tests E2E.
