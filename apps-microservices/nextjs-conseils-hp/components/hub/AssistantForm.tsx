@@ -97,9 +97,8 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
    * c'est de là que part un visiteur qui n'a cliqué sur aucun CTA. Les six autres
    * portes posent leur propre valeur via l'événement d'ouverture.
    *
-   * ⚠️ Volontairement HORS de `reset()`. Un `reset()` remet le parcours à zéro,
-   * pas la provenance : le gestionnaire d'ouverture repose la valeur juste après,
-   * et l'effacer ici ferait perdre l'emplacement sur les abandons.
+   * Remis au défaut par `reset()` — voir le commentaire là-bas : sans ça,
+   * l'emplacement d'un parcours abandonné contaminait le suivant.
    */
   const [entryPoint, setEntryPoint] = useState<HubEntryPoint>(
     DEFAULT_ASSISTANT_ENTRY_POINT
@@ -175,6 +174,21 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
     setForceOpen(false);
     setSubmitting(false);
     setErrorMsg('');
+    /**
+     * ⚠️ L'emplacement fait partie du PARCOURS, il doit donc être remis à son
+     * défaut ici (constaté en recette le 2026-08-25 : une conversion partie du
+     * hero était attribuée à `banner_accompagnement`, cliqué plus tôt sur la
+     * même page).
+     *
+     * La fuite venait de la double façon d'ouvrir le dialog : par événement — un
+     * CTA, qui pose l'emplacement — ou par le bloc inline du hero, où
+     * `step > 0` suffit à ouvrir SANS émettre d'événement. Dans ce second cas
+     * rien ne repose la valeur, et celle du parcours précédent survivait.
+     *
+     * Sûr vis-à-vis des abandons : `hub_form_abandon` est émis AVANT le `reset()`
+     * différé de la fermeture, il lit donc encore le bon emplacement.
+     */
+    setEntryPoint(DEFAULT_ASSISTANT_ENTRY_POINT);
     // Dédup à la portée du parcours : le suivant doit ré-émettre ses étapes.
     firedScreensRef.current.clear();
     startedRef.current = false;
