@@ -13,7 +13,7 @@ Tunnel Guide;11;hub_form_view;Ouverture du dialog guide - vaut AUSSI email_view:
 Tunnel Guide;12;hub_form_email_submit;Soumission e-mail - APPEL 1;GuideDownloadDialog.tsx submitEmail / LeadPopup.tsx submitEmail;hub_entry_point;P2
 Tunnel Guide;13;hub_email_check;RECEPTION de la reponse de l'APPEL 1 - unknown vaut "etape coordonnees affichee";useGuideLead.ts send() apres await;email_check_result (known|unknown) / hub_entry_point;P2
 Tunnel Guide;14;hub_form_coordinates_submit;Soumission coordonnees - APPEL 2 - BRANCHE UNKNOWN UNIQUEMENT;GuideSteps.tsx CoordinatesStep onSubmit;hub_entry_point;P2
-Tunnel Guide;15;hub_form_submission;CONVERSION. Phase passe a 'download';useGuideLead.ts branche succes de send();hub_lead_path / hub_entry_point / user_known_status / id_page_hub=2000;P2
+Tunnel Guide;15;hub_form_submission;CONVERSION. Phase passe a 'download';useGuideLead.ts branche succes de send();hub_lead_path / hub_entry_point / user_known_status / id_page_hub (id de l'URL, comme le projet);P2
 Tunnel Guide;16;hub_form_error;Branches d'erreur de send();useGuideLead.ts branches console.error;error_stage (email|coordinates) / http_status;P2
 Tunnel Guide;17;hub_form_abandon;Fermeture du dialog ou de la pop-up avant conversion;GuideDownloadDialog onOpenChange / LeadPopup close();last_step_name (email|coordinates) / hub_entry_point;P2
 Tunnel Guide;18;hub_guide_popup_view;Pop-up de capture affichee au scroll (depassement de #reglementation-demarches);LeadPopup.tsx onScroll;trigger_section_id / hub_entry_point=popup_scroll;P2

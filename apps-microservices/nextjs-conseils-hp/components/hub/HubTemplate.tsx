@@ -4,7 +4,6 @@ import { GtmFooterScripts } from '@/components/conseil/GtmFooterScripts';
 import { FaqBlock } from '@/components/conseil/blocks/FaqBlock';
 import { HUB_SECTION_IDS } from '@/lib/hub/anchors';
 import type { HeaderCategory } from '@/data/site/header-categories';
-import { guideIdPageHub } from '@/data/hub';
 import { HubHero } from './HubHero';
 import { HubTrackingContext } from './HubTrackingContext';
 import { HubArticleClickTracker } from './HubArticleClickTracker';
@@ -159,12 +158,7 @@ export function HubTemplate({ page, headerCategories = [] }: HubTemplateProps) {
           `HubOverlays` charge les dialogs guide + pop-up PARESSEUSEMENT (armés au
           1er clic guide / 1er scroll) → hors du bundle initial, sans fenêtre morte. */}
       <StickyCta label={page.stickyCtaLabel} />
-      <HubOverlays
-        guide={page.guideDialog}
-        leadPopup={page.leadPopup}
-        guideIdPageHub={guideIdPageHub(page.id)}
-        pageId={page.id}
-      />
+      <HubOverlays guide={page.guideDialog} leadPopup={page.leadPopup} pageId={page.id} />
     </div>
   );
 }

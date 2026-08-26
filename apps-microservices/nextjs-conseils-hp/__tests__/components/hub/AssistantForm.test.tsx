@@ -328,6 +328,23 @@ describe('AssistantForm', () => {
     fireEvent.keyDown(dialog, { key: 'Escape' });
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 
+    /**
+     * ⚠️ Attendre que `reset()` ait RÉELLEMENT eu lieu, et pas seulement que le
+     * dialog ait disparu. La fermeture diffère le reset de 250 ms — le temps de
+     * l'animation de sortie, sans quoi le questionnaire réapparaîtrait dans le
+     * dialog en train de se fermer.
+     *
+     * Enchaîner avant, c'est cliquer alors que `closing` est encore vrai : le
+     * dialog refuse de se rouvrir, puis le reset tardif efface la réponse.
+     *
+     * Une attente explicite, et non un `waitFor` : à ce stade du parcours aucun
+     * élément de l'écran ne change au moment du reset — on n'a répondu à aucune
+     * question, donc le CTA est déjà désactivé avant comme après. Un `waitFor`
+     * se résoudrait immédiatement sans rien prouver (c'est l'erreur que faisait
+     * la première version de ce test).
+     */
+    await new Promise((resolve) => setTimeout(resolve, 400));
+
     // 2. Parcours depuis le bloc inline du hero — aucun événement d'ouverture.
     fireEvent.click(screen.getByText(short.steps[0].options[0]));
     fireEvent.click(screen.getByRole('button', { name: new RegExp(short.ctaLabel, 'i') }));

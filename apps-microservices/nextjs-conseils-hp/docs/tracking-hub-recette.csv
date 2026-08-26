@@ -19,7 +19,7 @@
 18;Projet;Erreur technique;Simuler une reponse 500;hub_form_error http_status=500 / AUCUNE conversion;NON TESTE;la soumission simulee n'a pas atteint send() - a rejouer manuellement
 19;Guide;Portes d'entree;Ouvrir le dialog depuis les 4 emplacements;hub_entry_point correct pour chacune;OK;banner_guide / cta_final / bloc_thematique / popup_scroll - 4/4
 20;Guide;Ouverture = ecran e-mail;Ouvrir le dialog guide;1 x hub_form_view et AUCUN hub_form_email_view;OK;conforme sur les 4 portes
-21;Guide;Conversion guide;Completer le parcours guide;hub_form_submission / hub_group=guide / id_page_hub=2000;OK;email_check=unknown puis coordinates_submit puis submission (2000, complet, Unknown)
+21;Guide;Conversion guide;Completer le parcours guide;hub_form_submission / hub_group=guide / id_page_hub=1000 (id de l'URL depuis le 2026-08-25);A REJOUER;valide le 2026-08-07 quand le guide envoyait encore 2000
 22;Guide;Erreur technique;Simuler une 500 pendant le parcours guide;hub_form_error avec hub_group=guide;NON TESTE;meme limite que #18
 23;Guide;Abandon aux coordonnees;Fermer le dialog guide en cours;hub_form_abandon last_step_name=coordinates;NON TESTE;le dialog guide ne se ferme pas dans l'onglet automatise (clic et Echap non traites)
 24;Guide;Raccourci deja converti;Cookie hub_lead contenant l'id de CETTE page puis clic CTA guide;hub_guide_shortcut + hub_guide_download / AUCUNE conversion / AUCUN appel API;OK;hub_guide_shortcut + hub_guide_download hub_lead_path=deja_converti - 0 appel API - 0 hub_form_submission
@@ -27,7 +27,7 @@
 26;Guide;Telechargement auto puis manuel;Ecran de remerciement puis clic sur le lien;download_trigger=auto puis manual;OK;les deux emis avec le bon hub_group
 27;Guide;Pop-up une fois par onglet;Scroller puis recharger;1 seul hub_guide_popup_view par onglet;A TESTER MANUELLEMENT;necessite un scroll reel
 28;Guide;Pop-up nouvel onglet;Rouvrir l'URL dans un nouvel onglet;hub_guide_popup_view se declenche A NOUVEAU;A TESTER MANUELLEMENT;necessite un scroll reel
-29;Transverse;Separation des tunnels;Les 2 parcours dans la meme session;2 x hub_form_submission / meme session_id / id_page_hub 1000 puis 2000;PARTIEL;chaque tunnel valide separement (1000 et 2000). Un seul session_id par session verifie. A rejouer sans rechargement entre les deux
+29;Transverse;Separation des tunnels;Les 2 parcours dans la meme session;2 x hub_form_submission / meme session_id / MEME id_page_hub / hub_group projet puis guide;A REJOUER;les deux tunnels partagent l'id depuis le 2026-08-25 - c'est hub_group (GA4) et l'absence de reponses (BO) qui les separent
 30;Transverse;Groupe sur tous les events;Inspecter chaque push;hub_group present sur 100% des evenements;OK;100% - idem hub_page_uri
 31;Transverse;Evenement supprime;Inspecter tout le parcours;AUCUN hub_form_coordinates_view;OK;absent
 32;Transverse;Non-contamination;Parcours HUB complet;AUCUN evenement du vocabulaire devis;OK;aucun quote_form_funnel / quote_funnel_validation / Popup_Appel_Offre / eec.add
