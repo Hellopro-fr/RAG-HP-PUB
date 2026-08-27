@@ -1,0 +1,69 @@
+name: 'Security Audit — pré-cutover (fs, informatif)'
+
+# Audit sécurité EXHAUSTIF (informatif, NON bloquant) du code destiné à prod (CR/GKE).
+# Track A passe 1 de l'ASPC (ticket 001-INFRA-GCP-ARCHI) : Trivy fs vuln+secret+misconfig
+# sur les 98 services + libs, HIGH+CRITICAL, rapport consolidé publié en artefact.
+#
+# ⚠️ Ceci N'EST PAS le gate de merge : le bloquant reste pr-gate-prod.yml (CRITICAL=0).
+# ⚠️ Trivy via CLI (install.sh) et NON aquasecurity/trivy-action (v0.29.0 cassée, réf setup-trivy@v0.2.2).
+#
+# Déclenchement : push sur la branche d'audit (issue de features/poc) OU dispatch manuel.
+# workflow_dispatch seul ne suffit pas depuis une branche non-défaut (défaut = main) → push-trigger.
+
+on:
+  push:
+    branches: [audit/security-pre-cutover]
+  workflow_dispatch:
+    inputs:
+      severity:
+        description: 'Sévérités scannées'
+        required: false
+        default: 'HIGH,CRITICAL'
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  fs-audit:
+    name: 'Trivy fs — audit complet (informatif)'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Cache Trivy DB
+        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0
+        with:
+          path: ~/.cache/trivy
+          key: trivy-db-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            trivy-db-${{ runner.os }}-
+
+      - name: Install Trivy CLI
+        run: curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b "$RUNNER_TEMP/bin"
+
+      - name: Run filesystem security audit
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}   # auth ghcr pour le pull de la DB Trivy (anti rate-limit)
+          TRIVY_BIN: ${{ runner.temp }}/bin/trivy
+          OUTPUT_DIR: ${{ github.workspace }}/docs/audit/pre-cutover
+          SEVERITY: ${{ github.event.inputs.severity || 'HIGH,CRITICAL' }}
+        run: bash tools/security-audit-fs.sh
+
+      - name: Job summary
+        if: always()
+        run: |
+          if [ -f docs/audit/pre-cutover/synthese.md ]; then
+            head -40 docs/audit/pre-cutover/synthese.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "⚠️ synthese.md absente — voir les logs du scan." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload audit report
+        if: always()
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: security-audit-pre-cutover
+          path: docs/audit/pre-cutover/
+          retention-days: 30
