@@ -11,6 +11,12 @@ import {
 } from '../components/ui/tooltip';
 import Pill from '../components/ui/Pill';
 import { cn } from '../lib/utils';
+import { formatApiDate } from '../lib/dates';
+
+/* Les horodatages de l'audit log passent par lib/dates : `new Date()` sur un
+   timestamp sans fuseau le lisait en heure locale (décalage d'1 à 2 h) et
+   rendait « Invalid Date » sur Safari. */
+const fmtAuditTs = (ts) => formatApiDate(ts, { dateStyle: 'short', timeStyle: 'medium' });
 
 /**
  * /audit — view the FS-rotated audit log entries.
@@ -50,14 +56,6 @@ const HeadWithTip = ({ tip, children }) => (
     </Tooltip>
   </TableHead>
 );
-
-const actionTone = (action) => {
-  if (!action) return 'neutral';
-  if (action.startsWith('login_')) return 'info';
-  if (action.startsWith('callback_')) return 'accent';
-  if (action.startsWith('queue_drop') || action.startsWith('dataset_dedup')) return 'err';
-  return 'warn';
-};
 
 const fmtMetadata = (m) => {
   if (!m) return '';
@@ -157,11 +155,11 @@ const AuditPage = ({ token }) => {
         <FileText className="h-5 w-5 text-ink-2 mt-1 flex-shrink-0" />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-3">
-            <h1 className="text-[26px] font-semibold tracking-[-0.025em] text-ink-0 font-display">Audit log</h1>
+            <h1 className="text-[26px] font-semibold tracking-[-0.025em] text-ink-0 font-display">Journal d’audit</h1>
             {/* Live dot */}
             <span className="flex items-center gap-1.5 font-mono text-[11px] text-ok">
               <span className="h-2 w-2 rounded-full bg-ok animate-pulse-dot" />
-              live
+              Live
             </span>
           </div>
           <p className="text-[13px] text-ink-2 mt-1">Historique des actions sensibles · rétention 90 jours</p>
@@ -267,9 +265,9 @@ const AuditPage = ({ token }) => {
               </TableHeader>
               <TableBody>
                 {items.map((e, idx) => (
-                  <TableRow key={e.id ?? `row-${idx}`} className="hover:bg-bg-2">
+                  <TableRow key={`${e.ts ?? e.timestamp ?? ''}-${e.action}-${idx}`} className="hover:bg-bg-2">
                     <TableCell className="font-mono text-[11px] text-ink-3 whitespace-nowrap">
-                      {e.ts ? new Date(e.ts).toLocaleString('fr-FR') : '—'}
+                      {fmtAuditTs(e.ts)}
                     </TableCell>
                     <TableCell className="font-mono text-[11px] text-ink-1">
                       <span className="inline-flex items-center">
