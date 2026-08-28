@@ -142,6 +142,36 @@ export class UpdateChecker {
     }
 
     /**
+     * Cette URL fait-elle partie du dataset précédent, au / final près ?
+     *
+     * Le repli est nécessaire parce que l'URL stockée vient du dataset précédent tandis que
+     * l'URL présentée vient du lien tel qu'écrit dans la page : rien ne garantit la même
+     * orthographe. C'est déjà la convention de tout l'aval — `isRedirect` compare en
+     * `rightTrimSlash` quelques lignes plus bas, et la soustraction d'orphelins du BO fait
+     * `trim($url, "/")` sur ses deux côtés.
+     *
+     * ⚠ Le repli vit ICI, en lecture, et JAMAIS dans le set `update_dataset:<crawlId>` : ce set
+     * est aussi SCANNÉ (UrlConsolidator.ts:214) pour produire la liste d'amorçage, et il arbitre
+     * le dédoublonnage des phases 2 et 3. Y stocker des URLs sans leur / final ferait amorcer
+     * des URLs modifiées.
+     *
+     * ⚠ Le helper est privé plutôt qu'une méthode du consolidateur parce que cinq suites de
+     * test simulent celui-ci par un objet littéral ne portant que `isInDataset` : élargir son
+     * API les casserait toutes en « not a function », pour un seul appelant.
+     *
+     * ⚠ `isInDataset` échoue OUVERT (catch → false, UrlConsolidator.ts:107-109). Un incident
+     * Redis fait donc sous-compter `accounted` — même sens qu'avant ce correctif, aucune
+     * régression, mais ce n'est pas une garantie.
+     */
+    private async estConnueDuDataset(url: string): Promise<boolean> {
+        if (await this.consolidator.isInDataset(url)) {
+            return true;
+        }
+        const alt = url.endsWith('/') ? url.slice(0, -1) : url + '/';
+        return this.consolidator.isInDataset(alt);
+    }
+
+    /**
      * Main decision engine method. Called from routes.ts for each processed page in update mode.
      *
      * @param originalUrl - request.url (the URL as it was in the queue)
@@ -163,7 +193,13 @@ export class UpdateChecker {
             return { action: 'ignored', url: originalUrl, source, reason: 'already_pushed' };
         }
 
-        const isFromDataset = source === 'dataset';
+        // La provenance ne peut PAS reposer sur userData.source : la copie DÉCOUVERTE d'une
+        // URL du dataset est enfilée ~65 ms avant l'amorce Phase 2 (mesuré sur atox.fr :
+        // enqueueLinks à 16:00:51.018, [PHASE 2] à 16:00:51.083), et c'est structurel — Phase 2
+        // attend que la page d'accueil soit traitée pour connaître les chemins régionaux. La
+        // requête survivante porte donc source='discovered'. On demande au consolidateur, qui
+        // sait. Le || court-circuite : aucun aller-retour Redis ajouté quand source suffit.
+        const isFromDataset = source === 'dataset' || await this.estConnueDuDataset(originalUrl);
         const isHttpError = httpStatus >= 400 || httpStatus === 0;
         const isRedirect = rightTrimSlash(originalUrl) !== rightTrimSlash(loadedUrl);
 
