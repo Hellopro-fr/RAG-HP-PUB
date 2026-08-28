@@ -91,18 +91,26 @@ re-nettoyage `processUrl` de la purge de file.
 
 ```ts
 const isFromDataset = source === 'dataset'
-    || await this.consolidator.isInDatasetLoose(originalUrl);
+    || await this.estConnueDuDataset(originalUrl);
 ```
 
-et, dans `UrlConsolidator`, une lecture tolérante au `/` final :
+avec, **privé à `UpdateChecker`**, un repli tolérant au `/` final :
 
 ```ts
-async isInDatasetLoose(url: string): Promise<boolean> {
-    if (await this.isInDataset(url)) return true;
+private async estConnueDuDataset(url: string): Promise<boolean> {
+    if (await this.consolidator.isInDataset(url)) return true;
     const alt = url.endsWith('/') ? url.slice(0, -1) : url + '/';
-    return this.isInDataset(alt);
+    return this.consolidator.isInDataset(alt);
 }
 ```
+
+⚠ **Le helper est privé à `UpdateChecker`, pas une nouvelle méthode publique du
+consolidateur** — révision du 2026-08-28, à la planification. **Cinq suites de test** simulent
+le consolidateur par un objet littéral ne portant que `isInDataset`
+(`UpdateChecker.{checkedSet.separation, deleteVerdict, forbiddenParams, pushedSet,
+redirectRepeat}.test.ts`) : élargir l'API du consolidateur les casserait toutes les cinq en
+`not a function`, pour un seul appelant. Et CASE 2 n'a pas besoin du repli — `isRedirect`
+compare déjà en `rightTrimSlash`, donc `/x` → `/x/` n'atteint jamais cette branche.
 
 **`originalUrl` et non `loadedUrl`.** La question posée est « connaissions-nous cette URL ? »,
 exactement ce que `source === 'dataset'` voulait dire. `isFromDataset` est calculé **avant** le
