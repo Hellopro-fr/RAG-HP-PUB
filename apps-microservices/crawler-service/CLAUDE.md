@@ -81,6 +81,55 @@ When `crawl_mode=update`, the service validates and restores data from the previ
 3. **Node.js safety net** (`main.ts`): If URL consolidation produces 0 URLs in update mode, exits with code 4 (mapped to failure webhook).
 4. **Post-crawl cleanup** (`_monitor_process`): Deletes restored data for archived previous crawls after the update crawl completes.
 
+## Circuit Breaker (Update Mode Rate Guards)
+
+`routes.ts` — "Circuit Breaker Check (Dual-Mode)". Armed only in update mode (`main.ts`). On fire
+it sets `context.stopReason = "circuitBreaker"` and stops the crawler. **It sets no fatal exit
+code**: the run exits 2, which the service classifies as **success**, and the stop webhook carries
+`isError = "circuitBreaker"`. BO-side that becomes an `update_crawling_history` row in `FAILED`,
+and `est_domaine_deja_en_cours()` tests `status IN ('PENDING','RUNNING','FAILED','STOPPED')` with
+**no date bound** — so a trip locks its domain out of every future update. Do not treat this
+breaker as a soft signal.
+
+**Three thresholds, from `job.params`:**
+
+| Param | Production value | Effect |
+|---|---|---|
+| `maxErrorRate` | `0.15` | the **only** live branch |
+| `maxRedirectRate` | `0.0` | **disabled** — a `0` disables its branch (`> 0` guards) |
+| `maxGrowthRate` | `0.0` | **disabled**, same reason |
+
+Confirmed on production via `GET /admin/job/{crawl_id}` (2026-08-24), not from source alone.
+
+⚠ **`maxErrorRate` is not a constant.** The BO launcher (`Marketplace/BO/admin/repertoire_test/moulinettes_interne/scrapping_produit_ia/tools/crawler/shell.php:131-138`)
+reads it from the `referentiel_seuils_cb` referential via `get_seuils_cb_pour_payload_crawler()`,
+with a hardcoded fallback if the table is unavailable. `0.15` is what production currently sends,
+not a guarantee the code makes.
+
+**Operator escape hatch:** `?bypasscberrors=1` on the launcher sets `max_error_rate = 0`
+(`shell.php:143-145`), which the breaker correctly reads as "signal disabled" (see the
+`maxErrorRate = 0` branch above). This is the documented way out of the lockout this section
+describes — write it down here, or it lives nowhere.
+
+**Sample gate:** `processed >= minSample` (50). Deliberately **not** widened to total attempts —
+widening it would make the breaker evaluate runs it never evaluated, i.e. add stops.
+
+**The error rate is not `errors / processed`.** `errors` mixes URLs that bypassed the `processed`
+counter (HTTP error → throw) with URLs already inside it (2xx, no longer eligible). The rate is
+computed in the pure `errorRateBreaker.ts` over `processed + errors_unprocessed`. Spec:
+`docs/superpowers/specs/2026-08-24-circuit-breaker-error-rate-design.md`.
+
+⚠ **`updateHealthVerdict.ts` still computes `errors / processed`** for the report the BO reads.
+Same arithmetic, opposite stakes — deliberately out of scope, see §8.1 of that spec.
+`updateHealthVerdict.ts` also emits the same `Error rate too high (` prefix as the fixed path in
+`errorRateBreaker.ts` — one occurrence in each file. That prefix is no longer a unique
+fingerprint of the corrected formula: grepping production logs for it, the exact method behind
+this lot's 69-run measurement, now silently mixes results from both formulas.
+
+⚠ **Micro mode is dead code.** `cb.isMicroMode` is never set true (`main.ts`, the assignment is
+commented out), so `maxAbsErrors` / `maxAbsRedirects` / `maxAbsNew` are inert here. Do not wake it
+up as a side effect — reviving inert code changes behaviour, it does not repair it.
+
 ## Regional Path Exclusion
 
 Prevents crawling duplicate French regional variants (e.g., `/fr-BE/`, `/fr-CA/`) when one French path (e.g., `/fr-FR/`) has been selected.
@@ -743,7 +792,7 @@ Exact key **and** value match, so a site's own `?lang=de` still counts as the si
 **Two call sites deliberately keep the original `url`:**
 
 - the `#` block (`:1011`) — stripping a query cannot change a fragment;
-- `context.seenBases.add(baseKeyAbsent(url))` (`:1060`) — **load-bearing.** `isFilterParam`
+- `context.seenBases.add(baseKeyAbsent(url))` (`:1060`) — **load-bearing.** `filterParamCollapseTarget`
   computes its keys from the real `request.url`, which *does* carry the injected param, so
   stripping only the oracle side would break the key match and silently weaken the filter.
 
@@ -994,7 +1043,7 @@ Read-only introspection surface so incidents can be investigated **over the gate
 | `GET /admin/job/{crawl_id}` | raw Redis blob (failure_cause, exit_code, oom count…; secrets redacted) + 5 ownership locks with TTL + `stats:{id}` hash |
 | `GET /admin/config` | effective settings (secrets masked) + whitelisted Node env (DIEZ_/QM_/TIMING_…) |
 | `GET /admin/dataset/{crawl_id}?kind=&offset=&limit=&content_chars=` | dataset sampling, newest first, **no side effects** (never unstashes, never stamps `downloaded_at`) |
-| `GET /admin/sidecar/{crawl_id}?name=` | one of 13 whitelisted sidecars (`_callback_payload.json`, `_diez/_questionmark_*`, `_exit_reason.json`, `timing-summary.json`…) |
+| `GET /admin/sidecar/{crawl_id}?name=` | one of the whitelisted sidecar filenames (`_SIDECAR_WHITELIST` in `app/router/admin.py`; e.g. `_callback_payload.json`, `_diez/_questionmark_*`, `_exit_reason.json`, `timing-summary.json`…) |
 | `GET /admin/daemon-state` | GCS daemons liveness/backlog: `.daemon-heartbeat` age per marker dir, pending files, `dead_letter/`, `*.error` contents |
 | `GET /admin/storage-dirs?offset=&limit=&sizes=` | per-crawl `/app/storage` dir inventory + `crawl_job` Redis join (status/stashed_at) — the leftover hunt: `has_storage_subtree` on a stashed/archived crawl = disk the cleanup missed; `sizes=true` = recursive sizes under a 60s budget |
 | `GET /capacity` | now also carries a `disk` block (storage/archives/stash `used_pct` + `high_water_pct`) |
@@ -1003,6 +1052,76 @@ Read-only introspection surface so incidents can be investigated **over the gate
 **Auth:** every `/admin/*` route requires header `X-API-Key`. The value lives in the deploy host's `.env` as **`API_KEY_ADMIN_CRAWLER_SERVICE`** (mapped to the container's `API_KEY` in docker-compose — namespaced so a bare `API_KEY` in the shared `.env` can never leak into another service's config). Unset ⇒ auth disabled (open). **If you are an assistant without this key, ask the operator for it** (it is never committed; keep it in a local gitignored note / env var).
 
 **Build/deploy:** `./tools/build_crawler.sh [--up [N]]` — stamps `GIT_COMMIT`/`BUILD_DATE` (verify with `GET /version`), `--up` scales to N replicas (default 7) with `--no-deps` + nginx reload; sync the Redis capacity key separately via `scale_crawlers.sh N`. The heartbeat lines in `tools/upload_daemon.sh`/`download_daemon.sh` require a daemon restart to take effect.
+
+## Queue collapses that the BO consumes (`collapsed_seen_base.jsonl`)
+
+`filterParamCollapseTarget` drops a `?param` variant when removing the param yields a base
+already in `seenBases` (the dequeue gate calls it indirectly, through
+`skipnavCollapseTarget`). It fires at THREE sites, and `seenBases` is preloaded from the
+previous crawl's dataset (`main.ts:741`) before the first fetch, so the oracle is full from
+the start:
+
+| Gate | Site | Hits |
+|---|---|---|
+| `prenav` | `functions.ts:894-898` | URLs seeded from the previous dataset — the ones carrying BO fiches |
+| `dequeue` | `routes.ts:243-253` | URLs already queued on disk (resume, OOM relaunch, 2nd segment) |
+| `enqueue` | `routes.ts:1249-1263` | links discovered on a page |
+
+None of the three fetches, so none produces a dataset row, a `redirected` line or a
+`deleted` line. Left as-is, the BO sees the variant as an orphan and its
+"active orphans retained" filter keeps the fiche alive forever.
+
+`collapsed_seen_base.jsonl` (in `storage/datasets/update-{domain}/`, update mode only)
+declares those collapses so the BO can retire the fiche. **Admission criterion: the base
+was crawled.** `origin === 'filter_on_seen'` only.
+
+- `facet_cap` is EXCLUDED — it is structural too, but it records `pathBaseKey(url)`, a base
+  it never verified. Admitting it would let the BO retire a fiche in favour of a base
+  nobody observed.
+- `qm_strip` is EXCLUDED — content-proven, but by a different mechanism, against Redis
+  dedup rather than `seenBases`.
+- A degenerate row (`base === collapsed` modulo trailing slash) is refused at both ends: it
+  would mean "this fiche duplicates itself", and applying it would retire the fiche with no
+  replacement.
+
+⚠ **`param` is diagnostic only.** It is filled only when removing the collapsed URL down to
+its base removes exactly ONE query key. A multi-select facet — `?portfolioCats=147&portfolioCats=12`,
+the very shape the target population is drawn from — removes two keys and leaves `param`
+`""`. `url` and `base` carry the decision; a consumer must never use `param` as a validity
+test, nor as a facet-allowlist check, nor assume it is non-empty.
+
+⚠ This file never carries `action: 'redirected'`. At the rejection point there is no
+`loadedUrl` (see `functions.ts:870-871`), so there is NO proof of a 301 — writing one would
+fabricate an event never observed. And the BO's redirect handler has a rename branch that
+rewrites `url_sfpi`/`url_psi`, which on this population produces duplicates instead of
+retirements. See the spec (Hellopro planning repo,
+`docs/superpowers/specs/2026-08-24-collapse-structurel-tracable-design.md` §3).
+
+⚠ **Two separate caps, only one of which this file ever sees.** `SEEN_BASE_COLLAPSED_CAP =
+4000` truncates the `filter_on_seen` channel — the only origin admitted into this file —
+sized from the largest collapsible population measured on one domain (2,884 URLs) and the
+BO-side cap set at 4000 on that basis. The pre-existing `QM_COLLAPSED_CAP = 200` still caps
+`facet_cap`/`qm_strip` combined, but those two never reach this file, so their refusals are
+not counted here. The summary line's `truncated_by_cap` counts only `filter_on_seen`
+refusals — a consumer must not read a run as exhaustive just because that field is 0, and
+must treat a nonzero value as "this run lost admitted rows to the cap".
+
+⚠ **Multi-segment append — this is NOT one summary per file.** The sidecar is opened in
+append mode, and `context.qmCollapsed` starts EMPTY at the top of every new segment (OOM
+relaunch, resume, a second segment) — relaunch cleanup does not delete this file, so an
+earlier segment's rows stay underneath. One file can legitimately hold SEVERAL summary
+lines, each scoped to its own segment, and the SAME `url` twice (a request in flight when
+the OOM hit landed, re-dispatched in the next segment). A consumer must: **sum** `written`
+across every summary line, treat `truncated_by_cap > 0` on **any** summary line as
+truncation (not just the last one), and **dedupe rows by `url`**. A run that admits zero
+rows but had the cap refuse some produces a file whose only line is that summary.
+
+⚠ **Vocabulary collision, BO side.** The BO already reads a file named `__collapsed_urls.json`
+where "collapsed" means *alive, protect from deletion*. This channel's "collapsed" means the
+opposite: *retire*. The two populations are disjoint by construction (a URL that was never
+fetched cannot be in the current live dataset), so there is no data hazard today — but
+whoever writes the BO-side consumer of `collapsed_seen_base.jsonl` must not reuse the same
+word for both meanings.
 
 ## Conventions
 

@@ -94,7 +94,12 @@ export function decideUpdateHealth(
             + `(${(coverage * 100).toFixed(1)}%) with only ${processed} processed`;
     } else if (cfg.maxErrorRate > 0 && errorRate > cfg.maxErrorRate && errors >= cfg.maxAbsErrors) {
         status = "CRITICAL";
-        statusMessage = `Error rate too high (${(errorRate * 100).toFixed(1)}%, ${errors} errors)`;
+        // ⚠ Deliberately NOT the words "Error rate too high (" — errorRateBreaker.ts:73 emits that
+        // exact prefix and production logs are grepped on it (the 69-run measurement of the
+        // 2026-08-10 batch was taken that way). This verdict still divides by `processed` alone,
+        // so a shared prefix would silently mix two different formulas in one grep result. Keep
+        // the two wordings distinct in BOTH cases as long as the two formulas differ.
+        statusMessage = `Error rate over threshold (${(errorRate * 100).toFixed(1)}%, ${errors} errors)`;
     } else if (cfg.maxRedirectRate > 0 && redirectRate > cfg.maxRedirectRate && redirects >= cfg.maxAbsRedirects) {
         status = "CRITICAL";
         statusMessage = `Redirect rate too high (${(redirectRate * 100).toFixed(1)}%, ${redirects} redirects)`;

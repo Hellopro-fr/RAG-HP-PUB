@@ -58,6 +58,7 @@ import { flagStaleVariantsOnDisk } from "./queuePurge.js";
 import { baseKeyAbsent } from "./urlBase.js";
 import { QM_FACET_ENABLED } from "./facetCap.js";
 import { writeQmAudit, writeDiezAudit, writeCanonicalDedupAudit } from "./auditSidecars.js";
+import { writeCollapsedSeenBase } from "./collapsedSeenBase.js";
 import { canonicalDedupEnabled } from "./canonicalBase.js";
 import { isFilterParam } from "./filterOnSeen.js";
 import { facetParamsForCms } from "./cmsFacetLists.js";
@@ -1352,6 +1353,17 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         if (qmAudit.collapsedTotal > 0) {
             console.warn(`[questionmark] route-loss candidates: ${qmAudit.collapsedTotal} ?param= page(s) collapsed onto an existing base — see _questionmark_audit.json (re-crawl to confirm).`);
         }
+
+        // Le canal que le BO consomme. Distinct de _questionmark_audit.json, qui reste un
+        // audit exhaustif sans lecteur BO : celui-ci ne porte que les replis dont la base a
+        // été crawlée, et il vit dans storage/datasets/update-<domaine>/ parce que c'est là
+        // que le recepteur BO ouvre ses jsonl (script_process_update_crawling.php:589).
+        const seenBaseWritten = await writeCollapsedSeenBase(new Date().toISOString());
+        if (seenBaseWritten > 0 || context.qmCollapsedRejected > 0) {
+            console.warn(`[collapse] ${seenBaseWritten} seen-base collapse(s) declared to the BO`
+                + `${context.qmCollapsedRejected > 0 ? `, ${context.qmCollapsedRejected} refused by the cap` : ""}.`);
+        }
+
         if (perClassEnabled()) {
             const diezAudit = writeDiezAudit(storagePath, {
                 collapsed: context.diezCollapsed,
@@ -1591,8 +1603,18 @@ if (typeCrawling == "sitemap") {
                         { toKeep: context.config.toKeep, toRemove: context.config.toRemove },
                     );
                 }
+                // Épinglage de l'identité de file, comme Phase 1 (:952) et l'amorce standard
+                // (:1033). Sans lui, Crawlee calcule un uniqueKey NORMALISÉ (il retire le /
+                // final) alors que routes.ts:1277 épingle les liens découverts sur l'URL BRUTE :
+                // la même page devient alors deux requêtes, et la copie dataset — celle qui
+                // porte source='dataset' — arrive seconde et sort en already_pushed sans
+                // créditer 'accounted'. Mesuré le 2026-08-27 sur atox.fr : 19 amorces sur 19
+                // dupliquées, contre 0 sur 1 pour la page d'accueil, qui épingle déjà.
+                // seedUrl et non url : c'est la chaîne réellement enfilée, après
+                // stripActionAnchor et le re-nettoyage processUrl de la purge de file.
                 await requestQueue.addRequest({
                     url: seedUrl,
+                    uniqueKey: seedUrl,
                     userData: { source: source }
                 });
                 seedCount++;
