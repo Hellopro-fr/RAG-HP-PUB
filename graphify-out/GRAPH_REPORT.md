@@ -1,11 +1,11 @@
-# Graph Report - crawler-service + docs + libs (circuit breaker)  (2026-08-25)
+# Graph Report - scoped rebuild (scope derived from graphify-out/graph.json)  (2026-08-28)
 
 ## Corpus Check
-- 22 files · ~0 words
+- 772 files · ~0 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 11751 nodes · 27942 edges · 224 communities detected
+- 11753 nodes · 27951 edges · 224 communities detected
 - Extraction: 64% EXTRACTED · 36% INFERRED · 0% AMBIGUOUS · INFERRED: 9994 edges (avg confidence: 0.61)
 - Token cost: 0 input · 0 output
 
