@@ -1,5 +1,5 @@
 import { useContext } from 'react';
-import { CoherenceContext } from './CoherenceProvider';
+import { CoherenceContext } from './context';
 
 /**
  * Get violations for a specific rule, optionally filtered by itemKey for per-item rules.

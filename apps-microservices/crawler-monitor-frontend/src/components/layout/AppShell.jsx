@@ -24,6 +24,7 @@ export function AppShell({
   onRefresh,
   isRefreshing = false,
   wsConnected = true,
+  health = null,
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -47,7 +48,6 @@ export function AppShell({
       <aside className="hidden sm:block flex-shrink-0">
         <Sidebar
           onLogout={onLogout}
-          onSearch={() => setPaletteOpen(true)}
           badges={badges}
         />
       </aside>
@@ -60,7 +60,6 @@ export function AppShell({
             mobile
             onLogout={() => { setMobileOpen(false); onLogout?.(); }}
             onItemSelect={() => setMobileOpen(false)}
-            onSearch={() => { setMobileOpen(false); setPaletteOpen(true); }}
             badges={badges}
           />
         </SheetContent>
@@ -74,6 +73,7 @@ export function AppShell({
           onRefresh={onRefresh}
           isRefreshing={isRefreshing}
           wsConnected={wsConnected}
+          health={health}
         />
         {/* pb-16 réserve la hauteur de la BottomTabBar sur mobile */}
         <main className="flex-1 overflow-y-auto p-5 pb-16 sm:pb-5">
