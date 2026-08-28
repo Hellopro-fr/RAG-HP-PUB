@@ -206,7 +206,7 @@ export class UpdateChecker {
         // enqueueLinks à 16:00:51.018, [PHASE 2] à 16:00:51.083), et c'est structurel — Phase 2
         // attend que la page d'accueil soit traitée pour connaître les chemins régionaux. La
         // requête survivante porte donc source='discovered'. On demande au consolidateur, qui
-        // sait. Le || court-circuite : aucun aller-retour Redis ajouté quand source suffit —
+        // sait. Le ternaire court-circuite : aucun aller-retour Redis ajouté quand source suffit —
         // mais l'épinglage du uniqueKey (Tâche 0) supprime justement la requête qui portait
         // source='dataset' : Crawlee garde le userData du PREMIER inserant, et c'est la copie
         // DÉCOUVERTE, enfilée 65 ms plus tôt, qui survit. Pour la population que ce lot vise,
@@ -288,7 +288,13 @@ export class UpdateChecker {
                         destination: loadedUrl,
                         reason: 'redirect_to_existing',
                     });
-                    await this.statsManager.increment("accounted");
+                    // Crédit conditionnel à l'orthographe exacte : l'exacte est de toute façon
+                    // seedée et comptée pour son propre compte (Tâche 0) — créditer aussi la
+                    // repliée doublerait la même entrée du dataset précédent et pourrait porter
+                    // `coverage` au-dessus de 1. Voir le docblock de `datasetMatch()` ci-dessus.
+                    if (match === 'exact') {
+                        await this.statsManager.increment("accounted");
+                    }
                     return { action: 'confirmed', url: originalUrl, source, reason: 'redirect_to_existing' };
                 } else {
                     // Redirect to a URL NOT in Dataset → track the redirection
@@ -300,7 +306,10 @@ export class UpdateChecker {
                         destination: loadedUrl,
                     };
                     await this.writeJsonl(UpdateChecker.REDIRECTED_FILE, result);
-                    await this.statsManager.increment("accounted");
+                    // Même garde que ci-dessus : crédit réservé à l'orthographe exacte.
+                    if (match === 'exact') {
+                        await this.statsManager.increment("accounted");
+                    }
                     return result;
                 }
             } else {
@@ -342,7 +351,12 @@ export class UpdateChecker {
             // Dataset URL, 2xx, same URL → check if still eligible
             if (this.isEligible(loadedUrl, isFrenchContent)) {
                 // Confirmed: URL is still valid in Dataset
-                await this.statsManager.increment("accounted");
+                // Crédit conditionnel à l'orthographe exacte (même garde que CASE 2) : la
+                // repliée n'écrit aucun JSONL ici, donc sans le crédit c'est un no-op — exactement
+                // ce qu'on veut, l'exacte étant déjà seedée et comptée pour son propre compte.
+                if (match === 'exact') {
+                    await this.statsManager.increment("accounted");
+                }
                 return { action: 'confirmed', url: originalUrl, source };
             } else {
                 // No longer eligible → mark as deleted
@@ -354,7 +368,12 @@ export class UpdateChecker {
                     reason: 'not_eligible',
                 };
                 await this.writeJsonl(UpdateChecker.DELETED_FILE, result);
-                await this.statsManager.increment("accounted");
+                // L'événement `deleted` s'écrit pour les deux orthographes — l'inéligibilité est
+                // un jugement sur le CONTENU, valable pour l'une comme pour l'autre, contrairement
+                // au statut HTTP de CASE 1. Seul le crédit reste réservé à l'orthographe exacte.
+                if (match === 'exact') {
+                    await this.statsManager.increment("accounted");
+                }
                 return result;
             }
         } else {

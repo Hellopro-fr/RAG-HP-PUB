@@ -90,17 +90,18 @@ re-nettoyage `processUrl` de la purge de file.
 ### ② `UpdateChecker` — la provenance cesse de reposer sur une course
 
 ```ts
-const isFromDataset = source === 'dataset'
-    || await this.estConnueDuDataset(originalUrl);
+const match = source === 'dataset' ? 'exact' : await this.datasetMatch(originalUrl);
+const isFromDataset = match !== 'none';
 ```
 
 avec, **privé à `UpdateChecker`**, un repli tolérant au `/` final :
 
 ```ts
-private async estConnueDuDataset(url: string): Promise<boolean> {
-    if (await this.consolidator.isInDataset(url)) return true;
+private async datasetMatch(url: string): Promise<'exact' | 'folded' | 'none'> {
+    if (await this.consolidator.isInDataset(url)) return 'exact';
     const alt = url.endsWith('/') ? url.slice(0, -1) : url + '/';
-    return this.consolidator.isInDataset(alt);
+    if (await this.consolidator.isInDataset(alt)) return 'folded';
+    return 'none';
 }
 ```
 
@@ -114,9 +115,10 @@ compare déjà en `rightTrimSlash`, donc `/x` → `/x/` n'atteint jamais cette b
 
 **`originalUrl` et non `loadedUrl`.** La question posée est « connaissions-nous cette URL ? »,
 exactement ce que `source === 'dataset'` voulait dire. `isFromDataset` est calculé **avant** le
-split en CASE 1/2/3 et gouverne les trois : le tester sur `loadedUrl` ferait entrer une
-destination de redirection dans la branche dataset, ce que CASE 2 traite déjà séparément via
-`destInDataset`.
+split en CASE 1/2/3 et gouverne CASE 2 et CASE 3 — CASE 1, depuis le correctif de la vague
+précédente (§③ ci-dessous), est gouverné par `match === 'exact'`, pas par `isFromDataset` : le
+tester sur `loadedUrl` ferait entrer une destination de redirection dans la branche dataset, ce
+que CASE 2 traite déjà séparément via `destInDataset`.
 
 ⚠⚠ **Le repli vit dans la LECTURE, jamais dans le set.** `update_dataset:<crawlId>` n'est pas
 qu'un test d'appartenance : il est **scanné** (`UrlConsolidator.ts:214`) pour produire la liste
@@ -147,6 +149,30 @@ délibérément réduit à 404/410 après l'incident **1320-402** (63 blocages a
 fausses suppressions de fiches BO-side). Ce correctif applique le même principe à l'identité de
 l'URL plutôt qu'au statut HTTP.
 
+### ④ CASE 2/3 — le crédit `accounted` se réserve à l'exact (2e moitié du correctif)
+
+⚠⚠ **Miroir exact du défaut fermé en ③.** `PushedSet.tryClaim` est un `sAdd` de chaîne brute
+(`PushedSet.ts:58-62`, aucun repli), donc une orthographe exacte et sa variante repliée
+réclament chacune leur propre entrée et atteignent toutes les deux CASE 2 ou CASE 3 — chacune
+incrémentait `accounted`, doublant le crédit d'une seule entrée du dataset précédent et pouvant
+porter `coverage` au-dessus de 1.
+
+`accounted` compte des **entrées du dataset précédent re-observées**. Seule l'orthographe
+**exacte** en est une ; la repliée n'en est pas une, et l'exacte est de toute façon seedée et
+observée pour son propre compte (①). Les quatre incréments restants — les deux de CASE 2
+(`redirect_to_existing` et la redirection hors dataset) et les deux de CASE 3 (`confirmed` et
+`deleted` sur `not_eligible`) — sont donc gatés sur `match === 'exact'`, à l'identique du
+gate posé en ③ pour CASE 1.
+
+Ce que le gate NE change PAS — les branches, seulement le crédit :
+- CASE 2 écrit toujours son événement `REDIRECTED` (mapping ancien→nouveau nécessaire au BO,
+  indépendant du comptage) et incrémente toujours `redirects` sur la redirection hors dataset ;
+- CASE 3 éligible reste `confirmed` sur une variante repliée — sans JSONL et désormais sans
+  crédit, c'est un no-op, ce qui est le comportement recherché ;
+- CASE 3 non éligible écrit toujours son événement `deleted` : l'inéligibilité juge le
+  **contenu**, valable pour les deux orthographes d'une même page — contrairement au statut
+  HTTP de CASE 1, qui ne l'est pas.
+
 ### Pourquoi les deux, et pas l'une ou l'autre
 
 | | ① seule | ② seule | ① + ② |
@@ -157,7 +183,7 @@ l'URL plutôt qu'au statut HTTP.
 ① supprime le gaspillage — **49 % des navigations sur `atox.fr`** (19 requêtes sur 39).
 ② corrige le compteur quelle que soit l'issue de la course, **et corrige aussi la page
 d'accueil**, que `main.ts:942` amorce en `source: 'seed'` et qui n'était donc jamais créditée :
-`estConnueDuDataset` la reconnaît, elle fait partie des URLs du dataset précédent.
+`datasetMatch` la reconnaît, elle fait partie des URLs du dataset précédent.
 
 ## 5. Coût et risques hérités
 
@@ -218,10 +244,14 @@ les entrées du verdict de santé DÉFAVORABLEMENT des deux côtés à la fois :
   `errors` incrémenté) ; elles comptent désormais ;
 - ① baisse le **dénominateur** : `processed` passe de 39 à ~20 sur `atox.fr` (les requêtes
   dupliquées disparaissent) ;
-- ⇒ `errorRate` peut **environ doubler par arithmétique seule**, et `HEALTHY → CRITICAL` ou
-  `SUSPECT` devient possible sur un domaine qui n'a fait que quelques 404 ordinaires. Les seuils
-  `maxErrorRate` / `maxAbsErrors` ont été calibrés contre un nombre faux **des deux côtés** —
-  pas seulement optimiste comme le paragraphe précédent le donne à penser.
+- ⇒ `errorRate = errors / processed` peut **environ doubler par arithmétique seule**, et
+  `HEALTHY → CRITICAL` devient possible sur un domaine qui n'a fait que quelques 404 ordinaires.
+  Les seuils `maxErrorRate` / `maxAbsErrors` ont été calibrés contre un nombre faux **des deux
+  côtés** — pas seulement optimiste comme le paragraphe précédent le donne à penser.
+  `SUSPECT` (`errors / previousTotal > 0,5`) n'est concerné que par la moitié de cet effet : son
+  dénominateur `previousTotal` est la taille du dataset précédent, que ce lot ne touche pas —
+  seule la hausse du numérateur `errors` peut l'y faire basculer, sans le doublement
+  arithmétique du ratio lui-même.
 
 Ce n'est **pas un bug** : les nouveaux chiffres sont les bons, `processed` et `errors` mesurent
 enfin ce qu'ils prétendent mesurer. C'est un risque de **mise en service** — un domaine jusqu'ici

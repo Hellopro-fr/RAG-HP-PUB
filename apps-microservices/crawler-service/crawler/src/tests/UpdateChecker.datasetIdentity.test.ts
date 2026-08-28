@@ -43,7 +43,10 @@ test('a dataset URL arriving as discovered still credits accounted exactly once'
 
 // TEST 2 — repli sur le / final, DANS LES DEUX SENS. L'URL stockée vient du dataset
 // précédent, l'URL présentée vient du lien tel qu'écrit dans la page : rien ne garantit
-// la même orthographe.
+// la même orthographe. Les deux sens sont des correspondances REPLIÉES (jamais 'exact',
+// puisque stocké et présenté diffèrent) : depuis la 2e moitié du correctif, ni l'une ni
+// l'autre ne crédite plus `accounted` — même changement que TEST 7, sur l'autre sens du pli.
+// Avant ce correctif, les deux assertions attendaient ['accounted'].
 test('the trailing-slash fold works both ways', async () => {
     const stored = 'https://www.example.fr/produits';
     const c1 = makeConsolidator([stored]);
@@ -51,14 +54,14 @@ test('the trailing-slash fold works both ways', async () => {
     const r1 = await makeChecker(c1, s1, makeWriter())
         .checkUrl(stored + '/', stored + '/', 'discovered', 200, true);
     assert.equal(r1.action, 'confirmed', 'stocké sans /, présenté avec /');
-    assert.deepEqual(s1._calls, ['accounted']);
+    assert.deepEqual(s1._calls, [], 'la repliee ne credite plus accounted');
 
     const c2 = makeConsolidator([stored + '/']);
     const s2 = makeStats();
     const r2 = await makeChecker(c2, s2, makeWriter())
         .checkUrl(stored, stored, 'discovered', 200, true);
     assert.equal(r2.action, 'confirmed', 'stocké avec /, présenté sans /');
-    assert.deepEqual(s2._calls, ['accounted']);
+    assert.deepEqual(s2._calls, [], 'la repliee ne credite plus accounted');
 });
 
 // TEST 3 — la garde contre un correctif trop gourmand. Une URL réellement neuve doit
@@ -78,8 +81,8 @@ test('a genuinely unknown URL stays new and never credits accounted', async () =
 });
 
 // TEST 4 — court-circuit. Quand la provenance est déjà connue, on n'ajoute aucun
-// aller-retour Redis : le || de JavaScript n'évalue pas sa droite si la gauche est vraie,
-// et ce test empêche qu'un refactor le perde.
+// aller-retour Redis : le ternaire n'évalue sa branche `datasetMatch()` que si
+// source !== 'dataset', et ce test empêche qu'un refactor le perde.
 test('source=dataset short-circuits: the consolidator is never consulted', async () => {
     const url = 'https://www.example.fr/services/';
     const consolidator = makeConsolidator([url]);
@@ -127,9 +130,13 @@ test('an exact match on a 404 still deletes and accounts, unchanged', async () =
     assert.equal(writer._calls[0][0], UpdateChecker.DELETED_FILE);
 });
 
-// TEST 7 — CASE 3 garde le repli : un 200 éligible sur la variante repliée reste confirmed,
-// à la différence de CASE 1. C'est l'asymétrie que ce correctif introduit délibérément.
-test('a folded match on an eligible 200 stays confirmed — CASE 3 keeps the fold', async () => {
+// TEST 7 — CASE 3 garde le repli comme BRANCHE, mais plus comme CRÉDIT (2e moitié du
+// correctif). Un 200 éligible sur la variante repliée reste 'confirmed' — CASE 3 ne retombe
+// pas sur la branche non-dataset, à la différence de CASE 1 — mais n'incrémente plus
+// `accounted` : l'orthographe exacte est de toute façon seedée et comptée pour son propre
+// compte, donc créditer aussi la repliée compterait deux fois la même entrée du dataset
+// précédent. Comportement changé par ce correctif : avant, ce test attendait ['accounted'].
+test('a folded match on an eligible 200 stays confirmed but no longer credits accounted', async () => {
     const stored = 'https://www.example.fr/a';
     const consolidator = makeConsolidator([stored]);
     const stats = makeStats();
@@ -137,5 +144,23 @@ test('a folded match on an eligible 200 stays confirmed — CASE 3 keeps the fol
         .checkUrl(stored + '/', stored + '/', 'discovered', 200, true);
 
     assert.equal(r.action, 'confirmed');
-    assert.deepEqual(stats._calls, ['accounted']);
+    assert.deepEqual(stats._calls, [], 'la repliee ne credite plus accounted');
+});
+
+// TEST 8 — CASE 2, variante repliée redirigeant hors dataset : l'événement REDIRECTED
+// s'écrit toujours et `redirects` s'incrémente toujours (signal repeatable pour le BO),
+// mais `accounted` reste à zéro — même garde, sur la branche redirection de CASE 2.
+test('a folded match redirecting off-dataset still writes REDIRECTED and increments redirects, no accounted', async () => {
+    const stored = 'https://www.example.fr/a';
+    const destination = 'https://www.example.fr/hors-dataset';
+    const consolidator = makeConsolidator([stored]);
+    const stats = makeStats();
+    const writer = makeWriter();
+    const r = await makeChecker(consolidator, stats, writer)
+        .checkUrl(stored + '/', destination, 'discovered', 301, true);
+
+    assert.equal(r.action, 'redirected');
+    assert.deepEqual(stats._calls, ['redirects'], 'redirects s\'incremente, accounted non');
+    assert.equal(writer._calls.length, 1);
+    assert.equal(writer._calls[0][0], UpdateChecker.REDIRECTED_FILE);
 });
