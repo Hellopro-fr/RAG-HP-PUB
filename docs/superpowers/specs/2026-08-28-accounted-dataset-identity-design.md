@@ -134,7 +134,7 @@ normalisant le set.
 ① supprime le gaspillage — **49 % des navigations sur `atox.fr`** (19 requêtes sur 39).
 ② corrige le compteur quelle que soit l'issue de la course, **et corrige aussi la page
 d'accueil**, que `main.ts:942` amorce en `source: 'seed'` et qui n'était donc jamais créditée :
-`isInDatasetLoose` la reconnaît, elle fait partie des URLs du dataset précédent.
+`estConnueDuDataset` la reconnaît, elle fait partie des URLs du dataset précédent.
 
 ## 5. Coût et risques hérités
 
@@ -158,7 +158,14 @@ suites au style `assert.deepEqual(stats._calls, [...])`
 - `/x` stocké, `/x/` présenté (et l'inverse) ⇒ reconnue ;
 - une URL réellement inconnue ⇒ toujours `new_urls`, jamais `accounted` (la garde contre un
   correctif qui rendrait tout « dataset ») ;
-- `isInDataset` en échec Redis ⇒ comportement inchangé, pas d'exception qui remonte.
+- `source === 'dataset'` ⇒ le consolidateur n'est **pas** interrogé, prouvant qu'aucun
+  aller-retour Redis n'est ajouté sur le chemin qui connaît déjà la provenance.
+
+⚠ **Un cinquième cas a été écarté à la planification : « `isInDataset` en échec Redis ».** Il
+n'est pas testable honnêtement — `isInDataset` **attrape en interne** (`catch → return false`,
+`UrlConsolidator.ts:107-109`), donc l'exception qu'il décrirait ne peut être produite qu'en
+simulant un comportement que la vraie classe n'a pas. Le risque réel est ailleurs et reste
+documenté en §5 : la dégradation est **silencieuse**, pas bruyante.
 
 **En production** — rejouer la sonde des 60 runs. Attendu : `accounted == previous_total` sur
 les runs sains, contre **0 sur 60** aujourd'hui, et la distribution de couverture déplacée vers

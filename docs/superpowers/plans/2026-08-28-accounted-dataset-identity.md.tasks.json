@@ -1,0 +1,21 @@
+{
+  "planPath": "docs/superpowers/plans/2026-08-28-accounted-dataset-identity.md",
+  "tasks": [
+    {
+      "id": 0,
+      "subject": "Task 0: Epingler l'identite de l'amorce Phase 2",
+      "status": "pending",
+      "description": "**Goal:** Une URL du dataset et sa copie découverte partagent désormais le même `uniqueKey`, donc une seule requête Crawlee.\n\n**Files:**\n- Modify: `apps-microservices/crawler-service/crawler/src/main.ts:1606-1609`\n- Create: `apps-microservices/crawler-service/crawler/src/tests/uniqueKeyPinning.test.ts`\n\n**Acceptance Criteria:**\n- [ ] `main.ts` passe `uniqueKey: seedUrl` à l'`addRequest` de Phase 2.\n- [ ] La valeur épinglée est `seedUrl` (après `stripActionAnchor` et `processUrl`), jamais `url`.\n- [ ] Un test échoue si Crawlee cesse de normaliser le `/` final — c'est-à-dire si la prémisse du correctif disparaît.\n- [ ] Les 43 suites existantes restent vertes.\n\n**Verify:** `cd apps-microservices/crawler-service/crawler && npm test` → toutes les suites passent, dont `uniqueKeyPinning.test.ts` (3 tests ajoutés).\n\n⚠ Le test de la Task 0 est un TÉMOIN DE PRÉMISSE, pas un test TDD : il passe avant comme après le correctif, parce qu'il décrit le comportement de Crawlee et non le nôtre. Ne pas s'attendre à un rouge à l'étape 2.\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/crawler/src/main.ts\", \"apps-microservices/crawler-service/crawler/src/tests/uniqueKeyPinning.test.ts\"], \"verifyCommand\": \"cd apps-microservices/crawler-service/crawler && npm test\", \"acceptanceCriteria\": [\"main.ts passe uniqueKey: seedUrl a l'addRequest de Phase 2\", \"la valeur epinglee est seedUrl et non url\", \"un test casse si Crawlee cesse de normaliser le / final\", \"les 43 suites existantes restent vertes\"], \"modelTier\": \"mechanical\"}\n```"
+    },
+    {
+      "id": 1,
+      "subject": "Task 1: La provenance dataset ne depend plus d'une course",
+      "status": "pending",
+      "blockedBy": [
+        0
+      ],
+      "description": "**Goal:** `UpdateChecker` reconnaît une URL du dataset précédent même quand la requête survivante porte `source: 'discovered'`, et crédite `accounted` une fois exactement.\n\n**Files:**\n- Modify: `apps-microservices/crawler-service/crawler/src/class/UpdateChecker.ts:166`\n- Create: `apps-microservices/crawler-service/crawler/src/tests/UpdateChecker.datasetIdentity.test.ts`\n\n**Acceptance Criteria:**\n- [ ] Une URL connue du dataset arrivant en `source: 'discovered'` rend `action: 'confirmed'` et incrémente `accounted` exactement une fois.\n- [ ] Le repli sur le `/` final fonctionne dans les DEUX sens : `/x` stocké / `/x/` présenté, et l'inverse.\n- [ ] Une URL réellement inconnue rend toujours `action: 'new_url'` et n'incrémente jamais `accounted`.\n- [ ] Quand `source === 'dataset'`, le consolidateur n'est PAS interrogé (court-circuit du `||`).\n- [ ] Les cinq suites `UpdateChecker.*` existantes restent vertes SANS être modifiées.\n\n**Verify:** `cd apps-microservices/crawler-service/crawler && npm test` → toutes vertes ; `git diff --name-only -- src/tests/` ne montre que le fichier créé.\n\n⚠ Le helper `estConnueDuDataset` est PRIVÉ à UpdateChecker, jamais une méthode publique de UrlConsolidator : cinq suites simulent le consolidateur par un objet littéral ne portant que `isInDataset`, et élargir son API les casserait toutes en « not a function ».\n\n⚠ Le repli du `/` vit dans la LECTURE, jamais dans le set `update_dataset:<crawlId>` — ce set est aussi scanné (UrlConsolidator.ts:214) pour produire la liste d'amorçage.\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/crawler/src/class/UpdateChecker.ts\", \"apps-microservices/crawler-service/crawler/src/tests/UpdateChecker.datasetIdentity.test.ts\"], \"verifyCommand\": \"cd apps-microservices/crawler-service/crawler && npm test\", \"acceptanceCriteria\": [\"une URL du dataset arrivant en source=discovered rend confirmed et incremente accounted exactement une fois\", \"le repli sur le / final fonctionne dans les deux sens\", \"une URL inconnue reste new_url et n'incremente jamais accounted\", \"source=dataset court-circuite : le consolidateur n'est pas interroge\", \"les cinq suites UpdateChecker existantes restent vertes sans etre modifiees\"], \"modelTier\": \"standard\"}\n```"
+    }
+  ],
+  "lastUpdated": "2026-08-28T13:04:17"
+}
