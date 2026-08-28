@@ -124,6 +124,29 @@ d'amorçage, et il arbitre le dédoublonnage des phases 2 et 3 (`:167`, `:190`).
 URLs sans leur `/` final ferait **amorcer des URLs modifiées**. Ne pas « simplifier » en
 normalisant le set.
 
+### ③ CASE 1 — la garde d'exactitude (revue finale de branche)
+
+⚠⚠ **CASE 1 ne peut pas se contenter d'`isFromDataset`.** Un appariement REPLIÉ ne prouve rien
+sur le statut HTTP de l'AUTRE orthographe : le dataset contient `/a` ; une page lie `/a/`, qui
+n'a **jamais** été au dataset ; un serveur à routage strict rend 404 sur `/a/` alors que `/a`
+est vivant. Le booléen d'origine aurait laissé passer un `deleted` pour `/a/` **et** un
+`confirmed` pour `/a` dans le même run — deux instructions contradictoires pour la même page
+envoyées au BO, qui replie lui aussi le `/`.
+
+Le helper devient donc `datasetMatch(): 'exact' | 'folded' | 'none'`, et CASE 1 (le bloc
+404/410 **et** le comptage `errors` / `errors_unprocessed` qui le précède) ne s'engage que sur
+`'exact'` : un appariement `'folded'` retombe entièrement sur la branche non-dataset (`ignored /
+non_dataset_error`), à l'identique du comportement d'avant ce lot. Gater seulement le bloc
+404/410 en laissant `errors` / `errors_unprocessed` s'appliquer à une variante repliée a été
+écarté : cette population alimenterait le numérateur d'`errorRate`, exactement ce que §7 met en
+garde de ne pas aggraver. CASE 2 et CASE 3 gardent le repli intégral — un 200 ou une redirection
+sur la variante repliée enseigne bien quelque chose sur la page, à la différence d'une erreur.
+
+Cette asymétrie prolonge un principe déjà en place, pas une nouvelle prudence : CASE 1 avait été
+délibérément réduit à 404/410 après l'incident **1320-402** (63 blocages anti-bot 403 devenus 59
+fausses suppressions de fiches BO-side). Ce correctif applique le même principe à l'identité de
+l'URL plutôt qu'au statut HTTP.
+
 ### Pourquoi les deux, et pas l'une ou l'autre
 
 | | ① seule | ② seule | ① + ② |
@@ -172,6 +195,11 @@ les runs sains, contre **0 sur 60** aujourd'hui, et la distribution de couvertur
 1. L'observable métier est la file « Garde santé » du BO, qui montre run par run ce qui se
 débloque, avec son Total.
 
+⚠⚠ **La sonde post-déploiement doit aussi compter les verdicts `CRITICAL` et `SUSPECT`**, pas
+seulement la distribution de couverture — voir §7 : `errorRate` peut basculer défavorablement
+sur des runs jusqu'ici `HEALTHY`. Décision du partenaire humain : livraison **nue, sans
+drapeau** ; c'est donc cette sonde, et elle seule, qui doit voir la bascule si elle se produit.
+
 ## 7. Mise en service
 
 **Nu, sans drapeau.** Le plafond de suppression de masse (`errors / previousTotal > 0,5` →
@@ -181,6 +209,24 @@ clic d'opérateur** dans la file.
 ⚠ Rendre `accounted` juste **arme** des suppressions aujourd'hui retenues : 9 runs sur 60 sont
 en `PENDING_SAMPLE` à cause d'une couverture fausse. C'est l'effet recherché — ces runs sont
 retenus pour une raison qui n'existe pas — mais il doit être observé, pas subi.
+
+⚠⚠ **Le risque n'est pas à sens unique — la revue finale de branche l'a trouvé.** Ce lot bouge
+les entrées du verdict de santé DÉFAVORABLEMENT des deux côtés à la fois :
+
+- ② monte le **numérateur** d'`errorRate = errors / processed` : les erreurs d'une URL dataset
+  arrivée en `discovered` étaient AVALÉES avant ce lot (branche non-dataset de CASE 1, aucun
+  `errors` incrémenté) ; elles comptent désormais ;
+- ① baisse le **dénominateur** : `processed` passe de 39 à ~20 sur `atox.fr` (les requêtes
+  dupliquées disparaissent) ;
+- ⇒ `errorRate` peut **environ doubler par arithmétique seule**, et `HEALTHY → CRITICAL` ou
+  `SUSPECT` devient possible sur un domaine qui n'a fait que quelques 404 ordinaires. Les seuils
+  `maxErrorRate` / `maxAbsErrors` ont été calibrés contre un nombre faux **des deux côtés** —
+  pas seulement optimiste comme le paragraphe précédent le donne à penser.
+
+Ce n'est **pas un bug** : les nouveaux chiffres sont les bons, `processed` et `errors` mesurent
+enfin ce qu'ils prétendent mesurer. C'est un risque de **mise en service** — un domaine jusqu'ici
+`HEALTHY` peut basculer le jour du déploiement sans qu'aucune régression n'ait eu lieu. Voir §6
+« En production » pour la sonde qui doit l'observer.
 
 ## 8. Hors périmètre, délibérément
 

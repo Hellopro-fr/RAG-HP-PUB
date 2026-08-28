@@ -142,7 +142,8 @@ export class UpdateChecker {
     }
 
     /**
-     * Cette URL fait-elle partie du dataset précédent, au / final près ?
+     * Comment cette URL correspond-elle au dataset précédent : exacte, repliée au / final
+     * près, ou aucune ?
      *
      * Le repli est nécessaire parce que l'URL stockée vient du dataset précédent tandis que
      * l'URL présentée vient du lien tel qu'écrit dans la page : rien ne garantit la même
@@ -162,13 +163,20 @@ export class UpdateChecker {
      * ⚠ `isInDataset` échoue OUVERT (catch → false, UrlConsolidator.ts:107-109). Un incident
      * Redis fait donc sous-compter `accounted` — même sens qu'avant ce correctif, aucune
      * régression, mais ce n'est pas une garantie.
+     *
+     * ⚠⚠ Le retour distingue 'exact' de 'folded' — et non un simple booléen — parce que CASE 1
+     * (revue finale de branche) ne peut pas traiter les deux pareil : un statut HTTP recueilli
+     * sur une orthographe n'établit rien sur l'autre. Voir le commentaire à l'appel dans CASE 1.
      */
-    private async estConnueDuDataset(url: string): Promise<boolean> {
+    private async datasetMatch(url: string): Promise<'exact' | 'folded' | 'none'> {
         if (await this.consolidator.isInDataset(url)) {
-            return true;
+            return 'exact';
         }
         const alt = url.endsWith('/') ? url.slice(0, -1) : url + '/';
-        return this.consolidator.isInDataset(alt);
+        if (await this.consolidator.isInDataset(alt)) {
+            return 'folded';
+        }
+        return 'none';
     }
 
     /**
@@ -198,8 +206,14 @@ export class UpdateChecker {
         // enqueueLinks à 16:00:51.018, [PHASE 2] à 16:00:51.083), et c'est structurel — Phase 2
         // attend que la page d'accueil soit traitée pour connaître les chemins régionaux. La
         // requête survivante porte donc source='discovered'. On demande au consolidateur, qui
-        // sait. Le || court-circuite : aucun aller-retour Redis ajouté quand source suffit.
-        const isFromDataset = source === 'dataset' || await this.estConnueDuDataset(originalUrl);
+        // sait. Le || court-circuite : aucun aller-retour Redis ajouté quand source suffit —
+        // mais l'épinglage du uniqueKey (Tâche 0) supprime justement la requête qui portait
+        // source='dataset' : Crawlee garde le userData du PREMIER inserant, et c'est la copie
+        // DÉCOUVERTE, enfilée 65 ms plus tôt, qui survit. Pour la population que ce lot vise,
+        // le court-circuit ne tire donc plus JAMAIS — `datasetMatch()` est le SEUL chemin qui
+        // crédite ces pages, et le retirer réintroduirait tout le défaut, épinglage ou pas.
+        const match = source === 'dataset' ? 'exact' : await this.datasetMatch(originalUrl);
+        const isFromDataset = match !== 'none';
         const isHttpError = httpStatus >= 400 || httpStatus === 0;
         const isRedirect = rightTrimSlash(originalUrl) !== rightTrimSlash(loadedUrl);
 
@@ -207,7 +221,21 @@ export class UpdateChecker {
         //  CASE 1: HTTP Error (non 2xx/3xx)
         // ═══════════════════════════════════════════
         if (isHttpError) {
-            if (isFromDataset) {
+            // CASE 1 asks "has this resource disappeared?" — a 'folded' match only proves
+            // some spelling of this URL was in the dataset, never that THIS spelling shares
+            // the OTHER spelling's HTTP status. Gate on 'exact', not `isFromDataset`: dataset
+            // has /a, a page links /a/ (never in the dataset), a strict-routing server 404s
+            // on /a/ while /a is alive — folding here would emit `deleted` for /a/ AND
+            // `confirmed` for /a in the SAME run, two contradictory verdicts for one page.
+            // A folded match falls through to the non-dataset branch below (`ignored /
+            // non_dataset_error`) — no errors/errors_unprocessed either: those feed the
+            // errorRate numerator this same wave is already trying not to inflate further.
+            // CASE 2/3 keep the fold — a 200 or a redirect on the folded spelling DOES teach
+            // us something about the page; only "this resource is GONE" does not survive it.
+            // ⛔ Do not widen this back to `isFromDataset`: CASE 1 was deliberately narrowed to
+            // 404/410 after incident 1320-402 (63 anti-bot 403s → 59 false fiche deletions) —
+            // this gate is the same principle applied to URL identity instead of HTTP status.
+            if (match === 'exact') {
                 await this.statsManager.increment("errors");
                 // Off-book half of `errors`: this URL threw on the HTTP status policy
                 // (routes.ts) or exhausted its retries (failedRequestHandler), so it

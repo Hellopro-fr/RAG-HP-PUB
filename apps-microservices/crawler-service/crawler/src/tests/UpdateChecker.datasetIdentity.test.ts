@@ -91,3 +91,51 @@ test('source=dataset short-circuits: the consolidator is never consulted', async
     assert.deepEqual(stats._calls, ['accounted']);
     assert.deepEqual(consolidator._calls, [], 'aucun appel Redis ajouté sur ce chemin');
 });
+
+// TEST 5 — Correction IMPORTANT de la revue finale de branche. Le dataset contient /a ; une
+// page lie /a/, qui n'a JAMAIS été au dataset ; un serveur à routage strict rend 404 sur /a/
+// pendant que /a est vivant. Un appariement REPLIÉ ne peut pas fonder un verdict de
+// suppression : il doit retomber sur la branche non-dataset, à l'identique d'avant ce lot.
+test('a folded match on a 404 is ignored — no deleted, no errors, no accounted', async () => {
+    const stored = 'https://www.example.fr/a';
+    const consolidator = makeConsolidator([stored]);
+    const stats = makeStats();
+    const writer = makeWriter();
+    const r = await makeChecker(consolidator, stats, writer)
+        .checkUrl(stored + '/', stored + '/', 'discovered', 404, true);
+
+    assert.equal(r.action, 'ignored');
+    assert.equal(r.reason, 'non_dataset_error');
+    assert.deepEqual(writer._calls, [], 'aucun evenement deleted ecrit');
+    assert.deepEqual(stats._calls, [], 'ni errors, ni errors_unprocessed, ni accounted');
+});
+
+// TEST 6 — même geste, mais l'appariement est EXACT : le comportement CASE 1 pré-existant
+// (deleted + errors + errors_unprocessed + accounted) reste inchangé.
+test('an exact match on a 404 still deletes and accounts, unchanged', async () => {
+    const url = 'https://www.example.fr/a';
+    const consolidator = makeConsolidator([url]);
+    const stats = makeStats();
+    const writer = makeWriter();
+    const r = await makeChecker(consolidator, stats, writer)
+        .checkUrl(url, url, 'discovered', 404, true);
+
+    assert.equal(r.action, 'deleted');
+    assert.equal(r.reason, 'http_error_404');
+    assert.deepEqual(stats._calls, ['errors', 'errors_unprocessed', 'accounted']);
+    assert.equal(writer._calls.length, 1);
+    assert.equal(writer._calls[0][0], UpdateChecker.DELETED_FILE);
+});
+
+// TEST 7 — CASE 3 garde le repli : un 200 éligible sur la variante repliée reste confirmed,
+// à la différence de CASE 1. C'est l'asymétrie que ce correctif introduit délibérément.
+test('a folded match on an eligible 200 stays confirmed — CASE 3 keeps the fold', async () => {
+    const stored = 'https://www.example.fr/a';
+    const consolidator = makeConsolidator([stored]);
+    const stats = makeStats();
+    const r = await makeChecker(consolidator, stats, makeWriter())
+        .checkUrl(stored + '/', stored + '/', 'discovered', 200, true);
+
+    assert.equal(r.action, 'confirmed');
+    assert.deepEqual(stats._calls, ['accounted']);
+});
