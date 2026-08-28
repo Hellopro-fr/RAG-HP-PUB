@@ -1545,6 +1545,8 @@ services:
     build:
       context: ./apps-microservices/crawler-monitor-backend
       dockerfile: Dockerfile
+      args:
+        VERSION: ${CRAWLER_MONITOR_VERSION:-dev}
     container_name: crawler-monitor-backend
     profiles: [ "app" ]
     restart: unless-stopped

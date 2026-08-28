@@ -22,7 +22,36 @@ export function Topbar({
   onRefresh,
   isRefreshing = false,
   wsConnected = true,
+  health = null,
 }) {
+  // Trois états, dans cet ordre de priorité :
+  //   WS coupé         → Hors ligne (rouge)
+  //   backend dégradé  → Dégradé (orange)
+  //   sinon            → Live (vert)
+  const degraded = wsConnected && health?.degraded === true;
+  const badge = !wsConnected
+    ? {
+        label: 'Hors ligne',
+        surface: 'border-err/30 bg-err-soft text-err',
+        dot: 'bg-err',
+        title: 'Temps réel interrompu — données rafraîchies toutes les 15s, reconnexion en cours',
+      }
+    : degraded
+      ? {
+          label: 'Dégradé',
+          surface: 'border-warn/30 bg-warn-soft text-warn',
+          dot: 'bg-warn',
+          title: health?.redis_connected === false
+            ? 'Redis injoignable'
+            : 'Flux temps réel backend inactif depuis > 60 s',
+        }
+      : {
+          label: 'Live',
+          surface: 'border-ok/30 bg-ok-soft text-ok',
+          dot: 'bg-ok animate-pulse',
+          title: 'Temps réel actif (WebSocket connecté)',
+        };
+
   return (
     <header className="h-[52px] flex-shrink-0 flex items-center px-5 border-b border-hairline bg-surface gap-4">
       {/* Bouton burger — mobile uniquement */}
@@ -47,14 +76,12 @@ export function Topbar({
         <span
           className={cn(
             'hidden sm:inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium',
-            wsConnected
-              ? 'border-ok/30 bg-ok-soft text-ok'
-              : 'border-err/30 bg-err-soft text-err',
+            badge.surface,
           )}
-          title={wsConnected ? 'Temps réel actif (WebSocket connecté)' : 'Temps réel interrompu — données rafraîchies toutes les 15s, reconnexion en cours'}
+          title={badge.title}
         >
-          <span className={cn('h-1.5 w-1.5 rounded-full', wsConnected ? 'bg-ok animate-pulse' : 'bg-err')} />
-          {wsConnected ? 'Live' : 'Hors ligne'}
+          <span className={cn('h-1.5 w-1.5 rounded-full', badge.dot)} />
+          {badge.label}
         </span>
 
         {/* Bouton Cmd+K — desktop */}

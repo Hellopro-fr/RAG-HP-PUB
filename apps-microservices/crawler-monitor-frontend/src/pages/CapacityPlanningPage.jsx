@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   SlidersHorizontal, RefreshCw, AlertCircle, TrendingDown, Cpu,
 } from 'lucide-react';
-import { useCapacityPlanningQuery, useJobsQuery, useCapacityHistoryQuery } from '../hooks/queries';
+import { useCapacityPlanningQuery, useJobsQuery, useReplicasHistoryQuery } from '../hooks/queries';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '../components/ui/table';
@@ -16,6 +16,9 @@ import Pill from '../components/ui/Pill';
 import StatTile from '../components/ui/StatTile';
 import AreaChart from '../components/ui/AreaChart';
 import ProjCard from '../components/ui/ProjCard';
+import { windowLabel } from '../lib/constants';
+import { formatApiDate } from '../lib/dates';
+import { aggregateReplicasRamSeries } from '../lib/replicas';
 
 const GB = 1024 * 1024 * 1024;
 
@@ -27,7 +30,22 @@ const fmtBytes = (b) => {
 };
 
 const fmtPct = (v) => v == null ? '—' : `${(v * 100).toFixed(1)}%`;
-const fmtDate = (ts) => ts ? new Date(ts).toLocaleString('fr-FR') : '—';
+
+/** Mo -> « 1.50G » / « 512M ». */
+const fmtMb = (mb) => mb == null
+  ? '—'
+  : (mb > 1024 ? `${(mb / 1024).toFixed(2)}G` : `${Math.round(mb)}M`);
+
+/*
+ * Seule la fenêtre 1h porte une série temporelle de RAM : /replicas/history
+ * n’accepte que « 15m » et « 1h » côté backend, et /capacity/history — la
+ * source utilisée jusqu’ici — ne renvoie que { ts, running, max, full }, donc
+ * aucun champ RAM. La courbe restait plate à 0 sous une légende
+ * « 24.00G / 24.00G » qui, elle, venait des totaux : un graphe qui se
+ * contredisait lui-même.
+ */
+const RAM_SERIES_WINDOW = '1h';
+const fmtDate = (ts) => formatApiDate(ts, { dateStyle: 'short', timeStyle: 'medium' });
 
 const shortJobId = (id) => {
   if (!id) return '';
@@ -57,11 +75,21 @@ const CapacityPlanningPage = ({ token }) => {
   const [marginPct, setMarginPct] = useState(30);
   const query = useCapacityPlanningQuery(token, windowKey);
   const jobsQuery = useJobsQuery(token);
-  const historyQuery = useCapacityHistoryQuery(token, windowKey);
+  const hasRamSeries = windowKey === RAM_SERIES_WINDOW;
+  const historyQuery = useReplicasHistoryQuery(token, RAM_SERIES_WINDOW, {
+    enabled: hasRamSeries,
+  });
   const data = query.data;
 
-  const replicas = data?.replicas || [];
+  // useMemo : sans ça, `replicas` est un nouveau tableau à chaque rendu et
+  // invalide toutes les dérivations mémoïsées en aval.
+  const replicas = useMemo(() => data?.replicas || [], [data]);
   const totals = data?.totals || null;
+
+  /* Fenêtre réellement appliquée par l'API : elle peut différer du state local
+     (valeur normalisée, ou fenêtre repliée faute d'échantillons). C'est elle
+     qu'on affiche, sinon le graphe ment sur ce qu'il montre. */
+  const apiWindow = data?.window ?? windowKey;
 
   const jobsById = useMemo(() => {
     const jobs = jobsQuery.data || [];
@@ -97,18 +125,22 @@ const CapacityPlanningPage = ({ token }) => {
     [replicas]
   );
 
-  // AreaChart data
-  const historyPoints = historyQuery.data?.points || [];
-  const ramMbData = historyPoints.map(p => (p.ram_bytes ?? p.ram ?? 0) / 1024 / 1024);
-  const allocatedMb = totals ? totals.total_allocated / 1024 / 1024 : undefined;
+  /* Série RAM : somme des relevés de tous les replicas, bucket 30s (voir
+     aggregateReplicasRamSeries). « Utilisation » = dernier point de la courbe,
+     « Capacité » = somme des totalRam annoncés par les replicas. */
+  const ramSeries = useMemo(
+    () => aggregateReplicasRamSeries(historyQuery.data?.replicas),
+    [historyQuery.data],
+  );
+  const capacityMb = ramSeries.capacityMb;
 
   return (
     <div className="p-5">
       {/* Hero */}
       <div className="flex items-center gap-3 mb-5">
         <SlidersHorizontal className="h-5 w-5 text-ink-2" />
-        <h1 className="text-[26px] font-semibold tracking-[-0.025em] text-ink-0 font-display">Capacity Planning</h1>
-        <Pill tone="info" dot>simulation prête</Pill>
+        <h1 className="text-[26px] font-semibold tracking-[-0.025em] text-ink-0 font-display">Capacity planning</h1>
+        {replicas.length > 0 && totals && <Pill tone="info" dot>simulation prête</Pill>}
         <div className="ml-auto flex items-center gap-3">
           <div className="flex gap-0.5 rounded-md border border-hairline bg-bg-2 p-0.5">
             {['1h', '24h', '7d'].map(w => (
@@ -119,7 +151,7 @@ const CapacityPlanningPage = ({ token }) => {
                   w === windowKey ? 'bg-surface text-ink-0 shadow-sm' : 'text-ink-2 hover:text-ink-1'
                 )}
               >
-                {w}
+                {windowLabel(w)}
               </button>
             ))}
           </div>
@@ -146,13 +178,14 @@ const CapacityPlanningPage = ({ token }) => {
         </div>
       ) : replicas.length === 0 ? (
         <div className="py-16 text-center text-ink-2">
-          <p className="text-sm">Aucun sample de replica dans la fenêtre {windowKey}.</p>
-          <p className="mt-1 text-xs">Attends quelques heartbeats et réessaie.</p>
+          <p className="text-sm">
+            Aucun relevé de replica sur la fenêtre {windowLabel(apiWindow)} — essayez 24h ou 7j.
+          </p>
         </div>
       ) : !totals ? (
         <div className="py-16 text-center text-ink-2">
           <AlertCircle className="mx-auto mb-3 h-10 w-10 opacity-40" />
-          <p className="text-sm">Totaux indisponibles — retente dans quelques secondes.</p>
+          <p className="text-sm">Totaux indisponibles — réessayez dans quelques secondes.</p>
         </div>
       ) : (
         <>
@@ -183,44 +216,61 @@ const CapacityPlanningPage = ({ token }) => {
             />
           </div>
 
-          {/* AreaChart RAM — wrapped in card */}
+          {/* Courbe RAM agrégée — wrapped in card */}
           <div className="mb-5 rounded-lg border border-hairline bg-surface overflow-hidden">
             {/* Card header */}
             <div className="flex items-center gap-2 px-4 py-3 border-b border-hairline">
               <Cpu className="h-4 w-4 text-ink-3 flex-shrink-0" />
               <div className="flex-1 min-w-0">
-                <div className="text-[13px] font-semibold text-ink-0">RAM usage — 1h</div>
-                <div className="text-[11px] text-ink-3">fenêtre {windowKey}</div>
+                <div className="text-[13px] font-semibold text-ink-0">
+                  Utilisation RAM — {windowLabel(RAM_SERIES_WINDOW)}
+                </div>
+                <div className="text-[11px] text-ink-3">
+                  somme des relevés replicas · points de 30s
+                </div>
               </div>
               {/* Legend */}
-              <div className="flex items-center gap-4 text-[11px]">
-                <span className="flex items-center gap-1.5">
-                  <span className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: 'var(--accent)' }} />
-                  <span className="text-ink-2">Utilisation</span>
-                  {allocatedMb != null && (
-                    <span className="font-mono text-ink-1">{(allocatedMb > 1024 ? (allocatedMb / 1024).toFixed(2) + 'G' : Math.round(allocatedMb) + 'M')}</span>
-                  )}
-                </span>
-                {allocatedMb != null && (
+              {hasRamSeries && (
+                <div className="flex items-center gap-4 text-[11px]">
                   <span className="flex items-center gap-1.5">
-                    <span className="inline-block w-2.5 h-[2px] flex-shrink-0 border-t-2 border-dashed" style={{ borderColor: 'var(--err)' }} />
-                    <span className="text-ink-2">Capacité</span>
-                    <span className="font-mono text-ink-1">{(allocatedMb > 1024 ? (allocatedMb / 1024).toFixed(2) + 'G' : Math.round(allocatedMb) + 'M')}</span>
+                    <span className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: 'var(--accent)' }} />
+                    <span className="text-ink-2">Utilisation</span>
+                    <span className="font-mono text-ink-1">{fmtMb(ramSeries.lastMb)}</span>
                   </span>
-                )}
-              </div>
+                  {capacityMb != null && (
+                    <span className="flex items-center gap-1.5">
+                      <span className="inline-block w-2.5 h-[2px] flex-shrink-0 border-t-2 border-dashed" style={{ borderColor: 'var(--err)' }} />
+                      <span className="text-ink-2">Capacité</span>
+                      <span className="font-mono text-ink-1">{fmtMb(capacityMb)}</span>
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
             <div className="p-4">
-              {historyQuery.isError && (
-                <p className="text-[11px] italic text-ink-3 mb-2">Historique indisponible.</p>
+              {!hasRamSeries ? (
+                <p className="py-6 text-center text-[12px] text-ink-3">
+                  Courbe disponible sur la fenêtre 1h — au-delà, le backend ne
+                  conserve aucune série temporelle de RAM. Les totaux ci-dessus
+                  restent calculés sur {windowLabel(apiWindow)}.
+                </p>
+              ) : historyQuery.isError ? (
+                <p className="py-6 text-center text-[12px] italic text-ink-3">
+                  Historique des replicas indisponible.
+                </p>
+              ) : ramSeries.points.length === 0 ? (
+                <p className="py-6 text-center text-[12px] text-ink-3">
+                  Aucun relevé de heartbeat sur la dernière heure.
+                </p>
+              ) : (
+                <AreaChart
+                  data={ramSeries.points}
+                  w={900}
+                  h={120}
+                  color="var(--accent)"
+                  refLine={capacityMb}
+                />
               )}
-              <AreaChart
-                data={ramMbData}
-                w={900}
-                h={120}
-                color="var(--accent)"
-                refLine={allocatedMb}
-              />
             </div>
           </div>
 
@@ -369,7 +419,7 @@ const CapacityPlanningPage = ({ token }) => {
               )}
 
               <p className="text-[11px] italic text-ink-3">
-                Note : le peak affiché est sur la fenêtre {windowKey}. Pour une décision en prod, valide sur 7 jours.
+                Note : le pic affiché porte sur la fenêtre {windowLabel(apiWindow)}. Pour une décision en prod, validez sur 7 jours.
               </p>
             </div>
           </div>

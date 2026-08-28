@@ -21,16 +21,30 @@ describe('running_count_parity', () => {
     const jobs = [mkJob('a'), mkJob('b')];
     const result = rule.evaluate({ capacity, jobs });
     expect(result).toHaveLength(1);
-    expect(result[0].data).toEqual({ backendRunning: 5, listRunning: 2, diff: 3 });
+    expect(result[0].data).toEqual({
+      kind: 'running_count_mismatch',
+      backendRunning: 5,
+      listRunning: 2,
+      diff: 3,
+    });
   });
 
-  it('returns [] when capacity is missing', () => {
-    expect(rule.evaluate({ capacity: null, jobs: [mkJob('a')] })).toEqual([]);
-    expect(rule.evaluate({ capacity: {}, jobs: [mkJob('a')] })).toEqual([]);
+  it('returns null (indeterminate) when capacity is missing', () => {
+    expect(rule.evaluate({ capacity: null, jobs: [mkJob('a')] })).toBeNull();
+    expect(rule.evaluate({ capacity: {}, jobs: [mkJob('a')] })).toBeNull();
   });
 
-  it('returns [] when jobs is missing', () => {
-    expect(rule.evaluate({ capacity: { running_jobs: 3 }, jobs: null })).toEqual([]);
+  it('returns null (indeterminate) when jobs is missing', () => {
+    expect(rule.evaluate({ capacity: { running_jobs: 3 }, jobs: null })).toBeNull();
+  });
+
+  it('garde une cle d\'hysteresis stable quand les compteurs bougent', () => {
+    const a = rule.evaluate({ capacity: { running_jobs: 6 }, jobs: [] })[0];
+    const b = rule.evaluate({ capacity: { running_jobs: 7 }, jobs: [] })[0];
+    // Le message change (il porte les compteurs) mais data.kind, lui, ne bouge pas :
+    // c'est lui que le provider utilise comme cle d'hysteresis.
+    expect(a.message).not.toBe(b.message);
+    expect(a.data.kind).toBe(b.data.kind);
   });
 
   it('ignores non-running jobs', () => {

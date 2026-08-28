@@ -36,7 +36,7 @@ function AlbumRow({ index, style, rows, onSelectDomain, onRequestDelete }) {
           onSelectDomain(r.domain);
         }
       }}
-      className={`grid ${GRID_COLS} cursor-pointer items-center border-b border-hairline px-3 hover:bg-bg-2 focus:outline-none focus-visible:bg-bg-2 focus-visible:ring-2 focus-visible:ring-accent`}
+      className={`group grid ${GRID_COLS} cursor-pointer items-center border-b border-hairline px-3 hover:bg-bg-2 focus:outline-none focus-visible:bg-bg-2 focus-visible:ring-2 focus-visible:ring-accent`}
     >
       <div className="truncate font-mono text-sm">{r.domain}</div>
       <div className="font-mono text-sm">{r.product_count ?? 0}</div>
@@ -47,7 +47,7 @@ function AlbumRow({ index, style, rows, onSelectDomain, onRequestDelete }) {
       <div className="text-xs text-ink-3">{formatDate(r.last_update)}</div>
       <div className="font-mono text-xs">{syncPercent(r)}</div>
       <div
-        className="flex justify-end"
+        className="flex justify-end opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.stopPropagation()}
       >
@@ -58,7 +58,7 @@ function AlbumRow({ index, style, rows, onSelectDomain, onRequestDelete }) {
           aria-label={`Supprimer l'album ${r.domain}`}
           onClick={() => onRequestDelete(r)}
         >
-          <Trash2 className="h-4 w-4 text-err" />
+          <Trash2 className="h-4 w-4 text-ink-3 hover:text-err" />
         </Button>
       </div>
     </div>

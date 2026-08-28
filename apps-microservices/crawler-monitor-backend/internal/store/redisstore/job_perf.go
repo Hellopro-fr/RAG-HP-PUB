@@ -3,6 +3,7 @@ package redisstore
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -14,7 +15,8 @@ import (
 const RetentionJobPerfMs = int64(7 * 24 * 60 * 60 * 1000)
 
 // PersistJobPerfSample appends a perf sample to job:perf:<jobId> ZSet.
-// Score = ts ms. Auto-prunes entries older than 7 days. Tolerant: errors swallowed.
+// Score = ts ms. Auto-prunes entries older than 7 days. Tolerant : ne retourne
+// jamais d'erreur, mais toute erreur d'ecriture Redis est loggee.
 func (c *Client) PersistJobPerfSample(ctx context.Context, jobID string, ts int64, sample any) {
 	if jobID == "" {
 		return
@@ -24,12 +26,19 @@ func (c *Client) PersistJobPerfSample(ctx context.Context, jobID string, ts int6
 	}
 	raw, err := json.Marshal(sample)
 	if err != nil {
+		slog.Warn("redis.write_failed", "op", "PersistJobPerfSample.marshal", "key", JobPerfPrefix+jobID, "err", err)
 		return
 	}
 	key := JobPerfPrefix + jobID
-	_ = c.rdb.ZAdd(ctx, key, redis.Z{Score: float64(ts), Member: string(raw)}).Err()
-	_ = c.rdb.ZRemRangeByScore(ctx, key, "0", formatScore(ts-RetentionJobPerfMs)).Err()
-	_ = c.rdb.Expire(ctx, key, time.Duration(RetentionJobPerfMs)*time.Millisecond).Err()
+	// Un seul aller-retour : ZADD + purge de la fenetre + TTL 7j.
+	if _, err := c.rdb.Pipelined(ctx, func(pipe redis.Pipeliner) error {
+		pipe.ZAdd(ctx, key, redis.Z{Score: float64(ts), Member: string(raw)})
+		pipe.ZRemRangeByScore(ctx, key, "0", formatScore(ts-RetentionJobPerfMs))
+		pipe.Expire(ctx, key, time.Duration(RetentionJobPerfMs)*time.Millisecond)
+		return nil
+	}); err != nil {
+		slog.Warn("redis.write_failed", "op", "PersistJobPerfSample", "key", key, "err", err)
+	}
 }
 
 // ScanJobPerfByReplica scans every job:perf:* key and groups all samples in

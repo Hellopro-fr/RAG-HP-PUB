@@ -44,7 +44,7 @@ func TestWSBroadcastP99(t *testing.T) {
 	rs, _ := redisstore.New("redis://" + mr.Addr())
 	hub := ws.NewHub()
 	defer hub.Close()
-	ps := ws.NewPubSub(rdb, hub, "crawl_updates")
+	ps := ws.NewPubSub(rs, hub, "crawl_updates")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go ps.Run(ctx)

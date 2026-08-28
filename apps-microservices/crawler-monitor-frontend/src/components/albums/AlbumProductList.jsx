@@ -1,15 +1,30 @@
 import { List } from 'react-window';
 import { ProductCard } from './ProductCard';
 
-// Hauteur fixe par carte selon le mode d'affichage des images :
-//   - legacy (bande horizontale 56×56) : header (~32) + strip 56 + paddings = ~132
-//   - fancy (deck/coverflow/reel/dial) : strip ~200-210 + chrome (header, controls,
-//     captions) + paddings de la carte = ~280
-const CARD_HEIGHT_LEGACY = 132;
-const CARD_HEIGHT_FANCY  = 280;
+/*
+ * Hauteur de ligne fixe imposée par react-window. Sous-estimée, la carte
+ * déborde sur la suivante ; les 280 précédents étaient une estimation à vue.
+ * Décomposition mesurée sur les classes réelles de ProductCard +
+ * ProductImageStripCoverflow :
+ *
+ *   ProductCard    bordures 1px × 2 ..............................    2
+ *                  p-3 (12px haut + 12px bas) ....................   24
+ *                  header : Button h-7 = 28px .....................   28
+ *                  space-y-2 entre header et strip ................    8
+ *   Coverflow      scène h-[210px] ................................  210
+ *                  mt-2 avant la légende ..........................    8
+ *                  légende text-[11px] × line-height 1.5 ..........   17
+ *                                                                   ----
+ *                  carte ..........................................  297
+ *   ProductRow     pb-2 (gouttière entre deux lignes) .............    8
+ *                                                                   ----
+ *                  total ..........................................  305
+ *
+ * Arrondi à 308 : ~3px de marge pour les arrondis de rendu (line-height
+ * fractionnaire, zoom navigateur) sans creuser de blanc visible.
+ */
+const CARD_HEIGHT = 308;
 const MAX_LIST_HEIGHT = 700;
-
-const FANCY_MODES = new Set(['deck', 'coverflow', 'reel', 'dial']);
 
 /**
  * Row component for react-window v2 — reçoit `index`, `style`, et toutes les
@@ -26,7 +41,6 @@ function ProductRow({
   onRebuild,
   onDelete,
   hasMore,
-  imageMode,
 }) {
   const p = products[index];
   if (!p) {
@@ -49,7 +63,6 @@ function ProductRow({
         onSelectImage={onSelectImage}
         onRebuild={onRebuild}
         onDelete={onDelete}
-        imageMode={imageMode}
       />
     </div>
   );
@@ -64,10 +77,6 @@ function ProductRow({
  *   - `style={{ height }}` (hauteur via prop CSS, pas via prop `height`)
  *   - `onRowsRendered({ visibleStopIndex })` pour déclencher l'infinite scroll
  *
- * `rowHeight` est calculé selon `imageMode` (132 legacy, 280 fancy). Quand le
- * user change de mode, react-window ré-rend toutes les rows avec la nouvelle
- * hauteur — pas besoin d'invalider le cache.
- *
  * Précédent posé en Task 11 (`AlbumsTable`) — on garde le même shape.
  */
 export function AlbumProductList({
@@ -78,12 +87,10 @@ export function AlbumProductList({
   onDelete,
   onLoadMore,
   hasMore,
-  imageMode,
 }) {
   const rowCount = products.length + (hasMore ? 1 : 0);
-  const rowHeight = FANCY_MODES.has(imageMode) ? CARD_HEIGHT_FANCY : CARD_HEIGHT_LEGACY;
   // Hauteur calculée pour ne pas réserver 700px quand il n'y a que 2 cartes.
-  const listHeight = Math.min(MAX_LIST_HEIGHT, Math.max(rowHeight, rowCount * rowHeight));
+  const listHeight = Math.min(MAX_LIST_HEIGHT, Math.max(CARD_HEIGHT, rowCount * CARD_HEIGHT));
 
   const handleRowsRendered = ({ visibleStopIndex }) => {
     if (hasMore && visibleStopIndex >= products.length - 1) {
@@ -95,8 +102,8 @@ export function AlbumProductList({
     <List
       rowComponent={ProductRow}
       rowCount={rowCount}
-      rowHeight={rowHeight}
-      rowProps={{ products, domain, onSelectImage, onRebuild, onDelete, hasMore, imageMode }}
+      rowHeight={CARD_HEIGHT}
+      rowProps={{ products, domain, onSelectImage, onRebuild, onDelete, hasMore }}
       style={{ height: listHeight }}
       overscanCount={3}
       onRowsRendered={handleRowsRendered}

@@ -1,12 +1,17 @@
 import { useEffect, useState } from 'react';
 import { useLocation, Link } from 'react-router-dom';
-import { HeartPulse, AlertTriangle, AlertCircle, Info, CheckCircle, ChevronDown, ChevronRight } from 'lucide-react';
+import { HeartPulse, AlertTriangle, AlertCircle, Info, CheckCircle, HelpCircle, ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { cn } from '../../lib/utils';
 import Pill from '../../components/ui/Pill';
 import StatTile from '../../components/ui/StatTile';
 import { useCoherenceSummary } from '../hooks';
 import { RULES } from '../rules';
+import {
+  useJobsQuery,
+  useCapacityQuery,
+  useCapacityPlanningQuery,
+} from '../../hooks/queries';
 
 const SEVERITY_ICON = {
   info: Info,
@@ -20,11 +25,18 @@ const SEVERITY_COLOR = {
   critical: 'text-err border-err/20 bg-err-soft',
 };
 
-export default function CoherenceHealthPage() {
+export default function CoherenceHealthPage({ token }) {
   const { hash } = useLocation();
   const { verdicts, ignoredRules, setIgnored, byStatus, total, lastEvaluatedAt, retryState, manualRetry } =
     useCoherenceSummary();
   const [showOk, setShowOk] = useState(false);
+
+  // Le CoherenceProvider ne fait que LIRE le cache (il est monté partout, il ne
+  // doit pas maintenir /api/jobs actif). /health est la page de diagnostic :
+  // c'est elle qui charge réellement les sources.
+  useJobsQuery(token);
+  useCapacityQuery(token);
+  useCapacityPlanningQuery(token, '1h');
 
   // Hash scroll + 2s highlight ring
   useEffect(() => {
@@ -40,14 +52,20 @@ export default function CoherenceHealthPage() {
     return () => clearTimeout(t);
   }, [hash]);
 
-  // Categorize rules: violated, ok, ignored
+  // Categorize rules: violated, ok, indéterminé, ignored.
+  // verdicts[id] === null ⇒ la règle n'a PAS pu être évaluée (source absente) :
+  // on ne la compte surtout pas comme « OK ».
   const violated = [];
   const ok = [];
+  const indeterminate = [];
   const ignored = [];
   for (const rule of RULES) {
+    const verdict = verdicts[rule.id];
     if (ignoredRules.has(rule.id)) {
       ignored.push(rule);
-    } else if ((verdicts[rule.id] ?? []).length > 0) {
+    } else if (verdict === null || verdict === undefined) {
+      indeterminate.push(rule);
+    } else if (verdict.length > 0) {
       violated.push(rule);
     } else {
       ok.push(rule);
@@ -76,10 +94,17 @@ export default function CoherenceHealthPage() {
             <h1 className="text-[26px] font-semibold tracking-[-0.025em] text-ink-0 font-display">
               Cohérence des données
             </h1>
-            {violated.length === 0
-              ? <span aria-label="Aucune violation détectée"><Pill tone="ok">tout vert</Pill></span>
-              : <span aria-label={`${violated.length} violation${violated.length > 1 ? 's' : ''} détectée${violated.length > 1 ? 's' : ''}`}><Pill tone="err" dot>{violated.length} violation{violated.length > 1 ? 's' : ''}</Pill></span>
-            }
+            {violated.length > 0 ? (
+              <span aria-label={`${violated.length} violation${violated.length > 1 ? 's' : ''} détectée${violated.length > 1 ? 's' : ''}`}>
+                <Pill tone="err" dot>{violated.length} violation{violated.length > 1 ? 's' : ''}</Pill>
+              </span>
+            ) : indeterminate.length > 0 ? (
+              <span aria-label={`${indeterminate.length} règle${indeterminate.length > 1 ? 's' : ''} non évaluable${indeterminate.length > 1 ? 's' : ''}`}>
+                <Pill tone="neutral" dot>indéterminé</Pill>
+              </span>
+            ) : (
+              <span aria-label="Aucune violation détectée"><Pill tone="ok">tout vert</Pill></span>
+            )}
           </div>
           <p className="text-[13px] text-ink-2 mt-1">Cohérence des données affichées · invariants applicatifs</p>
         </div>
@@ -112,7 +137,7 @@ export default function CoherenceHealthPage() {
         <StatTile
           label="OK"
           value={ok.length}
-          sub={total > 0 ? `${Math.round(ok.length / total * 100)}%` : '0%'}
+          sub={indeterminate.length > 0 ? `${indeterminate.length} indéterminé${indeterminate.length > 1 ? 's' : ''}` : (total > 0 ? `${Math.round(ok.length / total * 100)}%` : '0%')}
           accent="var(--ok)"
         />
       </div>
@@ -133,6 +158,26 @@ export default function CoherenceHealthPage() {
               onManualRetry={() => manualRetry(rule.id)}
             />
           ))}
+        </div>
+      )}
+
+      {indeterminate.length > 0 && (
+        <div className="space-y-3">
+          <h2 className="text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-3">
+            Indéterminé ({indeterminate.length})
+          </h2>
+          <ul className="space-y-1 text-sm">
+            {indeterminate.map((rule) => (
+              <li key={rule.id} className="flex items-center gap-2 text-ink-3">
+                <HelpCircle className="h-3.5 w-3.5 text-ink-2 flex-shrink-0" />
+                <span className="font-mono">{rule.id}</span>
+                <span>— {rule.label}</span>
+                <span className="ml-auto flex-shrink-0 font-mono text-[10px] text-ink-3">
+                  source{(rule.sources ?? []).length > 1 ? 's' : ''} indisponible{(rule.sources ?? []).length > 1 ? 's' : ''} : {(rule.sources ?? []).join(', ')}
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

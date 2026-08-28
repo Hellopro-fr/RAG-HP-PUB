@@ -2,25 +2,31 @@ import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 
 /**
- * ScrollToTop — reset la position de scroll quand la route change vers une
- * PAGE différente.
+ * ScrollToTop — remet le scroll en haut à chaque changement de route.
  *
- * Ne pas fire sur /jobs/:id (qui réutilise le composant Overview pour afficher
- * un job sélectionné) : Overview gère lui-même le scrollIntoView vers le
- * détail. Sans cette exception, on avait une race où window.scrollTo(0,0)
- * écrasait le scrollIntoView → l'utilisateur restait figé sur Timeline/Replicas.
+ * Le conteneur scrollable est le <main> de l'AppShell (`flex-1 overflow-y-auto`),
+ * pas la fenêtre : `window.scrollTo` ne faisait donc strictement rien et on
+ * arrivait sur les pages au milieu du contenu précédent.
  *
- * Les sous-routes /jobs/:id/queue|dataset|replay utilisent d'autres composants
- * (QueuePage, DatasetPage, ReplayPage) et profitent bien du reset de scroll.
+ * ORDRE DE MONTAGE — NE PAS DÉPLACER. Ce composant doit rester monté AVANT
+ * l'arbre des pages dans l'AppShell : React exécute les effets dans l'ordre du
+ * document, donc ce remise-à-zéro du scroll passe avant le `scrollIntoView` par
+ * lequel Overview ramène le job sélectionné dans le viewport. Monté après, il
+ * écraserait ce cadrage et l'opérateur atterrirait en haut de la liste au lieu
+ * du job qu'il vient d'ouvrir.
  */
 export function ScrollToTop() {
   const { pathname } = useLocation();
 
   useEffect(() => {
-    // /jobs/<id> pile (pas de /queue /dataset /replay derrière) → Overview est
-    // déjà monté et fait son propre scrollIntoView, ne pas lutter contre.
-    if (/^\/jobs\/[^/]+$/.test(pathname)) return;
-    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    const main = typeof document !== 'undefined'
+      ? document.querySelector('main')
+      : null;
+    if (main) {
+      main.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+      return;
+    }
+    window.scrollTo?.({ top: 0, left: 0, behavior: 'instant' });
   }, [pathname]);
 
   return null;

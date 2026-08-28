@@ -48,7 +48,7 @@ func main() {
 
 	hub := ws.NewHub()
 	defer hub.Close()
-	ps := ws.NewPubSub(rs.Raw(), hub, redisstore.UpdatesChannel, redisstore.HeartbeatChannel)
+	ps := ws.NewPubSub(rs, hub, redisstore.UpdatesChannel, redisstore.HeartbeatChannel)
 	go ps.Run(ctx)
 
 	// Capacity snapshot ticker (60s) — feeds capacity:history:zset.
@@ -76,6 +76,7 @@ func main() {
 		FileStore:  fs,
 		AuditStore: httpapi.WrapAuditStore(as),
 		Hub:        hub,
+		PubSub:     ps,
 	})
 
 	srv := &http.Server{
