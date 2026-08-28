@@ -90,17 +90,18 @@ re-nettoyage `processUrl` de la purge de file.
 ### ② `UpdateChecker` — la provenance cesse de reposer sur une course
 
 ```ts
-const isFromDataset = source === 'dataset'
-    || await this.estConnueDuDataset(originalUrl);
+const match = source === 'dataset' ? 'exact' : await this.datasetMatch(originalUrl);
+const isFromDataset = match !== 'none';
 ```
 
 avec, **privé à `UpdateChecker`**, un repli tolérant au `/` final :
 
 ```ts
-private async estConnueDuDataset(url: string): Promise<boolean> {
-    if (await this.consolidator.isInDataset(url)) return true;
+private async datasetMatch(url: string): Promise<'exact' | 'folded' | 'none'> {
+    if (await this.consolidator.isInDataset(url)) return 'exact';
     const alt = url.endsWith('/') ? url.slice(0, -1) : url + '/';
-    return this.consolidator.isInDataset(alt);
+    if (await this.consolidator.isInDataset(alt)) return 'folded';
+    return 'none';
 }
 ```
 
@@ -114,15 +115,63 @@ compare déjà en `rightTrimSlash`, donc `/x` → `/x/` n'atteint jamais cette b
 
 **`originalUrl` et non `loadedUrl`.** La question posée est « connaissions-nous cette URL ? »,
 exactement ce que `source === 'dataset'` voulait dire. `isFromDataset` est calculé **avant** le
-split en CASE 1/2/3 et gouverne les trois : le tester sur `loadedUrl` ferait entrer une
-destination de redirection dans la branche dataset, ce que CASE 2 traite déjà séparément via
-`destInDataset`.
+split en CASE 1/2/3 et gouverne CASE 2 et CASE 3 — CASE 1, depuis le correctif de la vague
+précédente (§③ ci-dessous), est gouverné par `match === 'exact'`, pas par `isFromDataset` : le
+tester sur `loadedUrl` ferait entrer une destination de redirection dans la branche dataset, ce
+que CASE 2 traite déjà séparément via `destInDataset`.
 
 ⚠⚠ **Le repli vit dans la LECTURE, jamais dans le set.** `update_dataset:<crawlId>` n'est pas
 qu'un test d'appartenance : il est **scanné** (`UrlConsolidator.ts:214`) pour produire la liste
 d'amorçage, et il arbitre le dédoublonnage des phases 2 et 3 (`:167`, `:190`). Y stocker des
 URLs sans leur `/` final ferait **amorcer des URLs modifiées**. Ne pas « simplifier » en
 normalisant le set.
+
+### ③ CASE 1 — la garde d'exactitude (revue finale de branche)
+
+⚠⚠ **CASE 1 ne peut pas se contenter d'`isFromDataset`.** Un appariement REPLIÉ ne prouve rien
+sur le statut HTTP de l'AUTRE orthographe : le dataset contient `/a` ; une page lie `/a/`, qui
+n'a **jamais** été au dataset ; un serveur à routage strict rend 404 sur `/a/` alors que `/a`
+est vivant. Le booléen d'origine aurait laissé passer un `deleted` pour `/a/` **et** un
+`confirmed` pour `/a` dans le même run — deux instructions contradictoires pour la même page
+envoyées au BO, qui replie lui aussi le `/`.
+
+Le helper devient donc `datasetMatch(): 'exact' | 'folded' | 'none'`, et CASE 1 (le bloc
+404/410 **et** le comptage `errors` / `errors_unprocessed` qui le précède) ne s'engage que sur
+`'exact'` : un appariement `'folded'` retombe entièrement sur la branche non-dataset (`ignored /
+non_dataset_error`), à l'identique du comportement d'avant ce lot. Gater seulement le bloc
+404/410 en laissant `errors` / `errors_unprocessed` s'appliquer à une variante repliée a été
+écarté : cette population alimenterait le numérateur d'`errorRate`, exactement ce que §7 met en
+garde de ne pas aggraver. CASE 2 et CASE 3 gardent le repli intégral — un 200 ou une redirection
+sur la variante repliée enseigne bien quelque chose sur la page, à la différence d'une erreur.
+
+Cette asymétrie prolonge un principe déjà en place, pas une nouvelle prudence : CASE 1 avait été
+délibérément réduit à 404/410 après l'incident **1320-402** (63 blocages anti-bot 403 devenus 59
+fausses suppressions de fiches BO-side). Ce correctif applique le même principe à l'identité de
+l'URL plutôt qu'au statut HTTP.
+
+### ④ CASE 2/3 — le crédit `accounted` se réserve à l'exact (2e moitié du correctif)
+
+⚠⚠ **Miroir exact du défaut fermé en ③.** `PushedSet.tryClaim` est un `sAdd` de chaîne brute
+(`PushedSet.ts:58-62`, aucun repli), donc une orthographe exacte et sa variante repliée
+réclament chacune leur propre entrée et atteignent toutes les deux CASE 2 ou CASE 3 — chacune
+incrémentait `accounted`, doublant le crédit d'une seule entrée du dataset précédent et pouvant
+porter `coverage` au-dessus de 1.
+
+`accounted` compte des **entrées du dataset précédent re-observées**. Seule l'orthographe
+**exacte** en est une ; la repliée n'en est pas une, et l'exacte est de toute façon seedée et
+observée pour son propre compte (①). Les quatre incréments restants — les deux de CASE 2
+(`redirect_to_existing` et la redirection hors dataset) et les deux de CASE 3 (`confirmed` et
+`deleted` sur `not_eligible`) — sont donc gatés sur `match === 'exact'`, à l'identique du
+gate posé en ③ pour CASE 1.
+
+Ce que le gate NE change PAS — les branches, seulement le crédit :
+- CASE 2 écrit toujours son événement `REDIRECTED` (mapping ancien→nouveau nécessaire au BO,
+  indépendant du comptage) et incrémente toujours `redirects` sur la redirection hors dataset ;
+- CASE 3 éligible reste `confirmed` sur une variante repliée — sans JSONL et désormais sans
+  crédit, c'est un no-op, ce qui est le comportement recherché ;
+- CASE 3 non éligible écrit toujours son événement `deleted` : l'inéligibilité juge le
+  **contenu**, valable pour les deux orthographes d'une même page — contrairement au statut
+  HTTP de CASE 1, qui ne l'est pas.
 
 ### Pourquoi les deux, et pas l'une ou l'autre
 
@@ -134,7 +183,7 @@ normalisant le set.
 ① supprime le gaspillage — **49 % des navigations sur `atox.fr`** (19 requêtes sur 39).
 ② corrige le compteur quelle que soit l'issue de la course, **et corrige aussi la page
 d'accueil**, que `main.ts:942` amorce en `source: 'seed'` et qui n'était donc jamais créditée :
-`estConnueDuDataset` la reconnaît, elle fait partie des URLs du dataset précédent.
+`datasetMatch` la reconnaît, elle fait partie des URLs du dataset précédent.
 
 ## 5. Coût et risques hérités
 
@@ -172,6 +221,11 @@ les runs sains, contre **0 sur 60** aujourd'hui, et la distribution de couvertur
 1. L'observable métier est la file « Garde santé » du BO, qui montre run par run ce qui se
 débloque, avec son Total.
 
+⚠⚠ **La sonde post-déploiement doit aussi compter les verdicts `CRITICAL` et `SUSPECT`**, pas
+seulement la distribution de couverture — voir §7 : `errorRate` peut basculer défavorablement
+sur des runs jusqu'ici `HEALTHY`. Décision du partenaire humain : livraison **nue, sans
+drapeau** ; c'est donc cette sonde, et elle seule, qui doit voir la bascule si elle se produit.
+
 ## 7. Mise en service
 
 **Nu, sans drapeau.** Le plafond de suppression de masse (`errors / previousTotal > 0,5` →
@@ -181,6 +235,28 @@ clic d'opérateur** dans la file.
 ⚠ Rendre `accounted` juste **arme** des suppressions aujourd'hui retenues : 9 runs sur 60 sont
 en `PENDING_SAMPLE` à cause d'une couverture fausse. C'est l'effet recherché — ces runs sont
 retenus pour une raison qui n'existe pas — mais il doit être observé, pas subi.
+
+⚠⚠ **Le risque n'est pas à sens unique — la revue finale de branche l'a trouvé.** Ce lot bouge
+les entrées du verdict de santé DÉFAVORABLEMENT des deux côtés à la fois :
+
+- ② monte le **numérateur** d'`errorRate = errors / processed` : les erreurs d'une URL dataset
+  arrivée en `discovered` étaient AVALÉES avant ce lot (branche non-dataset de CASE 1, aucun
+  `errors` incrémenté) ; elles comptent désormais ;
+- ① baisse le **dénominateur** : `processed` passe de 39 à ~20 sur `atox.fr` (les requêtes
+  dupliquées disparaissent) ;
+- ⇒ `errorRate = errors / processed` peut **environ doubler par arithmétique seule**, et
+  `HEALTHY → CRITICAL` devient possible sur un domaine qui n'a fait que quelques 404 ordinaires.
+  Les seuils `maxErrorRate` / `maxAbsErrors` ont été calibrés contre un nombre faux **des deux
+  côtés** — pas seulement optimiste comme le paragraphe précédent le donne à penser.
+  `SUSPECT` (`errors / previousTotal > 0,5`) n'est concerné que par la moitié de cet effet : son
+  dénominateur `previousTotal` est la taille du dataset précédent, que ce lot ne touche pas —
+  seule la hausse du numérateur `errors` peut l'y faire basculer, sans le doublement
+  arithmétique du ratio lui-même.
+
+Ce n'est **pas un bug** : les nouveaux chiffres sont les bons, `processed` et `errors` mesurent
+enfin ce qu'ils prétendent mesurer. C'est un risque de **mise en service** — un domaine jusqu'ici
+`HEALTHY` peut basculer le jour du déploiement sans qu'aucune régression n'ait eu lieu. Voir §6
+« En production » pour la sonde qui doit l'observer.
 
 ## 8. Hors périmètre, délibérément
 

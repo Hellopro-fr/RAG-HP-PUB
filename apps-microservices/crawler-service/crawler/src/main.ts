@@ -1603,8 +1603,18 @@ if (typeCrawling == "sitemap") {
                         { toKeep: context.config.toKeep, toRemove: context.config.toRemove },
                     );
                 }
+                // Épinglage de l'identité de file, comme Phase 1 (:952) et l'amorce standard
+                // (:1033). Sans lui, Crawlee calcule un uniqueKey NORMALISÉ (il retire le /
+                // final) alors que routes.ts:1277 épingle les liens découverts sur l'URL BRUTE :
+                // la même page devient alors deux requêtes, et la copie dataset — celle qui
+                // porte source='dataset' — arrive seconde et sort en already_pushed sans
+                // créditer 'accounted'. Mesuré le 2026-08-27 sur atox.fr : 19 amorces sur 19
+                // dupliquées, contre 0 sur 1 pour la page d'accueil, qui épingle déjà.
+                // seedUrl et non url : c'est la chaîne réellement enfilée, après
+                // stripActionAnchor et le re-nettoyage processUrl de la purge de file.
                 await requestQueue.addRequest({
                     url: seedUrl,
+                    uniqueKey: seedUrl,
                     userData: { source: source }
                 });
                 seedCount++;
