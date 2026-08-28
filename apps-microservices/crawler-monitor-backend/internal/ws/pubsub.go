@@ -3,17 +3,18 @@ package ws
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
+	"runtime/debug"
 	"strconv"
+	"sync/atomic"
 	"time"
 
-	"github.com/redis/go-redis/v9"
+	"github.com/Hellopro-fr/crawler-monitor-backend/internal/store/redisstore"
 )
 
-// jobKeyPrefix mirrors redisstore.JobPrefix — local to avoid import cycle.
-const jobKeyPrefix = "crawl_job:"
-
-// stringOrNum extracts a string from a map value that may be a string or a number.
+// stringOrNum extrait une chaine d'une valeur de map qui peut etre une chaine
+// ou un nombre.
 func stringOrNum(v any) string {
 	switch val := v.(type) {
 	case string:
@@ -29,35 +30,51 @@ func stringOrNum(v any) string {
 	return ""
 }
 
-// jobTTL: jobs expire after 48h of inactivity.
-const jobTTL = 48 * time.Hour
-
-// replicaHistoryPrefix and knownReplicasKey mirror redisstore constants.
-const replicaHistoryPrefix = "replica:history:"
-const knownReplicasKey = "replica:known"
-
-// retentionMs: 1h replica history retention (matches redisstore.RetentionReplicaHistoryMs).
-const retentionMs = int64(60 * 60 * 1000)
-
-// jobPerfPrefix and jobPerfRetentionMs mirror redisstore constants.
-const jobPerfPrefix = "job:perf:"
-const jobPerfRetentionMs = int64(7 * 24 * 60 * 60 * 1000) // 7 days
+// defaultIdleTimeout : duree de silence au-dela de laquelle un abonnement est
+// suspect si des crawls tournent (les heartbeats arrivent toutes les 2 s).
+const defaultIdleTimeout = 120 * time.Second
 
 type PubSub struct {
-	rdb      *redis.Client
+	rs       *redisstore.Client
 	hub      *Hub
 	channels []string
+	// lastMessageAt : horodatage unix ms du dernier message recu sur les
+	// canaux Redis, amorce a l'abonnement. Expose par /api/system/health
+	// pour detecter un abonnement mort alors que des crawls tournent encore.
+	lastMessageAt atomic.Int64
+	// idleResubscribes : nombre de reabonnements declenches par le watchdog.
+	idleResubscribes atomic.Int64
+	idleTimeout      time.Duration
 }
 
-func NewPubSub(rdb *redis.Client, hub *Hub, channels ...string) *PubSub {
-	return &PubSub{rdb: rdb, hub: hub, channels: channels}
+func NewPubSub(rs *redisstore.Client, hub *Hub, channels ...string) *PubSub {
+	return &PubSub{rs: rs, hub: hub, channels: channels, idleTimeout: defaultIdleTimeout}
 }
+
+// LastMessageAt retourne l'horodatage unix ms du dernier message recu (0 si aucun).
+func (p *PubSub) LastMessageAt() int64 { return p.lastMessageAt.Load() }
+
+// SetIdleTimeoutForTest raccourcit le delai du watchdog. A appeler avant Run.
+func (p *PubSub) SetIdleTimeoutForTest(d time.Duration) { p.idleTimeout = d }
+
+// SetLastMessageAtForTest force l'horodatage du dernier message recu.
+func (p *PubSub) SetLastMessageAtForTest(ms int64) { p.lastMessageAt.Store(ms) }
+
+// IdleResubscribesForTest retourne le nombre de reabonnements du watchdog.
+func (p *PubSub) IdleResubscribesForTest() int64 { return p.idleResubscribes.Load() }
 
 func (p *PubSub) Run(ctx context.Context) {
 	backoff := time.Second
 	const maxBackoff = 30 * time.Second
 	for {
-		if err := p.runOnce(ctx); err != nil {
+		received, err := p.runOnce(ctx)
+		// Un abonnement qui a effectivement servi n'est pas une boucle
+		// d'echec : on repart du backoff minimal plutot que de garder le
+		// palier atteint par les pannes precedentes.
+		if received {
+			backoff = time.Second
+		}
+		if err != nil {
 			if ctx.Err() != nil {
 				return
 			}
@@ -77,40 +94,101 @@ func (p *PubSub) Run(ctx context.Context) {
 	}
 }
 
-func (p *PubSub) runOnce(ctx context.Context) error {
-	sub := p.rdb.Subscribe(ctx, p.channels...)
+// errChannelClosed : le canal de reception go-redis a ete ferme (perte de la
+// connexion subscriber). On remonte une erreur pour que Run relance
+// l'abonnement — retourner nil arreterait la diffusion definitivement.
+var errChannelClosed = errors.New("pubsub channel closed")
+
+// errPubSubIdle : plus aucun message alors que des crawls tournent. Le canal
+// go-redis n'est pas ferme pour autant (connexion a demi-morte) : seul un
+// reabonnement complet remet la diffusion en marche.
+var errPubSubIdle = errors.New("pubsub idle while crawls are running")
+
+// runOnce tient un abonnement jusqu'a sa perte. Le premier retour indique si au
+// moins un message a ete recu, ce qui permet a Run de distinguer un abonnement
+// sain qui vient de tomber d'une boucle d'echec.
+func (p *PubSub) runOnce(ctx context.Context) (bool, error) {
+	sub := p.rs.Subscribe(ctx, p.channels...)
 	defer sub.Close()
 	if _, err := sub.Receive(ctx); err != nil {
-		return err
+		return false, err
 	}
 	ch := sub.Channel()
+	// Amorcer l'horodatage a l'abonnement : sans ca, /api/system/health ne
+	// distingue pas "jamais abonne" de "abonne il y a une heure, muet depuis".
+	p.lastMessageAt.Store(time.Now().UnixMilli())
 	slog.Info("ws.pubsub.subscribed", "channels", p.channels)
+
+	idle := time.NewTimer(p.idleTimeout)
+	defer idle.Stop()
+	received := false
 	for {
 		select {
 		case <-ctx.Done():
-			return nil
+			return received, nil
 		case msg, ok := <-ch:
 			if !ok {
-				return nil
+				return received, errChannelClosed
 			}
-			func() {
-				defer func() { _ = recover() }()
-				p.broadcastTransformed(msg.Payload)
-				p.persistAndNotify(ctx, msg.Payload)
-			}()
+			received = true
+			p.lastMessageAt.Store(time.Now().UnixMilli())
+			// Diffuser d'abord : la latence WS du dashboard n'a pas a
+			// attendre l'aller-retour Redis. Les deux etapes sont
+			// independantes et chacune isolee dans son propre recover(),
+			// donc un panic de l'une n'empeche pas l'autre.
+			safe("broadcast", func() { p.broadcastTransformed(msg.Payload) })
+			safe("persist", func() { p.persistAndNotify(ctx, msg.Payload) })
+			resetTimer(idle, p.idleTimeout)
+		case <-idle.C:
+			// Silence prolonge : si des crawls tournent, des heartbeats
+			// devraient arriver. L'abonnement est mort sans que go-redis
+			// nous l'ait signale — on le reconstruit.
+			if running, err := p.runningCount(ctx); err == nil && running > 0 {
+				p.idleResubscribes.Add(1)
+				slog.Warn("ws.pubsub.idle_resubscribe",
+					"idle", p.idleTimeout, "running", running, "channels", p.channels)
+				return received, errPubSubIdle
+			}
+			idle.Reset(p.idleTimeout)
 		}
 	}
 }
 
-// broadcastTransformed converts a raw Redis pub/sub heartbeat into the
-// replica_heartbeat envelope the React frontend expects:
+// runningCount lit le nombre de crawls actifs (best effort).
+func (p *PubSub) runningCount(ctx context.Context) (int, error) {
+	running, _, err := p.rs.GetCapacity(ctx)
+	return running, err
+}
+
+// resetTimer redemarre un timer deja arme sans laisser de tick en attente.
+func resetTimer(t *time.Timer, d time.Duration) {
+	if !t.Stop() {
+		select {
+		case <-t.C:
+		default:
+		}
+	}
+	t.Reset(d)
+}
+
+// safe execute fn en isolant les panics et en les tracant.
+func safe(op string, fn func()) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("ws.pubsub.panic", "op", op, "err", r, "stack", string(debug.Stack()))
+		}
+	}()
+	fn()
+}
+
+// broadcastTransformed convertit un heartbeat brut Redis en enveloppe
+// replica_heartbeat attendue par le frontend React :
 //
 //	{ type: "replica_heartbeat", data: { replicaId, cpu, ram, … } }
 //
-// job_update events are NOT sent here — they are emitted by persistAndNotify
-// only when a job's status actually changes. Sending job_update on every
-// heartbeat caused a request storm (React Query invalidated 6+ endpoints
-// every 2s per replica).
+// Les job_update ne sont PAS emis a chaque heartbeat (tempete de requetes
+// React Query) : ils viennent des messages crawl_updates publies par
+// crawler-service lors d'un changement de statut.
 func (p *PubSub) broadcastTransformed(payload string) {
 	var raw map[string]any
 	if err := json.Unmarshal([]byte(payload), &raw); err != nil {
@@ -143,8 +221,8 @@ func (p *PubSub) broadcastTransformed(payload string) {
 	}
 }
 
-// emitJobUpdate sends a { type: "job_update", crawl_id } event to all
-// connected WebSocket clients, triggering React Query cache invalidation.
+// emitJobUpdate envoie { type: "job_update", crawl_id } a tous les clients
+// WebSocket, ce qui declenche l'invalidation du cache React Query.
 func (p *PubSub) emitJobUpdate(jobID string) {
 	envelope := map[string]any{
 		"type":     "job_update",
@@ -155,93 +233,20 @@ func (p *PubSub) emitJobUpdate(jobID string) {
 	}
 }
 
-// persistAndNotify upserts job + replica data and emits job_update only on real changes.
+// persistAndNotify persiste les series temporelles issues des heartbeats.
+// La cle crawl_job:<id> n'est PLUS reecrite ici : elle appartient a
+// crawler-service (Python), qui y ecrit deja status/replica_id/dates.
 func (p *PubSub) persistAndNotify(ctx context.Context, payload string) {
 	var msg map[string]any
 	if err := json.Unmarshal([]byte(payload), &msg); err != nil {
 		return
 	}
-	p.persistJob(ctx, msg)
-	p.persistReplica(ctx, msg)
-	p.persistJobPerf(ctx, msg)
-}
-
-// persistJob upserts crawl_job:<jobId> preserving start_time on existing entries.
-// Emits a job_update WS event when a new job appears or a job's status changes.
-func (p *PubSub) persistJob(ctx context.Context, msg map[string]any) {
-	jobID := stringOrNum(msg["jobId"])
-	if jobID == "" {
-		return
-	}
-	key := jobKeyPrefix + jobID
-
-	existing := map[string]any{}
-	isNewJob := true
-	if raw, err := p.rdb.Get(ctx, key).Result(); err == nil {
-		_ = json.Unmarshal([]byte(raw), &existing)
-		isNewJob = false
-	}
-
-	oldStatus, _ := existing["status"].(string)
-
-	if _, hasStart := existing["start_time"]; !hasStart {
-		if ts, ok := msg["timestamp"].(float64); ok {
-			existing["start_time"] = time.UnixMilli(int64(ts)).UTC().Format(time.RFC3339Nano)
-		} else {
-			existing["start_time"] = time.Now().UTC().Format(time.RFC3339Nano)
-		}
-	}
-
-	existing["id"] = jobID
-	if v := stringOrNum(msg["domain"]); v != "" {
-		existing["domain"] = v
-	}
-	if v := stringOrNum(msg["status"]); v != "" {
-		existing["status"] = v
-		if v == "finished" || v == "failed" || v == "archived" {
-			if _, hasEnd := existing["end_time"]; !hasEnd {
-				existing["end_time"] = time.Now().UTC().Format(time.RFC3339Nano)
-			}
-		}
-	}
-	if v := stringOrNum(msg["replicaId"]); v != "" {
-		existing["replica_id"] = v
-	}
-	if v, ok := msg["cpu"].(float64); ok {
-		existing["cpu"] = v
-	}
-	if v, ok := msg["ram"].(float64); ok {
-		existing["ram"] = v
-	}
-	if v, ok := msg["totalRam"].(float64); ok {
-		existing["total_ram"] = v
-	}
-	if v := stringOrNum(msg["crawlMode"]); v != "" {
-		existing["crawl_mode"] = v
-	}
-	if v, ok := msg["oomRestartCount"].(float64); ok {
-		existing["oom_restart_count"] = int(v)
-	}
-
-	out, err := json.Marshal(existing)
-	if err != nil {
-		return
-	}
-	_ = p.rdb.Set(ctx, key, string(out), jobTTL).Err()
-
-	// Emit job_update only when the job is new or its status changed.
-	newStatus, _ := existing["status"].(string)
-	if isNewJob || (newStatus != "" && newStatus != oldStatus) {
-		p.emitJobUpdate(jobID)
-	}
-}
-
-// persistReplica appends a heartbeat sample to replica:history:<replicaId> (ZSet, TTL 1h).
-func (p *PubSub) persistReplica(ctx context.Context, msg map[string]any) {
 	replicaID := stringOrNum(msg["replicaId"])
-	if replicaID == "" {
+	jobID := stringOrNum(msg["jobId"])
+	if replicaID == "" && jobID == "" {
 		return
 	}
+
 	ts := time.Now().UnixMilli()
 	if v, ok := msg["timestamp"].(float64); ok {
 		ts = int64(v)
@@ -249,45 +254,15 @@ func (p *PubSub) persistReplica(ctx context.Context, msg map[string]any) {
 	cpu, _ := msg["cpu"].(float64)
 	ram, _ := msg["ram"].(float64)
 	totalRAM, _ := msg["totalRam"].(float64)
-	jobID := stringOrNum(msg["jobId"])
 
-	sample := map[string]any{
-		"ts":       ts,
-		"cpu":      cpu,
-		"ram":      ram,
-		"totalRam": totalRAM,
-	}
+	var jobIDPtr *string
 	if jobID != "" {
-		sample["jobId"] = jobID
+		jobIDPtr = &jobID
 	}
-	raw, err := json.Marshal(sample)
-	if err != nil {
-		return
-	}
-	key := replicaHistoryPrefix + replicaID
-	minScore := strconv.FormatInt(ts-retentionMs, 10)
-	_ = p.rdb.ZAdd(ctx, key, redis.Z{Score: float64(ts), Member: string(raw)}).Err()
-	_ = p.rdb.ZRemRangeByScore(ctx, key, "0", minScore).Err()
-	_ = p.rdb.SAdd(ctx, knownReplicasKey, replicaID).Err()
-}
+	p.rs.PersistHeartbeat(ctx, replicaID, ts, cpu, ram, totalRAM, jobIDPtr)
 
-// persistJobPerf appends a perf sample to job:perf:<jobId> (ZSet, score=ts, 7d TTL).
-// Member shape: {ts, cpu, ram, totalRam, replicaId, jobId} — matches Express persistJobPerf
-// so the existing computeCapacityPlanning loader can decode it without changes.
-func (p *PubSub) persistJobPerf(ctx context.Context, msg map[string]any) {
-	jobID := stringOrNum(msg["jobId"])
-	if jobID == "" {
-		return
-	}
-	replicaID := stringOrNum(msg["replicaId"])
-	ts := time.Now().UnixMilli()
-	if v, ok := msg["timestamp"].(float64); ok {
-		ts = int64(v)
-	}
-	cpu, _ := msg["cpu"].(float64)
-	ram, _ := msg["ram"].(float64)
-	totalRAM, _ := msg["totalRam"].(float64)
-
+	// Meme forme de membre que l'implementation Express, pour que le
+	// chargeur de capacity planning la decode sans changement.
 	sample := map[string]any{
 		"ts":       ts,
 		"cpu":      cpu,
@@ -298,13 +273,5 @@ func (p *PubSub) persistJobPerf(ctx context.Context, msg map[string]any) {
 	if replicaID != "" {
 		sample["replicaId"] = replicaID
 	}
-	raw, err := json.Marshal(sample)
-	if err != nil {
-		return
-	}
-	key := jobPerfPrefix + jobID
-	minScore := strconv.FormatInt(ts-jobPerfRetentionMs, 10)
-	_ = p.rdb.ZAdd(ctx, key, redis.Z{Score: float64(ts), Member: string(raw)}).Err()
-	_ = p.rdb.ZRemRangeByScore(ctx, key, "0", minScore).Err()
-	_ = p.rdb.Expire(ctx, key, time.Duration(jobPerfRetentionMs)*time.Millisecond).Err()
+	p.rs.PersistJobPerfSample(ctx, jobID, ts, sample)
 }

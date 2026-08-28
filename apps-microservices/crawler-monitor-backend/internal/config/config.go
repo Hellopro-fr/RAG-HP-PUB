@@ -2,7 +2,9 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -14,7 +16,6 @@ type Config struct {
 	AdminPasswordHash  string
 	JWTSecret          string
 	CorsAllowedOrigins []string
-	TrustProxyHops     int
 	RateLimitMax       int
 	RateLimitWindowMs  int
 	ReplayHighCPU      float64
@@ -29,7 +30,6 @@ func Load() (*Config, error) {
 		CrawlerStoragePath: envOr("CRAWLER_STORAGE_PATH", "/app/storage"),
 		AdminPasswordHash:  os.Getenv("ADMIN_PASSWORD_HASH"),
 		JWTSecret:          os.Getenv("JWT_SECRET"),
-		TrustProxyHops:     envInt("TRUST_PROXY", 1),
 		RateLimitMax:       envInt("RATE_LIMIT_MAX", 600),
 		RateLimitWindowMs:  envInt("RATE_LIMIT_WINDOW_MS", 900000),
 		ReplayHighCPU:      envFloat("REPLAY_HIGH_CPU", 0.85),
@@ -43,6 +43,14 @@ func Load() (*Config, error) {
 				c.CorsAllowedOrigins = append(c.CorsAllowedOrigins, t)
 			}
 		}
+	}
+
+	// Liste vide ou "*" : l'API repond a n'importe quelle origine. Acceptable
+	// derriere nginx sur un reseau prive, dangereux si le service est expose.
+	if len(c.CorsAllowedOrigins) == 0 || slices.Contains(c.CorsAllowedOrigins, "*") {
+		slog.Warn("cors.permissive",
+			"origins", c.CorsAllowedOrigins,
+			"hint", "definir CORS_ALLOWED_ORIGINS=https://cmf.hellopro.eu")
 	}
 
 	if c.RedisURL == "" {
