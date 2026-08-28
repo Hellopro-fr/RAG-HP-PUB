@@ -1,11 +1,11 @@
 'use client';
 
 import { HubIcon } from './primitives';
-import { openAssistantDialog } from './AssistantForm';
-// ⚠️ Import depuis `guideDialogEvent` et NON depuis `GuideDownloadDialog` :
-// ces boutons sont rendus dès le chargement, importer le dialog ici re-tirerait
-// tout son corps (Radix + étapes) dans le bundle initial et annulerait son
-// chargement paresseux.
+// ⚠️ Imports depuis les modules d'ÉVÉNEMENT et NON depuis les dialogs eux-mêmes :
+// ces boutons sont rendus dès le chargement, importer un dialog ici re-tirerait
+// tout son corps (Radix + étapes + `react-international-phone`) dans le bundle
+// initial et annulerait son chargement paresseux.
+import { openAssistantDialog } from '@/lib/hub/assistantDialogEvent';
 import { openGuideDialog } from '@/lib/hub/guideDialogEvent';
 import type { HubEntryPoint } from '@/lib/analytics/hub';
 import type { HubIconName } from '@/types/hub';
@@ -106,14 +106,26 @@ export function GuideButton({
   );
 }
 
-/** Ouvre le questionnaire « plan projet ». */
-export function AssistantButton({ variant = 'solid', ...props }: TriggerProps) {
+/**
+ * Ouvre le questionnaire projet.
+ *
+ * `entryPoint` est OBLIGATOIRE, pour la même raison que sur `GuideButton` : six
+ * emplacements de la page ouvrent ce même dialog, et c'est la seule dimension
+ * qui dira lequel convertit. Le rendre optionnel garantirait qu'on l'oublie sur
+ * un bouton, et que ses conversions soient attribuées au hero par défaut — une
+ * erreur silencieuse, et flatteuse pour le mauvais emplacement.
+ */
+export function AssistantButton({
+  variant = 'solid',
+  entryPoint,
+  ...props
+}: TriggerProps & { entryPoint: HubEntryPoint }) {
   // Seuls les CTA de TYPE BOUTON (pas les liens `link`/`row`) sont observés par
   // `StickyCta` : quand l'un est visible, la barre collée du bas se masque.
   const markAssistant = variant !== 'link' && variant !== 'row';
   return (
     <TriggerButton
-      onClick={openAssistantDialog}
+      onClick={() => openAssistantDialog(entryPoint)}
       variant={variant}
       markAssistant={markAssistant}
       {...props}

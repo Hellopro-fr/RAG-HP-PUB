@@ -1,8 +1,9 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { AssistantForm, openAssistantDialog } from '@/components/hub/AssistantForm';
 import { listHubPages } from '@/data/hub';
 import { markLeadKnown } from '@/lib/hub/leadEmailCookie';
+import { __resetHubEventDedup, type HubEntryPoint } from '@/lib/analytics/hub';
 
 // PhoneField encapsule react-international-phone (+ son CSS) : on le mocke par un
 // input simple qui remonte toujours le pays « France » / indicatif « 33 ».
@@ -59,6 +60,17 @@ function renderShort(fetchResponses: MockResponse[] = [{ status: 200, body: {} }
   fireEvent.click(screen.getByText(short.steps[0].options[0]));
   return { short, fetchMock };
 }
+
+/** Lecture du dataLayer — même helper que `__tests__/lib/analytics/hub.test.ts`. */
+type Push = Record<string, unknown>;
+const dl = () => (window as unknown as { dataLayer: Push[] }).dataLayer ?? [];
+
+beforeEach(() => {
+  (window as unknown as { dataLayer: Push[] }).dataLayer = [];
+  // `hub_form_view` est dédupliqué au niveau du MODULE : sans ce reset, un seul
+  // test le verrait et les suivants croiraient à une régression.
+  __resetHubEventDedup();
+});
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -239,6 +251,118 @@ describe('AssistantForm', () => {
     await waitFor(() => expect(screen.getByLabelText(short.contact.label)).toBeDefined());
     // Aucun appel réseau tant que l'utilisateur n'a pas soumis l'e-mail lui-même.
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Convertit en ouvrant le questionnaire depuis l'emplacement demandé, et
+   * renvoie l'événement de conversion.
+   *
+   * ⚠️ Toutes les interactions passent par `within(dialog)`. L'étape 1 est rendue
+   * DEUX FOIS quand le dialog est ouvert — une fois dans le bloc inline du hero,
+   * une fois dans le dialog — et une requête globale échoue sur « Found multiple
+   * elements ». C'est propre à ce composant, dont l'étape d'entrée vit hors du
+   * dialog.
+   */
+  async function convertirDepuis(entryPoint?: HubEntryPoint) {
+    const short = { ...data, steps: [data.steps[0]] };
+    stubFetch([{ status: 201, body: { statut: 'enregistre', contact_connu: 1 } }]);
+    render(<AssistantForm data={short} idPageHub={ID_PAGE_HUB} />);
+
+    openAssistantDialog(entryPoint);
+    const dialog = await screen.findByRole('dialog');
+    const dans = within(dialog);
+
+    fireEvent.click(dans.getByText(short.steps[0].options[0]));
+    await waitFor(() => expect(dans.getByLabelText(short.contact.label)).toBeDefined());
+    fireEvent.change(dans.getByLabelText(short.contact.label), {
+      target: { value: 'jean@exemple.fr' },
+    });
+    fireEvent.click(
+      dans.getByRole('button', { name: new RegExp(short.contact.submitLabel, 'i') })
+    );
+
+    await waitFor(() => {
+      expect(dl().some((e) => e.event === 'hub_form_submission')).toBe(true);
+    });
+    return dl().find((e) => e.event === 'hub_form_submission');
+  }
+
+  /**
+   * RÉGRESSION (2026-08-25). La conversion du tunnel projet partait SANS
+   * `hub_entry_point`, alors que six emplacements ouvrent ce questionnaire :
+   * impossible de répondre à « quel CTA amène des projets ? », question pourtant
+   * résolue côté guide. La dimension GA4 était donc borgne sur un tunnel.
+   */
+  it('porte l’emplacement d’ouverture jusqu’à la conversion', async () => {
+    const conversion = await convertirDepuis('bloc_thematique');
+    expect(conversion?.hub_entry_point).toBe('bloc_thematique');
+  });
+
+  /**
+   * Sans emplacement fourni, le parcours vient du bloc inline du hero. Le défaut
+   * doit donc décrire la réalité, et non une valeur neutre du type `unknown` qui
+   * gonflerait artificiellement une catégorie « non attribué ».
+   */
+  it('retombe sur hero quand aucun emplacement n’est fourni', async () => {
+    const conversion = await convertirDepuis();
+    expect(conversion?.hub_entry_point).toBe('hero');
+  });
+
+  /**
+   * RÉGRESSION (constatée en recette le 2026-08-25). L'emplacement fuyait d'un
+   * parcours à l'autre : après une ouverture par CTA abandonnée, une conversion
+   * partie du bloc inline du hero restait attribuée au CTA précédent.
+   *
+   * Le dialog s'ouvre de DEUX façons — par événement, qui pose l'emplacement, ou
+   * par le hero où `step > 0` suffit et n'émet rien. Seul `reset()` peut donc
+   * garantir qu'un nouveau parcours reparte du bon défaut.
+   */
+  it('ne conserve pas l’emplacement du parcours précédent', async () => {
+    const short = { ...data, steps: [data.steps[0]] };
+    stubFetch([{ status: 201, body: { statut: 'enregistre', contact_connu: 1 } }]);
+    render(<AssistantForm data={short} idPageHub={ID_PAGE_HUB} />);
+
+    // 1. Ouverture par un CTA, puis abandon (fermeture au clavier).
+    openAssistantDialog('banner_accompagnement');
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    /**
+     * ⚠️ Attendre que `reset()` ait RÉELLEMENT eu lieu, et pas seulement que le
+     * dialog ait disparu. La fermeture diffère le reset de 250 ms — le temps de
+     * l'animation de sortie, sans quoi le questionnaire réapparaîtrait dans le
+     * dialog en train de se fermer.
+     *
+     * Enchaîner avant, c'est cliquer alors que `closing` est encore vrai : le
+     * dialog refuse de se rouvrir, puis le reset tardif efface la réponse.
+     *
+     * Une attente explicite, et non un `waitFor` : à ce stade du parcours aucun
+     * élément de l'écran ne change au moment du reset — on n'a répondu à aucune
+     * question, donc le CTA est déjà désactivé avant comme après. Un `waitFor`
+     * se résoudrait immédiatement sans rien prouver (c'est l'erreur que faisait
+     * la première version de ce test).
+     */
+    await new Promise((resolve) => setTimeout(resolve, 400));
+
+    // 2. Parcours depuis le bloc inline du hero — aucun événement d'ouverture.
+    fireEvent.click(screen.getByText(short.steps[0].options[0]));
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(short.ctaLabel, 'i') }));
+
+    const rouvert = await screen.findByRole('dialog');
+    const dans = within(rouvert);
+    await waitFor(() => expect(dans.getByLabelText(short.contact.label)).toBeDefined());
+    fireEvent.change(dans.getByLabelText(short.contact.label), {
+      target: { value: 'jean@exemple.fr' },
+    });
+    fireEvent.click(
+      dans.getByRole('button', { name: new RegExp(short.contact.submitLabel, 'i') })
+    );
+
+    await waitFor(() => {
+      const conversion = dl().find((e) => e.event === 'hub_form_submission');
+      expect(conversion?.hub_entry_point).toBe('hero');
+    });
   });
 
   it('bloque l’étape coordonnées si le téléphone est invalide', async () => {

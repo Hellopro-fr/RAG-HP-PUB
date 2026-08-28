@@ -36,23 +36,24 @@ export { openGuideDialog } from '@/lib/hub/guideDialogEvent';
  *   1. e-mail (+ consentement) → APPEL 1 → 201 (reconnu) `download` / 200 `coordinates`
  *   2. coordonnées (nom, téléphone, code postal) → APPEL 2 → 201 → `download`
  *
- * `id_page_hub` = prop `idPageHub` (dérivée de l'id de la page, distincte du
- * projet — cf. `guideIdPageHub`). Le consentement reste purement front (non transmis).
+ * `id_page_hub` = l'id de l'URL, le MÊME que celui du questionnaire. Le tunnel
+ * se reconnaît côté serveur à l'absence de `reponses` (cf. `data/hub/index.ts`).
+ * Le consentement reste purement front (non transmis).
  */
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function GuideDownloadDialog({
   data,
   idPageHub,
-  pageId,
   autoOpenOnMount = false,
   autoOpenEntryPoint,
 }: {
   data: HubGuideDialog;
-  /** `id_page_hub` du TUNNEL guide — ce qui part à l'API. */
+  /**
+   * Id de la page — celui de l'URL. Envoyé à l'API comme `id_page_hub` ET
+   * utilisé comme portée du drapeau « déjà converti ».
+   */
   idPageHub: number;
-  /** Id du PROJET — portée du drapeau « déjà converti » (cf. `HubOverlays`). */
-  pageId: number;
   /**
    * Emplacement du CTA à rejouer avec `autoOpenOnMount`.
    *
@@ -78,7 +79,7 @@ export function GuideDownloadDialog({
   const [entryPoint, setEntryPoint] = useState<HubEntryPoint>('banner_guide');
   // Visiteur déjà converti (cookie posé) : re-téléchargement, pas une conversion.
   const [alreadyConverted, setAlreadyConverted] = useState(false);
-  const lead = useGuideLead(idPageHub, entryPoint, pageId);
+  const lead = useGuideLead(idPageHub, entryPoint);
   const { reset } = lead;
 
   useEffect(() => {
@@ -97,8 +98,8 @@ export function GuideDownloadDialog({
       // la portée est par `id_page_hub`) → écran de téléchargement DIRECT. On ne
       // stocke plus l'e-mail, donc aucun ré-enregistrement : on affiche juste le
       // remerciement et on rafraîchit le drapeau (fenêtre glissante de 30 j).
-      if (isLeadKnown(pageId)) {
-        markLeadKnown(pageId);
+      if (isLeadKnown(idPageHub)) {
+        markLeadKnown(idPageHub);
         lead.setPhase('download');
         setAlreadyConverted(true);
         // RACCOURCI : aucun formulaire, aucun appel API. `hub_guide_shortcut`

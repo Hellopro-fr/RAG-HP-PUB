@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { Download } from 'lucide-react';
-import { openAssistantDialog } from './AssistantForm';
+// Module d'événement et non `AssistantForm` : cette barre est rendue dès le
+// chargement, importer le questionnaire ici annulerait son découpage de bundle.
+import { openAssistantDialog } from '@/lib/hub/assistantDialogEvent';
 
 /**
  * Barre d'action fixe en bas d'écran, mobile uniquement (`lg:hidden`).
@@ -57,7 +59,7 @@ export function StickyCta({ label }: { label: string }) {
       >
         <button
           type="button"
-          onClick={openAssistantDialog}
+          onClick={() => openAssistantDialog('sticky_mobile')}
           className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-cta text-sm font-bold text-cta-foreground shadow-cta transition hover:bg-cta-hover"
         >
           <Download className="h-4 w-4" />

@@ -131,13 +131,13 @@ describe('pushHubEvent — nettoyage des paramètres', () => {
     pushHubEvent('hub_form_submission', 'guide', {
       hub_lead_path: 'reconnu',
       user_known_status: 'Known',
-      id_page_hub: 2000,
+      id_page_hub: 1000,
       hub_entry_point: 'popup_scroll',
     });
     expect(dl()[0]).toMatchObject({
       hub_lead_path: 'reconnu',
       user_known_status: 'Known',
-      id_page_hub: 2000,
+      id_page_hub: 1000,
       hub_entry_point: 'popup_scroll',
     });
   });

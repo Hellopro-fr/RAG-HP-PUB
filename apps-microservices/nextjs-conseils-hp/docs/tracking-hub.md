@@ -102,9 +102,8 @@ sans cet événement.
 
 ⚠️ **Portée par PROJET depuis le 2026-08-24.** Le cookie `hub_lead` contient la
 liste des **ids de PAGE** déjà convertis (ex. `1000.1002`) et non plus un simple
-`1`. Ce sont bien les ids de page, pas ceux du tunnel guide (`guideIdPageHub`,
-décalés de 1000) : les deux tunnels d'une même page partagent le drapeau, sinon
-remplir le questionnaire ne dispenserait pas du formulaire guide juste à côté.
+`1`. Depuis le 2026-08-25 il n'existe plus qu'un identifiant par page — celui de
+l'URL — pour les deux tunnels, donc plus d'ambiguïté possible ici.
 Un visiteur converti sur l'élevage se voit donc
 redemander son e-mail sur la laverie — un seul champ, l'API le reconnaît et
 répond 201 — et **un lead laverie est créé**. Avant ce correctif, il n'en existait
@@ -255,7 +254,7 @@ abandons et affichages ne se croiseraient pas dans un même rapport.
 | Groupe | Nature | Ce qu'il répond |
 |---|---|---|
 | **Projet** | tunnel — questionnaire du hero, 6 écrans, lead qualifié, `id_page_hub = 1000` | Combien de projets qualifiés, et à quelle étape on décroche |
-| **Guide** | tunnel — un e-mail contre un PDF, 4 portes d'entrée, `id_page_hub = 2000` | Combien de guides, et depuis quel emplacement |
+| **Guide** | tunnel — un e-mail contre un PDF, 4 portes d'entrée, `id_page_hub` = id de l'URL (le même que le projet) | Combien de guides, et depuis quel emplacement |
 | **Engagement** | **pas un tunnel** — aucun point d'arrivée | Pourquoi les deux premiers convertissent ou non |
 
 `hub_group` (`projet` \| `guide` \| `engagement`) est ajouté par le helper sur **tous** les
@@ -300,7 +299,7 @@ Un `gtag` direct contourne le Consent Mode du conteneur.
 | `hub_group` | `projet` \| `guide` \| `engagement` | `projet` |
 | `hub_page_id` | `page.id` — ⚠️ envoyé mais **non déclaré** en dimension : doublon du **Chemin de page** standard | `1000` |
 | `hub_page_uri` | `hubCanonicalPath(page)` — URI **publique**, pas la route interne. ⚠️ Même remarque | `/lancer-elevage-poules-pondeuses-1000-projet.html` |
-| `id_page_hub` | id effectif de l'appel API | `1000` / `2000` |
+| `id_page_hub` | `page.id` — id de l'URL, identique pour les DEUX tunnels depuis le 2026-08-25 | `1000` |
 | `session_id` | `getHpSessionId()` — **helper existant réutilisé** | `session_1785854120765_a1b2c3d4e` |
 | `product.category5` | lu du dataLayer, comme `getCategory5()` | `Élevage-avicole` |
 
@@ -429,7 +428,7 @@ première collecte, changer coûte une reprise de tous les segments.
 | 1 | `lib/analytics/hub.ts` + tests unitaires | rien — mais le socle est testable sans navigateur |
 | 2 | Tunnel projet (§3, events 1-11) | combien de projets, où ça décroche |
 | 3 | `hub_email_check` + `hub_form_submission` + `hub_form_abandon` sur les deux tunnels | part de contacts déjà connus, étape qui tue le tunnel |
-| 4 | Tunnel guide avec `hub_entry_point` et `hub_guide_shortcut` | quelle porte convertit, usage réel du guide |
+| 4 | Les DEUX tunnels avec `hub_entry_point` et `hub_guide_shortcut` | quelle porte convertit, usage réel du guide |
 | 5 | `hub_article_click` | si le HUB alimente les pages conseils |
 | 6 | Conteneur GTM + GA4 + recette 30 tests | les chiffres sont fiables |
 
@@ -441,6 +440,7 @@ répond à « pourquoi », et ne se justifie qu'une fois du volume observé.
 ## 11. Reporté, hors périmètre tracking
 
 - **Barre sticky mobile** : icône de téléchargement pour un bouton qui ouvre le questionnaire.
-  Revu plus tard ; `hub_entry_point = sticky_mobile` reste prévu dans le plan.
+  Revu plus tard ; `hub_entry_point = sticky_mobile` est désormais réellement émis
+  (corrigé le 2026-08-25, cf. ci-dessous).
 - **PDF du guide** : `/seo_masterclass_detailed.pdf` (résidu du prototype Lovable) sera
   remplacé quand l'équipe aura terminé le livre. Aucun impact sur le plan.
