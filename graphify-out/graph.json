@@ -14403,8 +14403,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\main.ts",
       "source_location": "L85",
       "community": 1,
-      "id": "main_getarg",
-      "norm_label": "getarg()"
+      "norm_label": "getarg()",
+      "id": "main_getarg"
     },
     {
       "label": "parseNumericArg()",
@@ -14412,8 +14412,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\main.ts",
       "source_location": "L87",
       "community": 1,
-      "id": "main_parsenumericarg",
-      "norm_label": "parsenumericarg()"
+      "norm_label": "parsenumericarg()",
+      "id": "main_parsenumericarg"
     },
     {
       "label": "readContainerMemory()",
@@ -14421,8 +14421,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\main.ts",
       "source_location": "L271",
       "community": 1,
-      "id": "main_readcontainermemory",
-      "norm_label": "readcontainermemory()"
+      "norm_label": "readcontainermemory()",
+      "id": "main_readcontainermemory"
     },
     {
       "label": "handleWarningMemory()",
@@ -14430,8 +14430,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\main.ts",
       "source_location": "L283",
       "community": 1,
-      "id": "main_handlewarningmemory",
-      "norm_label": "handlewarningmemory()"
+      "norm_label": "handlewarningmemory()",
+      "id": "main_handlewarningmemory"
     },
     {
       "label": "handleCriticalMemory()",
@@ -14439,8 +14439,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\main.ts",
       "source_location": "L322",
       "community": 1,
-      "id": "main_handlecriticalmemory",
-      "norm_label": "handlecriticalmemory()"
+      "norm_label": "handlecriticalmemory()",
+      "id": "main_handlecriticalmemory"
     },
     {
       "label": "getTopProcesses()",
@@ -14448,8 +14448,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\main.ts",
       "source_location": "L420",
       "community": 1,
-      "id": "main_gettopprocesses",
-      "norm_label": "gettopprocesses()"
+      "norm_label": "gettopprocesses()",
+      "id": "main_gettopprocesses"
     },
     {
       "label": "getContainerMemoryUsage()",
@@ -14457,8 +14457,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\main.ts",
       "source_location": "L437",
       "community": 1,
-      "id": "main_getcontainermemoryusage",
-      "norm_label": "getcontainermemoryusage()"
+      "norm_label": "getcontainermemoryusage()",
+      "id": "main_getcontainermemoryusage"
     },
     {
       "label": "getContainerCpuUsec()",
@@ -14466,8 +14466,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\main.ts",
       "source_location": "L448",
       "community": 1,
-      "id": "main_getcontainercpuusec",
-      "norm_label": "getcontainercpuusec()"
+      "norm_label": "getcontainercpuusec()",
+      "id": "main_getcontainercpuusec"
     },
     {
       "label": "cleanUrlFn()",
@@ -14475,8 +14475,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\main.ts",
       "source_location": "L915",
       "community": 1,
-      "id": "main_cleanurlfn",
-      "norm_label": "cleanurlfn()"
+      "norm_label": "cleanurlfn()",
+      "id": "main_cleanurlfn"
     },
     {
       "label": "mapStopReasonToMessage()",
@@ -14484,8 +14484,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\main.ts",
       "source_location": "L1136",
       "community": 1,
-      "id": "main_mapstopreasontomessage",
-      "norm_label": "mapstopreasontomessage()"
+      "norm_label": "mapstopreasontomessage()",
+      "id": "main_mapstopreasontomessage"
     },
     {
       "label": "gracefulShutdown()",
@@ -14493,8 +14493,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\main.ts",
       "source_location": "L1173",
       "community": 1,
-      "id": "main_gracefulshutdown",
-      "norm_label": "gracefulshutdown()"
+      "norm_label": "gracefulshutdown()",
+      "id": "main_gracefulshutdown"
     },
     {
       "label": "seedPhase2()",
@@ -14502,8 +14502,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\main.ts",
       "source_location": "L1540",
       "community": 1,
-      "id": "main_seedphase2",
-      "norm_label": "seedphase2()"
+      "norm_label": "seedphase2()",
+      "id": "main_seedphase2"
     },
     {
       "label": "questionMarkDecision.test.ts",
@@ -15015,8 +15015,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\class\\UpdateChecker.ts",
       "source_location": "L74",
       "community": 1,
-      "id": "updatechecker_updatechecker",
-      "norm_label": "updatechecker"
+      "norm_label": "updatechecker",
+      "id": "updatechecker_updatechecker"
     },
     {
       "label": ".constructor()",
@@ -15024,8 +15024,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\class\\UpdateChecker.ts",
       "source_location": "L85",
       "community": 1,
-      "id": "updatechecker_updatechecker_constructor",
-      "norm_label": ".constructor()"
+      "norm_label": ".constructor()",
+      "id": "updatechecker_updatechecker_constructor"
     },
     {
       "label": ".hasIgnoredExtension()",
@@ -15042,8 +15042,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\class\\UpdateChecker.ts",
       "source_location": "L104",
       "community": 1,
-      "id": "updatechecker_updatechecker_hasforbiddenparams",
-      "norm_label": ".hasforbiddenparams()"
+      "norm_label": ".hasforbiddenparams()",
+      "id": "updatechecker_updatechecker_hasforbiddenparams"
     },
     {
       "label": ".isEligible()",
@@ -15051,8 +15051,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\class\\UpdateChecker.ts",
       "source_location": "L129",
       "community": 1,
-      "id": "updatechecker_updatechecker_iseligible",
-      "norm_label": ".iseligible()"
+      "norm_label": ".iseligible()",
+      "id": "updatechecker_updatechecker_iseligible"
     },
     {
       "label": ".checkUrl()",
@@ -15060,8 +15060,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\class\\UpdateChecker.ts",
       "source_location": "L191",
       "community": 1,
-      "id": "updatechecker_updatechecker_checkurl",
-      "norm_label": ".checkurl()"
+      "norm_label": ".checkurl()",
+      "id": "updatechecker_updatechecker_checkurl"
     },
     {
       "label": ".writeJsonl()",
@@ -15069,8 +15069,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\class\\UpdateChecker.ts",
       "source_location": "L399",
       "community": 1,
-      "id": "updatechecker_updatechecker_writejsonl",
-      "norm_label": ".writejsonl()"
+      "norm_label": ".writejsonl()",
+      "id": "updatechecker_updatechecker_writejsonl"
     },
     {
       "label": "UrlConsolidator.ts",
@@ -20547,8 +20547,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\main.ts",
       "source_location": "L1",
       "community": 1,
-      "id": "main_ts",
-      "norm_label": "main.ts"
+      "norm_label": "main.ts",
+      "id": "main_ts"
     },
     {
       "label": "formatTimingSummary()",
@@ -20556,8 +20556,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\main.ts",
       "source_location": "L1102",
       "community": 1,
-      "id": "main_formattimingsummary",
-      "norm_label": "formattimingsummary()"
+      "norm_label": "formattimingsummary()",
+      "id": "main_formattimingsummary"
     },
     {
       "label": "._load_completion_marker_or_none()",
@@ -30213,8 +30213,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\class\\UpdateChecker.ts",
       "source_location": "L1",
       "community": 1,
-      "id": "class_updatechecker_ts",
-      "norm_label": "updatechecker.ts"
+      "norm_label": "updatechecker.ts",
+      "id": "class_updatechecker_ts"
     },
     {
       "label": "StatsManager.ts",
@@ -46417,8 +46417,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\main.ts",
       "source_location": "L236",
       "community": 1,
-      "id": "main_gb",
-      "norm_label": "gb()"
+      "norm_label": "gb()",
+      "id": "main_gb"
     },
     {
       "label": "main.py",
@@ -75414,8 +75414,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\main.ts",
       "source_location": "L733",
       "community": 1,
-      "id": "main_addseen",
-      "norm_label": "addseen()"
+      "norm_label": "addseen()",
+      "id": "main_addseen"
     },
     {
       "label": "urlBase.ts",
@@ -78425,8 +78425,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\main.ts",
       "source_location": "L1060",
       "community": 1,
-      "id": "main_writecompletedexitreason",
-      "norm_label": "writecompletedexitreason()"
+      "norm_label": "writecompletedexitreason()",
+      "id": "main_writecompletedexitreason"
     },
     {
       "label": "skipnavCollapseTarget()",
@@ -78452,8 +78452,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\tests\\UpdateChecker.redirectRepeat.test.ts",
       "source_location": "L10",
       "community": 1,
-      "id": "updatechecker_redirectrepeat_test_makemockredisclient",
-      "norm_label": "makemockredisclient()"
+      "norm_label": "makemockredisclient()",
+      "id": "updatechecker_redirectrepeat_test_makemockredisclient"
     },
     {
       "label": "makeMockConsolidator()",
@@ -78461,8 +78461,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\tests\\UpdateChecker.redirectRepeat.test.ts",
       "source_location": "L28",
       "community": 1,
-      "id": "updatechecker_redirectrepeat_test_makemockconsolidator",
-      "norm_label": "makemockconsolidator()"
+      "norm_label": "makemockconsolidator()",
+      "id": "updatechecker_redirectrepeat_test_makemockconsolidator"
     },
     {
       "label": "makeMockStatsManager()",
@@ -78470,8 +78470,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\tests\\UpdateChecker.redirectRepeat.test.ts",
       "source_location": "L35",
       "community": 1,
-      "id": "updatechecker_redirectrepeat_test_makemockstatsmanager",
-      "norm_label": "makemockstatsmanager()"
+      "norm_label": "makemockstatsmanager()",
+      "id": "updatechecker_redirectrepeat_test_makemockstatsmanager"
     },
     {
       "label": "makeMockJsonlWriter()",
@@ -78479,8 +78479,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\tests\\UpdateChecker.redirectRepeat.test.ts",
       "source_location": "L43",
       "community": 1,
-      "id": "updatechecker_redirectrepeat_test_makemockjsonlwriter",
-      "norm_label": "makemockjsonlwriter()"
+      "norm_label": "makemockjsonlwriter()",
+      "id": "updatechecker_redirectrepeat_test_makemockjsonlwriter"
     },
     {
       "label": "makeChecker()",
@@ -78488,8 +78488,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\tests\\UpdateChecker.redirectRepeat.test.ts",
       "source_location": "L51",
       "community": 1,
-      "id": "updatechecker_redirectrepeat_test_makechecker",
-      "norm_label": "makechecker()"
+      "norm_label": "makechecker()",
+      "id": "updatechecker_redirectrepeat_test_makechecker"
     },
     {
       "label": "test_admin_dataset_sample.py",
@@ -117357,7 +117357,7 @@
       "label": "updateHealthRates()",
       "file_type": "code",
       "source_file": "apps-microservices/crawler-service/crawler/src/updateHealthVerdict.ts",
-      "source_location": "L63",
+      "source_location": "L108",
       "community": 1,
       "norm_label": "updatehealthrates()",
       "id": "updatehealthverdict_updatehealthrates"
@@ -117366,7 +117366,7 @@
       "label": "decideUpdateHealth()",
       "file_type": "code",
       "source_file": "apps-microservices/crawler-service/crawler/src/updateHealthVerdict.ts",
-      "source_location": "L75",
+      "source_location": "L120",
       "community": 1,
       "norm_label": "decideupdatehealth()",
       "id": "updatehealthverdict_decideupdatehealth"
@@ -119824,8 +119824,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\class\\UpdateChecker.ts",
       "source_location": "L171",
       "community": 1,
-      "id": "updatechecker_updatechecker_datasetmatch",
-      "norm_label": ".datasetmatch()"
+      "norm_label": ".datasetmatch()",
+      "id": "updatechecker_updatechecker_datasetmatch"
     },
     {
       "label": "UpdateChecker.redirectRepeat.test.ts",
@@ -119833,8 +119833,138 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\tests\\UpdateChecker.redirectRepeat.test.ts",
       "source_location": "L1",
       "community": 1,
-      "id": "tests_updatechecker_redirectrepeat_test_ts",
-      "norm_label": "updatechecker.redirectrepeat.test.ts"
+      "norm_label": "updatechecker.redirectrepeat.test.ts",
+      "id": "tests_updatechecker_redirectrepeat_test_ts"
+    },
+    {
+      "label": "updateHealthVerdict.test.ts",
+      "file_type": "code",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\updateHealthVerdict.test.ts",
+      "source_location": "L1",
+      "community": 1,
+      "norm_label": "updatehealthverdict.test.ts",
+      "id": "updatehealthverdict_test_ts"
+    },
+    {
+      "label": "effectiveMinSample()",
+      "file_type": "code",
+      "source_file": "apps-microservices/crawler-service/crawler/src/updateHealthVerdict.ts",
+      "source_location": "L97",
+      "community": 1,
+      "norm_label": "effectiveminsample()",
+      "id": "updatehealthverdict_effectiveminsample"
+    },
+    {
+      "label": "The health verdict's sample gate is capped by the corpus (2026-08-31): decideUpdateHealth no longer holds a run to a flat cfg.minSample but to effectiveMinSample(stats, cfg) = Math.min(cfg.minSample, previousTotal). The PENDING_SAMPLE branch reads `previousTotal > 0 && processed < effectiveMinSample(...) && coverage < cfg.minCoverage`, and the status message now prints the floor actually applied (\"sample gate N\"). Measured on the 98 guard-blocked update runs of 2026-08: 38 PENDING_SAMPLE blocks, 24 of them on runs whose own log showed a healthy crawl",
+      "file_type": "document",
+      "source_file": "apps-microservices/crawler-service/CLAUDE.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 1,
+      "id": "crawler_v63_sample_gate_capped_by_corpus",
+      "norm_label": "the health verdict's sample gate is capped by the corpus (2026-08-31): decideupdatehealth no longer holds a run to a flat cfg.minsample but to effectiveminsample(stats, cfg) = math.min(cfg.minsample, previoustotal). the pending_sample branch reads `previoustotal > 0 && processed < effectiveminsample(...) && coverage < cfg.mincoverage`, and the status message now prints the floor actually applied (\"sample gate n\"). measured on the 98 guard-blocked update runs of 2026-08: 38 pending_sample blocks, 24 of them on runs whose own log showed a healthy crawl"
+    },
+    {
+      "label": "WHY the cap exists \u2014 PENDING_SAMPLE was a permanent HOLD, not a detection: a site with fewer previously-known URLs than the floor could never satisfy processed >= 50, so the verdict never depended on anything the run did. The 2026-08-17 disjunction (processed < minSample AND coverage < minCoverage) did NOT close this, and the 2026-08 measurement is the proof: with coverage structurally unable to clear its own threshold on a small corpus, the conjunction degenerated back into `processed < 50` alone \u2014 unreachable by construction. A gate whose outcome no run can change is not measuring representativeness, it is asserting a permanent verdict",
+      "file_type": "rationale",
+      "source_file": "apps-microservices/crawler-service/CLAUDE.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 1,
+      "id": "crawler_v63_rationale_pending_sample_was_permanent_hold",
+      "norm_label": "why the cap exists \u2014 pending_sample was a permanent hold, not a detection: a site with fewer previously-known urls than the floor could never satisfy processed >= 50, so the verdict never depended on anything the run did. the 2026-08-17 disjunction (processed < minsample and coverage < mincoverage) did not close this, and the 2026-08 measurement is the proof: with coverage structurally unable to clear its own threshold on a small corpus, the conjunction degenerated back into `processed < 50` alone \u2014 unreachable by construction. a gate whose outcome no run can change is not measuring representativeness, it is asserting a permanent verdict"
+    },
+    {
+      "label": "STRICT RELAXATION, provable rather than asserted: Math.min can only LOWER the floor, so `processed < min(minSample, previousTotal)` implies `processed < minSample` \u2014 the set of runs that trip the gate can only shrink, never grow. Two boundaries the proof carries with it: a genuinely partial LARGE crawl is untouched (30 processed on a 100-URL corpus still faces a floor of 50, and still trips), and an UNKNOWN corpus keeps the configured floor rather than collapsing to zero (effectiveMinSample returns cfg.minSample when previousTotal is not > 0, so a missing corpus can never auto-pass the gate)",
+      "file_type": "rationale",
+      "source_file": "apps-microservices/crawler-service/CLAUDE.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 1,
+      "id": "crawler_v63_rationale_strict_relaxation_provable",
+      "norm_label": "strict relaxation, provable rather than asserted: math.min can only lower the floor, so `processed < min(minsample, previoustotal)` implies `processed < minsample` \u2014 the set of runs that trip the gate can only shrink, never grow. two boundaries the proof carries with it: a genuinely partial large crawl is untouched (30 processed on a 100-url corpus still faces a floor of 50, and still trips), and an unknown corpus keeps the configured floor rather than collapsing to zero (effectiveminsample returns cfg.minsample when previoustotal is not > 0, so a missing corpus can never auto-pass the gate)"
+    },
+    {
+      "label": "\u26a0 `coverage` is NOT the escape hatch it looks like, and that is why the floor had to be capped instead: previousTotal is counted BEFORE Phase-2 seeding, while `accounted` credits only URLs that were seeded AND visited AND matched exactly \u2014 and seeding drops excluded regional paths and ignored extensions. Those URLs sit in the DENOMINATOR and can never reach the numerator, so the ratio has a site-dependent ceiling BELOW 1 (78.79% measured on one site, against a 0.8 threshold). Aligning the two populations is a separate change and is deliberately not made here, because previousTotal is also growthRate's denominator \u2014 moving one moves the other",
+      "file_type": "rationale",
+      "source_file": "apps-microservices/crawler-service/CLAUDE.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 1,
+      "id": "crawler_v63_rationale_coverage_not_an_escape_hatch",
+      "norm_label": "\u26a0 `coverage` is not the escape hatch it looks like, and that is why the floor had to be capped instead: previoustotal is counted before phase-2 seeding, while `accounted` credits only urls that were seeded and visited and matched exactly \u2014 and seeding drops excluded regional paths and ignored extensions. those urls sit in the denominator and can never reach the numerator, so the ratio has a site-dependent ceiling below 1 (78.79% measured on one site, against a 0.8 threshold). aligning the two populations is a separate change and is deliberately not made here, because previoustotal is also growthrate's denominator \u2014 moving one moves the other"
+    },
+    {
+      "label": "What still guards a small corpus once the floor drops: SUSPECT (previousTotal > 0 AND errors / previousTotal > 0.5) is CORPUS-RELATIVE, so it does not weaken when the sample floor falls \u2014 it is the check that actually catches a mass-404 restructure. CRITICAL on the error rate is unchanged (still errorRate > maxErrorRate AND errors >= maxAbsErrors, still divided by `processed`). Both shapes are pinned in updateHealthVerdict.test.ts, alongside the four effectiveMinSample cases (corpus below the floor lowers it, corpus at or above it leaves it alone, unknown corpus keeps it)",
+      "file_type": "document",
+      "source_file": "apps-microservices/crawler-service/CLAUDE.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 1,
+      "id": "crawler_v63_what_replaces_the_gate_small_corpus",
+      "norm_label": "what still guards a small corpus once the floor drops: suspect (previoustotal > 0 and errors / previoustotal > 0.5) is corpus-relative, so it does not weaken when the sample floor falls \u2014 it is the check that actually catches a mass-404 restructure. critical on the error rate is unchanged (still errorrate > maxerrorrate and errors >= maxabserrors, still divided by `processed`). both shapes are pinned in updatehealthverdict.test.ts, alongside the four effectiveminsample cases (corpus below the floor lowers it, corpus at or above it leaves it alone, unknown corpus keeps it)"
+    },
+    {
+      "label": "THE SHARPEST CONSEQUENCE \u2014 the gate MASKED CRITICAL on small sites, so the diagnosis was wrong, not merely the outcome. PENDING_SAMPLE is the FIRST branch of a first-match-wins if/else-if chain, so on a sub-floor corpus a genuinely bad error rate never reached the CRITICAL branch: it was reported as \"insufficient sample\". Reader and operator therefore saw a run described as unmeasured when it had in fact been measured and had failed. Capping the floor does not merely unblock those runs, it lets them be named correctly \u2014 a technical insufficiency stops being written over a business verdict",
+      "file_type": "rationale",
+      "source_file": "apps-microservices/crawler-service/CLAUDE.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 1,
+      "id": "crawler_v63_rationale_gate_masked_critical",
+      "norm_label": "the sharpest consequence \u2014 the gate masked critical on small sites, so the diagnosis was wrong, not merely the outcome. pending_sample is the first branch of a first-match-wins if/else-if chain, so on a sub-floor corpus a genuinely bad error rate never reached the critical branch: it was reported as \"insufficient sample\". reader and operator therefore saw a run described as unmeasured when it had in fact been measured and had failed. capping the floor does not merely unblock those runs, it lets them be named correctly \u2014 a technical insufficiency stops being written over a business verdict"
+    },
+    {
+      "label": "DISTINCT FROM THE CIRCUIT BREAKER'S OWN SAMPLE GATE, and NOT the same rule \u2014 the section says so in its first line and the distinction must not be collapsed. The breaker's gate (processed >= minSample, 50) lives in errorRateBreaker.ts / routes.ts, decides whether to ABORT a run in flight, and was deliberately left un-widened and un-capped because loosening it would ADD stops. This gate lives in updateHealthVerdict.ts, decides the BUSINESS verdict the BO reads in the update report, and is capped because tightening it was blocking runs by construction. Same constant, two files, two decisions, opposite error asymmetries: conflating them would justify a change in one from a measurement taken on the other",
+      "file_type": "rationale",
+      "source_file": "apps-microservices/crawler-service/CLAUDE.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 1,
+      "id": "crawler_v63_rationale_distinct_from_breaker_gate",
+      "norm_label": "distinct from the circuit breaker's own sample gate, and not the same rule \u2014 the section says so in its first line and the distinction must not be collapsed. the breaker's gate (processed >= minsample, 50) lives in errorratebreaker.ts / routes.ts, decides whether to abort a run in flight, and was deliberately left un-widened and un-capped because loosening it would add stops. this gate lives in updatehealthverdict.ts, decides the business verdict the bo reads in the update report, and is capped because tightening it was blocking runs by construction. same constant, two files, two decisions, opposite error asymmetries: conflating them would justify a change in one from a measurement taken on the other"
+    },
+    {
+      "label": "CORRECTION to the update-health lineage, superseding on 2026-08-31: the health verdict's sample floor is NO LONGER FLAT, and PENDING_SAMPLE is no longer permanent-by-construction on a sub-50-URL corpus. Any statement of the form \"processed < minSample\" as the PENDING_SAMPLE condition, or \"every domain crawling fewer than 50 URLs gets PENDING_SAMPLE permanently\", now describes the PRE-2026-08-31 code. The live condition is processed < min(cfg.minSample, previousTotal). Also corrected: the 2026-08-17 claim that the disjunction made small complete crawls pass \u2014 it did not, measured 24 healthy-looking runs still blocked in 2026-08, because the coverage term has a structural ceiling below its own threshold",
+      "file_type": "rationale",
+      "source_file": "apps-microservices/crawler-service/CLAUDE.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 1,
+      "id": "crawler_v63_correction_pending_sample_no_longer_permanent",
+      "norm_label": "correction to the update-health lineage, superseding on 2026-08-31: the health verdict's sample floor is no longer flat, and pending_sample is no longer permanent-by-construction on a sub-50-url corpus. any statement of the form \"processed < minsample\" as the pending_sample condition, or \"every domain crawling fewer than 50 urls gets pending_sample permanently\", now describes the pre-2026-08-31 code. the live condition is processed < min(cfg.minsample, previoustotal). also corrected: the 2026-08-17 claim that the disjunction made small complete crawls pass \u2014 it did not, measured 24 healthy-looking runs still blocked in 2026-08, because the coverage term has a structural ceiling below its own threshold"
+    },
+    {
+      "id": "updatehealthverdict_rationale_error_prefix_deliberately_distinct",
+      "label": "CORRECTION (2026-08-26): the two error-rate log prefixes are distinct again. errorRateBreaker.ts:73 emits 'Error rate too high (' while updateHealthVerdict.ts:149 now emits 'Error rate over threshold (', with a comment at :144 naming the divergence as deliberate. The grep-the-prefix measurement method is therefore replayable, not poisoned.",
+      "file_type": "rationale",
+      "source_file": "apps-microservices/crawler-service/crawler/src/updateHealthVerdict.ts",
+      "source_location": "updateHealthVerdict.ts:144-149",
+      "community": 1
     }
   ],
   "links": [
@@ -204233,8 +204363,8 @@
       "source_location": "L88",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "main_parsenumericarg",
-      "_tgt": "main_getarg",
+      "_src": "main_getarg",
+      "_tgt": "main_parsenumericarg",
       "source": "main_getarg",
       "target": "main_parsenumericarg"
     },
@@ -204245,8 +204375,8 @@
       "source_location": "L85",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "main_ts",
-      "_tgt": "main_getarg",
+      "_src": "main_getarg",
+      "_tgt": "main_ts",
       "source": "main_getarg",
       "target": "main_ts"
     },
@@ -204305,8 +204435,8 @@
       "source_location": "L87",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "main_ts",
-      "_tgt": "main_parsenumericarg",
+      "_src": "main_parsenumericarg",
+      "_tgt": "main_ts",
       "source": "main_parsenumericarg",
       "target": "main_ts"
     },
@@ -204377,8 +204507,8 @@
       "source_location": "L271",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "main_ts",
-      "_tgt": "main_readcontainermemory",
+      "_src": "main_readcontainermemory",
+      "_tgt": "main_ts",
       "source": "main_readcontainermemory",
       "target": "main_ts"
     },
@@ -204474,8 +204604,8 @@
       "source_location": "L283",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "main_ts",
-      "_tgt": "main_handlewarningmemory",
+      "_src": "main_handlewarningmemory",
+      "_tgt": "main_ts",
       "source": "main_handlewarningmemory",
       "target": "main_ts"
     },
@@ -204595,8 +204725,8 @@
       "source_location": "L322",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "main_ts",
-      "_tgt": "main_handlecriticalmemory",
+      "_src": "main_handlecriticalmemory",
+      "_tgt": "main_ts",
       "source": "main_handlecriticalmemory",
       "target": "main_ts"
     },
@@ -204679,8 +204809,8 @@
       "source_location": "L420",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "main_ts",
-      "_tgt": "main_gettopprocesses",
+      "_src": "main_gettopprocesses",
+      "_tgt": "main_ts",
       "source": "main_gettopprocesses",
       "target": "main_ts"
     },
@@ -204739,8 +204869,8 @@
       "source_location": "L437",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "main_ts",
-      "_tgt": "main_getcontainermemoryusage",
+      "_src": "main_getcontainermemoryusage",
+      "_tgt": "main_ts",
       "source": "main_getcontainermemoryusage",
       "target": "main_ts"
     },
@@ -204787,8 +204917,8 @@
       "source_location": "L448",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "main_ts",
-      "_tgt": "main_getcontainercpuusec",
+      "_src": "main_getcontainercpuusec",
+      "_tgt": "main_ts",
       "source": "main_getcontainercpuusec",
       "target": "main_ts"
     },
@@ -204835,8 +204965,8 @@
       "source_location": "L915",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "main_ts",
-      "_tgt": "main_cleanurlfn",
+      "_src": "main_cleanurlfn",
+      "_tgt": "main_ts",
       "source": "main_cleanurlfn",
       "target": "main_ts"
     },
@@ -204908,8 +205038,8 @@
       "source_location": "L1234",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "main_gracefulshutdown",
-      "_tgt": "main_mapstopreasontomessage",
+      "_src": "main_mapstopreasontomessage",
+      "_tgt": "main_gracefulshutdown",
       "source": "main_mapstopreasontomessage",
       "target": "main_gracefulshutdown"
     },
@@ -204920,8 +205050,8 @@
       "source_location": "L1136",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "main_ts",
-      "_tgt": "main_mapstopreasontomessage",
+      "_src": "main_mapstopreasontomessage",
+      "_tgt": "main_ts",
       "source": "main_mapstopreasontomessage",
       "target": "main_ts"
     },
@@ -205028,8 +205158,8 @@
       "source_location": "L1173",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "main_ts",
-      "_tgt": "main_gracefulshutdown",
+      "_src": "main_gracefulshutdown",
+      "_tgt": "main_ts",
       "source": "main_gracefulshutdown",
       "target": "main_ts"
     },
@@ -205376,8 +205506,8 @@
       "source_location": "L1540",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "main_ts",
-      "_tgt": "main_seedphase2",
+      "_src": "main_seedphase2",
+      "_tgt": "main_ts",
       "source": "main_seedphase2",
       "target": "main_ts"
     },
@@ -209035,8 +209165,8 @@
       "source_location": "L74",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "class_updatechecker_ts",
-      "_tgt": "updatechecker_updatechecker",
+      "_src": "updatechecker_updatechecker",
+      "_tgt": "class_updatechecker_ts",
       "source": "updatechecker_updatechecker",
       "target": "class_updatechecker_ts"
     },
@@ -209155,9 +209285,9 @@
       "weight": 1.0,
       "_src": "updatechecker_updatechecker",
       "_tgt": "updatechecker_updatechecker_datasetmatch",
+      "confidence_score": 1.0,
       "source": "updatechecker_updatechecker",
-      "target": "updatechecker_updatechecker_datasetmatch",
-      "confidence_score": 1.0
+      "target": "updatechecker_updatechecker_datasetmatch"
     },
     {
       "relation": "calls",
@@ -209178,8 +209308,8 @@
       "source_location": "L136",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "updatechecker_updatechecker_iseligible",
-      "_tgt": "updatechecker_updatechecker_hasforbiddenparams",
+      "_src": "updatechecker_updatechecker_hasforbiddenparams",
+      "_tgt": "updatechecker_updatechecker_iseligible",
       "source": "updatechecker_updatechecker_hasforbiddenparams",
       "target": "updatechecker_updatechecker_iseligible"
     },
@@ -209190,8 +209320,8 @@
       "source_location": "L331",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "updatechecker_updatechecker_checkurl",
-      "_tgt": "updatechecker_updatechecker_iseligible",
+      "_src": "updatechecker_updatechecker_iseligible",
+      "_tgt": "updatechecker_updatechecker_checkurl",
       "source": "updatechecker_updatechecker_iseligible",
       "target": "updatechecker_updatechecker_checkurl"
     },
@@ -209383,9 +209513,9 @@
       "weight": 1.0,
       "_src": "updatechecker_updatechecker_checkurl",
       "_tgt": "updatechecker_updatechecker_datasetmatch",
+      "confidence_score": 1.0,
       "source": "updatechecker_updatechecker_checkurl",
-      "target": "updatechecker_updatechecker_datasetmatch",
-      "confidence_score": 1.0
+      "target": "updatechecker_updatechecker_datasetmatch"
     },
     {
       "relation": "references",
@@ -224729,9 +224859,9 @@
       "weight": 1.0,
       "_src": "main_ts",
       "_tgt": "d_devhellopro_workspaces_rag_hp_pub_apps_microservices_crawler_service_crawler_src_routes_ts",
+      "confidence_score": 1.0,
       "source": "main_ts",
-      "target": "d_devhellopro_workspaces_rag_hp_pub_apps_microservices_crawler_service_crawler_src_routes_ts",
-      "confidence_score": 1.0
+      "target": "d_devhellopro_workspaces_rag_hp_pub_apps_microservices_crawler_service_crawler_src_routes_ts"
     },
     {
       "relation": "contains",
@@ -301483,11 +301613,11 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\tests\\UpdateChecker.redirectRepeat.test.ts",
       "source_location": "L7",
       "weight": 1.0,
-      "_src": "tests_updatechecker_redirectrepeat_test_ts",
-      "_tgt": "class_updatechecker_ts",
+      "_src": "class_updatechecker_ts",
+      "_tgt": "tests_updatechecker_redirectrepeat_test_ts",
+      "confidence_score": 1.0,
       "source": "class_updatechecker_ts",
-      "target": "tests_updatechecker_redirectrepeat_test_ts",
-      "confidence_score": 1.0
+      "target": "tests_updatechecker_redirectrepeat_test_ts"
     },
     {
       "relation": "imports_from",
@@ -336967,6 +337097,26 @@
       "_tgt": "cb_error_plan_claude_md_section",
       "source": "crawler_service_claudemd",
       "target": "cb_error_plan_claude_md_section"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "apps-microservices/crawler-service/CLAUDE.md",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "crawler_service_claudemd",
+      "target": "crawler_v63_sample_gate_capped_by_corpus"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "apps-microservices/crawler-service/CLAUDE.md",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "crawler_service_claudemd",
+      "target": "crawler_v63_correction_pending_sample_no_longer_permanent"
     },
     {
       "relation": "references",
@@ -392888,8 +393038,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\tests\\UpdateChecker.redirectRepeat.test.ts",
       "source_location": "L52",
       "weight": 1.0,
-      "_src": "updatechecker_redirectrepeat_test_makechecker",
-      "_tgt": "updatechecker_redirectrepeat_test_makemockredisclient",
+      "_src": "updatechecker_redirectrepeat_test_makemockredisclient",
+      "_tgt": "updatechecker_redirectrepeat_test_makechecker",
       "confidence_score": 1.0,
       "source": "updatechecker_redirectrepeat_test_makemockredisclient",
       "target": "updatechecker_redirectrepeat_test_makechecker"
@@ -392912,11 +393062,11 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\tests\\UpdateChecker.redirectRepeat.test.ts",
       "source_location": "L10",
       "weight": 1.0,
-      "_src": "tests_updatechecker_redirectrepeat_test_ts",
-      "_tgt": "updatechecker_redirectrepeat_test_makemockredisclient",
+      "_src": "updatechecker_redirectrepeat_test_makemockredisclient",
+      "_tgt": "tests_updatechecker_redirectrepeat_test_ts",
+      "confidence_score": 1.0,
       "source": "updatechecker_redirectrepeat_test_makemockredisclient",
-      "target": "tests_updatechecker_redirectrepeat_test_ts",
-      "confidence_score": 1.0
+      "target": "tests_updatechecker_redirectrepeat_test_ts"
     },
     {
       "relation": "calls",
@@ -392924,8 +393074,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\tests\\UpdateChecker.redirectRepeat.test.ts",
       "source_location": "L56",
       "weight": 1.0,
-      "_src": "updatechecker_redirectrepeat_test_makechecker",
-      "_tgt": "updatechecker_redirectrepeat_test_makemockconsolidator",
+      "_src": "updatechecker_redirectrepeat_test_makemockconsolidator",
+      "_tgt": "updatechecker_redirectrepeat_test_makechecker",
       "confidence_score": 1.0,
       "source": "updatechecker_redirectrepeat_test_makemockconsolidator",
       "target": "updatechecker_redirectrepeat_test_makechecker"
@@ -392948,11 +393098,11 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\tests\\UpdateChecker.redirectRepeat.test.ts",
       "source_location": "L28",
       "weight": 1.0,
-      "_src": "tests_updatechecker_redirectrepeat_test_ts",
-      "_tgt": "updatechecker_redirectrepeat_test_makemockconsolidator",
+      "_src": "updatechecker_redirectrepeat_test_makemockconsolidator",
+      "_tgt": "tests_updatechecker_redirectrepeat_test_ts",
+      "confidence_score": 1.0,
       "source": "updatechecker_redirectrepeat_test_makemockconsolidator",
-      "target": "tests_updatechecker_redirectrepeat_test_ts",
-      "confidence_score": 1.0
+      "target": "tests_updatechecker_redirectrepeat_test_ts"
     },
     {
       "relation": "calls",
@@ -392960,8 +393110,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\tests\\UpdateChecker.redirectRepeat.test.ts",
       "source_location": "L53",
       "weight": 1.0,
-      "_src": "updatechecker_redirectrepeat_test_makechecker",
-      "_tgt": "updatechecker_redirectrepeat_test_makemockstatsmanager",
+      "_src": "updatechecker_redirectrepeat_test_makemockstatsmanager",
+      "_tgt": "updatechecker_redirectrepeat_test_makechecker",
       "confidence_score": 1.0,
       "source": "updatechecker_redirectrepeat_test_makemockstatsmanager",
       "target": "updatechecker_redirectrepeat_test_makechecker"
@@ -392984,11 +393134,11 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\tests\\UpdateChecker.redirectRepeat.test.ts",
       "source_location": "L35",
       "weight": 1.0,
-      "_src": "tests_updatechecker_redirectrepeat_test_ts",
-      "_tgt": "updatechecker_redirectrepeat_test_makemockstatsmanager",
+      "_src": "updatechecker_redirectrepeat_test_makemockstatsmanager",
+      "_tgt": "tests_updatechecker_redirectrepeat_test_ts",
+      "confidence_score": 1.0,
       "source": "updatechecker_redirectrepeat_test_makemockstatsmanager",
-      "target": "tests_updatechecker_redirectrepeat_test_ts",
-      "confidence_score": 1.0
+      "target": "tests_updatechecker_redirectrepeat_test_ts"
     },
     {
       "relation": "calls",
@@ -392996,8 +393146,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\tests\\UpdateChecker.redirectRepeat.test.ts",
       "source_location": "L54",
       "weight": 1.0,
-      "_src": "updatechecker_redirectrepeat_test_makechecker",
-      "_tgt": "updatechecker_redirectrepeat_test_makemockjsonlwriter",
+      "_src": "updatechecker_redirectrepeat_test_makemockjsonlwriter",
+      "_tgt": "updatechecker_redirectrepeat_test_makechecker",
       "confidence_score": 1.0,
       "source": "updatechecker_redirectrepeat_test_makemockjsonlwriter",
       "target": "updatechecker_redirectrepeat_test_makechecker"
@@ -393020,11 +393170,11 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\tests\\UpdateChecker.redirectRepeat.test.ts",
       "source_location": "L43",
       "weight": 1.0,
-      "_src": "tests_updatechecker_redirectrepeat_test_ts",
-      "_tgt": "updatechecker_redirectrepeat_test_makemockjsonlwriter",
+      "_src": "updatechecker_redirectrepeat_test_makemockjsonlwriter",
+      "_tgt": "tests_updatechecker_redirectrepeat_test_ts",
+      "confidence_score": 1.0,
       "source": "updatechecker_redirectrepeat_test_makemockjsonlwriter",
-      "target": "tests_updatechecker_redirectrepeat_test_ts",
-      "confidence_score": 1.0
+      "target": "tests_updatechecker_redirectrepeat_test_ts"
     },
     {
       "relation": "contains",
@@ -393044,11 +393194,11 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\tests\\UpdateChecker.redirectRepeat.test.ts",
       "source_location": "L51",
       "weight": 1.0,
-      "_src": "tests_updatechecker_redirectrepeat_test_ts",
-      "_tgt": "updatechecker_redirectrepeat_test_makechecker",
+      "_src": "updatechecker_redirectrepeat_test_makechecker",
+      "_tgt": "tests_updatechecker_redirectrepeat_test_ts",
+      "confidence_score": 1.0,
       "source": "updatechecker_redirectrepeat_test_makechecker",
-      "target": "tests_updatechecker_redirectrepeat_test_ts",
-      "confidence_score": 1.0
+      "target": "tests_updatechecker_redirectrepeat_test_ts"
     },
     {
       "relation": "contains",
@@ -429270,6 +429420,16 @@
       "target": "crawler_v61_collapse_oracle_preloaded"
     },
     {
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.7,
+      "source_file": "apps-microservices/crawler-service/CLAUDE.md",
+      "source_location": null,
+      "weight": 0.7,
+      "source": "crawlsvc_update_mode",
+      "target": "crawler_v63_rationale_pending_sample_was_permanent_hold"
+    },
+    {
       "relation": "references",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
@@ -429304,6 +429464,16 @@
       "_tgt": "crawlsvc_domain_changed_exit7",
       "source": "crawlsvc_regional_path_exclusion",
       "target": "crawlsvc_domain_changed_exit7"
+    },
+    {
+      "relation": "shares_data_with",
+      "confidence": "INFERRED",
+      "confidence_score": 0.75,
+      "source_file": "apps-microservices/crawler-service/CLAUDE.md",
+      "source_location": null,
+      "weight": 0.75,
+      "source": "crawlsvc_regional_path_exclusion",
+      "target": "crawler_v63_rationale_coverage_not_an_escape_hatch"
     },
     {
       "relation": "references",
@@ -451683,6 +451853,18 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\updateHealthVerdict.test.ts",
+      "source_location": "L34",
+      "weight": 1.0,
+      "_src": "updatehealthverdict_test_ts",
+      "_tgt": "updatehealthverdict_test_s",
+      "confidence_score": 1.0,
+      "source": "updatehealthverdict_test_s",
+      "target": "updatehealthverdict_test_ts"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
       "source_file": "apps-microservices/crawler-service/crawler/src/updateHealthVerdict.ts",
       "source_location": "L55",
       "weight": 1.0,
@@ -451696,7 +451878,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "apps-microservices/crawler-service/crawler/src/updateHealthVerdict.ts",
-      "source_location": "L63",
+      "source_location": "L108",
       "weight": 1.0,
       "_src": "apps_microservices_crawler_service_crawler_src_updatehealthverdict_ts",
       "_tgt": "updatehealthverdict_updatehealthrates",
@@ -451708,7 +451890,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "apps-microservices/crawler-service/crawler/src/updateHealthVerdict.ts",
-      "source_location": "L75",
+      "source_location": "L120",
       "weight": 1.0,
       "_src": "apps_microservices_crawler_service_crawler_src_updatehealthverdict_ts",
       "_tgt": "updatehealthverdict_decideupdatehealth",
@@ -451789,13 +451971,25 @@
       "target": "cb_error_plan_out_of_scope"
     },
     {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "apps-microservices/crawler-service/crawler/src/updateHealthVerdict.ts",
+      "source_location": "L97",
+      "weight": 1.0,
+      "_src": "apps_microservices_crawler_service_crawler_src_updatehealthverdict_ts",
+      "_tgt": "updatehealthverdict_effectiveminsample",
+      "source": "apps_microservices_crawler_service_crawler_src_updatehealthverdict_ts",
+      "target": "updatehealthverdict_effectiveminsample",
+      "confidence_score": 1.0
+    },
+    {
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "apps-microservices/crawler-service/crawler/src/updateHealthVerdict.ts",
-      "source_location": "L81",
+      "source_location": "L126",
       "weight": 1.0,
-      "_src": "updatehealthverdict_updatehealthcoverage",
-      "_tgt": "updatehealthverdict_decideupdatehealth",
+      "_src": "updatehealthverdict_decideupdatehealth",
+      "_tgt": "updatehealthverdict_updatehealthcoverage",
       "confidence_score": 1.0,
       "source": "updatehealthverdict_updatehealthcoverage",
       "target": "updatehealthverdict_decideupdatehealth"
@@ -451830,20 +452024,32 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\updateHealthVerdict.ts",
       "source_location": "L55",
       "weight": 1.0,
-      "_src": "updatehealthverdict_updatehealthcoverage",
-      "_tgt": "updatehealthverdict_ts",
+      "_src": "updatehealthverdict_ts",
+      "_tgt": "updatehealthverdict_updatehealthcoverage",
       "confidence_score": 1.0,
       "source": "updatehealthverdict_updatehealthcoverage",
       "target": "updatehealthverdict_ts"
     },
     {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "apps-microservices/crawler-service/CLAUDE.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "crawler_v63_rationale_coverage_not_an_escape_hatch",
+      "_tgt": "updatehealthverdict_updatehealthcoverage",
+      "source": "updatehealthverdict_updatehealthcoverage",
+      "target": "crawler_v63_rationale_coverage_not_an_escape_hatch"
+    },
+    {
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "apps-microservices/crawler-service/crawler/src/updateHealthVerdict.ts",
-      "source_location": "L80",
+      "source_location": "L125",
       "weight": 1.0,
-      "_src": "updatehealthverdict_updatehealthrates",
-      "_tgt": "updatehealthverdict_decideupdatehealth",
+      "_src": "updatehealthverdict_decideupdatehealth",
+      "_tgt": "updatehealthverdict_updatehealthrates",
       "confidence_score": 1.0,
       "source": "updatehealthverdict_updatehealthrates",
       "target": "updatehealthverdict_decideupdatehealth"
@@ -451876,10 +452082,10 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\updateHealthVerdict.ts",
-      "source_location": "L63",
+      "source_location": "L108",
       "weight": 1.0,
-      "_src": "updatehealthverdict_updatehealthrates",
-      "_tgt": "updatehealthverdict_ts",
+      "_src": "updatehealthverdict_ts",
+      "_tgt": "updatehealthverdict_updatehealthrates",
       "confidence_score": 1.0,
       "source": "updatehealthverdict_updatehealthrates",
       "target": "updatehealthverdict_ts"
@@ -451907,6 +452113,18 @@
       "_tgt": "cb_error_spec_rationale_same_defect_health_verdict_out_of_scope",
       "source": "updatehealthverdict_updatehealthrates",
       "target": "cb_error_spec_rationale_same_defect_health_verdict_out_of_scope"
+    },
+    {
+      "relation": "shares_data_with",
+      "confidence": "INFERRED",
+      "confidence_score": 0.7,
+      "source_file": "apps-microservices/crawler-service/CLAUDE.md",
+      "source_location": null,
+      "weight": 0.7,
+      "_src": "crawler_v63_rationale_coverage_not_an_escape_hatch",
+      "_tgt": "updatehealthverdict_updatehealthrates",
+      "source": "updatehealthverdict_updatehealthrates",
+      "target": "crawler_v63_rationale_coverage_not_an_escape_hatch"
     },
     {
       "relation": "implements",
@@ -451960,10 +452178,10 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\updateHealthVerdict.ts",
-      "source_location": "L75",
+      "source_location": "L120",
       "weight": 1.0,
-      "_src": "updatehealthverdict_decideupdatehealth",
-      "_tgt": "updatehealthverdict_ts",
+      "_src": "updatehealthverdict_ts",
+      "_tgt": "updatehealthverdict_decideupdatehealth",
       "confidence_score": 1.0,
       "source": "updatehealthverdict_decideupdatehealth",
       "target": "updatehealthverdict_ts"
@@ -451980,6 +452198,42 @@
       "_tgt": "cb_error_spec_residual_lock_vs_deletions",
       "source": "updatehealthverdict_decideupdatehealth",
       "target": "cb_error_spec_residual_lock_vs_deletions"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "apps-microservices/crawler-service/crawler/src/updateHealthVerdict.ts",
+      "source_location": "L136",
+      "weight": 1.0,
+      "_src": "updatehealthverdict_decideupdatehealth",
+      "_tgt": "updatehealthverdict_effectiveminsample",
+      "confidence_score": 1.0,
+      "source": "updatehealthverdict_decideupdatehealth",
+      "target": "updatehealthverdict_effectiveminsample"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "apps-microservices/crawler-service/CLAUDE.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "crawler_v63_sample_gate_capped_by_corpus",
+      "_tgt": "updatehealthverdict_decideupdatehealth",
+      "source": "updatehealthverdict_decideupdatehealth",
+      "target": "crawler_v63_sample_gate_capped_by_corpus"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "apps-microservices/crawler-service/CLAUDE.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "crawler_v63_what_replaces_the_gate_small_corpus",
+      "_tgt": "updatehealthverdict_decideupdatehealth",
+      "source": "updatehealthverdict_decideupdatehealth",
+      "target": "crawler_v63_what_replaces_the_gate_small_corpus"
     },
     {
       "relation": "references",
@@ -452369,6 +452623,26 @@
       "relation": "references",
       "confidence": "INFERRED",
       "confidence_score": 0.85,
+      "source_file": "apps-microservices/crawler-service/CLAUDE.md",
+      "source_location": null,
+      "weight": 0.85,
+      "source": "update_health_spec_problem_pending_sample_permanent",
+      "target": "crawler_v63_rationale_pending_sample_was_permanent_hold"
+    },
+    {
+      "relation": "references",
+      "confidence": "INFERRED",
+      "confidence_score": 0.9,
+      "source_file": "apps-microservices/crawler-service/CLAUDE.md",
+      "source_location": null,
+      "weight": 0.9,
+      "source": "update_health_spec_problem_pending_sample_permanent",
+      "target": "crawler_v63_correction_pending_sample_no_longer_permanent"
+    },
+    {
+      "relation": "references",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
       "source_file": "docs/superpowers/plans/2026-08-17-update-health-verdict-decoupling.md",
       "source_location": "reason: both concern the same blocking-reason string and its four writers; the plan amendment is the operational consequence of the spec attribution note, which the plan does not cite explicitly",
       "weight": 1.0,
@@ -452534,6 +452808,16 @@
       "target": "cb_error_spec_reconciliation_not_covered"
     },
     {
+      "relation": "references",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "apps-microservices/crawler-service/CLAUDE.md",
+      "source_location": null,
+      "weight": 0.85,
+      "source": "update_health_spec_accounted_counter_definition",
+      "target": "crawler_v63_rationale_coverage_not_an_escape_hatch"
+    },
+    {
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
@@ -452676,6 +452960,26 @@
       "_tgt": "cb_error_spec_rationale_materiality_floor_refuted",
       "source": "update_health_spec_evaluation_order",
       "target": "cb_error_spec_rationale_materiality_floor_refuted"
+    },
+    {
+      "relation": "references",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "apps-microservices/crawler-service/CLAUDE.md",
+      "source_location": null,
+      "weight": 0.85,
+      "source": "update_health_spec_evaluation_order",
+      "target": "crawler_v63_rationale_gate_masked_critical"
+    },
+    {
+      "relation": "references",
+      "confidence": "INFERRED",
+      "confidence_score": 0.9,
+      "source_file": "apps-microservices/crawler-service/CLAUDE.md",
+      "source_location": null,
+      "weight": 0.9,
+      "source": "update_health_spec_evaluation_order",
+      "target": "crawler_v63_correction_pending_sample_no_longer_permanent"
     },
     {
       "relation": "rationale_for",
@@ -452942,6 +453246,16 @@
       "target": "update_health_spec_withdrawn_reconciliation_numerator"
     },
     {
+      "relation": "implements",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "apps-microservices/crawler-service/CLAUDE.md",
+      "source_location": null,
+      "weight": 0.8,
+      "source": "update_health_spec_rationale_governing_constraint_strict_relaxation",
+      "target": "crawler_v63_rationale_strict_relaxation_provable"
+    },
+    {
       "relation": "references",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
@@ -452952,6 +453266,26 @@
       "_tgt": "update_health_spec_calibration_limits",
       "source": "update_health_spec_rationale_disjunction_not_replacement",
       "target": "update_health_spec_calibration_limits"
+    },
+    {
+      "relation": "references",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "apps-microservices/crawler-service/CLAUDE.md",
+      "source_location": null,
+      "weight": 0.85,
+      "source": "update_health_spec_rationale_disjunction_not_replacement",
+      "target": "crawler_v63_rationale_pending_sample_was_permanent_hold"
+    },
+    {
+      "relation": "references",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "apps-microservices/crawler-service/CLAUDE.md",
+      "source_location": null,
+      "weight": 0.85,
+      "source": "update_health_spec_rationale_disjunction_not_replacement",
+      "target": "crawler_v63_correction_pending_sample_no_longer_permanent"
     },
     {
       "relation": "references",
@@ -453000,6 +453334,16 @@
       "_tgt": "update_health_plan_task2_accounted_counter",
       "source": "update_health_spec_rationale_unverified_http_error_excluded",
       "target": "update_health_plan_task2_accounted_counter"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.7,
+      "source_file": "apps-microservices/crawler-service/CLAUDE.md",
+      "source_location": null,
+      "weight": 0.7,
+      "source": "update_health_spec_rationale_unverified_http_error_excluded",
+      "target": "crawler_v63_rationale_coverage_not_an_escape_hatch"
     },
     {
       "relation": "references",
@@ -453470,6 +453814,30 @@
       "target": "crawler_v61_cb_error_prefix_no_longer_unique"
     },
     {
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\updateHealthVerdict.test.ts",
+      "source_location": "L14",
+      "weight": 1.0,
+      "_src": "updatehealthverdict_test_ts",
+      "_tgt": "updatehealthverdict_ts",
+      "confidence_score": 1.0,
+      "source": "updatehealthverdict_ts",
+      "target": "updatehealthverdict_test_ts"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\updateHealthVerdict.ts",
+      "source_location": "L97",
+      "weight": 1.0,
+      "_src": "updatehealthverdict_ts",
+      "_tgt": "updatehealthverdict_effectiveminsample",
+      "confidence_score": 1.0,
+      "source": "updatehealthverdict_ts",
+      "target": "updatehealthverdict_effectiveminsample"
+    },
+    {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "apps-microservices/crawler-service/crawler/src/qmConsumptionSkip.ts",
@@ -453916,6 +454284,16 @@
       "_tgt": "cb_error_plan_task4_wire_and_document",
       "source": "errorratebreaker_shouldtriperrorratebreaker",
       "target": "cb_error_plan_task4_wire_and_document"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "apps-microservices/crawler-service/CLAUDE.md",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "errorratebreaker_shouldtriperrorratebreaker",
+      "target": "crawler_v63_rationale_distinct_from_breaker_gate"
     },
     {
       "relation": "contains",
@@ -454688,6 +455066,16 @@
       "target": "crawler_v61_cb_rate_denominator_is_attempts"
     },
     {
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.7,
+      "source_file": "apps-microservices/crawler-service/CLAUDE.md",
+      "source_location": null,
+      "weight": 0.7,
+      "source": "crawler_v61_cb_section",
+      "target": "crawler_v63_sample_gate_capped_by_corpus"
+    },
+    {
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
@@ -454698,6 +455086,16 @@
       "_tgt": "crawler_v61_cb_bypass_escape_hatch",
       "source": "crawler_v61_cb_trip_is_permanent_lockout",
       "target": "crawler_v61_cb_bypass_escape_hatch"
+    },
+    {
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.65,
+      "source_file": "apps-microservices/crawler-service/CLAUDE.md",
+      "source_location": null,
+      "weight": 0.65,
+      "source": "crawler_v61_cb_trip_is_permanent_lockout",
+      "target": "crawler_v63_rationale_gate_masked_critical"
     },
     {
       "relation": "rationale_for",
@@ -454748,6 +455146,26 @@
       "target": "crawler_v61_cb_rate_denominator_is_attempts"
     },
     {
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.65,
+      "source_file": "apps-microservices/crawler-service/CLAUDE.md",
+      "source_location": null,
+      "weight": 0.65,
+      "source": "crawler_v61_cb_sample_gate_not_widened",
+      "target": "crawler_v63_rationale_strict_relaxation_provable"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "apps-microservices/crawler-service/CLAUDE.md",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "crawler_v61_cb_sample_gate_not_widened",
+      "target": "crawler_v63_rationale_distinct_from_breaker_gate"
+    },
+    {
       "relation": "references",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
@@ -454770,6 +455188,16 @@
       "_tgt": "crawler_v61_cb_error_prefix_no_longer_unique",
       "source": "crawler_v61_cb_update_health_keeps_old_formula",
       "target": "crawler_v61_cb_error_prefix_no_longer_unique"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "apps-microservices/crawler-service/CLAUDE.md",
+      "source_location": null,
+      "weight": 0.8,
+      "source": "crawler_v61_cb_update_health_keeps_old_formula",
+      "target": "crawler_v63_what_replaces_the_gate_small_corpus"
     },
     {
       "relation": "references",
@@ -455618,6 +456046,16 @@
     },
     {
       "relation": "references",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "apps-microservices/crawler-service/CLAUDE.md",
+      "source_location": null,
+      "weight": 0.8,
+      "source": "cb_error_plan_rationale_sample_gate_stays_on_processed",
+      "target": "crawler_v63_rationale_distinct_from_breaker_gate"
+    },
+    {
+      "relation": "references",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "docs/superpowers/plans/2026-08-24-circuit-breaker-error-rate.md",
@@ -455747,6 +456185,164 @@
       "_tgt": "cb_error_tasks_task4_wire_document",
       "source": "cb_error_tasks_tracker",
       "target": "cb_error_tasks_task4_wire_document"
+    },
+    {
+      "relation": "cites",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "apps-microservices/crawler-service/CLAUDE.md",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "updatehealthverdict_test_ts",
+      "target": "crawler_v63_what_replaces_the_gate_small_corpus"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "apps-microservices/crawler-service/CLAUDE.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "crawler_v63_sample_gate_capped_by_corpus",
+      "_tgt": "updatehealthverdict_effectiveminsample",
+      "source": "updatehealthverdict_effectiveminsample",
+      "target": "crawler_v63_sample_gate_capped_by_corpus"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "apps-microservices/crawler-service/CLAUDE.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "crawler_v63_rationale_strict_relaxation_provable",
+      "_tgt": "updatehealthverdict_effectiveminsample",
+      "source": "updatehealthverdict_effectiveminsample",
+      "target": "crawler_v63_rationale_strict_relaxation_provable"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "apps-microservices/crawler-service/CLAUDE.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "crawler_v63_rationale_pending_sample_was_permanent_hold",
+      "_tgt": "crawler_v63_sample_gate_capped_by_corpus",
+      "source": "crawler_v63_sample_gate_capped_by_corpus",
+      "target": "crawler_v63_rationale_pending_sample_was_permanent_hold"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "apps-microservices/crawler-service/CLAUDE.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "crawler_v63_rationale_strict_relaxation_provable",
+      "_tgt": "crawler_v63_sample_gate_capped_by_corpus",
+      "source": "crawler_v63_sample_gate_capped_by_corpus",
+      "target": "crawler_v63_rationale_strict_relaxation_provable"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "apps-microservices/crawler-service/CLAUDE.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "crawler_v63_rationale_coverage_not_an_escape_hatch",
+      "_tgt": "crawler_v63_sample_gate_capped_by_corpus",
+      "source": "crawler_v63_sample_gate_capped_by_corpus",
+      "target": "crawler_v63_rationale_coverage_not_an_escape_hatch"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "apps-microservices/crawler-service/CLAUDE.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "crawler_v63_what_replaces_the_gate_small_corpus",
+      "_tgt": "crawler_v63_sample_gate_capped_by_corpus",
+      "source": "crawler_v63_sample_gate_capped_by_corpus",
+      "target": "crawler_v63_what_replaces_the_gate_small_corpus"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "apps-microservices/crawler-service/CLAUDE.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "crawler_v63_rationale_distinct_from_breaker_gate",
+      "_tgt": "crawler_v63_sample_gate_capped_by_corpus",
+      "source": "crawler_v63_sample_gate_capped_by_corpus",
+      "target": "crawler_v63_rationale_distinct_from_breaker_gate"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "apps-microservices/crawler-service/CLAUDE.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "crawler_v63_correction_pending_sample_no_longer_permanent",
+      "_tgt": "crawler_v63_sample_gate_capped_by_corpus",
+      "source": "crawler_v63_sample_gate_capped_by_corpus",
+      "target": "crawler_v63_correction_pending_sample_no_longer_permanent"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "apps-microservices/crawler-service/CLAUDE.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "crawler_v63_rationale_gate_masked_critical",
+      "_tgt": "crawler_v63_what_replaces_the_gate_small_corpus",
+      "source": "crawler_v63_what_replaces_the_gate_small_corpus",
+      "target": "crawler_v63_rationale_gate_masked_critical"
+    },
+    {
+      "source": "updatehealthverdict_rationale_error_prefix_deliberately_distinct",
+      "target": "crawler_v61_cb_error_prefix_no_longer_unique",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "apps-microservices/crawler-service/crawler/src/updateHealthVerdict.ts",
+      "source_location": "updateHealthVerdict.ts:144-149",
+      "weight": 1.0
+    },
+    {
+      "source": "updatehealthverdict_rationale_error_prefix_deliberately_distinct",
+      "target": "updatehealthverdict_decideupdatehealth",
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "apps-microservices/crawler-service/crawler/src/updateHealthVerdict.ts",
+      "source_location": "updateHealthVerdict.ts:144-149",
+      "weight": 1.0
+    },
+    {
+      "source": "updatehealthverdict_rationale_error_prefix_deliberately_distinct",
+      "target": "errorratebreaker_shouldtriperrorratebreaker",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "apps-microservices/crawler-service/crawler/src/updateHealthVerdict.ts",
+      "source_location": "updateHealthVerdict.ts:144-149",
+      "weight": 1.0
+    },
+    {
+      "source": "updatehealthverdict_rationale_error_prefix_deliberately_distinct",
+      "target": "apps_microservices_crawler_service_crawler_src_updatehealthverdict_ts",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "apps-microservices/crawler-service/crawler/src/updateHealthVerdict.ts",
+      "source_location": "updateHealthVerdict.ts:144-149",
+      "weight": 1.0
     }
   ],
   "hyperedges": [
