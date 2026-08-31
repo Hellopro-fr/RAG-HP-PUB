@@ -11,7 +11,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { decideUpdateHealth, updateHealthRates } from './updateHealthVerdict.js';
+import { decideUpdateHealth, updateHealthRates, effectiveMinSample } from './updateHealthVerdict.js';
 
 // Production configuration: the BO sends max_redirect_rate = 0 and
 // max_growth_rate = 0 (shell.php), and does not send min_sample or the
@@ -144,4 +144,97 @@ test('rates are 0 when their denominator is 0 (no NaN leaks into the report)', (
     assert.equal(rates.errorRate, 0);
     assert.equal(rates.redirectRate, 0);
     assert.equal(rates.growthRate, 0);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// effectiveMinSample() — the sample floor never exceeds the corpus it judges
+// ─────────────────────────────────────────────────────────────────────────────
+// The four cases below are real runs from the 2026-08-28 audit of the 98
+// guard-blocked runs of the month. Each was a PENDING_SAMPLE block on a crawl
+// its own log showed as healthy, and each is unreachable-by-construction: the
+// corpus is smaller than the floor it was held to.
+
+test('effectiveMinSample: a corpus smaller than the floor lowers the floor', () => {
+    assert.equal(effectiveMinSample({ ...S({}), previousTotal: 9 }, PROD), 9);
+    assert.equal(effectiveMinSample({ ...S({}), previousTotal: 6 }, PROD), 6);
+});
+
+test('effectiveMinSample: a corpus larger than the floor leaves it alone', () => {
+    assert.equal(effectiveMinSample({ ...S({}), previousTotal: 500 }, PROD), 50);
+    assert.equal(effectiveMinSample({ ...S({}), previousTotal: 50 }, PROD), 50);
+});
+
+test('effectiveMinSample: an unknown corpus keeps the configured floor', () => {
+    // previousTotal 0 means "no baseline", and the gate has its own
+    // previousTotal > 0 guard. Returning the corpus here would hand back 0 and
+    // silently disable the gate for every initial-shaped run.
+    assert.equal(effectiveMinSample({ ...S({}), previousTotal: 0 }, PROD), 50);
+    assert.equal(effectiveMinSample({ ...S({}), previousTotal: -4 }, PROD), 50);
+});
+
+test('norpalex.fr shape: 9-URL corpus, 23 processed → HEALTHY, not PENDING_SAMPLE', () => {
+    // Measured 2026-08-25: "accounted for 0/9 (0.0%) with only 23 processed".
+    // The crawl covered its corpus 2.5x over and was still held.
+    const r = decideUpdateHealth(S({ processed: 23, accounted: 0, previousTotal: 9 }), PROD);
+    assert.equal(r.status, 'HEALTHY');
+});
+
+test('barriere-titan.fr shape: 6-URL corpus, 12 processed → HEALTHY', () => {
+    const r = decideUpdateHealth(S({ processed: 12, accounted: 0, previousTotal: 6 }), PROD);
+    assert.equal(r.status, 'HEALTHY');
+});
+
+test('smc-palettes.com shape: 11-URL corpus, 31 processed → HEALTHY', () => {
+    const r = decideUpdateHealth(S({ processed: 31, accounted: 1, previousTotal: 11 }), PROD);
+    assert.equal(r.status, 'HEALTHY');
+});
+
+test('ckelprocess.fr shape: 18-URL corpus, 19 processed → HEALTHY', () => {
+    // The tightest of the four: one URL above its own corpus size.
+    const r = decideUpdateHealth(S({ processed: 19, accounted: 2, previousTotal: 18 }), PROD);
+    assert.equal(r.status, 'HEALTHY');
+});
+
+test('a small corpus NOT yet covered still trips the gate', () => {
+    // The other half of the rule, and the one that keeps it honest: 5 processed
+    // against a 9-URL corpus is genuinely partial, so the gate must still fire.
+    const r = decideUpdateHealth(S({ processed: 5, accounted: 0, previousTotal: 9 }), PROD);
+    assert.equal(r.status, 'PENDING_SAMPLE');
+});
+
+test('a genuinely partial large crawl is untouched (the regression that matters)', () => {
+    // 30 processed on a 100-URL corpus: floor stays min(50, 100) = 50, so the
+    // gate fires exactly as before this change.
+    const r = decideUpdateHealth(S({ processed: 30, accounted: 30, previousTotal: 100 }), PROD);
+    assert.equal(r.status, 'PENDING_SAMPLE');
+});
+
+test('the message names the floor actually applied', () => {
+    // Without this the trace shows "only 5 processed" against an invisible
+    // threshold, and the reader cannot tell which floor was used.
+    const r = decideUpdateHealth(S({ processed: 5, accounted: 0, previousTotal: 9 }), PROD);
+    assert.match(r.statusMessage, /sample gate 9/);
+});
+
+// The two brakes that remain on a small corpus once the sample gate stops
+// holding it. Both are derived from the chain, not guessed: the first `else if`
+// that matches wins, and the SUSPECT override only applies to HEALTHY and
+// PENDING_SAMPLE. The numbers below were computed backwards from those rules —
+// a first version of this test asserted SUSPECT on figures that trip CRITICAL
+// two branches earlier, and failed against correct code.
+
+test('a small corpus with a high error RATE is still caught, by CRITICAL', () => {
+    // 6/23 = 26% > 15% and 6 >= maxAbsErrors, so CRITICAL matches before the
+    // SUSPECT override is ever considered.
+    const r = decideUpdateHealth(S({ processed: 23, errors: 6, accounted: 6, previousTotal: 9 }), PROD);
+    assert.equal(r.status, 'CRITICAL');
+});
+
+test('a small corpus losing over half itself is caught by SUSPECT', () => {
+    // The rate is deliberately kept UNDER the CRITICAL threshold so the mass
+    // guard is the one doing the work: 5/34 = 14.7% < 15%, while 5/9 = 56% of
+    // the previous corpus. SUSPECT is corpus-relative, so it does not weaken
+    // when the sample floor drops — this is what replaces the gate.
+    const r = decideUpdateHealth(S({ processed: 34, errors: 5, accounted: 5, previousTotal: 9 }), PROD);
+    assert.equal(r.status, 'SUSPECT');
 });

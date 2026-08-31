@@ -130,6 +130,31 @@ this lot's 69-run measurement, now silently mixes results from both formulas.
 commented out), so `maxAbsErrors` / `maxAbsRedirects` / `maxAbsNew` are inert here. Do not wake it
 up as a side effect — reviving inert code changes behaviour, it does not repair it.
 
+### The health verdict's sample gate is capped by the corpus (2026-08-31)
+
+Distinct from the breaker's gate above, and **not** the same rule: `decideUpdateHealth` holds a run
+to `effectiveMinSample(stats, cfg)` = `Math.min(cfg.minSample, previousTotal)`, not to `minSample`
+flat. A site with fewer previously-known URLs than the floor could otherwise never clear it, so
+`PENDING_SAMPLE` became a permanent hold rather than a detection — measured on the 98 guard-blocked
+runs of 2026-08: 38 `PENDING_SAMPLE` blocks, **24** on runs whose own log showed a healthy crawl.
+
+Strict relaxation, provable: `Math.min` only lowers the floor, so the set of runs that trip the gate
+can only shrink. A genuinely partial large crawl is untouched — 30 processed on a 100-URL corpus
+still gets a floor of 50.
+
+⚠ **`coverage` is NOT the escape hatch it looks like.** `previousTotal` is counted before Phase-2
+seeding, while `accounted` credits only URLs that were seeded, visited, and matched exactly — and
+seeding drops excluded regional paths and ignored extensions. Those sit in the denominator and can
+never reach the numerator, so the ratio has a site-dependent ceiling below 1 (**78.79%** measured on
+symotronic.com, against a 0.8 threshold). Aligning the two populations is a separate change, and it
+moves `growthRate` too — same denominator.
+
+⚠ **What replaces the gate on a small corpus**: `SUSPECT` (`errors / previousTotal > 0.5`) is
+corpus-relative and does not weaken when the floor drops; `CRITICAL` on the error rate is unchanged.
+Both are pinned in `updateHealthVerdict.test.ts`. Note that before this change the gate **masked**
+`CRITICAL` on small sites — a bad error rate was reported as `PENDING_SAMPLE`, so the diagnosis was
+wrong, not merely the outcome.
+
 ## Regional Path Exclusion
 
 Prevents crawling duplicate French regional variants (e.g., `/fr-BE/`, `/fr-CA/`) when one French path (e.g., `/fr-FR/`) has been selected.
