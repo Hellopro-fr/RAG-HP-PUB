@@ -57,6 +57,51 @@ export function updateHealthCoverage(stats: UpdateHealthStats): number {
 }
 
 /**
+ * The sample floor this run is actually held to: never more than the corpus it has.
+ *
+ * THE DEFECT THIS FIXES — a site with fewer than `minSample` previously-known URLs could
+ * never clear the gate. The condition is a conjunction (`processed < minSample` AND
+ * `coverage < minCoverage`), and the coverage term is not a working escape hatch today (see
+ * the note below), so on a small site the gate degenerated into `processed < 50` alone —
+ * unreachable by construction. That is not a detection, it is a permanent hold.
+ *
+ * MEASURED on the 98 guard-blocked runs of 2026-08 (audit of 2026-08-28): PENDING_SAMPLE
+ * accounted for 38 blocks, 24 of them on runs whose own log showed a healthy crawl. Four
+ * cases, re-derived against this rule:
+ *
+ *   norpalex.fr        previousTotal  9, processed 23  -> gate 9,  23 < 9  false
+ *   barriere-titan.fr  previousTotal  6, processed 12  -> gate 6,  12 < 6  false
+ *   smc-palettes.com   previousTotal 11, processed 31  -> gate 11, 31 < 11 false
+ *   ckelprocess.fr     previousTotal 18, processed 19  -> gate 18, 19 < 18 false
+ *
+ * All four leave PENDING_SAMPLE, and none of them needed `coverage` to do so.
+ *
+ * ⚠ STRICT RELAXATION, and it is provable rather than asserted: `Math.min` can only lower
+ * the floor, so `processed < min(minSample, previousTotal)` implies `processed < minSample`.
+ * The set of runs that trip the gate can therefore only shrink. This is the same invariant
+ * the file header states for every other condition here — see "STRICT RELAXATION" above.
+ *
+ * ⚠ What it deliberately does NOT do: loosen a genuinely partial crawl. A corpus of 100 seen
+ * with 30 processed still gets a floor of 50 (`min(50, 100)`), so the gate still fires. Only
+ * the sites whose corpus is SMALLER than the floor change behaviour — exactly the population
+ * that could never satisfy it.
+ *
+ * ⚠ Why `coverage` cannot be relied on instead, measured 2026-08-31 on symotronic.com:
+ * `previousTotal` is counted BEFORE Phase-2 seeding (main.ts), while `accounted` can only
+ * credit a URL that was seeded AND visited AND matched exactly. Seeding drops excluded
+ * regional paths and ignored extensions, so those URLs sit in the denominator and can never
+ * reach the numerator: the ratio has a site-dependent ceiling below 1 (78.79% on that run,
+ * against a 0.8 threshold). Aligning the two populations is a separate change — and it moves
+ * `growthRate` too, which shares the same denominator.
+ */
+export function effectiveMinSample(stats: UpdateHealthStats, cfg: UpdateHealthConfig): number {
+    if (!(stats.previousTotal > 0)) {
+        return cfg.minSample;
+    }
+    return Math.min(cfg.minSample, stats.previousTotal);
+}
+
+/**
  * The three rates, with their pre-change definitions and denominators.
  * Single source of truth: the verdict and the published report both use this.
  */
@@ -88,10 +133,12 @@ export function decideUpdateHealth(
     let status = "HEALTHY";
     let statusMessage = "Update progressing normally.";
 
-    if (previousTotal > 0 && processed < cfg.minSample && coverage < cfg.minCoverage) {
+    const minSample = effectiveMinSample(stats, cfg);
+    if (previousTotal > 0 && processed < minSample && coverage < cfg.minCoverage) {
         status = "PENDING_SAMPLE";
         statusMessage = `Crawl accounted for ${accounted}/${previousTotal} of the previous Dataset `
-            + `(${(coverage * 100).toFixed(1)}%) with only ${processed} processed`;
+            + `(${(coverage * 100).toFixed(1)}%) with only ${processed} processed `
+            + `(sample gate ${minSample})`;
     } else if (cfg.maxErrorRate > 0 && errorRate > cfg.maxErrorRate && errors >= cfg.maxAbsErrors) {
         status = "CRITICAL";
         // ⚠ Deliberately NOT the words "Error rate too high (" — errorRateBreaker.ts:73 emits that
