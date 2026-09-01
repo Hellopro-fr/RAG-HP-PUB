@@ -145,6 +145,23 @@ services:
       - APIFY_PROXY=${APIFY_PROXY}
       - REDIS_URL=redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
       - RABBITMQ_URL=${RABBITMQ_URL}
+      # --- Derive logo 200x200 (recette r1m0) -------------------------------
+      # Le FLUX est inerte tant que ENABLE_LOGO_DERIVE ne vaut pas exactement
+      # "true" (comparaison .lower() == "true" : ni 1, ni on, ni True).
+      # L'ENDPOINT POST /logos/{domaine}/derive, lui, est actif des la livraison
+      # de l'image, independamment de ce flag : c'est lui qui porte le backfill.
+      - ENABLE_LOGO_DERIVE=${ENABLE_LOGO_DERIVE:-false}
+      # Bornes de protection. Valeurs par defaut mesurees sur une replica a
+      # 1 CPU / 2 Go ; les surcharger ici ou dans .env sans avoir mesure la
+      # distribution reelle des masters est un risque d'OOM-kill, et un OOM-kill
+      # ne leve pas d'exception : le message RabbitMQ revient et tue la replica
+      # suivante.
+      - LOGO_DERIVE_MAX_MASTER_PIXELS=${LOGO_DERIVE_MAX_MASTER_PIXELS:-32000000}
+      - LOGO_DERIVE_MAX_PARALLEL=${LOGO_DERIVE_MAX_PARALLEL:-2}
+      - LOGO_DERIVE_MAX_QUEUE=${LOGO_DERIVE_MAX_QUEUE:-4}
+      - LOGO_DERIVE_MAX_ENTRIES=${LOGO_DERIVE_MAX_ENTRIES:-50}
+      - LOGO_DERIVE_TIME_BUDGET=${LOGO_DERIVE_TIME_BUDGET:-15}
+      - LOGO_DERIVE_LOCK_TIMEOUT=${LOGO_DERIVE_LOCK_TIMEOUT:-3}
     env_file:
       - .env
     networks:

@@ -21,15 +21,18 @@ fournisseur, cadre 70x44 avec padding 5px et bordure 1px, soit une boite utile d
 """
 
 import hashlib
+import inspect
 import io
 
 import pyvips
 import pytest
 from PIL import Image, ImageDraw
 
+from core import logo_derive
 from core.logo_derive import (
     BLOCKING_FLAGS,
     CANVAS,
+    DEFAULT_PLATE_COLOR,
     FLAG_ORDER,
     FLAGS,
     MAX_SVG_CONTENT_BYTES,
@@ -985,23 +988,42 @@ def test_plaque_est_opaque_a_coins_arrondis_et_dans_le_canvas():
     assert img.getpixel(((x0 + x1) // 2, y0))[3] == 255, "bord haut de plaque non opaque"
 
 
-def test_plaque_utilise_la_couleur_demandee():
-    """plate_color est respectee, et le defaut est l'anthracite de la carte."""
+def test_plaque_utilise_la_couleur_de_la_recette():
+    """La plaque porte l'anthracite de la carte, pris dans la CONSTANTE."""
     defaut = variant(derived("png_blanc_sur_transparent"), "sq200d")
     box = as_pil(defaut).split()[3].getbbox()
     sonde = (box[0] + 3, (box[1] + box[3]) // 2)
-    assert as_pil(defaut).getpixel(sonde) == (31, 41, 51, 255)
-
-    custom = variant(
-        derived("png_blanc_sur_transparent", content_hash=HASH_A, plate_color=(10, 20, 30)),
-        "sq200d",
-    )
-    assert as_pil(custom).getpixel(sonde) == (10, 20, 30, 255)
+    assert as_pil(defaut).getpixel(sonde) == DEFAULT_PLATE_COLOR + (255,)
+    assert DEFAULT_PLATE_COLOR == (31, 41, 51)
 
 
-def test_plate_color_invalide_ne_fait_pas_echouer_le_derive():
-    """Contrat dur : le worker ne doit jamais echouer a cause du derive."""
-    result = derive_logo(CASES["png_blanc_sur_transparent"], KEY, HASH_A, plate_color="nawak")
+def test_la_couleur_de_plaque_n_est_pas_surchargeable_a_l_appel():
+    """NON-REGRESSION G4 — le nom de fichier ne porte QUE h12 + RECIPE + variante.
+
+    Un ``plate_color`` par appel produisait des octets differents sous le MEME
+    nom, alors que le CDN les sert en ``immutable`` 30 jours sans purge (mesure du
+    01/09/2026, meme master : (31,41,51) -> sha256 aee472cc..., (10,20,30) ->
+    3721f70b..., et le meme nom dans les deux cas). La couleur est donc une
+    constante de recette : la changer passe par un bump de RECIPE, qui renomme
+    tout.
+    """
+    assert "plate_color" not in inspect.signature(derive_logo).parameters
+
+    with pytest.raises(TypeError):
+        derive_logo(CASES["png_blanc_sur_transparent"], KEY, HASH_A,
+                    plate_color=(10, 20, 30))
+
+
+def test_couleur_de_plaque_invalide_retombe_sur_la_recette():
+    """Contrat dur : le worker ne doit jamais echouer a cause du derive.
+
+    La garde de forme reste utile alors que la couleur n'est plus surchargeable :
+    elle protege desormais la CONSTANTE de recette contre une edition fautive.
+    """
+    assert logo_derive._sanitize_plate_color("nawak") == DEFAULT_PLATE_COLOR
+    assert logo_derive._sanitize_plate_color((999, -5, 1.6)) == (255, 0, 2)
+
+    result = derive_logo(CASES["png_blanc_sur_transparent"], KEY, HASH_A)
     assert result["error"] is None
     assert variant(result, "sq200d") is not None
 

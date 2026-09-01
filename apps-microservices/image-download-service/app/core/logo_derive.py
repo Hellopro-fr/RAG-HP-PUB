@@ -175,6 +175,17 @@ logger = logging.getLogger(__name__)
 #: de libvips coexistaient un jour, des octets DIFFERENTS seraient servis sous la
 #: MEME URL immutable. La version reelle est relevee a l'execution et exposee
 #: dans ``metrics["libvips_version"]``, qui n'entre pas dans le nom de fichier.
+#:
+#: CONTRAT D'IMMUTABILITE — a respecter a la lettre, le CDN sert ces fichiers en
+#: ``Cache-Control: public, max-age=2592000, immutable`` SANS moyen de purge :
+#: TOUT ce qui change les octets d'une variante DOIT changer ce jeton. Cela
+#: couvre les constantes de la recette (canvas, marges, seuils, couleur de
+#: plaque), et cela couvre aussi un changement de version de libvips ou de son
+#: zlib — donc un rebuild de l'image de base. Un nom de fichier ne porte que
+#: ``h12(content_hash|RECIPE)`` + ``RECIPE`` : rien d'autre ne peut faire la
+#: difference. C'est pourquoi la couleur de plaque n'est PLUS un argument
+#: d'appel (cf. :func:`derive_logo`) : un parametre par appel produisait des
+#: octets differents sous le meme nom, ce que ce contrat interdit.
 RECIPE = "r1m0"
 
 #: Version de libvips reellement liee, pour l'audit UNIQUEMENT (jamais dans un
@@ -441,6 +452,15 @@ LOW_RES_MIN_EDGE = 96
 ELONGATED_RATIO_MAX = 6.0
 
 # --- Etape 8 : plaque sombre ------------------------------------------------
+#: Couleur de la plaque sombre — CONSTANTE DE RECETTE, pas un parametre d'appel.
+#: Elle determine les octets de la variante ``sq200d`` et n'entre PAS dans le nom
+#: de fichier : la faire varier a l'appel produisait deux fichiers d'octets
+#: differents sous le MEME nom (mesure du 01/09/2026 sur le meme master :
+#: (31,41,51) -> sha256 aee472cc..., (10,20,30) -> 3721f70b..., et dans les deux
+#: cas le nom logo-...--79fbdabe4c8d-r1m0-sq200d.png), donc une URL declaree
+#: immutable 30 jours servant deux images selon l'appelant. La changer est une
+#: decision de CHARTE : elle passe par un bump de :data:`RECIPE`, ce qui renomme
+#: proprement toutes les variantes.
 DEFAULT_PLATE_COLOR = (31, 41, 51)
 PLATE_PADDING = 6          # la plaque epouse la boite d'encre + cette marge
 PLATE_CORNER_RADIUS = 8    # coins arrondis, pour se lire comme intentionnelle dans un cadre radius 6
@@ -1578,10 +1598,17 @@ def _variant(variant, slug, h12, image):
 # API publique
 # =============================================================================
 
-def derive_logo(content: bytes, key: str, content_hash: str,
-                plate_color: tuple = DEFAULT_PLATE_COLOR) -> dict:
+def derive_logo(content: bytes, key: str, content_hash: str) -> dict:
     """
     Produit les vignettes d'affichage 200x200 d'un logo deja heberge.
+
+    Les octets produits ne dependent que de ``content`` et de :data:`RECIPE` —
+    c'est exactement ce que le nom de fichier porte, et c'est ce qui rend vrai le
+    ``Cache-Control: immutable`` de 30 jours du CDN. Aucun parametre d'appel ne
+    peut plus les faire varier : la couleur de plaque, qui etait un argument
+    public, est desormais la constante de recette :data:`DEFAULT_PLATE_COLOR`
+    (mesure : deux ``plate_color`` differents produisaient le MEME nom de fichier
+    avec des octets DIFFERENTS).
 
     Args:
         content:      Octets REELLEMENT heberges par ``process_logo``
@@ -1590,7 +1617,6 @@ def derive_logo(content: bytes, key: str, content_hash: str,
                       ``content_hash``.
         key:          Cle du logo (celle passee a ``_build_logo_filename``).
         content_hash: sha256 hexadecimal (64 caracteres) des octets ci-dessus.
-        plate_color:  Couleur de la plaque sombre (R, G, B).
 
     Returns:
         dict: ``{"variants": [...], "metrics": {...}, "error": None | str}``.
@@ -1671,7 +1697,9 @@ def derive_logo(content: bytes, key: str, content_hash: str,
 
         slug = _slug(str(key))
         h12 = _content_key(content_hash)
-        plate_rgb = _sanitize_plate_color(plate_color)
+        # Constante de recette, relue ICI pour que ``_sanitize_plate_color``
+        # continue de garantir la forme (R, G, B) bornee 0-255.
+        plate_rgb = _sanitize_plate_color(DEFAULT_PLATE_COLOR)
 
         # --- Etape 1/2 : format et tri des SVG ------------------------------
         # P15 : le ROUTAGE se decide sur le loader que libvips choisit vraiment,
