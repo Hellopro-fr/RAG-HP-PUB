@@ -1,0 +1,175 @@
+name: 'Remediation forge — bump + build + scan (informatif)'
+
+# Forge de remédiation sécurité (informatif, NON bloquant, SANS push AR, SANS deploy, ZÉRO VM).
+# Le runner porte Go+Docker+Trivy à la place du poste dev.
+#   - branche fix/rem2-<service>  : bump modules Go (grpc/x-crypto/x-net/x-text présents) + go mod tidy,
+#                                   RE-COMMIT go.mod/go.sum sur la branche, puis build image + Trivy image.
+#   - branche fix/rem1-<service>  : build image (Dockerfile déjà patché : upgrade pip toolchain) + Trivy image.
+# Preuve = chute des CRITICAL fixables. Le service est dérivé du nom de branche.
+# ⚠️ Trivy via CLI (install.sh), pas l'action cassée. Le push GITHUB_TOKEN ne re-déclenche pas le workflow.
+
+on:
+  push:
+    branches:
+      - 'fix/rem1-**'
+      - 'fix/rem2-**'
+      - 'fix/rem3-**'
+
+permissions:
+  contents: write   # re-commit go.mod/go.sum sur la branche fix
+
+jobs:
+  forge:
+    name: 'Forge — ${{ github.ref_name }}'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: 'Derive service + mode from branch'
+        id: ctx
+        run: |
+          set -euo pipefail
+          BR="${GITHUB_REF_NAME}"
+          case "$BR" in
+            fix/rem1-*) MODE=rem1; SVC="${BR#fix/rem1-}";;
+            fix/rem2-*) MODE=rem2; SVC="${BR#fix/rem2-}";;
+            fix/rem3-*) MODE=rem3; SVC="${BR#fix/rem3-}";;
+            *) echo "::error::branche non reconnue: $BR"; exit 1;;
+          esac
+          DIR="apps-microservices/${SVC}"
+          [ -f "${DIR}/Dockerfile" ] || { echo "::error::${DIR}/Dockerfile introuvable"; exit 1; }
+          echo "mode=$MODE"    >> "$GITHUB_OUTPUT"
+          echo "service=$SVC"  >> "$GITHUB_OUTPUT"
+          echo "dir=$DIR"      >> "$GITHUB_OUTPUT"
+          echo "### Forge $MODE — \`$SVC\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 'Setup Go (rem2)'
+        if: steps.ctx.outputs.mode == 'rem2'
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: 'REM-2 — bump modules Go + tidy (runner, best-effort)'
+        id: bump
+        # Best-effort : les services qui GÉNÈRENT leurs stubs proto au build Docker (proto/gen
+        # absent hors Docker) échouent ici → ils se corrigent via le Dockerfile builder (go get
+        # après codegen). On continue alors vers build image + scan (pas de commit-back go.mod).
+        if: steps.ctx.outputs.mode == 'rem2'
+        continue-on-error: true
+        working-directory: ${{ steps.ctx.outputs.dir }}
+        run: |
+          set -euo pipefail
+          # 0) Codegen : si le service génère ses stubs proto au build Docker, les générer ICI
+          #    (proto/gen absent hors Docker → sinon go get/tidy ne résout pas le module local).
+          if [ -f proto/generate.sh ]; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq protobuf-compiler
+            go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+            go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+            export PATH="$PATH:$(go env GOPATH)/bin"
+            bash proto/generate.sh
+          fi
+          # 1) Bump PATCH de toutes les deps (sûr : reste dans la minor courante, pas de saut
+          #    de toolchain) → capte les fixes patch hors-liste (ex. quic-go 0.54.0→0.54.1).
+          #    ⚠️ PAS `go get -u ./...` (minor global) : il pull quic-go@0.62 qui exige Go 1.26.
+          go get -u=patch ./...
+          # 2) Bump MINOR ciblé des modules à CVE connues qui l'exigent (en @latest, pas figé :
+          #    un "fix" d'ancien finding périme vite — grpc 1.79.3 dépassé par GHSA-hrxh → 1.82.1).
+          for dep in google.golang.org/grpc golang.org/x/crypto golang.org/x/net golang.org/x/text \
+                     github.com/golang-jwt/jwt/v5 go.opentelemetry.io/otel; do
+            if grep -q "${dep} " go.mod; then go get "${dep}@latest"; fi
+          done
+          go mod tidy
+          go build ./... 2>&1 | tail -20 || { echo "::error::go build KO — bump incompatible, à trancher manuellement"; exit 1; }
+
+      - name: 'REM-2 — re-commit go.mod/go.sum'
+        if: steps.ctx.outputs.mode == 'rem2' && steps.bump.outcome == 'success'
+        run: |
+          set -euo pipefail
+          git config user.name  "remediation-forge[bot]"
+          git config user.email "remediation-forge@users.noreply.github.com"
+          if ! git diff --quiet -- "${{ steps.ctx.outputs.dir }}/go.mod" "${{ steps.ctx.outputs.dir }}/go.sum"; then
+            git add "${{ steps.ctx.outputs.dir }}/go.mod" "${{ steps.ctx.outputs.dir }}/go.sum"
+            git commit -m "fix(sec): bump Go modules (grpc/x-crypto) — REM-2 ${{ steps.ctx.outputs.service }}"
+            git push origin "HEAD:${GITHUB_REF_NAME}"    # GITHUB_TOKEN → ne re-déclenche pas le workflow
+            echo "- go.mod/go.sum re-committés" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "- go.mod inchangé (déjà à jour)" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: 'Setup Node (rem3)'
+        if: steps.ctx.outputs.mode == 'rem3'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 'REM-3 — bump next (pnpm) + commit-back (best-effort)'
+        id: bumpnode
+        if: steps.ctx.outputs.mode == 'rem3'
+        continue-on-error: true
+        working-directory: ${{ steps.ctx.outputs.dir }}
+        run: |
+          set -euo pipefail
+          npm install -g pnpm@9   # pnpm 9 exécute les build scripts par défaut (pnpm 10 les bloque → ERR_PNPM_IGNORED_BUILDS)
+          # bump next (CVE CRITICAL) — --lockfile-only : met à jour package.json + pnpm-lock.yaml
+          # SANS installer/builder (évite l'échec sur la dép locale @hellopro/auth `file:`).
+          # C'est le lockfile source que le gate `trivy fs` lit → c'est LUI qu'il faut patcher.
+          if grep -q '"next"' package.json; then pnpm add next@latest --lockfile-only; fi
+          # re-résout le lockfile en appliquant les pnpm.overrides (ex. tar) SANS installer
+          pnpm install --lockfile-only
+          echo "next après bump : $(grep -m1 '\"next\"' package.json)" >> "$GITHUB_STEP_SUMMARY"
+          # commit-back package.json + lockfile → le gate fs voit le next patché.
+          git config user.name  "remediation-forge[bot]"
+          git config user.email "remediation-forge@users.noreply.github.com"
+          if ! git diff --quiet -- package.json pnpm-lock.yaml; then
+            git add package.json pnpm-lock.yaml
+            git commit -m "fix(sec): bump next — REM-3 ${{ steps.ctx.outputs.service }}"
+            git push origin "HEAD:${GITHUB_REF_NAME}"   # GITHUB_TOKEN → ne re-déclenche pas le workflow
+            echo "- package.json/pnpm-lock.yaml re-committés" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "- lockfile inchangé" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: 'Build image (BuildKit, sans push)'
+        run: |
+          set -euo pipefail
+          # Contexte de build : racine si le Dockerfile COPY des chemins `apps-microservices/`
+          # ou `libs/`, sinon le dossier du service (Dockerfile à COPY relatif type `COPY go.mod`).
+          if grep -qE "^[[:space:]]*COPY[[:space:]].*(apps-microservices/|libs/)" "${{ steps.ctx.outputs.dir }}/Dockerfile"; then
+            BUILD_CTX="."
+          else
+            BUILD_CTX="${{ steps.ctx.outputs.dir }}"
+          fi
+          echo "build context: $BUILD_CTX" >> "$GITHUB_STEP_SUMMARY"
+          DOCKER_BUILDKIT=1 docker build \
+            -f "${{ steps.ctx.outputs.dir }}/Dockerfile" \
+            -t "remediation-forge/${{ steps.ctx.outputs.service }}:test" \
+            --pull "$BUILD_CTX"
+
+      - name: Cache Trivy DB
+        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0
+        with:
+          path: ~/.cache/trivy
+          key: trivy-db-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            trivy-db-${{ runner.os }}-
+
+      - name: Install Trivy CLI
+        run: curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b "$RUNNER_TEMP/bin"
+
+      - name: 'Trivy image — CRITICAL fixables (preuve) + contexte'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          IMG="remediation-forge/${{ steps.ctx.outputs.service }}:test"
+          echo "#### Trivy image — $IMG" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "== CRITICAL/HIGH FIXABLES (objectif : 0 CRITICAL) ==" | tee -a "$GITHUB_STEP_SUMMARY"
+          "$RUNNER_TEMP/bin/trivy" image --scanners vuln --severity HIGH,CRITICAL \
+            --ignore-unfixed --no-progress "$IMG" | tail -25 | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "== CRITICAL détaillé (identité + fixable/unfixed) ==" | tee -a "$GITHUB_STEP_SUMMARY"
+          "$RUNNER_TEMP/bin/trivy" image --scanners vuln --severity CRITICAL \
+            --no-progress "$IMG" | tail -40 | tee -a "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
