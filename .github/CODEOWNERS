@@ -1,0 +1,19 @@
+# CODEOWNERS — required reviewers pour les PR (branch protection `prod`, CD2.b).
+# ⚠️ REMPLACER les handles ci-dessous par les VRAIS teams/users GitHub de l'org Hellopro-fr
+#    (ex. @Hellopro-fr/devsecops, @Hellopro-fr/lead-dev, ou des users @login). Les handles doivent
+#    exister ET avoir accès en écriture au repo, sinon le "required review from Code Owners" ne s'applique pas.
+
+# --- Infra / CI-CD (DevSecOps) ---
+/infra-microservices/          @Hellopro-fr/devsecops
+/.github/workflows/            @Hellopro-fr/devsecops
+/.github/CODEOWNERS            @Hellopro-fr/devsecops
+
+# --- Services applicatifs (Lead Dev) ---
+/apps-microservices/           @Hellopro-fr/lead-dev
+/libs/                         @Hellopro-fr/lead-dev
+
+# --- Services GPU-bound (ML + DevSecOps) ---
+/apps-microservices/vllm-*             @Hellopro-fr/ml-team @Hellopro-fr/devsecops
+/apps-microservices/triton-*           @Hellopro-fr/ml-team @Hellopro-fr/devsecops
+/apps-microservices/embedding-model-*  @Hellopro-fr/ml-team
+/apps-microservices/reranking-model-*  @Hellopro-fr/ml-team
