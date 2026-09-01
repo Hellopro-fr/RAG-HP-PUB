@@ -65,55 +65,58 @@ func queuesReadFileHandler(storage *filestore.Storage) http.HandlerFunc {
 }
 
 // queuesCleanPatternsHandler handles POST /api/jobs/{id}/request-queues/clean-patterns.
-// Corps JSON : {"patterns": ["**/*.pdf", ...]}
-// Supprime les fichiers de queue dont l'URL correspond à l'un des patterns.
-// Retourne {"deleted": N}. Traduit server.js:1299-1367.
+// Corps JSON optionnel : {"patterns": ["**/*.pdf", ...]}. Corps vide (ou
+// "patterns" absent) => patterns de blocage par defaut du crawler.
+// Retourne {"deleted": N, "scanned": M}. Traduit server.js:1299-1367.
 func queuesCleanPatternsHandler(storage *filestore.Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
 		var body struct {
 			Patterns []string `json:"patterns"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil && !errors.Is(err, io.EOF) {
 			WriteError(w, 400, "Invalid JSON body")
 			return
 		}
-		deleted, err := queue.CleanPatterns(r.Context(), storage, id, body.Patterns)
+		if body.Patterns == nil {
+			body.Patterns = queue.BlockedPatterns
+		}
+		deleted, scanned, err := queue.CleanPatterns(r.Context(), storage, id, body.Patterns)
 		if err != nil {
 			WriteError(w, 500, "Failed to clean patterns")
 			return
 		}
-		WriteJSON(w, 200, map[string]int{"deleted": deleted})
+		WriteJSON(w, 200, map[string]int{"deleted": deleted, "scanned": scanned})
 	}
 }
 
 // queuesRepairHandler handles POST /api/jobs/{id}/request-queues/repair.
 // Supprime les fichiers de queue dont le hostname ne correspond pas au domaine attendu.
-// Retourne {"deleted": N}. Traduit server.js:772-823.
+// Retourne {"deleted": N, "scanned": M}. Traduit server.js:772-823.
 func queuesRepairHandler(storage *filestore.Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
-		deleted, err := queue.Repair(r.Context(), storage, id)
+		deleted, scanned, err := queue.Repair(r.Context(), storage, id)
 		if err != nil {
 			WriteError(w, 500, "Failed to repair request queues")
 			return
 		}
-		WriteJSON(w, 200, map[string]int{"deleted": deleted})
+		WriteJSON(w, 200, map[string]int{"deleted": deleted, "scanned": scanned})
 	}
 }
 
 // queuesDropHandler handles POST /api/jobs/{id}/request-queues/drop.
 // Supprime tous les fichiers du répertoire request_queues du job.
-// Retourne {"deleted": N}. Traduit server.js:826-861.
+// Retourne {"deleted": N, "scanned": M}. Traduit server.js:826-861.
 func queuesDropHandler(storage *filestore.Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
-		deleted, err := queue.DropAll(r.Context(), storage, id)
+		deleted, scanned, err := queue.DropAll(r.Context(), storage, id)
 		if err != nil {
 			WriteError(w, 500, "Failed to drop request queues")
 			return
 		}
-		WriteJSON(w, 200, map[string]int{"deleted": deleted})
+		WriteJSON(w, 200, map[string]int{"deleted": deleted, "scanned": scanned})
 	}
 }
 

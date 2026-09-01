@@ -85,19 +85,15 @@ func ParseAnyMs(v any) int64 {
 }
 
 // AnyToISO accepts an interface{} from a JSON map and returns its canonical
-// RFC3339Nano string representation, or "" if it cannot be parsed.
-// Useful when downstream code expects start_time as a string.
+// RFC3339Nano UTC string representation. Toute valeur parsable (chaine ISO,
+// date naive, millisecondes) est normalisee ; une chaine non parsable est
+// retournee telle quelle, et "" pour tout le reste.
 func AnyToISO(v any) string {
-	if s, ok := v.(string); ok && s != "" {
-		// Already a string; if parseable, normalize, else return as-is.
-		if ParseStringMs(s) > 0 {
-			return s
-		}
+	if ms := ParseAnyMs(v); ms > 0 {
+		return time.UnixMilli(ms).UTC().Format(time.RFC3339Nano)
+	}
+	if s, ok := v.(string); ok {
 		return s
 	}
-	ms := ParseAnyMs(v)
-	if ms <= 0 {
-		return ""
-	}
-	return time.UnixMilli(ms).UTC().Format(time.RFC3339Nano)
+	return ""
 }

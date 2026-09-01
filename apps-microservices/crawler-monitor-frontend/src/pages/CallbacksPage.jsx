@@ -2,16 +2,15 @@ import { useNavigate } from 'react-router-dom';
 import CallbacksPanel from '../components/CallbacksPanel';
 
 /**
- * Full-screen page wrapping the CallbacksPanel.
- * Path: /callbacks
+ * Page autonome des callbacks en échec — route `/callbacks`.
  *
- * Replaces the modal previously toggled from a header badge button.
- * Closing the page navigates back to / (Overview).
+ * `onClose` est câblé au bouton « Retour » du panneau : il laisse au parent la
+ * chance de rafraîchir son compteur, puis ramène sur la vue d'ensemble.
  */
 const CallbacksPage = ({ token, onClose }) => {
   const navigate = useNavigate();
   const handleClose = () => {
-    if (onClose) onClose(); // give parent a chance to refresh count
+    onClose?.();
     navigate('/');
   };
   return <CallbacksPanel token={token} onClose={handleClose} />;
