@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { existsSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { HUB_PAGES, getHubPage, listHubPages, guideIdPageHub } from '@/data/hub';
+import { HUB_PAGES, getHubPage, listHubPages } from '@/data/hub';
 import { hubCanonicalPath } from '@/types/hub';
 import { resolveHubIcon } from '@/lib/hub/icons';
 import { HUB_SECTION_ID_LIST } from '@/lib/hub/anchors';
@@ -96,12 +96,20 @@ describe('registry HUB', () => {
     }
   });
 
-  it('l’id_page_hub du guide (dérivé) est un entier positif distinct de l’id projet', () => {
-    // Spec guide §5 : c'est le seul moyen de séparer les leads guide/projet.
-    for (const page of pages) {
-      const guideId = guideIdPageHub(page.id);
-      expect(Number.isInteger(guideId) && guideId > 0, `id_page_hub guide invalide (${guideId})`).toBe(true);
-      expect(guideId, `id guide ${guideId} ne doit pas égaler l'id projet ${page.id}`).not.toBe(page.id);
+  /**
+   * `id_page_hub` doit être l'id de l'URL, pour LES DEUX tunnels (2026-08-25).
+   *
+   * Le tunnel guide envoyait auparavant `page.id + 1000`. Le back-office ne
+   * connaissant que 1000-1002, ses leads arrivaient non rattachés. La
+   * distinction guide/projet se lit désormais à l'absence de réponses dans
+   * `hub_demande_reponse`, sans second identifiant.
+   */
+  it('n’expose aucun identifiant de page en dehors de ceux de l’URL', () => {
+    const idsAttendus = pages.map((p) => p.id);
+    for (const id of idsAttendus) {
+      expect(Number.isInteger(id) && id > 0, `id de page invalide (${id})`).toBe(true);
+      // Le décalage supprimé produisait 2000-2002 : aucun id ne doit y retomber.
+      expect(idsAttendus, `l'id ${id} entre en collision avec un id décalé`).not.toContain(id + 1000);
     }
   });
 

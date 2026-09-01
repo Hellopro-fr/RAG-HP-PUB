@@ -1,5 +1,5 @@
 # ── Stage 1: Generate Go gRPC stubs ──────────────────────────────────────────
-FROM golang:1.24-alpine AS protogen
+FROM golang:1.25-alpine AS protogen
 
 RUN apk add --no-cache protobuf protobuf-dev
 RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
@@ -51,16 +51,19 @@ RUN mkdir -p /build/proto/gen/embedding \
         /protos/grpc_stubs/llm.proto
 
 # ── Stage 2: Build Go binary ─────────────────────────────────────────────────
-FROM golang:1.24-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 WORKDIR /build
 COPY --from=protogen /build/ /build/
 
+# REM-2 : bump des modules à CVE (grpc/x-net/x-text) ICI (dans le builder), car les stubs
+# proto sont générés au build (proto/gen absent hors Docker → go get impossible sur le runner).
+RUN go get google.golang.org/grpc@latest golang.org/x/net@latest golang.org/x/text@latest
 RUN go mod tidy
 RUN CGO_ENABLED=0 GOOS=linux go build -o /bin/mcp-api-recherche ./cmd/server/
 
 # ── Stage 3: Minimal runtime ─────────────────────────────────────────────────
-FROM alpine:3.20
+FROM alpine:3.21
 
 RUN apk add --no-cache ca-certificates
 COPY --from=builder /bin/mcp-api-recherche /bin/mcp-api-recherche

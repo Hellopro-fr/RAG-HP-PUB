@@ -1,12 +1,12 @@
-# Graph Report - detection + crawler-service + docs (update health verdict)  (2026-08-24)
+# Graph Report - crawler-service (corpus-capped sample gate)  (2026-08-31)
 
 ## Corpus Check
-- 17 files · ~0 words
+- 3 files · ~0 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 11619 nodes · 27581 edges · 223 communities detected
-- Extraction: 64% EXTRACTED · 36% INFERRED · 0% AMBIGUOUS · INFERRED: 9903 edges (avg confidence: 0.61)
+- 11764 nodes · 27994 edges · 224 communities detected
+- Extraction: 64% EXTRACTED · 36% INFERRED · 0% AMBIGUOUS · INFERRED: 10011 edges (avg confidence: 0.61)
 - Token cost: 0 input · 0 output
 
 ## Community Hubs (Navigation)
@@ -233,6 +233,7 @@
 - [[_COMMUNITY_graphify-guide-en.md Limitation undirected graph, e...|graphify-guide-en.md: Limitation: undirected graph, e...]]
 - [[_COMMUNITY_graphify-guide-en.md PreToolUse hook on GlobGrep (n...|graphify-guide-en.md: PreToolUse hook on Glob|Grep (n...]]
 - [[_COMMUNITY_superpowers Faux-négatifs — suite de référence avant chantier|superpowers: Faux-négatifs — suite de référence avant chantier]]
+- [[_COMMUNITY_common-utils Fenetre tarifaire (pricing window)|common-utils: Fenetre tarifaire (pricing window)]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `CrawlerManager` - 532 edges
@@ -300,6 +301,11 @@
 - **The interlocking invariants that shape every formula in this design: strict relaxation (no run passing today may newly fail), the sample gate as a DISJUNCTION rather than a replacement, the error test as a CONJUNCTION rather than a max() that would swap the denominator, and zero-means-disabled as the reason the rate guard must lead each conjunction.** — update_health_spec_rationale_governing_constraint_strict_relaxation, update_health_spec_rationale_disjunction_not_replacement, update_health_spec_rationale_conjunction_not_max, update_health_spec_rationale_zero_means_disabled, update_health_spec_evaluation_order, updatehealthverdict_decideupdatehealth [INFERRED 0.85]
 - **The BO half and its hard ordering: the redirect cap is a precondition rather than an improvement, it must count the applied list and never the incomplete crawler counter, WARNING stops blocking, and the two deployments leave a window in which mass internal-redirect archiving is possible.** — update_health_spec_bo_redirect_cap, update_health_spec_rationale_redirect_cap_is_a_precondition, update_health_spec_rationale_redirect_cap_not_metrics_redirects, update_health_spec_bo_warning_stops_blocking, update_health_plan_task4_bo_redirect_cap, update_health_plan_task5_warning_stops_blocking, update_health_plan_deployment_gate_window [EXTRACTED 1.00]
 - **The refuted-claim ledger kept deliberately in both documents: sixteen dead claims from revisions 1 and 2, plus four corrections found during execution - a mis-described calibration tool, a line range that would have deleted the ABORTED override, two grep expectations asserted without being derived from a run, a missing guard on the percentage cap, and a verification script that does not exist.** — update_health_spec_selfcorrection_revision1_refuted, update_health_spec_selfcorrection_revision2_refuted, update_health_spec_selfcorrection_script_revue_seuils_not_replay_tool, update_health_spec_rationale_aborted_override_retained_range_1457, update_health_plan_selfcorrection_grep_expected_values_underived, update_health_plan_selfcorrection_pct_cap_missing_guard, update_health_plan_selfcorrection_mep_tooling_absent_and_symlink [INFERRED 0.80]
+- **Circuit-breaker trip -> exit 2 -> success classification -> stop webhook isError -> BO FAILED row -> permanent domain lockout (and its only escape hatch)** — crawler_v61_cb_section, crawler_v61_cb_trip_is_permanent_lockout, crawler_v59_rationale_is_success_allowlist, crawlsvc_success_stop_webhook_idempotency, crawlsvc_exit_codes, crawler_v61_cb_bypass_escape_hatch [INFERRED 0.85]
+- **The reading rules a BO consumer of collapsed_seen_base.jsonl must apply together (param is diagnostic, caps are partial, summaries are per-segment, 'collapsed' means retire)** — crawler_v61_collapsed_seen_base_sidecar, crawler_v61_param_diagnostic_only, crawler_v61_two_caps_only_one_visible, crawler_v61_truncated_by_cap_reading_rule, crawler_v61_multi_segment_append_contract, crawler_v61_collapsed_vocabulary_collision [INFERRED 0.80]
+- **The denominator that excluded its own numerator — the full chain from the counter writers to the two formulas that consume them: one writer for `processed`, two writers of opposite natures for `errors`, a new off-book counter, a pure breaker module, and the health verdict that still carries the identical arithmetic on purpose** — cb_error_spec_defect_denominator_excludes_numerator, cb_error_plan_rationale_denominator_formula, cb_error_plan_finding_processed_single_writer, cb_error_plan_finding_errors_two_live_writers, errorratebreaker_shouldtriperrorratebreaker, apps_microservices_crawler_service_crawler_src_class_updatechecker_ts, apps_microservices_crawler_service_crawler_src_routes_ts, apps_microservices_crawler_service_crawler_src_updatehealthverdict_ts [INFERRED 0.85]
+- **Recurring theme across four lots of this service: a technical failure written as a business outcome — the crawl that stops on an invalid rate and locks its domain, the detection outage that leaves through the success webhook, the sample guard that never expires, and the partial outage that had no counter** — cb_error_spec_lockout_chain, seam_audit_v49_finding_a_technical_failure_laundering, seam_audit_v49_finding_c_success_webhook_on_detection_failure, verdict_unavail_spec_defect_laundering, update_health_spec_problem_pending_sample_permanent, outage_vis_spec_rationale_compteur_panne_partielle [INFERRED 0.80]
+- **The claims this chantier refuted, narrowed or refused to make: the materiality floor that rescues zero runs, the proxy-wall symmetry the first draft asserted wrongly, the numerator double-count refuted by is_existing never being true, the composition measurement blocked by design, and the honest limitation that the fix stops the lock and not the withholding of deletions** — cb_error_spec_rationale_materiality_floor_refuted, cb_error_spec_rationale_symmetry_not_exact, cb_error_plan_rationale_is_existing_never_true, cb_error_spec_rationale_measurement_blocked_by_design, cb_error_spec_residual_lock_vs_deletions, cb_error_spec_rationale_threshold_not_settled [INFERRED 0.85]
 
 ## Communities
 
@@ -309,7 +315,7 @@ Nodes (102): CollectionName, Enum, CollectionNameGraph, Enum for the possible co
 
 ### Community 3 - "CrawlerManager Tests (manager & stash)"
 Cohesion: 0.0
-Nodes (769): str, DLQPropertiesAsync, create_dlq_headers(), create_dlq_message(), CrawlerManager, mock_cache_service(), TestStaleHandlerCounter, test_stale_handler_decrements_counter() (+761 more)
+Nodes (770): str, DLQPropertiesAsync, create_dlq_headers(), create_dlq_message(), CrawlerManager, mock_cache_service(), TestStaleHandlerCounter, test_stale_handler_decrements_counter() (+762 more)
 
 ### Community 86 - "crawler-service: test_admin_job_dump.py"
 Cohesion: 0.67
@@ -433,7 +439,7 @@ Nodes (259): Initializes the Redis connection pool.     Connects to Redis using 
 
 ### Community 9 - "Crawler Admin & Admission Control"
 Cohesion: 0.01
-Nodes (261): Sets a dictionary for a key, serializing it to JSON., set_json(), Prometheus metrics exposition endpoint., AdmissionController, FastAPI admission-control middleware.  Scope after the crawler carve-out refac, Atomic in-flight counter with a hard max.      Not a semaphore: acquire() does, Try to acquire a slot. Returns True on success, False if saturated., Release a slot. Defensive: does not go below zero. (+253 more)
+Nodes (267): Sets a dictionary for a key, serializing it to JSON., set_json(), Prometheus metrics exposition endpoint., AdmissionController, FastAPI admission-control middleware.  Scope after the crawler carve-out refac, Atomic in-flight counter with a hard max.      Not a semaphore: acquire() does, Try to acquire a slot. Returns True on success, False if saturated., Release a slot. Defensive: does not go below zero. (+259 more)
 
 ### Community 0 - "CrawlerManager Schemas, Archive & Reconcile"
 Cohesion: 0.0
@@ -537,7 +543,7 @@ Nodes (16): Archive Pre-flight Disk Space Check (2026-04-18), Rationale: Diagnos
 
 ### Community 1 - "Crawler Engine Core (main/functions)"
 Cohesion: 0.0
-Nodes (863): verify_api_key(), Verifies the API key if API_KEY is configured in settings.     If API_KEY is not, resetContextState(), makeTmpStorage(), classifyFragment(), recordClassification(), maybeCommitDecision(), writeDecisionFile() (+855 more)
+Nodes (945): verify_api_key(), Verifies the API key if API_KEY is configured in settings.     If API_KEY is not, resetContextState(), makeTmpStorage(), classifyFragment(), recordClassification(), maybeCommitDecision(), writeDecisionFile() (+937 more)
 
 ### Community 60 - "Crawler Engine Core (main/functions)"
 Cohesion: 0.31
@@ -1133,7 +1139,7 @@ Nodes (4): _client(), test_version_defaults_to_unknown(), test_version_reads_env
 
 ### Community 24 - "Service Overviews (crawler + detection CLAUDE.md)"
 Cohesion: 0.02
-Nodes (158): api-detection-langue-fr Service, Tech Stack (Python/FastAPI/Camoufox), Camoufox Stealth Scraper (Chromium fallback), Redis Cache (cache_service pool), Async Batch Job API (/detect-batch-async), FIFO Job Queue (JOB_WORKER_CONCURRENCY), Idempotent Re-submit (client_job_id), Terminal-Write Hardening (2026-07-26 incident) (+150 more)
+Nodes (162): api-detection-langue-fr Service, Tech Stack (Python/FastAPI/Camoufox), Camoufox Stealth Scraper (Chromium fallback), Redis Cache (cache_service pool), Async Batch Job API (/detect-batch-async), FIFO Job Queue (JOB_WORKER_CONCURRENCY), Idempotent Re-submit (client_job_id), Terminal-Write Hardening (2026-07-26 incident) (+154 more)
 
 ### Community 254 - "crawler-service: DedupManager.test.ts"
 Cohesion: 1.0
@@ -1195,6 +1201,10 @@ Nodes (1): Détermine si l'URL a un signal très fort de site français.        
 Cohesion: 1.0
 Nodes (2): Référence de suite AVANT chantier : 7 échecs préexistants + 1 erreur de collecte, à comparer et jamais compter comme introduits, PIÈGE D'OUTILLAGE : une erreur de collecte pytest préexistante INTERROMPT tout le run, si bien qu'aucune commande l'incluant n'est exploitable — la contourner par --ignore, ne pas la réparer (hors périmètre)
 
+### Community 268 - "common-utils: Fenetre tarifaire (pricing window)"
+Cohesion: 0.08
+Nodes (34): parser_fenetres(), _heure_utc(), est_heure_pleine(), libelle_fenetre(), Fenêtres de facturation DeepSeek — heures pleines / heures creuses.  Les borne, Analyse une grille au format "1-4,6-10". Retombe sur le défaut si invalide., True si l'instant tombe dans une fenêtre facturée au tarif double.      :param, Libellé lisible de la fenêtre en cours, destiné aux logs. (+26 more)
+
 ## Ambiguous Edges - Review These
 - `security-auditor agent (proposed)` → `Removed agents @code-reviewer and @debugger, superseded by superpowers skills`  [AMBIGUOUS]
   docs/claude-code-team-guide-en.md · relation: conceptually_related_to
@@ -1238,6 +1248,8 @@ Nodes (2): Référence de suite AVANT chantier : 7 échecs préexistants + 1 err
   docs/superpowers/specs/2026-08-05-detection-orphaned-goto-callback-flood-design.md · relation: conceptually_related_to
 - `test_variant_gate.py` → `Rationale: the cancellation is not an exceptional wedge-breaker but the NORMAL outcome — which is why the flood appears on alternatives, not homepages`  [AMBIGUOUS]
   docs/superpowers/specs/2026-08-05-detection-orphaned-goto-callback-flood-design.md · relation: conceptually_related_to
+- `GET /admin/sidecar/{crawl_id}` → `collapsed_seen_base.jsonl (storage/datasets/update-{domain}/, update mode only) - the BO-facing declaration of queue collapses, written by collapsedSeenBase.ts so the BO can retire the fiche of a variant that was dropped before any fetch. ADMISSION CRITERION: the base was crawled. origin === 'filter_on_seen' only, proven by seenBases. Named after the criterion rather than the family so its name cannot be read as an invitation to widen it`  [AMBIGUOUS]
+  apps-microservices/crawler-service/CLAUDE.md · relation: references
 - `Playwright's two cleanup() guards (no_reply, already-cancelled) miss the pending-but-uncancelled third case — upstream playwright-python#2163` → `Mechanism behind the giant repeated traceback: unroute_all on a dead page makes Playwright schedule its internal _update_interceptor_patterns_ignore_exceptions task — and that unroute_all was itself added to suppress a different TargetClosedError flood`  [AMBIGUOUS]
   docs/superpowers/specs/2026-08-03-detection-teardown-flood-and-retry-cascade-cost-design.md · relation: conceptually_related_to
 - `Second-order cost, same cause: one alternative can legitimately eat 255 s+ of the 300 s per-item budget, so a multi-alternative domain gets cancelled at the batch level instead — reproducing the same orphaned callbacks one layer up` → `Noted in passing, not touched: ADMISSION_MAX_SLOTS=8 exceeds BROWSER_SEMAPHORE_SIZE=6, so two admitted items always queue on the browser semaphore inside the same item budget — 6 browsers on 4 CPUs at 30% utilisation is not the constraint`  [AMBIGUOUS]
@@ -1260,11 +1272,17 @@ Nodes (2): Référence de suite AVANT chantier : 7 échecs préexistants + 1 err
   docs/superpowers/specs/2026-08-10-detection-faux-negatifs-design.md · relation: conceptually_related_to
 - `statNameParity.test.ts` → `Report shape - the BO reads health, message, metrics.* and rates.*, never mode nor thresholds; rates.redirect_rate is consumed one hop away feeding the maintenance detector, so rates must keep its current keys and meaning. mode becomes the literal GRADUATED, key retained. New and additive: metrics.accounted, rates.coverage, thresholds.min_coverage, thresholds.max_abs_new, thresholds.disabled_signals - the last one because without it a HEALTHY verdict is indistinguishable from a verdict whose checks were off. Naming: TS key minCoverage, JSON field min_coverage; both spellings intentional, do not unify.`  [AMBIGUOUS]
   docs/superpowers/specs/2026-08-17-update-health-verdict-decoupling-design.md · relation: conceptually_related_to
+- `Spec — une panne de détection doit être VISIBLE, pas seulement inoffensive (2026-08-14, crawler-service)` → `Explicitly out of scope (§5): the 15% threshold, untouched before the §4 measurement; the materiality floor, discarded at §3 because it repairs nothing; MICRO mode (maxAbsErrors / maxAbsRedirects / maxAbsNew) which is DEAD CODE — isMicroMode is never set true (main.ts:984 commented) — and must not be woken in passing, since reviving inert code changes behaviour rather than repairing it; the BO-side lock, because repairing the breaker stems the flux but frees NONE of the 121 already-locked domains, a distinct BO lot that must not ship before the flux is stemmed or the work is paid for twice; and the replay of a stale _callback_payload.json, a second path by which a webhook can carry circuitBreaker without any breaker having tripped on that run — unmeasured, discriminant being details_json.date_start against the run's own date_start.`  [AMBIGUOUS]
+  docs/superpowers/specs/2026-08-24-circuit-breaker-error-rate-design.md · relation: conceptually_related_to
 - `reportLiteral()` → `Report shape - the BO reads health, message, metrics.* and rates.*, never mode nor thresholds; rates.redirect_rate is consumed one hop away feeding the maintenance detector, so rates must keep its current keys and meaning. mode becomes the literal GRADUATED, key retained. New and additive: metrics.accounted, rates.coverage, thresholds.min_coverage, thresholds.max_abs_new, thresholds.disabled_signals - the last one because without it a HEALTHY verdict is indistinguishable from a verdict whose checks were off. Naming: TS key minCoverage, JSON field min_coverage; both spellings intentional, do not unify.`  [AMBIGUOUS]
   docs/superpowers/specs/2026-08-17-update-health-verdict-decoupling-design.md · relation: conceptually_related_to
+- `collapsedSeenBase.ts` → `Implementation plan 2026-08-24 — Circuit Breaker Error Rate. Goal: make the update-mode error-rate breaker decide on an ACTUAL PROPORTION, so it stops manufacturing permanently-locked domains out of runs it stopped on a number greater than 100%. Architecture: extract the inline rate computation from routes.ts into a pure unit-tested errorRateBreaker.ts, mirroring the externalRedirectBreaker.ts / terminalFailure.ts precedent; the denominator becomes processed + errors_unprocessed, where a NEW counter isolates the half of `errors` that never reached increment("processed"); the sample gate deliberately stays on `processed`. Stack: TypeScript / Node 20, node:test runner, Redis-backed StatsManager, no framework. Four tasks.`  [AMBIGUOUS]
+  docs/superpowers/plans/2026-08-24-circuit-breaker-error-rate.md · relation: conceptually_related_to
+- `Honest limitation of the lot (§8.2): this lot stems the LOCK, not the withholding of deletions. A marginal run that no longer stops will FINISH, so it no longer writes a FAILED row and no longer creates a permanent lock through est_domaine_deja_en_cours() — that is the gain, and it is the reported harm. But its report will still carry the rate computed the old way (§8.1): if that rate exceeds 15% the verdict stays CRITICAL and the BO withholds the destructive actions. The domain stops being locked; its deletions do not apply for all that. Announcing "the 23 marginal runs are recovered" would be false. Measured BO-side with a positive control against a lying grep: BO/script/chatgpt/script_process_update_crawling.php:713 withholds destructive actions by a WHITELIST, not by a per-verdict test — if (!in_array($health_update, ["HEALTHY", "WARNING"], true)) then $appliquer_actions_destructives = false. CRITICAL appears NOWHERE in that file (0 occurrences) while the positive control HEALTHY = 5, so the search does work: every verdict outside the two admitted values — CRITICAL included, and an absent or empty key too — takes the negative branch, meaning CRITICAL withholds destructive actions by the very same line as PENDING_SAMPLE.` → `Task 1 — Correct the spec BEFORE implementing from it. Goal: remove the one false claim in the design authority and record the two findings the implementer needs, so nobody builds errors + processed from the letter of §5. Step 1 replaces the "symétrie exacte" sentence; Step 2 appends a new §8 recording that updateHealthVerdict.ts:69 carries the same defect, deliberately out of scope, and the honest limitation that the fix stops the LOCK and not the withholding of deletions. Verify: grep -c 'symétrie exacte' on the spec must be 0, and grep -c 'updateHealthVerdict.ts:69' must be 1 or more.`  [AMBIGUOUS]
+  docs/superpowers/specs/2026-08-24-circuit-breaker-error-rate-design.md · relation: references
 
 ## Knowledge Gaps
-- **3355 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+3350 more)
+- **3378 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+3373 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **Thin community `graphify-guide-en.md: Limitation: ID collision on sha...`** (1 nodes): `Creates a dictionary of headers for a DLQ message, compatible with both pika and`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.

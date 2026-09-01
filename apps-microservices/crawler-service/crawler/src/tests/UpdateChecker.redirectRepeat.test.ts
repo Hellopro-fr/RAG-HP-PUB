@@ -22,9 +22,12 @@ function makeMockRedisClient() {
     };
 }
 
+// Sensible à l'URL, pas une constante : checkUrl pose désormais DEUX questions
+// d'arguments différents (originalUrl=OLD puis loadedUrl=NEW), et une réponse constante
+// ne peut plus distinguer le scénario que ce fichier teste (OLD hors dataset par construction).
 function makeMockConsolidator(destInDataset: boolean) {
     return {
-        async isInDataset(_url: string) { return destInDataset; },
+        async isInDataset(url: string) { return url === NEW ? destInDataset : false; },
         async cleanup() {},
     };
 }

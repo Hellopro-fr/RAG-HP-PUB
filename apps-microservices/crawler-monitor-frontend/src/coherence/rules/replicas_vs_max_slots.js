@@ -12,12 +12,14 @@ const rule = {
   sources: ['replicas', 'capacity'],
   attachUiHint: { path: '/', label: 'Vue d\'ensemble · Capacity bar' },
   evaluate: ({ replicas, capacity }) => {
-    if (!capacity?.max_global_jobs) return [];
+    // Sources absentes / pas encore alimentees -> non evaluable (null),
+    // ce qui n'est PAS la meme chose que "aucune violation" ([]).
+    if (!capacity?.max_global_jobs) return null;
     const max = capacity.max_global_jobs;
     const alive = Object.values(replicas || {}).filter(
       (r) => r?.replicaId && isReplicaLive(r),
     ).length;
-    if (alive === 0) return []; // cold start — skip
+    if (alive === 0) return null; // cold start : aucun heartbeat recu encore
     if (alive >= max) return []; // OK (over-provisioning is a separate concern)
     return [
       {

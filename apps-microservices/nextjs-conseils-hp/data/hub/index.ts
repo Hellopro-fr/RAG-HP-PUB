@@ -37,16 +37,28 @@ export function listHubPages(): HubPage[] {
 }
 
 /**
- * Décalage d'`id_page_hub` des leads « guide » par rapport aux leads « projet ».
- * La spec guide §5 impose un id DISTINCT de celui du projet (= id de la page) :
- * c'est le seul moyen de séparer les deux types de leads dans les stats.
+ * ⚠️ `guideIdPageHub()` et `GUIDE_LEAD_ID_OFFSET` ont été SUPPRIMÉS le 2026-08-25.
+ *
+ * Le tunnel guide envoyait `id_page_hub = id de la page + 1000` (1001 → 2001)
+ * pour que le back-office distingue ses leads de ceux du questionnaire. Deux
+ * problèmes en production : le BO ne connaissait que les ids 1000-1002, donc les
+ * leads guide arrivaient non rattachés ; et deux identifiants pour une même page
+ * obligeaient chaque lecteur — GA4, BO, requête SQL — à connaître l'astuce.
+ *
+ * Désormais **`id_page_hub` est l'id de l'URL, pour les deux tunnels**.
+ *
+ * La distinction se lit à l'arrivée, sans champ supplémentaire : une demande
+ * SANS ligne dans `hub_demande_reponse` vient du tunnel guide, une demande AVEC
+ * réponses vient du questionnaire. L'API le prévoyait déjà (cf. le commentaire
+ * « certains formulaires n'ont pas de questionnaire » dans `handle_hub_demande`).
+ *
+ * ⚠️ Cette règle repose sur un invariant : **le questionnaire produit toujours au
+ * moins une réponse** — sa première question est obligatoire pour démarrer — et
+ * **le tunnel guide n'en produit aucune**. Ajouter une question au tunnel guide,
+ * ou rendre la première question du questionnaire facultative, casserait la
+ * distinction EN SILENCE. Si l'un des deux devient nécessaire, il faudra alors
+ * un champ explicite dans le payload.
+ *
+ * Côté analytics, rien ne repose sur cet invariant : `hub_group` distingue déjà
+ * `projet` de `guide` sur chaque événement.
  */
-export const GUIDE_LEAD_ID_OFFSET = 1000;
-
-/**
- * `id_page_hub` des leads « guide » d'une page, dérivé de son id réel
- * (ex. page 1000 → guide 2000). Toujours distinct de l'id projet.
- */
-export function guideIdPageHub(pageId: number): number {
-  return pageId + GUIDE_LEAD_ID_OFFSET;
-}

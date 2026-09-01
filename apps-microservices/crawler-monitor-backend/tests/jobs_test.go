@@ -89,3 +89,40 @@ func TestCapacity_Ok(t *testing.T) {
 		t.Errorf("is_full=%v", body["is_full"])
 	}
 }
+
+// TestJobs_WindowKeepsUnparsableStartTime : un start_time illisible n'est pas
+// une date ancienne. Avant le correctif, ParseAnyMs retournait -1 et le job
+// disparaissait de la liste des qu'un ?window= etait demande.
+func TestJobs_WindowKeepsUnparsableStartTime(t *testing.T) {
+	mr, _ := miniredis.Run()
+	t.Cleanup(mr.Close)
+	mr.Set("crawl_job:broken", `{"id":"broken","status":"running","start_time":"pas-une-date"}`)
+	mr.Set("crawl_job:recent", `{"id":"recent","status":"running","start_time":"`+isoNow()+`"}`)
+	mr.Set("crawl_job:old", `{"id":"old","status":"running","start_time":"2020-01-01T00:00:00Z"}`)
+	rs, _ := redisstore.New("redis://" + mr.Addr())
+	cfg := &config.Config{JWTSecret: "test-secret"}
+	srv := httptest.NewServer(httpapi.NewRouter(httpapi.Deps{
+		Config: cfg, RedisStore: rs, AuditStore: &noopAudit{},
+	}))
+	t.Cleanup(srv.Close)
+
+	resp, err := authedGet(srv.URL+"/api/jobs?window=24h", mintToken("admin", "test-secret"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var jobs []map[string]any
+	_ = json.NewDecoder(resp.Body).Decode(&jobs)
+	seen := map[string]bool{}
+	for _, j := range jobs {
+		seen[j["id"].(string)] = true
+	}
+	if !seen["broken"] {
+		t.Error("le job a la date illisible a ete filtre")
+	}
+	if !seen["recent"] {
+		t.Error("le job recent a ete filtre")
+	}
+	if seen["old"] {
+		t.Error("le job de 2020 ne devrait pas passer la fenetre 24h")
+	}
+}

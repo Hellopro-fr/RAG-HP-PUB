@@ -1,31 +1,23 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  XCircle, Clock, ChevronLeft,
+  XCircle, ChevronLeft,
   Globe, Server,
-  Play, Download, ExternalLink, MoreVertical,
-  Settings, Layers, Mail,
-  Cpu, RefreshCw,
+  Play, Download, ExternalLink, ListOrdered,
+  Settings, Mail,
+  Cpu,
 } from 'lucide-react';
 import AdvancedLogViewer from './AdvancedLogViewer';
-import { Button } from './ui/button';
 import Pill from './ui/Pill';
 import AreaChart from './ui/AreaChart';
 import LogLine from './ui/LogLine';
 import KV from './ui/KV';
 import { Card, CardHeader, CardTitle, CardContent } from './ui/card';
 import { useJobPerformanceQuery } from '../hooks/queries';
+import { ACTIVE_JOB_STATUSES, statusTone, statusLabel, isTerminalStatus } from '../lib/constants';
+import { formatApiDate } from '../lib/dates';
 
 /* -- helpers ---------------------------------------------------------------- */
-
-const RUNNING_STATUSES = ['running', 'stopping', 'restarting_oom'];
-
-function statusTone(status) {
-  const s = (status || '').toLowerCase();
-  if (RUNNING_STATUSES.includes(s) || s === 'finished') return 'ok';
-  if (s === 'failed') return 'err';
-  return 'neutral';
-}
 
 function formatDuration(ms) {
   if (ms == null) return null;
@@ -40,25 +32,60 @@ function formatBytes(bytes) {
   return (bytes / 1024 / 1024).toFixed(1) + ' MB';
 }
 
-/** Format an ISO timestamp to "DD/MM/YYYY HH:mm:ss" (fr-style), or "—" */
-function fmtTs(ts) {
-  if (!ts) return '—';
-  try {
-    return new Date(ts).toLocaleString('fr-FR', {
-      day: '2-digit', month: '2-digit', year: 'numeric',
-      hour: '2-digit', minute: '2-digit', second: '2-digit',
-    });
-  } catch {
-    return '—';
-  }
+const TS_FMT = {
+  day: '2-digit', month: '2-digit', year: 'numeric',
+  hour: '2-digit', minute: '2-digit', second: '2-digit',
+};
+
+/** Formate un timestamp API en « JJ/MM/AAAA HH:mm:ss », ou « — ». */
+const fmtTs = (ts) => formatApiDate(ts, TS_FMT);
+
+/*
+ * Configuration du crawl : `job.config` est la forme cible de
+ * /api/jobs/:id/details. Tant que le backend renvoie encore le document brut,
+ * on retombe sur une allowlist de `job.params` — jamais sur `params` en entier,
+ * qui contient des chemins de stockage et des secrets d'appel.
+ */
+const PARAMS_ALLOWLIST = [
+  'crawlMode', 'method', 'typecrawling', 'cms', 'perminute', 'camoufox', 'previousCrawlId',
+];
+
+function buildConfig(job) {
+  const cfg = job.config ?? null;
+  const params = job.params ?? null;
+  const legacy = (key) => (params && PARAMS_ALLOWLIST.includes(key) ? params[key] : undefined);
+  const pick = (key) => cfg?.[key] ?? legacy(key) ?? null;
+  return {
+    depth:           cfg?.depth ?? null,
+    concurrency:     cfg?.concurrency ?? null,
+    queuelimit:      cfg?.queuelimit ?? null,
+    maxErrorRate:    cfg?.maxErrorRate ?? null,
+    perminute:       pick('perminute'),
+    method:          pick('method'),
+    typecrawling:    pick('typecrawling'),
+    cms:             pick('cms'),
+    camoufox:        pick('camoufox'),
+    previousCrawlId: pick('previousCrawlId'),
+    // `config.strategy` EST le crawlMode : le backend mappe params.crawlMode →
+    // strategy (configAllowlist, internal/httpapi/jobs.go). Les deux lignes
+    // « Stratégie » et « Mode » affichaient donc la même valeur deux fois.
+    crawlMode:       cfg?.strategy ?? legacy('crawlMode') ?? job.crawl_mode ?? null,
+  };
 }
+
+/** Statut du callback : forme cible `pending|sent|failed`, repli sur l'ancien code HTTP. */
+const CALLBACK_STATUS = {
+  pending: { tone: 'warn', label: 'En attente' },
+  sent:    { tone: 'ok',   label: 'Envoyé' },
+  failed:  { tone: 'err',  label: 'Échec' },
+};
 
 /* -- KPI Strip -------------------------------------------------------------- */
 
 function KpiCell({ label, value, tone }) {
   const valueClass = tone === 'warn' ? 'text-warn' : 'text-ink-0';
   return (
-    <div className="px-4 py-3 border-r border-hairline last:border-r-0">
+    <div className="px-4 py-3 border-r border-hairline last:border-r-0 min-w-0">
       <div className="text-[10px] font-semibold uppercase tracking-[0.06em] text-ink-3 mb-1">{label}</div>
       <div className={`text-[22px] font-semibold tracking-[-0.025em] tabular-nums font-display ${valueClass}`}>
         {value ?? '—'}
@@ -108,42 +135,21 @@ function SideCard({ icon: Icon, title, children }) {
   );
 }
 
-/* -- Pipeline step row ------------------------------------------------------ */
-
-function PipelineRow({ label, duration, ratio }) {
-  return (
-    <div className="flex items-center gap-2 py-1.5 border-b border-hairline last:border-b-0">
-      <span className="flex-1 text-[12px] text-ink-1">{label}</span>
-      <span className="font-mono text-ink-2 text-[11px] w-14 text-right">{duration ?? '—'}</span>
-      {ratio != null ? (
-        <div className="w-12 h-1 bg-bg-2 rounded flex-shrink-0">
-          <div
-            className="h-full bg-accent rounded"
-            style={{ width: `${Math.min(ratio * 100, 100)}%` }}
-          />
-        </div>
-      ) : (
-        <div className="w-12 h-1 bg-bg-2 rounded flex-shrink-0" />
-      )}
-    </div>
-  );
-}
-
 /* -- Chart wrapper card ----------------------------------------------------- */
 
 function ChartCard({ icon: Icon, title, subtitle, peak, color, data, refLine }) {
   return (
-    <div className="border border-hairline rounded-lg bg-surface p-4">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          {Icon && <Icon size={14} className="text-ink-3" />}
-          <div>
+    <div className="border border-hairline rounded-lg bg-surface p-4 min-w-0">
+      <div className="flex items-center justify-between mb-3 gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          {Icon && <Icon size={14} className="text-ink-3 flex-shrink-0" />}
+          <div className="min-w-0">
             <div className="text-[12px] font-semibold text-ink-1">{title}</div>
             {subtitle && <div className="text-[10px] text-ink-3 mt-0.5">{subtitle}</div>}
           </div>
         </div>
         {peak && (
-          <span className="font-mono text-[12px] font-semibold" style={{ color }}>
+          <span className="font-mono text-[12px] font-semibold flex-shrink-0" style={{ color }}>
             {peak}
           </span>
         )}
@@ -153,15 +159,23 @@ function ChartCard({ icon: Icon, title, subtitle, peak, color, data, refLine }) 
   );
 }
 
-/* -- Ghost button (small, inline) ------------------------------------------ */
+/* -- Toolbar link (small, inline) ------------------------------------------ */
 
-function GhostBtn({ icon: Icon, children, onClick, disabled }) {
+const TOOLBAR_CLS =
+  'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[12px] text-ink-2 hover:text-ink-0 hover:bg-bg-2 border border-hairline transition-colors';
+
+function ToolbarLink({ icon: Icon, to, children }) {
   return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[12px] text-ink-2 hover:text-ink-0 hover:bg-bg-2 border border-hairline transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-    >
+    <Link to={to} className={TOOLBAR_CLS}>
+      {Icon && <Icon size={12} />}
+      {children}
+    </Link>
+  );
+}
+
+function ToolbarBtn({ icon: Icon, children, onClick }) {
+  return (
+    <button onClick={onClick} className={TOOLBAR_CLS}>
       {Icon && <Icon size={12} />}
       {children}
     </button>
@@ -170,15 +184,18 @@ function GhostBtn({ icon: Icon, children, onClick, disabled }) {
 
 /* -- Main component --------------------------------------------------------- */
 
-const TABS = ['Logs', 'Queue', 'Dataset', 'Replay', 'Metrics', 'Callbacks'];
+const TABS = ['Logs', 'Métriques'];
 
 const JobDetails = ({ job, onToggleRaw, showRaw, onSelectJob, token, inline = false }) => {
   const [activeTab, setActiveTab] = useState('Logs');
 
   /* Performance data — always call hook (Rules of Hooks) */
-  const isRunning = RUNNING_STATUSES.includes((job?.status || '').toLowerCase());
+  const isRunning = ACTIVE_JOB_STATUSES.includes((job?.status || '').toLowerCase());
+  // Les métriques ne sont chargées (et pollées) que lorsque l'onglet est ouvert :
+  // /jobs/:id/performance déroule tout l'historique de heartbeats du replica.
   const perfQuery = useJobPerformanceQuery(token, job?.id, {
-    refetchInterval: isRunning ? 15000 : false,
+    jobStatus: job?.status,
+    enabled: activeTab === 'Métriques',
   });
 
   if (!job) return null;
@@ -195,6 +212,7 @@ const JobDetails = ({ job, onToggleRaw, showRaw, onSelectJob, token, inline = fa
   }
 
   const tone = statusTone(job.status);
+  const terminal = isTerminalStatus(job.status);
 
   /* KPI values */
   const stats = job.stats;
@@ -205,72 +223,54 @@ const JobDetails = ({ job, onToggleRaw, showRaw, onSelectJob, token, inline = fa
 
   /* Performance chart data */
   const perfData = perfQuery.data;
-  const ramData = perfData?.points?.map((p) => p.ram / 1024 / 1024) ?? [];
-  const cpuData = perfData?.points?.map((p) => p.cpu * 100) ?? [];
+  const perfPoints = perfData?.points ?? [];
+  const ramData = perfPoints.map((p) => p.ram / 1024 / 1024);
+  const cpuData = perfPoints.map((p) => p.cpu * 100);
   const maxRamMb = perfData?.summary?.total_ram
     ? perfData.summary.total_ram / 1024 / 1024
     : undefined;
 
   /* Peak labels */
-  const peakRam = maxRamMb ? `peak ${maxRamMb.toFixed(1)} MB` : null;
+  const peakRam = maxRamMb ? `pic ${maxRamMb.toFixed(1)} MB` : null;
   const peakCpu = perfData?.summary?.avg_cpu != null
-    ? `avg ${(perfData.summary.avg_cpu * 100).toFixed(0)}%`
+    ? `moy. ${(perfData.summary.avg_cpu * 100).toFixed(0)}%`
     : null;
 
-  /*
-   * Fix 1 — Callback pill condition.
-   * job.callback?.dispatched (future API shape) or job.callback_status === '200'
-   * (alternate shape). If neither is present, the pill is omitted.
-   */
-  const callbackDispatched =
-    job.callback?.dispatched === true || job.callback_status === '200';
+  /* Callback — forme cible { url, failure_url, status }, repli sur l'ancien contrat */
+  const cb = job.callback ?? null;
+  const cbUrl = cb?.url ?? job.callback_url ?? null;
+  const cbFailureUrl = cb?.failure_url ?? null;
+  const cbStatusKey = cb?.status ?? null;
+  const cbMeta = cbStatusKey ? CALLBACK_STATUS[cbStatusKey] : null;
+  const legacyCbOk = job.callback_status === '200' || job.callback_status === 200;
+  const callbackDispatched = cbStatusKey === 'sent' || cb?.dispatched === true || legacyCbOk;
 
-  /*
-   * Fix 3 — Hero sub-line.
-   * replica: job.replica (object) or job.replica_id (string).
-   * region:  job.replica?.region or job.region.
-   * timestamps: start_time / end_time (jobs list) or started_at / finished_at.
-   */
+  /* Hero sub-line — replica + horodatage */
   const replicaId = job.replica?.id ?? job.replica_id ?? null;
-  const replicaRegion = job.replica?.region ?? job.region ?? null;
   const startedAt = fmtTs(job.start_time ?? job.started_at);
-  const finishedAt = fmtTs(job.end_time ?? job.finished_at);
+  const finishedAt = fmtTs(job.finished_at ?? job.end_time);
 
-  /*
-   * Fix 5 — Tab count badges.
-   * Sources from actual job data; omit badge when count is unknown.
-   */
   const tabCounts = {
-    Logs:      job.errors?.length ?? null,
-    Queue:     stats?.requestsTotal ?? null,
-    Dataset:   stats?.requestsFinished ?? null,
-    Replay:    null,
-    Metrics:   null,
-    Callbacks: job.callback ? 1 : null,
+    Logs: job.errors?.length ?? null,
+    Métriques: null,
   };
 
-  /*
-   * Fix 8 — Sidebar configuration.
-   * job.config holds crawler configuration when available.
-   */
-  const cfg = job.config ?? {};
-
-  /*
-   * Fix 8 — Pipeline data.
-   * job.pipeline not yet in API; render placeholder rows when absent.
-   */
-  const pipeline = job.pipeline ?? null;
-  const PIPELINE_STEPS = ['fetch', 'parse', 'deduplicate', 'validate', 'callback'];
-
-  /*
-   * Fix 8 — Callback card.
-   * job.callback expected future shape; job.callback_status is alternate.
-   */
-  const cb = job.callback ?? null;
-  const cbStatus = cb?.status ?? job.callback_status ?? null;
-  const cbLatency = cb?.latency_ms != null ? `${cb.latency_ms}ms` : null;
-  const cbUrl = cb?.url ?? null;
-  const cbOk = cbStatus === '200' || cbStatus === 200;
+  const cfg = buildConfig(job);
+  /* On ne rend que les lignes réellement renseignées : une carte de 12 tirets
+     n'apprend rien et masque les 2 valeurs qui comptent. */
+  const configRows = [
+    ['Mode de crawl',    cfg.crawlMode, true],
+    ['Profondeur',       cfg.depth != null ? String(cfg.depth) : null],
+    ['Concurrence',      cfg.concurrency != null ? `${cfg.concurrency} en parallèle` : null],
+    ['Débit max',        cfg.perminute != null ? `${cfg.perminute}/min` : null],
+    ['Méthode',          cfg.method, true],
+    ['Type de crawl',    cfg.typecrawling, true],
+    ['CMS',              cfg.cms, true],
+    ['Camoufox',         cfg.camoufox != null ? (cfg.camoufox ? 'oui' : 'non') : null],
+    ['Limite queue',     cfg.queuelimit != null ? String(cfg.queuelimit) : null],
+    ['Taux erreur max',  cfg.maxErrorRate != null ? String(cfg.maxErrorRate) : null],
+    ['Crawl précédent',  cfg.previousCrawlId, true],
+  ].filter(([, value]) => value != null && value !== '');
 
   /*
    * Visibilité des sections — une section est masquée tant que TOUTES ses
@@ -284,16 +284,15 @@ const JobDetails = ({ job, onToggleRaw, showRaw, onSelectJob, token, inline = fa
     throughput,
     formatBytes(stats?.totalBytes),
   ].some((v) => v != null);
-  const hasConfig = [cfg.strategy, cfg.depth, cfg.concurrency, cfg.user_agent ?? cfg.userAgent, cfg.respect_robots, cfg.timeout_ms ?? cfg.timeout, cfg.retries, cfg.cron ?? job.cron].some((v) => v != null);
-  const hasCallbackInfo = cbStatus != null || cbUrl != null || cbLatency != null;
+  const hasCallbackInfo = cbUrl != null || cbFailureUrl != null || cbMeta != null || legacyCbOk;
 
   /* -- render --------------------------------------------------------------- */
   return (
-    <div>
+    <div className="min-w-0">
       {/* HERO */}
-      <div className="mb-5">
+      <div className="mb-5 min-w-0">
         {/* Row 1: back button + status pills */}
-        <div className="flex items-center gap-3 mb-2">
+        <div className="flex items-center gap-3 mb-2 flex-wrap">
           {!inline && (
             <button
               onClick={() => onSelectJob?.(null)}
@@ -306,11 +305,11 @@ const JobDetails = ({ job, onToggleRaw, showRaw, onSelectJob, token, inline = fa
           )}
 
           <Pill tone={tone} dot={isRunning} pulse={isRunning}>
-            {job.status}
+            {statusLabel(job.status)}
           </Pill>
 
           {job.crawl_mode && (
-            <Pill tone="accent">
+            <Pill tone="info">
               {job.crawl_mode === 'update' ? 'Update' : 'Standard'}
             </Pill>
           )}
@@ -319,73 +318,44 @@ const JobDetails = ({ job, onToggleRaw, showRaw, onSelectJob, token, inline = fa
             <Pill tone="warn">{job.oom_restart_count} OOM</Pill>
           )}
 
-          {/* Fix 1: callback dispatched pill — shown only when API confirms dispatch */}
           {callbackDispatched && (
-            <Pill tone="neutral">callback dispatched</Pill>
+            <Pill tone="neutral">callback envoyé</Pill>
           )}
         </div>
 
-        {/* Row 2: full job ID + action buttons */}
-        {/* Fix 2: full ID with # in ink-3; Fix 4: right-aligned actions */}
-        <div className="flex items-start justify-between gap-4 flex-wrap sm:flex-nowrap">
-          {/* Fix 2 */}
-          <h2 className="font-mono text-[30px] font-semibold tracking-[-0.03em] leading-tight">
+        {/* Row 2: job ID + toolbar */}
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <h2 className="font-mono text-[20px] font-semibold tracking-[-0.02em] leading-tight break-all min-w-0">
             <span className="text-ink-3 font-normal">#</span>
             <span className="text-ink-0">{job.id}</span>
           </h2>
 
-          {/* Fix 4: action buttons */}
-          <div className="flex items-center gap-1.5 flex-shrink-0 mt-1">
-            {inline && (
-              <Link
-                to={`/jobs/${job.id}`}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[12px] text-ink-2 hover:text-ink-0 hover:bg-bg-2 border border-hairline transition-colors"
-              >
-                <ExternalLink size={12} />
-                Détail complet
-              </Link>
+          {/* Vues dediees + bascule logs bruts */}
+          <div className="flex items-center gap-1.5 flex-wrap mt-1">
+            <ToolbarLink icon={ListOrdered} to={`/jobs/${job.id}/queue`}>Queue</ToolbarLink>
+            <ToolbarLink icon={Download} to={`/jobs/${job.id}/dataset`}>Dataset</ToolbarLink>
+            <ToolbarLink icon={Play} to={`/jobs/${job.id}/replay`}>Replay</ToolbarLink>
+            {onToggleRaw && (
+              <ToolbarBtn icon={ExternalLink} onClick={onToggleRaw}>
+                {showRaw ? 'Vue synthèse' : 'Logs bruts'}
+              </ToolbarBtn>
             )}
-            <GhostBtn icon={Play} onClick={() => console.log('Replay', job.id)}>
-              Replay
-            </GhostBtn>
-            <GhostBtn icon={Download} onClick={() => console.log('Dataset', job.id)}>
-              Dataset
-            </GhostBtn>
-            <GhostBtn
-              icon={ExternalLink}
-              onClick={() => onToggleRaw ? onToggleRaw() : console.log('Logs bruts', job.id)}
-            >
-              Logs bruts
-            </GhostBtn>
-            <button
-              onClick={() => console.log('More', job.id)}
-              className="inline-flex items-center justify-center w-8 h-8 rounded-md text-ink-2 hover:text-ink-0 hover:bg-bg-2 border border-hairline transition-colors"
-              aria-label="Plus d'actions"
-            >
-              <MoreVertical size={14} />
-            </button>
           </div>
         </div>
 
-        {/* Fix 3: sub-line — domain · replica · region · timestamps */}
-        <div className="text-[12px] text-ink-2 mt-2 flex items-center gap-2 flex-wrap font-mono">
+        {/* Sub-line — domain · replica · horodatage */}
+        <div className="text-[12px] text-ink-2 mt-2 flex items-center gap-2 flex-wrap font-mono min-w-0">
           {job.domain && (
             <>
               <Globe size={12} className="text-ink-3 flex-shrink-0" />
-              <span className="text-ink-1">{job.domain}</span>
+              <span className="text-ink-1 break-all">{job.domain}</span>
               <span className="text-ink-3">·</span>
             </>
           )}
-          {(replicaId || replicaRegion) && (
+          {replicaId && (
             <>
               <Server size={12} className="text-ink-3 flex-shrink-0" />
-              {replicaId && <span>{replicaId}</span>}
-              {replicaRegion && (
-                <>
-                  {replicaId && <span className="text-ink-3">—</span>}
-                  <span>{replicaRegion}</span>
-                </>
-              )}
+              <span className="break-all">{replicaId}</span>
               <span className="text-ink-3">·</span>
             </>
           )}
@@ -395,7 +365,7 @@ const JobDetails = ({ job, onToggleRaw, showRaw, onSelectJob, token, inline = fa
 
       {/* KPI STRIP — masqué tant que l'API ne fournit aucune statistique */}
       {hasAnyKpi && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 border border-hairline rounded-lg mb-5">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 border border-hairline rounded-lg mb-5">
           <KpiCell label="URLs crawlées"  value={stats?.requestsTotal ?? null} />
           <KpiCell label="Items extraits" value={stats?.requestsFinished ?? null} />
           <KpiCell
@@ -404,17 +374,16 @@ const JobDetails = ({ job, onToggleRaw, showRaw, onSelectJob, token, inline = fa
             tone={stats?.requestsFailed > 0 ? 'warn' : undefined}
           />
           <KpiCell label="Durée totale"   value={formatDuration(stats?.crawlerRuntimeMillis)} />
-          <KpiCell label="Throughput"     value={throughput} />
-          <KpiCell label="Bandwidth"      value={formatBytes(stats?.totalBytes)} />
+          <KpiCell label="Débit"          value={throughput} />
+          <KpiCell label="Volume"         value={formatBytes(stats?.totalBytes)} />
         </div>
       )}
 
       {/* TABS + SIDEBAR */}
-      <div className="grid gap-5 grid-cols-1 md:grid-cols-[1fr_360px]">
+      <div className="grid gap-5 grid-cols-1 2xl:grid-cols-[1fr_360px]">
 
         {/* Left: tabs */}
-        <div>
-          {/* Fix 5: tab labels with count badges */}
+        <div className="min-w-0">
           <div role="tablist" className="flex border-b border-hairline mb-4 gap-0">
             {TABS.map((tab) => (
               <TabBtn
@@ -427,78 +396,59 @@ const JobDetails = ({ job, onToggleRaw, showRaw, onSelectJob, token, inline = fa
             ))}
           </div>
 
-          <div role="tabpanel" className="min-h-[300px]">
+          <div role="tabpanel" className="min-h-[300px] min-w-0">
 
             {/* Logs */}
             {activeTab === 'Logs' && (
               showRaw ? (
                 <AdvancedLogViewer content={job.rawContent || 'Contenu brut non disponible.'} jobId={job.id} />
-              ) : (
-                <>
-                  {!job.hasStats && !job.stats ? (
-                    <div className="py-12 text-center text-ink-2">
-                      <Clock className={`mx-auto mb-3 h-10 w-10 ${isRunning ? 'animate-spin' : 'text-ink-3'}`} />
-                      <p className="mb-1 text-[13px]">Les statistiques ne sont pas encore disponibles.</p>
-                    </div>
-                  ) : job.errors?.length > 0 ? (
-                    <div className="space-y-1">
-                      {job.errors.slice(0, 50).map((e, i) => (
-                        <LogLine key={i} lvl="err" msg={e} />
-                      ))}
-                      {job.errors.length > 50 && (
-                        <p className="text-[12px] text-ink-3 italic mt-2">
-                          … et {job.errors.length - 50} autres erreurs
-                        </p>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="py-12 text-center text-ink-2">
-                      <p className="text-[13px]">Aucune donnée de log disponible.</p>
-                    </div>
+              ) : job.errors?.length > 0 ? (
+                <div className="space-y-1">
+                  {job.errors.slice(0, 50).map((e, i) => (
+                    <LogLine key={i} lvl="err" msg={e} />
+                  ))}
+                  {job.errors.length > 50 && (
+                    <p className="text-[12px] text-ink-3 italic mt-2">
+                      … et {job.errors.length - 50} autres erreurs
+                    </p>
                   )}
-                </>
+                </div>
+              ) : job.rawContent ? (
+                <div className="py-12 text-center text-ink-2">
+                  <p className="text-[13px] mb-3">Aucune erreur détectée dans le log de ce crawl.</p>
+                  {onToggleRaw && (
+                    <ToolbarBtn icon={ExternalLink} onClick={onToggleRaw}>Logs bruts</ToolbarBtn>
+                  )}
+                </div>
+              ) : (
+                <div className="py-12 text-center text-ink-2">
+                  <p className="text-[13px]">
+                    {isRunning
+                      ? 'Log en cours d’écriture…'
+                      : terminal
+                        ? 'Log du crawl indisponible (job archivé ou stockage purgé).'
+                        : 'Log du crawl indisponible.'}
+                  </p>
+                </div>
               )
             )}
 
-            {/* Queue */}
-            {activeTab === 'Queue' && (
-              <div className="py-6">
-                <Button asChild variant="outline">
-                  <Link to={`/jobs/${job.id}/queue`}>Voir la Queue</Link>
-                </Button>
-              </div>
-            )}
-
-            {/* Dataset */}
-            {activeTab === 'Dataset' && (
-              <div className="py-6">
-                <Button asChild variant="outline">
-                  <Link to={`/jobs/${job.id}/dataset`}>Voir le Dataset</Link>
-                </Button>
-              </div>
-            )}
-
-            {/* Replay */}
-            {activeTab === 'Replay' && (
-              <div className="py-6">
-                <Button asChild variant="outline">
-                  <Link to={`/jobs/${job.id}/replay`}>Voir le Replay</Link>
-                </Button>
-              </div>
-            )}
-
-            {/* Fix 7: Metrics — charts wrapped in ChartCard */}
-            {activeTab === 'Metrics' && (
+            {/* Métriques */}
+            {activeTab === 'Métriques' && (
               perfQuery.isLoading ? (
                 <div className="py-12 text-center text-ink-2 text-[13px]">Chargement des métriques…</div>
               ) : perfQuery.isError ? (
                 <div className="py-12 text-center text-err text-[13px]">Impossible de charger les métriques.</div>
+              ) : perfPoints.length === 0 ? (
+                <div className="py-12 text-center text-ink-2 text-[13px]">
+                  Aucun échantillon de performance pour ce job.
+                </div>
               ) : (
                 <div className="space-y-4">
                   <ChartCard
                     icon={Cpu}
                     title="Mémoire RAM"
-                    subtitle="Replica · last hour"
+                    subtitle="Replica · dernière heure"
                     peak={peakRam}
                     color="var(--accent)"
                     data={ramData}
@@ -507,7 +457,7 @@ const JobDetails = ({ job, onToggleRaw, showRaw, onSelectJob, token, inline = fa
                   <ChartCard
                     icon={Cpu}
                     title="CPU"
-                    subtitle="Replica · last hour"
+                    subtitle="Replica · dernière heure"
                     peak={peakCpu}
                     color="var(--info)"
                     data={cpuData}
@@ -515,90 +465,61 @@ const JobDetails = ({ job, onToggleRaw, showRaw, onSelectJob, token, inline = fa
                 </div>
               )
             )}
-
-            {/* Callbacks */}
-            {activeTab === 'Callbacks' && (
-              <div className="py-12 text-center text-ink-2">
-                <p className="text-[13px]">Callbacks panel</p>
-              </div>
-            )}
           </div>
         </div>
 
-        {/* Right: sidebar — Fix 8: 3 dedicated cards */}
-        <div className="flex flex-col gap-4">
+        {/* Right: sidebar */}
+        <div className="flex flex-col gap-4 min-w-0">
 
           {/* Card A: Configuration — masquée tant que l'API ne fournit aucune valeur */}
-          {hasConfig && (
+          {configRows.length > 0 && (
             <SideCard icon={Settings} title="Configuration">
-              <KV k="Strategy"       v={cfg.strategy ?? null}            mono />
-              <KV k="Depth"          v={cfg.depth != null ? String(cfg.depth) : null} />
-              <KV k="Concurrency"    v={cfg.concurrency != null ? `${cfg.concurrency} parallel` : null} />
-              <KV k="User-agent"     v={cfg.user_agent ?? cfg.userAgent ?? null}  mono />
-              <KV k="Respect robots" v={cfg.respect_robots != null ? (cfg.respect_robots ? 'oui' : 'non') : null} tone={cfg.respect_robots ? 'ok' : undefined} />
-              <KV k="Timeout"        v={cfg.timeout_ms != null ? `${cfg.timeout_ms / 1000}s` : cfg.timeout ?? null} />
-              <KV k="Retries"        v={cfg.retries != null ? `${cfg.retries} max` : null} />
-              <KV k="Cron"           v={cfg.cron ?? job.cron ?? null}    mono />
+              {configRows.map(([label, value, mono]) => (
+                <KV key={label} k={label} v={value} mono={!!mono} />
+              ))}
             </SideCard>
           )}
 
-          {/* Card B: Pipeline — masquée tant que job.pipeline est absent de l'API */}
-          {pipeline && (
-            <SideCard icon={Layers} title="Pipeline">
-              {PIPELINE_STEPS.map((step) => {
-                const s = pipeline ? (pipeline[step] ?? {}) : {};
-                return (
-                  <PipelineRow
-                    key={step}
-                    label={step}
-                    duration={s.duration ?? null}
-                    ratio={s.ratio ?? null}
-                  />
-                );
-              })}
-            </SideCard>
-          )}
-
-          {/* Card C: Callback — masquée sans info callback (le bouton Rejouer est disabled sans cb, donc inutile seul) */}
+          {/* Card B: Callback */}
           {hasCallbackInfo && (
             <SideCard icon={Mail} title="Callback">
               <div className="flex flex-col gap-3">
                 <div className="flex items-center gap-2">
-                  {cbStatus ? (
-                    <>
-                      <Pill tone={cbOk ? 'ok' : 'err'} dot>
-                        {cbOk ? '200 OK' : `Échec${cbStatus ? ` (${cbStatus})` : ''}`}
-                      </Pill>
-                      {cbLatency && (
-                        <span className="font-mono text-[11px] text-ink-2">{cbLatency}</span>
-                      )}
-                    </>
+                  {cbMeta ? (
+                    <Pill tone={cbMeta.tone} dot>{cbMeta.label}</Pill>
+                  ) : legacyCbOk ? (
+                    <Pill tone="ok" dot>200 OK</Pill>
                   ) : (
                     <span className="text-[12px] text-ink-3 font-mono">—</span>
                   )}
                 </div>
 
-                <div className="font-mono text-[11px] text-ink-1 p-2.5 bg-bg-1 rounded-md border border-hairline break-all min-h-[32px]">
-                  {cbUrl ?? '—'}
-                </div>
+                {cbUrl && (
+                  <div>
+                    <div className="text-[10px] uppercase tracking-[0.05em] text-ink-3 mb-1">Succès</div>
+                    <div className="font-mono text-[11px] text-ink-1 p-2.5 bg-bg-1 rounded-md border border-hairline break-all">
+                      {cbUrl}
+                    </div>
+                  </div>
+                )}
 
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={!cb}
-                  onClick={() => console.log('Rejouer callback', job.id)}
-                  className="w-full justify-center gap-1.5 text-[12px]"
-                >
-                  <RefreshCw size={12} />
-                  Rejouer le callback
-                </Button>
+                {cbFailureUrl && (
+                  <div>
+                    <div className="text-[10px] uppercase tracking-[0.05em] text-ink-3 mb-1">Échec</div>
+                    <div className="font-mono text-[11px] text-ink-1 p-2.5 bg-bg-1 rounded-md border border-hairline break-all">
+                      {cbFailureUrl}
+                    </div>
+                  </div>
+                )}
               </div>
             </SideCard>
           )}
 
-          {/* Fallback discret quand aucune métadonnée latérale n'est disponible */}
-          {!hasConfig && !pipeline && !hasCallbackInfo && (
-            <p className="text-[12px] text-ink-3 text-center py-4">Métadonnées de configuration non disponibles pour ce job.</p>
+          {/* Repli discret quand aucune métadonnée latérale n'est disponible */}
+          {configRows.length === 0 && !hasCallbackInfo && (
+            <p className="text-[12px] text-ink-3 text-center py-4">
+              Métadonnées de configuration non disponibles pour ce job.
+            </p>
           )}
 
         </div>

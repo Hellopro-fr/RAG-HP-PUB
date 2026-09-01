@@ -9,7 +9,7 @@
 #                   surface for a CGO-disabled Go binary.
 
 # ---------- builder ----------
-FROM golang:1.24.13-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 ENV CGO_ENABLED=0 \
     GOOS=linux \

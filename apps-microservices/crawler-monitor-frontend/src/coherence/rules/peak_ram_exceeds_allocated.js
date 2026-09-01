@@ -14,7 +14,9 @@ const rule = {
   sources: ['capacityPlanning'],
   attachUiHint: { path: '/capacity-planning', label: 'Capacity Planning · table replicas' },
   evaluate: ({ capacityPlanning }) => {
-    const replicas = capacityPlanning?.replicas ?? [];
+    // Source absente -> non evaluable (null), pas "tout vert".
+    if (!capacityPlanning?.replicas) return null;
+    const replicas = capacityPlanning.replicas;
     const violations = [];
     for (const r of replicas) {
       if (!r.allocated || !r.peak) continue;

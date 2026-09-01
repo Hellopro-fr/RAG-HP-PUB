@@ -715,6 +715,16 @@ l'inventaire exhaustif des points de mesure ; un `dataLayer.push` éparpillé, n
   les événements. `hub_guide_download` est émis par les DEUX tunnels — le
   questionnaire offre aussi le guide.
 
+**`hub_entry_point` — les DEUX tunnels le portent** (depuis le 2026-08-25). Chacun a
+son module d'événement (`lib/hub/guideDialogEvent.ts`, `lib/hub/assistantDialogEvent.ts`)
+qui transporte l'emplacement dans le `detail`, parce qu'il n'existe qu'UNE instance de
+chaque dialog : la provenance ne peut pas être fixée à la construction. Les déclencheurs
+(`GuideButton`, `AssistantButton`) l'exigent en prop — le rendre optionnel garantirait
+qu'on l'oublie sur un bouton et que ses conversions soient attribuées ailleurs, en
+silence. ⚠️ Ne PAS importer un dialog depuis `triggers.tsx` ou `StickyCta.tsx` : ces
+boutons sont rendus dès le chargement, ça annulerait le découpage de bundle. C'est toute
+la raison d'être de ces deux modules minuscules.
+
 **Raccourci « lead déjà connu SUR CETTE PAGE »** (cookie `hub_lead`, liste
 d'`id_page_hub`, cf. `lib/hub/leadEmailCookie.ts`) :
 `GuideDownloadDialog` va directement à l'écran de téléchargement, **sans formulaire
@@ -819,15 +829,19 @@ Objectif : valider la rentabilité du workflow, pas livrer une V1.
   écran de téléchargement (visuel + bouton). Spécificités guide : **pas de
   `reponses`** ; l'étape coordonnées reprend le **même design que le projet**
   (civilité, Prénom + Nom → `nom_prenom` relié par « _ », téléphone `PhoneField`
-  avec indicateur pays → `pays`, code postal ; pas d'adresse). `id_page_hub`
-  **dérivé** de l'id de la page via `guideIdPageHub(page.id)` = `page.id + 1000`
-  (ex. 1000 → 2000), distinct du projet pour séparer les leads en stats.
+  avec indicateur pays → `pays`, code postal ; pas d'adresse).
+  ⚠️ **`id_page_hub` = l'id de l'URL, pour LES DEUX tunnels** (2026-08-25). Le
+  guide envoyait `page.id + 1000` ; le BO ne connaissant que 1000-1002, ses leads
+  arrivaient non rattachés. **La distinction guide/projet se lit à l'ABSENCE de
+  lignes dans `hub_demande_reponse`** — le questionnaire produit toujours au moins
+  une réponse, le guide aucune. Ne pas ajouter de question au tunnel guide sans
+  introduire un champ explicite : la distinction casserait en silence. Détail dans
+  `data/hub/index.ts`.
   La route `/api/demande` rend `reponses`/`adresse` optionnels et déclare
-  `civilite`/`pays`. `fileUrl` du PDF encore à `'#'` (asset à livrer).
+  `civilite`/`pays`.
 - **Lead connu (drapeau cookie), PAR PROJET** : après un enregistrement réel
   (**201**), on ajoute l'`id_page_hub` à un cookie 30 j
-  (`lib/hub/leadEmailCookie.ts`, `hub_lead=1000.1002` — des ids de PAGE, pas de
-  tunnel : les deux tunnels d'une même page partagent le drapeau) — **jamais l'e-mail** (le
+  (`lib/hub/leadEmailCookie.ts`, `hub_lead=1000.1002`) — **jamais l'e-mail** (le
   mail ne part que dans le corps de `POST /api/demande`, pas dans un cookie
   renvoyé à chaque requête). Tant que l'id figure dans la liste :
   `GuideDownloadDialog` va **directement** à l'écran de téléchargement (sans appel,
@@ -846,7 +860,7 @@ Objectif : valider la rentabilité du workflow, pas livrer une V1.
   l'affichage de l'écran de remerciement (guide, pop-up, projet). **No-op tant que
   `fileUrl = '#'`** ; cross-origin nécessitera `Content-Disposition: attachment`.
 - **`LeadPopup` est branché** (2026-07-31) sur le **même parcours guide** que
-  `GuideDownloadDialog` (même `id_page_hub` = `guideIdPageHub(page.id)`, mêmes leads).
+  `GuideDownloadDialog` (même `id_page_hub` = `page.id`, mêmes leads).
   Son écran e-mail garde son design riche (bandeau, livre, pastille) ; le bouton
   est grisé tant que l'e-mail n'est pas valide, puis APPEL 1 → 201 (reconnu)
   téléchargement / 200 → coordonnées → APPEL 2 → téléchargement.

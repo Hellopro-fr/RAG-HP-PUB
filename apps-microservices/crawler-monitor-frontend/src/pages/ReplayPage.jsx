@@ -15,17 +15,18 @@ import {
   Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle,
 } from '../components/ui/sheet';
 import { cn } from '../lib/utils';
+import { parseApiDate, formatApiDate } from '../lib/dates';
 
+/* Horodatages du replay via lib/dates : les points peuvent arriver en epoch ms
+   comme en chaîne sans fuseau, que `new Date()` interprétait en heure locale
+   (décalage d'1 à 2 h) et que Safari rendait « Invalid Date ». */
 const fmtTime = (ts) => {
-  if (!ts) return '';
-  const d = new Date(ts);
+  const d = parseApiDate(ts);
+  if (!d) return '—';
   return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')}`;
 };
 
-const fmtDate = (ts) => {
-  if (!ts) return '';
-  return new Date(ts).toLocaleString('fr-FR');
-};
+const fmtDate = (ts) => formatApiDate(ts, { dateStyle: 'short', timeStyle: 'medium' });
 
 const fmtBytes = (b) => {
   if (!b) return '0 MB';
@@ -51,6 +52,12 @@ const EVENT_STYLES = {
   critical: { surface: 'bg-err-soft border-err/30 text-err', Icon: AlertCircle },
 };
 
+/**
+ * Page autonome de replay d'un job — route `/jobs/:id/replay`.
+ *
+ * Se monte seule dans le <main> de l'AppShell ; l'en-tete porte le titre et le
+ * bouton « Retour au job » qui ramene sur /jobs/:id.
+ */
 const ReplayPage = ({ token }) => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -59,10 +66,10 @@ const ReplayPage = ({ token }) => {
   const query = useJobReplayQuery(token, id);
   const data = query.data;
 
-  const points = data?.points || [];
+  const points = useMemo(() => data?.points || [], [data]);
   const hasPoints = points.length > 1;
-  const events = data?.events || [];
-  const hotZones = data?.hot_zones || [];
+  const events = useMemo(() => data?.events || [], [data]);
+  const hotZones = useMemo(() => data?.hot_zones || [], [data]);
   const totalRamBytes = data?.summary?.total_ram || 0;
 
   const tsStart = hasPoints ? points[0].ts : 0;
@@ -227,7 +234,7 @@ const ReplayPage = ({ token }) => {
           {/* Fix 1a : bouton retour visible (mobile friendly) */}
           <Button variant="ghost" size="sm" onClick={close} className="h-8 gap-1 px-2">
             <ArrowLeft className="h-4 w-4" />
-            <span className="hidden sm:inline">Retour</span>
+            <span className="hidden sm:inline">Retour au job</span>
           </Button>
           <Activity className="h-5 w-5 shrink-0 text-accent" />
           <div className="min-w-0">

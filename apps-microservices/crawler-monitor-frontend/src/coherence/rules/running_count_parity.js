@@ -9,17 +9,21 @@ const rule = {
     'devrait se résoudre au prochain refetch.',
   severity: 'info',
   sources: ['capacity', 'jobs'],
-  attachUiHint: { path: '/', label: 'Vue d\'ensemble · StatCard En cours' },
+  attachUiHint: { path: '/', label: 'Vue d\'ensemble · compteur « En cours »' },
   evaluate: ({ capacity, jobs }) => {
-    if (capacity?.running_jobs == null || !jobs) return [];
+    // Source absente → non évaluable (≠ « tout va bien »).
+    if (capacity?.running_jobs == null || !jobs) return null;
     const backendRunning = capacity.running_jobs;
     const listRunning = jobs.filter((j) => j?.status === 'running').length;
     if (backendRunning === listRunning) return [];
     if (Math.abs(backendRunning - listRunning) <= 1) return []; // race tolerance
     return [
       {
-        message: `CapacityBar indique ${backendRunning} jobs en cours, la liste en affiche ${listRunning} — désync REST`,
+        message: `Le compteur REST indique ${backendRunning} jobs en cours, la liste en affiche ${listRunning} — désync REST`,
         data: {
+          // `kind` est la clé d'hystérésis : elle DOIT rester stable pendant que
+          // les compteurs bougent, sinon la règle ne sonne jamais.
+          kind: 'running_count_mismatch',
           backendRunning,
           listRunning,
           diff: backendRunning - listRunning,

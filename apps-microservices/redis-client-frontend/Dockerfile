@@ -1,7 +1,7 @@
 # Build context = repo root. Preserves libs/auth/node at ../../ relative to the service.
 FROM node:20-alpine AS builder
 WORKDIR /app
-RUN npm install -g pnpm
+RUN npm install -g pnpm@9
 
 # Shared lib (the file: dependency target) + the service, keeping their relative tree.
 COPY libs/auth/node ./libs/auth/node

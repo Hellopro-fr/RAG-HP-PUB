@@ -13,7 +13,7 @@ Variable dataLayer;DL - hub_group;hub_group;projet | guide | engagement - presen
 Variable dataLayer;DL - hub_page_id;hub_page_id;1000 | 1001 | 1002
 Variable dataLayer;DL - hub_page_uri;hub_page_uri;URI PUBLIQUE ex. /lancer-elevage-poules-pondeuses-1000-projet.html - PAS la route interne /hub/<slug>-<id> et PAS de nom d'hote (sinon localhost + ngrok + prod = 3 valeurs pour une meme page)
 Variable dataLayer;DL - step_id;step_id;id metier de la question (budget|volume|delai) - complete step_name sans le remplacer
-Variable dataLayer;DL - id_page_hub;id_page_hub;1000 (projet) / 2000 (guide) - decalage guideIdPageHub
+Variable dataLayer;DL - id_page_hub;id_page_hub;1000 / 1001 / 1002 - id de l'URL pour LES DEUX tunnels (le decalage +1000 du guide a ete supprime le 2026-08-25)
 Variable dataLayer;DL - session_id;session_id;reutilise getHpSessionId() existant - fenetre glissante 30 min
 Variable dataLayer;DL - form_id;form_id;assistant | guide
 Variable dataLayer;DL - hub_entry_point;hub_entry_point;hero | banner_guide | cta_final | bloc_thematique | popup_scroll | sticky_mobile

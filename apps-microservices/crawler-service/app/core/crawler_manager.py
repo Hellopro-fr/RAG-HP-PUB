@@ -669,8 +669,18 @@ class CrawlerManager:
             prev_job_info = await cache_service.get_json(prev_job_key)
             prev_storage = os.path.join(settings.CRAWLER_STORAGE_PATH, previous_crawl_id)
 
+            # The three 400s below are logged, not only returned. Their detail travels in the
+            # HTTP body and nowhere else, and there is no global exception handler in this app —
+            # so an operator reading the logs saw only the 503 capacity rejections that happen
+            # EARLIER in this same function, and never the reason a queued update actually died.
+            # Measured 2026-09-01: five updates had been retrying every ~5 min since 2026-08-10,
+            # all failing on the third branch, with nothing in the log to say so.
             if not prev_job_info and not os.path.isdir(prev_storage):
                 await _rollback_claim(decrement_counter=True)
+                logger.warning(
+                    f"Update crawl '{crawl_id}' rejected (400): previous crawl "
+                    f"'{previous_crawl_id}' not found in Redis or on disk."
+                )
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Previous crawl '{previous_crawl_id}' not found in Redis or on disk."
@@ -679,6 +689,10 @@ class CrawlerManager:
             prev_status = prev_job_info.get("status") if prev_job_info else None
             if prev_status == "failed":
                 await _rollback_claim(decrement_counter=True)
+                logger.warning(
+                    f"Update crawl '{crawl_id}' rejected (400): previous crawl "
+                    f"'{previous_crawl_id}' is in status 'failed'."
+                )
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Previous crawl '{previous_crawl_id}' failed and cannot be used for update mode."
@@ -704,6 +718,18 @@ class CrawlerManager:
                     )
             elif not has_local_data:
                 await _rollback_claim(decrement_counter=True)
+                # The three flags are logged individually because the state is a DEAD END and
+                # which flag is missing says why: the GCS restore above is gated on
+                # archived-or-stashed, so a `finished` blob whose dataset was cleaned up can
+                # never be restored and the update retries forever. That is the state
+                # _repair_archived_status exists to flip — and it is inert while its GCS
+                # allowlist is absent (591 blobs rejected `not_in_gcs_list`, measured 2026-09-01).
+                logger.warning(
+                    f"Update crawl '{crawl_id}' rejected (400): previous crawl "
+                    f"'{previous_crawl_id}' has no dataset files on disk "
+                    f"(status={prev_status!r}, stashed={stashed}, datasets_dir={prev_datasets_dir}). "
+                    f"Neither archived nor stashed, so the GCS restore path was not taken."
+                )
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Previous crawl '{previous_crawl_id}' has no dataset files on disk "
