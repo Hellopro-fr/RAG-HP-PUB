@@ -1,12 +1,12 @@
-# Graph Report - crawler-service (corpus-capped sample gate)  (2026-08-31)
+# Graph Report - docs (two BDD table docs)  (2026-09-02)
 
 ## Corpus Check
-- 3 files · ~0 words
+- 2 files · ~0 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 11764 nodes · 27994 edges · 224 communities detected
-- Extraction: 64% EXTRACTED · 36% INFERRED · 0% AMBIGUOUS · INFERRED: 10011 edges (avg confidence: 0.61)
+- 11841 nodes · 28159 edges · 224 communities detected
+- Extraction: 64% EXTRACTED · 36% INFERRED · 0% AMBIGUOUS · INFERRED: 10038 edges (avg confidence: 0.61)
 - Token cost: 0 input · 0 output
 
 ## Community Hubs (Navigation)
@@ -255,7 +255,7 @@
 - `Drain orphaned Playwright protocol callbacks; report everything else.      A c` --semantically_similar_to--> `Change 2 — the service's first set_exception_handler, narrow on three axes`  [INFERRED] [semantically similar]
   apps-microservices/api-detection-langue-fr/main.py → docs/superpowers/specs/2026-08-05-detection-orphaned-goto-callback-flood-design.md
 - `retry_on_error is what lets _disconnect_raise fall through to the retry     loo` --semantically_similar_to--> `WHY the retry must be explicit: redis-py defaults to Retry(NoBackoff(), 0) with an empty retry_on_error (verified 5.2.1), so the first command on a reaped socket raises ConnectionError and every cache_service helper swallows it into its default return (None/0/[]/False) — indistinguishable from a real answer; redis is unpinned so the default is whatever pip resolved`  [INFERRED] [semantically similar]
-  libs/common-utils/tests/test_cache_service.py → apps-microservices/crawler-service/CLAUDE.md
+  D:\DevHellopro\Workspaces\RAG-HP-PUB\libs\common-utils\tests\test_cache_service.py → apps-microservices/crawler-service/CLAUDE.md
 - `detect_challenge_page()` --semantically_similar_to--> `The crawler's hand-ported challenge classifier has drifted from the service's 9 families`  [EXTRACTED] [semantically similar]
   apps-microservices/api-detection-langue-fr/app/services/language_detector.py → docs/superpowers/references/2026-07-29-crawler-detection-seam-audit.md
 
@@ -315,7 +315,7 @@ Nodes (102): CollectionName, Enum, CollectionNameGraph, Enum for the possible co
 
 ### Community 3 - "CrawlerManager Tests (manager & stash)"
 Cohesion: 0.0
-Nodes (770): str, DLQPropertiesAsync, create_dlq_headers(), create_dlq_message(), CrawlerManager, mock_cache_service(), TestStaleHandlerCounter, test_stale_handler_decrements_counter() (+762 more)
+Nodes (775): str, DLQPropertiesAsync, create_dlq_headers(), create_dlq_message(), CrawlerManager, mock_cache_service(), TestStaleHandlerCounter, test_stale_handler_decrements_counter() (+767 more)
 
 ### Community 86 - "crawler-service: test_admin_job_dump.py"
 Cohesion: 0.67
@@ -435,15 +435,15 @@ Nodes (2): RabbitMQConnection, Crée une connexion RabbitMQ avec un nombre limit
 
 ### Community 12 - "common-utils: Redis Cache Service"
 Cohesion: 0.01
-Nodes (259): Initializes the Redis connection pool.     Connects to Redis using the URL from, Closes the Redis connection pool., Atomically sets a key only if it does not already exist (SET NX).     Returns T, Sets a raw value for a key., Gets the raw string value of a key., Deletes a key from Redis., Gets all keys matching a given prefix using SCAN., Atomically increments a key's value by 1. (+251 more)
+Nodes (270): Initializes the Redis connection pool.     Connects to Redis using the URL from, Closes the Redis connection pool., Atomically sets a key only if it does not already exist (SET NX).     Returns T, Sets a raw value for a key., Gets the raw string value of a key., Deletes a key from Redis., Gets all keys matching a given prefix using SCAN., Atomically increments a key's value by 1. (+262 more)
 
 ### Community 9 - "Crawler Admin & Admission Control"
 Cohesion: 0.01
-Nodes (267): Sets a dictionary for a key, serializing it to JSON., set_json(), Prometheus metrics exposition endpoint., AdmissionController, FastAPI admission-control middleware.  Scope after the crawler carve-out refac, Atomic in-flight counter with a hard max.      Not a semaphore: acquire() does, Try to acquire a slot. Returns True on success, False if saturated., Release a slot. Defensive: does not go below zero. (+259 more)
+Nodes (268): Sets a dictionary for a key, serializing it to JSON., set_json(), Prometheus metrics exposition endpoint., AdmissionController, FastAPI admission-control middleware.  Scope after the crawler carve-out refac, Atomic in-flight counter with a hard max.      Not a semaphore: acquire() does, Try to acquire a slot. Returns True on success, False if saturated., Release a slot. Defensive: does not go below zero. (+260 more)
 
 ### Community 0 - "CrawlerManager Schemas, Archive & Reconcile"
 Cohesion: 0.0
-Nodes (1568): Gets a dictionary for a key, deserializing it from JSON., _count_files_in_dir(), _map_error_to_message(), Safely counts files in a directory, excluding Crawlee metadata., Read isError from _callback_payload.json in the crawl storage dir.     Returns, Flatten a dict/list payload into a list of (key, value) tuples using     PHP-st, Safely counts files in a directory, excluding Crawlee metadata., Publie une mise à jour du statut d'un job sur le canal Pub/Sub de Redis. (+1560 more)
+Nodes (1593): Gets a dictionary for a key, deserializing it from JSON., _count_files_in_dir(), _map_error_to_message(), Safely counts files in a directory, excluding Crawlee metadata., Read isError from _callback_payload.json in the crawl storage dir.     Returns, Flatten a dict/list payload into a list of (key, value) tuples using     PHP-st, Safely counts files in a directory, excluding Crawlee metadata., Publie une mise à jour du statut d'un job sur le canal Pub/Sub de Redis. (+1585 more)
 
 ### Community 58 - "common-utils: TestLuaScripts"
 Cohesion: 0.22
@@ -459,7 +459,7 @@ Nodes (104): _run_gcloud(), check_gcloud_auth(), gcloud_ls(), gcloud_download(),
 
 ### Community 8 - "Async Job Manager & Store"
 Cohesion: 0.01
-Nodes (309): Shared test fixtures.  Since the migration to the shared common_utils Redis po, Gracefully shut down all locally running crawlers on this replica., Gracefully shut down all locally running crawlers on this replica., metrics_endpoint(), root(), Prometheus metrics for api-detection-langue-fr.  Exposed at /metrics. Used to, _generate_url_variants(), Génère les variantes d'URL à essayer quand l'URL originale échoue.      Bascul (+301 more)
+Nodes (310): Shared test fixtures.  Since the migration to the shared common_utils Redis po, Gracefully shut down all locally running crawlers on this replica., Gracefully shut down all locally running crawlers on this replica., metrics_endpoint(), root(), Prometheus metrics for api-detection-langue-fr.  Exposed at /metrics. Used to, _generate_url_variants(), Génère les variantes d'URL à essayer quand l'URL originale échoue.      Bascul (+302 more)
 
 ### Community 94 - "crawler-service: crawler-service failure classif..."
 Cohesion: 0.67
@@ -543,7 +543,7 @@ Nodes (16): Archive Pre-flight Disk Space Check (2026-04-18), Rationale: Diagnos
 
 ### Community 1 - "Crawler Engine Core (main/functions)"
 Cohesion: 0.0
-Nodes (945): verify_api_key(), Verifies the API key if API_KEY is configured in settings.     If API_KEY is not, resetContextState(), makeTmpStorage(), classifyFragment(), recordClassification(), maybeCommitDecision(), writeDecisionFile() (+937 more)
+Nodes (959): verify_api_key(), Verifies the API key if API_KEY is configured in settings.     If API_KEY is not, resetContextState(), makeTmpStorage(), classifyFragment(), recordClassification(), maybeCommitDecision(), writeDecisionFile() (+951 more)
 
 ### Community 60 - "Crawler Engine Core (main/functions)"
 Cohesion: 0.31
@@ -807,7 +807,7 @@ Nodes (3): app_with_admin_router(), Tests for /admin/redis-debug endpoint., Buil
 
 ### Community 25 - "Crawler Auto-Stash Eligibility & Sweep"
 Cohesion: 0.02
-Nodes (109): _reconcile_locked sweep, _is_stash_eligible, Reconciliation Leader Election, Capacity Counter (crawl_jobs:running_count), Rationale: Sweep tars via create_task (no lock hold), Stash one crawl on behalf of the sweep. Swallows 409 (already         stashed /, Stash one crawl on behalf of the sweep. Swallows 409 (already         stashed /, Wipes any persistent state from a prior run of this crawl_id that         would (+101 more)
+Nodes (112): _reconcile_locked sweep, _is_stash_eligible, Reconciliation Leader Election, Capacity Counter (crawl_jobs:running_count), Rationale: Sweep tars via create_task (no lock hold), Stash one crawl on behalf of the sweep. Swallows 409 (already         stashed /, Stash one crawl on behalf of the sweep. Swallows 409 (already         stashed /, Wipes any persistent state from a prior run of this crawl_id that         would (+104 more)
 
 ### Community 90 - "superpowers: Spec: Stash Bind-Mount Pre-Flig..."
 Cohesion: 0.67
@@ -858,8 +858,8 @@ Cohesion: 0.03
 Nodes (82): Dynamic Unit Normalization Design Spec, graph-rag-normalize-unite-service (target service), Redeploy-per-unit pain (FIX 1-16 churn), Five dynamic layers A-E, Layer A pint defines (56 statements), Layer B UNIT_TO_DIMENSION (200 keys), Layer C LABEL_TO_DIMENSION (99 ordered keys), Layer D CANONICAL_UNITS (36 entries) (+74 more)
 
 ### Community 28 - "BDD Doc-Enrichment Workflow"
-Cohesion: 0.04
-Nodes (74): BDD doc-enrichment workflow (design spec), BDD doc-enrichment workflow (implementation plan), BDD doc-enrichment runbook, Objective: reusable code-free table doc-enrichment process, MCP 'Table BDD' system (read-only MySQL exposure to LLM), Six bdd_* MCP tools (read-only), bdd_list_tables tool, bdd_describe_table tool (+66 more)
+Cohesion: 0.03
+Nodes (89): BDD doc-enrichment workflow (design spec), BDD doc-enrichment workflow (implementation plan), BDD doc-enrichment runbook, Objective: reusable code-free table doc-enrichment process, MCP 'Table BDD' system (read-only MySQL exposure to LLM), Six bdd_* MCP tools (read-only), bdd_list_tables tool, bdd_describe_table tool (+81 more)
 
 ### Community 112 - "crawler-service: test_timing_summary_tool.ts"
 Cohesion: 1.0
@@ -1282,7 +1282,7 @@ Nodes (34): parser_fenetres(), _heure_utc(), est_heure_pleine(), libelle_fenetre
   docs/superpowers/specs/2026-08-24-circuit-breaker-error-rate-design.md · relation: references
 
 ## Knowledge Gaps
-- **3378 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+3373 more)
+- **3416 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+3411 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **Thin community `graphify-guide-en.md: Limitation: ID collision on sha...`** (1 nodes): `Creates a dictionary of headers for a DLQ message, compatible with both pika and`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
