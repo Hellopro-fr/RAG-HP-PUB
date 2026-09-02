@@ -392,7 +392,7 @@ export const docServers: DocServer[] = [
     name: "SEMrush",
     description: "Données SEO et SEM : mots-clés, backlinks, concurrents, annonces et analyses de domaines.",
     icon: "/images/servers/semrush.svg",
-    toolsCount: 16,
+    toolsCount: 23,
     configGuide: {
       authType: "Clé API",
       steps: [
