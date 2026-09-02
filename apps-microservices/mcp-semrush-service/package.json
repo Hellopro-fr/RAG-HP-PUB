@@ -1,4 +1,7 @@
 {
   "name": "mcp-semrush-service",
-  "private": true
+  "private": true,
+  "scripts": {
+    "test": "node --test"
+  }
 }
