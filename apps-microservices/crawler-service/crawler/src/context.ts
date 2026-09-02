@@ -161,6 +161,22 @@ export const context = {
     // qm_strip (cap QM_COLLAPSED_CAP, partagé) ne sont pas comptés ici : ils ne nourrissent
     // jamais ce fichier.
     qmCollapsedRejected: 0,
+    // Clés (collapsed, base) DÉJÀ enregistrées, une carte par classe de plafond. Elles
+    // existent pour que `qmCollapsedRejected` compte une POPULATION et non des ÉVÉNEMENTS.
+    //
+    // MESURÉ le 2026-09-02 sur les 4 domaines que la troncature a bloqués : `filter_on_seen`
+    // est enregistré depuis TROIS points (functions.ts prenav, routes.ts dequeue, routes.ts
+    // enqueue) et le dernier est dans la boucle d'enqueue — un lien paramétré présent dans un
+    // menu est donc ré-enregistré une fois par page crawlée. Sur tools-trails.com : 45 662
+    // enregistrements pour **4** paires distinctes ; sur maneko.fr, 5 389 pour **1**. Le
+    // budget de 4 000 partait en répétitions, puis chaque enregistrement suivant déclarait une
+    // troncature, et le BO fermait toute la phase destructive du run sur ce signal faux.
+    //
+    // Deux ensembles et non un : les deux classes ont des plafonds distincts (4000 contre 200),
+    // donc `size` doit être lisible par classe en O(1). C'est aussi ce qui remplace le
+    // `.filter().length` recalculé à chaque appel — O(n²) sur le nombre d'appels.
+    qmCollapsedSeenKeys: new Set<string>(),
+    qmCollapsedOtherKeys: new Set<string>(),
     // Queue-purge #1: per-base distinct query-signature counter (facet cap). In-memory.
     facetVariantCount: new Map<string, Set<string>>(),
     // Queue-purge #2: normalized bases (baseKeyAbsent) already crawled — the seen oracle.
