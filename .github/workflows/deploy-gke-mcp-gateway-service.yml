@@ -1,0 +1,30 @@
+name: 'Deploy GKE — mcp-gateway-service (CD shadow)'
+
+# CD shadow GKE (CD3.b, réplique du pilote product-processor). Déclencheur = branche `prod`
+# (push = merge de PR poc→prod). Redéploie l'image corrigée (REM-2 grpc) sur le Deployment
+# shadow B1 `mcp-gateway-service` (ns apps-microservices) via `kubectl set image`.
+# Shadow uniquement — zéro impact VM. Path-filter = ce service + ce wrapper (JAMAIS le
+# réutilisable deploy-gke-service.yml → évite le mass-trigger F-HP-CI-001).
+
+on:
+  push:
+    branches: [prod]
+    paths:
+      - 'apps-microservices/mcp-gateway-service/**'
+      - '.github/workflows/deploy-gke-mcp-gateway-service.yml'
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/deploy-gke-service.yml
+    with:
+      service_name: mcp-gateway-service
+      dockerfile: apps-microservices/mcp-gateway-service/Dockerfile
+      build_context: .
+      deployment: mcp-gateway-service
+      container: mcp-gateway-service
+      namespace: apps-microservices
