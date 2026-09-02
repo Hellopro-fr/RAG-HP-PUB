@@ -1428,7 +1428,9 @@ export const generateUpdateReport = async (domain: string) => {
 
         const cb = context.config.circuitBreaker;
 
-        const healthStats = { processed, errors, redirects, newUrls, accounted, previousTotal: cb.previousTotal };
+        // errorsUnprocessed is part of the error DENOMINATOR (updateHealthVerdict.ts).
+        // It is read at :1427 above and must be passed, not recomputed.
+        const healthStats = { processed, errors, errorsUnprocessed, redirects, newUrls, accounted, previousTotal: cb.previousTotal };
         const { errorRate, redirectRate, growthRate } = updateHealthRates(healthStats);
         const verdict = decideUpdateHealth(healthStats, cb);
 
