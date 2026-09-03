@@ -35,8 +35,8 @@ describe('peak_ram_exceeds_allocated', () => {
     expect(result[0].data.ratio).toBeCloseTo(1.2);
   });
 
-  it('returns [] when capacityPlanning is null', () => {
-    expect(rule.evaluate({ capacityPlanning: null })).toEqual([]);
+  it('returns null (indeterminate) when capacityPlanning is null', () => {
+    expect(rule.evaluate({ capacityPlanning: null })).toBeNull();
   });
 
   it('skips replicas with missing allocated or peak', () => {

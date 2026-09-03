@@ -294,3 +294,65 @@ async def test_set_json_nx_returns_false_when_key_exists(reset_cache_service):
     reset_cache_service.redis_client = fake
 
     assert await reset_cache_service.set_json_nx("k", {"a": 1}) is False
+
+
+# ---------------------------------------------------------------------------
+# scan_keys_by_prefix must pass COUNT
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_scan_keys_by_prefix_passes_count(reset_cache_service):
+    """The SCAN must carry an explicit COUNT.
+
+    Without it redis-py sends COUNT=10, and since COUNT bounds the keys EXAMINED
+    rather than returned, a prefix search on a shared Redis walks the whole
+    keyspace ten at a time. Measured 2026-09-02: the crawler route built on this
+    helper never answered (http=000 after a 900s cap) while a sibling route
+    answered in 0.54s and zero crawls were running.
+
+    This asserts the ABSENCE of a default, which is the whole defect -- a test on
+    the returned keys would pass just as well with COUNT=10.
+    """
+    cache_service = reset_cache_service
+    seen = {}
+
+    async def _scan_iter(match=None, count=None):
+        seen["match"] = match
+        seen["count"] = count
+        for key in ("crawl_job:a", "crawl_job:b"):
+            yield key
+
+    client = MagicMock()
+    client.scan_iter = _scan_iter
+    cache_service.redis_client = client
+
+    keys = await cache_service.scan_keys_by_prefix("crawl_job:")
+
+    assert keys == ["crawl_job:a", "crawl_job:b"]
+    assert seen["match"] == "crawl_job:*"
+    assert seen["count"] is not None, "SCAN sent without COUNT -- redis-py defaults to 10"
+    assert seen["count"] == cache_service.SCAN_COUNT
+    assert cache_service.SCAN_COUNT >= 100, (
+        "a COUNT under 100 defeats the purpose on a shared keyspace"
+    )
+
+
+@pytest.mark.asyncio
+async def test_scan_keys_by_prefix_returns_empty_on_error(reset_cache_service):
+    """A Redis failure yields [] -- callers cannot tell it from "no keys".
+
+    Pinned because two crawler consumers treat the empty list as "nothing to
+    do": the swallowing is deliberate, and changing it is a caller-visible
+    decision, not a cleanup.
+    """
+    cache_service = reset_cache_service
+
+    async def _boom(match=None, count=None):
+        raise RuntimeError("redis down")
+        yield  # pragma: no cover
+
+    client = MagicMock()
+    client.scan_iter = _boom
+    cache_service.redis_client = client
+
+    assert await cache_service.scan_keys_by_prefix("crawl_job:") == []

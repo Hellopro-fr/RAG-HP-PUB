@@ -8,6 +8,9 @@ import { TimingRecorder } from "./class/TimingRecorder.js";
 import { DetectionLangueClient } from "./class/DetectionLangueClient.js";
 import { ContentExtractorClient } from "./class/ContentExtractorClient.js";
 import { PlaywrightCrawler } from "crawlee";
+// Type-only: qmConsumptionSkip.ts imports `context` at the value level, so a value-level
+// import here would be circular. `import type` is erased at compile time — no cycle.
+import type { CollapseOrigin, CollapseGate } from "./qmConsumptionSkip.js";
 
 export const context = {
     dedupManager: null as DedupManager | null,
@@ -150,7 +153,30 @@ export const context = {
     // Phase-2 QM collapsed-param audit (spec 2026-06-29). In-memory, per-crawl.
     // Populated by the consumption skip (Part C): a queued ?param= variant that
     // collapsed onto an already-seen base = a route-loss candidate to re-crawl-audit.
-    qmCollapsed: [] as Array<{ collapsed: string; base: string; param: string }>,
+    qmCollapsed: [] as Array<{ collapsed: string; base: string; param: string; origin: CollapseOrigin; gate: CollapseGate }>,
+    // Entrées `filter_on_seen` refusées par SEEN_BASE_COLLAPSED_CAP — SEUL l'origine admise
+    // est comptée ici (qmConsumptionSkip.ts) : c'est ce compteur qui alimente
+    // `truncated_by_cap` dans collapsed_seen_base.jsonl, et un plafond muet sur CE canal se
+    // lirait comme « il n'y avait rien de plus » à retirer côté BO. Les refus facet_cap/
+    // qm_strip (cap QM_COLLAPSED_CAP, partagé) ne sont pas comptés ici : ils ne nourrissent
+    // jamais ce fichier.
+    qmCollapsedRejected: 0,
+    // Clés (collapsed, base) DÉJÀ enregistrées, une carte par classe de plafond. Elles
+    // existent pour que `qmCollapsedRejected` compte une POPULATION et non des ÉVÉNEMENTS.
+    //
+    // MESURÉ le 2026-09-02 sur les 4 domaines que la troncature a bloqués : `filter_on_seen`
+    // est enregistré depuis TROIS points (functions.ts prenav, routes.ts dequeue, routes.ts
+    // enqueue) et le dernier est dans la boucle d'enqueue — un lien paramétré présent dans un
+    // menu est donc ré-enregistré une fois par page crawlée. Sur tools-trails.com : 45 662
+    // enregistrements pour **4** paires distinctes ; sur maneko.fr, 5 389 pour **1**. Le
+    // budget de 4 000 partait en répétitions, puis chaque enregistrement suivant déclarait une
+    // troncature, et le BO fermait toute la phase destructive du run sur ce signal faux.
+    //
+    // Deux ensembles et non un : les deux classes ont des plafonds distincts (4000 contre 200),
+    // donc `size` doit être lisible par classe en O(1). C'est aussi ce qui remplace le
+    // `.filter().length` recalculé à chaque appel — O(n²) sur le nombre d'appels.
+    qmCollapsedSeenKeys: new Set<string>(),
+    qmCollapsedOtherKeys: new Set<string>(),
     // Queue-purge #1: per-base distinct query-signature counter (facet cap). In-memory.
     facetVariantCount: new Map<string, Set<string>>(),
     // Queue-purge #2: normalized bases (baseKeyAbsent) already crawled — the seen oracle.

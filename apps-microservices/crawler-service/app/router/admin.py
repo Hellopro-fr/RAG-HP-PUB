@@ -349,6 +349,7 @@ _SIDECAR_WHITELIST = frozenset({
     "_questionmark_decision.json", "_questionmark_observations.json",
     "_questionmark_audit.json",
     "_canonical_dedup_audit.json",
+    "collapsed_seen_base.jsonl",
 })
 
 

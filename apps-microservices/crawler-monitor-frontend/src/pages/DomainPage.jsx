@@ -12,27 +12,53 @@ import {
   Tooltip, TooltipTrigger, TooltipContent,
 } from '../components/ui/tooltip';
 import Pill from '../components/ui/Pill';
+import { statusTone, statusLabel, windowLabel } from '../lib/constants';
+import { formatApiDate } from '../lib/dates';
 import { cn } from '../lib/utils';
 
 const WINDOW_OPTIONS = ['24h', '7d', '30d'];
 
-const STATUS_META = {
-  finished:       { tone: 'ok',      text: 'Succes',   Icon: CheckCircle },
-  failed:         { tone: 'err',     text: 'Echec',    Icon: XCircle },
-  running:        { tone: 'ok',      text: 'En cours', Icon: RefreshCw, dot: true, pulse: true },
-  stopping:       { tone: 'warn',    text: 'Arret',    Icon: AlertTriangle },
-  archived:       { tone: 'neutral', text: 'Archive',  Icon: Archive },
-  restarting_oom: { tone: 'warn',    text: 'OOM',      Icon: RotateCcw },
+/* Le ton et le libelle d'un statut viennent de lib/constants (table unique) ;
+   la page n'ajoute que l'icone propre a chaque statut. */
+const STATUS_ICONS = {
+  finished:       CheckCircle,
+  failed:         XCircle,
+  running:        RefreshCw,
+  starting:       RefreshCw,
+  stopping:       AlertTriangle,
+  stopped:        AlertTriangle,
+  archived:       Archive,
+  restarting_oom: RotateCcw,
 };
 
-const fmtDate = (s) => s ? new Date(s).toLocaleString('fr-FR') : '—';
+const LIVE_STATUSES = ['running', 'starting', 'stopping', 'restarting_oom'];
+
+function statusMeta(status) {
+  const key = String(status ?? '').toLowerCase();
+  const live = LIVE_STATUSES.includes(key);
+  return {
+    tone: statusTone(key),
+    text: statusLabel(key),
+    Icon: STATUS_ICONS[key] ?? Clock,
+    dot: live,
+    pulse: live,
+  };
+}
+
+const fmtDate = (s) => formatApiDate(s, { dateStyle: 'short', timeStyle: 'medium' });
+
+/** Identifiant de job tronque, uniformement sur 12 caracteres. */
+const shortId = (id) => {
+  const str = String(id ?? '');
+  return str.length > 12 ? `${str.slice(0, 12)}…` : str;
+};
 
 const HEAD_TOOLTIPS = {
-  when:   'Date et heure de demarrage du job',
-  job:    'Identifiant du job (tronque - clique la ligne pour ouvrir la page detail)',
-  status: 'Statut courant du job (finished/failed/running/...)',
-  mode:   'Mode de crawl : "update" (incremental) ou standard',
-  oom:    'Out Of Memory - nombre de redemarrages suite a un depassement memoire',
+  when:   'Date et heure de démarrage du job',
+  job:    'Identifiant du job (tronqué — cliquez la ligne pour ouvrir le détail)',
+  status: 'Statut courant du job (terminé / échec / en cours…)',
+  mode:   'Mode de crawl : « update » (incrémental) ou standard',
+  oom:    'Out Of Memory — nombre de redémarrages suite à un dépassement mémoire',
 };
 
 const HeadWithTip = ({ tip, className, children }) => (
@@ -57,7 +83,7 @@ const KpiCell = ({ label, value, valueClass = 'text-ink-0' }) => (
 
 const ChainNode = ({ entry, isFirst }) => {
   if (!entry || !entry.id) return null;
-  const meta = STATUS_META[(entry.status || '').toLowerCase()] || { tone: 'neutral', text: entry.status, Icon: Clock };
+  const meta = statusMeta(entry.status);
   const Icon = meta.Icon;
 
   const bubbleClass = {
@@ -91,10 +117,10 @@ const ChainNode = ({ entry, isFirst }) => {
         <Icon className={cn('h-5 w-5', iconClass)} />
       </div>
       <div className="max-w-[110px] truncate font-mono text-xs text-ink-0">
-        <span title={String(entry.id || '')}>#{String(entry.id || '').slice(0, 10)}</span>
+        <span title={String(entry.id || '')}>#{shortId(entry.id)}</span>
       </div>
       <div className="text-[10px] text-ink-3">
-        {String(fmtDate(entry.start_time) || '').slice(0, 16)}
+        {fmtDate(entry.start_time)}
       </div>
       {entry.crawl_mode === 'update' && (
         <span className="rounded bg-accent-soft px-1 text-[9px] text-accent-ink">update</span>
@@ -145,9 +171,9 @@ const DomainPage = ({ token }) => {
   }, [goToJob]);
 
   const overallPill = running > 0
-    ? <Pill tone="ok" dot pulse>En cours</Pill>
+    ? <Pill tone="accent" dot pulse>En cours</Pill>
     : failure > 0
-    ? <Pill tone="err">Echecs recents</Pill>
+    ? <Pill tone="err">Échecs récents</Pill>
     : <Pill tone="neutral">Inactif</Pill>;
 
   return (
@@ -178,7 +204,7 @@ const DomainPage = ({ token }) => {
                       w === period ? 'bg-surface text-ink-0 shadow-sm' : 'text-ink-2 hover:text-ink-1'
                     )}
                   >
-                    {w}
+                    {windowLabel(w)}
                   </button>
                 ))}
               </div>
@@ -186,7 +212,7 @@ const DomainPage = ({ token }) => {
                 onClick={() => query.refetch()}
                 disabled={query.isFetching}
                 className="p-1.5 rounded-md hover:bg-bg-2 text-ink-2"
-                title="Rafraichir"
+                title="Rafraîchir"
                 aria-label="Rafraîchir"
               >
                 <RefreshCw className={cn('h-4 w-4', query.isFetching && 'animate-spin')} />
@@ -196,10 +222,10 @@ const DomainPage = ({ token }) => {
 
           {/* KPI Strip */}
           <div className="grid grid-cols-2 sm:grid-cols-4 border border-hairline rounded-lg mb-5">
-            <KpiCell label="Total jobs"    value={jobs.length}   valueClass="text-ink-0" />
-            <KpiCell label="Success rate"  value={fmtPct(successRate)} valueClass={successRateClass} />
-            <KpiCell label="En cours"      value={running}       valueClass={running > 0 ? 'text-info' : 'text-ink-3'} />
-            <KpiCell label="OOM restarts"  value={oomTotal}      valueClass={oomTotal > 0 ? 'text-warn' : 'text-ink-3'} />
+            <KpiCell label="Jobs"            value={jobs.length}         valueClass="text-ink-0" />
+            <KpiCell label="Taux de succès" value={fmtPct(successRate)} valueClass={successRateClass} />
+            <KpiCell label="En cours"        value={running}             valueClass={running > 0 ? 'text-info' : 'text-ink-3'} />
+            <KpiCell label="Redémarrages OOM" value={oomTotal}          valueClass={oomTotal > 0 ? 'text-warn' : 'text-ink-3'} />
           </div>
         </div>
 
@@ -213,11 +239,11 @@ const DomainPage = ({ token }) => {
         {/* Run chain */}
         <div className="border-b border-hairline px-5 py-4">
           <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.06em] text-ink-3">
-            Run chain (via previous_crawl_id)
+            Chaîne de runs
           </div>
           {chain.length === 0 ? (
             <div className="text-[13px] italic text-ink-2">
-              Pas de chaine - aucune relation previous_crawl_id detectee.
+              Pas de chaîne — aucune relation previous_crawl_id détectée.
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -243,22 +269,22 @@ const DomainPage = ({ token }) => {
             </div>
           ) : jobs.length === 0 ? (
             <div className="py-16 text-center text-[13px] text-ink-2">
-              Aucun job dans la fenetre.
+              Aucun job dans la fenêtre.
             </div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <HeadWithTip tip={HEAD_TOOLTIPS.when}>When</HeadWithTip>
+                  <HeadWithTip tip={HEAD_TOOLTIPS.when}>Quand</HeadWithTip>
                   <HeadWithTip tip={HEAD_TOOLTIPS.job}>Job</HeadWithTip>
-                  <HeadWithTip tip={HEAD_TOOLTIPS.status}>Status</HeadWithTip>
+                  <HeadWithTip tip={HEAD_TOOLTIPS.status}>Statut</HeadWithTip>
                   <HeadWithTip tip={HEAD_TOOLTIPS.mode}>Mode</HeadWithTip>
                   <HeadWithTip tip={HEAD_TOOLTIPS.oom} className="text-right">OOM</HeadWithTip>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {jobs.map(j => {
-                  const meta = STATUS_META[(j.status || '').toLowerCase()] || { tone: 'neutral', text: j.status };
+                  const meta = statusMeta(j.status);
                   return (
                     <TableRow
                       key={j.id}
@@ -272,7 +298,7 @@ const DomainPage = ({ token }) => {
                         {fmtDate(j.start_time)}
                       </TableCell>
                       <TableCell className="text-[12px] py-2 font-mono text-ink-0">
-                        <span title={j.id}>{String(j.id || '').slice(0, 12)}</span>
+                        <span title={j.id}>{shortId(j.id)}</span>
                       </TableCell>
                       <TableCell className="text-[12px] py-2">
                         <Pill tone={meta.tone} dot={!!meta.dot} pulse={!!meta.pulse}>{meta.text}</Pill>

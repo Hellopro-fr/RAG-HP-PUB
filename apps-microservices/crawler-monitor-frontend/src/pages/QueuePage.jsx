@@ -2,11 +2,11 @@ import { useParams, useNavigate } from 'react-router-dom';
 import RequestQueueEditor from '../components/RequestQueueEditor';
 
 /**
- * Full-screen page wrapping the RequestQueueEditor.
- * Path: /jobs/:id/queue — replaces the previous modal that opened from JobDetails.
+ * Page autonome de l'editeur de request queue — route `/jobs/:id/queue`.
  *
- * The editor component is rendered as-is (it already covers the viewport),
- * and onClose navigates back to the parent /jobs/:id.
+ * Ce n'est pas une sous-vue de la vue d'ensemble : la page se monte seule dans
+ * le <main> de l'AppShell. RequestQueueEditor porte son propre en-tete (titre +
+ * bouton « Retour au job »), qui ramene ici sur /jobs/:id.
  */
 const QueuePage = ({ token }) => {
   const { id } = useParams();

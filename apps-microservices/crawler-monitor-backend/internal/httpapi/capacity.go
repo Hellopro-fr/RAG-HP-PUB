@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"errors"
 	"net/http"
 	"time"
 
@@ -16,17 +17,21 @@ var capacityWindowMap = map[string]int64{
 	"1h":  60 * 60 * 1000,
 	"6h":  6 * 60 * 60 * 1000,
 	"24h": 24 * 60 * 60 * 1000,
+	"7d":  7 * 24 * 60 * 60 * 1000,
 }
 
-func parseCapacityWindow(s string) (int64, string) {
+// parseCapacityWindow retourne une erreur sur fenetre inconnue plutot que de
+// retomber silencieusement sur 1h (le graphe affichait alors autre chose que
+// ce que l'utilisateur avait demande).
+func parseCapacityWindow(s string) (int64, string, error) {
 	if s == "" {
 		s = "1h"
 	}
 	ms, ok := capacityWindowMap[s]
 	if !ok {
-		return 60 * 60 * 1000, "1h"
+		return 0, "", errors.New("invalid window: use '15m', '1h', '6h', '24h' or '7d'")
 	}
-	return ms, s
+	return ms, s, nil
 }
 
 func capacityGetHandler(rs *redisstore.Client) http.HandlerFunc {
@@ -48,7 +53,11 @@ func capacityGetHandler(rs *redisstore.Client) http.HandlerFunc {
 // Response: { window, count, points: [{ts, running, max, full}, …] }
 func capacityHistoryHandler(rs *redisstore.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		windowMs, windowStr := parseCapacityWindow(r.URL.Query().Get("window"))
+		windowMs, windowStr, err := parseCapacityWindow(r.URL.Query().Get("window"))
+		if err != nil {
+			WriteError(w, 400, err.Error())
+			return
+		}
 		points, err := rs.ReadCapacityHistory(r.Context(), windowMs)
 		if err != nil {
 			WriteError(w, 500, "Failed to read capacity history")

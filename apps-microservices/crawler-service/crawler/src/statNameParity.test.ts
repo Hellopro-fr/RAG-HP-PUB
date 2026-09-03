@@ -105,3 +105,67 @@ test("generateUpdateReport: the two fields a future BO consumer will depend on a
     assert.match(report, /\bmin_coverage:\s*cb\.minCoverage,/, "report.thresholds.min_coverage");
     assert.match(report, /\bdisabled_signals:\s*verdict\.disabledSignals\b/, "report.thresholds.disabled_signals");
 });
+
+/**
+ * `errors_unprocessed` is the breaker's other denominator term (errorRateBreaker.ts). It has to
+ * reach the report because crawler_manager.py forwards `metrics` wholesale into the BO webhook,
+ * which is the only path by which the number that decided a stop survives the dataset being
+ * archived — /admin/dataset returns 404 on an archived crawl, which is exactly how the
+ * composition of `errors` became unmeasurable during this chantier.
+ *
+ * Pinned by name for the same reason as the fields above: the Python forwards, and the PHP reads,
+ * BY STRING KEY. A rename is tsc-clean, suite-green, and silently inert downstream.
+ */
+test("generateUpdateReport: errors_unprocessed reaches report.metrics", () => {
+    const functions = src("functions.ts");
+    const report = reportLiteral(functions);
+    const metricsStart = report.indexOf("metrics: {");
+    const metrics = report.slice(metricsStart, report.indexOf("}", metricsStart));
+
+    assert.match(
+        metrics,
+        /\berrors_unprocessed:\s*errorsUnprocessed\b/,
+        "report.metrics.errors_unprocessed — without it the breaker's denominator is unreproducible once the dataset is archived",
+    );
+    assert.match(
+        functions,
+        /const\s+errorsUnprocessed\s*=\s*await[^;]*getValue\("errors_unprocessed"\)/,
+        "the reported value must come from the counter itself, not from a literal or a stale local",
+    );
+});
+
+/**
+ * Two different formulas must not answer to one grep.
+ *
+ * errorRateBreaker.ts divides by `processed + errors_unprocessed`; updateHealthVerdict.ts still
+ * divides by `processed` alone (deliberate — correcting it would loosen CRITICAL and so apply MORE
+ * destructive actions; see §8.1 of the design spec). Production logs are grepped by message text,
+ * and the 69-run measurement that justified the whole chantier was taken that way. If the two
+ * messages ever share a prefix again, that grep silently mixes the two formulas and the next
+ * measurement is wrong in a way nobody can see.
+ */
+test("the breaker and the health verdict do not share a message prefix", () => {
+    const breaker = src("errorRateBreaker.ts");
+    const verdict = src("updateHealthVerdict.ts");
+
+    assert.ok(
+        breaker.includes("Error rate too high ("),
+        "errorRateBreaker.ts must keep its grepped prefix — the historical measurement depends on it",
+    );
+
+    // Anchored to the EMITTED strings, not to the file text. A whole-file search is satisfied — or,
+    // as happened when this test was written, broken — by any comment that merely quotes the
+    // forbidden wording. The first draft searched the file and went red on its own explanatory
+    // comment: same unanchored-match defect this suite exists to catch, one file over.
+    const emitted = verdict.match(/statusMessage = `[^`]*`/g) ?? [];
+    assert.ok(
+        emitted.length >= 3,
+        `expected the verdict's statusMessage assignments to be found, got ${emitted.length}`,
+    );
+    for (const message of emitted) {
+        assert.ok(
+            !/error rate too high \(/i.test(message),
+            `updateHealthVerdict.ts must not emit the breaker's wording (case-insensitive) — it still divides by \`processed\` alone: ${message}`,
+        );
+    }
+});

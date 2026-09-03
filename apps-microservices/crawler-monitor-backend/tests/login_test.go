@@ -9,6 +9,7 @@ import (
 	"github.com/Hellopro-fr/crawler-monitor-backend/internal/auth/password"
 	"github.com/Hellopro-fr/crawler-monitor-backend/internal/config"
 	"github.com/Hellopro-fr/crawler-monitor-backend/internal/httpapi"
+	middleware "github.com/Hellopro-fr/crawler-monitor-backend/internal/httpapi/middleware"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -95,5 +96,34 @@ func TestLogin_EmptyBody(t *testing.T) {
 	resp, _ := srv.Client().Post(srv.URL+"/api/login", "application/json", bytes.NewBufferString(""))
 	if resp.StatusCode != 400 {
 		t.Errorf("status=%d, want 400", resp.StatusCode)
+	}
+}
+
+// TestLogin_RateLimited : /api/login a son propre quota (10 req/min par IP).
+// Le quota global (600 / 15 min) laissait toute la place a un bruteforce du
+// mot de passe admin.
+func TestLogin_RateLimited(t *testing.T) {
+	hash, _ := password.Hash("hunter2")
+	srv := newLoginServer(t, hash, &noopAudit{})
+
+	for i := 0; i < middleware.LoginRateLimitMax; i++ {
+		resp, err := srv.Client().Post(srv.URL+"/api/login", "application/json",
+			bytes.NewBufferString(`{"password":"wrong"}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode == 429 {
+			t.Fatalf("tentative %d: 429 avant la limite", i+1)
+		}
+	}
+	resp, err := srv.Client().Post(srv.URL+"/api/login", "application/json",
+		bytes.NewBufferString(`{"password":"hunter2"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 429 {
+		t.Errorf("status = %d, want 429 apres %d tentatives", resp.StatusCode, middleware.LoginRateLimitMax)
 	}
 }

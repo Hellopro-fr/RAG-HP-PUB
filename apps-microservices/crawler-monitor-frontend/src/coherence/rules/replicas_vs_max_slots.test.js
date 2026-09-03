@@ -15,10 +15,10 @@ describe('replicas_vs_max_slots', () => {
     expect(rule.evaluate({ replicas, capacity })).toEqual([]);
   });
 
-  it('returns [] on cold start (no replicas)', () => {
+  it('returns null (indeterminate) on cold start (no replicas)', () => {
     expect(
       rule.evaluate({ replicas: {}, capacity: mkCapacity({ max_global_jobs: 7 }) }),
-    ).toEqual([]);
+    ).toBeNull();
   });
 
   it('flags phantom slots when alive < max', () => {
@@ -44,10 +44,10 @@ describe('replicas_vs_max_slots', () => {
     expect(rule.evaluate({ replicas, capacity })).toEqual([]);
   });
 
-  it('returns [] when capacity data is missing', () => {
+  it('returns null (indeterminate) when capacity data is missing', () => {
     const replicas = mkReplicasDict([mkReplica('r1')]);
-    expect(rule.evaluate({ replicas, capacity: null })).toEqual([]);
-    expect(rule.evaluate({ replicas, capacity: {} })).toEqual([]);
+    expect(rule.evaluate({ replicas, capacity: null })).toBeNull();
+    expect(rule.evaluate({ replicas, capacity: {} })).toBeNull();
   });
 
   it('returns [] when alive exceeds max (over-provisioning, not this rule)', () => {

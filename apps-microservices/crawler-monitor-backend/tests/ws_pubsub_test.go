@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Hellopro-fr/crawler-monitor-backend/internal/store/redisstore"
 	"github.com/Hellopro-fr/crawler-monitor-backend/internal/ws"
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
@@ -16,14 +17,16 @@ func TestWSPubSub_BroadcastsToHub(t *testing.T) {
 	defer mr.Close()
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	defer rdb.Close()
+	rs, _ := redisstore.New("redis://" + mr.Addr())
+	defer rs.Close()
 	hub := ws.NewHub()
 	c := ws.NewClientForTest()
 	hub.Register(c)
-	ps := ws.NewPubSub(rdb, hub, "crawl_updates")
+	ps := ws.NewPubSub(rs, hub, "crawl_updates")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go ps.Run(ctx)
-	time.Sleep(150 * time.Millisecond)
+	waitSubscribed(t, mr, "crawl_updates")
 	rdb.Publish(context.Background(), "crawl_updates", `{"x":1}`)
 	select {
 	case msg := <-c.SendForTest():
@@ -40,14 +43,16 @@ func TestWSPubSub_CrawlUpdateEmitsJobUpdate(t *testing.T) {
 	defer mr.Close()
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	defer rdb.Close()
+	rs, _ := redisstore.New("redis://" + mr.Addr())
+	defer rs.Close()
 	hub := ws.NewHub()
 	c := ws.NewClientForTest()
 	hub.Register(c)
-	ps := ws.NewPubSub(rdb, hub, "crawl_updates")
+	ps := ws.NewPubSub(rs, hub, "crawl_updates")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go ps.Run(ctx)
-	time.Sleep(150 * time.Millisecond)
+	waitSubscribed(t, mr, "crawl_updates")
 	rdb.Publish(context.Background(), "crawl_updates", `{"crawl_id":"abc","status":"finished","timestamp":"2026-06-09T10:00:00Z"}`)
 	select {
 	case raw := <-c.SendForTest():

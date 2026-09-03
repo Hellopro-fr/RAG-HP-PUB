@@ -2,6 +2,7 @@ package ws
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -14,10 +15,33 @@ const (
 	maxMessageSize = 4096
 )
 
-var Upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-	CheckOrigin:     func(r *http.Request) bool { return true },
+// newUpgrader construit un Upgrader dont CheckOrigin valide l'en-tete Origin
+// contre la liste CORS du service. Une liste vide ou contenant "*" accepte
+// tout ; l'absence d'Origin (client non navigateur) est acceptee.
+func newUpgrader(allowedOrigins []string) websocket.Upgrader {
+	return websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		CheckOrigin:     originChecker(allowedOrigins),
+	}
+}
+
+func originChecker(allowed []string) func(*http.Request) bool {
+	return func(r *http.Request) bool {
+		origin := r.Header.Get("Origin")
+		if origin == "" {
+			return true
+		}
+		if len(allowed) == 0 {
+			return true
+		}
+		for _, a := range allowed {
+			if a == "*" || strings.EqualFold(a, origin) {
+				return true
+			}
+		}
+		return false
+	}
 }
 
 type ClientConn struct {

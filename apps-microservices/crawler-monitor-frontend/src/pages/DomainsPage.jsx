@@ -1,8 +1,6 @@
 ﻿import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Globe, RefreshCw, AlertCircle, Search, Filter, Download, Plus,
-} from 'lucide-react';
+import { Globe, RefreshCw, AlertCircle, Search } from 'lucide-react';
 import { useDomainsQuery } from '../hooks/queries';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -10,21 +8,20 @@ import {
 import {
   Tooltip, TooltipTrigger, TooltipContent,
 } from '../components/ui/tooltip';
-import Sparkline from '../components/ui/Sparkline';
 import StatTile from '../components/ui/StatTile';
-import { Button } from '../components/ui/button';
+import { windowLabel } from '../lib/constants';
+import { formatApiDate } from '../lib/dates';
 import { cn } from '../lib/utils';
 
 const WINDOW_OPTIONS = ['24h', '7d', '30d'];
 
 const HEAD_TOOLTIPS = {
-  jobs:    'Nombre total de jobs sur la periode',
-  spark:   'Activite sur 7 jours (donnees non disponibles par domaine)',
-  ok:      'Succes (jobs finished/archived)',
-  ko:      'Echec (failed)',
-  oom:     'Out Of Memory - nombre de redemarrages suite a un depassement memoire',
-  succ:    'Taux de succes sur les jobs termines (finished+archived) / (finished+archived+failed)',
-  lastrun: 'Date et heure du dernier job demarre',
+  jobs:    'Nombre total de jobs sur la période',
+  ok:      'Succès (jobs finished/archived)',
+  ko:      'Échec (failed)',
+  oom:     'Out Of Memory — nombre de redémarrages suite à un dépassement mémoire',
+  succ:    'Taux de succès sur les jobs terminés : (finished+archived) / (finished+archived+failed)',
+  lastrun: 'Date et heure du dernier job démarré',
 };
 
 const HeadWithTip = ({ tip, className, children }) => (
@@ -61,7 +58,6 @@ const DomainsPage = ({ token }) => {
   const paginated = filtered.slice(pageStart, pageEnd);
 
   const fmtPct = (v) => v == null ? '—' : `${(v * 100).toFixed(1)}%`;
-  const fmtDate = (s) => s ? new Date(s).toLocaleString('fr-FR') : '—';
 
   const successColor = (rate) => {
     if (rate == null) return 'text-ink-3';
@@ -72,7 +68,9 @@ const DomainsPage = ({ token }) => {
 
   const totalSuccess = all.reduce((s, d) => s + (d.success || 0), 0);
   const totalFailed  = all.reduce((s, d) => s + (d.failure || 0), 0);
-  const totalJobs    = all.reduce((s, d) => s + (d.total_jobs || 0), 0);
+  // `total_jobs` global si l'API le fournit, sinon somme des lignes.
+  const totalJobs    = query.data?.total_jobs
+    ?? all.reduce((s, d) => s + (d.total_jobs || 0), 0);
   const totalOom     = all.reduce((s, d) => s + (d.oom_total || 0), 0);
 
   const totalFinished = totalSuccess + totalFailed;
@@ -105,7 +103,7 @@ const DomainsPage = ({ token }) => {
             <Globe className="h-5 w-5 text-ink-2 mt-1 flex-shrink-0" />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-3">
-                <h1 className="text-[26px] font-semibold tracking-[-0.025em] text-ink-0 font-display">Domains</h1>
+                <h1 className="text-[26px] font-semibold tracking-[-0.025em] text-ink-0 font-display">Domaines</h1>
                 <span className="font-mono text-[12px] text-ink-3">
                   ({filtered.length}{filtered.length !== all.length ? ` / ${all.length}` : ''})
                 </span>
@@ -113,37 +111,11 @@ const DomainsPage = ({ token }) => {
               <p className="text-[13px] text-ink-2 mt-1">{heroSub}</p>
             </div>
             <div className="flex items-center gap-2 ml-auto flex-shrink-0">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="gap-1.5"
-                onClick={() => console.log('Filtres clicked')}
-              >
-                <Filter className="h-3.5 w-3.5" />
-                Filtres
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="gap-1.5"
-                onClick={() => console.log('Export CSV clicked')}
-              >
-                <Download className="h-3.5 w-3.5" />
-                Export CSV
-              </Button>
-              <Button
-                size="sm"
-                className="gap-1.5"
-                onClick={() => console.log('Ajouter domaine clicked')}
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Ajouter domaine
-              </Button>
               <button
                 onClick={() => query.refetch()}
                 disabled={query.isFetching}
                 className="p-1.5 rounded-md hover:bg-bg-2 text-ink-2"
-                title="Rafraichir"
+                title="Rafraîchir"
                 aria-label="Rafraîchir"
               >
                 <RefreshCw className={cn('h-4 w-4', query.isFetching && 'animate-spin')} />
@@ -181,7 +153,7 @@ const DomainsPage = ({ token }) => {
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-ink-3" />
               <input
                 type="text"
-                placeholder="Filtrer domaines..."
+                placeholder="Filtrer les domaines…"
                 value={search}
                 onChange={e => { setSearch(e.target.value); setPage(0); }}
                 className="w-full h-8 pl-8 pr-3 rounded-md border border-hairline bg-bg-1 text-[12px] text-ink-0 placeholder:text-ink-3 focus:outline-none focus:border-accent"
@@ -197,7 +169,7 @@ const DomainsPage = ({ token }) => {
                     w === period ? 'bg-surface text-ink-0 shadow-sm' : 'text-ink-2 hover:text-ink-1'
                   )}
                 >
-                  {w}
+                  {windowLabel(w)}
                 </button>
               ))}
             </div>
@@ -212,7 +184,7 @@ const DomainsPage = ({ token }) => {
         )}
 
         {/* Table */}
-        <div className="max-h-[65vh] overflow-auto">
+        <div className="max-h-[65vh] overflow-y-auto overflow-x-auto">
           {query.isLoading && all.length === 0 ? (
             <div className="flex items-center justify-center py-16">
               <RefreshCw className="h-6 w-6 animate-spin text-ink-3" />
@@ -221,21 +193,22 @@ const DomainsPage = ({ token }) => {
             <div className="py-16 text-center">
               <Globe className="mx-auto mb-3 h-10 w-10 text-ink-3 opacity-40" />
               <p className="text-[13px] text-ink-2">
-                {search ? `Aucun domaine ne correspond a "${search}".` : 'Aucun domaine sur la periode.'}
+                {search
+                  ? `Aucun domaine ne correspond à « ${search} ».`
+                  : 'Aucun domaine sur la période.'}
               </p>
             </div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="text-[10px] font-semibold uppercase tracking-[0.06em] text-ink-3 h-8 border-b border-hairline">Domain</TableHead>
+                  <TableHead className="text-[10px] font-semibold uppercase tracking-[0.06em] text-ink-3 h-8 border-b border-hairline">Domaine</TableHead>
                   <HeadWithTip tip={HEAD_TOOLTIPS.jobs}    className="text-right">Jobs</HeadWithTip>
-                  <HeadWithTip tip={HEAD_TOOLTIPS.spark}>Activite</HeadWithTip>
                   <HeadWithTip tip={HEAD_TOOLTIPS.ok}      className="text-right">OK</HeadWithTip>
                   <HeadWithTip tip={HEAD_TOOLTIPS.ko}      className="text-right">KO</HeadWithTip>
                   <HeadWithTip tip={HEAD_TOOLTIPS.oom}     className="text-right">OOM</HeadWithTip>
                   <HeadWithTip tip={HEAD_TOOLTIPS.succ}    className="text-right">%</HeadWithTip>
-                  <HeadWithTip tip={HEAD_TOOLTIPS.lastrun}>Last run</HeadWithTip>
+                  <HeadWithTip tip={HEAD_TOOLTIPS.lastrun}>Dernier run</HeadWithTip>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -250,10 +223,6 @@ const DomainsPage = ({ token }) => {
                   >
                     <TableCell className="text-[12px] py-2 font-mono text-ink-0">{d.domain}</TableCell>
                     <TableCell className="text-[12px] py-2 text-right font-mono text-ink-2">{d.total_jobs ?? '—'}</TableCell>
-                    <TableCell className="text-[12px] py-2">
-                      {/* Sparkline: no per-domain time-series from backend — renders flat until API exposes daily counts */}
-                      <Sparkline data={[]} w={80} h={24} color="var(--ink-3)" />
-                    </TableCell>
                     <TableCell className="text-[12px] py-2 text-right font-mono text-ok">{d.success || ''}</TableCell>
                     <TableCell className="text-[12px] py-2 text-right font-mono text-err">{d.failure || ''}</TableCell>
                     <TableCell className="text-[12px] py-2 text-right font-mono text-warn">{d.oom_total || ''}</TableCell>
@@ -261,7 +230,7 @@ const DomainsPage = ({ token }) => {
                       {fmtPct(d.success_rate)}
                     </TableCell>
                     <TableCell className="text-[12px] py-2 font-mono text-[11px] text-ink-3 whitespace-nowrap">
-                      {fmtDate(d.last_run_at)}
+                      {formatApiDate(d.last_run_at, { dateStyle: 'short', timeStyle: 'medium' })}
                     </TableCell>
                   </TableRow>
                 ))}

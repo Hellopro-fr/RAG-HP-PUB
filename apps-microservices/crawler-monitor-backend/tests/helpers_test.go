@@ -9,8 +9,26 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/golang-jwt/jwt/v5"
 )
+
+// waitSubscribed bloque jusqu'a ce qu'un abonne soit enregistre sur le canal.
+// Remplace un Sleep arbitraire : la course "publier avant d'etre abonne" perd
+// le message en silence.
+func waitSubscribed(t *testing.T, mr *miniredis.Miniredis, channel string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if mr.PubSubNumSub(channel)[channel] > 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("abonnement a %q jamais etabli", channel)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
 
 type noopAudit struct{}
 
@@ -56,4 +74,9 @@ func bodyContains(t *testing.T, r io.Reader, s string) {
 	if !strings.Contains(string(b), s) {
 		t.Errorf("body=%q does not contain %q", b, s)
 	}
+}
+
+// isoNow retourne l'instant courant au format RFC3339 (helper de seed).
+func isoNow() string {
+	return time.Now().UTC().Format(time.RFC3339)
 }

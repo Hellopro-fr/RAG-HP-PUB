@@ -287,3 +287,34 @@ func TestDomainsHTTP_NoAuth(t *testing.T) {
 		t.Errorf("status = %d, want 401", resp.StatusCode)
 	}
 }
+
+// TestDomains_DetailNormalizesNaiveDates : crawler-service ecrit des dates
+// naives ("2026-08-28 13:20:03.306901") que le frontend interprete en heure
+// locale. Le detail domaine doit les republier en RFC3339 UTC.
+func TestDomains_DetailNormalizesNaiveDates(t *testing.T) {
+	mr, _ := miniredis.Run()
+	t.Cleanup(mr.Close)
+	naive := time.Now().UTC().Format("2006-01-02 15:04:05.000000")
+	mr.Set("crawl_job:n1", `{"id":"n1","domain":"naive.com","status":"finished","start_time":"`+naive+`"}`)
+	rs, _ := redisstore.New("redis://" + mr.Addr())
+	cfg := &config.Config{JWTSecret: "test-secret"}
+	srv := httptest.NewServer(httpapi.NewRouter(httpapi.Deps{
+		Config: cfg, RedisStore: rs, AuditStore: &noopAudit{},
+	}))
+	t.Cleanup(srv.Close)
+
+	resp, err := authedGet(srv.URL+"/api/domains/naive.com?window=24h", mintToken("admin", "test-secret"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var body map[string]any
+	decodeJSON(t, resp.Body, &body)
+	jobs, _ := body["jobs"].([]any)
+	if len(jobs) != 1 {
+		t.Fatalf("jobs = %v", body["jobs"])
+	}
+	got, _ := jobs[0].(map[string]any)["start_time"].(string)
+	if _, err := time.Parse(time.RFC3339Nano, got); err != nil {
+		t.Errorf("start_time = %q, want RFC3339 UTC (%v)", got, err)
+	}
+}

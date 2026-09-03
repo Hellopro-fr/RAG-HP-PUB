@@ -1,12 +1,12 @@
-# Graph Report - detection + crawler-service + docs (update health verdict)  (2026-08-24)
+# Graph Report - docs (historique_exec_chatgpt)  (2026-09-03)
 
 ## Corpus Check
-- 17 files · ~0 words
+- 1 files · ~0 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 11619 nodes · 27581 edges · 223 communities detected
-- Extraction: 64% EXTRACTED · 36% INFERRED · 0% AMBIGUOUS · INFERRED: 9903 edges (avg confidence: 0.61)
+- 12026 nodes · 28518 edges · 225 communities detected
+- Extraction: 64% EXTRACTED · 36% INFERRED · 0% AMBIGUOUS · INFERRED: 10125 edges (avg confidence: 0.61)
 - Token cost: 0 input · 0 output
 
 ## Community Hubs (Navigation)
@@ -233,9 +233,11 @@
 - [[_COMMUNITY_graphify-guide-en.md Limitation undirected graph, e...|graphify-guide-en.md: Limitation: undirected graph, e...]]
 - [[_COMMUNITY_graphify-guide-en.md PreToolUse hook on GlobGrep (n...|graphify-guide-en.md: PreToolUse hook on Glob|Grep (n...]]
 - [[_COMMUNITY_superpowers Faux-négatifs — suite de référence avant chantier|superpowers: Faux-négatifs — suite de référence avant chantier]]
+- [[_COMMUNITY_common-utils Fenetre tarifaire (pricing window)|common-utils: Fenetre tarifaire (pricing window)]]
+- [[_COMMUNITY_superpowers SEMrush Backlink Tools (mcp-semrush-service)|superpowers: SEMrush Backlink Tools (mcp-semrush-service)]]
 
 ## God Nodes (most connected - your core abstractions)
-1. `CrawlerManager` - 532 edges
+1. `CrawlerManager` - 550 edges
 2. `IncludeInArchive` - 381 edges
 3. `ReindexResponse` - 381 edges
 4. `CrawlStatus` - 381 edges
@@ -254,7 +256,7 @@
 - `Drain orphaned Playwright protocol callbacks; report everything else.      A c` --semantically_similar_to--> `Change 2 — the service's first set_exception_handler, narrow on three axes`  [INFERRED] [semantically similar]
   apps-microservices/api-detection-langue-fr/main.py → docs/superpowers/specs/2026-08-05-detection-orphaned-goto-callback-flood-design.md
 - `retry_on_error is what lets _disconnect_raise fall through to the retry     loo` --semantically_similar_to--> `WHY the retry must be explicit: redis-py defaults to Retry(NoBackoff(), 0) with an empty retry_on_error (verified 5.2.1), so the first command on a reaped socket raises ConnectionError and every cache_service helper swallows it into its default return (None/0/[]/False) — indistinguishable from a real answer; redis is unpinned so the default is whatever pip resolved`  [INFERRED] [semantically similar]
-  libs/common-utils/tests/test_cache_service.py → apps-microservices/crawler-service/CLAUDE.md
+  D:\DevHellopro\Workspaces\RAG-HP-PUB\libs\common-utils\tests\test_cache_service.py → apps-microservices/crawler-service/CLAUDE.md
 - `detect_challenge_page()` --semantically_similar_to--> `The crawler's hand-ported challenge classifier has drifted from the service's 9 families`  [EXTRACTED] [semantically similar]
   apps-microservices/api-detection-langue-fr/app/services/language_detector.py → docs/superpowers/references/2026-07-29-crawler-detection-seam-audit.md
 
@@ -300,6 +302,16 @@
 - **The interlocking invariants that shape every formula in this design: strict relaxation (no run passing today may newly fail), the sample gate as a DISJUNCTION rather than a replacement, the error test as a CONJUNCTION rather than a max() that would swap the denominator, and zero-means-disabled as the reason the rate guard must lead each conjunction.** — update_health_spec_rationale_governing_constraint_strict_relaxation, update_health_spec_rationale_disjunction_not_replacement, update_health_spec_rationale_conjunction_not_max, update_health_spec_rationale_zero_means_disabled, update_health_spec_evaluation_order, updatehealthverdict_decideupdatehealth [INFERRED 0.85]
 - **The BO half and its hard ordering: the redirect cap is a precondition rather than an improvement, it must count the applied list and never the incomplete crawler counter, WARNING stops blocking, and the two deployments leave a window in which mass internal-redirect archiving is possible.** — update_health_spec_bo_redirect_cap, update_health_spec_rationale_redirect_cap_is_a_precondition, update_health_spec_rationale_redirect_cap_not_metrics_redirects, update_health_spec_bo_warning_stops_blocking, update_health_plan_task4_bo_redirect_cap, update_health_plan_task5_warning_stops_blocking, update_health_plan_deployment_gate_window [EXTRACTED 1.00]
 - **The refuted-claim ledger kept deliberately in both documents: sixteen dead claims from revisions 1 and 2, plus four corrections found during execution - a mis-described calibration tool, a line range that would have deleted the ABORTED override, two grep expectations asserted without being derived from a run, a missing guard on the percentage cap, and a verification script that does not exist.** — update_health_spec_selfcorrection_revision1_refuted, update_health_spec_selfcorrection_revision2_refuted, update_health_spec_selfcorrection_script_revue_seuils_not_replay_tool, update_health_spec_rationale_aborted_override_retained_range_1457, update_health_plan_selfcorrection_grep_expected_values_underived, update_health_plan_selfcorrection_pct_cap_missing_guard, update_health_plan_selfcorrection_mep_tooling_absent_and_symlink [INFERRED 0.80]
+- **Circuit-breaker trip -> exit 2 -> success classification -> stop webhook isError -> BO FAILED row -> permanent domain lockout (and its only escape hatch)** — crawler_v61_cb_section, crawler_v61_cb_trip_is_permanent_lockout, crawler_v59_rationale_is_success_allowlist, crawlsvc_success_stop_webhook_idempotency, crawlsvc_exit_codes, crawler_v61_cb_bypass_escape_hatch [INFERRED 0.85]
+- **The reading rules a BO consumer of collapsed_seen_base.jsonl must apply together (param is diagnostic, caps are partial, summaries are per-segment, 'collapsed' means retire)** — crawler_v61_collapsed_seen_base_sidecar, crawler_v61_param_diagnostic_only, crawler_v61_two_caps_only_one_visible, crawler_v61_truncated_by_cap_reading_rule, crawler_v61_multi_segment_append_contract, crawler_v61_collapsed_vocabulary_collision [INFERRED 0.80]
+- **The denominator that excluded its own numerator — the full chain from the counter writers to the two formulas that consume them: one writer for `processed`, two writers of opposite natures for `errors`, a new off-book counter, a pure breaker module, and the health verdict that still carries the identical arithmetic on purpose** — cb_error_spec_defect_denominator_excludes_numerator, cb_error_plan_rationale_denominator_formula, cb_error_plan_finding_processed_single_writer, cb_error_plan_finding_errors_two_live_writers, errorratebreaker_shouldtriperrorratebreaker, apps_microservices_crawler_service_crawler_src_class_updatechecker_ts, apps_microservices_crawler_service_crawler_src_routes_ts, apps_microservices_crawler_service_crawler_src_updatehealthverdict_ts [INFERRED 0.85]
+- **Recurring theme across four lots of this service: a technical failure written as a business outcome — the crawl that stops on an invalid rate and locks its domain, the detection outage that leaves through the success webhook, the sample guard that never expires, and the partial outage that had no counter** — cb_error_spec_lockout_chain, seam_audit_v49_finding_a_technical_failure_laundering, seam_audit_v49_finding_c_success_webhook_on_detection_failure, verdict_unavail_spec_defect_laundering, update_health_spec_problem_pending_sample_permanent, outage_vis_spec_rationale_compteur_panne_partielle [INFERRED 0.80]
+- **The claims this chantier refuted, narrowed or refused to make: the materiality floor that rescues zero runs, the proxy-wall symmetry the first draft asserted wrongly, the numerator double-count refuted by is_existing never being true, the composition measurement blocked by design, and the honest limitation that the fix stops the lock and not the withholding of deletions** — cb_error_spec_rationale_materiality_floor_refuted, cb_error_spec_rationale_symmetry_not_exact, cb_error_plan_rationale_is_existing_never_true, cb_error_spec_rationale_measurement_blocked_by_design, cb_error_spec_residual_lock_vs_deletions, cb_error_spec_rationale_threshold_not_settled [INFERRED 0.85]
+- **The cost guard: 40 API units per row is the constraint that shapes the clamp, its silence, the per-request billing of the overview report, and the single live call the whole plan permits** — semrush_spec_display_limit_clamp, semrush_spec_r_silent_clamp_tradeoff, semrush_spec_r_cost_ladder_40_units_per_row, semrush_spec_r_overview_billed_per_request, semrush_plan_task3_display_limit_clamp, semrush_plan_r_clamp_fallback_semantics, semrush_plan_live_smoke_test, semrush_spec_r_no_live_calls_in_tests [INFERRED 0.80]
+- **The three-shape decomposition: non-uniform Semrush reports force standard/summary/multi, and the multi shape is what drags buildQS array support into scope** — semrush_spec_three_report_shapes, semrush_spec_r_shapes_not_uniform, semrush_spec_r_matrix_needs_repeated_params, semrush_spec_buildqs_array_change, semrush_plan_task5_standard_shape, semrush_plan_task6_summary_overview, semrush_plan_task7_multi_matrix, semrush_plan_task2_buildqs_arrays [INFERRED 0.85]
+- **What this chantier deliberately did not settle: two rejected reports, no CSV parsing, deferred filter and offset, an unconfirmed matrix display_limit, and an unverified Business-plan entitlement** — semrush_spec_r_reject_backlinks_comparison, semrush_spec_r_reject_backlinks_refips, semrush_spec_r_reject_csv_parsing, semrush_spec_r_defer_display_filter_offset, semrush_spec_r_matrix_display_limit_unconfirmed, semrush_spec_r_business_plan_entitlement_unverified, semrush_plan_r_matrix_display_limit_gate, semrush_plan_r_escalate_on_api_disabled [INFERRED 0.75]
+- **The GCS-verified allowlist as shared state with three consumers and three different meanings: evidence authorising a status repair, the arming input of a destructive sweep, and now the sole warrant for a non-destructive restore — with staleness harmless on the third and dangerous on the second** — archived_repair_spec_allowlist_evidence, reclean_spec_design, restore_allowlist_spec_third_path_frontier, restore_allowlist_spec_rationale_fail_closed_none_vs_empty, restore_allowlist_spec_out_of_scope_manual_allowlist [INFERRED 0.80]
+- **The dead-end chain the lot closes: blob absent, datasets absent, tar present and listed — measured on two crawls in two days, defeating both existing recovery mechanisms, and resolved by an id-only restore inserted before the existing 400** — restore_allowlist_spec_defect_two_blind_mechanisms, restore_allowlist_spec_measurement_14_reference_crawls, restore_allowlist_spec_two_manual_interventions, restore_allowlist_spec_third_path_frontier, restore_allowlist_spec_insertion_point, restore_allowlist_spec_rationale_id_only_restore [INFERRED 0.85]
 
 ## Communities
 
@@ -309,7 +321,7 @@ Nodes (102): CollectionName, Enum, CollectionNameGraph, Enum for the possible co
 
 ### Community 3 - "CrawlerManager Tests (manager & stash)"
 Cohesion: 0.0
-Nodes (769): str, DLQPropertiesAsync, create_dlq_headers(), create_dlq_message(), CrawlerManager, mock_cache_service(), TestStaleHandlerCounter, test_stale_handler_decrements_counter() (+761 more)
+Nodes (801): str, DLQPropertiesAsync, create_dlq_headers(), create_dlq_message(), CrawlerManager, mock_cache_service(), TestStaleHandlerCounter, test_stale_handler_decrements_counter() (+793 more)
 
 ### Community 86 - "crawler-service: test_admin_job_dump.py"
 Cohesion: 0.67
@@ -429,15 +441,15 @@ Nodes (2): RabbitMQConnection, Crée une connexion RabbitMQ avec un nombre limit
 
 ### Community 12 - "common-utils: Redis Cache Service"
 Cohesion: 0.01
-Nodes (259): Initializes the Redis connection pool.     Connects to Redis using the URL from, Closes the Redis connection pool., Atomically sets a key only if it does not already exist (SET NX).     Returns T, Sets a raw value for a key., Gets the raw string value of a key., Deletes a key from Redis., Gets all keys matching a given prefix using SCAN., Atomically increments a key's value by 1. (+251 more)
+Nodes (271): Initializes the Redis connection pool.     Connects to Redis using the URL from, Closes the Redis connection pool., Atomically sets a key only if it does not already exist (SET NX).     Returns T, Sets a raw value for a key., Gets the raw string value of a key., Deletes a key from Redis., Gets all keys matching a given prefix using SCAN., Atomically increments a key's value by 1. (+263 more)
 
 ### Community 9 - "Crawler Admin & Admission Control"
 Cohesion: 0.01
-Nodes (261): Sets a dictionary for a key, serializing it to JSON., set_json(), Prometheus metrics exposition endpoint., AdmissionController, FastAPI admission-control middleware.  Scope after the crawler carve-out refac, Atomic in-flight counter with a hard max.      Not a semaphore: acquire() does, Try to acquire a slot. Returns True on success, False if saturated., Release a slot. Defensive: does not go below zero. (+253 more)
+Nodes (270): Sets a dictionary for a key, serializing it to JSON., set_json(), Prometheus metrics exposition endpoint., AdmissionController, FastAPI admission-control middleware.  Scope after the crawler carve-out refac, Atomic in-flight counter with a hard max.      Not a semaphore: acquire() does, Try to acquire a slot. Returns True on success, False if saturated., Release a slot. Defensive: does not go below zero. (+262 more)
 
 ### Community 0 - "CrawlerManager Schemas, Archive & Reconcile"
 Cohesion: 0.0
-Nodes (1568): Gets a dictionary for a key, deserializing it from JSON., _count_files_in_dir(), _map_error_to_message(), Safely counts files in a directory, excluding Crawlee metadata., Read isError from _callback_payload.json in the crawl storage dir.     Returns, Flatten a dict/list payload into a list of (key, value) tuples using     PHP-st, Safely counts files in a directory, excluding Crawlee metadata., Publie une mise à jour du statut d'un job sur le canal Pub/Sub de Redis. (+1560 more)
+Nodes (1636): Gets a dictionary for a key, deserializing it from JSON., _count_files_in_dir(), _map_error_to_message(), Safely counts files in a directory, excluding Crawlee metadata., Read isError from _callback_payload.json in the crawl storage dir.     Returns, Flatten a dict/list payload into a list of (key, value) tuples using     PHP-st, Safely counts files in a directory, excluding Crawlee metadata., Publie une mise à jour du statut d'un job sur le canal Pub/Sub de Redis. (+1628 more)
 
 ### Community 58 - "common-utils: TestLuaScripts"
 Cohesion: 0.22
@@ -453,7 +465,7 @@ Nodes (104): _run_gcloud(), check_gcloud_auth(), gcloud_ls(), gcloud_download(),
 
 ### Community 8 - "Async Job Manager & Store"
 Cohesion: 0.01
-Nodes (309): Shared test fixtures.  Since the migration to the shared common_utils Redis po, Gracefully shut down all locally running crawlers on this replica., Gracefully shut down all locally running crawlers on this replica., metrics_endpoint(), root(), Prometheus metrics for api-detection-langue-fr.  Exposed at /metrics. Used to, _generate_url_variants(), Génère les variantes d'URL à essayer quand l'URL originale échoue.      Bascul (+301 more)
+Nodes (311): Shared test fixtures.  Since the migration to the shared common_utils Redis po, Gracefully shut down all locally running crawlers on this replica., Gracefully shut down all locally running crawlers on this replica., metrics_endpoint(), root(), Prometheus metrics for api-detection-langue-fr.  Exposed at /metrics. Used to, _generate_url_variants(), Génère les variantes d'URL à essayer quand l'URL originale échoue.      Bascul (+303 more)
 
 ### Community 94 - "crawler-service: crawler-service failure classif..."
 Cohesion: 0.67
@@ -537,7 +549,7 @@ Nodes (16): Archive Pre-flight Disk Space Check (2026-04-18), Rationale: Diagnos
 
 ### Community 1 - "Crawler Engine Core (main/functions)"
 Cohesion: 0.0
-Nodes (863): verify_api_key(), Verifies the API key if API_KEY is configured in settings.     If API_KEY is not, resetContextState(), makeTmpStorage(), classifyFragment(), recordClassification(), maybeCommitDecision(), writeDecisionFile() (+855 more)
+Nodes (963): verify_api_key(), Verifies the API key if API_KEY is configured in settings.     If API_KEY is not, resetContextState(), makeTmpStorage(), classifyFragment(), recordClassification(), maybeCommitDecision(), writeDecisionFile() (+955 more)
 
 ### Community 60 - "Crawler Engine Core (main/functions)"
 Cohesion: 0.31
@@ -801,7 +813,7 @@ Nodes (3): app_with_admin_router(), Tests for /admin/redis-debug endpoint., Buil
 
 ### Community 25 - "Crawler Auto-Stash Eligibility & Sweep"
 Cohesion: 0.02
-Nodes (109): _reconcile_locked sweep, _is_stash_eligible, Reconciliation Leader Election, Capacity Counter (crawl_jobs:running_count), Rationale: Sweep tars via create_task (no lock hold), Stash one crawl on behalf of the sweep. Swallows 409 (already         stashed /, Stash one crawl on behalf of the sweep. Swallows 409 (already         stashed /, Wipes any persistent state from a prior run of this crawl_id that         would (+101 more)
+Nodes (115): _reconcile_locked sweep, _is_stash_eligible, Reconciliation Leader Election, Capacity Counter (crawl_jobs:running_count), Rationale: Sweep tars via create_task (no lock hold), Stash one crawl on behalf of the sweep. Swallows 409 (already         stashed /, Stash one crawl on behalf of the sweep. Swallows 409 (already         stashed /, Wipes any persistent state from a prior run of this crawl_id that         would (+107 more)
 
 ### Community 90 - "superpowers: Spec: Stash Bind-Mount Pre-Flig..."
 Cohesion: 0.67
@@ -852,8 +864,8 @@ Cohesion: 0.03
 Nodes (82): Dynamic Unit Normalization Design Spec, graph-rag-normalize-unite-service (target service), Redeploy-per-unit pain (FIX 1-16 churn), Five dynamic layers A-E, Layer A pint defines (56 statements), Layer B UNIT_TO_DIMENSION (200 keys), Layer C LABEL_TO_DIMENSION (99 ordered keys), Layer D CANONICAL_UNITS (36 entries) (+74 more)
 
 ### Community 28 - "BDD Doc-Enrichment Workflow"
-Cohesion: 0.04
-Nodes (74): BDD doc-enrichment workflow (design spec), BDD doc-enrichment workflow (implementation plan), BDD doc-enrichment runbook, Objective: reusable code-free table doc-enrichment process, MCP 'Table BDD' system (read-only MySQL exposure to LLM), Six bdd_* MCP tools (read-only), bdd_list_tables tool, bdd_describe_table tool (+66 more)
+Cohesion: 0.03
+Nodes (126): BDD doc-enrichment workflow (design spec), BDD doc-enrichment workflow (implementation plan), BDD doc-enrichment runbook, Objective: reusable code-free table doc-enrichment process, MCP 'Table BDD' system (read-only MySQL exposure to LLM), Six bdd_* MCP tools (read-only), bdd_list_tables tool, bdd_describe_table tool (+118 more)
 
 ### Community 112 - "crawler-service: test_timing_summary_tool.ts"
 Cohesion: 1.0
@@ -1133,7 +1145,7 @@ Nodes (4): _client(), test_version_defaults_to_unknown(), test_version_reads_env
 
 ### Community 24 - "Service Overviews (crawler + detection CLAUDE.md)"
 Cohesion: 0.02
-Nodes (158): api-detection-langue-fr Service, Tech Stack (Python/FastAPI/Camoufox), Camoufox Stealth Scraper (Chromium fallback), Redis Cache (cache_service pool), Async Batch Job API (/detect-batch-async), FIFO Job Queue (JOB_WORKER_CONCURRENCY), Idempotent Re-submit (client_job_id), Terminal-Write Hardening (2026-07-26 incident) (+150 more)
+Nodes (162): api-detection-langue-fr Service, Tech Stack (Python/FastAPI/Camoufox), Camoufox Stealth Scraper (Chromium fallback), Redis Cache (cache_service pool), Async Batch Job API (/detect-batch-async), FIFO Job Queue (JOB_WORKER_CONCURRENCY), Idempotent Re-submit (client_job_id), Terminal-Write Hardening (2026-07-26 incident) (+154 more)
 
 ### Community 254 - "crawler-service: DedupManager.test.ts"
 Cohesion: 1.0
@@ -1195,6 +1207,14 @@ Nodes (1): Détermine si l'URL a un signal très fort de site français.        
 Cohesion: 1.0
 Nodes (2): Référence de suite AVANT chantier : 7 échecs préexistants + 1 erreur de collecte, à comparer et jamais compter comme introduits, PIÈGE D'OUTILLAGE : une erreur de collecte pytest préexistante INTERROMPT tout le run, si bien qu'aucune commande l'incluant n'est exploitable — la contourner par --ignore, ne pas la réparer (hors périmètre)
 
+### Community 268 - "common-utils: Fenetre tarifaire (pricing window)"
+Cohesion: 0.08
+Nodes (34): parser_fenetres(), _heure_utc(), est_heure_pleine(), libelle_fenetre(), Fenêtres de facturation DeepSeek — heures pleines / heures creuses.  Les borne, Analyse une grille au format "1-4,6-10". Retombe sur le défaut si invalide., True si l'instant tombe dans une fenêtre facturée au tarif double.      :param, Libellé lisible de la fenêtre en cours, destiné aux logs. (+26 more)
+
+### Community 269 - "superpowers: SEMrush Backlink Tools (mcp-semrush-service)"
+Cohesion: 0.05
+Nodes (64): Semrush backlink tools — design (2026-08-07, approved): extend mcp-semrush-service from 2 backlink tools to 9 via a declarative table + factory, Problem: only 2 of Semrush v3's 11 backlink report types are exposed; the 9 missing ones block link-health monitoring, competitive analysis, prospecting and anchor/quality auditing — and the 2 existing tools lack nofollow, pagination, filtering and display_limit validation, Scope: 7 new backlink tools, shared table-driven factory, display_limit cap, buildQS array support, ERROR-body detection, unit tests — everything else explicitly out, Three report shapes: standard (target + target_type + clamped display_limit, 7 reports), summary (backlinks_overview, target + target_type only), multi (backlinks_matrix, targets[] + target_types[]), BACKLINK_REPORTS declarative table: 9 entries carrying name, Semrush API type, shape, description and export_columns — adding a tenth report becomes a table entry instead of a hand-written tool block, makeBacklinkTool(spec) factory: returns a tool object matching the 16 existing tools, switches on the report shape, and is the single place where clamping and ERROR detection live; every table entry is registered by mapping the table over the factory, Change 1 — buildQS gains array support: an array value expands to repeated key=value pairs instead of being stringified to a comma list; backward compatible because no current caller passes an array, pinned by a regression test, Change 2 — display_limit clamp: MAX_DISPLAY_LIMIT = 100 applied in the factory wherever a shape exposes display_limit; clamping is silent and the cap is a module constant so raising it is a one-line change (+56 more)
+
 ## Ambiguous Edges - Review These
 - `security-auditor agent (proposed)` → `Removed agents @code-reviewer and @debugger, superseded by superpowers skills`  [AMBIGUOUS]
   docs/claude-code-team-guide-en.md · relation: conceptually_related_to
@@ -1214,12 +1234,16 @@ Nodes (2): Référence de suite AVANT chantier : 7 échecs préexistants + 1 err
   docs/claude-code-team-guide-en.md · relation: conceptually_related_to
 - `._validate_alternative_urls()` → `One Challenge Detector, Three Consumers (45s poll / detect reclass / Case-6 guard)`  [AMBIGUOUS]
   docs/superpowers/specs/2026-07-25-detection-langue-fr-challenge-noscript-altprobe-design.md · relation: references
+- `mcp_servers MySQL table` → `Semrush backlink tools — implementation plan (2026-08-07): 9 TDD tasks with checkbox steps, taking mcp-semrush-service from 2 backlink tools to 9 generated from a table, with a cost guard and correct error reporting`  [AMBIGUOUS]
+  docs/superpowers/plans/2026-08-07-semrush-backlink-tools.md · relation: conceptually_related_to
 - `._verify_bind_mount()` → `Pourquoi la date du fichier est digne de confiance: le mtime vient du touch du daemon sur le repertoire de resultats, stashed_at de datetime.utcnow() dans le conteneur, et ce repertoire est un bind mount sur le meme hote (docker-compose.yml:1361) — meme horloge noyau, pas de derive; ne pas confondre avec le volume des archives (:1352)`  [AMBIGUOUS]
   docs/superpowers/specs/2026-08-10-move-done-freshness-guard-design.md · relation: conceptually_related_to
 - `stash_lock:{id} Redis lock` → `Out of scope: stashed stubs. Repairing them would mean fabricating a lost stashed_at, and /results on a stashed crawl triggers an unstash that DELETES the GCS copy — the same reason the reclean already excludes stashed leftovers`  [AMBIGUOUS]
   docs/superpowers/specs/2026-08-07-archived-status-repair-design.md · relation: conceptually_related_to
 - `graphify team guide (scoped hook, slash commands, edge honesty tags)` → `Layered Claude Code memory system (root CLAUDE.md, rules, agents, commands, service CLAUDE.md, personal, primer)`  [AMBIGUOUS]
   docs/claude-code-team-guide-en.md · relation: conceptually_related_to
+- `C3: wire _is_confidently_archived into _auto_stash_one (heal+free+skip)` → `The frontier — exactly ONE scenario changes: no local data with the reference id IN the allowlist goes from 400 dead end to restore attempted. Unchanged: archived-or-stashed without data (already restores), prev_status == 'failed' (400, never resurrect a failed crawl), data present (the update starts), id ABSENT from the allowlist (the archive does not exist, the rejection is correct), and allowlist file absent from disk (fail-closed). The measured case that stays legitimately rejected is a crawl whose tar is not in GCS and whose data is lost`  [AMBIGUOUS]
+  docs/superpowers/specs/2026-09-02-restore-from-verified-allowlist-design.md · relation: conceptually_related_to
 - `job_dump()` → `Correction of a comfortable assumption: '/admin/* is read-only' is false — 12 endpoints (8 GET) depend on get_job_or_recover and can write through its recovery path; the new dry-run deliberately does not`  [AMBIGUOUS]
   docs/superpowers/specs/2026-08-07-archived-status-repair-design.md · relation: references
 - `._abandon_job()` → `Terminal-Write Loss Incident (job 9597267b: 5/5 OK, record stuck running/success_count=0)`  [AMBIGUOUS]
@@ -1238,6 +1262,8 @@ Nodes (2): Référence de suite AVANT chantier : 7 échecs préexistants + 1 err
   docs/superpowers/specs/2026-08-05-detection-orphaned-goto-callback-flood-design.md · relation: conceptually_related_to
 - `test_variant_gate.py` → `Rationale: the cancellation is not an exceptional wedge-breaker but the NORMAL outcome — which is why the flood appears on alternatives, not homepages`  [AMBIGUOUS]
   docs/superpowers/specs/2026-08-05-detection-orphaned-goto-callback-flood-design.md · relation: conceptually_related_to
+- `GET /admin/sidecar/{crawl_id}` → `collapsed_seen_base.jsonl (storage/datasets/update-{domain}/, update mode only) - the BO-facing declaration of queue collapses, written by collapsedSeenBase.ts so the BO can retire the fiche of a variant that was dropped before any fetch. ADMISSION CRITERION: the base was crawled. origin === 'filter_on_seen' only, proven by seenBases. Named after the criterion rather than the family so its name cannot be read as an invitation to widen it`  [AMBIGUOUS]
+  apps-microservices/crawler-service/CLAUDE.md · relation: references
 - `Playwright's two cleanup() guards (no_reply, already-cancelled) miss the pending-but-uncancelled third case — upstream playwright-python#2163` → `Mechanism behind the giant repeated traceback: unroute_all on a dead page makes Playwright schedule its internal _update_interceptor_patterns_ignore_exceptions task — and that unroute_all was itself added to suppress a different TargetClosedError flood`  [AMBIGUOUS]
   docs/superpowers/specs/2026-08-03-detection-teardown-flood-and-retry-cascade-cost-design.md · relation: conceptually_related_to
 - `Second-order cost, same cause: one alternative can legitimately eat 255 s+ of the 300 s per-item budget, so a multi-alternative domain gets cancelled at the batch level instead — reproducing the same orphaned callbacks one layer up` → `Noted in passing, not touched: ADMISSION_MAX_SLOTS=8 exceeds BROWSER_SEMAPHORE_SIZE=6, so two admitted items always queue on the browser semaphore inside the same item budget — 6 browsers on 4 CPUs at 30% utilisation is not the constraint`  [AMBIGUOUS]
@@ -1258,13 +1284,23 @@ Nodes (2): Référence de suite AVANT chantier : 7 échecs préexistants + 1 err
   docs/superpowers/specs/2026-08-10-detection-faux-negatifs-design.md · relation: conceptually_related_to
 - `Défaut B — le signal lexical n'est pas consulté quand fastText se trompe avec assurance` → `NON RÉSOLU : un des quatre domaines reste AMBIGU entre le défaut A et le défaut B ; le discriminant serait /detect-debug sur les deux formes — ne pas le compter comme un succès du volet A`  [AMBIGUOUS]
   docs/superpowers/specs/2026-08-10-detection-faux-negatifs-design.md · relation: conceptually_related_to
+- `Task 2 — wire the guard into _reclean_archived_leftovers after active_prev_ids and before the age gate, add the two skip counters next to recleaned = 0, emit the per-tick summary before return recleaned, and treat a non-FileNotFoundError OSError on the sidecar stat as warn-then-continue without deleting` → `Out of scope 1 and the accepted residual — the lot does NOT recreate the missing Redis blob. After the restore, has_local_data becomes true and the update starts, but the blob stays absent, so a later cleanup can delete the data again and the case recurs — at the price of an automatic restore instead of a manual intervention. Recreating the blob is a separate lot with its own open question: which status to write, and who becomes responsible for it`  [AMBIGUOUS]
+  docs/superpowers/specs/2026-09-02-restore-from-verified-allowlist-design.md · relation: conceptually_related_to
 - `statNameParity.test.ts` → `Report shape - the BO reads health, message, metrics.* and rates.*, never mode nor thresholds; rates.redirect_rate is consumed one hop away feeding the maintenance detector, so rates must keep its current keys and meaning. mode becomes the literal GRADUATED, key retained. New and additive: metrics.accounted, rates.coverage, thresholds.min_coverage, thresholds.max_abs_new, thresholds.disabled_signals - the last one because without it a HEALTHY verdict is indistinguishable from a verdict whose checks were off. Naming: TS key minCoverage, JSON field min_coverage; both spellings intentional, do not unify.`  [AMBIGUOUS]
   docs/superpowers/specs/2026-08-17-update-health-verdict-decoupling-design.md · relation: conceptually_related_to
+- `Spec — une panne de détection doit être VISIBLE, pas seulement inoffensive (2026-08-14, crawler-service)` → `Explicitly out of scope (§5): the 15% threshold, untouched before the §4 measurement; the materiality floor, discarded at §3 because it repairs nothing; MICRO mode (maxAbsErrors / maxAbsRedirects / maxAbsNew) which is DEAD CODE — isMicroMode is never set true (main.ts:984 commented) — and must not be woken in passing, since reviving inert code changes behaviour rather than repairing it; the BO-side lock, because repairing the breaker stems the flux but frees NONE of the 121 already-locked domains, a distinct BO lot that must not ship before the flux is stemmed or the work is paid for twice; and the replay of a stale _callback_payload.json, a second path by which a webhook can carry circuitBreaker without any breaker having tripped on that run — unmeasured, discriminant being details_json.date_start against the run's own date_start.`  [AMBIGUOUS]
+  docs/superpowers/specs/2026-08-24-circuit-breaker-error-rate-design.md · relation: conceptually_related_to
 - `reportLiteral()` → `Report shape - the BO reads health, message, metrics.* and rates.*, never mode nor thresholds; rates.redirect_rate is consumed one hop away feeding the maintenance detector, so rates must keep its current keys and meaning. mode becomes the literal GRADUATED, key retained. New and additive: metrics.accounted, rates.coverage, thresholds.min_coverage, thresholds.max_abs_new, thresholds.disabled_signals - the last one because without it a HEALTHY verdict is indistinguishable from a verdict whose checks were off. Naming: TS key minCoverage, JSON field min_coverage; both spellings intentional, do not unify.`  [AMBIGUOUS]
   docs/superpowers/specs/2026-08-17-update-health-verdict-decoupling-design.md · relation: conceptually_related_to
+- `collapsedSeenBase.ts` → `Implementation plan 2026-08-24 — Circuit Breaker Error Rate. Goal: make the update-mode error-rate breaker decide on an ACTUAL PROPORTION, so it stops manufacturing permanently-locked domains out of runs it stopped on a number greater than 100%. Architecture: extract the inline rate computation from routes.ts into a pure unit-tested errorRateBreaker.ts, mirroring the externalRedirectBreaker.ts / terminalFailure.ts precedent; the denominator becomes processed + errors_unprocessed, where a NEW counter isolates the half of `errors` that never reached increment("processed"); the sample gate deliberately stays on `processed`. Stack: TypeScript / Node 20, node:test runner, Redis-backed StatsManager, no framework. Four tasks.`  [AMBIGUOUS]
+  docs/superpowers/plans/2026-08-24-circuit-breaker-error-rate.md · relation: conceptually_related_to
+- `Honest limitation of the lot (§8.2): this lot stems the LOCK, not the withholding of deletions. A marginal run that no longer stops will FINISH, so it no longer writes a FAILED row and no longer creates a permanent lock through est_domaine_deja_en_cours() — that is the gain, and it is the reported harm. But its report will still carry the rate computed the old way (§8.1): if that rate exceeds 15% the verdict stays CRITICAL and the BO withholds the destructive actions. The domain stops being locked; its deletions do not apply for all that. Announcing "the 23 marginal runs are recovered" would be false. Measured BO-side with a positive control against a lying grep: BO/script/chatgpt/script_process_update_crawling.php:713 withholds destructive actions by a WHITELIST, not by a per-verdict test — if (!in_array($health_update, ["HEALTHY", "WARNING"], true)) then $appliquer_actions_destructives = false. CRITICAL appears NOWHERE in that file (0 occurrences) while the positive control HEALTHY = 5, so the search does work: every verdict outside the two admitted values — CRITICAL included, and an absent or empty key too — takes the negative branch, meaning CRITICAL withholds destructive actions by the very same line as PENDING_SAMPLE.` → `Task 1 — Correct the spec BEFORE implementing from it. Goal: remove the one false claim in the design authority and record the two findings the implementer needs, so nobody builds errors + processed from the letter of §5. Step 1 replaces the "symétrie exacte" sentence; Step 2 appends a new §8 recording that updateHealthVerdict.ts:69 carries the same defect, deliberately out of scope, and the honest limitation that the fix stops the LOCK and not the withholding of deletions. Verify: grep -c 'symétrie exacte' on the spec must be 0, and grep -c 'updateHealthVerdict.ts:69' must be 1 or more.`  [AMBIGUOUS]
+  docs/superpowers/specs/2026-08-24-circuit-breaker-error-rate-design.md · relation: references
+- `Plafonds qui arment la branche « blocage par plafond » : cap ABSOLU 100 et 50 % du corpus précédent, pour les suppressions ET pour les redirections ; cap 4000 pour les replis de dédoublonnage (nb_replis_base_crawlee est écrit dès que la porte de repli est fermée, que ce soit par la garde globale ou par le seul plafond de repli). L'écriture en base est INCONDITIONNELLE et précède le mail ; le mail n'est envoyé qu'au-delà d'un seuil de 100 actions, avec une règle anti-silence — un plafond qui bloque avec les huit familles à zéro envoie toujours un mail` → `PIEGE MAJEUR sur seuil_mail_tmt : le seuil ne differe pas l'envoi, il le SUPPRIME. La suppression du journal est HORS du test de seuil — sous le seuil, les lignes sont detruites sans qu'aucun mail ne parte et rien n'est reporte au lendemain. Un seuil eleve sur un type peu bavard equivaut a une mise au rebut silencieuse et quotidienne`  [AMBIGUOUS]
+  docs/superpowers/runbooks/examples/tracking_mail2bdd_tables.doc.json · relation: conceptually_related_to
 
 ## Knowledge Gaps
-- **3355 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+3350 more)
+- **3468 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+3463 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **Thin community `graphify-guide-en.md: Limitation: ID collision on sha...`** (1 nodes): `Creates a dictionary of headers for a DLQ message, compatible with both pika and`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.

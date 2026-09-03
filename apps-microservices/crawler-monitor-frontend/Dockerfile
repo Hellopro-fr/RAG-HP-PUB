@@ -13,6 +13,9 @@ COPY package.json yarn.lock .yarnrc.yml ./
 # --immutable fails the build if yarn.lock would change — catches drift in CI.
 RUN yarn install --immutable
 
+# Copie du source APRES l'install : .dockerignore exclut node_modules et dist,
+# donc cette couche n'écrase pas les dépendances installées ci-dessus et le
+# cache de la couche `yarn install` n'est invalidé que par package.json/yarn.lock.
 COPY . .
 RUN yarn build
 

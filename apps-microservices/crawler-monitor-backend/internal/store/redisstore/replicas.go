@@ -3,6 +3,7 @@ package redisstore
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"strconv"
 	"time"
 
@@ -13,8 +14,13 @@ import (
 // RetentionReplicaHistoryMs is 1 hour, matching JS REPLICA_HISTORY_RETENTION_MS.
 const RetentionReplicaHistoryMs = int64(60 * 60 * 1000)
 
+// TTLReplicaHistory : les series par replica expirent au bout de 2h (deux fois
+// la retention glissante) pour que les replicas disparus ne fuitent pas.
+const TTLReplicaHistory = 2 * time.Hour
+
 // PersistHeartbeat stores a heartbeat sample into the per-replica sorted set and
-// registers the replicaId in the known-replicas set. Tolerant: never returns an error.
+// registers the replicaId in the known-replicas set. Tolerant: never returns an error,
+// mais toute erreur d'ecriture Redis est loggee (silence = panne invisible en prod).
 // hb fields: ReplicaID, JobID (optional), Timestamp (ms; 0 = now), CPU, RAM, TotalRAM.
 func (c *Client) PersistHeartbeat(ctx context.Context, replicaID string, ts int64, cpu, ram, totalRAM float64, jobID *string) {
 	if replicaID == "" {
@@ -32,12 +38,20 @@ func (c *Client) PersistHeartbeat(ctx context.Context, replicaID string, ts int6
 	}
 	raw, err := json.Marshal(sample)
 	if err != nil {
+		slog.Warn("redis.write_failed", "op", "PersistHeartbeat.marshal", "key", ReplicaHistoryPrefix+replicaID, "err", err)
 		return
 	}
 	key := ReplicaHistoryPrefix + replicaID
-	_ = c.rdb.ZAdd(ctx, key, redis.Z{Score: float64(ts), Member: string(raw)}).Err()
-	_ = c.rdb.ZRemRangeByScore(ctx, key, "0", formatScore(ts-RetentionReplicaHistoryMs)).Err()
-	_ = c.rdb.SAdd(ctx, KnownReplicasKey, replicaID).Err()
+	// Un seul aller-retour : ZADD + purge de la fenetre + TTL + registre.
+	if _, err := c.rdb.Pipelined(ctx, func(pipe redis.Pipeliner) error {
+		pipe.ZAdd(ctx, key, redis.Z{Score: float64(ts), Member: string(raw)})
+		pipe.ZRemRangeByScore(ctx, key, "0", formatScore(ts-RetentionReplicaHistoryMs))
+		pipe.Expire(ctx, key, TTLReplicaHistory)
+		pipe.SAdd(ctx, KnownReplicasKey, replicaID)
+		return nil
+	}); err != nil {
+		slog.Warn("redis.write_failed", "op", "PersistHeartbeat", "key", key, "err", err)
+	}
 }
 
 // ReadReplicaHistory returns decoded history points for a single replica within
@@ -66,13 +80,17 @@ func (c *Client) ReadReplicaHistory(ctx context.Context, replicaID string, windo
 	return out, nil
 }
 
-// ReadAllReplicasHistory returns history for all known replicas and prunes orphans
-// (replicas with no points in the window).
+// ReadAllReplicasHistory returns history for all known replicas.
+// La purge du registre (SREM) n'est appliquee que si la fenetre demandee couvre
+// au moins la retention : sur une fenetre courte (15m) l'absence de points ne
+// prouve pas que le replica est mort, et le SREM le faisait disparaitre des
+// lectures suivantes.
 func (c *Client) ReadAllReplicasHistory(ctx context.Context, windowMs int64) (map[string][]replicahistory.HeartbeatSample, error) {
 	ids, err := c.rdb.SMembers(ctx, KnownReplicasKey).Result()
 	if err != nil {
 		return nil, err
 	}
+	pruneOrphans := windowMs >= RetentionReplicaHistoryMs
 	result := make(map[string][]replicahistory.HeartbeatSample)
 	for _, id := range ids {
 		points, err := c.ReadReplicaHistory(ctx, id, windowMs)
@@ -80,8 +98,9 @@ func (c *Client) ReadAllReplicasHistory(ctx context.Context, windowMs int64) (ma
 			continue
 		}
 		if len(points) == 0 {
-			// Prune orphan (no data in window).
-			_ = c.rdb.SRem(ctx, KnownReplicasKey, id).Err()
+			if pruneOrphans {
+				_ = c.rdb.SRem(ctx, KnownReplicasKey, id).Err()
+			}
 			continue
 		}
 		result[id] = points
