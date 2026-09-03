@@ -2153,3 +2153,321 @@ def test_p7_lentete_de_ce_fichier_nomme_la_recette_reelle():
     premiere_ligne = (__doc__ or "").splitlines()[0]
     assert "« %s »" % RECIPE in premiere_ligne, premiere_ligne
     assert "8151" not in premiere_ligne and "v8" not in premiere_ligne, premiere_ligne
+
+
+# =============================================================================
+# Etape 6 : les FRONTIERES du verdict de surface, et l'invariant de « unknown »
+# =============================================================================
+# La regle 3 comparait ``on_white`` a INK_ON_WHITE_WEAK (2) et non a
+# INK_ON_WHITE_STRONG (8), ce qui laissait un trou exactement large de la bande
+# ``pale``. Ces cas verrouillent les deux bords de chaque seuil : c'est la seule
+# chose qui compte ici, un verdict etant une cascade de comparaisons.
+
+#: Cadre de mesure qui NEUTRALISE la regle 1 : alpha reellement utilisee
+#: (>= ALPHA_RATIO_SELF_BACKGROUND) et source non opaque, donc les regles 2 a 4
+#: tranchent seules. Sans cela un ``alpha_ratio`` faible renverrait « any »
+#: avant meme d'avoir regarde la couleur de l'encre.
+ALPHA_NEUTRE = 50.0
+
+
+def _verdict(on_white, on_black, alpha_ratio=ALPHA_NEUTRE, self_background=False):
+    """Appelle l'etape 6 sur des mesures fabriquees a la main."""
+    return logo_derive._surface_verdict(
+        {"alpha_ratio": alpha_ratio, "ink_on_white": on_white,
+         "ink_on_black": on_black, "is_light": False},
+        self_background=self_background,
+    )
+
+
+#: (on_white, on_black) -> (verdict attendu, flag « pale » attendu).
+#: on_white balaye 1,9 / 2,0 / 7,9 / 8,0 et on_black 1,9 / 2,0 / 8,0 / 90 :
+#: les deux bords de INK_ON_WHITE_WEAK, de INK_ON_WHITE_STRONG et de
+#: INK_ON_BLACK_WEAK, plus un noir franc.
+FRONTIERES = [
+    # --- on_white sous le plancher faible : rien de visible sur blanc --------
+    (1.9, 1.9, "unknown",        False),   # invisible des DEUX cotes : le seul vrai unknown
+    (1.9, 2.0, "dark_required",  False),   # bord bas de INK_ON_BLACK_WEAK
+    (1.9, 8.0, "dark_required",  False),
+    (1.9, 90.0, "dark_required", False),
+    # --- bord bas de la bande pale ------------------------------------------
+    (2.0, 1.9, "light_required", True),    # visible sur blanc, pas sur noir
+    (2.0, 2.0, "dark_required",  True),    # REPARE : etait « unknown »
+    (2.0, 8.0, "dark_required",  True),    # REPARE
+    (2.0, 90.0, "dark_required", True),    # REPARE
+    # --- bord haut de la bande pale -----------------------------------------
+    (7.9, 1.9, "light_required", True),
+    (7.9, 2.0, "dark_required",  True),    # REPARE
+    (7.9, 8.0, "dark_required",  True),    # REPARE
+    (7.9, 90.0, "dark_required", True),    # REPARE — le profil de witeck.fr
+    # --- on_white a INK_ON_WHITE_STRONG : plus « pale », plus dark_required --
+    (8.0, 1.9, "light_required", False),
+    (8.0, 2.0, "any",            False),   # bord bas de la regle 2
+    (8.0, 8.0, "any",            False),
+    (8.0, 90.0, "any",           False),
+]
+
+
+@pytest.mark.parametrize("on_white,on_black,attendu,pale_attendu", FRONTIERES)
+def test_frontieres_du_verdict_de_surface(on_white, on_black, attendu, pale_attendu):
+    """Les 16 croisements de frontiere : verdict ET presence du flag « pale ».
+
+    Le flag est verifie en meme temps que le verdict parce que les deux se
+    lisent ENSEMBLE cote consommateur : ``pale`` dit « encre tenue sur blanc »,
+    le verdict dit quelle surface il faut. Le defaut corrige tenait justement a
+    ce que le flag etait pose et le verdict, lui, ne concluait pas.
+    """
+    surface, flags = _verdict(on_white, on_black)
+    assert surface == attendu, (on_white, on_black, surface, flags)
+    assert ("pale" in flags) is pale_attendu, (on_white, on_black, flags)
+
+
+def test_la_bande_pale_franche_sur_noir_ne_tombe_plus_en_unknown():
+    """Le TROU repare, enonce comme tel : 2 <= on_white < 8 et on_black >= 2.
+
+    Dans cette bande, la regle 2 echoue (elle exige on_white >= 8), la regle 3
+    echouait aussi (elle exigeait on_white < 2) et la regle 4 echoue des que
+    l'encre est franche sur noir (elle exige on_black < 2). Il ne restait que le
+    repli ``unknown``, donc aucune plaque et aucun flag bloquant : le service
+    autorisait la publication d'un logo qu'on ne voit pas.
+    """
+    repares = [(ow, ob) for ow, ob, attendu, _ in FRONTIERES
+               if logo_derive.INK_ON_WHITE_WEAK <= ow < logo_derive.INK_ON_WHITE_STRONG
+               and ob >= logo_derive.INK_ON_BLACK_WEAK]
+    assert len(repares) == 6, repares
+    for on_white, on_black in repares:
+        surface, flags = _verdict(on_white, on_black)
+        assert surface == "dark_required", (on_white, on_black, surface)
+        assert "pale" in flags, (on_white, on_black, flags)
+
+
+# --- L'invariant de la spec, verrouille par ENUMERATION ----------------------
+# Spec (« Cadre 200 et fond des logos », section 06) : ``unknown`` designe les
+# irrecuperables, c'est-a-dire les logos invisibles sur blanc ET sur noir. Avant
+# correctif il attrapait bien plus large. Ci-dessous ce n'est pas un commentaire
+# mais une equivalence testee sur tout le plan des mesures.
+
+_OW_GRID = (0.0, 0.5, 1.0, 1.9, 1.99, 2.0, 2.01, 4.0, 7.9, 7.99, 8.0, 8.01, 12.0, 50.0, 100.0)
+_OB_GRID = _OW_GRID
+_ALPHA_GRID = (0.0, 5.0, 9.99, 10.0, 10.01, 50.0, 100.0)
+
+
+def test_unknown_ne_survient_que_si_invisible_des_deux_cotes():
+    """ENUMERATION : ``unknown`` <=> on_white < 2 ET on_black < 2.
+
+    Balaye 15 x 15 x 7 x 2 = 3150 combinaisons de (on_white, on_black,
+    alpha_ratio, self_background), bords de seuils inclus. La seule echappatoire
+    admise est la regle 1, qui rend « any » un logo portant son propre fond :
+    d'ou le terme ``not (alpha < 10 and self_background)``.
+
+    C'est l'invariant que le chantier doit tenir : si un jour un seuil bouge et
+    rouvre un trou, c'est ce test qui tombe — pas un lecteur attentif.
+    """
+    vus = 0
+    for self_bg in (False, True):
+        for alpha in _ALPHA_GRID:
+            for on_white in _OW_GRID:
+                for on_black in _OB_GRID:
+                    surface, flags = _verdict(on_white, on_black, alpha, self_bg)
+                    porte_son_fond = (alpha < logo_derive.ALPHA_RATIO_SELF_BACKGROUND
+                                      and self_bg)
+                    attendu = (on_white < logo_derive.INK_ON_WHITE_WEAK
+                               and on_black < logo_derive.INK_ON_BLACK_WEAK
+                               and not porte_son_fond)
+                    assert (surface == "unknown") is attendu, (
+                        on_white, on_black, alpha, self_bg, surface, flags)
+                    vus += 1
+    assert vus == 3150, vus
+
+
+def test_les_quatre_regles_couvrent_tout_le_plan_sans_se_recouvrir():
+    """Les branches restent DISJOINTES et exhaustives.
+
+    Disjonction : les regles 2, 3 et 4 sont DEUX A DEUX exclusives, donc leur
+    ordre dans la cascade n'a aucune influence sur le verdict. 2 contre 3
+    s'excluent par ``on_white`` (>= 8 contre < 8) ; 3 contre 4 et 2 contre 4
+    s'excluent par ``on_black`` (>= 2 contre < 2).
+
+    La regle 1, elle, RECOUVRE volontairement les trois autres : c'est une
+    PRECEDENCE, pas une partition — un logo qui porte deja son fond sort
+    « any » sans qu'on regarde la couleur de son encre. Mesure : sur un maillage
+    de 793 962 points, la regle 1 recouvre une regle 2/3/4 dans 159 840 cas, et
+    c'est le comportement voulu. Le test l'affirme donc pour 2/3/4 seulement,
+    et non pour « les quatre », afin que personne ne lise ici une garantie que
+    la cascade ne donne pas.
+
+    Exhaustivite : hors du coin « invisible des deux cotes », le repli n'est
+    jamais atteint.
+    """
+    for on_white in _OW_GRID:
+        for on_black in _OB_GRID:
+            r2 = (on_white >= logo_derive.INK_ON_WHITE_STRONG
+                  and on_black >= logo_derive.INK_ON_BLACK_WEAK)
+            r3 = (on_white < logo_derive.INK_ON_WHITE_STRONG
+                  and on_black >= logo_derive.INK_ON_BLACK_WEAK)
+            r4 = (on_black < logo_derive.INK_ON_BLACK_WEAK
+                  and on_white >= logo_derive.INK_ON_WHITE_WEAK)
+            assert not (r2 and r3), (on_white, on_black)
+            assert not (r3 and r4), (on_white, on_black)
+            assert not (r2 and r4), (on_white, on_black)
+
+            surface, _flags = _verdict(on_white, on_black)
+            assert surface in {"any", "dark_required", "light_required", "unknown"}, surface
+            if on_white >= logo_derive.INK_ON_WHITE_WEAK or on_black >= logo_derive.INK_ON_BLACK_WEAK:
+                assert surface != "unknown", (on_white, on_black, surface)
+
+
+def test_pale_et_unknown_sont_desormais_exclusifs():
+    """Corollaire lisible : un logo « pale » a forcement un verdict tranche.
+
+    ``pale`` exige on_white >= INK_ON_WHITE_WEAK, et ``unknown`` exige
+    desormais on_white < INK_ON_WHITE_WEAK : la conjonction est impossible.
+    C'etait exactement l'etat de witeck.fr — ``surface=unknown flags=pale`` —
+    et c'est ce que ce test rend inatteignable.
+    """
+    for self_bg in (False, True):
+        for alpha in _ALPHA_GRID:
+            for on_white in _OW_GRID:
+                for on_black in _OB_GRID:
+                    surface, flags = _verdict(on_white, on_black, alpha, self_bg)
+                    assert not ("pale" in flags and surface == "unknown"), (
+                        on_white, on_black, alpha, self_bg, surface, flags)
+
+
+# --- Le cas reel, de bout en bout -------------------------------------------
+
+def _png_logotype_pale_sur_transparent(accent_px, cadre=(400, 200)):
+    """Logotype PALE sur transparent : barres claires espacees + un accent sombre.
+
+    Reproduit le profil de witeck.fr (domaine 4621) : une encre tres claire,
+    donc invisible sur le cadre #FFFFFF de la carte, mais franche sur noir. Les
+    GAPS entre les barres sont ce qui compte : ils gardent de la transparence
+    DANS la boite d'encre, donc ``alpha_ratio`` reste au-dessus de
+    ALPHA_RATIO_SELF_BACKGROUND et la regle 1 ne court-circuite pas le verdict.
+    Un bloc plein, lui, sort trime a alpha_ratio = 0 et donc « any ».
+
+    Args:
+        accent_px: largeur de la bande sombre, seule encre visible sur blanc.
+            C'est elle qui place le cas dans la bande ``pale``.
+    """
+    img = Image.new("RGBA", cadre, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    for i in range(7):
+        x = 10 + i * 54
+        draw.rectangle([x, 30, x + 19, 169], fill=(246, 246, 246, 255))
+    if accent_px:
+        draw.rectangle([10, 30, 10 + accent_px - 1, 169], fill=(40, 40, 40, 255))
+    return _png(img)
+
+
+@pytest.mark.parametrize("accent_px", (8, 12, 16, 20))
+def test_logotype_pale_franc_sur_noir_recoit_sa_plaque(accent_px):
+    """LE CAS witeck.fr, de bout en bout : la bande pale doit produire une sq200d.
+
+    witeck.fr (domaine 4621) est sorti du backfill du 02/09 en
+    ``outcome=ok surface=unknown publishable=oui flags=pale`` alors que sa
+    vignette est VIDE sur le damier de l'ecran de validation comme dans la carte
+    blanche du front. Mesure de son master : ink_on_white 4,83 /
+    ink_on_black 29,10 / alpha_ratio 77,36.
+
+    Ce que le defaut coutait, et que ce test interdit de retrouver : aucune
+    plaque (l'etape 8 ne s'arme que sur ``dark_required``), aucun flag bloquant
+    donc ``publishable`` vrai, et un ecran de validation incapable de signaler
+    quoi que ce soit puisque son correctif d'affichage ne s'arme lui aussi que
+    sur ``dark_required``.
+    """
+    content = _png_logotype_pale_sur_transparent(accent_px)
+    result = derive_logo(content, KEY, hashlib.sha256(content).hexdigest())
+    metrics = result["metrics"]
+
+    # Le temoin est bien DANS la bande pale, et franc sur noir.
+    assert logo_derive.INK_ON_WHITE_WEAK <= metrics["ink_on_white"] < logo_derive.INK_ON_WHITE_STRONG, metrics
+    assert metrics["ink_on_black"] >= logo_derive.INK_ON_BLACK_WEAK, metrics
+    assert metrics["alpha_ratio"] >= logo_derive.ALPHA_RATIO_SELF_BACKGROUND, metrics
+
+    assert metrics["surface"] == "dark_required", metrics
+    assert "pale" in metrics["flags"], metrics
+    assert variant(result, "sq200d") is not None, (
+        "la plaque est ce qui rend le logo lisible : sans elle le verdict ne sert a rien")
+    assert variant(result, "sq200a") is not None, metrics
+    # Rien de bloquant : le logo est publiable AVEC sa plaque, pas malgre elle.
+    assert not (set(metrics["flags"]) & BLOCKING_FLAGS), metrics
+
+
+def test_le_correctif_ne_touche_pas_les_octets_de_sq200a():
+    """INVARIANT : le verdict ne peut pas changer la variante principale.
+
+    ``sq200a`` est construite ET encodee AVANT l'etape 8, et son nom est adresse
+    par contenu — ``sha256(content_hash|RECIPE)[:12]`` — pour un CDN qui sert ces
+    fichiers en ``Cache-Control: immutable`` 30 JOURS SANS PURGE POSSIBLE. Si un
+    changement de verdict pouvait deplacer ces octets a nom constant, la mauvaise
+    image serait servie un mois.
+
+    Le temoin balaye la bande pale de part en part : ``accent_px`` fait varier
+    le verdict (dark_required dans la bande, any au-dela) SANS toucher a la
+    geometrie ni aux couleurs de l'encre claire. Les octets de ``sq200a`` ne
+    doivent dependre que du contenu.
+    """
+    for accent_px in (8, 16, 28):
+        content = _png_logotype_pale_sur_transparent(accent_px)
+        chash = hashlib.sha256(content).hexdigest()
+        premier = derive_logo(content, KEY, chash)
+        second = derive_logo(content, KEY, chash)
+        a1, a2 = variant(premier, "sq200a"), variant(second, "sq200a")
+        assert a1 is not None and a2 is not None, accent_px
+        # Deterministe a contenu egal : meme nom, memes octets.
+        assert a1["filename"] == a2["filename"], accent_px
+        assert a1["bytes"] == a2["bytes"], accent_px
+        # Et le nom ne porte QUE le hash de contenu et la recette.
+        assert logo_derive._content_key(chash) in a1["filename"], a1["filename"]
+        assert RECIPE in a1["filename"], a1["filename"]
+
+
+@pytest.mark.parametrize("accent_px", (8, 16, 28))
+def test_le_verdict_ne_peut_pas_deplacer_les_octets_de_sq200a(accent_px, monkeypatch):
+    """INVARIANT REEL : a contenu EGAL, les 4 verdicts rendent la MEME sq200a.
+
+    Le test de determinisme voisin ne suffit pas a l'etablir : il derive deux
+    fois le meme contenu, donc les deux passes empruntent la MEME branche et un
+    sabotage de l'etape 8 les corromprait TOUTES LES DEUX a l'identique. Mesure
+    faite : en ajoutant un seul octet a ``variants[0]["bytes"]`` dans la branche
+    ``dark_required``, la suite ENTIERE du service passe encore — 626 tests
+    verts sur des octets pourtant faux, a nom de fichier constant. C'est
+    exactement le scenario que le ``Cache-Control: immutable`` de 30 jours rend
+    irreparable, et il n'etait couvert par personne.
+
+    Ce test le couvre en FORCANT chacun des 4 verdicts sur le MEME contenu : si
+    une etape posterieure a la construction de ``sq200a`` touchait ses octets ou
+    son nom, les 4 passes divergeraient et l'assertion tomberait.
+    """
+    content = _png_logotype_pale_sur_transparent(accent_px)
+    chash = hashlib.sha256(content).hexdigest()
+
+    obtenus = {}
+    for force in ("any", "dark_required", "light_required", "unknown"):
+        monkeypatch.setattr(
+            logo_derive, "_surface_verdict",
+            lambda _measures, self_background=False, _v=force: (_v, []),
+        )
+        res = derive_logo(content, KEY, chash)
+        plain = variant(res, "sq200a")
+        assert plain is not None, (accent_px, force, res["metrics"])
+        obtenus[force] = (plain["filename"], hashlib.sha256(plain["bytes"]).hexdigest(),
+                          len(plain["bytes"]))
+
+    reference = obtenus["any"]
+    for force, valeur in obtenus.items():
+        assert valeur == reference, (
+            "le verdict %r a deplace sq200a (nom, sha256 ou taille) : %r != %r"
+            % (force, valeur, reference))
+
+
+def test_recipe_nest_pas_bumpee_par_ce_correctif():
+    """La recette reste « r1m0 » : le correctif ne renomme AUCUN derive.
+
+    Bumper RECIPE renommerait tous les derives du parc et imposerait une
+    re-derivation complete. Ce n'est pas necessaire : le verdict n'entre pas dans
+    les octets de ``sq200a`` ni dans son nom, seule la PRESENCE de ``sq200d``
+    change. Ce test est la pour qu'un futur reglage de seuil ne s'accompagne pas
+    d'un bump reflexe.
+    """
+    assert RECIPE == "r1m0", RECIPE
