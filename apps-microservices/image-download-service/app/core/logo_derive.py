@@ -1293,6 +1293,85 @@ def _surface_verdict(measures, self_background=False):
         du chantier (logotype BLANC PLEIN sur TRANSPARENT) n'est pas touchee :
         son alpha est reellement utilisee au niveau de la SOURCE, donc
         ``self_background`` y vaut False et le verdict reste ``dark_required``.
+
+        CORRECTIF du 02/09/2026 : la regle 3 compare desormais ``on_white`` a
+        :data:`INK_ON_WHITE_STRONG` (8) et non plus a
+        :data:`INK_ON_WHITE_WEAK` (2). Elle laissait un TROU exactement large
+        de la bande ``pale`` : pour 2 <= on_white < 8, la regle 2 echoue
+        (elle exige on_white >= 8), la regle 3 echouait aussi (elle exigeait
+        on_white < 2) et la regle 4 echoue des que l'encre est franche sur
+        noir (elle exige on_black < 2). Il ne restait que le repli
+        ``unknown`` — donc AUCUNE plaque (l'etape 8 ne s'arme que sur
+        ``dark_required``), AUCUN flag bloquant, et un logo qu'on ne voit pas
+        declare publiable.
+
+        Le cas qui l'a montre est witeck.fr (domaine 4621), sorti du backfill
+        du 02/09 en ``outcome=ok surface=unknown publishable=oui flags=pale``
+        alors que sa vignette est VIDE sur le damier de l'ecran de validation
+        comme dans la carte blanche du front. Mesure de son master :
+        ink_on_white 4,83 / ink_on_black 29,10 / alpha_ratio 77,36 — un
+        logotype tres pale, invisible sur blanc et FRANC sur noir, c'est-a-dire
+        la definition meme de ``dark_required``.
+
+        Ce que devient ``unknown`` : la SPEC (artifact « Cadre 200 et fond des
+        logos », section 06) le reserve aux « 2 irrecuperables » — invisible
+        sur blanc ET sur noir. C'est ce que la regle rend enfin vrai : les
+        regles 1 a 4 couvrent desormais tout le plan (on_white, on_black) SAUF
+        le coin on_white < 2 ET on_black < 2, et ce coin est le seul repli.
+        Cf. le test d'enumeration qui verrouille cet invariant.
+        A NOTER : ``metrics["surface"]`` vaut aussi ``"unknown"`` par DEFAUT
+        quand la derivation s'arrete AVANT l'etape 6 (``svg_text``,
+        ``svg_too_complex``, ``ink_too_small``, ``derivation_failed``) ; ces
+        lignes portent alors un flag BLOQUANT, elles ne sont donc jamais un
+        « unknown publiable ». L'invariant porte sur le VERDICT rendu ici.
+
+        La bande pale n'est pas perdue pour autant : le flag ``pale`` reste
+        pose independamment du verdict, et continue de dire « encre visible
+        mais tenue sur blanc » a l'audit.
+
+        MESURE de la bascule (02/09/2026), en derivant 913 masters REELS du
+        parc avec ce module, AVANT puis APRES le changement de seuil : 74
+        lignes basculent ``unknown`` -> ``dark_required``, et il ne reste 0
+        ``unknown`` rendu par cette fonction. Population : les 426 domaines
+        dont la revue du 27/08 mesure la visibilite sur blanc sous 16 %, les 6
+        lignes scrapees apres cette revue, et un tirage ALEATOIRE de 500 sur
+        les 3763 — ce tirage n'a trouve AUCUNE bascule hors du recensement, et
+        sur ses 435 masters au-dela de 16 % aucun n'a meme ``on_white`` < 8.
+        Il extrapole 2,21 % du parc, soit 83 lignes, cadrant les 74 recensees.
+
+        Le doute « et un logo mediocre PARTOUT ? » est tranche par la mesure
+        et non par le raisonnement : sur ces 74 cas, on_white va de 2,07 a
+        7,89 et on_black de 9,06 a 87,34 ; le rapport on_black/on_white vaut
+        6,25x en median et ne descend jamais sous 2,03x ; il n'existe AUCUN
+        cas ou on_black <= on_white, ni aucun ou on_black < 8. Les deux
+        garde-fous envisages sont donc soit inertes, soit nuisibles :
+        « on_black > on_white » ne change RIEN (0 divergence sur les 906
+        verdicts rendus), et « on_black >= 8 » ferait REGRESSER un cas deja
+        correct — soudax.com (on_white 0,00 / on_black 3,90), aujourd'hui
+        ``dark_required``, repasserait en ``unknown``. Aucune condition
+        supplementaire n'est donc retenue : le seul seuil deplace suffit.
+
+        CONSEQUENCE A CONNAITRE, mesuree elle aussi : sur les 74 bascules, 57
+        gagnent leur plaque et restent publiables (c'est le but), 10 etaient
+        DEJA refusees par ``elongated`` (le verdict n'y change que l'audit),
+        et 7 PASSENT DE PUBLIABLE A REFUSEES. Ces 7 ont un bord de matte
+        suspect : l'etape 8 refuse la plaque, donc ``no_usable_variant`` tombe
+        et il est BLOQUANT. Ce n'est pas une regression du seuil mais la
+        politique de plaque qui s'applique enfin a une population qui
+        court-circuitait l'etape 8 (``matte_suspect`` n'y etait meme jamais
+        mesure) ; et refuser vaut mieux que publier une vignette vide, ce que
+        le defaut faisait pour les 74. Les 7 : cabs-industries.com,
+        distributeur-automatique-lot-...com, etancogroup.com,
+        hexagone-air-concept.com, lanef-pro.fr, sachot-acces.fr, valtra.fr.
+
+        INVARIANT VERIFIE sur ces 913 masters, et non suppose : les 900 qui
+        produisent une ``sq200a`` la produisent au MEME nom et aux MEMES
+        octets (0 ecart de sha256, 0 ecart de taille) avant et apres, et
+        aucune ``sq200d`` preexistante ne change d'octets. Le verdict ne peut
+        pas deplacer la variante principale : elle est construite et encodee
+        AVANT l'etape 8. C'est ce qui rend ce correctif compatible avec le
+        ``Cache-Control: immutable`` de 30 jours du CDN et dispense de bumper
+        :data:`RECIPE` — 67 plaques apparaissent, rien n'est renomme.
     """
     alpha_ratio = measures["alpha_ratio"]
     on_white = measures["ink_on_white"]
@@ -1304,8 +1383,8 @@ def _surface_verdict(measures, self_background=False):
         surface = "any"                      # le logo porte deja son fond
     elif on_white >= INK_ON_WHITE_STRONG and on_black >= INK_ON_BLACK_WEAK:
         surface = "any"
-    elif on_white < INK_ON_WHITE_WEAK and on_black >= INK_ON_BLACK_WEAK:
-        surface = "dark_required"            # invisible sur blanc
+    elif on_white < INK_ON_WHITE_STRONG and on_black >= INK_ON_BLACK_WEAK:
+        surface = "dark_required"            # pas lisible sur blanc, franc sur noir
     elif on_black < INK_ON_BLACK_WEAK and on_white >= INK_ON_WHITE_WEAK:
         surface = "light_required"           # invisible sur noir
     else:
