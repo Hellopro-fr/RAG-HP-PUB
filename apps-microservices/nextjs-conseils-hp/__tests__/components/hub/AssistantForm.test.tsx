@@ -88,6 +88,37 @@ describe('AssistantForm', () => {
     }
   });
 
+  /**
+   * La pastille compte les QUESTIONS, pas les écrans (2026-09-03).
+   *
+   * Le bug corrigé ici affichait « Question 1/6 » pour 4 questions, parce que la
+   * pastille lisait `totalSteps` — qui inclut l'écran e-mail et l'écran
+   * coordonnées. Il est resté invisible parce que les trois pages HUB ont
+   * exactement 4 questions : la valeur avait l'air figée à 6, alors qu'elle était
+   * calculée à partir du mauvais total.
+   *
+   * ⚠️ D'où un nombre de questions VOLONTAIREMENT différent de 4 dans ce test :
+   * avec 4, l'assertion passerait aussi bien avec l'ancien code de la page 1000,
+   * et ne prouverait rien.
+   */
+  it('annonce le nombre exact de questions, pas le nombre d’écrans', () => {
+    const troisQuestions = { ...data, steps: data.steps.slice(0, 3) };
+    render(<AssistantForm data={troisQuestions} idPageHub={ID_PAGE_HUB} />);
+    expect(screen.getByText('Question 1/3')).toBeDefined();
+    expect(screen.queryByText('Question 1/5')).toBeNull();
+  });
+
+  it('suit le nombre de questions de la page, sans valeur figée', () => {
+    const { unmount } = render(
+      <AssistantForm data={{ ...data, steps: data.steps.slice(0, 2) }} idPageHub={ID_PAGE_HUB} />
+    );
+    expect(screen.getByText('Question 1/2')).toBeDefined();
+    unmount();
+
+    render(<AssistantForm data={data} idPageHub={ID_PAGE_HUB} />);
+    expect(screen.getByText(`Question 1/${data.steps.length}`)).toBeDefined();
+  });
+
   it('désactive le bouton de démarrage tant qu’aucune réponse n’est choisie', () => {
     render(<AssistantForm data={data} idPageHub={ID_PAGE_HUB} />);
     expect(screen.getByRole('button', { name: new RegExp(data.ctaLabel, 'i') })).toBeDisabled();
