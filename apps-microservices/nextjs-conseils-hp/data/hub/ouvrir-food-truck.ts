@@ -84,7 +84,9 @@ export const ouvrirFoodTruck: HubPage = {
   ],
 
   hero: {
-    badge: "Préparez l'ouverture de votre food-truck",
+    // Libellé UNIFORME sur les trois pages HUB (2026-09-03) — cf. la note du
+    // même champ dans `ouvrir-laverie-automatique.ts`.
+    badge: 'Accompagnement gratuit',
     titleParts: [
       { text: 'Ouvrir un ' },
       { text: 'food truck', accent: true },
