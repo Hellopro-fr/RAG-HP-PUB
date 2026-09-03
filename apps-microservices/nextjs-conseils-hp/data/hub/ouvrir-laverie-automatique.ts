@@ -109,10 +109,13 @@ export const ouvrirLaverieAutomatique: HubPage = {
   ],
 
   hero: {
-    // « Phrase d'accroche : Ouvrir une laverie automatique rentable » au cahier
-    // des charges. Le H1 portant déjà « Ouvrir une laverie automatique », le
-    // badge reprend l'angle sans répéter la formule mot pour mot.
-    badge: 'Préparez lʼouverture de votre laverie automatique',
+    // Libellé UNIFORME sur les trois pages HUB (2026-09-03). Il portait d'abord
+    // l'angle de la page — « Préparez lʼouverture de votre laverie automatique »,
+    // repris du cahier des charges. Deux raisons de l'avoir abandonné : le H1
+    // juste dessous dit déjà de quel projet il s'agit, et un badge qui change de
+    // longueur d'une page à l'autre déforme le hero. Il annonce donc ce que la
+    // page OFFRE, ce qui est le même sur les trois.
+    badge: 'Accompagnement gratuit',
     titleParts: [
       { text: 'Ouvrir une ' },
       { text: 'laverie automatique', accent: true },
