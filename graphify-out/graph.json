@@ -122532,8 +122532,8 @@
       "source_file": "apps-microservices/crawler-service/tests/test_restore_from_verified_allowlist.py",
       "source_location": "L1",
       "community": 0,
-      "id": "apps_microservices_crawler_service_tests_test_restore_from_verified_allowlist_py",
-      "norm_label": "test_restore_from_verified_allowlist.py"
+      "norm_label": "test_restore_from_verified_allowlist.py",
+      "id": "apps_microservices_crawler_service_tests_test_restore_from_verified_allowlist_py"
     },
     {
       "label": "test_gcs_verified_false_when_allowlist_absent()",
@@ -122541,8 +122541,8 @@
       "source_file": "apps-microservices/crawler-service/tests/test_restore_from_verified_allowlist.py",
       "source_location": "L26",
       "community": 3,
-      "id": "test_restore_from_verified_allowlist_test_gcs_verified_false_when_allowlist_absent",
-      "norm_label": "test_gcs_verified_false_when_allowlist_absent()"
+      "norm_label": "test_gcs_verified_false_when_allowlist_absent()",
+      "id": "test_restore_from_verified_allowlist_test_gcs_verified_false_when_allowlist_absent"
     },
     {
       "label": "test_gcs_verified_false_when_allowlist_empty()",
@@ -122550,8 +122550,8 @@
       "source_file": "apps-microservices/crawler-service/tests/test_restore_from_verified_allowlist.py",
       "source_location": "L37",
       "community": 3,
-      "id": "test_restore_from_verified_allowlist_test_gcs_verified_false_when_allowlist_empty",
-      "norm_label": "test_gcs_verified_false_when_allowlist_empty()"
+      "norm_label": "test_gcs_verified_false_when_allowlist_empty()",
+      "id": "test_restore_from_verified_allowlist_test_gcs_verified_false_when_allowlist_empty"
     },
     {
       "label": "test_gcs_verified_false_when_id_not_listed()",
@@ -122559,8 +122559,8 @@
       "source_file": "apps-microservices/crawler-service/tests/test_restore_from_verified_allowlist.py",
       "source_location": "L47",
       "community": 3,
-      "id": "test_restore_from_verified_allowlist_test_gcs_verified_false_when_id_not_listed",
-      "norm_label": "test_gcs_verified_false_when_id_not_listed()"
+      "norm_label": "test_gcs_verified_false_when_id_not_listed()",
+      "id": "test_restore_from_verified_allowlist_test_gcs_verified_false_when_id_not_listed"
     },
     {
       "label": "test_gcs_verified_true_when_id_listed()",
@@ -122568,8 +122568,8 @@
       "source_file": "apps-microservices/crawler-service/tests/test_restore_from_verified_allowlist.py",
       "source_location": "L54",
       "community": 3,
-      "id": "test_restore_from_verified_allowlist_test_gcs_verified_true_when_id_listed",
-      "norm_label": "test_gcs_verified_true_when_id_listed()"
+      "norm_label": "test_gcs_verified_true_when_id_listed()",
+      "id": "test_restore_from_verified_allowlist_test_gcs_verified_true_when_id_listed"
     },
     {
       "label": "test_gcs_verified_compares_as_string()",
@@ -122577,8 +122577,8 @@
       "source_file": "apps-microservices/crawler-service/tests/test_restore_from_verified_allowlist.py",
       "source_location": "L60",
       "community": 3,
-      "id": "test_restore_from_verified_allowlist_test_gcs_verified_compares_as_string",
-      "norm_label": "test_gcs_verified_compares_as_string()"
+      "norm_label": "test_gcs_verified_compares_as_string()",
+      "id": "test_restore_from_verified_allowlist_test_gcs_verified_compares_as_string"
     },
     {
       "label": "_scaffold()",
@@ -122586,8 +122586,8 @@
       "source_file": "apps-microservices/crawler-service/tests/test_restore_from_verified_allowlist.py",
       "source_location": "L78",
       "community": 3,
-      "id": "test_restore_from_verified_allowlist_scaffold",
-      "norm_label": "_scaffold()"
+      "norm_label": "_scaffold()",
+      "id": "test_restore_from_verified_allowlist_scaffold"
     },
     {
       "label": "_start()",
@@ -122595,8 +122595,8 @@
       "source_file": "apps-microservices/crawler-service/tests/test_restore_from_verified_allowlist.py",
       "source_location": "L130",
       "community": 9,
-      "id": "test_restore_from_verified_allowlist_start",
-      "norm_label": "_start()"
+      "norm_label": "_start()",
+      "id": "test_restore_from_verified_allowlist_start"
     },
     {
       "label": "test_no_blob_but_gcs_verified_attempts_restore()",
@@ -122604,8 +122604,8 @@
       "source_file": "apps-microservices/crawler-service/tests/test_restore_from_verified_allowlist.py",
       "source_location": "L142",
       "community": 3,
-      "id": "test_restore_from_verified_allowlist_test_no_blob_but_gcs_verified_attempts_restore",
-      "norm_label": "test_no_blob_but_gcs_verified_attempts_restore()"
+      "norm_label": "test_no_blob_but_gcs_verified_attempts_restore()",
+      "id": "test_restore_from_verified_allowlist_test_no_blob_but_gcs_verified_attempts_restore"
     },
     {
       "label": "test_no_allowlist_still_rejects_400_and_attempts_nothing()",
@@ -122613,8 +122613,8 @@
       "source_file": "apps-microservices/crawler-service/tests/test_restore_from_verified_allowlist.py",
       "source_location": "L162",
       "community": 3,
-      "id": "test_restore_from_verified_allowlist_test_no_allowlist_still_rejects_400_and_attempts_nothing",
-      "norm_label": "test_no_allowlist_still_rejects_400_and_attempts_nothing()"
+      "norm_label": "test_no_allowlist_still_rejects_400_and_attempts_nothing()",
+      "id": "test_restore_from_verified_allowlist_test_no_allowlist_still_rejects_400_and_attempts_nothing"
     },
     {
       "label": "test_id_absent_from_allowlist_still_rejects_400()",
@@ -122622,8 +122622,8 @@
       "source_file": "apps-microservices/crawler-service/tests/test_restore_from_verified_allowlist.py",
       "source_location": "L181",
       "community": 3,
-      "id": "test_restore_from_verified_allowlist_test_id_absent_from_allowlist_still_rejects_400",
-      "norm_label": "test_id_absent_from_allowlist_still_rejects_400()"
+      "norm_label": "test_id_absent_from_allowlist_still_rejects_400()",
+      "id": "test_restore_from_verified_allowlist_test_id_absent_from_allowlist_still_rejects_400"
     },
     {
       "label": "test_failed_previous_crawl_is_not_resurrected()",
@@ -122631,8 +122631,8 @@
       "source_file": "apps-microservices/crawler-service/tests/test_restore_from_verified_allowlist.py",
       "source_location": "L194",
       "community": 3,
-      "id": "test_restore_from_verified_allowlist_test_failed_previous_crawl_is_not_resurrected",
-      "norm_label": "test_failed_previous_crawl_is_not_resurrected()"
+      "norm_label": "test_failed_previous_crawl_is_not_resurrected()",
+      "id": "test_restore_from_verified_allowlist_test_failed_previous_crawl_is_not_resurrected"
     },
     {
       "label": "test_archived_blob_keeps_the_existing_route()",
@@ -122640,8 +122640,8 @@
       "source_file": "apps-microservices/crawler-service/tests/test_restore_from_verified_allowlist.py",
       "source_location": "L214",
       "community": 3,
-      "id": "test_restore_from_verified_allowlist_test_archived_blob_keeps_the_existing_route",
-      "norm_label": "test_archived_blob_keeps_the_existing_route()"
+      "norm_label": "test_archived_blob_keeps_the_existing_route()",
+      "id": "test_restore_from_verified_allowlist_test_archived_blob_keeps_the_existing_route"
     },
     {
       "label": "Third recovery path: restore a reference crawl whose Redis blob is gone but whos",
@@ -122649,8 +122649,8 @@
       "source_file": "apps-microservices/crawler-service/tests/test_restore_from_verified_allowlist.py",
       "source_location": "L1",
       "community": 3,
-      "id": "test_restore_from_verified_allowlist_rationale_1",
-      "norm_label": "third recovery path: restore a reference crawl whose redis blob is gone but whos"
+      "norm_label": "third recovery path: restore a reference crawl whose redis blob is gone but whos",
+      "id": "test_restore_from_verified_allowlist_rationale_1"
     },
     {
       "label": "No allowlist file => _load_reclean_allowlist returns None => never attempt.",
@@ -122658,8 +122658,8 @@
       "source_file": "apps-microservices/crawler-service/tests/test_restore_from_verified_allowlist.py",
       "source_location": "L27",
       "community": 3,
-      "id": "test_restore_from_verified_allowlist_rationale_27",
-      "norm_label": "no allowlist file => _load_reclean_allowlist returns none => never attempt."
+      "norm_label": "no allowlist file => _load_reclean_allowlist returns none => never attempt.",
+      "id": "test_restore_from_verified_allowlist_rationale_27"
     },
     {
       "label": "An EMPTY allowlist is a valid state that must reject, not raise.      Distinct",
@@ -122667,8 +122667,8 @@
       "source_file": "apps-microservices/crawler-service/tests/test_restore_from_verified_allowlist.py",
       "source_location": "L38",
       "community": 3,
-      "id": "test_restore_from_verified_allowlist_rationale_38",
-      "norm_label": "an empty allowlist is a valid state that must reject, not raise.      distinct"
+      "norm_label": "an empty allowlist is a valid state that must reject, not raise.      distinct",
+      "id": "test_restore_from_verified_allowlist_rationale_38"
     },
     {
       "label": "3559 measured 2026-09-02: its tar is genuinely not in GCS, the 400 is correct.",
@@ -122676,8 +122676,8 @@
       "source_file": "apps-microservices/crawler-service/tests/test_restore_from_verified_allowlist.py",
       "source_location": "L48",
       "community": 3,
-      "id": "test_restore_from_verified_allowlist_rationale_48",
-      "norm_label": "3559 measured 2026-09-02: its tar is genuinely not in gcs, the 400 is correct."
+      "norm_label": "3559 measured 2026-09-02: its tar is genuinely not in gcs, the 400 is correct.",
+      "id": "test_restore_from_verified_allowlist_rationale_48"
     },
     {
       "label": "The allowlist is read from a text file; a crawl_id may arrive as an int.",
@@ -122685,8 +122685,8 @@
       "source_file": "apps-microservices/crawler-service/tests/test_restore_from_verified_allowlist.py",
       "source_location": "L61",
       "community": 3,
-      "id": "test_restore_from_verified_allowlist_rationale_61",
-      "norm_label": "the allowlist is read from a text file; a crawl_id may arrive as an int."
+      "norm_label": "the allowlist is read from a text file; a crawl_id may arrive as an int.",
+      "id": "test_restore_from_verified_allowlist_rationale_61"
     },
     {
       "label": "Minimal start_crawl harness. Mirrors test_auto_stash_update_restore.py.      `",
@@ -122694,8 +122694,8 @@
       "source_file": "apps-microservices/crawler-service/tests/test_restore_from_verified_allowlist.py",
       "source_location": "L79",
       "community": 3,
-      "id": "test_restore_from_verified_allowlist_rationale_79",
-      "norm_label": "minimal start_crawl harness. mirrors test_auto_stash_update_restore.py.      `"
+      "norm_label": "minimal start_crawl harness. mirrors test_auto_stash_update_restore.py.      `",
+      "id": "test_restore_from_verified_allowlist_rationale_79"
     },
     {
       "label": "The dead end measured on 4688: no blob, no local data, tar verified in GCS.",
@@ -122703,8 +122703,8 @@
       "source_file": "apps-microservices/crawler-service/tests/test_restore_from_verified_allowlist.py",
       "source_location": "L143",
       "community": 3,
-      "id": "test_restore_from_verified_allowlist_rationale_143",
-      "norm_label": "the dead end measured on 4688: no blob, no local data, tar verified in gcs."
+      "norm_label": "the dead end measured on 4688: no blob, no local data, tar verified in gcs.",
+      "id": "test_restore_from_verified_allowlist_rationale_143"
     },
     {
       "label": "THE test that matters: without an allowlist, nothing is attempted.      Pins t",
@@ -122712,8 +122712,8 @@
       "source_file": "apps-microservices/crawler-service/tests/test_restore_from_verified_allowlist.py",
       "source_location": "L163",
       "community": 3,
-      "id": "test_restore_from_verified_allowlist_rationale_163",
-      "norm_label": "the test that matters: without an allowlist, nothing is attempted.      pins t"
+      "norm_label": "the test that matters: without an allowlist, nothing is attempted.      pins t",
+      "id": "test_restore_from_verified_allowlist_rationale_163"
     },
     {
       "label": "3559's shape: the allowlist exists and does not list this crawl.",
@@ -122721,8 +122721,8 @@
       "source_file": "apps-microservices/crawler-service/tests/test_restore_from_verified_allowlist.py",
       "source_location": "L182",
       "community": 3,
-      "id": "test_restore_from_verified_allowlist_rationale_182",
-      "norm_label": "3559's shape: the allowlist exists and does not list this crawl."
+      "norm_label": "3559's shape: the allowlist exists and does not list this crawl.",
+      "id": "test_restore_from_verified_allowlist_rationale_182"
     },
     {
       "label": "A previous crawl explicitly in status 'failed' must stay rejected.      Its 40",
@@ -122730,8 +122730,8 @@
       "source_file": "apps-microservices/crawler-service/tests/test_restore_from_verified_allowlist.py",
       "source_location": "L195",
       "community": 3,
-      "id": "test_restore_from_verified_allowlist_rationale_195",
-      "norm_label": "a previous crawl explicitly in status 'failed' must stay rejected.      its 40"
+      "norm_label": "a previous crawl explicitly in status 'failed' must stay rejected.      its 40",
+      "id": "test_restore_from_verified_allowlist_rationale_195"
     },
     {
       "label": "Non-regression: an 'archived' blob still goes through _restore_previous_crawl.",
@@ -122739,24 +122739,260 @@
       "source_file": "apps-microservices/crawler-service/tests/test_restore_from_verified_allowlist.py",
       "source_location": "L215",
       "community": 3,
-      "id": "test_restore_from_verified_allowlist_rationale_215",
-      "norm_label": "non-regression: an 'archived' blob still goes through _restore_previous_crawl."
+      "norm_label": "non-regression: an 'archived' blob still goes through _restore_previous_crawl.",
+      "id": "test_restore_from_verified_allowlist_rationale_215"
     },
     {
-      "id": "qmconsumptionskip_rationale_dedup_before_cap_defect",
       "label": "WHY recordQmCollapsed deduplicates: it did not, so a pair already recorded took another slot, and once the 4000 budget was full every further record incremented qmCollapsedRejected -- the counter the BO reads as truncated_by_cap. The BO then shut the whole DESTRUCTIVE phase of the run on that false truncation, losing redirections and Milvus orphan handling that had nothing to do with this channel. Four domains sat blocked up to five days. auditSidecars.ts's mergeCollapsed() already deduped; the collector was the one end that did not.",
       "file_type": "rationale",
       "source_file": "apps-microservices/crawler-service/crawler/src/qmConsumptionSkip.ts",
       "source_location": "qmConsumptionSkip.ts:100-112",
-      "community": 1
+      "community": 1,
+      "id": "qmconsumptionskip_rationale_dedup_before_cap_defect",
+      "norm_label": "why recordqmcollapsed deduplicates: it did not, so a pair already recorded took another slot, and once the 4000 budget was full every further record incremented qmcollapsedrejected -- the counter the bo reads as truncated_by_cap. the bo then shut the whole destructive phase of the run on that false truncation, losing redirections and milvus orphan handling that had nothing to do with this channel. four domains sat blocked up to five days. auditsidecars.ts's mergecollapsed() already deduped; the collector was the one end that did not."
     },
     {
-      "id": "qmconsumptionskip_rationale_dedup_test_precedes_cap",
       "label": "THE ORDER IS THE FIX: the dedup test runs BEFORE the cap test. Reversed, a repeat arriving after the cap was reached would increment qmCollapsedRejected and re-create the false truncation. One key map per cap class answers size in O(1), replacing a .filter().length recomputed over the whole array on every call -- quadratic, and ~180M comparisons at 45,662 calls against a 4000-element array in one run. The key joins the pair with NUL because it cannot occur in a URL: without an impossible separator, (a, b/c) and (a/b, c) would collide.",
       "file_type": "rationale",
       "source_file": "apps-microservices/crawler-service/crawler/src/qmConsumptionSkip.ts",
       "source_location": "qmConsumptionSkip.ts:118-131",
-      "community": 1
+      "community": 1,
+      "id": "qmconsumptionskip_rationale_dedup_test_precedes_cap",
+      "norm_label": "the order is the fix: the dedup test runs before the cap test. reversed, a repeat arriving after the cap was reached would increment qmcollapsedrejected and re-create the false truncation. one key map per cap class answers size in o(1), replacing a .filter().length recomputed over the whole array on every call -- quadratic, and ~180m comparisons at 45,662 calls against a 4000-element array in one run. the key joins the pair with nul because it cannot occur in a url: without an impossible separator, (a, b/c) and (a/b, c) would collide."
+    },
+    {
+      "label": "Doc m\u00e9tier de la table historique_exec_chatgpt (ANNUAIRE_BO / edgb2b, database_id 1) \u2014 journal d'usage et de co\u00fbt de TOUS les appels LLM de la plateforme : 1 ligne = 1 appel \u00e0 OpenAI, DeepSeek, Gemini, Claude ou Kimi. 6 233 631 lignes depuis le 2024-11-07, en croissance continue. PK id_historique_exec_chatgpt, tri par d\u00e9faut PK DESC.",
+      "file_type": "document",
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 28,
+      "id": "historique_exec_chatgpt_table_doc",
+      "norm_label": "doc metier de la table historique_exec_chatgpt (annuaire_bo / edgb2b, database_id 1) \u2014 journal d'usage et de cout de tous les appels llm de la plateforme : 1 ligne = 1 appel a openai, deepseek, gemini, claude ou kimi. 6 233 631 lignes depuis le 2024-11-07, en croissance continue. pk id_historique_exec_chatgpt, tri par defaut pk desc."
+    },
+    {
+      "label": "S\u00c9MANTIQUES ADOSS\u00c9ES \u00c0 DES DONN\u00c9ES DE PRODUCTION R\u00c9ELLEMENT OBSERV\u00c9ES : le champ \"rows\" du JSON vaut null, mais chaque colonne est chiffr\u00e9e sur la table vivante (6 233 631 lignes au 2026-09-03, 31,79 milliards de tokens, 54 568,36 USD cumul\u00e9s, distributions de NULL et de valeurs aberrantes compt\u00e9es ligne \u00e0 ligne). Un compte de lignes null ne signifie donc PAS que la s\u00e9mantique est d\u00e9duite du seul code.",
+      "file_type": "rationale",
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 28,
+      "id": "historique_exec_chatgpt_observed_production_data",
+      "norm_label": "semantiques adossees a des donnees de production reellement observees : le champ \"rows\" du json vaut null, mais chaque colonne est chiffree sur la table vivante (6 233 631 lignes au 2026-09-03, 31,79 milliards de tokens, 54 568,36 usd cumules, distributions de null et de valeurs aberrantes comptees ligne a ligne). un compte de lignes null ne signifie donc pas que la semantique est deduite du seul code."
+    },
+    {
+      "label": "ARCHIVE PURE, R\u00c9TENTION NULLE : la cl\u00e9 primaire va de 1 \u00e0 6 233 631 sans le moindre trou \u2014 preuve directe qu'aucune ligne n'a jamais \u00e9t\u00e9 supprim\u00e9e. Aucun DELETE, aucun TRUNCATE, aucune routine d'archivage ne vise cette table nulle part dans le d\u00e9p\u00f4t ; la croissance est non born\u00e9e en lignes comme en octets. Liability d\u00e9j\u00e0 recens\u00e9e dans docs/pipelines/REGISTRE-TROUS.md.",
+      "file_type": "rationale",
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 28,
+      "id": "historique_exec_chatgpt_pure_archive_no_retention",
+      "norm_label": "archive pure, retention nulle : la cle primaire va de 1 a 6 233 631 sans le moindre trou \u2014 preuve directe qu'aucune ligne n'a jamais ete supprimee. aucun delete, aucun truncate, aucune routine d'archivage ne vise cette table nulle part dans le depot ; la croissance est non bornee en lignes comme en octets. liability deja recensee dans docs/pipelines/registre-trous.md."
+    },
+    {
+      "label": "AUCUN WRITER CANONIQUE : dix blocs INSERT recopi\u00e9s, un par classe de la couche multi-LLM (Gpt, Deepseek, Gemini, Claude, Kimik2, Gpt_batch, Batch, Thread, Assistant, Files) sous BO/fichiers_communs_bo_front/hellopro_fr/chatgpt/. Les divergences entre ces copies sont la source principale des pi\u00e8ges de la table \u2014 c'est la cause commune, pas un d\u00e9tail d'impl\u00e9mentation.",
+      "file_type": "rationale",
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 28,
+      "id": "historique_exec_chatgpt_ten_copied_insert_writers",
+      "norm_label": "aucun writer canonique : dix blocs insert recopies, un par classe de la couche multi-llm (gpt, deepseek, gemini, claude, kimik2, gpt_batch, batch, thread, assistant, files) sous bo/fichiers_communs_bo_front/hellopro_fr/chatgpt/. les divergences entre ces copies sont la source principale des pieges de la table \u2014 c'est la cause commune, pas un detail d'implementation."
+    },
+    {
+      "label": "ANGLE MORT D'OBSERVABILIT\u00c9 : quatre chemins n'\u00e9crivent RIEN dans cette table. L'insertion c\u00f4t\u00e9 OpenAI est lanc\u00e9e en mode non bloquant, donc un \u00e9chec d'\u00e9criture est perdu en silence l\u00e0 o\u00f9 les autres classes interrompent le script ; la classe Files ne journalise plus rien, son code d'insertion \u00e9tant devenu inatteignable ; une erreur de TRANSPORT DeepSeek sort avant toute journalisation ; et Perplexity n'appara\u00eet sous AUCUN code fournisseur, sa classe ne journalisant pas.",
+      "file_type": "rationale",
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 28,
+      "id": "historique_exec_chatgpt_logging_blind_spots",
+      "norm_label": "angle mort d'observabilite : quatre chemins n'ecrivent rien dans cette table. l'insertion cote openai est lancee en mode non bloquant, donc un echec d'ecriture est perdu en silence la ou les autres classes interrompent le script ; la classe files ne journalise plus rien, son code d'insertion etant devenu inatteignable ; une erreur de transport deepseek sort avant toute journalisation ; et perplexity n'apparait sous aucun code fournisseur, sa classe ne journalisant pas."
+    },
+    {
+      "label": "PI\u00c8GE DE PERFORMANCE MAJEUR \u2014 date_hec n'est PAS index\u00e9e alors qu'elle est le filtre de tous les lecteurs : sur 6,2 millions de lignes, tout filtre par date est un balayage complet. INDEXATION \u00c0 CONTRE-EMPLOI : les trois index secondaires portent sur cout_hec, id_process_hec et type_api_hec, tandis que date_hec et etat_chatgpt_hec n'en ont aucun. Borner d'abord par la PK, contigu\u00eb et strictement croissante avec le temps : une plage d'identifiants approche une plage de dates sans co\u00fbter un balayage.",
+      "file_type": "rationale",
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 28,
+      "id": "historique_exec_chatgpt_date_hec_unindexed",
+      "norm_label": "piege de performance majeur \u2014 date_hec n'est pas indexee alors qu'elle est le filtre de tous les lecteurs : sur 6,2 millions de lignes, tout filtre par date est un balayage complet. indexation a contre-emploi : les trois index secondaires portent sur cout_hec, id_process_hec et type_api_hec, tandis que date_hec et etat_chatgpt_hec n'en ont aucun. borner d'abord par la pk, contigue et strictement croissante avec le temps : une plage d'identifiants approche une plage de dates sans couter un balayage."
+    },
+    {
+      "label": "type_ia_hec \u2014 COLLISION ASSUM\u00c9E DANS LE CODE : 1 = OpenAI, 2 = DeepSeek, 3 = Gemini, 4 = Claude ET Kimi K2, la classe Kimi \u00e9crivant d\u00e9lib\u00e9r\u00e9ment le m\u00eame code que la classe Claude ; SEULE modele_hec les s\u00e9pare (pr\u00e9fixe claude- contre kimi-, sur 20 valeurs de mod\u00e8le observ\u00e9es). Le d\u00e9faut \u00e0 1 est PORTANT et non d\u00e9coratif : les cinq writers OpenAI n'\u00e9crivent jamais la colonne, et la valeur 1 recouvre en outre toute la population ant\u00e9rieure \u00e0 l'introduction de la colonne, jamais r\u00e9tro-remplie.",
+      "file_type": "rationale",
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 28,
+      "id": "historique_exec_chatgpt_type_ia_provider_collision",
+      "norm_label": "type_ia_hec \u2014 collision assumee dans le code : 1 = openai, 2 = deepseek, 3 = gemini, 4 = claude et kimi k2, la classe kimi ecrivant deliberement le meme code que la classe claude ; seule modele_hec les separe (prefixe claude- contre kimi-, sur 20 valeurs de modele observees). le defaut a 1 est portant et non decoratif : les cinq writers openai n'ecrivent jamais la colonne, et la valeur 1 recouvre en outre toute la population anterieure a l'introduction de la colonne, jamais retro-remplie."
+    },
+    {
+      "label": "cout_hec \u2014 co\u00fbt de l'appel en DOLLARS, formule (tokens_entr\u00e9e \u00d7 taux_entr\u00e9e + tokens_sortie \u00d7 taux_sortie) / 1 000 000 avec des bar\u00e8mes XML par fournisseur. QUATRE PI\u00c8GES : (1) type float, pas un type mon\u00e9taire exact, donc pas de rapprochement comptable au centime ; (2) NULL sur 17 201 lignes ; (3) 76 lignes \u00e0 0 malgr\u00e9 des tokens consomm\u00e9s (Kimi et gemini-2.0-flash, bar\u00e8me hors d\u00e9p\u00f4t, cause non \u00e9tablie) ; (4) DeepSeek applique un DOUBLE TARIF selon l'heure UTC et les mod\u00e8les de recherche web re\u00e7oivent en plus un forfait fixe par appel \u2014 sur ces lignes le co\u00fbt n'est pas proportionnel aux tokens.",
+      "file_type": "rationale",
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 28,
+      "id": "historique_exec_chatgpt_cost_column_four_traps",
+      "norm_label": "cout_hec \u2014 cout de l'appel en dollars, formule (tokens_entree \u00d7 taux_entree + tokens_sortie \u00d7 taux_sortie) / 1 000 000 avec des baremes xml par fournisseur. quatre pieges : (1) type float, pas un type monetaire exact, donc pas de rapprochement comptable au centime ; (2) null sur 17 201 lignes ; (3) 76 lignes a 0 malgre des tokens consommes (kimi et gemini-2.0-flash, bareme hors depot, cause non etablie) ; (4) deepseek applique un double tarif selon l'heure utc et les modeles de recherche web recoivent en plus un forfait fixe par appel \u2014 sur ces lignes le cout n'est pas proportionnel aux tokens."
+    },
+    {
+      "label": "LES COMPTEURS DE TOKENS NE S'ADDITIONNENT PAS : total_token_hec est REPRIS DE L'API et non recalcul\u00e9 sur la plupart des chemins, et 21 056 lignes le portent diff\u00e9rent de input + output (tokens mis en cache, tokens de raisonnement, arrondis du fournisseur). Ne jamais supposer l'\u00e9galit\u00e9, ni reconstituer un total manquant par l'addition. PI\u00c8GE GEMINI : output_token_hec y inclut les tokens de RAISONNEMENT, ce que les autres fournisseurs n'y mettent pas \u2014 toute comparaison de verbosit\u00e9 entre fournisseurs sur cette colonne est fauss\u00e9e. input et output sont NULL sur les m\u00eames 17 201 lignes (appels refus\u00e9s avant ex\u00e9cution).",
+      "file_type": "rationale",
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 28,
+      "id": "historique_exec_chatgpt_token_columns_not_additive",
+      "norm_label": "les compteurs de tokens ne s'additionnent pas : total_token_hec est repris de l'api et non recalcule sur la plupart des chemins, et 21 056 lignes le portent different de input + output (tokens mis en cache, tokens de raisonnement, arrondis du fournisseur). ne jamais supposer l'egalite, ni reconstituer un total manquant par l'addition. piege gemini : output_token_hec y inclut les tokens de raisonnement, ce que les autres fournisseurs n'y mettent pas \u2014 toute comparaison de verbosite entre fournisseurs sur cette colonne est faussee. input et output sont null sur les memes 17 201 lignes (appels refuses avant execution)."
+    },
+    {
+      "label": "id_process_hec M\u00c9LANGE DEUX ESPACES D'IDENTIFIANTS SANS LE SIGNALER : d'un c\u00f4t\u00e9 une taxonomie m\u00e9tier ferm\u00e9e maintenue \u00e0 la main dans le code (38 libell\u00e9s num\u00e9rot\u00e9s 1 \u00e0 38 \u2014 3 = classification produit IA, 6 = am\u00e9lioration titre/description, 20 = classification fournisseur, 30 = questions/r\u00e9ponses, 34 = optimisation profil soci\u00e9t\u00e9), plus un code 0 sans libell\u00e9 sur 13 286 lignes affich\u00e9 en cellule vide ; de l'autre 27 valeurs \u00e0 sept chiffres (1 001 328 \u00e0 9 000 577) sur 21 893 lignes, \u00e9crites par l'endpoint API v2 entre le 2026-02-03 et le 2026-03-19 avec ses PROPRES identifiants d'entit\u00e9. Un GROUP BY agr\u00e8ge donc les deux.",
+      "file_type": "rationale",
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 28,
+      "id": "historique_exec_chatgpt_id_process_two_id_spaces",
+      "norm_label": "id_process_hec melange deux espaces d'identifiants sans le signaler : d'un cote une taxonomie metier fermee maintenue a la main dans le code (38 libelles numerotes 1 a 38 \u2014 3 = classification produit ia, 6 = amelioration titre/description, 20 = classification fournisseur, 30 = questions/reponses, 34 = optimisation profil societe), plus un code 0 sans libelle sur 13 286 lignes affiche en cellule vide ; de l'autre 27 valeurs a sept chiffres (1 001 328 a 9 000 577) sur 21 893 lignes, ecrites par l'endpoint api v2 entre le 2026-02-03 et le 2026-03-19 avec ses propres identifiants d'entite. un group by agrege donc les deux."
+    },
+    {
+      "label": "origine_hec (1 = BO, 2 = Script, 3 = FRONT) \u2014 LA VALEUR 1 N'EST PAS FIABLE : deux producteurs d\u00e9duisent l'origine de la pr\u00e9sence d'un en-t\u00eate HTTP absent en ligne de commande, si bien que des ex\u00e9cutions cron sont \u00e9tiquet\u00e9es BO. Mesur\u00e9 : 1 272 712 des 2 980 544 lignes en origine 1 cumulent une IP vide ET un chemin absolu /var/www/ \u2014 la signature exacte d'une ex\u00e9cution CLI, soit 43 % de la population suppos\u00e9e interactive. La valeur 3 se comporte, elle, comme attendu. La valeur 0 (985 457 lignes) n'a aucun libell\u00e9 : l'API v2 y \u00e9crit une cha\u00eene non num\u00e9rique que le tinyint coerce en 0.",
+      "file_type": "rationale",
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 28,
+      "id": "historique_exec_chatgpt_origine_hec_unreliable",
+      "norm_label": "origine_hec (1 = bo, 2 = script, 3 = front) \u2014 la valeur 1 n'est pas fiable : deux producteurs deduisent l'origine de la presence d'un en-tete http absent en ligne de commande, si bien que des executions cron sont etiquetees bo. mesure : 1 272 712 des 2 980 544 lignes en origine 1 cumulent une ip vide et un chemin absolu /var/www/ \u2014 la signature exacte d'une execution cli, soit 43 % de la population supposee interactive. la valeur 3 se comporte, elle, comme attendu. la valeur 0 (985 457 lignes) n'a aucun libelle : l'api v2 y ecrit une chaine non numerique que le tinyint coerce en 0."
+    },
+    {
+      "label": "etat_chatgpt_hec (1 = succ\u00e8s sur 6 188 983 lignes, 2 = erreur sur 40 670) \u2014 TROIS PI\u00c8GES. (1) Deux valeurs existent sans libell\u00e9 : 0 sur 3 977 lignes et NULL sur 11 lignes du premier jour. (2) LES DEUX FAMILLES DE WRITERS NE TESTENT PAS LA M\u00caME CHOSE : les appels directs regardent la pr\u00e9sence d'un n\u0153ud d'erreur dans le corps de la r\u00e9ponse, les familles batch, assistant et threads regardent le code HTTP \u2014 une r\u00e9ponse 500 sans n\u0153ud d'erreur est donc enregistr\u00e9e en SUCC\u00c8S. (3) Une erreur de transport DeepSeek n'\u00e9crit aucune ligne : le taux d'erreur tir\u00e9 de cette colonne est un PLANCHER.",
+      "file_type": "rationale",
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 28,
+      "id": "historique_exec_chatgpt_etat_writers_disagree",
+      "norm_label": "etat_chatgpt_hec (1 = succes sur 6 188 983 lignes, 2 = erreur sur 40 670) \u2014 trois pieges. (1) deux valeurs existent sans libelle : 0 sur 3 977 lignes et null sur 11 lignes du premier jour. (2) les deux familles de writers ne testent pas la meme chose : les appels directs regardent la presence d'un n\u0153ud d'erreur dans le corps de la reponse, les familles batch, assistant et threads regardent le code http \u2014 une reponse 500 sans n\u0153ud d'erreur est donc enregistree en succes. (3) une erreur de transport deepseek n'ecrit aucune ligne : le taux d'erreur tire de cette colonne est un plancher."
+    },
+    {
+      "label": "retour_chatgpt_hec est une COLONNE D'\u00c9CHEC, PAS UNE ARCHIVE DE R\u00c9PONSE : sur le chemin normal elle reste vide en succ\u00e8s et re\u00e7oit le corps HTTP BRUT du fournisseur en erreur. TROIS ENCODAGES DU VIDE COEXISTENT \u2014 662 966 NULL, 4 959 522 cha\u00eenes vides et 589 valeurs \u00e0 deux caract\u00e8res contenant un tableau JSON vide : un test qui ne v\u00e9rifie que NULL et cha\u00eene vide laisse passer ces derni\u00e8res. EXCEPTION : le chemin RAG stocke la r\u00e9ponse compl\u00e8te du mod\u00e8le M\u00caME EN SUCC\u00c8S (571 725 lignes en \u00e9tat 1 porteuses d'une charge utile depuis le 2025-10-16). AUCUNE TRONCATURE avant insertion sur aucun chemin \u2014 c'est cette colonne qui porte le volume disque.",
+      "file_type": "rationale",
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 28,
+      "id": "historique_exec_chatgpt_retour_failure_column_not_archive",
+      "norm_label": "retour_chatgpt_hec est une colonne d'echec, pas une archive de reponse : sur le chemin normal elle reste vide en succes et recoit le corps http brut du fournisseur en erreur. trois encodages du vide coexistent \u2014 662 966 null, 4 959 522 chaines vides et 589 valeurs a deux caracteres contenant un tableau json vide : un test qui ne verifie que null et chaine vide laisse passer ces dernieres. exception : le chemin rag stocke la reponse complete du modele meme en succes (571 725 lignes en etat 1 porteuses d'une charge utile depuis le 2025-10-16). aucune troncature avant insertion sur aucun chemin \u2014 c'est cette colonne qui porte le volume disque."
+    },
+    {
+      "label": "url_process_hec n'est NI une URL NI un chemin de mani\u00e8re fiable : le r\u00e9f\u00e9rent HTTP s'il existe, \u00e0 d\u00e9faut le chemin du script ex\u00e9cut\u00e9. Mesur\u00e9 \u2014 4 417 760 chemins relatifs au docroot, 1 729 439 chemins absolus /var/www/ (signature d'une ex\u00e9cution en ligne de commande), 34 784 URL compl\u00e8tes avec query string, 35 766 cha\u00eenes vides, quelques aberrations dont une adresse IP, et 531 586 valeurs distinctes, certains appelants y concat\u00e9nant un libell\u00e9 libre. PI\u00c8GE : 17 866 lignes font exactement 255 caract\u00e8res, donc tronqu\u00e9es \u00e0 droite en silence.",
+      "file_type": "rationale",
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 28,
+      "id": "historique_exec_chatgpt_url_process_provenance",
+      "norm_label": "url_process_hec n'est ni une url ni un chemin de maniere fiable : le referent http s'il existe, a defaut le chemin du script execute. mesure \u2014 4 417 760 chemins relatifs au docroot, 1 729 439 chemins absolus /var/www/ (signature d'une execution en ligne de commande), 34 784 url completes avec query string, 35 766 chaines vides, quelques aberrations dont une adresse ip, et 531 586 valeurs distinctes, certains appelants y concatenant un libelle libre. piege : 17 866 lignes font exactement 255 caracteres, donc tronquees a droite en silence."
+    },
+    {
+      "label": "LES DEUX COLONNES D'IDENTIT\u00c9 SONT VIDES SUR L'ESSENTIEL DE LA TABLE, et l'\u00e9cran BO les marque explicitement non filtrables : ip_hec, jamais NULL, est une CHA\u00ceNE VIDE sur 1 745 198 lignes (28 %) \u2014 sous ex\u00e9cution en ligne de commande, cas dominant puisque ces appels sont tr\u00e8s majoritairement des crons, l'adresse distante n'existe pas et la colonne re\u00e7oit une cha\u00eene vide sans le moindre garde-fou ; user_bo_hec VAUT 0 SUR 6 015 499 LIGNES (96,5 %), la session n'\u00e9tant jamais d\u00e9marr\u00e9e dans les classes d'appel \u2014 seuls 26 identifiants r\u00e9els apparaissent, sur environ 218 000 lignes.",
+      "file_type": "rationale",
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 28,
+      "id": "historique_exec_chatgpt_identity_columns_mostly_empty",
+      "norm_label": "les deux colonnes d'identite sont vides sur l'essentiel de la table, et l'ecran bo les marque explicitement non filtrables : ip_hec, jamais null, est une chaine vide sur 1 745 198 lignes (28 %) \u2014 sous execution en ligne de commande, cas dominant puisque ces appels sont tres majoritairement des crons, l'adresse distante n'existe pas et la colonne recoit une chaine vide sans le moindre garde-fou ; user_bo_hec vaut 0 sur 6 015 499 lignes (96,5 %), la session n'etant jamais demarree dans les classes d'appel \u2014 seuls 26 identifiants reels apparaissent, sur environ 218 000 lignes."
+    },
+    {
+      "label": "TROIS LECTEURS de la table : (1) le mail hebdomadaire de co\u00fbt, un cron qui agr\u00e8ge SUM(cout_hec) par processus et par fournisseur sur trois semaines glissantes ; (2) l'\u00e9cran BO d'historique, avec filtres et affichage du corps d'erreur ligne \u00e0 ligne ; (3) un tableau de bord QC agr\u00e9geant tokens, co\u00fbt et erreurs par fournisseur et par mod\u00e8le. Tous filtrent sur date_hec, qui n'est pas index\u00e9e.",
+      "file_type": "document",
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 28,
+      "id": "historique_exec_chatgpt_three_readers",
+      "norm_label": "trois lecteurs de la table : (1) le mail hebdomadaire de cout, un cron qui agrege sum(cout_hec) par processus et par fournisseur sur trois semaines glissantes ; (2) l'ecran bo d'historique, avec filtres et affichage du corps d'erreur ligne a ligne ; (3) un tableau de bord qc agregeant tokens, cout et erreurs par fournisseur et par modele. tous filtrent sur date_hec, qui n'est pas indexee."
+    },
+    {
+      "label": "D\u00c9FAUT MESURABLE DU MAIL HEBDOMADAIRE DE CO\u00dbT : il ne conna\u00eet que deux compartiments, type_ia_hec = 1 d'un c\u00f4t\u00e9 et TOUT LE RESTE de l'autre, ce reste \u00e9tant \u00e9tiquet\u00e9 DeepSeek \u2014 Gemini et Claude sont donc rapport\u00e9s comme du DeepSeek. Chiffr\u00e9 sur l'historique complet : le compartiment ainsi nomm\u00e9 p\u00e8se 9 127,86 USD dont 3 924,12 ne sont pas du DeepSeek, soit 43 % d'attribution fausse. Sym\u00e9triquement, l'\u00e9cran BO ne propose l'acc\u00e8s au retour que lorsque l'\u00e9tat vaut autre chose que succ\u00e8s, hypoth\u00e8se que le chemin RAG contredit.",
+      "file_type": "rationale",
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 28,
+      "id": "historique_exec_chatgpt_weekly_cost_mail_misattribution",
+      "norm_label": "defaut mesurable du mail hebdomadaire de cout : il ne connait que deux compartiments, type_ia_hec = 1 d'un cote et tout le reste de l'autre, ce reste etant etiquete deepseek \u2014 gemini et claude sont donc rapportes comme du deepseek. chiffre sur l'historique complet : le compartiment ainsi nomme pese 9 127,86 usd dont 3 924,12 ne sont pas du deepseek, soit 43 % d'attribution fausse. symetriquement, l'ecran bo ne propose l'acces au retour que lorsque l'etat vaut autre chose que succes, hypothese que le chemin rag contredit."
+    },
+    {
+      "label": "TROIS RELATIONS DOCUMENT\u00c9ES, AUCUNE CL\u00c9 \u00c9TRANG\u00c8RE : id_process_hec pointe vers une liste PHP de 38 codes servant \u00e0 la fois le mail hebdomadaire et l'\u00e9cran BO (aucune table, aucune validation) ; user_bo_hec vers l'espace d'ID administrateur BO, renseign\u00e9 sur 3,5 % des lignes et r\u00e9solu vers un nom par l'\u00e9cran BO seulement quand la valeur est non nulle ; et type_ia_hec = 2 est la cible que d\u00e9signe l'alerte de co\u00fbt DeepSeek en heure pleine \u00e9crite dans tracking_mail2bdd (type 35) \u2014 mais ses chiffres viennent de compteurs en m\u00e9moire du processus, PAS d'une lecture de cette table, et il n'y a aucune jointure.",
+      "file_type": "document",
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 28,
+      "id": "historique_exec_chatgpt_no_foreign_keys_logical_relations",
+      "norm_label": "trois relations documentees, aucune cle etrangere : id_process_hec pointe vers une liste php de 38 codes servant a la fois le mail hebdomadaire et l'ecran bo (aucune table, aucune validation) ; user_bo_hec vers l'espace d'id administrateur bo, renseigne sur 3,5 % des lignes et resolu vers un nom par l'ecran bo seulement quand la valeur est non nulle ; et type_ia_hec = 2 est la cible que designe l'alerte de cout deepseek en heure pleine ecrite dans tracking_mail2bdd (type 35) \u2014 mais ses chiffres viennent de compteurs en memoire du processus, pas d'une lecture de cette table, et il n'y a aucune jointure."
     }
   ],
   "links": [
@@ -162919,9 +163155,9 @@
       "weight": 0.8,
       "_src": "test_restore_from_verified_allowlist_rationale_1",
       "_tgt": "crawler_manager_crawlermanager",
+      "confidence_score": 0.5,
       "source": "crawler_manager_crawlermanager",
-      "target": "test_restore_from_verified_allowlist_rationale_1",
-      "confidence_score": 0.5
+      "target": "test_restore_from_verified_allowlist_rationale_1"
     },
     {
       "relation": "uses",
@@ -162931,9 +163167,9 @@
       "weight": 0.8,
       "_src": "test_restore_from_verified_allowlist_rationale_27",
       "_tgt": "crawler_manager_crawlermanager",
+      "confidence_score": 0.5,
       "source": "crawler_manager_crawlermanager",
-      "target": "test_restore_from_verified_allowlist_rationale_27",
-      "confidence_score": 0.5
+      "target": "test_restore_from_verified_allowlist_rationale_27"
     },
     {
       "relation": "uses",
@@ -162943,9 +163179,9 @@
       "weight": 0.8,
       "_src": "test_restore_from_verified_allowlist_rationale_38",
       "_tgt": "crawler_manager_crawlermanager",
+      "confidence_score": 0.5,
       "source": "crawler_manager_crawlermanager",
-      "target": "test_restore_from_verified_allowlist_rationale_38",
-      "confidence_score": 0.5
+      "target": "test_restore_from_verified_allowlist_rationale_38"
     },
     {
       "relation": "uses",
@@ -162955,9 +163191,9 @@
       "weight": 0.8,
       "_src": "test_restore_from_verified_allowlist_rationale_48",
       "_tgt": "crawler_manager_crawlermanager",
+      "confidence_score": 0.5,
       "source": "crawler_manager_crawlermanager",
-      "target": "test_restore_from_verified_allowlist_rationale_48",
-      "confidence_score": 0.5
+      "target": "test_restore_from_verified_allowlist_rationale_48"
     },
     {
       "relation": "uses",
@@ -162967,9 +163203,9 @@
       "weight": 0.8,
       "_src": "test_restore_from_verified_allowlist_rationale_61",
       "_tgt": "crawler_manager_crawlermanager",
+      "confidence_score": 0.5,
       "source": "crawler_manager_crawlermanager",
-      "target": "test_restore_from_verified_allowlist_rationale_61",
-      "confidence_score": 0.5
+      "target": "test_restore_from_verified_allowlist_rationale_61"
     },
     {
       "relation": "uses",
@@ -162979,9 +163215,9 @@
       "weight": 0.8,
       "_src": "test_restore_from_verified_allowlist_rationale_79",
       "_tgt": "crawler_manager_crawlermanager",
+      "confidence_score": 0.5,
       "source": "crawler_manager_crawlermanager",
-      "target": "test_restore_from_verified_allowlist_rationale_79",
-      "confidence_score": 0.5
+      "target": "test_restore_from_verified_allowlist_rationale_79"
     },
     {
       "relation": "uses",
@@ -162991,9 +163227,9 @@
       "weight": 0.8,
       "_src": "test_restore_from_verified_allowlist_rationale_143",
       "_tgt": "crawler_manager_crawlermanager",
+      "confidence_score": 0.5,
       "source": "crawler_manager_crawlermanager",
-      "target": "test_restore_from_verified_allowlist_rationale_143",
-      "confidence_score": 0.5
+      "target": "test_restore_from_verified_allowlist_rationale_143"
     },
     {
       "relation": "uses",
@@ -163003,9 +163239,9 @@
       "weight": 0.8,
       "_src": "test_restore_from_verified_allowlist_rationale_163",
       "_tgt": "crawler_manager_crawlermanager",
+      "confidence_score": 0.5,
       "source": "crawler_manager_crawlermanager",
-      "target": "test_restore_from_verified_allowlist_rationale_163",
-      "confidence_score": 0.5
+      "target": "test_restore_from_verified_allowlist_rationale_163"
     },
     {
       "relation": "uses",
@@ -163015,9 +163251,9 @@
       "weight": 0.8,
       "_src": "test_restore_from_verified_allowlist_rationale_182",
       "_tgt": "crawler_manager_crawlermanager",
+      "confidence_score": 0.5,
       "source": "crawler_manager_crawlermanager",
-      "target": "test_restore_from_verified_allowlist_rationale_182",
-      "confidence_score": 0.5
+      "target": "test_restore_from_verified_allowlist_rationale_182"
     },
     {
       "relation": "uses",
@@ -163027,9 +163263,9 @@
       "weight": 0.8,
       "_src": "test_restore_from_verified_allowlist_rationale_195",
       "_tgt": "crawler_manager_crawlermanager",
+      "confidence_score": 0.5,
       "source": "crawler_manager_crawlermanager",
-      "target": "test_restore_from_verified_allowlist_rationale_195",
-      "confidence_score": 0.5
+      "target": "test_restore_from_verified_allowlist_rationale_195"
     },
     {
       "relation": "uses",
@@ -163039,9 +163275,9 @@
       "weight": 0.8,
       "_src": "test_restore_from_verified_allowlist_rationale_215",
       "_tgt": "crawler_manager_crawlermanager",
+      "confidence_score": 0.5,
       "source": "crawler_manager_crawlermanager",
-      "target": "test_restore_from_verified_allowlist_rationale_215",
-      "confidence_score": 0.5
+      "target": "test_restore_from_verified_allowlist_rationale_215"
     },
     {
       "relation": "calls",
@@ -175316,6 +175552,16 @@
       "confidence_score": 1.0,
       "source": "crawler_manager_crawlermanager_restore_archived_crawl",
       "target": "crawler_manager_rationale_2822"
+    },
+    {
+      "relation": "implements",
+      "confidence": "INFERRED",
+      "confidence_score": 0.9,
+      "source_file": "docs/superpowers/specs/2026-09-02-restore-from-verified-allowlist-design.md",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "crawler_manager_crawlermanager_restore_archived_crawl",
+      "target": "restore_allowlist_spec_design"
     },
     {
       "relation": "rationale_for",
@@ -377118,6 +377364,16 @@
       "target": "tracking_mail2bdd_doc_json_overview"
     },
     {
+      "relation": "implements",
+      "confidence": "INFERRED",
+      "confidence_score": 0.9,
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "weight": 0.9,
+      "source": "bdd_doc_enrichment_runbook_overview",
+      "target": "historique_exec_chatgpt_table_doc"
+    },
+    {
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
@@ -377296,6 +377552,16 @@
       "_tgt": "tracking_mail2bdd_doc_json_overview",
       "source": "bdd_doc_enrichment_workflow_design_tool_get_table_doc",
       "target": "tracking_mail2bdd_doc_json_overview"
+    },
+    {
+      "relation": "references",
+      "confidence": "INFERRED",
+      "confidence_score": 0.75,
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "weight": 0.75,
+      "source": "bdd_doc_enrichment_workflow_design_tool_get_table_doc",
+      "target": "historique_exec_chatgpt_table_doc"
     },
     {
       "relation": "writes_to",
@@ -377572,6 +377838,16 @@
       "_tgt": "tracking_mail2bdd_doc_json_overview",
       "source": "bdd_doc_enrichment_workflow_design_doc_json_shape",
       "target": "tracking_mail2bdd_doc_json_overview"
+    },
+    {
+      "relation": "implements",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "weight": 0.85,
+      "source": "bdd_doc_enrichment_workflow_design_doc_json_shape",
+      "target": "historique_exec_chatgpt_table_doc"
     },
     {
       "relation": "concerns",
@@ -377932,6 +378208,16 @@
       "_tgt": "enrichissement_fournisseur_doc_json_overview",
       "source": "bdd_doc_enrichment_workflow_plan_task3_worked_example",
       "target": "enrichissement_fournisseur_doc_json_overview"
+    },
+    {
+      "relation": "references",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "weight": 0.8,
+      "source": "bdd_doc_enrichment_workflow_plan_example_artifact",
+      "target": "historique_exec_chatgpt_table_doc"
     },
     {
       "relation": "implements",
@@ -389677,6 +389963,26 @@
       "confidence_score": 1.0,
       "source": "qmconsumptionskip_recordqmcollapsed",
       "target": "qmconsumptionskip_ts"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "apps-microservices/crawler-service/crawler/src/qmConsumptionSkip.ts",
+      "source_location": "qmConsumptionSkip.ts:100-112",
+      "weight": 1.0,
+      "source": "qmconsumptionskip_recordqmcollapsed",
+      "target": "qmconsumptionskip_rationale_dedup_before_cap_defect"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "apps-microservices/crawler-service/crawler/src/qmConsumptionSkip.ts",
+      "source_location": "qmConsumptionSkip.ts:118-131",
+      "weight": 1.0,
+      "source": "qmconsumptionskip_recordqmcollapsed",
+      "target": "qmconsumptionskip_rationale_dedup_test_precedes_cap"
     },
     {
       "relation": "imports_from",
@@ -439870,6 +440176,16 @@
       "target": "tracking_mail2bdd_doc_json_overview"
     },
     {
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.6,
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "weight": 0.6,
+      "source": "equivalence_produit_ia_bo_table_doc",
+      "target": "historique_exec_chatgpt_table_doc"
+    },
+    {
       "relation": "references",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
@@ -440024,6 +440340,16 @@
       "_tgt": "equivalence_produit_ia_bo_rationale_psbc_shortcircuit_artifacts",
       "source": "equivalence_produit_ia_bo_rationale_bo_actif_tristate",
       "target": "equivalence_produit_ia_bo_rationale_psbc_shortcircuit_artifacts"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.6,
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "weight": 0.6,
+      "source": "equivalence_produit_ia_bo_rationale_code_spec_divergences",
+      "target": "historique_exec_chatgpt_observed_production_data"
     },
     {
       "relation": "references",
@@ -448454,6 +448780,16 @@
       "_tgt": "tracking_mail2bdd_rationale_observed_production_data",
       "source": "enrichissement_fournisseur_observed_production_data",
       "target": "tracking_mail2bdd_rationale_observed_production_data"
+    },
+    {
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.7,
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "weight": 0.7,
+      "source": "enrichissement_fournisseur_observed_production_data",
+      "target": "historique_exec_chatgpt_observed_production_data"
     },
     {
       "relation": "calls",
@@ -460147,9 +460483,9 @@
       "weight": 1.0,
       "_src": "apps_microservices_crawler_service_crawler_src_qmconsumptionskip_ts",
       "_tgt": "qmconsumptionskip_resetqmcollapsedstate",
+      "confidence_score": 1.0,
       "source": "apps_microservices_crawler_service_crawler_src_qmconsumptionskip_ts",
-      "target": "qmconsumptionskip_resetqmcollapsedstate",
-      "confidence_score": 1.0
+      "target": "qmconsumptionskip_resetqmcollapsedstate"
     },
     {
       "relation": "contains",
@@ -461158,6 +461494,16 @@
       "_tgt": "crawler_v61_truncated_by_cap_reading_rule",
       "source": "crawler_v61_two_caps_only_one_visible",
       "target": "crawler_v61_truncated_by_cap_reading_rule"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "apps-microservices/crawler-service/crawler/src/qmConsumptionSkip.ts",
+      "source_location": "qmConsumptionSkip.ts:100-112",
+      "weight": 1.0,
+      "source": "crawler_v61_two_caps_only_one_visible",
+      "target": "qmconsumptionskip_rationale_dedup_before_cap_defect"
     },
     {
       "relation": "references",
@@ -462377,6 +462723,16 @@
       "target": "tracking_mail2bdd_doc_json_overview"
     },
     {
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.6,
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "weight": 0.6,
+      "source": "maj_garde_sante_blocage_table_doc",
+      "target": "historique_exec_chatgpt_table_doc"
+    },
+    {
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
@@ -462387,6 +462743,16 @@
       "_tgt": "maj_garde_sante_blocage_error_rate_display_defect",
       "source": "maj_garde_sante_blocage_two_block_causes",
       "target": "maj_garde_sante_blocage_error_rate_display_defect"
+    },
+    {
+      "relation": "references",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "apps-microservices/crawler-service/crawler/src/qmConsumptionSkip.ts",
+      "source_location": "qmConsumptionSkip.ts:100-112",
+      "weight": 1.0,
+      "source": "maj_garde_sante_blocage_two_block_causes",
+      "target": "qmconsumptionskip_rationale_dedup_before_cap_defect"
     },
     {
       "relation": "rationale_for",
@@ -462591,6 +462957,16 @@
       "_tgt": "tracking_mail2bdd_doc_json_overview",
       "source": "fournisseur_profil_v2_sp_table_doc",
       "target": "tracking_mail2bdd_doc_json_overview"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.7,
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "weight": 0.7,
+      "source": "fournisseur_profil_v2_sp_table_doc",
+      "target": "historique_exec_chatgpt_table_doc"
     },
     {
       "relation": "rationale_for",
@@ -463841,6 +464217,16 @@
       "target": "tracking_mail2bdd_rationale_observed_production_data"
     },
     {
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.65,
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "weight": 0.65,
+      "source": "tracking_mail2bdd_doc_json_overview",
+      "target": "historique_exec_chatgpt_table_doc"
+    },
+    {
       "relation": "shares_data_with",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
@@ -463959,6 +464345,26 @@
       "_tgt": "tracking_mail2bdd_rationale_dead_and_inert_columns",
       "source": "tracking_mail2bdd_journal_table",
       "target": "tracking_mail2bdd_rationale_dead_and_inert_columns"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "tracking_mail2bdd_journal_table",
+      "target": "historique_exec_chatgpt_no_foreign_keys_logical_relations"
+    },
+    {
+      "relation": "references",
+      "confidence": "INFERRED",
+      "confidence_score": 0.7,
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "weight": 0.7,
+      "source": "tracking_mail2bdd_journal_table",
+      "target": "historique_exec_chatgpt_cost_column_four_traps"
     },
     {
       "relation": "rationale_for",
@@ -464104,6 +464510,16 @@
       "_tgt": "tracking_mail2bdd_rationale_monitoring_script_out_of_mcp_scope",
       "source": "tracking_mail2bdd_rationale_single_reader_cron_absent_from_repo",
       "target": "tracking_mail2bdd_rationale_monitoring_script_out_of_mcp_scope"
+    },
+    {
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.65,
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "weight": 0.65,
+      "source": "tracking_mail2bdd_rationale_monitoring_script_out_of_mcp_scope",
+      "target": "historique_exec_chatgpt_logging_blind_spots"
     },
     {
       "relation": "references",
@@ -464286,6 +464702,26 @@
       "target": "restore_allowlist_spec_deployment_image_rebuild"
     },
     {
+      "relation": "implements",
+      "confidence": "INFERRED",
+      "confidence_score": 0.9,
+      "source_file": "docs/superpowers/specs/2026-09-02-restore-from-verified-allowlist-design.md",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "restore_allowlist_spec_design",
+      "target": "crawler_manager_crawlermanager_is_archive_gcs_verified"
+    },
+    {
+      "relation": "implements",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "docs/superpowers/specs/2026-09-02-restore-from-verified-allowlist-design.md",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "restore_allowlist_spec_design",
+      "target": "apps_microservices_crawler_service_tests_test_restore_from_verified_allowlist_py"
+    },
+    {
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
@@ -464380,6 +464816,16 @@
       "_tgt": "restore_allowlist_spec_verification_absence_test",
       "source": "restore_allowlist_spec_rationale_fail_closed_none_vs_empty",
       "target": "restore_allowlist_spec_verification_absence_test"
+    },
+    {
+      "relation": "implements",
+      "confidence": "INFERRED",
+      "confidence_score": 0.9,
+      "source_file": "docs/superpowers/specs/2026-09-02-restore-from-verified-allowlist-design.md",
+      "source_location": null,
+      "weight": 1.0,
+      "source": "restore_allowlist_spec_rationale_fail_closed_none_vs_empty",
+      "target": "test_restore_from_verified_allowlist_rationale_38"
     },
     {
       "relation": "references",
@@ -464514,6 +464960,16 @@
       "target": "qmconsumptionskip_resetqmcollapsedstate"
     },
     {
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "apps-microservices/crawler-service/crawler/src/qmConsumptionSkip.ts",
+      "source_location": "qmConsumptionSkip.ts:118-131",
+      "weight": 1.0,
+      "source": "qmconsumptionskip_resetqmcollapsedstate",
+      "target": "qmconsumptionskip_rationale_dedup_test_precedes_cap"
+    },
+    {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "apps-microservices/crawler-service/tests/test_restore_from_verified_allowlist.py",
@@ -464521,9 +464977,9 @@
       "weight": 1.0,
       "_src": "apps_microservices_crawler_service_tests_test_restore_from_verified_allowlist_py",
       "_tgt": "test_restore_from_verified_allowlist_test_gcs_verified_false_when_allowlist_absent",
+      "confidence_score": 1.0,
       "source": "apps_microservices_crawler_service_tests_test_restore_from_verified_allowlist_py",
-      "target": "test_restore_from_verified_allowlist_test_gcs_verified_false_when_allowlist_absent",
-      "confidence_score": 1.0
+      "target": "test_restore_from_verified_allowlist_test_gcs_verified_false_when_allowlist_absent"
     },
     {
       "relation": "contains",
@@ -464533,9 +464989,9 @@
       "weight": 1.0,
       "_src": "apps_microservices_crawler_service_tests_test_restore_from_verified_allowlist_py",
       "_tgt": "test_restore_from_verified_allowlist_test_gcs_verified_false_when_allowlist_empty",
+      "confidence_score": 1.0,
       "source": "apps_microservices_crawler_service_tests_test_restore_from_verified_allowlist_py",
-      "target": "test_restore_from_verified_allowlist_test_gcs_verified_false_when_allowlist_empty",
-      "confidence_score": 1.0
+      "target": "test_restore_from_verified_allowlist_test_gcs_verified_false_when_allowlist_empty"
     },
     {
       "relation": "contains",
@@ -464545,9 +465001,9 @@
       "weight": 1.0,
       "_src": "apps_microservices_crawler_service_tests_test_restore_from_verified_allowlist_py",
       "_tgt": "test_restore_from_verified_allowlist_test_gcs_verified_false_when_id_not_listed",
+      "confidence_score": 1.0,
       "source": "apps_microservices_crawler_service_tests_test_restore_from_verified_allowlist_py",
-      "target": "test_restore_from_verified_allowlist_test_gcs_verified_false_when_id_not_listed",
-      "confidence_score": 1.0
+      "target": "test_restore_from_verified_allowlist_test_gcs_verified_false_when_id_not_listed"
     },
     {
       "relation": "contains",
@@ -464557,9 +465013,9 @@
       "weight": 1.0,
       "_src": "apps_microservices_crawler_service_tests_test_restore_from_verified_allowlist_py",
       "_tgt": "test_restore_from_verified_allowlist_test_gcs_verified_true_when_id_listed",
+      "confidence_score": 1.0,
       "source": "apps_microservices_crawler_service_tests_test_restore_from_verified_allowlist_py",
-      "target": "test_restore_from_verified_allowlist_test_gcs_verified_true_when_id_listed",
-      "confidence_score": 1.0
+      "target": "test_restore_from_verified_allowlist_test_gcs_verified_true_when_id_listed"
     },
     {
       "relation": "contains",
@@ -464569,9 +465025,9 @@
       "weight": 1.0,
       "_src": "apps_microservices_crawler_service_tests_test_restore_from_verified_allowlist_py",
       "_tgt": "test_restore_from_verified_allowlist_test_gcs_verified_compares_as_string",
+      "confidence_score": 1.0,
       "source": "apps_microservices_crawler_service_tests_test_restore_from_verified_allowlist_py",
-      "target": "test_restore_from_verified_allowlist_test_gcs_verified_compares_as_string",
-      "confidence_score": 1.0
+      "target": "test_restore_from_verified_allowlist_test_gcs_verified_compares_as_string"
     },
     {
       "relation": "contains",
@@ -464581,9 +465037,9 @@
       "weight": 1.0,
       "_src": "apps_microservices_crawler_service_tests_test_restore_from_verified_allowlist_py",
       "_tgt": "test_restore_from_verified_allowlist_scaffold",
+      "confidence_score": 1.0,
       "source": "apps_microservices_crawler_service_tests_test_restore_from_verified_allowlist_py",
-      "target": "test_restore_from_verified_allowlist_scaffold",
-      "confidence_score": 1.0
+      "target": "test_restore_from_verified_allowlist_scaffold"
     },
     {
       "relation": "contains",
@@ -464593,9 +465049,9 @@
       "weight": 1.0,
       "_src": "apps_microservices_crawler_service_tests_test_restore_from_verified_allowlist_py",
       "_tgt": "test_restore_from_verified_allowlist_start",
+      "confidence_score": 1.0,
       "source": "apps_microservices_crawler_service_tests_test_restore_from_verified_allowlist_py",
-      "target": "test_restore_from_verified_allowlist_start",
-      "confidence_score": 1.0
+      "target": "test_restore_from_verified_allowlist_start"
     },
     {
       "relation": "contains",
@@ -464605,9 +465061,9 @@
       "weight": 1.0,
       "_src": "apps_microservices_crawler_service_tests_test_restore_from_verified_allowlist_py",
       "_tgt": "test_restore_from_verified_allowlist_test_no_blob_but_gcs_verified_attempts_restore",
+      "confidence_score": 1.0,
       "source": "apps_microservices_crawler_service_tests_test_restore_from_verified_allowlist_py",
-      "target": "test_restore_from_verified_allowlist_test_no_blob_but_gcs_verified_attempts_restore",
-      "confidence_score": 1.0
+      "target": "test_restore_from_verified_allowlist_test_no_blob_but_gcs_verified_attempts_restore"
     },
     {
       "relation": "contains",
@@ -464617,9 +465073,9 @@
       "weight": 1.0,
       "_src": "apps_microservices_crawler_service_tests_test_restore_from_verified_allowlist_py",
       "_tgt": "test_restore_from_verified_allowlist_test_no_allowlist_still_rejects_400_and_attempts_nothing",
+      "confidence_score": 1.0,
       "source": "apps_microservices_crawler_service_tests_test_restore_from_verified_allowlist_py",
-      "target": "test_restore_from_verified_allowlist_test_no_allowlist_still_rejects_400_and_attempts_nothing",
-      "confidence_score": 1.0
+      "target": "test_restore_from_verified_allowlist_test_no_allowlist_still_rejects_400_and_attempts_nothing"
     },
     {
       "relation": "contains",
@@ -464629,9 +465085,9 @@
       "weight": 1.0,
       "_src": "apps_microservices_crawler_service_tests_test_restore_from_verified_allowlist_py",
       "_tgt": "test_restore_from_verified_allowlist_test_id_absent_from_allowlist_still_rejects_400",
+      "confidence_score": 1.0,
       "source": "apps_microservices_crawler_service_tests_test_restore_from_verified_allowlist_py",
-      "target": "test_restore_from_verified_allowlist_test_id_absent_from_allowlist_still_rejects_400",
-      "confidence_score": 1.0
+      "target": "test_restore_from_verified_allowlist_test_id_absent_from_allowlist_still_rejects_400"
     },
     {
       "relation": "contains",
@@ -464641,9 +465097,9 @@
       "weight": 1.0,
       "_src": "apps_microservices_crawler_service_tests_test_restore_from_verified_allowlist_py",
       "_tgt": "test_restore_from_verified_allowlist_test_failed_previous_crawl_is_not_resurrected",
+      "confidence_score": 1.0,
       "source": "apps_microservices_crawler_service_tests_test_restore_from_verified_allowlist_py",
-      "target": "test_restore_from_verified_allowlist_test_failed_previous_crawl_is_not_resurrected",
-      "confidence_score": 1.0
+      "target": "test_restore_from_verified_allowlist_test_failed_previous_crawl_is_not_resurrected"
     },
     {
       "relation": "contains",
@@ -464653,9 +465109,9 @@
       "weight": 1.0,
       "_src": "apps_microservices_crawler_service_tests_test_restore_from_verified_allowlist_py",
       "_tgt": "test_restore_from_verified_allowlist_test_archived_blob_keeps_the_existing_route",
+      "confidence_score": 1.0,
       "source": "apps_microservices_crawler_service_tests_test_restore_from_verified_allowlist_py",
-      "target": "test_restore_from_verified_allowlist_test_archived_blob_keeps_the_existing_route",
-      "confidence_score": 1.0
+      "target": "test_restore_from_verified_allowlist_test_archived_blob_keeps_the_existing_route"
     },
     {
       "relation": "rationale_for",
@@ -464665,9 +465121,9 @@
       "weight": 1.0,
       "_src": "test_restore_from_verified_allowlist_rationale_1",
       "_tgt": "apps_microservices_crawler_service_tests_test_restore_from_verified_allowlist_py",
+      "confidence_score": 1.0,
       "source": "apps_microservices_crawler_service_tests_test_restore_from_verified_allowlist_py",
-      "target": "test_restore_from_verified_allowlist_rationale_1",
-      "confidence_score": 1.0
+      "target": "test_restore_from_verified_allowlist_rationale_1"
     },
     {
       "relation": "rationale_for",
@@ -464677,9 +465133,9 @@
       "weight": 1.0,
       "_src": "test_restore_from_verified_allowlist_rationale_27",
       "_tgt": "test_restore_from_verified_allowlist_test_gcs_verified_false_when_allowlist_absent",
+      "confidence_score": 1.0,
       "source": "test_restore_from_verified_allowlist_test_gcs_verified_false_when_allowlist_absent",
-      "target": "test_restore_from_verified_allowlist_rationale_27",
-      "confidence_score": 1.0
+      "target": "test_restore_from_verified_allowlist_rationale_27"
     },
     {
       "relation": "rationale_for",
@@ -464689,9 +465145,9 @@
       "weight": 1.0,
       "_src": "test_restore_from_verified_allowlist_rationale_38",
       "_tgt": "test_restore_from_verified_allowlist_test_gcs_verified_false_when_allowlist_empty",
+      "confidence_score": 1.0,
       "source": "test_restore_from_verified_allowlist_test_gcs_verified_false_when_allowlist_empty",
-      "target": "test_restore_from_verified_allowlist_rationale_38",
-      "confidence_score": 1.0
+      "target": "test_restore_from_verified_allowlist_rationale_38"
     },
     {
       "relation": "rationale_for",
@@ -464701,9 +465157,9 @@
       "weight": 1.0,
       "_src": "test_restore_from_verified_allowlist_rationale_48",
       "_tgt": "test_restore_from_verified_allowlist_test_gcs_verified_false_when_id_not_listed",
+      "confidence_score": 1.0,
       "source": "test_restore_from_verified_allowlist_test_gcs_verified_false_when_id_not_listed",
-      "target": "test_restore_from_verified_allowlist_rationale_48",
-      "confidence_score": 1.0
+      "target": "test_restore_from_verified_allowlist_rationale_48"
     },
     {
       "relation": "rationale_for",
@@ -464713,9 +465169,9 @@
       "weight": 1.0,
       "_src": "test_restore_from_verified_allowlist_rationale_61",
       "_tgt": "test_restore_from_verified_allowlist_test_gcs_verified_compares_as_string",
+      "confidence_score": 1.0,
       "source": "test_restore_from_verified_allowlist_test_gcs_verified_compares_as_string",
-      "target": "test_restore_from_verified_allowlist_rationale_61",
-      "confidence_score": 1.0
+      "target": "test_restore_from_verified_allowlist_rationale_61"
     },
     {
       "relation": "calls",
@@ -464725,9 +465181,9 @@
       "weight": 1.0,
       "_src": "test_restore_from_verified_allowlist_test_no_blob_but_gcs_verified_attempts_restore",
       "_tgt": "test_restore_from_verified_allowlist_scaffold",
+      "confidence_score": 1.0,
       "source": "test_restore_from_verified_allowlist_scaffold",
-      "target": "test_restore_from_verified_allowlist_test_no_blob_but_gcs_verified_attempts_restore",
-      "confidence_score": 1.0
+      "target": "test_restore_from_verified_allowlist_test_no_blob_but_gcs_verified_attempts_restore"
     },
     {
       "relation": "calls",
@@ -464737,9 +465193,9 @@
       "weight": 1.0,
       "_src": "test_restore_from_verified_allowlist_test_no_allowlist_still_rejects_400_and_attempts_nothing",
       "_tgt": "test_restore_from_verified_allowlist_scaffold",
+      "confidence_score": 1.0,
       "source": "test_restore_from_verified_allowlist_scaffold",
-      "target": "test_restore_from_verified_allowlist_test_no_allowlist_still_rejects_400_and_attempts_nothing",
-      "confidence_score": 1.0
+      "target": "test_restore_from_verified_allowlist_test_no_allowlist_still_rejects_400_and_attempts_nothing"
     },
     {
       "relation": "calls",
@@ -464749,9 +465205,9 @@
       "weight": 1.0,
       "_src": "test_restore_from_verified_allowlist_test_id_absent_from_allowlist_still_rejects_400",
       "_tgt": "test_restore_from_verified_allowlist_scaffold",
+      "confidence_score": 1.0,
       "source": "test_restore_from_verified_allowlist_scaffold",
-      "target": "test_restore_from_verified_allowlist_test_id_absent_from_allowlist_still_rejects_400",
-      "confidence_score": 1.0
+      "target": "test_restore_from_verified_allowlist_test_id_absent_from_allowlist_still_rejects_400"
     },
     {
       "relation": "calls",
@@ -464761,9 +465217,9 @@
       "weight": 1.0,
       "_src": "test_restore_from_verified_allowlist_test_failed_previous_crawl_is_not_resurrected",
       "_tgt": "test_restore_from_verified_allowlist_scaffold",
+      "confidence_score": 1.0,
       "source": "test_restore_from_verified_allowlist_scaffold",
-      "target": "test_restore_from_verified_allowlist_test_failed_previous_crawl_is_not_resurrected",
-      "confidence_score": 1.0
+      "target": "test_restore_from_verified_allowlist_test_failed_previous_crawl_is_not_resurrected"
     },
     {
       "relation": "calls",
@@ -464773,9 +465229,9 @@
       "weight": 1.0,
       "_src": "test_restore_from_verified_allowlist_test_archived_blob_keeps_the_existing_route",
       "_tgt": "test_restore_from_verified_allowlist_scaffold",
+      "confidence_score": 1.0,
       "source": "test_restore_from_verified_allowlist_scaffold",
-      "target": "test_restore_from_verified_allowlist_test_archived_blob_keeps_the_existing_route",
-      "confidence_score": 1.0
+      "target": "test_restore_from_verified_allowlist_test_archived_blob_keeps_the_existing_route"
     },
     {
       "relation": "rationale_for",
@@ -464785,9 +465241,9 @@
       "weight": 1.0,
       "_src": "test_restore_from_verified_allowlist_rationale_79",
       "_tgt": "test_restore_from_verified_allowlist_scaffold",
+      "confidence_score": 1.0,
       "source": "test_restore_from_verified_allowlist_scaffold",
-      "target": "test_restore_from_verified_allowlist_rationale_79",
-      "confidence_score": 1.0
+      "target": "test_restore_from_verified_allowlist_rationale_79"
     },
     {
       "relation": "calls",
@@ -464797,9 +465253,9 @@
       "weight": 1.0,
       "_src": "test_restore_from_verified_allowlist_test_no_blob_but_gcs_verified_attempts_restore",
       "_tgt": "test_restore_from_verified_allowlist_start",
+      "confidence_score": 1.0,
       "source": "test_restore_from_verified_allowlist_start",
-      "target": "test_restore_from_verified_allowlist_test_no_blob_but_gcs_verified_attempts_restore",
-      "confidence_score": 1.0
+      "target": "test_restore_from_verified_allowlist_test_no_blob_but_gcs_verified_attempts_restore"
     },
     {
       "relation": "calls",
@@ -464809,9 +465265,9 @@
       "weight": 1.0,
       "_src": "test_restore_from_verified_allowlist_test_no_allowlist_still_rejects_400_and_attempts_nothing",
       "_tgt": "test_restore_from_verified_allowlist_start",
+      "confidence_score": 1.0,
       "source": "test_restore_from_verified_allowlist_start",
-      "target": "test_restore_from_verified_allowlist_test_no_allowlist_still_rejects_400_and_attempts_nothing",
-      "confidence_score": 1.0
+      "target": "test_restore_from_verified_allowlist_test_no_allowlist_still_rejects_400_and_attempts_nothing"
     },
     {
       "relation": "calls",
@@ -464821,9 +465277,9 @@
       "weight": 1.0,
       "_src": "test_restore_from_verified_allowlist_test_id_absent_from_allowlist_still_rejects_400",
       "_tgt": "test_restore_from_verified_allowlist_start",
+      "confidence_score": 1.0,
       "source": "test_restore_from_verified_allowlist_start",
-      "target": "test_restore_from_verified_allowlist_test_id_absent_from_allowlist_still_rejects_400",
-      "confidence_score": 1.0
+      "target": "test_restore_from_verified_allowlist_test_id_absent_from_allowlist_still_rejects_400"
     },
     {
       "relation": "calls",
@@ -464833,9 +465289,9 @@
       "weight": 1.0,
       "_src": "test_restore_from_verified_allowlist_test_failed_previous_crawl_is_not_resurrected",
       "_tgt": "test_restore_from_verified_allowlist_start",
+      "confidence_score": 1.0,
       "source": "test_restore_from_verified_allowlist_start",
-      "target": "test_restore_from_verified_allowlist_test_failed_previous_crawl_is_not_resurrected",
-      "confidence_score": 1.0
+      "target": "test_restore_from_verified_allowlist_test_failed_previous_crawl_is_not_resurrected"
     },
     {
       "relation": "calls",
@@ -464845,9 +465301,9 @@
       "weight": 1.0,
       "_src": "test_restore_from_verified_allowlist_test_archived_blob_keeps_the_existing_route",
       "_tgt": "test_restore_from_verified_allowlist_start",
+      "confidence_score": 1.0,
       "source": "test_restore_from_verified_allowlist_start",
-      "target": "test_restore_from_verified_allowlist_test_archived_blob_keeps_the_existing_route",
-      "confidence_score": 1.0
+      "target": "test_restore_from_verified_allowlist_test_archived_blob_keeps_the_existing_route"
     },
     {
       "relation": "rationale_for",
@@ -464857,9 +465313,9 @@
       "weight": 1.0,
       "_src": "test_restore_from_verified_allowlist_rationale_143",
       "_tgt": "test_restore_from_verified_allowlist_test_no_blob_but_gcs_verified_attempts_restore",
+      "confidence_score": 1.0,
       "source": "test_restore_from_verified_allowlist_test_no_blob_but_gcs_verified_attempts_restore",
-      "target": "test_restore_from_verified_allowlist_rationale_143",
-      "confidence_score": 1.0
+      "target": "test_restore_from_verified_allowlist_rationale_143"
     },
     {
       "relation": "rationale_for",
@@ -464869,9 +465325,9 @@
       "weight": 1.0,
       "_src": "test_restore_from_verified_allowlist_rationale_163",
       "_tgt": "test_restore_from_verified_allowlist_test_no_allowlist_still_rejects_400_and_attempts_nothing",
+      "confidence_score": 1.0,
       "source": "test_restore_from_verified_allowlist_test_no_allowlist_still_rejects_400_and_attempts_nothing",
-      "target": "test_restore_from_verified_allowlist_rationale_163",
-      "confidence_score": 1.0
+      "target": "test_restore_from_verified_allowlist_rationale_163"
     },
     {
       "relation": "rationale_for",
@@ -464881,9 +465337,9 @@
       "weight": 1.0,
       "_src": "test_restore_from_verified_allowlist_rationale_182",
       "_tgt": "test_restore_from_verified_allowlist_test_id_absent_from_allowlist_still_rejects_400",
+      "confidence_score": 1.0,
       "source": "test_restore_from_verified_allowlist_test_id_absent_from_allowlist_still_rejects_400",
-      "target": "test_restore_from_verified_allowlist_rationale_182",
-      "confidence_score": 1.0
+      "target": "test_restore_from_verified_allowlist_rationale_182"
     },
     {
       "relation": "rationale_for",
@@ -464893,9 +465349,9 @@
       "weight": 1.0,
       "_src": "test_restore_from_verified_allowlist_rationale_195",
       "_tgt": "test_restore_from_verified_allowlist_test_failed_previous_crawl_is_not_resurrected",
+      "confidence_score": 1.0,
       "source": "test_restore_from_verified_allowlist_test_failed_previous_crawl_is_not_resurrected",
-      "target": "test_restore_from_verified_allowlist_rationale_195",
-      "confidence_score": 1.0
+      "target": "test_restore_from_verified_allowlist_rationale_195"
     },
     {
       "relation": "rationale_for",
@@ -464905,99 +465361,314 @@
       "weight": 1.0,
       "_src": "test_restore_from_verified_allowlist_rationale_215",
       "_tgt": "test_restore_from_verified_allowlist_test_archived_blob_keeps_the_existing_route",
+      "confidence_score": 1.0,
       "source": "test_restore_from_verified_allowlist_test_archived_blob_keeps_the_existing_route",
-      "target": "test_restore_from_verified_allowlist_rationale_215",
-      "confidence_score": 1.0
+      "target": "test_restore_from_verified_allowlist_rationale_215"
     },
     {
-      "source": "qmconsumptionskip_rationale_dedup_before_cap_defect",
-      "target": "qmconsumptionskip_recordqmcollapsed",
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
-      "source_file": "apps-microservices/crawler-service/crawler/src/qmConsumptionSkip.ts",
-      "source_location": "qmConsumptionSkip.ts:100-112",
-      "weight": 1.0
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "historique_exec_chatgpt_observed_production_data",
+      "_tgt": "historique_exec_chatgpt_table_doc",
+      "source": "historique_exec_chatgpt_table_doc",
+      "target": "historique_exec_chatgpt_observed_production_data"
     },
     {
-      "source": "qmconsumptionskip_rationale_dedup_before_cap_defect",
-      "target": "maj_garde_sante_blocage_two_block_causes",
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "historique_exec_chatgpt_pure_archive_no_retention",
+      "_tgt": "historique_exec_chatgpt_table_doc",
+      "source": "historique_exec_chatgpt_table_doc",
+      "target": "historique_exec_chatgpt_pure_archive_no_retention"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "historique_exec_chatgpt_ten_copied_insert_writers",
+      "_tgt": "historique_exec_chatgpt_table_doc",
+      "source": "historique_exec_chatgpt_table_doc",
+      "target": "historique_exec_chatgpt_ten_copied_insert_writers"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "historique_exec_chatgpt_logging_blind_spots",
+      "_tgt": "historique_exec_chatgpt_table_doc",
+      "source": "historique_exec_chatgpt_table_doc",
+      "target": "historique_exec_chatgpt_logging_blind_spots"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "historique_exec_chatgpt_date_hec_unindexed",
+      "_tgt": "historique_exec_chatgpt_table_doc",
+      "source": "historique_exec_chatgpt_table_doc",
+      "target": "historique_exec_chatgpt_date_hec_unindexed"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "historique_exec_chatgpt_type_ia_provider_collision",
+      "_tgt": "historique_exec_chatgpt_table_doc",
+      "source": "historique_exec_chatgpt_table_doc",
+      "target": "historique_exec_chatgpt_type_ia_provider_collision"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "historique_exec_chatgpt_cost_column_four_traps",
+      "_tgt": "historique_exec_chatgpt_table_doc",
+      "source": "historique_exec_chatgpt_table_doc",
+      "target": "historique_exec_chatgpt_cost_column_four_traps"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "historique_exec_chatgpt_token_columns_not_additive",
+      "_tgt": "historique_exec_chatgpt_table_doc",
+      "source": "historique_exec_chatgpt_table_doc",
+      "target": "historique_exec_chatgpt_token_columns_not_additive"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "historique_exec_chatgpt_id_process_two_id_spaces",
+      "_tgt": "historique_exec_chatgpt_table_doc",
+      "source": "historique_exec_chatgpt_table_doc",
+      "target": "historique_exec_chatgpt_id_process_two_id_spaces"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "historique_exec_chatgpt_origine_hec_unreliable",
+      "_tgt": "historique_exec_chatgpt_table_doc",
+      "source": "historique_exec_chatgpt_table_doc",
+      "target": "historique_exec_chatgpt_origine_hec_unreliable"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "historique_exec_chatgpt_etat_writers_disagree",
+      "_tgt": "historique_exec_chatgpt_table_doc",
+      "source": "historique_exec_chatgpt_table_doc",
+      "target": "historique_exec_chatgpt_etat_writers_disagree"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "historique_exec_chatgpt_retour_failure_column_not_archive",
+      "_tgt": "historique_exec_chatgpt_table_doc",
+      "source": "historique_exec_chatgpt_table_doc",
+      "target": "historique_exec_chatgpt_retour_failure_column_not_archive"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "historique_exec_chatgpt_url_process_provenance",
+      "_tgt": "historique_exec_chatgpt_table_doc",
+      "source": "historique_exec_chatgpt_table_doc",
+      "target": "historique_exec_chatgpt_url_process_provenance"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "historique_exec_chatgpt_identity_columns_mostly_empty",
+      "_tgt": "historique_exec_chatgpt_table_doc",
+      "source": "historique_exec_chatgpt_table_doc",
+      "target": "historique_exec_chatgpt_identity_columns_mostly_empty"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "historique_exec_chatgpt_three_readers",
+      "_tgt": "historique_exec_chatgpt_table_doc",
+      "source": "historique_exec_chatgpt_table_doc",
+      "target": "historique_exec_chatgpt_three_readers"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "historique_exec_chatgpt_no_foreign_keys_logical_relations",
+      "_tgt": "historique_exec_chatgpt_table_doc",
+      "source": "historique_exec_chatgpt_table_doc",
+      "target": "historique_exec_chatgpt_no_foreign_keys_logical_relations"
+    },
+    {
       "relation": "references",
       "confidence": "INFERRED",
       "confidence_score": 0.8,
-      "source_file": "apps-microservices/crawler-service/crawler/src/qmConsumptionSkip.ts",
-      "source_location": "qmConsumptionSkip.ts:100-112",
-      "weight": 1.0
+      "reason": "La croissance non born\u00e9e EN OCTETS s'explique par l'absence de troncature de retour_chatgpt_hec ; le fichier fait le lien dans les notes mais les deux faits vivent dans des sections diff\u00e9rentes.",
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "weight": 0.8,
+      "_src": "historique_exec_chatgpt_pure_archive_no_retention",
+      "_tgt": "historique_exec_chatgpt_retour_failure_column_not_archive",
+      "source": "historique_exec_chatgpt_pure_archive_no_retention",
+      "target": "historique_exec_chatgpt_retour_failure_column_not_archive"
     },
     {
-      "source": "qmconsumptionskip_rationale_dedup_before_cap_defect",
-      "target": "crawler_v61_two_caps_only_one_visible",
       "relation": "references",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
-      "source_file": "apps-microservices/crawler-service/crawler/src/qmConsumptionSkip.ts",
-      "source_location": "qmConsumptionSkip.ts:100-112",
-      "weight": 1.0
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "historique_exec_chatgpt_logging_blind_spots",
+      "_tgt": "historique_exec_chatgpt_ten_copied_insert_writers",
+      "source": "historique_exec_chatgpt_ten_copied_insert_writers",
+      "target": "historique_exec_chatgpt_logging_blind_spots"
     },
     {
-      "source": "qmconsumptionskip_rationale_dedup_test_precedes_cap",
-      "target": "qmconsumptionskip_recordqmcollapsed",
+      "relation": "references",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "reason": "Les deux familles de writers qui ne testent pas la m\u00eame chose sont exactement les copies d'INSERT d\u00e9crites par le n\u0153ud des dix \u00e9crivains ; le lien de causalit\u00e9 est \u00e9nonc\u00e9 en termes g\u00e9n\u00e9raux (\u00ab les divergences entre copies expliquent la plupart des pi\u00e8ges \u00bb), pas nomm\u00e9ment.",
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "weight": 0.85,
+      "_src": "historique_exec_chatgpt_etat_writers_disagree",
+      "_tgt": "historique_exec_chatgpt_ten_copied_insert_writers",
+      "source": "historique_exec_chatgpt_ten_copied_insert_writers",
+      "target": "historique_exec_chatgpt_etat_writers_disagree"
+    },
+    {
+      "relation": "references",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "reason": "Le co\u00fbt du balayage est port\u00e9 par les lecteurs (le mail balaie date_hec trois fois par ex\u00e9cution, l'\u00e9cran BO propose quatre op\u00e9rateurs de date) ; l'association est implicite dans deux passages distincts du fichier.",
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "weight": 0.8,
+      "_src": "historique_exec_chatgpt_date_hec_unindexed",
+      "_tgt": "historique_exec_chatgpt_three_readers",
+      "source": "historique_exec_chatgpt_date_hec_unindexed",
+      "target": "historique_exec_chatgpt_three_readers"
+    },
+    {
+      "relation": "references",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "reason": "Le mail ne distingue que type_ia_hec = 1 du reste ; l'attribution fausse \u00e0 43 % est la cons\u00e9quence directe du codage fournisseur document\u00e9 par ce n\u0153ud, mais le fichier ne relie pas explicitement les deux passages.",
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "weight": 0.85,
+      "_src": "historique_exec_chatgpt_weekly_cost_mail_misattribution",
+      "_tgt": "historique_exec_chatgpt_type_ia_provider_collision",
+      "source": "historique_exec_chatgpt_type_ia_provider_collision",
+      "target": "historique_exec_chatgpt_weekly_cost_mail_misattribution"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "historique_exec_chatgpt_origine_hec_unreliable",
+      "_tgt": "historique_exec_chatgpt_url_process_provenance",
+      "source": "historique_exec_chatgpt_origine_hec_unreliable",
+      "target": "historique_exec_chatgpt_url_process_provenance"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "historique_exec_chatgpt_origine_hec_unreliable",
+      "_tgt": "historique_exec_chatgpt_identity_columns_mostly_empty",
+      "source": "historique_exec_chatgpt_origine_hec_unreliable",
+      "target": "historique_exec_chatgpt_identity_columns_mostly_empty"
+    },
+    {
+      "relation": "references",
+      "confidence": "INFERRED",
+      "confidence_score": 0.75,
+      "reason": "L'\u00e9cran BO n'ouvre l'acc\u00e8s au retour que hors \u00e9tat de succ\u00e8s ; le chemin RAG contredit cette hypoth\u00e8se de lecteur.",
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
+      "source_location": null,
+      "weight": 0.75,
+      "_src": "historique_exec_chatgpt_retour_failure_column_not_archive",
+      "_tgt": "historique_exec_chatgpt_three_readers",
+      "source": "historique_exec_chatgpt_retour_failure_column_not_archive",
+      "target": "historique_exec_chatgpt_three_readers"
+    },
+    {
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
-      "source_file": "apps-microservices/crawler-service/crawler/src/qmConsumptionSkip.ts",
-      "source_location": "qmConsumptionSkip.ts:118-131",
-      "weight": 1.0
-    },
-    {
-      "source": "qmconsumptionskip_rationale_dedup_test_precedes_cap",
-      "target": "qmconsumptionskip_resetqmcollapsedstate",
-      "relation": "conceptually_related_to",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "apps-microservices/crawler-service/crawler/src/qmConsumptionSkip.ts",
-      "source_location": "qmConsumptionSkip.ts:118-131",
-      "weight": 1.0
-    },
-    {
-      "source": "restore_allowlist_spec_design",
-      "target": "crawler_manager_crawlermanager_restore_archived_crawl",
-      "relation": "implements",
-      "confidence": "INFERRED",
-      "confidence_score": 0.9,
-      "source_file": "docs/superpowers/specs/2026-09-02-restore-from-verified-allowlist-design.md",
+      "source_file": "docs/superpowers/runbooks/examples/historique_exec_chatgpt.doc.json",
       "source_location": null,
-      "weight": 1.0
-    },
-    {
-      "source": "restore_allowlist_spec_design",
-      "target": "crawler_manager_crawlermanager_is_archive_gcs_verified",
-      "relation": "implements",
-      "confidence": "INFERRED",
-      "confidence_score": 0.9,
-      "source_file": "docs/superpowers/specs/2026-09-02-restore-from-verified-allowlist-design.md",
-      "source_location": null,
-      "weight": 1.0
-    },
-    {
-      "source": "restore_allowlist_spec_design",
-      "target": "apps_microservices_crawler_service_tests_test_restore_from_verified_allowlist_py",
-      "relation": "implements",
-      "confidence": "INFERRED",
-      "confidence_score": 0.85,
-      "source_file": "docs/superpowers/specs/2026-09-02-restore-from-verified-allowlist-design.md",
-      "source_location": null,
-      "weight": 1.0
-    },
-    {
-      "source": "restore_allowlist_spec_rationale_fail_closed_none_vs_empty",
-      "target": "test_restore_from_verified_allowlist_rationale_38",
-      "relation": "implements",
-      "confidence": "INFERRED",
-      "confidence_score": 0.9,
-      "source_file": "docs/superpowers/specs/2026-09-02-restore-from-verified-allowlist-design.md",
-      "source_location": null,
-      "weight": 1.0
+      "weight": 1.0,
+      "_src": "historique_exec_chatgpt_weekly_cost_mail_misattribution",
+      "_tgt": "historique_exec_chatgpt_three_readers",
+      "source": "historique_exec_chatgpt_three_readers",
+      "target": "historique_exec_chatgpt_weekly_cost_mail_misattribution"
     }
   ],
   "hyperedges": [

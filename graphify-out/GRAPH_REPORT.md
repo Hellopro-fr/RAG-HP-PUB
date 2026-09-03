@@ -1,12 +1,12 @@
-# Graph Report - crawler-service (restore impl + collapse cap)  (2026-09-03)
+# Graph Report - docs (historique_exec_chatgpt)  (2026-09-03)
 
 ## Corpus Check
-- 5 files · ~0 words
+- 1 files · ~0 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 12008 nodes · 28480 edges · 225 communities detected
-- Extraction: 64% EXTRACTED · 35% INFERRED · 0% AMBIGUOUS · INFERRED: 10108 edges (avg confidence: 0.61)
+- 12026 nodes · 28518 edges · 225 communities detected
+- Extraction: 64% EXTRACTED · 36% INFERRED · 0% AMBIGUOUS · INFERRED: 10125 edges (avg confidence: 0.61)
 - Token cost: 0 input · 0 output
 
 ## Community Hubs (Navigation)
@@ -865,7 +865,7 @@ Nodes (82): Dynamic Unit Normalization Design Spec, graph-rag-normalize-unite-se
 
 ### Community 28 - "BDD Doc-Enrichment Workflow"
 Cohesion: 0.03
-Nodes (108): BDD doc-enrichment workflow (design spec), BDD doc-enrichment workflow (implementation plan), BDD doc-enrichment runbook, Objective: reusable code-free table doc-enrichment process, MCP 'Table BDD' system (read-only MySQL exposure to LLM), Six bdd_* MCP tools (read-only), bdd_list_tables tool, bdd_describe_table tool (+100 more)
+Nodes (126): BDD doc-enrichment workflow (design spec), BDD doc-enrichment workflow (implementation plan), BDD doc-enrichment runbook, Objective: reusable code-free table doc-enrichment process, MCP 'Table BDD' system (read-only MySQL exposure to LLM), Six bdd_* MCP tools (read-only), bdd_list_tables tool, bdd_describe_table tool (+118 more)
 
 ### Community 112 - "crawler-service: test_timing_summary_tool.ts"
 Cohesion: 1.0
