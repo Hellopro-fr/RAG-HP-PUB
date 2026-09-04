@@ -1,0 +1,86 @@
+name: 'Deploy — crawler-monitor-backend'
+
+# Wrapper qui appelle deploy-cloud-run.yml pour crawler-monitor-backend
+# (Go 1.25 distroless, backend REST + WebSocket du dashboard de monitoring crawler, port 3001).
+#
+# Deploiement PARALLELE (shadow), zero trafic reroute. Le container VM continue de servir
+# le crawler-monitor-frontend ; shadow = instance CR isolee, non exposee.
+#
+# *** VAGUE 4B — MCP/gateways & backends admin (auth applicative) ***
+# Backend Redis (lecture etat crawler + pubsub crawl_updates) + WebSocket hub + login JWT
+# (mot de passe admin hashe scrypt). Storage local /app/storage = EPHEMERE sur CR (audit/albums
+# resettes au cold start) : tolerable en shadow (monitoring, pas de source de verite disque).
+#
+# Ingress = INTERNAL + no-allow-unauthenticated : outil d'admin/ops (endpoints mutation :
+# drop/dedup queue, clear callbacks) -> JAMAIS expose sur Internet, meme en shadow.
+# Consequence : smoke test GHA SKIP (runner public ne peut pas atteindre l'interne) ->
+# validation via logs (server.start + redis.connect OK). Health = GET /health (non authentifie).
+#
+# min_instances=0 (shadow, zero cout). ATTENTION cutover prod : min>=1 requis
+# (ticker snapshot capacite 60s + subscriber pubsub Redis + WS hub = etat permanent).
+#
+# 3 secrets Secret Manager :
+#   REDIS_URL           -> platform-redis-url         (partage, existant)
+#   JWT_SECRET          -> platform-jwt-secret        (partage, existant)
+#   ADMIN_PASSWORD_HASH -> crawler-monitor-admin-password-hash (dedie, cree 2026-07-10)
+#
+# Trivy : Go distroless static-debian12 (surface OS minimale) -> gate LAISSE ACTIF
+# (principe Rust/Go). Bump module (go get) si CVE dependance. CMD = binaire unique -> pas d'override.
+#
+# VPC Connector requis : Redis interne GKE (10.0.1.220:6379) via private-ranges-only.
+#
+# *** CD3.b CR (2026-09-04) — PILOTE du rail Cloud Run shadow ***
+# Trigger porte sur `prod` (etait feat/migration-**) : le merge du PR sur prod auto-declenche
+# le CD via `on: push:[prod]` + path-filter (cf. reference_cd_shadow_automatique D1).
+# Pendant CR de deploy-gke-service.yml / deploy-gke-mcp-gateway-service.yml (rail GKE deja prouve).
+
+on:
+  push:
+    branches:
+      - prod
+    paths:
+      - 'apps-microservices/crawler-monitor-backend/**'
+      - '.github/workflows/deploy-crawler-monitor-backend.yml'
+  workflow_dispatch:
+    inputs:
+      cloud_run_region:
+        description: 'Région Cloud Run (override)'
+        required: false
+        type: string
+        default: 'europe-west1'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    name: 'Deploy crawler-monitor-backend'
+    uses: ./.github/workflows/deploy-cloud-run.yml
+    with:
+      service_name: crawler-monitor-backend
+      dockerfile_path: apps-microservices/crawler-monitor-backend/Dockerfile
+      build_context: apps-microservices/crawler-monitor-backend
+      cloud_run_region: ${{ github.event.inputs.cloud_run_region || 'europe-west1' }}
+      ingress: internal
+      allow_unauthenticated: false
+      cpu: '1'
+      # Go binaire distroless statique = leger ; marge pour WS hub + pubsub.
+      memory: '512Mi'
+      min_instances: 0
+      max_instances: 3
+      container_port: 3001
+      health_check_path: /health
+      # *** VPC Connector requis : Redis interne GKE (10.0.1.220) ***
+      vpc_connector: vpc-access-connector
+      vpc_egress: private-ranges-only
+      # PORT est RÉSERVÉ par Cloud Run (injecté = --port ci-dessus, soit 3001) → jamais en env.
+      # L'app lit envOr("PORT","3001") → reçoit 3001 automatiquement.
+      secret_env_vars_json: |
+        {
+          "REDIS_URL": "platform-redis-url:latest",
+          "JWT_SECRET": "platform-jwt-secret:latest",
+          "ADMIN_PASSWORD_HASH": "crawler-monitor-admin-password-hash:latest"
+        }
+    secrets:
+      slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
