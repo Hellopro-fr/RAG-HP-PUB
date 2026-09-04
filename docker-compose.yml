@@ -2730,6 +2730,22 @@ services:
       timeout: 5s
       retries: 3
 
+  tailscale:
+    image: tailscale/tailscale:stable
+    container_name: tailscale-gateway
+    hostname: api-hellopro-gateway        # le nom qui apparaîtra dans le tailnet
+    network_mode: host
+    cap_add: [NET_ADMIN]
+    devices: ["/dev/net/tun:/dev/net/tun"]
+    volumes:
+      - tailscale_state:/var/lib/tailscale   # l'identité de la machine : à ne jamais perdre
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY}            # clé d'auth pré-approuvée, réutilisable, taguée
+      TS_EXTRA_ARGS: --advertise-tags=tag:gateway
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_USERSPACE: "false"
+    restart: unless-stopped
+
   account-service-frontend:
     build:
       context: ./apps-microservices/account-service-frontend
