@@ -2829,3 +2829,4 @@ volumes:
   gr_neo4j_data:
   gr_neo4j_logs:
   gateway_mysql_data:
+  tailscale_state:
