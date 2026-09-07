@@ -655,8 +655,12 @@ export const ouvrirFoodTruck: HubPage = {
         'Pour vous aider à avancer, nous vous offrons gratuitement un guide de démarrage. Vous pouvez aussi le récupérer à nouveau à tout moment.',
       image: GUIDE_COVER,
       downloadLabel: 'Télécharger à nouveau le guide',
-      // PDF de test, comme la page 1000. À remplacer par le guide food truck.
-      fileUrl: '/seo_masterclass_detailed.pdf',
+      // Guide livré le 2026-09-07. `fileUrl` = chemin technique en kebab-case
+      // ASCII, `fileName` = nom que le visiteur voit dans ses téléchargements.
+      // Les deux sont volontairement dissociés : le chemin doit rester robuste,
+      // le titre doit rester éditorial.
+      fileUrl: '/guides/ouvrir-food-truck.pdf',
+      fileName: 'Livre blanc - Ouvrir un food truck.pdf',
     },
   },
 
@@ -690,7 +694,11 @@ export const ouvrirFoodTruck: HubPage = {
       note: 'Vous pouvez aussi le récupérer à nouveau à tout moment.',
       image: GUIDE_COVER,
       buttonLabel: 'Télécharger à nouveau le guide',
-      fileUrl: '/seo_masterclass_detailed.pdf',
+      // ⚠️ DEUX références par page, à garder synchronisées : celle-ci sert le
+      // tunnel guide, `assistant.success` sert la fin du questionnaire. N'en
+      // changer qu'une donnerait deux fichiers différents selon le parcours.
+      fileUrl: '/guides/ouvrir-food-truck.pdf',
+      fileName: 'Livre blanc - Ouvrir un food truck.pdf',
     },
   },
 

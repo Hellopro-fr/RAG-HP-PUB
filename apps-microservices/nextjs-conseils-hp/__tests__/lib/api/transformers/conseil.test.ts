@@ -73,7 +73,18 @@ describe('transformPhpConseilPage', () => {
     expect(page.blocks).toHaveLength(1);
     expect(page.blocks[0].type).toBe('h2');
     expect((page.blocks[0].data as any).title).toBe('Prix de construction');
-    expect((page.blocks[0].data as any).id).toBe('prix-de-construction');
+    /**
+     * ⚠️ L'ancre est l'ORDRE du bloc, pas un slug du titre.
+     *
+     * Ce test attendait `prix-de-construction` et réclamait donc, sans le dire,
+     * un changement de toutes les ancres du site. Le transformer réplique
+     * délibérément l'ancien template PHP (`<h2 id="<ordre>">`) : ce sont ces
+     * ancres numériques que Google a indexées, et les casser perdrait les liens
+     * profonds des SERP tant que les blocs n'ont pas été réordonnés en BO.
+     *
+     * Autrement dit, « corriger » le code vers le slug serait la régression.
+     */
+    expect((page.blocks[0].data as any).id).toBe('1');
   });
 
   it('ignore un bloc type 1 sans contenu.titre', () => {
@@ -155,7 +166,47 @@ describe('transformPhpConseilPage', () => {
     expect((page.blocks[0].data as any).url).toBe('https://youtube.com/watch?v=abc');
   });
 
-  it('transforme un bloc CTA standalone (type 7)', () => {
+  /**
+   * ⚠️ Le H2 du fixture est INDISPENSABLE, il n'est pas décoratif.
+   *
+   * `prepareIntroCta` retire tous les CTA type 7 situés AVANT le premier H2 —
+   * la zone d'intro n'en garde qu'un seul, celui qui pointe sur `demande_info.php`.
+   * Sans H2, la page entière est « avant le premier H2 » : le CTA était donc
+   * mangé et `page.blocks` revenait vide, ce qui faisait échouer ce test sur un
+   * `undefined` peu parlant.
+   *
+   * Le CTA est donc placé APRÈS un H2 : c'est le vrai cas « standalone ».
+   */
+  it('transforme un bloc CTA standalone (type 7) placé après un H2', () => {
+    const response: PhpConseilResponse = {
+      ...BASE_RESPONSE,
+      response: {
+        ...BASE_RESPONSE.response,
+        blocs: [
+          { type: 1, ordre: 1, contenu: { titre: 'Une section' } },
+          {
+            id: 1, type: 7, ordre: 2,
+            contenu: { cta: { accroche_1: 'Titre CTA', accroche_2: 'Sous-titre', wording: 'Demander', color: '#000', wording_color: '#fff', formulaire_popup: 1, feuille_associe: '', url: '' } },
+          },
+        ],
+      },
+    };
+    const page = transformPhpConseilPage(response);
+    const cta = page.blocks.find((b) => b.type === 'cta');
+    expect(cta).toBeDefined();
+    expect((cta!.data as any).title).toBe('Titre CTA');
+    expect((cta!.data as any).ctaLabel).toBe('Demander');
+  });
+
+  /**
+   * Le pendant du test précédent, et la règle qui l'avait fait échouer.
+   *
+   * Elle n'était couverte par aucun test alors qu'elle SUPPRIME du contenu du BO :
+   * un CTA d'intro qui ne pointe pas sur `demande_info.php` disparaît de la page.
+   * `catId` est absent de `BASE_RESPONSE`, donc aucun CTA de remplacement n'est
+   * synthétisé — la page se retrouve bien vide.
+   */
+  it('retire un CTA type 7 situé avant le premier H2 (zone intro)', () => {
     const response: PhpConseilResponse = {
       ...BASE_RESPONSE,
       response: {
@@ -167,9 +218,7 @@ describe('transformPhpConseilPage', () => {
       },
     };
     const page = transformPhpConseilPage(response);
-    expect(page.blocks[0].type).toBe('cta');
-    expect((page.blocks[0].data as any).title).toBe('Titre CTA');
-    expect((page.blocks[0].data as any).ctaLabel).toBe('Demander');
+    expect(page.blocks).toHaveLength(0);
   });
 
   it('transforme un bloc produits (type 8) en extrayant les IDs', () => {
@@ -205,14 +254,23 @@ describe('transformPhpConseilPage', () => {
     expect((page.blocks[0].data as any).rows).toEqual([['col 1', 'col 2']]);
   });
 
-  it('transforme une estimation prix (type 11) en texte avec badge', () => {
+  /**
+   * `estimation-prix` est devenu un TYPE DE BLOC à part entière, il n'est plus un
+   * bloc `texte` porteur d'un champ `estimation`.
+   *
+   * Ce cas ne se produit que pour un type 11 « seul » : quand il précède un bloc
+   * texte-image (type 4/5), `mergeEstimationIntoNextBloc` l'y fusionne en amont et
+   * aucun bloc `estimation-prix` n'est émis.
+   */
+  it('transforme une estimation prix (type 11) isolée en bloc estimation-prix', () => {
     const response: PhpConseilResponse = {
       ...BASE_RESPONSE,
       response: { ...BASE_RESPONSE.response, blocs: [{ id: 1, type: 11, ordre: 1, contenu: { texte: '200 à 500 €' } }] },
     };
     const page = transformPhpConseilPage(response);
-    expect(page.blocks[0].type).toBe('texte');
-    expect((page.blocks[0].data as any).estimation.value).toBe('200 à 500 €');
+    expect(page.blocks[0].type).toBe('estimation-prix');
+    expect((page.blocks[0].data as any).value).toBe('200 à 500 €');
+    expect((page.blocks[0].data as any).label).toBe('Estimation de prix');
   });
 
   it('transforme un bloc h3 (type 12) depuis contenu.titre', () => {

@@ -8,9 +8,14 @@ const items = [
 ];
 
 describe('FaqBlock', () => {
+  /**
+   * Le repli porte le préfixe « FAQ : », comme les titres venant du BO. Le test
+   * attendait la moitié droite de la chaîne et cherchait donc un texte exact qui
+   * n'existe pas — `getByText` compare le contenu complet du nœud.
+   */
   it('renders static fallback title when no title in data', () => {
     render(<FaqBlock data={{ items }} />);
-    expect(screen.getByText('Vos questions les plus fréquentes')).toBeDefined();
+    expect(screen.getByText('FAQ : Vos questions les plus fréquentes')).toBeDefined();
   });
 
   it('renders custom title from data.title', () => {
