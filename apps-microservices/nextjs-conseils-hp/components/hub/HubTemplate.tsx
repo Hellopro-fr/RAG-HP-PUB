@@ -10,6 +10,7 @@ import { HubArticleClickTracker } from './HubArticleClickTracker';
 import { AssistantForm } from './AssistantForm';
 import { HubSectionNav } from './HubSectionNav';
 import { HubOverlays } from './HubOverlays';
+import { HubDeepLink } from './HubDeepLink';
 import { StickyCta } from './StickyCta';
 import { ValueProps } from './ValueProps';
 import { ThematiqueBloc } from './ThematiqueBloc';
@@ -159,6 +160,9 @@ export function HubTemplate({ page, headerCategories = [] }: HubTemplateProps) {
           1er clic guide / 1er scroll) → hors du bundle initial, sans fenêtre morte. */}
       <StickyCta label={page.stickyCtaLabel} />
       <HubOverlays guide={page.guideDialog} leadPopup={page.leadPopup} pageId={page.id} />
+      {/* Deep-link externe : `?hub_cta=projet` ouvre le questionnaire sur sa 1re
+          question, `?hub_cta=guide` ouvre la pop-up guide (condition e-mail préservée). */}
+      <HubDeepLink />
     </div>
   );
 }
