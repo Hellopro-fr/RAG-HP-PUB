@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import type { ReactNode } from 'react';
 import { render, screen } from '@testing-library/react';
 import { ConseilTemplate, extractResumeTitle } from '@/components/conseil/ConseilTemplate';
 import { mockPagePrix } from '@/data/mocks/page-prix';
@@ -7,8 +8,31 @@ import type { AoFormQuestion } from '@/types/conseils';
 // Isolation des composants lourds (header/footer/hero/sidebar non testés ici)
 vi.mock('@/components/conseil/SiteHeader', () => ({ SiteHeader: () => <header data-testid="site-header" /> }));
 vi.mock('@/components/conseil/SiteFooter', () => ({ SiteFooter: () => <footer data-testid="site-footer" /> }));
+/**
+ * ⚠️ Le mock doit rendre les DEUX slots.
+ *
+ * `Hero` a scindé sa prop `slot` en `slotMobile` / `slotDesktop` (deux copies du
+ * formulaire devis, une par largeur d'écran). Un mock qui ne rendait que `data`
+ * avalait donc silencieusement le `HeroQuoteForm` : les deux tests ci-dessous ne
+ * démontraient plus rien, ils échouaient sur un `hero-quote-form` introuvable
+ * alors que `ConseilTemplate` le passait correctement.
+ */
 vi.mock('@/components/conseil/Hero', () => ({
-  Hero: ({ data }: { data: { title: string } }) => <div data-testid="hero">{data.title}</div>,
+  Hero: ({
+    data,
+    slotMobile,
+    slotDesktop,
+  }: {
+    data: { title: string };
+    slotMobile?: ReactNode;
+    slotDesktop?: ReactNode;
+  }) => (
+    <div data-testid="hero">
+      {data.title}
+      {slotMobile}
+      {slotDesktop}
+    </div>
+  ),
 }));
 vi.mock('@/components/conseil/Sidebar', () => ({ Sidebar: () => <nav data-testid="sidebar" /> }));
 vi.mock('@/components/conseil/BlockRenderer', () => ({ BlockRenderer: () => <div data-testid="block" /> }));
@@ -40,15 +64,79 @@ describe('ConseilTemplate', () => {
     };
     const page = { ...mockPagePrix, formulaire_ao: question };
     render(<ConseilTemplate page={page} />);
-    const form = screen.getByTestId('hero-quote-form');
-    expect(form.getAttribute('data-question')).toBe('Quel est votre projet ?');
+    // Deux copies (mobile + desktop), et c'est justement ce qu'il faut vérifier :
+    // elles doivent être alimentées à l'identique. En nourrir une seule ne se
+    // verrait qu'à une largeur d'écran donnée.
+    const forms = screen.getAllByTestId('hero-quote-form');
+    expect(forms).toHaveLength(2);
+    for (const form of forms) {
+      expect(form.getAttribute('data-question')).toBe('Quel est votre projet ?');
+    }
   });
 
   it('passes null formulaire_ao when absent', () => {
     const page = { ...mockPagePrix, formulaire_ao: undefined };
     render(<ConseilTemplate page={page} />);
-    const form = screen.getByTestId('hero-quote-form');
-    expect(form.getAttribute('data-question')).toBe('none');
+    const forms = screen.getAllByTestId('hero-quote-form');
+    expect(forms).toHaveLength(2);
+    for (const form of forms) {
+      expect(form.getAttribute('data-question')).toBe('none');
+    }
+  });
+
+  /**
+   * Déplacé depuis `ProduitsBlock.test.tsx` (2026-09-07) : la collecte GTM a été
+   * remontée ici, parce que la numérotation des `position` doit être CONTINUE
+   * d'un bloc produits à l'autre — un bloc isolé ne peut pas savoir combien de
+   * produits l'ont précédé sur la page. C'est précisément ce que vérifie le
+   * second test ci-dessous, et c'est ce qu'on perdait à tester bloc par bloc.
+   */
+  it('injecte le script prod_intern_gtm avec les données GTM', () => {
+    const page = {
+      ...mockPagePrix,
+      blocks: [
+        {
+          id: 'p1',
+          type: 'produits' as const,
+          order: 1,
+          data: {
+            productIds: [],
+            produits: [
+              { id: '11454124', name: 'Produit A', image: '/img/a.jpg', priceHt: null, url: '/a',
+                brand: 'Marque A', category: '1002121', variant: 'cert' },
+            ],
+          },
+        },
+      ],
+    };
+    const { container } = render(<ConseilTemplate page={page} />);
+    const script = container.querySelector('script');
+    // JSON compact (`JSON.stringify`) : pas d'espace après les deux-points.
+    expect(script?.innerHTML).toContain('prod_intern_gtm[1]');
+    expect(script?.innerHTML).toContain('"id":"11454124"');
+    expect(script?.innerHTML).toContain('"category":"1002121"');
+    expect(script?.innerHTML).toContain('"variant":"cert"');
+    expect(script?.innerHTML).toContain('"list":"lien interne"');
+    expect(script?.innerHTML).toContain('"position":1');
+  });
+
+  it('numérote les positions GTM en continu sur plusieurs blocs produits', () => {
+    const produit = (id: string) => ({
+      id, name: `Produit ${id}`, image: '', priceHt: null, url: `/${id}`,
+      brand: '', category: '', variant: '',
+    });
+    const page = {
+      ...mockPagePrix,
+      blocks: [
+        { id: 'p1', type: 'produits' as const, order: 1, data: { productIds: [], produits: [produit('a'), produit('b')] } },
+        { id: 'p2', type: 'produits' as const, order: 2, data: { productIds: [], produits: [produit('c')] } },
+      ],
+    };
+    const { container } = render(<ConseilTemplate page={page} />);
+    const html = container.querySelector('script')?.innerHTML ?? '';
+    // Le produit du SECOND bloc doit être en position 3, pas repartir à 1.
+    expect(html).toContain('prod_intern_gtm[3]');
+    expect(html).toContain('"id":"c","brand":"","category":"","variant":"","list":"lien interne","position":3');
   });
 });
 

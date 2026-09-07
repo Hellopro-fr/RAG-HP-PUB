@@ -23,36 +23,51 @@ describe('Hero', () => {
     expect(screen.queryByText(/essentiel à retenir/i)).toBeNull();
   });
 
-  it('affiche KeyTakeaways quand des items resume sont fournis', () => {
+  /**
+   * TITRE DU BLOC RÉSUMÉ — arbitré le 2026-09-07.
+   *
+   * Ces trois tests attendaient un titre rendu depuis la prop `resumeTitle`.
+   * `KeyTakeaways` ne rend AUCUN titre : celui-ci fait partie du HTML éditorial
+   * envoyé par le BO (le texte qui précède le `<ul>`). Le rendre aussi depuis une
+   * prop l'afficherait deux fois.
+   *
+   * La prop `resumeTitle` est donc morte de bout en bout et part dans un commit
+   * de nettoyage distinct. Les tests ci-dessous décrivent le comportement réel.
+   */
+  it('affiche les items du résumé, sans titre ajouté', () => {
     render(
       <Hero
         data={BASE_HERO}
         pageType="prix"
-        resumeTitle="L'essentiel à retenir"
         resume={[
           { label: 'Coût', text: 'entre 200 et 500 €' },
           { label: 'Durée', text: '3 à 5 jours' },
         ]}
       />
     );
-    expect(screen.getByText("L'essentiel à retenir")).toBeDefined();
     expect(screen.getByText(/Coût/)).toBeDefined();
+    expect(screen.getByText(/entre 200 et 500 €/)).toBeDefined();
   });
 
-  it('affiche KeyTakeaways avec HTML brut quand resumeHtml est fourni', () => {
+  it('rend le titre porté par le HTML du BO', () => {
     render(
       <Hero
         data={BASE_HERO}
         pageType="prix"
-        resumeTitle="L'essentiel à retenir"
-        resumeHtml="<ul><li>Coût : entre 200 et 500 €</li><li>Durée : 3 jours</li></ul>"
+        resumeHtml="<p>L'essentiel à retenir</p><ul><li>Coût : entre 200 et 500 €</li><li>Durée : 3 jours</li></ul>"
       />
     );
     expect(screen.getByText("L'essentiel à retenir")).toBeDefined();
     expect(screen.getByText(/Coût : entre 200 et 500 €/i)).toBeDefined();
   });
 
-  it('utilise resumeTitle comme titre du bloc résumé quand fourni', () => {
+  /**
+   * Le corollaire, et la raison d'être du nettoyage à venir : fournir un titre
+   * par la prop n'affiche rien. Si quelqu'un rebranche `resumeTitle` un jour, ce
+   * test tombera et l'obligera à vérifier qu'il ne crée pas un titre en double
+   * avec celui du HTML.
+   */
+  it('ignore la prop resumeTitle', () => {
     render(
       <Hero
         data={BASE_HERO}
@@ -61,19 +76,8 @@ describe('Hero', () => {
         resumeHtml="<ul><li>Délai : 3 semaines</li></ul>"
       />
     );
-    expect(screen.getByText('Points clés à retenir')).toBeDefined();
-    expect(screen.queryByText(/essentiel à retenir/i)).toBeNull();
-  });
-
-  it("n'affiche pas de titre quand resumeTitle n'est pas fourni", () => {
-    render(
-      <Hero
-        data={BASE_HERO}
-        pageType="prix"
-        resume={[{ label: 'Coût', text: '200 €' }]}
-      />
-    );
-    expect(screen.queryByText(/essentiel à retenir/i)).toBeNull();
+    expect(screen.getByText(/Délai : 3 semaines/)).toBeDefined();
+    expect(screen.queryByText('Points clés à retenir')).toBeNull();
   });
 
   it('resumeHtml est prioritaire sur items vides', () => {
@@ -138,7 +142,14 @@ describe('Hero', () => {
       />
     );
     expect(screen.getByRole('navigation', { name: /fil d.ariane/i })).toBeDefined();
-    expect(screen.getByText('Accueil')).toBeDefined();
+    /**
+     * Le premier maillon est rendu en ICÔNE (maison) et non en texte : « Accueil »
+     * n'existe plus que comme nom accessible. On l'interroge donc par le rôle, ce
+     * qui vérifie au passage ce qui compte vraiment ici — qu'un lecteur d'écran
+     * annonce toujours le maillon, malgré l'absence de libellé visible.
+     */
+    expect(screen.getByRole('link', { name: 'Accueil' })).toBeDefined();
+    expect(screen.getByText('Conseils')).toBeDefined();
   });
 
   it('affiche "Voir plus" quand il y a plus de 2 items', () => {
