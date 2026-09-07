@@ -1,3 +1,4 @@
-mcp-proxy>=0.11.0
-analytics-mcp
+mcp-proxy==0.12.0
+analytics-mcp==0.6.0
+mcp==1.28.1
 cryptography
