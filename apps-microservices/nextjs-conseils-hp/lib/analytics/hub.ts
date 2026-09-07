@@ -60,8 +60,9 @@ export type HubGroup = 'projet' | 'guide' | 'engagement';
  *
  * Répartition actuelle :
  *  - questionnaire (projet) : `hero`, `bloc_thematique`, `banner_accompagnement`,
- *    `nos_ressources`, `sticky_mobile`
- *  - guide : `banner_guide`, `cta_final`, `bloc_thematique`, `popup_scroll`
+ *    `nos_ressources`, `sticky_mobile`, `external_projet`
+ *  - guide : `banner_guide`, `cta_final`, `bloc_thematique`, `popup_scroll`,
+ *    `external_guide`
  */
 export type HubEntryPoint =
   | 'hero'
@@ -73,7 +74,11 @@ export type HubEntryPoint =
   /** Liens « Être accompagné » du bloc ressources. */
   | 'nos_ressources'
   | 'popup_scroll'
-  | 'sticky_mobile';
+  | 'sticky_mobile'
+  /** Deep-link depuis un SITE EXTERNE (`?hub_cta=projet`) → ouvre le questionnaire. */
+  | 'external_projet'
+  /** Deep-link depuis un SITE EXTERNE (`?hub_cta=guide`) → ouvre la pop-up guide. */
+  | 'external_guide';
 
 /**
  * Paramètres autorisés — LISTE FERMÉE, et c'est le point important.
