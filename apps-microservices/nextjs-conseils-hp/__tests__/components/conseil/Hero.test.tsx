@@ -89,15 +89,41 @@ describe('Hero', () => {
     expect(screen.getByText('Résumé en HTML')).toBeDefined();
   });
 
-  it('affiche le slot droit passé en prop', () => {
+  /**
+   * La prop unique `slot` a été scindée en `slotMobile` / `slotDesktop` : le
+   * formulaire devis est rendu DEUX fois, la copie mobile portant le vrai `h2` et
+   * la copie desktop un simple `p`, pour n'avoir qu'un seul `h2` dans le DOM. Ce
+   * test suivait encore l'ancienne signature et faisait échouer `tsc` — donc
+   * aussi tout `tsc && vitest`.
+   *
+   * Il vérifie maintenant les deux emplacements, puisque c'est précisément ce que
+   * la scission a introduit : oublier d'en rendre un ne se verrait qu'à une
+   * largeur d'écran donnée.
+   */
+  it('affiche les deux copies du slot formulaire', () => {
     render(
       <Hero
         data={BASE_HERO}
         pageType="prix"
-        slot={<div data-testid="custom-slot">Formulaire devis</div>}
+        slotMobile={<div data-testid="slot-mobile">Formulaire devis</div>}
+        slotDesktop={<div data-testid="slot-desktop">Formulaire devis</div>}
       />
     );
-    expect(screen.getByTestId('custom-slot')).toBeDefined();
+    expect(screen.getByTestId('slot-mobile')).toBeDefined();
+    expect(screen.getByTestId('slot-desktop')).toBeDefined();
+  });
+
+  /** Chaque copie reste indépendante : n'en passer qu'une ne rend que celle-là. */
+  it('n’invente pas la copie manquante', () => {
+    render(
+      <Hero
+        data={BASE_HERO}
+        pageType="prix"
+        slotMobile={<div data-testid="slot-mobile">Formulaire devis</div>}
+      />
+    );
+    expect(screen.getByTestId('slot-mobile')).toBeDefined();
+    expect(screen.queryByTestId('slot-desktop')).toBeNull();
   });
 
   it('affiche le breadcrumb quand fourni', () => {
