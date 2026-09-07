@@ -3,7 +3,7 @@ FROM node:20-slim
 RUN apt-get update && apt-get install -y python3 python3-pip python3-venv && rm -rf /var/lib/apt/lists/*
 RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
-RUN pip install --no-cache-dir "mcp-proxy>=0.11.0"
+RUN pip install --no-cache-dir "mcp-proxy==0.12.0" "mcp==1.28.1"
 
 WORKDIR /app
 COPY apps-microservices/mcp-semrush-service/server.js .
