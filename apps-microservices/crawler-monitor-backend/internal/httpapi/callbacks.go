@@ -95,7 +95,11 @@ func callbacksRetryHandler(rs *redisstore.Client, audit AuditAppender) http.Hand
 			entry.ManualRetryAttempts++
 			updated, _ := json.Marshal(entry)
 			rs.Raw().LSet(ctx, redisstore.FailedCallbacksKey, int64(idx), string(updated))
-			WriteJSON(w, 502, map[string]any{
+			// 200 et non 5xx : l'echec appartient au webhook distant, pas
+			// a ce service, qui a fait son travail en le rejouant.
+			// Repondre 5xx ferait passer une panne tierce pour une panne
+			// du monitor (supervision, alertes, health checks).
+			WriteJSON(w, 200, map[string]any{
 				"success":               false,
 				"status":                result.Status,
 				"error":                 result.Error,

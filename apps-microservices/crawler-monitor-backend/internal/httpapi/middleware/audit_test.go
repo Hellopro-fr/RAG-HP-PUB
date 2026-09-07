@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"sync"
 	"testing"
+
+	"github.com/go-chi/chi/v5"
 )
 
 type fakeAuditStore struct {
@@ -73,5 +75,37 @@ func TestAudit_CaptureQuery(t *testing.T) {
 	}
 	if _, exists := md["hidden"]; exists {
 		t.Error("hidden field should not be captured")
+	}
+}
+
+// TestAudit_CaptureParams : les parametres de route alimentent metadata, et
+// "id" devient la cible de l'entree d'audit.
+func TestAudit_CaptureParams(t *testing.T) {
+	store := &fakeAuditStore{}
+	mw := AuditMiddleware(store, "drop_queues", AuditOptions{
+		CaptureParams: []string{"id", "domain", "filename"},
+	})
+	h := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) }))
+
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", "job-42")
+	rctx.URLParams.Add("domain", "example.com")
+	r := httptest.NewRequest("POST", "/x", nil).
+		WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, rctx))
+	h.ServeHTTP(httptest.NewRecorder(), r)
+
+	e := store.entries[0]
+	if e["target"] != "job-42" {
+		t.Errorf("target = %v, want job-42", e["target"])
+	}
+	md, ok := e["metadata"].(map[string]any)
+	if !ok {
+		t.Fatalf("metadata missing/wrong type: %T", e["metadata"])
+	}
+	if md["id"] != "job-42" || md["domain"] != "example.com" {
+		t.Errorf("metadata = %v", md)
+	}
+	if _, exists := md["filename"]; exists {
+		t.Error("filename absent de la route ne doit pas etre capture")
 	}
 }

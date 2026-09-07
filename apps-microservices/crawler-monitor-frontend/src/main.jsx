@@ -8,6 +8,7 @@ import ErrorBoundary from './components/ErrorBoundary.jsx'
 import ToastProvider from './components/ToastProvider.jsx'
 import { ThemeProvider } from './components/providers/ThemeProvider.jsx'
 import { TooltipProvider } from './components/ui/tooltip'
+import { ApiError } from './lib/api'
 import { tryAutoReloadOnStaleChunk, clearStaleChunkReloadFlag } from './lib/staleChunk'
 
 const queryClient = new QueryClient({
@@ -19,7 +20,10 @@ const queryClient = new QueryClient({
       staleTime: 30 * 1000,        // 30s before considered stale
       gcTime:    5 * 60 * 1000,    // 5min cache retention after unmount
       refetchOnWindowFocus: false, // dashboard is already live via WS
-      retry: 1,                    // one retry on failure
+      // Un ApiError est une réponse HTTP typée : les 4xx ne guériront pas d'un
+      // retry, et les 5xx ont déjà été rejoués par lib/api. On ne rejoue donc
+      // ici que les échecs non typés (réseau/parse), une seule fois.
+      retry: (failureCount, error) => failureCount < 1 && !(error instanceof ApiError),
     },
   },
 })
@@ -44,7 +48,9 @@ createRoot(document.getElementById('root')).render(
     <ErrorBoundary>
       <ThemeProvider defaultTheme="system">
         <QueryClientProvider client={queryClient}>
-          <BrowserRouter>
+          {/* Future flags v7 : opt-in explicite pour lever les 2 avertissements
+              console de react-router 6 et aligner le comportement sur v7. */}
+          <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
             <TooltipProvider delayDuration={200}>
               <ToastProvider>
                 <App />

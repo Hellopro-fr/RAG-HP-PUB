@@ -79,6 +79,11 @@
     --err-soft: oklch(0.22 0.04 25);
     --info: oklch(0.74 0.12 230);
     --info-soft: oklch(0.22 0.04 230);
+    /* accent-soft / accent-ink : sans redéfinition sombre, la ligne
+       sélectionnée et les pastilles tone="accent" restaient en tokens clairs
+       (fond quasi blanc + texte violet foncé) — illisibles sur fond sombre. */
+    --accent-soft: oklch(0.24 0.05 268);
+    --accent-ink: oklch(0.80 0.12 268);
 
     /* shadcn dark aliases */
     --background: var(--bg-1);

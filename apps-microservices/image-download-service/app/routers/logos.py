@@ -1,8 +1,9 @@
 """Routeur FastAPI pour les Logos Fournisseur (chantier logo fournisseur — Task 2).
 
 Endpoints :
-    POST   /logos/enqueue          # Trigger download asynchrone (miroir /pages/enqueue)
-    GET    /logos/{domaine}        # Contenu manifest_logo.json
+    POST   /logos/enqueue           # Trigger download asynchrone (miroir /pages/enqueue)
+    GET    /logos/{domaine}         # Contenu manifest_logo.json
+    POST   /logos/{domaine}/derive  # Derive d'affichage 200x200 a la demande
 
 Architecture :
     - POST /enqueue publie vers RabbitMQ (data_exchange_logos / new_data.logo)
@@ -19,6 +20,7 @@ import json
 import logging
 import os
 import re
+from typing import List, Optional
 
 import aio_pika
 from fastapi import APIRouter, HTTPException, Request
@@ -39,7 +41,22 @@ _DOMAIN_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 
 
 def _validate_domain(domain: str) -> None:
+    """
+    Garde du parametre de chemin.
+
+    P19 — LE POINT EST DANS L ALLOWLIST, DONC « .. » LA FRANCHIT. La regex
+    ``^[A-Za-z0-9._-]+$`` accepte le point, ce qui est necessaire pour un nom de
+    domaine — mais elle accepte donc aussi « . » et « .. ». Mesure :
+    ``POST /logos/%2e%2e/derive`` rendait 200 avec ``domain='..'``, et le chemin
+    d ecriture resolu sortait de ``images/`` (il tombait dans
+    ``{STORAGE_BASE}/logo/d``). Tant que ce parametre ne servait qu a un GET, le
+    defaut restait theorique ; il porte maintenant une ECRITURE, donc il faut
+    refuser explicitement les composants de traversee. Un vrai nom de domaine
+    contient toujours au moins un caractere autre que le point.
+    """
     if not _DOMAIN_RE.fullmatch(domain):
+        raise HTTPException(status_code=400, detail="domaine invalide")
+    if domain.strip(".") == "":
         raise HTTPException(status_code=400, detail="domaine invalide")
 
 
@@ -64,6 +81,26 @@ class LogoPayload(BaseModel):
     domaine: str = Field(..., description="Domaine fournisseur")
     url_logo: str = Field(..., description="URL absolue du logo source")
     key: str = Field(..., description="Cle d'identification du logo (dedup manifest)")
+
+
+class LogoDerivePayload(BaseModel):
+    """Corps OPTIONNEL de POST /logos/{domaine}/derive."""
+
+    keys: Optional[List[str]] = Field(
+        default=None,
+        max_length=200,
+        description=(
+            "Cles a deriver (manifest_logo.json est une LISTE dedupliquee sur key). "
+            "Absent ou vide : toutes les entrees du domaine. Le SERVEUR borne de "
+            "toute facon le travail d'un appel (LOGO_DERIVE_MAX_ENTRIES, "
+            "LOGO_DERIVE_TIME_BUDGET_S) : ce qui n'a pas ete traite revient dans "
+            "`remaining`, avec `truncated: true`."
+        ),
+    )
+    force: bool = Field(
+        default=False,
+        description="Regenerer meme si le derive est deja complet (bloc manifest ET fichiers).",
+    )
 
 
 # =============================================================================
@@ -111,6 +148,72 @@ async def enqueue_logo(payload: LogoPayload, request: Request):
         "domaine": payload.domaine,
         "key": payload.key,
     }
+
+
+# =============================================================================
+# POST — DERIVE D'AFFICHAGE A LA DEMANDE
+# =============================================================================
+
+@router.post("/{domain}/derive")
+async def derive_domain_logos(domain: str, payload: Optional[LogoDerivePayload] = None):
+    """Produit (ou confirme) les vignettes d'affichage 200x200 d'un domaine.
+
+    Sert les deux usages du chantier :
+      - BACKFILL des domaines dont le logo est deja heberge (le flux ne repassera
+        pas dessus) ;
+      - VALIDATION (ecran BO, cron 4b, script ponctuel) qui veut la vignette et
+        ses metriques tout de suite.
+
+    Synchrone et idempotent : un derive n'est refait que si le bloc du manifest
+    manque OU si un fichier de variante manque (``force`` outrepasse les deux).
+    La reponse porte les metriques de ``derive_logo`` VERBATIM, pour que le BO
+    remplisse ses colonnes sans relire manifest_logo.json.
+
+    ``_validate_domain`` est ici indispensable : contrairement au GET, le
+    parametre sert a construire un chemin d'ECRITURE.
+
+    LE TRAVAIL EST BORNE PAR APPEL (nombre d'entrees derivees et budget de
+    temps, cf. ``derive_logos_for_domain``) : quand une borne est atteinte, la
+    reponse reste 200 et porte ``truncated: true``, ``stop_reason`` et
+    ``remaining`` (les cles non traitees) — le pilote de backfill rappelle avec
+    ces cles au lieu de deviner.
+
+    Reponse : ``{domaine, recipe, manifest_entries, created[], skipped[],
+    failed[], remaining[], truncated, stop_reason, counts{}}``. 200 meme quand
+    rien n'a ete cree (le detail est dans ``counts`` et ``failed``), 400 sur
+    domaine invalide, 429 quand le processus a deja trop de derivations en cours
+    (avec ``Retry-After``), 500 sur defaillance inattendue.
+    """
+    _validate_domain(domain)
+
+    keys = payload.keys if payload is not None else None
+    force = bool(payload.force) if payload is not None else False
+
+    # Lazy import : evite la circulaire router -> core -> router (meme motif que
+    # routers/albums.py::_get_downloader).
+    from image_download_service.core.downloader import (
+        LogoDeriveOverloaded,
+        derive_logos_for_domain,
+    )
+
+    try:
+        return await derive_logos_for_domain(domain, keys=keys, force=force)
+    except LogoDeriveOverloaded as exc:
+        # Refus HONNETE et immediat. Sans lui, la replica accepte des derivations
+        # pyvips en parallele jusqu'a l'OOM-kill — qui ne leve aucune exception
+        # Python, donc le message RabbitMQ en vol du consumer n'est jamais
+        # acquitte et revient tuer la replica suivante (mesure : 6 derivations
+        # simultanees d'un master de 64 Mpx = 1969 Mo, plafond de la replica
+        # 2048 Mo).
+        logger.warning("Derivation logos saturee domaine=%s : %s", domain, exc)
+        raise HTTPException(
+            status_code=429,
+            detail="derivations saturees, reessayer",
+            headers={"Retry-After": "5"},
+        )
+    except Exception as exc:
+        logger.exception("Erreur derivation logos domaine=%s : %s", domain, exc)
+        raise HTTPException(status_code=500, detail="derivation logos echouee")
 
 
 # =============================================================================

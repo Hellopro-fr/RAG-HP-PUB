@@ -11,7 +11,12 @@ import path from "node:path";
 
 export const AUDIT_COLLAPSED_CAP = 200;
 
-type QmRow = { collapsed: string; base: string; param: string };
+// origin/gate ride along undeclared since the qm_strip/facet_cap collector started tagging
+// every row (collapsedSeenBase.ts's admission filter reads them). Optional, not required:
+// rows merged back from an EARLIER segment's on-disk file predate that tagging and lack
+// them — this type describes what a row MAY carry, not a guaranteed shape, and there is no
+// migration backfilling the old ones.
+type QmRow = { collapsed: string; base: string; param: string; origin?: string; gate?: string };
 type DiezRow = { collapsed: string; base: string };
 type PairStats = Record<string, { same: number; different: number; unusable: number }>;
 

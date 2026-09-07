@@ -65,10 +65,15 @@ func domainsListHandler(rs *redisstore.Client) http.HandlerFunc {
 		if result == nil {
 			result = []domains.DomainSummary{}
 		}
+		totalJobs := 0
+		for _, d := range result {
+			totalJobs += d.TotalJobs
+		}
 		WriteJSON(w, 200, map[string]any{
-			"window":  windowStr,
-			"count":   len(result),
-			"domains": result,
+			"window":     windowStr,
+			"count":      len(result), // nombre de domaines (conserve pour compat)
+			"total_jobs": totalJobs,
+			"domains":    result,
 		})
 	}
 }

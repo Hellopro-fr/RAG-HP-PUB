@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 
 /**
  * useBrowserNotifications — small wrapper around the Web Notifications API.
@@ -86,5 +86,10 @@ export function useBrowserNotifications() {
     }
   }, [enabled, requestPermission]);
 
-  return { enabled, permission, supported: SUPPORTED, toggle, notify };
+  // Retour memoise : l'objet ne change que si l'un des membres change, ce qui
+  // evite d'invalider les deps des effets consommateurs a chaque rendu.
+  return useMemo(
+    () => ({ enabled, permission, supported: SUPPORTED, toggle, notify }),
+    [enabled, permission, toggle, notify],
+  );
 }

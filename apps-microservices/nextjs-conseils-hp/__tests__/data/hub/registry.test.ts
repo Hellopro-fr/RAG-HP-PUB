@@ -90,6 +90,24 @@ describe('registry HUB', () => {
     expect(pages.some((p) => collectImages(p).length > 0)).toBe(true);
   });
 
+  /**
+   * Badge du hero UNIFORME sur toutes les pages HUB (2026-09-03).
+   *
+   * Chaque page portait au départ son propre angle (« Préparez lʼouverture de
+   * votre laverie automatique »…). Deux défauts : le H1 juste dessous dit déjà de
+   * quel projet il s'agit, et un libellé de longueur variable déforme le hero
+   * d'une page à l'autre. Le badge annonce donc ce que la page OFFRE — identique
+   * partout.
+   *
+   * Assertion portée au REGISTRE et non par page : le risque n'est pas qu'une des
+   * trois pages actuelles change, c'est que la QUATRIÈME reparte sur un libellé
+   * sur mesure, et que personne ne compare les hero côte à côte.
+   */
+  it('affiche le même badge de hero sur toutes les pages', () => {
+    const badges = new Set(pages.map((p) => p.hero.badge));
+    expect([...badges]).toEqual(['Accompagnement gratuit']);
+  });
+
   it('la clé du registry est égale à l’id de la page', () => {
     for (const [key, page] of Object.entries(HUB_PAGES)) {
       expect(page.id).toBe(Number(key));

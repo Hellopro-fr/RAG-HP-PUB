@@ -94,7 +94,10 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
     setError(null);
     setSuccessMsg(null);
     try {
-      const data = await api.get(`/jobs/${jobId}/request-queues/${file.domain}/${file.name}`, token);
+      const data = await api.get(
+        `/jobs/${jobId}/request-queues/${encodeURIComponent(file.domain)}/${encodeURIComponent(file.name)}`,
+        token,
+      );
       try {
         setContent(JSON.stringify(data, null, 2));
       } catch {
@@ -131,7 +134,7 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
       }
 
       await api.post(
-        `/jobs/${jobId}/request-queues/${selectedFile.domain}/${selectedFile.name}`,
+        `/jobs/${jobId}/request-queues/${encodeURIComponent(selectedFile.domain)}/${encodeURIComponent(selectedFile.name)}`,
         token,
         jsonContent
       );
@@ -173,7 +176,10 @@ const RequestQueueEditor = ({ jobId, onClose, token }) => {
     setSuccessMsg(null);
     try {
       const data = await api.post(`/jobs/${jobId}/request-queues/clean-patterns`, token);
-      setSuccessMsg(`Nettoyage patterns terminé : ${data.deleted} fichiers supprimés sur ${data.scanned} scannés.`);
+      // `scanned` n'est pas garanti par toutes les versions du backend : on ne
+      // l'annonce que s'il est réellement présent (sinon « sur undefined »).
+      const scannedPart = data?.scanned != null ? ` sur ${data.scanned} scannés` : '';
+      setSuccessMsg(`Nettoyage patterns terminé : ${data?.deleted ?? 0} supprimés${scannedPart}.`);
       setQueueAnalysis(null);
       fetchFiles();
     } catch (err) {

@@ -217,3 +217,79 @@ describe('CoherenceProvider autoRetry', () => {
     vi.useRealTimers();
   });
 });
+
+describe('CoherenceProvider — hysteresis vs compteurs mouvants', () => {
+  it('signale running_count_parity meme quand running_jobs oscille 6/7 a chaque tick', async () => {
+    vi.useFakeTimers();
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+    });
+    // 2 jobs running dans la liste, le REST en annonce 6 ou 7 : l'ecart depasse
+    // toujours la tolerance, la violation est donc CONTINUE.
+    qc.setQueryData(['jobs'], [
+      { id: 'a', status: 'running' },
+      { id: 'b', status: 'running' },
+    ]);
+    qc.setQueryData(['capacity'], { running_jobs: 6 });
+
+    const Wrapper = ({ children }) => (
+      <QueryClientProvider client={qc}>
+        <CoherenceProvider token="tok" replicas={{}}>
+          {children}
+        </CoherenceProvider>
+      </QueryClientProvider>
+    );
+
+    const { result } = renderHook(() => useCoherenceVerdict('running_count_parity'), {
+      wrapper: Wrapper,
+    });
+
+    // 8 ticks avec un compteur qui change a chaque fois.
+    for (let i = 0; i < 8; i++) {
+      await act(async () => {
+        qc.setQueryData(['capacity'], { running_jobs: i % 2 === 0 ? 7 : 6 });
+        vi.advanceTimersByTime(EVAL_INTERVAL_MS);
+      });
+    }
+
+    // AVANT le fix : la cle d'hysteresis retombait sur `message` (qui porte les
+    // compteurs) -> une "nouvelle" violation a chaque tick -> jamais affichee.
+    expect(result.current).toHaveLength(1);
+    expect(result.current[0].data.kind).toBe('running_count_mismatch');
+    vi.useRealTimers();
+  });
+});
+
+describe('CoherenceProvider — etat indetermine', () => {
+  it('ne pretend pas que tout va bien quand les sources sont absentes', () => {
+    const wrapper = mkWrapper(); // aucune donnee en cache
+    const { result } = renderHook(() => useCoherenceSummary(), { wrapper });
+    // Les 4 regles sont non evaluables, pas "OK".
+    expect(result.current.byStatus.indeterminate).toBe(4);
+    expect(result.current.byStatus.warning).toBe(0);
+    expect(result.current.byStatus.critical).toBe(0);
+    for (const verdict of Object.values(result.current.verdicts)) {
+      expect(verdict).toBeNull();
+    }
+  });
+
+  it('ne maintient AUCUNE query active (pas de fetch depuis le provider)', () => {
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+    });
+    const Wrapper = ({ children }) => (
+      <QueryClientProvider client={qc}>
+        <CoherenceProvider token="tok" replicas={{}}>
+          {children}
+        </CoherenceProvider>
+      </QueryClientProvider>
+    );
+    renderHook(() => useCoherenceSummary(), { wrapper: Wrapper });
+    // /api/jobs pese ~6 Mo : le provider, monte sur toutes les pages, ne doit
+    // jamais le rendre actif.
+    expect(qc.isFetching()).toBe(0);
+    expect(
+      qc.getQueryCache().getAll().filter((q) => q.isActive()),
+    ).toHaveLength(0);
+  });
+});

@@ -13,6 +13,8 @@ const rule = {
   sources: ['replicas', 'jobs'],
   attachUiHint: { path: '/', label: 'Vue d\'ensemble · Replicas' },
   evaluate: ({ replicas, jobs }) => {
+    // Liste des jobs absente -> impossible de trancher (null = indetermine).
+    if (!jobs) return null;
     const violations = [];
     const liveReplicas = Object.values(replicas || {}).filter(
       (r) => r?.replicaId && isReplicaLive(r),

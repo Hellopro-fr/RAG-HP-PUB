@@ -12,6 +12,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/Hellopro-fr/crawler-monitor-backend/internal/datetime"
 	"github.com/Hellopro-fr/crawler-monitor-backend/internal/domain/jobperf"
 	"github.com/Hellopro-fr/crawler-monitor-backend/internal/store/auditstore"
 	"github.com/Hellopro-fr/crawler-monitor-backend/internal/store/redisstore"
@@ -50,13 +51,13 @@ type ReplayHotZone struct {
 
 // ReplayResult est la réponse complète du endpoint /api/jobs/:id/replay (mirrors server.js:442-450).
 type ReplayResult struct {
-	JobID       string         `json:"job_id"`
-	Job         *ReplayJobInfo `json:"job"`
+	JobID       string           `json:"job_id"`
+	Job         *ReplayJobInfo   `json:"job"`
 	Points      []jobperf.Point  `json:"points"`
 	Summary     *jobperf.Summary `json:"summary"`
-	Events      []ReplayEvent  `json:"events"`
-	HotZones    []ReplayHotZone `json:"hot_zones"`
-	GeneratedAt string         `json:"generated_at"`
+	Events      []ReplayEvent    `json:"events"`
+	HotZones    []ReplayHotZone  `json:"hot_zones"`
+	GeneratedAt string           `json:"generated_at"`
 }
 
 // ComputeReplay construit la réponse de replay pour un job.
@@ -96,9 +97,7 @@ func ComputeReplay(
 			if v, ok := j["status"].(string); ok {
 				info.Status = v
 			}
-			if v, ok := j["start_time"].(string); ok {
-				info.StartTime = v
-			}
+			info.StartTime = datetime.AnyToISO(j["start_time"])
 			if v, ok := j["crawl_mode"].(string); ok {
 				info.CrawlMode = v
 			}

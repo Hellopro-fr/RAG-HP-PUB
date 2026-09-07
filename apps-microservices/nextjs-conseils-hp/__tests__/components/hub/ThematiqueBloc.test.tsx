@@ -213,6 +213,85 @@ describe('ThematiqueBloc', () => {
     expect(screen.getByText('Description simple.')).toBeDefined();
   });
 
+  /**
+   * Carte entièrement cliquable (2026-09-03) — « lien étiré ».
+   *
+   * L'overlay est un pseudo-élément du `<a>`, invisible pour jsdom : on ne peut
+   * pas simuler le clic dans un coin de la carte. Ce test verrouille donc les
+   * DEUX conditions dont dépend le procédé, et c'est justement là qu'une
+   * régression se glisserait sans bruit :
+   *
+   * 1. le lien porte `after:absolute after:inset-0` ;
+   * 2. la carte porteuse est `relative`.
+   *
+   * Perdre (2) ne casse RIEN visiblement : l'overlay remonte simplement jusqu'au
+   * premier ancêtre positionné et rend cliquable une zone bien plus large que la
+   * carte. Aucune erreur, aucun test rouge — d'où celui-ci.
+   */
+  it.each([
+    ['overlay-left' as const, 'Lire la suite'],
+    ['grid' as const, 'Lire l’article'],
+    ['carousel' as const, 'Lire l’article'],
+  ])('rend la carte %s entièrement cliquable', (layout, label) => {
+    const href = 'https://conseils.hellopro.fr/article-1-conseil.html';
+    render(
+      <ThematiqueBloc
+        data={base({
+          layout,
+          overlay: { title: 'T', bullets: ['b'], ctaLabel: label, href },
+          cards: [{ title: 'Carte A', href }],
+        })}
+      />
+    );
+
+    const link = screen.getByRole('link', { name: new RegExp(label, 'i') });
+    expect(link.className).toContain('after:absolute');
+    expect(link.className).toContain('after:inset-0');
+    expect(link.closest('article')?.className).toContain('relative');
+  });
+
+  /** Même invariant pour les cartes latérales des layouts overlay (`InfoCard`). */
+  it('rend la carte info latérale entièrement cliquable', () => {
+    render(
+      <ThematiqueBloc
+        data={base({
+          layout: 'overlay-left',
+          overlay: { title: 'T', bullets: [] },
+          cards: [
+            {
+              title: 'Carte A',
+              linkLabel: 'Lire l’article',
+              href: 'https://conseils.hellopro.fr/a-1-conseil.html',
+            },
+          ],
+        })}
+      />
+    );
+    const link = screen.getByRole('link', { name: /Lire l’article/i });
+    expect(link.className).toContain('after:inset-0');
+    expect(link.closest('article')?.className).toContain('relative');
+  });
+
+  /**
+   * Corollaire du lien étiré : UN SEUL lien par carte. En ajouter un second
+   * (ou un bouton) le placerait sous l'overlay, donc hors d'atteinte au clic.
+   */
+  it('ne rend qu’un seul lien par carte article', () => {
+    const { container } = render(
+      <ThematiqueBloc
+        data={base({
+          cards: [
+            { title: 'A', href: 'https://conseils.hellopro.fr/a-1-conseil.html' },
+            { title: 'B', href: 'https://conseils.hellopro.fr/b-2-conseil.html' },
+          ],
+        })}
+      />
+    );
+    for (const article of container.querySelectorAll('article')) {
+      expect(article.querySelectorAll('a, button')).toHaveLength(1);
+    }
+  });
+
   /** Le contenu vient de nos fichiers, mais la règle de sécurité est sans exception. */
   it('retire les balises dangereuses de descriptionHtml', () => {
     const { container } = render(

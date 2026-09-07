@@ -65,9 +65,14 @@ func systemStatsHandler(rs *redisstore.Client) http.HandlerFunc {
 	}
 }
 
+// pubsubStaleMs : au-dela de 60s sans message Redis alors que des crawls
+// tournent, l'abonnement pub/sub est considere comme mort.
+const pubsubStaleMs = int64(60 * 1000)
+
 // systemHealthHandler handles GET /api/system/health
-// Returns Redis connectivity, ws_clients_count from the hub, and overall status.
-func systemHealthHandler(rs *redisstore.Client, hub ...*ws.Hub) http.HandlerFunc {
+// Retourne la connectivite Redis, le nombre de clients WS, la fraicheur de
+// l'abonnement pub/sub et le statut global.
+func systemHealthHandler(rs *redisstore.Client, hub *ws.Hub, ps *ws.PubSub) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		redisConnected := rs.Raw().Ping(r.Context()).Err() == nil
 		status := "ok"
@@ -75,13 +80,34 @@ func systemHealthHandler(rs *redisstore.Client, hub ...*ws.Hub) http.HandlerFunc
 			status = "degraded"
 		}
 		var wsCount int64
-		if len(hub) > 0 && hub[0] != nil {
-			wsCount = hub[0].Count()
+		if hub != nil {
+			wsCount = hub.Count()
+		}
+		var lastMessage int64
+		if ps != nil {
+			lastMessage = ps.LastMessageAt()
+		}
+		running, _, _ := rs.GetCapacity(r.Context())
+		// age = -1 tant qu'aucun message n'est arrive (pub/sub jamais
+		// demarre, ou service qui vient de booter) : ce cas n'est pas une
+		// panne, alors que lastMessage=0 le faisait passer pour un silence
+		// de 57 ans.
+		age := int64(-1)
+		if lastMessage > 0 {
+			age = time.Now().UnixMilli() - lastMessage
+		}
+		// Silence du pub/sub avec des crawls actifs = plus aucun heartbeat
+		// n'arrive : la persistance et la diffusion temps reel sont a l'arret.
+		if lastMessage > 0 && running > 0 && age > pubsubStaleMs {
+			status = "degraded"
 		}
 		WriteJSON(w, 200, map[string]any{
-			"redis_connected":  redisConnected,
-			"ws_clients_count": wsCount,
-			"status":           status,
+			"redis_connected":            redisConnected,
+			"ws_clients_count":           wsCount,
+			"pubsub_last_message_ms":     lastMessage,
+			"pubsub_last_message_age_ms": age,
+			"running_count":              running,
+			"status":                     status,
 		})
 	}
 }

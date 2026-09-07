@@ -669,8 +669,18 @@ class CrawlerManager:
             prev_job_info = await cache_service.get_json(prev_job_key)
             prev_storage = os.path.join(settings.CRAWLER_STORAGE_PATH, previous_crawl_id)
 
+            # The three 400s below are logged, not only returned. Their detail travels in the
+            # HTTP body and nowhere else, and there is no global exception handler in this app —
+            # so an operator reading the logs saw only the 503 capacity rejections that happen
+            # EARLIER in this same function, and never the reason a queued update actually died.
+            # Measured 2026-09-01: five updates had been retrying every ~5 min since 2026-08-10,
+            # all failing on the third branch, with nothing in the log to say so.
             if not prev_job_info and not os.path.isdir(prev_storage):
                 await _rollback_claim(decrement_counter=True)
+                logger.warning(
+                    f"Update crawl '{crawl_id}' rejected (400): previous crawl "
+                    f"'{previous_crawl_id}' not found in Redis or on disk."
+                )
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Previous crawl '{previous_crawl_id}' not found in Redis or on disk."
@@ -679,6 +689,10 @@ class CrawlerManager:
             prev_status = prev_job_info.get("status") if prev_job_info else None
             if prev_status == "failed":
                 await _rollback_claim(decrement_counter=True)
+                logger.warning(
+                    f"Update crawl '{crawl_id}' rejected (400): previous crawl "
+                    f"'{previous_crawl_id}' is in status 'failed'."
+                )
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Previous crawl '{previous_crawl_id}' failed and cannot be used for update mode."
@@ -689,9 +703,41 @@ class CrawlerManager:
             has_local_data = os.path.isdir(prev_datasets_dir) and len(os.listdir(prev_datasets_dir)) > 0
 
             stashed = bool(prev_job_info.get("stashed_at")) if prev_job_info else False
-            if (prev_status == "archived" or stashed) and not has_local_data:
+
+            # THIRD RECOVERY PATH — the blob is gone (or carries no status) but the tar is
+            # GCS-verified. Both existing mechanisms key on in-memory state and neither ever
+            # looks at GCS as a last resort: _repair_archived_status only considers blobs with
+            # status == "finished" (:3775 builds finished_candidates), and the restore below is
+            # gated on "archived" or stashed_at. A lost blob is therefore a DEAD END — the
+            # update replays a 400 forever while the tar sits intact in GCS.
+            # Measured 2026-09-02 on the 14 reference crawls of the relaunched updates: 2 had
+            # lost their blob; one survived on leftover datasets, the other (4688) needed the
+            # same manual tar extraction as 7046 the day before.
+            # Evaluated ONLY on the not-has_local_data path, so the nominal path pays nothing.
+            # Spec: docs/superpowers/specs/2026-09-02-restore-from-verified-allowlist-design.md
+            from_allowlist = (
+                not has_local_data
+                and prev_status != "archived"
+                and not stashed
+                and self._is_archive_gcs_verified(previous_crawl_id)
+            )
+
+            if not has_local_data and (prev_status == "archived" or stashed or from_allowlist):
                 try:
-                    await self._restore_previous_crawl(prev_job_info, has_local_data)
+                    if from_allowlist:
+                        # Says WHY on the allowlist path: a reader of the log would otherwise
+                        # assume the blob existed and carried a status.
+                        logger.warning(
+                            f"Update crawl '{crawl_id}': previous crawl "
+                            f"'{previous_crawl_id}' has no usable blob (status={prev_status!r}) "
+                            f"and no local data, but its archive is verified in GCS "
+                            f"(allowlist) — attempting restore."
+                        )
+                        # _restore_archived_crawl takes the id alone. _restore_previous_crawl
+                        # dispatches on blob fields, which are precisely what is missing here.
+                        await self._restore_archived_crawl(previous_crawl_id)
+                    else:
+                        await self._restore_previous_crawl(prev_job_info, has_local_data)
                 except HTTPException:
                     await _rollback_claim(decrement_counter=True)
                     raise
@@ -704,6 +750,19 @@ class CrawlerManager:
                     )
             elif not has_local_data:
                 await _rollback_claim(decrement_counter=True)
+                # The three flags are logged individually because the state is a DEAD END and
+                # which flag is missing says why: the GCS restore above is gated on
+                # archived-or-stashed, so a `finished` blob whose dataset was cleaned up can
+                # never be restored and the update retries forever. That is the state
+                # _repair_archived_status exists to flip — and it is inert while its GCS
+                # allowlist is absent (591 blobs rejected `not_in_gcs_list`, measured 2026-09-01).
+                logger.warning(
+                    f"Update crawl '{crawl_id}' rejected (400): previous crawl "
+                    f"'{previous_crawl_id}' has no dataset files on disk "
+                    f"(status={prev_status!r}, stashed={stashed}, datasets_dir={prev_datasets_dir}). "
+                    f"Neither archived nor stashed, and its archive is not GCS-verified "
+                    f"either, so no restore path was taken."
+                )
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Previous crawl '{previous_crawl_id}' has no dataset files on disk "
@@ -4279,6 +4338,26 @@ class CrawlerManager:
                 f"skipped_tree_newer={skipped_tree_newer} "
                 f"skipped_no_snapshot={skipped_no_snapshot}")
         return recleaned
+
+    def _is_archive_gcs_verified(self, crawl_id: str) -> bool:
+        """Is this crawl's tar listed in the GCS-verified allowlist?
+
+        FAIL-CLOSED, and that is the whole point: a missing allowlist file yields None and
+        this returns False, so behaviour stays byte-identical on any install without one.
+        Waiting one more update attempt costs minutes; being wrong would launch an update
+        against a reference crawl whose data cannot be produced.
+
+        An EMPTY allowlist is NOT the same as a missing one: "the file exists and lists
+        nothing" is a valid state that must reject, not raise. Both land on False here, but
+        the distinction matters to _load_reclean_allowlist's own contract (Optional[set]).
+
+        Ids are compared as strings: the allowlist is read from a text file, while a
+        crawl_id reaching this method may be an int on legacy paths.
+        """
+        verified = self._load_reclean_allowlist()
+        if not verified:
+            return False
+        return str(crawl_id) in verified
 
     def _load_reclean_allowlist(self) -> Optional[set]:
         """Reads the host-generated GCS-verified crawl-id allowlist.

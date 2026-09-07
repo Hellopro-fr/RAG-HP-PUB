@@ -26,11 +26,12 @@ import { matchesMainSite } from "./isMainSite.js";
 import { applyPerClassStrip, perClassEnabled, stripActionAnchor, actionAnchorStripEnabled } from "./diezClassify.js";
 import { qmConsumptionStrip, shouldSkipDequeued, recordQmCollapsed, skipnavCollapseTarget } from "./qmConsumptionSkip.js";
 import { recordVariant, isOverCap, QM_FACET_ENABLED, QM_FACET_CAP_K } from "./facetCap.js";
-import { isFilterParam } from "./filterOnSeen.js";
+import { filterParamCollapseTarget } from "./filterOnSeen.js";
 import { baseKeyAbsent } from "./urlBase.js";
 import { recordTier2Sample, maybeCommitTier2, tier2Evidence, maybeDefaultAtCeiling as maybeDefaultDiezAtCeiling } from "./diezTier2.js";
 import { routeDiezOutcome } from "./diezHookGate.js";
 import { shouldTripExternalRedirectBreaker } from "./externalRedirectBreaker.js";
+import { shouldTripErrorRateBreaker } from "./errorRateBreaker.js";
 import { recordQuestionMarkObservation } from "./questionMarkDecision.js";
 import { recordQmTier2Sample, maybeCommitParam, commitToRemoveParam, maybeDefaultAtCeiling, QM_TIER2_TRIGGER } from "./questionMarkTier2.js";
 import { trackQmHashStatsForUrl } from "./qmHashTracker.js";
@@ -241,7 +242,13 @@ router.addDefaultHandler(
         // before the loadedUrl use below. Clean handled path (no error machinery).
         if (request.skipNavigation) {
             if (context.statsManager) await context.statsManager.increment("purged_skipnav");
-            recordQmCollapsed(request.url, skipnavCollapseTarget(request.url, context.seenBases));
+            const _skipnav = skipnavCollapseTarget(request.url, context.seenBases);
+            // via === 'none' : aucun décideur n'a tranché, le target est l'URL elle-même.
+            // Rien à enregistrer — recordQmCollapsed le refuserait de toute façon, mais
+            // l'écrire ici dit POURQUOI il n'y a rien à dire.
+            if (_skipnav.via !== 'none') {
+                recordQmCollapsed(request.url, _skipnav.target, _skipnav.via, 'dequeue');
+            }
             return;
         }
 
@@ -264,7 +271,7 @@ router.addDefaultHandler(
         if (qmStripped !== url && context.dedupManager) {
             const known = (await context.dedupManager.isKnownBatch([qmStripped])).has(qmStripped);
             if (shouldSkipDequeued(url, qmStripped, known)) {
-                recordQmCollapsed(url, qmStripped);
+                recordQmCollapsed(url, qmStripped, 'qm_strip', 'dequeue');
                 return;
             }
         }
@@ -450,7 +457,8 @@ router.addDefaultHandler(
                 const redirects = await context.statsManager.getValue("redirects");
                 const newUrls = await context.statsManager.getValue("new_urls");
                 const processed = await context.statsManager.getValue("processed");
-                
+                const errorsUnprocessed = await context.statsManager.getValue("errors_unprocessed");
+
                 let abortReason = "";
 
                 if (cb.isMicroMode) {
@@ -460,13 +468,27 @@ router.addDefaultHandler(
                     else if (cb.maxAbsNew > 0 && newUrls >= cb.maxAbsNew) abortReason = `Too many new URLs for small site (${newUrls} >= ${cb.maxAbsNew})`;
                 } else {
                     // --- STANDARD MODE (Rate Limits) ---
+                    // Keep this wrapper: it is the ONLY minSample gate for the redirect and
+                    // growth branches below — neither re-checks it. shouldTripErrorRateBreaker
+                    // re-checks the gate for itself only, so deleting this as "redundant" would
+                    // let those two branches fire below the sample size, i.e. ADD stops.
                     if (processed >= cb.minSample) {
-                        const errorRate = errors / processed;
+                        // The error rate lives in a pure, tested module because its
+                        // denominator is not `processed`: an HTTP error never reaches
+                        // that counter. See errorRateBreaker.ts — 12 of 69 stopped runs
+                        // in the 2026-08-10 batch reported a rate above 100%.
+                        const errorBreaker = shouldTripErrorRateBreaker(
+                            { errors, processed, errorsUnprocessed },
+                            cb,
+                        );
+                        // Left inline on purpose: this branch is disabled in production
+                        // (the BO launcher sends max_redirect_rate = 0) and the spec puts
+                        // it out of scope. Do not "harmonise" it with the line above.
                         const redirectRate = redirects / processed;
-                        
-                        if (cb.maxErrorRate > 0 && errorRate > cb.maxErrorRate) abortReason = `Error rate too high (${(errorRate*100).toFixed(1)}% > ${(cb.maxErrorRate*100)}%)`;
+
+                        if (errorBreaker.trip) abortReason = errorBreaker.reason;
                         else if (cb.maxRedirectRate > 0 && redirectRate > cb.maxRedirectRate) abortReason = `Redirect rate too high (${(redirectRate*100).toFixed(1)}% > ${(cb.maxRedirectRate*100)}%)`;
-                        
+
                         // Check growth relative to previous total
                         if (cb.maxGrowthRate > 0 && cb.previousTotal > 0 && (newUrls / cb.previousTotal) > cb.maxGrowthRate) {
                             abortReason = `Site growth too fast (> ${(cb.maxGrowthRate*100)}% of previous size)`;
@@ -1227,9 +1249,18 @@ router.addDefaultHandler(
                         // Queue-purge #2: filter-on-seen-base — drop a discovered variant whose
                         // param removal yields a base already crawled (structural, no content
                         // comparison; R1 allowlist protects lang/currency/etc.).
-                        if (QM_FACET_ENABLED && isFilterParam(request.url, context.seenBases)) {
-                            logBlocked('filter-on-seen', request.url);
-                            return false;
+                        // The target is RECORDED, not just logged: a queue rejection that leaves
+                        // a fiche active in the BO must be a declared event, not a log line.
+                        // recordQmCollapsed is synchronous (an array push), so the Crawlee
+                        // contract at :1063-1065 — transformRequestFunction MUST be synchronous
+                        // — is not in play here.
+                        if (QM_FACET_ENABLED) {
+                            const _fosTarget = filterParamCollapseTarget(request.url, context.seenBases);
+                            if (_fosTarget !== null) {
+                                recordQmCollapsed(request.url, _fosTarget, 'filter_on_seen', 'enqueue');
+                                logBlocked('filter-on-seen', request.url);
+                                return false;
+                            }
                         }
 
                         // 4. Pre-Crawl Deduplication (SYNCHRONOUS via pre-built Set)

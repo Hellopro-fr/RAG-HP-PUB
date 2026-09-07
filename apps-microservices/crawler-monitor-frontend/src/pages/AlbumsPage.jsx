@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { Images, RefreshCw } from 'lucide-react';
 import {
   useAlbumsQuery,
   useDeleteAlbumMutation,
   useAlbumDeleteJobQuery,
+  queryKeys,
 } from '../hooks/queries';
 import { AlbumsToolbar } from '../components/albums/AlbumsToolbar';
 import { AlbumsTable } from '../components/albums/AlbumsTable';
@@ -25,6 +27,7 @@ import { useToast } from '../components/ToastProvider';
  */
 export default function AlbumsPage({ token }) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const toast = useToast();
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState('all');
@@ -53,6 +56,19 @@ export default function AlbumsPage({ token }) {
       setActiveJobId(null);
     }
   }, [jobQ.data, toast]);
+
+  // Le registre des jobs de suppression vit en mémoire dans
+  // image-download-service : un redémarrage rend le job introuvable (404) et la
+  // query s'arrête. On prévient l'opérateur et on rafraîchit la liste, la
+  // suppression ayant pu aboutir malgré la perte du suivi.
+  useEffect(() => {
+    if (!jobQ.error) return;
+    toast.error(
+      'Suivi de la suppression perdu (service redémarré) — rafraîchissez la liste pour vérifier.',
+    );
+    setActiveJobId(null);
+    queryClient.invalidateQueries({ queryKey: queryKeys.albums(), exact: true });
+  }, [jobQ.error, toast, queryClient]);
 
   const rows = useMemo(() => {
     const all = data?.domains || [];

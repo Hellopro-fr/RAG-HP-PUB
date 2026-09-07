@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertTriangle, AlertCircle, ChevronDown, ChevronUp, X, Bell, BellOff } from 'lucide-react';
 import { useAlertsQuery } from '../hooks/queries';
@@ -45,6 +45,21 @@ const SEVERITY_LABELS = {
   info:     'Info',
 };
 
+/* Les alertes masquées survivent au rechargement : sans persistance, chaque
+   refresh de l'onglet ramenait le bandeau que l'opérateur venait d'écarter. */
+const DISMISSED_STORAGE_KEY = 'crawler-monitor:alerts:dismissed';
+
+const loadDismissedIds = () => {
+  try {
+    const raw = window.localStorage.getItem(DISMISSED_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(parsed) ? parsed : []);
+  } catch {
+    // Mode privé / stockage bloqué : on dégrade en mémoire seulement.
+    return new Set();
+  }
+};
+
 const fmtSince = (ts) => {
   if (!ts) return null;
   const ageMs = Date.now() - ts;
@@ -57,13 +72,35 @@ const fmtSince = (ts) => {
 
 const AlertsBanner = ({ token }) => {
   const [expanded, setExpanded] = useState(false);
-  const [dismissedIds, setDismissedIds] = useState(() => new Set());
+  const [dismissedIds, setDismissedIds] = useState(loadDismissedIds);
   const notif = useBrowserNotifications();
   const notifiedIdsRef = useRef(new Set());
 
   const query = useAlertsQuery(token);
-  const allAlerts = query.data?.alerts || [];
+  const allAlerts = useMemo(() => query.data?.alerts || [], [query.data]);
   const visible = allAlerts.filter(a => !dismissedIds.has(a.id));
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        DISMISSED_STORAGE_KEY,
+        JSON.stringify([...dismissedIds]),
+      );
+    } catch {
+      // Stockage indisponible : on garde l'état en mémoire pour la session.
+    }
+  }, [dismissedIds]);
+
+  /* Purge des ids d'alertes disparues : sinon la liste masquée grossit
+     indéfiniment et une alerte qui revient reste invisible pour toujours. */
+  useEffect(() => {
+    if (allAlerts.length === 0) return;
+    const live = new Set(allAlerts.map(a => a.id));
+    setDismissedIds(prev => {
+      const next = new Set([...prev].filter(id => live.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [allAlerts]);
 
   useEffect(() => {
     const currentCriticalIds = new Set(allAlerts.filter(a => a.severity === 'critical').map(a => a.id));

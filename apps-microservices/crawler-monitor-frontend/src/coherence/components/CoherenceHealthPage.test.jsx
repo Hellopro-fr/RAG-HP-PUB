@@ -51,4 +51,11 @@ describe('CoherenceHealthPage', () => {
     expect(screen.getByText(/3 slots configurés mais 1 replicas/)).toBeInTheDocument();
     vi.useRealTimers();
   });
+
+  it('affiche « indetermine » (et pas « tout vert ») quand les sources manquent', () => {
+    renderPage(); // aucune donnee en cache
+    expect(screen.queryByText(/tout vert/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Indéterminé/i })).toBeInTheDocument();
+  });
 });
+

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
-  RefreshCw, RotateCcw, Trash2, AlertCircle, CheckCircle, Mail,
+  ArrowLeft, RefreshCw, RotateCcw, Trash2, AlertCircle, CheckCircle, Mail,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import ConfirmDestructive from './ConfirmDestructive';
@@ -9,6 +10,8 @@ import { Button } from './ui/button';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from './ui/table';
+import { formatApiDate } from '../lib/dates';
+import { queryKeys } from '../hooks/queries';
 import { cn } from '../lib/utils';
 
 const typeBadgeClass = (type) => {
@@ -25,7 +28,16 @@ const truncate = (s, n = 50) => {
   return s.length > n ? s.slice(0, n - 1) + '…' : s;
 };
 
+/* Clé React stable : l'index de liste change dès qu'une entrée est supprimée,
+   ce qui réattribuait l'état de ligne (spinner « retry en cours ») au mauvais
+   callback. url + timestamp identifie une entrée de façon stable. */
+const entryKey = (entry, idx) =>
+  entry?.url || entry?.timestamp
+    ? `${entry.url ?? ''}|${entry.timestamp ?? ''}`
+    : `idx-${idx}`;
+
 const CallbacksPanel = ({ token, onClose }) => {
+  const queryClient = useQueryClient();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -49,11 +61,23 @@ const CallbacksPanel = ({ token, onClose }) => {
 
   useEffect(() => { fetchItems(); }, [fetchItems]);
 
+  /* Le badge « callbacks en échec » de la sidebar est alimenté par la query
+     ['callbacks'] : sans invalidation, il reste figé sur l'ancien compte après
+     un retry / delete / clear. */
+  const invalidateCallbacks = useCallback(() => {
+    // queryKeys.callbacks() plutôt qu'un littéral : la clé n'a qu'une seule
+    // définition (hooks/queries), sans quoi un renommage laisserait ce badge
+    // silencieusement figé.
+    queryClient.invalidateQueries({ queryKey: queryKeys.callbacks() });
+  }, [queryClient]);
+
   const retryItem = async (index) => {
     setBusyIndex(`retry-${index}`);
     setError(null);
     setSuccess(null);
     try {
+      // Le backend répond 200 avec { success: false } quand la relance échoue
+      // côté destinataire : ce n'est pas une exception, il faut le lire.
       const data = await api.post(`/callbacks/${index}/retry`, token);
       if (data && data.success) {
         setSuccess(`Callback #${index} relancé avec succès (${data.status}).`);
@@ -61,10 +85,12 @@ const CallbacksPanel = ({ token, onClose }) => {
         setError(`Échec retry #${index} : ${(data && data.error) || 'inconnu'}`);
       }
       await fetchItems();
+      invalidateCallbacks();
     } catch (err) {
       const msg = err.body && err.body.error ? err.body.error : err.message;
       setError(`Échec retry #${index} : ${msg}`);
       await fetchItems();
+      invalidateCallbacks();
     } finally {
       setBusyIndex(null);
     }
@@ -76,11 +102,20 @@ const CallbacksPanel = ({ token, onClose }) => {
     setError(null);
     setSuccess(null);
     try {
-      await api.delete(`/callbacks/${index}`, token);
-      setSuccess(`Callback #${index} supprimé.`);
+      const data = await api.delete(`/callbacks/${index}`, token);
+      if (data && data.success === false) {
+        setError(`Erreur suppression : ${data.error || 'inconnu'}`);
+      } else {
+        setSuccess(`Callback #${index} supprimé.`);
+      }
       await fetchItems();
+      invalidateCallbacks();
     } catch (err) {
       setError(`Erreur suppression : ${err.message}`);
+      // La suppression a pu aboutir côté serveur avant l'erreur (timeout de
+      // lecture) : on resynchronise la liste ET le badge, comme dans retryItem.
+      await fetchItems();
+      invalidateCallbacks();
     } finally {
       setBusyIndex(null);
     }
@@ -92,9 +127,14 @@ const CallbacksPanel = ({ token, onClose }) => {
     setSuccess(null);
     try {
       const data = await api.post('/callbacks/clear', token);
-      setSuccess(`Liste vidée (${(data && data.cleared) || 0} entrées).`);
+      if (data && data.success === false) {
+        setError(`Erreur clear : ${data.error || 'inconnu'}`);
+      } else {
+        setSuccess(`Liste vidée (${(data && data.cleared) || 0} entrées).`);
+      }
       setShowClearConfirm(false);
       await fetchItems();
+      invalidateCallbacks();
     } catch (err) {
       setError(`Erreur clear : ${err.message}`);
     } finally {
@@ -131,6 +171,12 @@ const CallbacksPanel = ({ token, onClose }) => {
             </span>
           </h3>
           <div className="flex items-center gap-2">
+            {onClose && (
+              <Button variant="outline" size="sm" onClick={onClose}>
+                <ArrowLeft className="h-4 w-4" />
+                Retour
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="icon"
@@ -178,12 +224,12 @@ const CallbacksPanel = ({ token, onClose }) => {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>When</TableHead>
+                  <TableHead>Quand</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Crawl</TableHead>
                   <TableHead>URL</TableHead>
-                  <TableHead>Error</TableHead>
-                  <TableHead className="text-right">Retries</TableHead>
+                  <TableHead>Erreur</TableHead>
+                  <TableHead className="text-right">Relances</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -191,9 +237,9 @@ const CallbacksPanel = ({ token, onClose }) => {
                 {items.map((entry, idx) => {
                   const isRetrying = busyIndex === `retry-${idx}`;
                   const isDeleting = busyIndex === `delete-${idx}`;
-                  const ts = entry.timestamp ? new Date(entry.timestamp).toLocaleString('fr-FR') : '—';
+                  const ts = formatApiDate(entry.timestamp, { dateStyle: 'short', timeStyle: 'medium' });
                   return (
-                    <TableRow key={idx}>
+                    <TableRow key={entryKey(entry, idx)}>
                       <TableCell className="whitespace-nowrap font-mono text-xs text-ink-3">{ts}</TableCell>
                       <TableCell>
                         <span className={cn('rounded px-1.5 py-0.5 text-[10px]', typeBadgeClass(entry.webhook_type))}>

@@ -7,12 +7,14 @@ const CIRC = 2 * Math.PI * R;
  * CapacityRing
  *
  * @param {number} used    Slots currently in use
- * @param {number} total   Total slots
+ * @param {number} total   Total slots (<= 0 : capacité inconnue, on n'affiche pas de ratio)
  * @param {string} label   Fallback label (only used in percent format)
  * @param {'count'|'percent'} format  'count' shows "used / total slots" label; 'percent' shows percentage (default legacy)
  */
 export default function CapacityRing({ used = 0, total = 1, label = 'Utilisé', format = 'percent' }) {
-  const pct = Math.min(1, used / total);
+  // total <= 0 → pas de division (NaN ⇒ anneau et pourcentage cassés).
+  const hasTotal = Number.isFinite(total) && total > 0;
+  const pct = hasTotal ? Math.min(1, Math.max(0, (used || 0) / total)) : 0;
   const offset = CIRC * (1 - pct);
   const tone = pct > 0.9 ? 'var(--err)' : pct > 0.7 ? 'var(--warn)' : 'var(--ok)';
   return (
@@ -34,13 +36,13 @@ export default function CapacityRing({ used = 0, total = 1, label = 'Utilisé', 
               {used}
             </span>
             <span className="text-[11px] text-ink-2 mt-1 font-mono">
-              / {total} slots
+              {hasTotal ? `/ ${total} slots` : 'capacité inconnue'}
             </span>
           </>
         ) : (
           <>
             <span className="font-display text-[28px] font-semibold tabular-nums text-ink-0 leading-none">
-              {Math.round(pct * 100)}%
+              {hasTotal ? `${Math.round(pct * 100)}%` : '—'}
             </span>
             <span className="text-[11px] text-ink-2 mt-1">{label}</span>
           </>

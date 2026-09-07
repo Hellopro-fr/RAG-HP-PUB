@@ -67,20 +67,19 @@ func MatchesPattern(rawURL, pattern string) bool {
 
 // CleanPatterns parcourt tous les fichiers de la request queue pour le job donné,
 // supprime ceux dont l'URL correspond à l'un des patterns fournis.
-// Retourne le nombre de fichiers supprimés.
+// Retourne le nombre de fichiers supprimés et le nombre de fichiers examinés.
 // Traduit server.js:1299-1367.
-func CleanPatterns(ctx context.Context, storage *filestore.Storage, jobID string, patterns []string) (int, error) {
+func CleanPatterns(ctx context.Context, storage *filestore.Storage, jobID string, patterns []string) (deleted int, scanned int, err error) {
 	baseDir := findRequestQueuesBase(storage, jobID)
 	if baseDir == "" {
-		return 0, nil
+		return 0, 0, nil
 	}
 
 	domainDirs, err := os.ReadDir(baseDir)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 
-	deleted := 0
 	for _, de := range domainDirs {
 		if !de.IsDir() {
 			continue
@@ -94,6 +93,7 @@ func CleanPatterns(ctx context.Context, storage *filestore.Storage, jobID string
 			if f.IsDir() || !strings.HasSuffix(f.Name(), ".json") {
 				continue
 			}
+			scanned++
 			filePath := filepath.Join(domainPath, f.Name())
 			raw, err := os.ReadFile(filePath)
 			if err != nil {
@@ -115,24 +115,23 @@ func CleanPatterns(ctx context.Context, storage *filestore.Storage, jobID string
 			}
 		}
 	}
-	return deleted, nil
+	return deleted, scanned, nil
 }
 
 // Repair parcourt les fichiers de la request queue pour le job donné.
 // Supprime les fichiers dont le hostname de l'URL ne correspond pas au domaine du répertoire.
 // Traduit server.js:772-823.
-func Repair(ctx context.Context, storage *filestore.Storage, jobID string) (int, error) {
+func Repair(ctx context.Context, storage *filestore.Storage, jobID string) (deleted int, scanned int, err error) {
 	baseDir := findRequestQueuesBase(storage, jobID)
 	if baseDir == "" {
-		return 0, nil
+		return 0, 0, nil
 	}
 
 	domainDirs, err := os.ReadDir(baseDir)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 
-	deleted := 0
 	for _, de := range domainDirs {
 		if !de.IsDir() {
 			continue
@@ -147,6 +146,7 @@ func Repair(ctx context.Context, storage *filestore.Storage, jobID string) (int,
 			if f.IsDir() || !strings.HasSuffix(f.Name(), ".json") {
 				continue
 			}
+			scanned++
 			filePath := filepath.Join(domainPath, f.Name())
 			raw, err := os.ReadFile(filePath)
 			if err != nil {
@@ -172,24 +172,23 @@ func Repair(ctx context.Context, storage *filestore.Storage, jobID string) (int,
 			}
 		}
 	}
-	return deleted, nil
+	return deleted, scanned, nil
 }
 
 // DropAll supprime tous les fichiers du répertoire request_queues du job donné.
 // Recrée les sous-dossiers vides après suppression.
 // Traduit server.js:826-861.
-func DropAll(ctx context.Context, storage *filestore.Storage, jobID string) (int, error) {
+func DropAll(ctx context.Context, storage *filestore.Storage, jobID string) (deleted int, scanned int, err error) {
 	baseDir := findRequestQueuesBase(storage, jobID)
 	if baseDir == "" {
-		return 0, nil
+		return 0, 0, nil
 	}
 
 	domainDirs, err := os.ReadDir(baseDir)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 
-	deleted := 0
 	for _, de := range domainDirs {
 		if !de.IsDir() {
 			continue
@@ -203,11 +202,12 @@ func DropAll(ctx context.Context, storage *filestore.Storage, jobID string) (int
 			if f.IsDir() {
 				continue
 			}
+			scanned++
 			filePath := filepath.Join(domainPath, f.Name())
 			if err := os.Remove(filePath); err == nil {
 				deleted++
 			}
 		}
 	}
-	return deleted, nil
+	return deleted, scanned, nil
 }

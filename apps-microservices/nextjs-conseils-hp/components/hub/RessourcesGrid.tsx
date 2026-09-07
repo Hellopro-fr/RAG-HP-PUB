@@ -2,6 +2,7 @@ import Image from 'next/image';
 import { HubSection, HubIcon } from './primitives';
 import { HubCardCarousel } from './HubCardCarousel';
 import { AssistantButton } from './triggers';
+import { STRETCHED_LINK } from './stretchedLink';
 import { CARD_TITLE, LINK_LABEL, SECTION_SUBTITLE, SECTION_TITLE, TAG } from './typography';
 import { HUB_SECTION_IDS } from '@/lib/hub/anchors';
 import type { HubIconName, HubRessources } from '@/types/hub';
@@ -43,7 +44,8 @@ export function RessourcesGrid({ data }: { data: HubRessources }) {
         {data.items.map((item) => (
           <article
             key={item.title}
-            className="flex h-full shrink-0 basis-full snap-start flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm transition hover:-translate-y-1 hover:shadow-elegant md:basis-auto"
+            // `relative` : ancre du lien étiré d'« En savoir plus ». Cf. stretchedLink.ts.
+            className="relative flex h-full shrink-0 basis-full snap-start flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm transition hover:-translate-y-1 hover:shadow-elegant md:basis-auto"
           >
             {item.image ? (
               <div className="relative h-52 w-full shrink-0">
@@ -72,7 +74,7 @@ export function RessourcesGrid({ data }: { data: HubRessources }) {
                 {item.href ? (
                   <a
                     href={item.href}
-                    className={`inline-flex items-center gap-1.5 ${LINK_LABEL} text-primary hover:underline`}
+                    className={`inline-flex items-center gap-1.5 ${LINK_LABEL} text-primary hover:underline ${STRETCHED_LINK}`}
                   >
                     En savoir plus
                     <HubIcon name="arrow-right" className="h-4 w-4" />

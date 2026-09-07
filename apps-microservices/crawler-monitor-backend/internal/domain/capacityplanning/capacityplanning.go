@@ -10,8 +10,12 @@ import (
 )
 
 // WindowMap maps frontend window keys to milliseconds.
+// Les fenetres sont alignees sur /api/capacity/history, a l'exception de
+// "15m" : le planning agrege des pics RAM et une fenetre de 15 min ne produit
+// pas d'echantillon exploitable.
 var WindowMap = map[string]int64{
 	"1h":  60 * 60 * 1000,
+	"6h":  6 * 60 * 60 * 1000,
 	"24h": 24 * 60 * 60 * 1000,
 	"7d":  7 * 24 * 60 * 60 * 1000,
 }
@@ -19,7 +23,7 @@ var WindowMap = map[string]int64{
 func ParseWindow(key string) (int64, error) {
 	ms, ok := WindowMap[key]
 	if !ok {
-		return 0, errors.New("Invalid window. Use '1h', '24h' or '7d'.")
+		return 0, errors.New("invalid window: use '1h', '6h', '24h' or '7d'")
 	}
 	return ms, nil
 }
@@ -48,13 +52,13 @@ type ReplicaStats struct {
 
 // Totals is the cross-replica summary.
 type Totals struct {
-	ReplicaCount    int     `json:"replica_count"`
-	TotalAllocated  float64 `json:"total_allocated"`
-	TotalPeakWorst  float64 `json:"total_peak_worst"`
-	TotalAvg        float64 `json:"total_avg"`
-	Waste           float64 `json:"waste"`
-	WastePct        float64 `json:"waste_pct"`
-	Efficiency      float64 `json:"efficiency"`
+	ReplicaCount   int     `json:"replica_count"`
+	TotalAllocated float64 `json:"total_allocated"`
+	TotalPeakWorst float64 `json:"total_peak_worst"`
+	TotalAvg       float64 `json:"total_avg"`
+	Waste          float64 `json:"waste"`
+	WastePct       float64 `json:"waste_pct"`
+	Efficiency     float64 `json:"efficiency"`
 }
 
 // AggregateByReplica folds per-replica points into ReplicaStats sorted by peak desc.

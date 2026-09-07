@@ -51,6 +51,11 @@ describe('replica_job_mapping', () => {
     expect(rule.evaluate({ replicas, jobs })).toEqual([]);
   });
 
+  it('returns null (indeterminate) when the jobs list is missing', () => {
+    const replicas = replicasDict([mkReplica('r1', { cpu: 0.5, jobId: null })]);
+    expect(rule.evaluate({ replicas, jobs: null })).toBeNull();
+  });
+
   it('returns multiple violations for multiple replicas', () => {
     const replicas = replicasDict([
       mkReplica('r1', { cpu: 0.5, jobId: null }),

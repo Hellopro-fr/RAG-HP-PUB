@@ -17,10 +17,10 @@ import (
 // roleRateLimiter throttles destructive calls per JWT role (or IP fallback).
 // 10/min/role by default — protects against fat-fingered admin loops.
 type roleRateLimiter struct {
-	mu      sync.Mutex
-	calls   map[string][]time.Time
-	limit   int
-	window  time.Duration
+	mu     sync.Mutex
+	calls  map[string][]time.Time
+	limit  int
+	window time.Duration
 }
 
 func newRoleRateLimiter(limit int, window time.Duration) *roleRateLimiter {
@@ -109,7 +109,10 @@ func MountAlbums(r chi.Router, audit AuditAppender, baseURL string, destructiveL
 				return
 			}
 
-			fwdHandler(w, r)
+			// On capture le statut renvoye par le service amont : marquer
+			// "ok" une action qui a echoue rendait la piste d'audit fausse.
+			rec := mw.NewStatusRecorder(w)
+			fwdHandler(rec, r)
 
 			if audit != nil {
 				meta := map[string]any{}
@@ -118,11 +121,16 @@ func MountAlbums(r chi.Router, audit AuditAppender, baseURL string, destructiveL
 						meta[p] = v
 					}
 				}
+				st := "ok"
+				if rec.Status >= 400 {
+					st = "error"
+					meta["http_status"] = rec.Status
+				}
 				entry := map[string]any{
 					"ts":     time.Now().UTC().Format(time.RFC3339Nano),
 					"action": action,
 					"user":   roleOrAnon(r),
-					"status": "ok",
+					"status": st,
 					"target": chi.URLParam(r, "domain"),
 				}
 				if len(meta) > 0 {

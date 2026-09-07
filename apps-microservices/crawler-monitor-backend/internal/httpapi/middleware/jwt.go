@@ -25,9 +25,11 @@ func JWTAuth(secret string) func(http.Handler) http.Handler {
 				return
 			}
 			raw := strings.TrimPrefix(h, "Bearer ")
-			tok, err := jwt.Parse(raw, keyFn)
+			// 401 (et pas 403) : le token est absent/invalide, ce n'est pas
+			// un probleme de droits — le frontend doit reauthentifier.
+			tok, err := jwt.Parse(raw, keyFn, jwt.WithValidMethods([]string{"HS256"}))
 			if err != nil || !tok.Valid {
-				writeJSONError(w, 403, "Invalid token")
+				writeJSONError(w, 401, "Invalid token")
 				return
 			}
 			claims, _ := tok.Claims.(jwt.MapClaims)

@@ -7,7 +7,9 @@ export default defineConfig({
     proxy: {
       '/api': {
         target: 'http://localhost:3001',
-        changeOrigin: true
+        changeOrigin: true,
+        // Le WebSocket temps réel passe aussi par /api (handshake Upgrade)
+        ws: true,
       },
       '/cdn-images': {
         target: 'http://localhost:8580',
@@ -17,9 +19,9 @@ export default defineConfig({
     }
   },
   build: {
-    // Expose source maps for prod debugging without shipping them in the main bundle.
-    // 'hidden' keeps the code map files available but no sourceMappingURL comment.
-    sourcemap: 'hidden',
+    // Pas de source maps en prod : les .map 'hidden' restaient servis
+    // publiquement par nginx et exposaient tout le code source.
+    sourcemap: false,
     // No manualChunks: Vite auto-splits via dynamic imports (React.lazy).
     // An earlier aggressive split caused runtime "Cannot set properties of
     // undefined (setting 'Activity')" because React ecosystem packages had

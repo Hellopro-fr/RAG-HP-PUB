@@ -44,6 +44,49 @@ func TestRateLimit_429AfterMax(t *testing.T) {
 	}
 }
 
+// TestRateLimit_ForgedHeaderCannotBypass : depuis une IP publique (service
+// expose sans proxy), un X-Real-IP invente ne doit pas ouvrir un seau neuf.
+func TestRateLimit_ForgedHeaderCannotBypass(t *testing.T) {
+	mw := RateLimitByIP(1, time.Minute)
+	h := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) }))
+
+	w1 := httptest.NewRecorder()
+	r1 := httptest.NewRequest("GET", "/", nil)
+	r1.RemoteAddr = "203.0.113.7:5555"
+	h.ServeHTTP(w1, r1)
+	if w1.Code != 200 {
+		t.Fatalf("1re requete: status=%d, want 200", w1.Code)
+	}
+
+	w2 := httptest.NewRecorder()
+	r2 := httptest.NewRequest("GET", "/", nil)
+	r2.RemoteAddr = "203.0.113.7:5556"
+	r2.Header.Set("X-Real-IP", "10.1.2.3")
+	r2.Header.Set("X-Forwarded-For", "10.1.2.3")
+	h.ServeHTTP(w2, r2)
+	if w2.Code != 429 {
+		t.Errorf("en-tete forge: status=%d, want 429 (meme seau)", w2.Code)
+	}
+}
+
+// TestRateLimit_TrustedProxyHeaderHonored : derriere nginx (IP privee), deux
+// clients distincts ne partagent pas le quota.
+func TestRateLimit_TrustedProxyHeaderHonored(t *testing.T) {
+	mw := RateLimitByIP(1, time.Minute)
+	h := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) }))
+
+	for _, real := range []string{"203.0.113.1", "203.0.113.2"} {
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest("GET", "/", nil)
+		r.RemoteAddr = "172.18.0.5:5555"
+		r.Header.Set("X-Real-IP", real)
+		h.ServeHTTP(w, r)
+		if w.Code != 200 {
+			t.Errorf("client %s: status=%d, want 200", real, w.Code)
+		}
+	}
+}
+
 func TestCORS_DefaultWildcard(t *testing.T) {
 	mw := CORS(nil)
 	h := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) }))

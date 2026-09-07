@@ -60,8 +60,8 @@ func TestJWT_BadToken(t *testing.T) {
 	r := httptest.NewRequest("GET", "/x", nil)
 	r.Header.Set("Authorization", "Bearer not.a.token")
 	h.ServeHTTP(w, r)
-	if w.Code != 403 {
-		t.Errorf("status=%d, want 403", w.Code)
+	if w.Code != 401 {
+		t.Errorf("status=%d, want 401", w.Code)
 	}
 }
 
@@ -72,8 +72,8 @@ func TestJWT_ExpiredToken(t *testing.T) {
 	r := httptest.NewRequest("GET", "/x", nil)
 	r.Header.Set("Authorization", "Bearer "+tok)
 	h.ServeHTTP(w, r)
-	if w.Code != 403 {
-		t.Errorf("status=%d, want 403", w.Code)
+	if w.Code != 401 {
+		t.Errorf("status=%d, want 401", w.Code)
 	}
 }
 
