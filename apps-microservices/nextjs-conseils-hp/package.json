@@ -52,7 +52,7 @@
     "date-fns": "^4.1.0",
     "isomorphic-dompurify": "^3.0.0",
     "lucide-react": "^0.575.0",
-    "next": "^15.0.0",
+    "next": "^15.5.24",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-hook-form": "^7.71.0",
