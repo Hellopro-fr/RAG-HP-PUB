@@ -1642,7 +1642,7 @@ services:
   neo4j_new:
     image: neo4j:5.15.0
     ports:
-      - "7476:7476" # Browser
+      - "7476:7474" # Browser
       - "7689:7687" # Bolt
     profiles: [ "graph-rag" ]
     environment:
@@ -1659,14 +1659,14 @@ services:
       # NEO4J_server_http_advertised__address: neo4j1.hellopro.eu:443
       # NEO4J_dbms_connector_bolt_advertised__address: neo4j1.hellopro.eu:7687
     volumes:
-      - gr_neo4j_data:/data
-      - gr_neo4j_logs:/logs
+      - gr_neo4j_new_data:/data
+      - gr_neo4j_new_logs:/logs
     networks:
       - services-net
       - services-ext-net
       - services-global-net
     healthcheck:
-      test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider localhost:7476 || exit 1" ]
+      test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider localhost:7474 || exit 1" ]
       interval: 10s
       timeout: 10s
       retries: 5
@@ -2860,5 +2860,7 @@ volumes:
   prometheus_data:
   gr_neo4j_data:
   gr_neo4j_logs:
+  gr_neo4j_new_data:
+  gr_neo4j_new_logs:
   gateway_mysql_data:
   tailscale_state:
