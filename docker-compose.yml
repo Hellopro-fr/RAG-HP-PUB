@@ -1639,7 +1639,7 @@ services:
       timeout: 10s
       retries: 5
 
-  neo4j:
+  neo4j_new:
     image: neo4j:5.15.0
     ports:
       - "7476:7476" # Browser
