@@ -61,7 +61,7 @@ jobs:
       health_check_path: /health
       # *** VPC Connector requis : proxy gRPC (10.11.0.2) + Neo4j (10.0.1.218) internes ***
       vpc_connector: vpc-access-connector
-      vpc_egress: private-ranges-only
+      vpc_egress: all-traffic
       env_vars_json: |
         {
           "API_PORT": "8528",

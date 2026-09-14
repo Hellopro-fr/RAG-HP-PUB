@@ -59,7 +59,9 @@ jobs:
       startup_cpu_boost: true
       # Pas de /health : /login (GET) rend la page HTML (200) sans auth.
       health_check_path: /login
-      # Pas de VPC Connector : egress internet seul (auth hellopro.fr).
+      # VPC Connector + all-traffic : egress via Cloud NAT statique -> whitelist ECRITEL.
+      vpc_connector: vpc-access-connector
+      vpc_egress: all-traffic
       env_vars_json: |
         {
           "JWT_ALGO": "HS256",

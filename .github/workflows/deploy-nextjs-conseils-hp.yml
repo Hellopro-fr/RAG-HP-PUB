@@ -54,6 +54,8 @@ jobs:
       # Aucune dependance interne VPC : le backend est l'API HelloPro publique
       # (HELLOPRO_API_URL, defaut https://api.hellopro.fr). NODE_ENV deja dans le Dockerfile.
       # NEXT_PUBLIC_* non requis (defauts dans le code ; inlines au build s'ils existent).
+      vpc_connector: vpc-access-connector
+      vpc_egress: all-traffic
       env_vars_json: '{}'
       # Secret server-side : token API HelloPro pour le fetch des pages conseils.
       secret_env_vars_json: |

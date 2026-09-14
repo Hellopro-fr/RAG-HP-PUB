@@ -20,7 +20,7 @@ name: 'Deploy — graph-rag-api-recherche-service'
 #
 # LECTURE SEULE (recherche / recommandation). CMD = uvicorn mono-process -> pas d'override workers.
 #
-# VPC Connector + egress private-ranges-only OBLIGATOIRES (cibles internes 10.11.0.2 + 10.0.1.218).
+# VPC Connector OBLIGATOIRE (cibles internes 10.11.0.2 + 10.0.1.218) ; egress all-traffic = IP sortie statique via Cloud NAT (whitelist ECRITEL).
 
 on:
   push:
@@ -64,7 +64,7 @@ jobs:
       health_check_path: /health
       # *** VPC Connector requis : proxy gRPC (10.11.0.2) + Neo4j (10.0.1.218) internes ***
       vpc_connector: vpc-access-connector
-      vpc_egress: private-ranges-only
+      vpc_egress: all-traffic
       # 7 cibles gRPC via l'enabler etendu + Neo4j direct + provider LLM. Ces noms sont lus
       # par les clients common_utils (embedding/reranking/graph_milvus/graph_database/
       # normalization/spacy) ET par config.py Settings.
