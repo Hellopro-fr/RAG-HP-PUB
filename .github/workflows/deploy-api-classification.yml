@@ -26,7 +26,7 @@ name: 'Deploy — api-classification'
 # CMD = uvicorn mono-process (pas de gunicorn -w N) -> pas d'override workers necessaire.
 # startup_cpu_boost pour accelerer le cold start (imports lourds : api_recherche_lib + pymilvus).
 #
-# VPC Connector + egress private-ranges-only OBLIGATOIRES (cibles gRPC = IP interne 10.11.0.2).
+# VPC Connector OBLIGATOIRE (cibles gRPC IP interne 10.11.0.2) ; egress all-traffic = IP sortie statique via Cloud NAT (whitelist ECRITEL).
 
 on:
   push:
@@ -73,7 +73,7 @@ jobs:
       health_check_path: /health
       # *** VPC Connector requis : cibles gRPC = IP interne VM GPU (10.11.0.2) via proxy ***
       vpc_connector: vpc-access-connector
-      vpc_egress: private-ranges-only
+      vpc_egress: all-traffic
       # 4 cibles gRPC -> proxy grpc-gpu-proxy (enabler complet). ZILLIZ_/QDRANT_/M_/EF_ requis
       # par api_recherche_lib.credentials.Settings() au startup (inertes : search via gRPC).
       env_vars_json: |
