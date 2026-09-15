@@ -1,5 +1,5 @@
 # Stage 1: Build Go CLIs
-FROM golang:1.24-alpine AS go-builder
+FROM golang:1.25-alpine AS go-builder
 WORKDIR /src
 
 # Install system dependencies
@@ -14,6 +14,8 @@ RUN go build -o go-trafilatura-hp main.go
 
 # Stage 2: Final Python Application
 FROM python:3.13-slim
+# refresh OS packages of the final stage (fixable CVEs in base layers)
+RUN apt-get update && apt-get -y upgrade && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 
 # Étape 1: Définir le PYTHONPATH.

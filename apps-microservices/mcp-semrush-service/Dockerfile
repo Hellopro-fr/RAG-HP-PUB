@@ -1,4 +1,7 @@
 FROM node:20-slim
+# refresh OS packages of the final stage (fixable CVEs in base layers)
+RUN apt-get update && apt-get -y upgrade && rm -rf /var/lib/apt/lists/*
+RUN npm install -g npm@latest
 
 RUN apt-get update && apt-get install -y python3 python3-pip python3-venv && rm -rf /var/lib/apt/lists/*
 RUN python3 -m venv /opt/venv

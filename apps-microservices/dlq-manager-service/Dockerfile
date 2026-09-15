@@ -18,7 +18,7 @@ COPY apps-microservices/dlq-manager-service/frontend/ ./
 RUN pnpm run build
 
 # Stage 2: Build the FastAPI backend
-FROM python:3.10.17-slim AS build-backend
+FROM python:3.10-slim AS build-backend
 WORKDIR /app/backend
 
 # Set environment variables
@@ -34,7 +34,9 @@ RUN pip install --no-cache-dir --upgrade pip && \
 COPY apps-microservices/dlq-manager-service/backend/ ./
 
 # Stage 3: Final production image
-FROM python:3.10.17-slim
+FROM python:3.10-slim
+# refresh OS packages of the final stage (fixable CVEs in base layers)
+RUN apt-get update && apt-get -y upgrade && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 
 # Set environment variables

@@ -1,5 +1,7 @@
 # Utiliser une base Python cohérente avec les autres services
 FROM python:3.11-slim
+# refresh OS packages of the final stage (fixable CVEs in base layers)
+RUN apt-get update && apt-get -y upgrade && rm -rf /var/lib/apt/lists/*
 RUN apt-get update && apt-get install -y protobuf-compiler && rm -rf /var/lib/apt/lists/*
 
 # Définir le répertoire de travail

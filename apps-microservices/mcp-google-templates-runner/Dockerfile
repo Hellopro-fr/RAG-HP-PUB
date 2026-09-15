@@ -1,4 +1,6 @@
 FROM python:3.11-slim
+# refresh OS packages of the final stage (fixable CVEs in base layers)
+RUN apt-get update && apt-get -y upgrade && rm -rf /var/lib/apt/lists/*
 
 # coreutils provides shred (used by the credentials manager to wipe tmpfs files).
 # curl is used by the Docker healthcheck.
