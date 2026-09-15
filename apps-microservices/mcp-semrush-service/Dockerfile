@@ -1,4 +1,4 @@
-FROM node:20-slim
+FROM node:22-slim
 # refresh OS packages of the final stage (fixable CVEs in base layers)
 RUN apt-get update && apt-get -y upgrade && rm -rf /var/lib/apt/lists/*
 RUN npm install -g npm@latest
