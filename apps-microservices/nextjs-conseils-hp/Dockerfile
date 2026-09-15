@@ -20,6 +20,9 @@ RUN npm run build
 
 # Étape 4: Runner production
 FROM base AS runner
+# refresh OS packages of the final stage (fixable CVEs in base layers)
+RUN apk upgrade --no-cache
+RUN npm install -g npm@latest
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1

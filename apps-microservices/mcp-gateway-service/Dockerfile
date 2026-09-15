@@ -22,7 +22,9 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     CGO_ENABLED=0 GOOS=linux go build -o mcp-gateway ./cmd/server/
 
 # Stage 2: Minimal runtime image
-FROM alpine:3.20
+FROM alpine:3.21
+# refresh OS packages of the final stage (fixable CVEs in base layers)
+RUN apk upgrade --no-cache
 # su-exec lets the entrypoint drop privileges from root → appuser AFTER
 # fixing the mounted volume's ownership.
 RUN apk add --no-cache ca-certificates wget su-exec && \

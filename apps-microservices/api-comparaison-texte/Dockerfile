@@ -1,4 +1,6 @@
 FROM python:3.10-slim
+# refresh OS packages of the final stage (fixable CVEs in base layers)
+RUN apt-get update && apt-get -y upgrade && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 ENV PYTHONPATH=/app
 

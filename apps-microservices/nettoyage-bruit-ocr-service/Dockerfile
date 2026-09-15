@@ -1,4 +1,6 @@
 FROM python:3.11-slim
+# refresh OS packages of the final stage (fixable CVEs in base layers)
+RUN apt-get update && apt-get -y upgrade && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 
 # Dit à Python de toujours chercher les modules à partir du dossier /app.
