@@ -3,7 +3,7 @@ FROM node:20.19.0-alpine3.21 AS build-frontend
 WORKDIR /app/frontend
 
 # Install pnpm
-RUN npm install -g pnpm
+RUN npm install -g pnpm@9
 
 # Copy package manifests to leverage Docker cache
 COPY apps-microservices/dlq-manager-service/frontend/package.json ./
