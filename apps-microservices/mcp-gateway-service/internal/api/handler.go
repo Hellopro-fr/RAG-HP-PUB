@@ -677,6 +677,12 @@ func (h *Handler) handleDiscoverAll(w http.ResponseWriter, r *http.Request) {
 			// min_role back in or a bulk re-discover silently makes every
 			// gated server public at once.
 			h.registry.SetMinRole(srv.ID, srv.MinRole)
+			// Known pre-existing gap, not introduced by the above: ToolPrefix
+			// and Tags are similarly wiped by the Unregister above but are NOT
+			// re-pushed here (unlike handleDiscoverServer, which at least
+			// restores ToolPrefix). Left unfixed deliberately — out of scope
+			// for the min_role gate work; flagged so the next reader doesn't
+			// rediscover it or assume it was an oversight in this change.
 			if backend := h.registry.FindByID(srv.ID); backend != nil {
 				h.saveBackendCapabilities(srv.ID, backend)
 			}
