@@ -526,6 +526,14 @@ func loadServersFromDB(gw *gateway.Gateway, reg *gateway.Registry, repo *reposit
 				checker.ApplyHealthResult(&s, err)
 				registerFromDBCache(gw, &s)
 			} else {
+				// The registry is empty at boot, so gateway.go's prev-
+				// preservation clause has nothing to preserve from — push
+				// min_role unconditionally (unlike ToolPrefix/Tags below,
+				// no guard: pushing "" onto a freshly-registered backend is
+				// a no-op, but skipping the push for a gated server is
+				// exactly the bug this closes) or every gated server comes
+				// up public on every restart until manually touched.
+				reg.SetMinRole(s.ID, s.MinRole)
 				if s.ToolPrefix != "" {
 					reg.SetToolPrefix(s.ID, s.ToolPrefix)
 				}
