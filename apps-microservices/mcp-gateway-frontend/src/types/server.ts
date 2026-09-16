@@ -62,6 +62,9 @@ export interface Server {
   last_error?: string
   last_discovered_at?: string
   tool_prefix: string
+  /** Minimum gateway role required to see and reach this server over MCP.
+   *  Empty string means public. */
+  min_role: string
   icon?: string
   tools_count: number
   tool_names: ServerToolName[]
@@ -108,6 +111,7 @@ export interface CreateServerRequest {
   auth_headers?: Record<string, string>
   tags?: string[]
   tool_prefix?: string
+  min_role?: string
   icon?: string
   doc_slug?: string
   doc_description?: string
@@ -128,4 +132,19 @@ export interface ImportResultDetail {
   name: string
   status: 'imported' | 'skipped' | 'error'
   message?: string
+}
+
+// Gateway roles a server's min_role can be gated to, public (empty string)
+// first. Shared by the admin form (select options) and the server card
+// (badge label) so both stay in sync with the three UserRole values in
+// stores/auth.ts.
+export const MIN_ROLE_OPTIONS = [
+  { value: '', label: 'Public' },
+  { value: 'config-only', label: 'Config-only' },
+  { value: 'read-only', label: 'Read-only' },
+  { value: 'admin', label: 'Admin' },
+] as const
+
+export function minRoleLabel(value: string): string {
+  return MIN_ROLE_OPTIONS.find((o) => o.value === value)?.label ?? value
 }

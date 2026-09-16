@@ -20,16 +20,21 @@ type MCPServer struct {
 	CapabilitiesRaw     json.RawMessage `gorm:"type:json" json:"capabilities_raw,omitempty"`
 
 	// MCP client config fields — used to generate .mcp.json
-	MCPTransport string          `gorm:"type:varchar(20);not null;default:http" json:"mcp_transport"`  // "http", "sse", "stdio"
-	MCPCommand   string          `gorm:"type:varchar(2048)" json:"mcp_command,omitempty"`              // for stdio: e.g. "npx", "python"
-	MCPArgs      json.RawMessage `gorm:"type:json" json:"mcp_args,omitempty"`                          // for stdio: e.g. ["-y", "@mcp/server"]
-	MCPEnv       json.RawMessage `gorm:"type:json" json:"mcp_env,omitempty"`                           // for stdio: e.g. {"KEY": "val"}
+	MCPTransport string          `gorm:"type:varchar(20);not null;default:http" json:"mcp_transport"` // "http", "sse", "stdio"
+	MCPCommand   string          `gorm:"type:varchar(2048)" json:"mcp_command,omitempty"`             // for stdio: e.g. "npx", "python"
+	MCPArgs      json.RawMessage `gorm:"type:json" json:"mcp_args,omitempty"`                         // for stdio: e.g. ["-y", "@mcp/server"]
+	MCPEnv       json.RawMessage `gorm:"type:json" json:"mcp_env,omitempty"`                          // for stdio: e.g. {"KEY": "val"}
 
 	// ToolPrefix is an optional alphanumeric prefix prepended to all tool names as {prefix}_{tool_name}.
 	ToolPrefix string `gorm:"type:varchar(64);not null;default:''" json:"tool_prefix"`
 
 	// Icon is a URL or path to the server's icon image.
 	Icon string `gorm:"type:varchar(512);not null;default:''" json:"icon"`
+
+	// MinRole is the minimum gateway_users.role required to see this server
+	// on the OAuth2 consent screen and to reach its tools over MCP. Empty
+	// means public — the value every pre-existing server carries.
+	MinRole string `gorm:"type:varchar(20);not null;default:''" json:"min_role"`
 
 	// TemplateSlug links this server to a template catalog row when the server
 	// was created via one of the templates flows (stdio instance or http_batch
@@ -42,14 +47,14 @@ type MCPServer struct {
 	DocDescription string          `gorm:"type:text" json:"doc_description,omitempty"`
 	DocConfigGuide json.RawMessage `gorm:"type:json" json:"doc_config_guide,omitempty"`
 
-	IsActive            bool            `gorm:"not null;default:true;index:idx_is_active" json:"is_active"`
-	HealthStatus        string          `gorm:"type:varchar(20);not null;default:unknown;index:idx_health_status" json:"health_status"`
-	LastHealthCheck     *time.Time      `gorm:"type:datetime(3)" json:"last_health_check,omitempty"`
-	LastError           string          `gorm:"type:text" json:"last_error,omitempty"`
-	LastDiscoveredAt    *time.Time      `gorm:"type:datetime(3)" json:"last_discovered_at,omitempty"`
-	CreatedBy           string          `gorm:"type:varchar(255);not null;default:'';index:idx_created_by" json:"created_by"`
-	CreatedAt           time.Time       `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`
-	UpdatedAt           time.Time       `gorm:"type:datetime(3);autoUpdateTime" json:"updated_at"`
+	IsActive         bool       `gorm:"not null;default:true;index:idx_is_active" json:"is_active"`
+	HealthStatus     string     `gorm:"type:varchar(20);not null;default:unknown;index:idx_health_status" json:"health_status"`
+	LastHealthCheck  *time.Time `gorm:"type:datetime(3)" json:"last_health_check,omitempty"`
+	LastError        string     `gorm:"type:text" json:"last_error,omitempty"`
+	LastDiscoveredAt *time.Time `gorm:"type:datetime(3)" json:"last_discovered_at,omitempty"`
+	CreatedBy        string     `gorm:"type:varchar(255);not null;default:'';index:idx_created_by" json:"created_by"`
+	CreatedAt        time.Time  `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`
+	UpdatedAt        time.Time  `gorm:"type:datetime(3);autoUpdateTime" json:"updated_at"`
 
 	// Associations
 	Tools     []ServerTool     `gorm:"foreignKey:ServerID;constraint:OnDelete:CASCADE" json:"tools,omitempty"`
@@ -126,8 +131,8 @@ func (ServerTag) TableName() string { return "server_tags" }
 // migration compatibility (MySQL AutoMigrate can't drop NOT NULL columns).
 // All instruction content now lives on LLMInstructionRow.
 type LLMInstruction struct {
-	ID          string    `gorm:"type:char(36);primaryKey" json:"id"`
-	Title       string    `gorm:"type:varchar(255);not null" json:"title"`
+	ID    string `gorm:"type:char(36);primaryKey" json:"id"`
+	Title string `gorm:"type:varchar(255);not null" json:"title"`
 	// Body is deprecated: the column is kept NOT NULL for backward-compatibility
 	// with records created before the row model landed. New code writes an
 	// empty string and all content lives on LLMInstructionRow.
@@ -200,20 +205,20 @@ func (OAuth2ClientInstruction) TableName() string { return "oauth2_client_instru
 
 // ScopeToken is the GORM model for the scope_tokens table.
 type ScopeToken struct {
-	ID          string     `gorm:"type:char(36);primaryKey" json:"id"`
-	Name        string     `gorm:"type:varchar(255);not null" json:"name"`
-	Description string     `gorm:"type:text" json:"description,omitempty"`
-	TokenHash   string     `gorm:"type:varchar(64);not null;uniqueIndex:uq_token_hash" json:"-"`
-	TokenPrefix string     `gorm:"type:varchar(16);not null" json:"token_prefix"`
-	CreatedBy   string     `gorm:"type:varchar(255);not null;default:''" json:"created_by"`
+	ID             string     `gorm:"type:char(36);primaryKey" json:"id"`
+	Name           string     `gorm:"type:varchar(255);not null" json:"name"`
+	Description    string     `gorm:"type:text" json:"description,omitempty"`
+	TokenHash      string     `gorm:"type:varchar(64);not null;uniqueIndex:uq_token_hash" json:"-"`
+	TokenPrefix    string     `gorm:"type:varchar(16);not null" json:"token_prefix"`
+	CreatedBy      string     `gorm:"type:varchar(255);not null;default:''" json:"created_by"`
 	MCPCommand     string     `gorm:"type:varchar(64);not null;default:'npx'" json:"mcp_command"`
 	ServerName     string     `gorm:"type:varchar(255);not null;default:''" json:"server_name"`
 	AllowHTTP      bool       `gorm:"not null;default:false" json:"allow_http"`
 	EncryptedToken []byte     `gorm:"type:blob" json:"-"`
 	ExpiresAt      *time.Time `gorm:"type:datetime(3)" json:"expires_at,omitempty"`
-	IsActive    bool       `gorm:"not null;default:true;index:idx_scope_active" json:"is_active"`
-	CreatedAt   time.Time  `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`
-	UpdatedAt   time.Time  `gorm:"type:datetime(3);autoUpdateTime" json:"updated_at"`
+	IsActive       bool       `gorm:"not null;default:true;index:idx_scope_active" json:"is_active"`
+	CreatedAt      time.Time  `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`
+	UpdatedAt      time.Time  `gorm:"type:datetime(3);autoUpdateTime" json:"updated_at"`
 
 	// Leexi ownership scope. When LeexiFilterMode is "none" (default) the
 	// token is unrestricted; other modes narrow access to calls whose owner
@@ -271,18 +276,18 @@ func (ScopeTokenTool) TableName() string { return "scope_token_tools" }
 // OAuth2Client is the GORM model for the oauth2_clients table.
 // Supports both Authorization Code (with PKCE) and Client Credentials grants per MCP spec.
 type OAuth2Client struct {
-	ID              string     `gorm:"type:char(36);primaryKey" json:"id"` // = client_id (UUID)
-	Name            string     `gorm:"type:varchar(255);not null" json:"name"`
-	Description     string     `gorm:"type:text" json:"description,omitempty"`
-	SecretHash      string     `gorm:"type:varchar(64);not null;uniqueIndex:uq_secret_hash" json:"-"`
-	SecretPrefix    string     `gorm:"type:varchar(16);not null" json:"secret_prefix"`
-	EncryptedSecret []byte     `gorm:"type:blob" json:"-"`
+	ID              string `gorm:"type:char(36);primaryKey" json:"id"` // = client_id (UUID)
+	Name            string `gorm:"type:varchar(255);not null" json:"name"`
+	Description     string `gorm:"type:text" json:"description,omitempty"`
+	SecretHash      string `gorm:"type:varchar(64);not null;uniqueIndex:uq_secret_hash" json:"-"`
+	SecretPrefix    string `gorm:"type:varchar(16);not null" json:"secret_prefix"`
+	EncryptedSecret []byte `gorm:"type:blob" json:"-"`
 	// OAuth2 registration fields
-	RedirectURIs          *string `gorm:"type:json" json:"redirect_uris,omitempty"`                              // JSON array of registered redirect URIs, NULL when unset
-	GrantTypes            *string `gorm:"type:json" json:"grant_types,omitempty"`                                // JSON array: ["authorization_code"], ["client_credentials"], or both, NULL when unset
-	TokenAuthMethod       string `gorm:"type:varchar(30);not null;default:'client_secret_post'" json:"token_auth_method"`
-	DynamicallyRegistered bool   `gorm:"not null;default:false" json:"dynamically_registered"`
-	AccessTokenTTL        int    `gorm:"not null;default:3600" json:"access_token_ttl"` // seconds
+	RedirectURIs          *string    `gorm:"type:json" json:"redirect_uris,omitempty"` // JSON array of registered redirect URIs, NULL when unset
+	GrantTypes            *string    `gorm:"type:json" json:"grant_types,omitempty"`   // JSON array: ["authorization_code"], ["client_credentials"], or both, NULL when unset
+	TokenAuthMethod       string     `gorm:"type:varchar(30);not null;default:'client_secret_post'" json:"token_auth_method"`
+	DynamicallyRegistered bool       `gorm:"not null;default:false" json:"dynamically_registered"`
+	AccessTokenTTL        int        `gorm:"not null;default:3600" json:"access_token_ttl"` // seconds
 	ExpiresAt             *time.Time `gorm:"type:datetime(3)" json:"expires_at,omitempty"`
 	IsActive              bool       `gorm:"not null;default:true;index:idx_oauth2_active" json:"is_active"`
 	CreatedBy             string     `gorm:"type:varchar(255);not null;default:''" json:"created_by"`
@@ -397,18 +402,18 @@ func (GatewayUser) TableName() string { return "gateway_users" }
 // gw_session cookie; access_token and refresh_token are AES-256-GCM ciphertext
 // (encrypted with ENCRYPTION_KEY in internal/sso, never stored in plaintext).
 type SSOSession struct {
-	ID            string    `gorm:"type:varchar(64);primaryKey" json:"id"`
-	UserID        uint64    `gorm:"not null;index:idx_sso_user" json:"user_id"`
-	Sub           string    `gorm:"type:varchar(255);not null;index:idx_sso_sub" json:"sub"`
-	Email         string    `gorm:"type:varchar(255);not null" json:"email"`
-	AccessToken   []byte    `gorm:"type:varbinary(2048);not null" json:"-"`
-	RefreshToken  []byte    `gorm:"type:varbinary(512);not null" json:"-"`
-	AccessExp     time.Time `gorm:"type:datetime(3);not null" json:"access_exp"`
-	RefreshExp    time.Time `gorm:"type:datetime(3);not null;index:idx_sso_refresh_exp" json:"refresh_exp"`
-	CreatedAt     time.Time `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`
-	LastSeenAt    time.Time `gorm:"type:datetime(3);not null" json:"last_seen_at"`
-	UserAgent     string    `gorm:"type:varchar(255)" json:"user_agent,omitempty"`
-	ClientIP      string    `gorm:"type:varchar(45)" json:"client_ip,omitempty"`
+	ID           string    `gorm:"type:varchar(64);primaryKey" json:"id"`
+	UserID       uint64    `gorm:"not null;index:idx_sso_user" json:"user_id"`
+	Sub          string    `gorm:"type:varchar(255);not null;index:idx_sso_sub" json:"sub"`
+	Email        string    `gorm:"type:varchar(255);not null" json:"email"`
+	AccessToken  []byte    `gorm:"type:varbinary(2048);not null" json:"-"`
+	RefreshToken []byte    `gorm:"type:varbinary(512);not null" json:"-"`
+	AccessExp    time.Time `gorm:"type:datetime(3);not null" json:"access_exp"`
+	RefreshExp   time.Time `gorm:"type:datetime(3);not null;index:idx_sso_refresh_exp" json:"refresh_exp"`
+	CreatedAt    time.Time `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`
+	LastSeenAt   time.Time `gorm:"type:datetime(3);not null" json:"last_seen_at"`
+	UserAgent    string    `gorm:"type:varchar(255)" json:"user_agent,omitempty"`
+	ClientIP     string    `gorm:"type:varchar(45)" json:"client_ip,omitempty"`
 }
 
 func (SSOSession) TableName() string { return "sso_sessions" }
@@ -481,8 +486,8 @@ type UserGoogleToken struct {
 	ID           string     `gorm:"type:char(36);primaryKey" json:"id"`
 	UserID       uint64     `gorm:"not null;uniqueIndex:uq_user_google" json:"user_id"`
 	Email        string     `gorm:"type:varchar(255);not null" json:"email"` // Google account email
-	AccessToken  []byte     `gorm:"type:blob;not null" json:"-"`            // Encrypted
-	RefreshToken []byte     `gorm:"type:blob;not null" json:"-"`            // Encrypted
+	AccessToken  []byte     `gorm:"type:blob;not null" json:"-"`             // Encrypted
+	RefreshToken []byte     `gorm:"type:blob;not null" json:"-"`             // Encrypted
 	TokenExpiry  *time.Time `gorm:"type:datetime(3)" json:"token_expiry,omitempty"`
 	CreatedAt    time.Time  `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`
 	UpdatedAt    time.Time  `gorm:"type:datetime(3);autoUpdateTime" json:"updated_at"`
@@ -508,9 +513,9 @@ type Template struct {
 	//   "stdio"      — spawns a subprocess via mcp-google-templates-runner (ga, gsc, ...)
 	//   "http_batch" — batch-creates full HTTP mcp_servers via Google Sheets import
 	// Frontend uses this to route clicks differently on the templates catalog.
-	Kind string `gorm:"type:varchar(16);not null;default:'stdio';index:idx_template_kind" json:"kind"`
-	CreatedAt        time.Time       `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`
-	UpdatedAt        time.Time       `gorm:"type:datetime(3);autoUpdateTime" json:"updated_at"`
+	Kind      string    `gorm:"type:varchar(16);not null;default:'stdio';index:idx_template_kind" json:"kind"`
+	CreatedAt time.Time `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`
+	UpdatedAt time.Time `gorm:"type:datetime(3);autoUpdateTime" json:"updated_at"`
 }
 
 func (Template) TableName() string { return "templates" }
@@ -518,14 +523,14 @@ func (Template) TableName() string { return "templates" }
 // TemplateInstance is one admin-uploaded service-account JSON. Each row backs
 // exactly one running mcp-proxy subprocess in the runner.
 type TemplateInstance struct {
-	ID                   string     `gorm:"type:char(36);primaryKey" json:"id"`
-	TemplateSlug         string     `gorm:"type:varchar(32);not null;index:idx_instance_template" json:"template_slug"`
+	ID           string `gorm:"type:char(36);primaryKey" json:"id"`
+	TemplateSlug string `gorm:"type:varchar(32);not null;index:idx_instance_template" json:"template_slug"`
 	// Template is the associated catalog row. The FK (on TemplateSlug →
 	// templates.slug) is declared here so AutoMigrate emits it; the field itself
 	// is not preloaded by default and not exposed in JSON.
-	Template *Template `gorm:"foreignKey:TemplateSlug;references:Slug;constraint:OnDelete:RESTRICT" json:"-"`
-	Name                 string     `gorm:"type:varchar(255);not null" json:"name"`
-	EncryptedCredentials []byte     `gorm:"type:blob;not null" json:"-"`
+	Template             *Template `gorm:"foreignKey:TemplateSlug;references:Slug;constraint:OnDelete:RESTRICT" json:"-"`
+	Name                 string    `gorm:"type:varchar(255);not null" json:"name"`
+	EncryptedCredentials []byte    `gorm:"type:blob;not null" json:"-"`
 	// CredentialsHash is SHA-256(plaintext) used by the runner to detect
 	// credential changes during reconcile. Not unique — multiple instances may
 	// share the same SA JSON under different names.
@@ -536,10 +541,10 @@ type TemplateInstance struct {
 	RunnerLastError string          `gorm:"type:text" json:"runner_last_error,omitempty"`
 	// MCPServerID links to mcp_servers.id. No DB FK / cascade by design — delete
 	// order is enforced in the repository so the runner-kill step cannot be skipped.
-	MCPServerID string `gorm:"type:char(36);not null;uniqueIndex:uq_instance_mcp_server" json:"mcp_server_id"`
-	CreatedBy            string     `gorm:"type:varchar(255);not null;default:''" json:"created_by"`
-	CreatedAt            time.Time  `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`
-	UpdatedAt            time.Time  `gorm:"type:datetime(3);autoUpdateTime" json:"updated_at"`
+	MCPServerID string    `gorm:"type:char(36);not null;uniqueIndex:uq_instance_mcp_server" json:"mcp_server_id"`
+	CreatedBy   string    `gorm:"type:varchar(255);not null;default:''" json:"created_by"`
+	CreatedAt   time.Time `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`
+	UpdatedAt   time.Time `gorm:"type:datetime(3);autoUpdateTime" json:"updated_at"`
 }
 
 func (TemplateInstance) TableName() string { return "template_instances" }

@@ -847,6 +847,11 @@ func (h *Handler) importSheetRow(r *http.Request, rowNum int, row []string, colI
 	result.Status = "imported"
 
 	// Auto-discover for remote servers
+	// Known gap: this Google-templates import path cannot set min_role (no
+	// such field in the request), so it never pushes SetMinRole — harmless
+	// today since the DB value and the registry both default to "". If
+	// min_role ever becomes settable here, add the push (see CLAUDE.md's
+	// min_role invariant).
 	if req.AutoDiscover && srv.MCPTransport != "stdio" && serverURL != "" {
 		authHeaders := parseAuthHeaders(srv.AuthHeaders)
 		if err := h.gw.DiscoverAndRegister(r.Context(), id, srv.URL, authHeaders); err != nil {
