@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -12,6 +13,13 @@ import (
 	"mcp-gateway/internal/db"
 	"mcp-gateway/internal/scopetoken"
 )
+
+// endUserEmailContextKeyWritePattern matches a context.WithValue(...) call
+// whose second argument is EndUserEmailContextKey, regardless of what the
+// first argument (the parent context) is named — ctx, parent, reqCtx, c,
+// r.Context(), etc. A plain substring match on "context.WithValue(ctx,
+// EndUserEmailContextKey" would miss every one of those spellings.
+var endUserEmailContextKeyWritePattern = regexp.MustCompile(`context\.WithValue\(\s*[^,)]+\s*,\s*EndUserEmailContextKey\b`)
 
 // fakeUsers is an in-memory gatewayUserFinder: email -> role.
 type fakeUsers map[string]string
@@ -139,11 +147,42 @@ func TestFilterServersByGate(t *testing.T) {
 	}
 }
 
+// TestEndUserEmailContextKeyPattern proves endUserEmailContextKeyWritePattern
+// can actually fail: it must match a write regardless of the parent-context
+// variable's name, and must not match an unrelated context.WithValue call.
+// Without this control, TestScopeTokenPathLeavesEndUserEmailUnset would be
+// re-shipping the same unfalsifiable guarantee the substring match gave —
+// just in regexp form.
+func TestEndUserEmailContextKeyPattern(t *testing.T) {
+	positiveCtx := `return context.WithValue(ctx, EndUserEmailContextKey, email)`
+	if !endUserEmailContextKeyWritePattern.MatchString(positiveCtx) {
+		t.Fatal("pattern did not match a write using the conventional ctx name")
+	}
+
+	positiveOtherName := `return context.WithValue(parent, EndUserEmailContextKey, email)`
+	if !endUserEmailContextKeyWritePattern.MatchString(positiveOtherName) {
+		t.Fatal("pattern did not match a write whose parent context is named parent, not ctx")
+	}
+
+	negative := `return context.WithValue(ctx, ScopeNameContextKey, name)`
+	if endUserEmailContextKeyWritePattern.MatchString(negative) {
+		t.Fatal("pattern matched an unrelated context.WithValue call")
+	}
+}
+
 // TestScopeTokenPathLeavesEndUserEmailUnset pins the invariant GateAllows
-// depends on: only the OAuth2 bearer path writes EndUserEmailContextKey. If a
-// future feature starts attaching an owner email to scope-token requests,
-// this test fails — and it must, because the gate would otherwise open for
-// machine tokens without anyone noticing.
+// depends on: no file in package scopetoken (other than its own tests) writes
+// EndUserEmailContextKey via context.WithValue, under any parent-context
+// variable name.
+//
+// Scope: this only guards package scopetoken against growing such a write.
+// It does NOT and cannot observe the one legitimate write, in
+// internal/oauth2/middleware.go:245 — that file is outside this package by
+// design, since only the OAuth2 bearer path is supposed to carry an end-user
+// identity. If a future feature starts attaching an owner email to
+// scope-token requests from inside package scopetoken, this test fails, and
+// it must: gateway.GateAllows would otherwise silently stop excluding
+// scope tokens and client_credentials grants from gated servers.
 func TestScopeTokenPathLeavesEndUserEmailUnset(t *testing.T) {
 	root := "../../internal/scopetoken"
 	entries, err := os.ReadDir(root)
@@ -158,7 +197,7 @@ func TestScopeTokenPathLeavesEndUserEmailUnset(t *testing.T) {
 		if err != nil {
 			t.Fatalf("read %s: %v", e.Name(), err)
 		}
-		if strings.Contains(string(src), "context.WithValue(ctx, EndUserEmailContextKey") {
+		if endUserEmailContextKeyWritePattern.Match(src) {
 			t.Fatalf("%s writes EndUserEmailContextKey: the scope-token path must never carry an end-user identity, or gateway.GateAllows silently stops excluding scope tokens", e.Name())
 		}
 	}
