@@ -402,6 +402,17 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
       const index = data.steps.findIndex((s) => s.id === id);
       pushHubEvent('hub_form_start', 'projet', {
         form_id: 'assistant',
+        // `hub_entry_point` avait ete oublie ici (corrige le 2026-09-16), alors
+        // qu'il est porte par `hub_form_step`, `hub_form_abandon` et
+        // `hub_form_submission`. Consequence dans GA4 : la dimension arrivait
+        // VIDE sur les demarrages — on pouvait ventiler les etapes, les abandons
+        // et les conversions par porte d'entree, mais pas les demarrages, soit
+        // precisement la marche ou se mesure l'attractivite d'une porte.
+        //
+        // Rien ne le signalait : une cle absente est poussee a `undefined`, le
+        // tag GA4 ne l'emet pas, et la dimension reste vide. Meme defaut
+        // silencieux que sur `hub_form_submission` en aout.
+        hub_entry_point: entryPoint,
         step_name: questionStepName(index < 0 ? 0 : index),
         step_id: id,
         answer_label: option,
