@@ -544,15 +544,15 @@ func (sg *ScopedGateway) tryAutoSelfLeexi(ctx context.Context) (string, bool) {
 // isGatewayAdmin returns true when the email belongs to a gateway_users row
 // with Role=admin. Returns false when the repo isn't configured, the row is
 // missing, or the role is anything else.
+//
+// Note the asymmetry with the access gate: here false means "not an admin, so
+// fall through to the admin-configured filter" — permissive by design for the
+// Leexi/Ringover auto-self override. GateAllowsEmail treats the same
+// uncertainty as a denial. Both share gatewayUserRole; only the reading of a
+// failed lookup differs.
 func (sg *ScopedGateway) isGatewayAdmin(email string) bool {
-	if sg.gatewayUsers == nil {
-		return false
-	}
-	user, err := sg.gatewayUsers.GetByEmail(email)
-	if err != nil || user == nil {
-		return false
-	}
-	return user.Role == auth.RoleAdmin
+	role, ok := gatewayUserRole(sg.gatewayUsers, email)
+	return ok && role == auth.RoleAdmin
 }
 
 // injectRingoverHeader is the Ringover-side mirror of injectLeexiHeader:
