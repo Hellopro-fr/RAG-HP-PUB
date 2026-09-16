@@ -74,6 +74,10 @@ The "Tables BDD" admin section is split into a 3-tier flow:
 Both `/bdd-tables/new` and `/bdd-tables/:id/fields` are admin-gated through
 the global `router.beforeEach` guard (`meta.minRole = 'admin'`).
 
+## Server form access gate
+
+The server create/edit form (`ServerFormView.vue`) carries a "Niveau d'accès requis" select bound to `min_role`, rendered only when `auth.isAdmin` (i.e. only for admin sessions). Public (empty string) is the default; setting it to `config-only` / `read-only` / `admin` hides the server from lower-role users on the OAuth2 consent screen and blocks its tools at the gateway. Gated servers show a lock badge (`pi-lock` + role label) on `ServerCard.vue`. The option list and label lookup (`MIN_ROLE_OPTIONS`, `minRoleLabel`) live in `src/types/server.ts`, shared by both the form and the card so they stay in sync with the three `UserRole` values in `stores/auth.ts`.
+
 ## Provider-scope filter panels
 
 The token and OAuth2 forms expose per-provider ownership-scope pickers when a
