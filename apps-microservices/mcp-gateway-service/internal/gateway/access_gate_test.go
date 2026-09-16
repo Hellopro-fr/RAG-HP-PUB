@@ -16,10 +16,20 @@ import (
 
 // endUserEmailContextKeyWritePattern matches a context.WithValue(...) call
 // whose second argument is EndUserEmailContextKey, regardless of what the
-// first argument (the parent context) is named — ctx, parent, reqCtx, c,
-// r.Context(), etc. A plain substring match on "context.WithValue(ctx,
-// EndUserEmailContextKey" would miss every one of those spellings.
-var endUserEmailContextKeyWritePattern = regexp.MustCompile(`context\.WithValue\(\s*[^,)]+\s*,\s*EndUserEmailContextKey\b`)
+// first argument (the parent context) is named or shaped — ctx, parent,
+// reqCtx, c, r.Context(), req.Context(), etc. A plain substring match on
+// "context.WithValue(ctx, EndUserEmailContextKey" would miss every one of
+// those spellings.
+//
+// Known gap: the first-argument class is [^,]+, which stops at the first
+// top-level comma. That's fine for r.Context()/req.Context() (no comma
+// inside), but a first argument that itself contains a comma — e.g.
+// context.WithValue(foo(a, b), EndUserEmailContextKey, e) — is NOT matched.
+// No call site in this codebase does that today; if one ever does, this
+// pattern silently misses it, so treat this comment as the limit of what
+// TestScopeTokenPathLeavesEndUserEmailUnset actually proves, not a general
+// "handles any expression" guarantee.
+var endUserEmailContextKeyWritePattern = regexp.MustCompile(`context\.WithValue\(\s*[^,]+\s*,\s*EndUserEmailContextKey\b`)
 
 // fakeUsers is an in-memory gatewayUserFinder: email -> role.
 type fakeUsers map[string]string
@@ -148,25 +158,43 @@ func TestFilterServersByGate(t *testing.T) {
 }
 
 // TestEndUserEmailContextKeyPattern proves endUserEmailContextKeyWritePattern
-// can actually fail: it must match a write regardless of the parent-context
-// variable's name, and must not match an unrelated context.WithValue call.
-// Without this control, TestScopeTokenPathLeavesEndUserEmailUnset would be
-// re-shipping the same unfalsifiable guarantee the substring match gave —
-// just in regexp form.
+// can actually fail: each case here encodes a spelling that previously
+// slipped through an earlier, weaker version of this check. Without this
+// control, TestScopeTokenPathLeavesEndUserEmailUnset would be re-shipping
+// the same unfalsifiable guarantee in fancier form.
+//
+// History: round 1 hardcoded the substring "context.WithValue(ctx,
+// EndUserEmailContextKey", missing any other parent-context name. Round 2's
+// replacement, `[^,)]+`, still excluded ')' from the first argument, so it
+// missed the r.Context() / req.Context() idiom — arguably the MORE common
+// spelling in HTTP-handler code, and the exact kind of code this test exists
+// to police. The current pattern uses `[^,]+` instead, which tolerates the
+// closing paren of a no-arg method call.
 func TestEndUserEmailContextKeyPattern(t *testing.T) {
-	positiveCtx := `return context.WithValue(ctx, EndUserEmailContextKey, email)`
-	if !endUserEmailContextKeyWritePattern.MatchString(positiveCtx) {
-		t.Fatal("pattern did not match a write using the conventional ctx name")
+	positives := []string{
+		`return context.WithValue(ctx, EndUserEmailContextKey, email)`,
+		`return context.WithValue(parent, EndUserEmailContextKey, email)`,
+		`return context.WithValue(r.Context(), EndUserEmailContextKey, e)`,
+		`return context.WithValue(req.Context(), EndUserEmailContextKey, e)`,
 	}
-
-	positiveOtherName := `return context.WithValue(parent, EndUserEmailContextKey, email)`
-	if !endUserEmailContextKeyWritePattern.MatchString(positiveOtherName) {
-		t.Fatal("pattern did not match a write whose parent context is named parent, not ctx")
+	for _, src := range positives {
+		if !endUserEmailContextKeyWritePattern.MatchString(src) {
+			t.Fatalf("pattern did not match known-positive write: %s", src)
+		}
 	}
 
 	negative := `return context.WithValue(ctx, ScopeNameContextKey, name)`
 	if endUserEmailContextKeyWritePattern.MatchString(negative) {
 		t.Fatal("pattern matched an unrelated context.WithValue call")
+	}
+
+	// Known, documented gap (see the pattern's doc comment): a first
+	// argument containing a top-level comma is not matched. Pinned here so
+	// a future tightening of the pattern is a deliberate choice, not an
+	// unnoticed behavior change.
+	knownGap := `return context.WithValue(foo(a, b), EndUserEmailContextKey, e)`
+	if endUserEmailContextKeyWritePattern.MatchString(knownGap) {
+		t.Fatal("pattern unexpectedly matched a first argument with a top-level comma — update the doc comment, this is no longer a known gap")
 	}
 }
 
