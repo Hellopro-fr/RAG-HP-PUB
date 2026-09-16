@@ -88,6 +88,36 @@ func TestGateAllowsEmail(t *testing.T) {
 	}
 }
 
+// TestGateAllowsEmail_UnrecognisedMinRoleDenies guards Finding 3: before the
+// fix, GateAllowsEmail's final comparison was
+// `auth.RoleLevelFor(role) >= auth.RoleLevelFor(minRole)`, and RoleLevelFor
+// returns 0 for any unrecognised string. So an unrecognised min_role (e.g.
+// from a direct SQL edit, a backup restore, or a future import path) resolved
+// to a required level of 0, which EVERY user with a gateway_users row
+// satisfies — including one whose own role is also unrecognised (0 >= 0).
+// A genuine admin must still be denied: an unrecognised gate value must fail
+// closed, not silently disable the gate.
+func TestGateAllowsEmail_UnrecognisedMinRoleDenies(t *testing.T) {
+	users := fakeUsers{
+		"admin@hellopro.fr": auth.RoleAdmin,
+		"weird@hellopro.fr": "Admin", // unrecognised role too — must not make 0 >= 0 pass
+	}
+
+	unrecognisedRoles := []string{"Admin", "wizard", "ADMIN"}
+	for _, minRole := range unrecognisedRoles {
+		t.Run("genuine admin, min_role="+minRole, func(t *testing.T) {
+			if GateAllowsEmail(minRole, "admin@hellopro.fr", users) {
+				t.Fatalf("GateAllowsEmail(%q, admin@hellopro.fr) = true, want false — unrecognised min_role must fail closed", minRole)
+			}
+		})
+		t.Run("user with unrecognised role, min_role="+minRole, func(t *testing.T) {
+			if GateAllowsEmail(minRole, "weird@hellopro.fr", users) {
+				t.Fatalf("GateAllowsEmail(%q, weird@hellopro.fr) = true, want false — 0 >= 0 must not pass", minRole)
+			}
+		})
+	}
+}
+
 func TestGateAllows_ContextForm(t *testing.T) {
 	users := fakeUsers{"admin@hellopro.fr": auth.RoleAdmin}
 

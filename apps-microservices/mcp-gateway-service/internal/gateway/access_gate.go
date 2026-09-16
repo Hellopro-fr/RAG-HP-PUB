@@ -35,6 +35,16 @@ func GateAllowsEmail(minRole, email string, users gatewayUserFinder) bool {
 	if minRole == "" {
 		return true // public: the value every pre-existing server carries
 	}
+	if auth.RoleLevelFor(minRole) == 0 {
+		// RoleLevelFor returns 0 for any unrecognised string, same as its
+		// "lowest defined role" default. If min_role ever holds something
+		// unrecognised (miscased via direct SQL, a backup restore, or a
+		// future import path), a required level of 0 would let EVERY user
+		// with a gateway_users row through — including one whose own role
+		// is also unrecognised (0 >= 0). Deny instead: an unrecognised gate
+		// value must fail closed, not silently disable the gate.
+		return false
+	}
 	role, ok := gatewayUserRole(users, email)
 	if !ok {
 		return false
