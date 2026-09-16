@@ -101,7 +101,11 @@ MinRole string `gorm:"type:varchar(20);not null;default:''" json:"min_role"`
 Accepted values: `''`, `config-only`, `read-only`, `admin`. Any other string is
 **rejected on write** in the DTO layer (`internal/api/dto.go`) — an unknown
 value must never be silently coerced to public. GORM auto-migration adds the
-column; `init-db/init-mcp-gateway-db.sql` gains the matching DDL.
+column, and that is the whole schema step: `init-db/init-mcp-gateway-db.sql`
+holds **no** `CREATE TABLE` at all (it is a `GRANT` plus the `templates` seed
+`INSERT`; every table is created by AutoMigrate in `internal/db/mysql.go`), so
+there is no DDL there to amend. *Corrected 2026-09-16 during implementation —
+this paragraph previously claimed the init-db script gains matching DDL.*
 
 ### 5.2 The predicate
 

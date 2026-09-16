@@ -17,9 +17,9 @@
 - The predicate is **fail-closed**: nil repository, missing email, unknown email, repository error, and role-below-threshold all deny.
 - `internal/api/handler.go` `isAdminOnly` / `isReadOnlyPlus` are **not** modified. This gate covers the MCP surface only; the browser admin REST API keeps its current role model.
 - Granularity is the **server**, never the tool.
-- Go formatting: `gofmt -l .` must print nothing before each commit.
-- Every Go task ends with `go vet ./... && go build ./... && go test ./...` green in `apps-microservices/mcp-gateway-service`.
-- Frontend tasks end with `npm run test` green in `apps-microservices/mcp-gateway-frontend`.
+- Go formatting: `gofmt -l <your touched files>` must print nothing before each commit (repo-wide `gofmt -l .` prints 43 pre-existing files — not yours to fix).
+- Every Go task ends with `go vet ./... && go build ./... && go test ./...` green in `apps-microservices/mcp-gateway-service` (baseline: 573 passing, 0 failing).
+- **Corrected 2026-09-16 — measured baselines.** `gofmt -l .` does NOT print nothing on this repo (43 pre-existing unformatted Go files) and `npm run test` is NOT green (20 of 31 frontend spec files cannot execute: vite.config.ts has no `test:` block, so `describe` and `window` are undefined). The binding rule is therefore: **(a)** every file your task touches is gofmt-clean, and **(b)** your task does not increase the baseline failure count (Go 0 failing; frontend 20 failing files). Do not repair the vitest config or the formatting debt — both are filed as deferred findings.
 - Commit messages: Conventional Commits, English subject, body carrying an `EN:` line and an `FR:` line. Stage with explicit paths.
 - The repo's PreToolUse secret scanner scans all untracked files whenever a command contains `git add`. If it blocks on unrelated untracked caches, stage with `git update-index --add <paths>` then `git commit`.
 
@@ -32,7 +32,7 @@
 | File | Responsibility |
 |---|---|
 | `internal/db/models.go` | `MCPServer.MinRole` column (modify) |
-| `init-db/init-mcp-gateway-db.sql` | matching DDL (modify) |
+| ~~`init-db/init-mcp-gateway-db.sql`~~ | **Not modified** — the file has no `CREATE TABLE`; schema is entirely GORM AutoMigrate (corrected 2026-09-16) |
 | `internal/api/dto.go` | `min_role` on create / update / response DTOs (modify) |
 | `internal/api/server_handlers.go` | validate + persist `min_role` (modify) |
 | `internal/gateway/access_gate.go` | **new** — `GateAllowsEmail`, `GateAllows`, `FilterServersByGate`, `gatewayUserRole` |
@@ -62,7 +62,6 @@
 
 **Files:**
 - Modify: `internal/db/models.go` (`MCPServer`)
-- Modify: `init-db/init-mcp-gateway-db.sql`
 - Modify: `internal/api/dto.go`
 - Modify: `internal/api/server_handlers.go`
 - Test: `internal/api/min_role_dto_test.go` (create)
@@ -137,13 +136,9 @@ In `internal/db/models.go`, inside `type MCPServer struct`, directly after the `
 	MinRole string `gorm:"type:varchar(20);not null;default:''" json:"min_role"`
 ```
 
-- [ ] **Step 6: Add the matching DDL**
+- [x] **Step 6: ~~Add the matching DDL~~ — VOID, no action**
 
-In `init-db/init-mcp-gateway-db.sql`, in the `mcp_servers` `CREATE TABLE`, after the `icon` column:
-
-```sql
-  min_role VARCHAR(20) NOT NULL DEFAULT '',
-```
+**Corrected 2026-09-16.** `init-db/init-mcp-gateway-db.sql` contains **no `CREATE TABLE` statement at all** — it is a `GRANT` plus the `templates` catalog seed `INSERT`. Every table in this service is created by GORM AutoMigrate (`internal/db/mysql.go`), so the struct tag in Step 5 is the entire schema change. Do **not** add a `CREATE TABLE` block to that file; leave it untouched.
 
 - [ ] **Step 7: Add the DTO fields**
 
@@ -181,7 +176,7 @@ In `internal/api/server_handlers.go`:
   			writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "min_role must be one of: \"\", config-only, read-only, admin"})
   			return
   		}
-  		srv.MinRole = *req.MinRole
+  		updates["min_role"] = *req.MinRole // handleUpdateServer accumulates into an updates map consumed by h.repo.Update — mirror the adjacent ToolPrefix block
   	}
   ```
 - In the function that builds `ServerResponse` from a `db.MCPServer`, add `MinRole: srv.MinRole`.
