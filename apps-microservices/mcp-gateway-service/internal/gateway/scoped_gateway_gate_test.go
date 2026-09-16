@@ -130,7 +130,18 @@ func TestToolsCall_DeniesGatedBackendForScopeToken(t *testing.T) {
 		ID:     json.RawMessage(`1`),
 		Params: json.RawMessage(`{"name":"gated_tool","arguments":{}}`),
 	}
-	if resp := sg.handleToolsCall(context.Background(), req); resp.Error == nil {
+	resp := sg.handleToolsCall(context.Background(), req)
+
+	if resp.Error == nil {
 		t.Fatal("scope token reached a gated backend")
+	}
+	// Assert on the message, not just non-nil: the test backend has no
+	// MessageURL, so a missing gate would still fall through to
+	// requestHeadersFor -> transport.NewBackendClientWithEndpoint("", ...)
+	// -> client.CallTool, which fails on the empty endpoint and returns a
+	// non-nil error for an entirely unrelated (transport) reason. Checking
+	// the message is what pins this test to the gate specifically.
+	if !strings.Contains(strings.ToLower(resp.Error.Message), "not allowed") {
+		t.Fatalf("error message = %q, want it to say the call is not allowed", resp.Error.Message)
 	}
 }
