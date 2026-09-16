@@ -543,6 +543,12 @@ func (h *Handler) handleUpdateServer(w http.ResponseWriter, r *http.Request) {
 		h.registry.SetToolPrefix(id, *req.ToolPrefix)
 	}
 
+	// Update min_role on the in-memory registry if changed (even without
+	// re-discovery) so the access gate takes effect immediately.
+	if req.MinRole != nil {
+		h.registry.SetMinRole(id, *req.MinRole)
+	}
+
 	// Re-discover if URL or auth headers changed
 	if (urlChanged || authChanged) && existing.IsActive {
 		h.registry.Unregister(id)
@@ -561,6 +567,10 @@ func (h *Handler) handleUpdateServer(w http.ResponseWriter, r *http.Request) {
 				refreshedTags = append(refreshedTags, t.Tag)
 			}
 			h.registry.SetTags(id, refreshedTags)
+			// Same reasoning for min_role: Unregister above drops the
+			// preservation clause's `prev`, so push the persisted value
+			// back in after the fresh init result lands.
+			h.registry.SetMinRole(id, refreshed.MinRole)
 			if backend := h.registry.FindByID(id); backend != nil {
 				h.saveBackendCapabilities(id, backend)
 			}

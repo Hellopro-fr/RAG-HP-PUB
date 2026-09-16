@@ -28,12 +28,16 @@ type BackendServer struct {
 	// Tags echoes mcp_servers.server_tags (one string per row). Used by the
 	// header injector dispatch to identify Zoho backends without depending
 	// on tool_prefix.
-	Tags          []string
-	Capabilities  mcp.ServerCapabilities
-	Tools         []mcp.Tool
-	Resources     []mcp.Resource
-	Prompts       []mcp.Prompt
-	AuthHeaders   map[string]string // extra headers forwarded to this backend
+	Tags []string
+	// MinRole echoes mcp_servers.min_role. Empty means public. Read by the
+	// access gate to decide whether this backend is visible and reachable
+	// for the caller behind the current request.
+	MinRole      string
+	Capabilities mcp.ServerCapabilities
+	Tools        []mcp.Tool
+	Resources    []mcp.Resource
+	Prompts      []mcp.Prompt
+	AuthHeaders  map[string]string // extra headers forwarded to this backend
 }
 
 // HasTag returns true when target is in s.Tags (case-insensitive).
@@ -122,6 +126,20 @@ func (r *Registry) SetTags(id string, tags []string) {
 		log.Printf("[registry] SetTags id=%s tags=%v", id, tags)
 	} else {
 		log.Printf("[registry] SetTags id=%s tags=%v — backend NOT in registry (not yet discovered or unregistered)", id, tags)
+	}
+}
+
+// SetMinRole updates the access gate level for a registered backend server.
+// Used by the PUT /servers/{id} handler so a min_role edit takes effect
+// without waiting for a re-discovery cycle.
+func (r *Registry) SetMinRole(id, minRole string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if s, ok := r.servers[id]; ok {
+		s.MinRole = minRole
+		log.Printf("[registry] SetMinRole id=%s min_role=%q", id, minRole)
+	} else {
+		log.Printf("[registry] SetMinRole id=%s min_role=%q — backend NOT in registry", id, minRole)
 	}
 }
 
