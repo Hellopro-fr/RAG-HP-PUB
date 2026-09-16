@@ -3,6 +3,8 @@ package api
 import (
 	"encoding/json"
 	"time"
+
+	"mcp-gateway/internal/auth"
 )
 
 // ── Request DTOs ────────────────────────────────────────────────────────────────
@@ -16,7 +18,8 @@ type CreateServerRequest struct {
 	Tags                []string          `json:"tags,omitempty"`
 	AutoDiscover        bool              `json:"auto_discover"`
 	ToolPrefix          string            `json:"tool_prefix,omitempty"` // alphanumeric prefix for tool names: {prefix}_{tool_name}
-	Icon                string            `json:"icon,omitempty"`        // URL or path to the server icon
+	MinRole             string            `json:"min_role,omitempty"`
+	Icon                string            `json:"icon,omitempty"` // URL or path to the server icon
 	// MCP client config
 	MCPTransport string            `json:"mcp_transport,omitempty"` // "http", "sse", "stdio"
 	MCPCommand   string            `json:"mcp_command,omitempty"`   // stdio: command to run
@@ -32,7 +35,8 @@ type UpdateServerRequest struct {
 	ConnectTimeoutMs    *uint             `json:"connect_timeout_ms,omitempty"`
 	Tags                *[]string         `json:"tags,omitempty"`
 	ToolPrefix          *string           `json:"tool_prefix,omitempty"` // alphanumeric prefix for tool names
-	Icon                *string           `json:"icon,omitempty"`        // URL or path to the server icon
+	MinRole             *string           `json:"min_role,omitempty"`
+	Icon                *string           `json:"icon,omitempty"` // URL or path to the server icon
 	// Documentation fields
 	DocSlug        *string          `json:"doc_slug,omitempty"`
 	DocDescription *string          `json:"doc_description,omitempty"`
@@ -54,21 +58,22 @@ type ToolSummary struct {
 }
 
 type ServerResponse struct {
-	ID                  string     `json:"id"`
-	Name                string     `json:"name"`
-	URL                 string     `json:"url"`
-	MessageURL          string     `json:"message_url,omitempty"`
-	TransportType       string     `json:"transport_type,omitempty"`
-	ServerName          string     `json:"server_name,omitempty"`
-	ServerVersion       string     `json:"server_version,omitempty"`
-	TransportPreference string     `json:"transport_preference"`
-	ConnectTimeoutMs    uint       `json:"connect_timeout_ms"`
-	IsActive            bool       `json:"is_active"`
-	HealthStatus        string     `json:"health_status"`
-	LastHealthCheck     *time.Time `json:"last_health_check,omitempty"`
-	LastError           string     `json:"last_error,omitempty"`
-	LastDiscoveredAt    *time.Time `json:"last_discovered_at,omitempty"`
+	ID                  string            `json:"id"`
+	Name                string            `json:"name"`
+	URL                 string            `json:"url"`
+	MessageURL          string            `json:"message_url,omitempty"`
+	TransportType       string            `json:"transport_type,omitempty"`
+	ServerName          string            `json:"server_name,omitempty"`
+	ServerVersion       string            `json:"server_version,omitempty"`
+	TransportPreference string            `json:"transport_preference"`
+	ConnectTimeoutMs    uint              `json:"connect_timeout_ms"`
+	IsActive            bool              `json:"is_active"`
+	HealthStatus        string            `json:"health_status"`
+	LastHealthCheck     *time.Time        `json:"last_health_check,omitempty"`
+	LastError           string            `json:"last_error,omitempty"`
+	LastDiscoveredAt    *time.Time        `json:"last_discovered_at,omitempty"`
 	ToolPrefix          string            `json:"tool_prefix"`
+	MinRole             string            `json:"min_role"`
 	Icon                string            `json:"icon,omitempty"`
 	ToolsCount          int               `json:"tools_count"`
 	ToolNames           []ToolSummary     `json:"tool_names"`
@@ -87,10 +92,10 @@ type ServerResponse struct {
 	// TemplateSlug is non-empty when the server originated from a template
 	// flow (stdio instance or http_batch sheet import). The frontend uses it
 	// to badge template-origin rows or hide them from admin views.
-	TemplateSlug        string            `json:"template_slug,omitempty"`
-	CreatedBy           string            `json:"created_by,omitempty"`
-	CreatedAt           time.Time         `json:"created_at"`
-	UpdatedAt           time.Time         `json:"updated_at"`
+	TemplateSlug string    `json:"template_slug,omitempty"`
+	CreatedBy    string    `json:"created_by,omitempty"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 type ServerDetailResponse struct {
@@ -149,4 +154,16 @@ type DocsServerDetail struct {
 	DocsServerSummary
 	Tools       []ToolResponse  `json:"tools"`
 	ConfigGuide json.RawMessage `json:"config_guide,omitempty"`
+}
+
+// ValidMinRole reports whether s is an accepted mcp_servers.min_role value.
+// Empty means "public". Comparison is exact: an unknown or differently-cased
+// string must be rejected, never coerced to public.
+func ValidMinRole(s string) bool {
+	switch s {
+	case "", auth.RoleConfigOnly, auth.RoleReadOnly, auth.RoleAdmin:
+		return true
+	default:
+		return false
+	}
 }

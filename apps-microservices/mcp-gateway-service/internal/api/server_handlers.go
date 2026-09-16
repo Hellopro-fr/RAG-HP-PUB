@@ -14,14 +14,14 @@ import (
 	"mcp-gateway/internal/auth"
 	"mcp-gateway/internal/bddcatalog"
 	"mcp-gateway/internal/config"
+	"mcp-gateway/internal/crypto"
 	"mcp-gateway/internal/db"
 	"mcp-gateway/internal/gateway"
 	goGoogle "mcp-gateway/internal/google"
-	"mcp-gateway/internal/crypto"
 	"mcp-gateway/internal/leexiadmin"
-	"mcp-gateway/internal/ringoveradmin"
 	oauth2pkg "mcp-gateway/internal/oauth2"
 	"mcp-gateway/internal/repository"
+	"mcp-gateway/internal/ringoveradmin"
 	"mcp-gateway/internal/runnerclient"
 	"mcp-gateway/internal/slack"
 	"mcp-gateway/internal/urlvalidation"
@@ -263,6 +263,11 @@ func (h *Handler) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !ValidMinRole(req.MinRole) {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "min_role must be one of: \"\", config-only, read-only, admin"})
+		return
+	}
+
 	id := uuid.New().String()
 	srv := db.MCPServer{
 		ID:                  id,
@@ -275,6 +280,7 @@ func (h *Handler) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 		MCPTransport:        mcpTransport,
 		MCPCommand:          req.MCPCommand,
 		ToolPrefix:          req.ToolPrefix,
+		MinRole:             req.MinRole,
 		Icon:                req.Icon,
 		DocSlug:             generateDocSlug(req.Name, id),
 		CreatedBy:           auth.UserEmailFromContext(r.Context()),
@@ -485,6 +491,13 @@ func (h *Handler) handleUpdateServer(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		updates["tool_prefix"] = *req.ToolPrefix
+	}
+	if req.MinRole != nil {
+		if !ValidMinRole(*req.MinRole) {
+			writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "min_role must be one of: \"\", config-only, read-only, admin"})
+			return
+		}
+		updates["min_role"] = *req.MinRole
 	}
 	if req.Icon != nil {
 		updates["icon"] = *req.Icon
@@ -761,11 +774,11 @@ func (h *Handler) handleDisableTool(w http.ResponseWriter, r *http.Request, serv
 func (h *Handler) saveBackendCapabilities(id string, backend *gateway.BackendServer) {
 	capsRaw, _ := json.Marshal(backend.Capabilities)
 	dbSrv := &db.MCPServer{
-		ID:            id,
-		MessageURL:    backend.MessageURL,
-		TransportType: backend.TransportType,
-		ServerName:    backend.Name,
-		ServerVersion: backend.Version,
+		ID:              id,
+		MessageURL:      backend.MessageURL,
+		TransportType:   backend.TransportType,
+		ServerName:      backend.Name,
+		ServerVersion:   backend.Version,
 		CapabilitiesRaw: capsRaw,
 	}
 	for _, t := range backend.Tools {
@@ -898,6 +911,7 @@ func toServerResponse(srv *db.MCPServer) ServerResponse {
 		LastError:           srv.LastError,
 		LastDiscoveredAt:    srv.LastDiscoveredAt,
 		ToolPrefix:          srv.ToolPrefix,
+		MinRole:             srv.MinRole,
 		Icon:                srv.Icon,
 		ToolsCount:          len(srv.Tools),
 		ToolNames:           toolNames,
