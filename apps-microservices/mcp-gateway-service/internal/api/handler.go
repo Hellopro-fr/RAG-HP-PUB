@@ -672,6 +672,11 @@ func (h *Handler) handleDiscoverAll(w http.ResponseWriter, r *http.Request) {
 			result["status"] = "failed"
 			result["error"] = err.Error()
 		} else {
+			// The explicit Unregister above wipes gateway.go's preservation
+			// clause's prev entry, same as handleDiscoverServer — push
+			// min_role back in or a bulk re-discover silently makes every
+			// gated server public at once.
+			h.registry.SetMinRole(srv.ID, srv.MinRole)
 			if backend := h.registry.FindByID(srv.ID); backend != nil {
 				h.saveBackendCapabilities(srv.ID, backend)
 			}

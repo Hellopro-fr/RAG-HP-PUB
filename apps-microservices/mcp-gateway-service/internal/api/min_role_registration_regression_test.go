@@ -294,3 +294,82 @@ func TestHandleDiscoverServer_PreservesMinRole(t *testing.T) {
 		t.Fatalf("registry MinRole = %q after explicit re-discover, want %q — an admin clicking \"Rediscover\" would have made this server public", backendEntry.MinRole, "admin")
 	}
 }
+
+// TestHandleDiscoverAll_PreservesMinRole guards the fifth (and widest-blast-
+// radius) regression: handleDiscoverAll (POST /servers/discover-all) loops
+// over every active server and Unregisters each one before re-discovering
+// it — same shape as handleDiscoverServer, but a single call un-gates every
+// admin-only backend in the registry simultaneously if min_role isn't
+// pushed back. Registers one gated ("admin") and one public ("") server and
+// asserts only the gated one keeps its MinRole after the bulk re-discover
+// (the public one is a control: it must not spuriously become gated).
+func TestHandleDiscoverAll_PreservesMinRole(t *testing.T) {
+	gatedBackend := fakeMCPBackend(t)
+	defer gatedBackend.Close()
+	publicBackend := fakeMCPBackend(t)
+	defer publicBackend.Close()
+
+	h := newMinRoleHandler(t)
+
+	gatedBody, _ := json.Marshal(CreateServerRequest{
+		Name:         "gated-server",
+		URL:          gatedBackend.URL,
+		AutoDiscover: true,
+		MinRole:      "admin",
+	})
+	gatedReq := httptest.NewRequest(http.MethodPost, "/api/v1/servers", bytes.NewReader(gatedBody))
+	gatedRec := httptest.NewRecorder()
+	h.handleCreateServer(gatedRec, gatedReq)
+	if gatedRec.Code != http.StatusCreated {
+		t.Fatalf("setup gated create status = %d, body=%s", gatedRec.Code, gatedRec.Body.String())
+	}
+	var gatedCreated ServerResponse
+	if err := json.Unmarshal(gatedRec.Body.Bytes(), &gatedCreated); err != nil {
+		t.Fatalf("decode gated create response: %v", err)
+	}
+	gatedID := gatedCreated.ID
+
+	publicBody, _ := json.Marshal(CreateServerRequest{
+		Name:         "public-server",
+		URL:          publicBackend.URL,
+		AutoDiscover: true,
+	})
+	publicReq := httptest.NewRequest(http.MethodPost, "/api/v1/servers", bytes.NewReader(publicBody))
+	publicRec := httptest.NewRecorder()
+	h.handleCreateServer(publicRec, publicReq)
+	if publicRec.Code != http.StatusCreated {
+		t.Fatalf("setup public create status = %d, body=%s", publicRec.Code, publicRec.Body.String())
+	}
+	var publicCreated ServerResponse
+	if err := json.Unmarshal(publicRec.Body.Bytes(), &publicCreated); err != nil {
+		t.Fatalf("decode public create response: %v", err)
+	}
+	publicID := publicCreated.ID
+
+	if got := h.registry.FindByID(gatedID); got == nil || got.MinRole != "admin" {
+		t.Fatalf("setup: gated server MinRole not admin right after create (got %+v)", got)
+	}
+
+	discoverAllReq := httptest.NewRequest(http.MethodPost, "/api/v1/servers/discover-all", nil)
+	discoverAllRec := httptest.NewRecorder()
+	h.handleDiscoverAll(discoverAllRec, discoverAllReq)
+	if discoverAllRec.Code != http.StatusOK {
+		t.Fatalf("discover-all status = %d, body=%s", discoverAllRec.Code, discoverAllRec.Body.String())
+	}
+
+	gatedEntry := h.registry.FindByID(gatedID)
+	if gatedEntry == nil {
+		t.Fatalf("gated server %s was not registered after discover-all", gatedID)
+	}
+	if gatedEntry.MinRole != "admin" {
+		t.Fatalf("registry MinRole = %q after discover-all, want %q — one call to /servers/discover-all would have un-gated every admin-only backend simultaneously", gatedEntry.MinRole, "admin")
+	}
+
+	publicEntry := h.registry.FindByID(publicID)
+	if publicEntry == nil {
+		t.Fatalf("public server %s was not registered after discover-all", publicID)
+	}
+	if publicEntry.MinRole != "" {
+		t.Fatalf("registry MinRole = %q for the public control server after discover-all, want empty", publicEntry.MinRole)
+	}
+}
