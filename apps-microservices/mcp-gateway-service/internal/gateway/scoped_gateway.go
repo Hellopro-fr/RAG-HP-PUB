@@ -158,11 +158,11 @@ func (sg *ScopedGateway) Handle(ctx context.Context, req *mcp.Request) *mcp.Resp
 	case "tools/call":
 		return sg.handleToolsCall(ctx, req)
 	case "resources/list":
-		return sg.handleResourcesList(req)
+		return sg.handleResourcesList(ctx, req)
 	case "resources/read":
 		return sg.handleResourcesRead(ctx, req)
 	case "prompts/list":
-		return sg.handlePromptsList(req)
+		return sg.handlePromptsList(ctx, req)
 	case "prompts/get":
 		return sg.handlePromptsGet(ctx, req)
 	default:
@@ -848,8 +848,12 @@ func (sg *ScopedGateway) injectZohoHeader(ctx context.Context, headers map[strin
 	}
 }
 
-func (sg *ScopedGateway) handleResourcesList(req *mcp.Request) *mcp.Response {
-	resources := sg.registry.MergedResourcesFiltered(sg.allowedIDs)
+func (sg *ScopedGateway) handleResourcesList(ctx context.Context, req *mcp.Request) *mcp.Response {
+	// Narrow the scope to backends this caller may reach — mirrors
+	// handleToolsList so a gated backend's resources never appear for a
+	// caller that doesn't meet its min_role (including mcp_… scope tokens
+	// and client_credentials grants, which never carry an end-user email).
+	resources := sg.registry.MergedResourcesFiltered(sg.allowedIDsMinusGated(ctx))
 	if resources == nil {
 		resources = []mcp.Resource{}
 	}
@@ -867,6 +871,12 @@ func (sg *ScopedGateway) handleResourcesRead(ctx context.Context, req *mcp.Reque
 		return errorResp(req.ID, mcp.ErrInvalidParams, fmt.Sprintf("unknown resource: %s", params.URI))
 	}
 
+	if !GateAllows(backend.MinRole, ctx, sg.gatewayUsers) {
+		email, _ := scopetoken.EndUserEmailFromContext(ctx)
+		log.Printf("[scoped] resources/read DENIED uri=%s backend=%s min_role=%q email=%q — caller does not meet the server's required role", params.URI, backend.ID, backend.MinRole, email)
+		return errorResp(req.ID, mcp.ErrInvalidParams, fmt.Sprintf("resource %q is not allowed: this server requires the gateway role %q", params.URI, backend.MinRole))
+	}
+
 	client := transport.NewBackendClientWithEndpoint(backend.MessageURL, backend.AuthHeaders)
 	result, err := client.ReadResource(ctx, params)
 	if err != nil {
@@ -875,8 +885,9 @@ func (sg *ScopedGateway) handleResourcesRead(ctx context.Context, req *mcp.Reque
 	return okResp(req.ID, result)
 }
 
-func (sg *ScopedGateway) handlePromptsList(req *mcp.Request) *mcp.Response {
-	prompts := sg.registry.MergedPromptsFiltered(sg.allowedIDs)
+func (sg *ScopedGateway) handlePromptsList(ctx context.Context, req *mcp.Request) *mcp.Response {
+	// See handleResourcesList: same gate-aware narrowing.
+	prompts := sg.registry.MergedPromptsFiltered(sg.allowedIDsMinusGated(ctx))
 	if prompts == nil {
 		prompts = []mcp.Prompt{}
 	}
@@ -892,6 +903,12 @@ func (sg *ScopedGateway) handlePromptsGet(ctx context.Context, req *mcp.Request)
 	backend := sg.registry.FindByPromptFiltered(params.Name, sg.allowedIDs)
 	if backend == nil {
 		return errorResp(req.ID, mcp.ErrInvalidParams, fmt.Sprintf("unknown prompt: %s", params.Name))
+	}
+
+	if !GateAllows(backend.MinRole, ctx, sg.gatewayUsers) {
+		email, _ := scopetoken.EndUserEmailFromContext(ctx)
+		log.Printf("[scoped] prompts/get DENIED name=%s backend=%s min_role=%q email=%q — caller does not meet the server's required role", params.Name, backend.ID, backend.MinRole, email)
+		return errorResp(req.ID, mcp.ErrInvalidParams, fmt.Sprintf("prompt %q is not allowed: this server requires the gateway role %q", params.Name, backend.MinRole))
 	}
 
 	client := transport.NewBackendClientWithEndpoint(backend.MessageURL, backend.AuthHeaders)
