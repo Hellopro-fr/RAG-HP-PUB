@@ -4,6 +4,11 @@
 - **Services:** new `apps-microservices/mcp-table-service` (Go 1.24), plus two small changes in `apps-microservices/mcp-gateway-service`
 - **Status:** Approved design — pending implementation plan
 - **Author:** Claude (pair) + sandrianirinaharivelo@hellopro.fr
+- **Amended 2026-09-16** by `2026-09-16-mcp-server-min-role-gate-design.md`:
+  the privilege model in §3 becomes **admin-only** (was role-mirroring), and the
+  §4 non-goal about `tools/list` hiding is struck. Both are marked inline below.
+  Everything else in this document — the 13 tools, tool prefix `tables`, port
+  8597, the act-as auth path — stands unchanged.
 
 ## 1. Problem
 
@@ -55,7 +60,7 @@ the gateway can list, inspect, complete, activate and delete registry tables —
 
 | Question | Decision |
 |---|---|
-| Privilege model | **Gateway role.** Email from the OAuth2 access token → `gateway_users.role`. admin = all tools; read-only = list/get only; config-only or unknown = denied. Mirrors the UI exactly. |
+| Privilege model | ~~**Gateway role.** Email from the OAuth2 access token → `gateway_users.role`. admin = all tools; read-only = list/get only; config-only or unknown = denied. Mirrors the UI exactly.~~ **SUPERSEDED 2026-09-16 → admin-only.** Every one of the 13 tools requires `gateway_users.role == "admin"`, including `list_registered_tables` and `get_table_info`. This is enforced at the *server* level by the `min_role` gate, not per tool: the `mcp_servers` row is registered with `min_role='admin'`, so a non-admin never reaches the service. The act-as branch below is unchanged — it still resolves whatever role the user holds; the gate decides reachability. See `2026-09-16-mcp-server-min-role-gate-design.md`. |
 | Catalog browsing | **Yes.** Tools to list the 3 databases, catalog tables (flagged "already registered") and catalog fields, so an LLM can find what to add. |
 | Architecture | **A — thin MCP façade over the gateway REST API.** The gateway stays the single writer; the service never touches MySQL. |
 | Activation rule | A table is only considered activatable when it has **≥ 1 exposed field**. `set_tables_active` refuses activation of zero-field tables. `add_fields` is the step that turns a draft into an active table. |
@@ -79,9 +84,15 @@ inside the gateway (contradicts the request, grows the gateway further).
 **Non-goals**
 - Scope tokens (`mcp_…`) carry no end user → `tools/call` fails closed for
   them. Machine access goes through an OAuth2 client with a real user.
-- No per-role hiding in `tools/list`: the gateway serves the cached discovery
+- ~~No per-role hiding in `tools/list`: the gateway serves the cached discovery
   catalog (only Zoho has a live per-user `tools/list`), so hiding would not
-  reach the client. Admins keep per-tool scoping on tokens / clients.
+  reach the client.~~ **STRUCK 2026-09-16.** The stated reason is incorrect:
+  `handleToolsList` (`scoped_gateway.go:195`) already drops whole backends per
+  viewer via `nonZohoAllowedIDs` (`:260`), precisely so the admin catalog is not
+  leaked to a non-admin client. The cache is the *source* of tool data; the
+  *scope* is resolved per request. Per-viewer hiding of this backend is now a
+  goal, delivered by the `min_role` gate. Admins keep per-tool scoping on
+  tokens / clients.
 - No registry-wide `_meta` (description / usage) editing, no export / import,
   no moving a table between databases, no frontend change.
 
