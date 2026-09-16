@@ -21,13 +21,19 @@ type gatewayUserFinder interface {
 	GetByEmail(email string) (*db.GatewayUser, error)
 }
 
+// serverLister abstracts repository.ServerRepo for the consent screen so
+// the access-gate filtering can be tested without GORM.
+type serverLister interface {
+	ListActive() ([]db.MCPServer, error)
+}
+
 // AuthServer holds dependencies for the OAuth2 Authorization Server endpoints.
 type AuthServer struct {
 	oauth2Repo   *repository.OAuth2Repo
 	authCodeRepo *repository.AuthCodeRepo
 	consentRepo  *repository.ConsentRepo
 	refreshRepo  *repository.RefreshRepo
-	serverRepo   *repository.ServerRepo
+	serverRepo   serverLister
 	// userRepo (optional) resolves a consent viewer's gateway role so
 	// servers carrying a min_role can be hidden from viewers below it.
 	// When nil, gateway.FilterServersByGate denies every gated server —
@@ -61,7 +67,7 @@ type AuthServerConfig struct {
 	AuthCodeRepo   *repository.AuthCodeRepo
 	ConsentRepo    *repository.ConsentRepo
 	RefreshRepo    *repository.RefreshRepo
-	ServerRepo     *repository.ServerRepo
+	ServerRepo     serverLister
 	UserRepo       gatewayUserFinder // optional, enables the min_role consent gate
 	SSOSessionRepo ssoSessionFinder  // optional, enables gw_session bridge
 	ZohoFetcher    ZohoStateForUser  // optional, partitions consent screen per viewer
