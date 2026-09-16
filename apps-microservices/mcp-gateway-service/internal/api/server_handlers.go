@@ -335,6 +335,12 @@ func (h *Handler) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 			if len(req.Tags) > 0 {
 				h.registry.SetTags(id, req.Tags)
 			}
+			// This is a brand-new id, so gateway.go's rediscovery
+			// preservation clause has no prev entry to fall back to —
+			// push min_role explicitly or a gated server registers public.
+			if req.MinRole != "" {
+				h.registry.SetMinRole(id, req.MinRole)
+			}
 			// Récupère le serveur mis à jour pour sauvegarder les capabilities
 			if backend := h.registry.FindByID(id); backend != nil {
 				h.saveBackendCapabilities(id, backend)
@@ -650,6 +656,10 @@ func (h *Handler) handleEnableServer(w http.ResponseWriter, r *http.Request) {
 		_ = h.repo.UpdateHealth(id, "unhealthy", err.Error())
 	} else {
 		h.registry.SetToolPrefix(id, srv.ToolPrefix)
+		// handleDisableServer unregisters the backend outright, so a
+		// disable→enable cycle leaves gateway.go's preservation clause
+		// with no prev entry — push min_role explicitly here too.
+		h.registry.SetMinRole(id, srv.MinRole)
 		if backend := h.registry.FindByID(id); backend != nil {
 			h.saveBackendCapabilities(id, backend)
 		}
@@ -706,6 +716,10 @@ func (h *Handler) handleDiscoverServer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.registry.SetToolPrefix(id, srv.ToolPrefix)
+	// The explicit Unregister above wipes gateway.go's preservation clause's
+	// prev entry, same as the enable path — push min_role back in or a
+	// re-discover silently makes a gated server public.
+	h.registry.SetMinRole(id, srv.MinRole)
 	if backend := h.registry.FindByID(id); backend != nil {
 		h.saveBackendCapabilities(id, backend)
 	}
