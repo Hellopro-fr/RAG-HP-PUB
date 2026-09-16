@@ -418,6 +418,7 @@ func registerRESTAndOAuthServer(
 		ConsentRepo:    consentRepo,
 		RefreshRepo:    refreshRepo,
 		ServerRepo:     dbs.repo,
+		UserRepo:       dbs.userRepo,
 		SSOSessionRepo: ssoSessionRepo,
 		ZohoFetcher:    gw,
 		DocsURL:        strings.TrimRight(cfg.GatewayPublicURL, "/") + "/docs/zohocrm",

@@ -14,6 +14,13 @@ type ssoSessionFinder interface {
 	FindByID(id string) (*db.SSOSession, error)
 }
 
+// gatewayUserFinder is the slice of *repository.UserRepo the consent screen
+// needs to resolve a viewer's role. An interface keeps authserver tests free
+// of GORM. nil disables the access gate — see the note on AuthServer.userRepo.
+type gatewayUserFinder interface {
+	GetByEmail(email string) (*db.GatewayUser, error)
+}
+
 // AuthServer holds dependencies for the OAuth2 Authorization Server endpoints.
 type AuthServer struct {
 	oauth2Repo   *repository.OAuth2Repo
@@ -21,6 +28,12 @@ type AuthServer struct {
 	consentRepo  *repository.ConsentRepo
 	refreshRepo  *repository.RefreshRepo
 	serverRepo   *repository.ServerRepo
+	// userRepo (optional) resolves a consent viewer's gateway role so
+	// servers carrying a min_role can be hidden from viewers below it.
+	// When nil, gateway.FilterServersByGate denies every gated server —
+	// fail-closed: an unwired repo hides gated servers rather than
+	// exposing them.
+	userRepo gatewayUserFinder
 	// ssoSessionRepo is the optional bridge into the admin SSO session store.
 	// When set, GET /authorize with no mcp_session cookie but a valid gw_session
 	// cookie reuses the SSO identity instead of bouncing through /sso/login.
@@ -34,12 +47,12 @@ type AuthServer struct {
 	// section so viewers know where to learn how to wire their Zoho
 	// import. Computed from GATEWAY_PUBLIC_URL + "/docs/zohocrm" at
 	// boot.
-	docsURL   string
-	jwtSecret string
-	publicURL      string
-	authURL        string // hellopro.fr auth endpoint
-	secureCookie   bool
-	refreshTTL     int // refresh token lifetime in seconds
+	docsURL      string
+	jwtSecret    string
+	publicURL    string
+	authURL      string // hellopro.fr auth endpoint
+	secureCookie bool
+	refreshTTL   int // refresh token lifetime in seconds
 }
 
 // AuthServerConfig holds configuration for creating an AuthServer.
@@ -49,9 +62,10 @@ type AuthServerConfig struct {
 	ConsentRepo    *repository.ConsentRepo
 	RefreshRepo    *repository.RefreshRepo
 	ServerRepo     *repository.ServerRepo
-	SSOSessionRepo ssoSessionFinder // optional, enables gw_session bridge
-	ZohoFetcher    ZohoStateForUser // optional, partitions consent screen per viewer
-	DocsURL        string           // optional, populated when GATEWAY_PUBLIC_URL is set
+	UserRepo       gatewayUserFinder // optional, enables the min_role consent gate
+	SSOSessionRepo ssoSessionFinder  // optional, enables gw_session bridge
+	ZohoFetcher    ZohoStateForUser  // optional, partitions consent screen per viewer
+	DocsURL        string            // optional, populated when GATEWAY_PUBLIC_URL is set
 	JWTSecret      string
 	PublicURL      string
 	AuthURL        string
@@ -67,6 +81,7 @@ func NewAuthServer(cfg AuthServerConfig) *AuthServer {
 		consentRepo:    cfg.ConsentRepo,
 		refreshRepo:    cfg.RefreshRepo,
 		serverRepo:     cfg.ServerRepo,
+		userRepo:       cfg.UserRepo,
 		ssoSessionRepo: cfg.SSOSessionRepo,
 		zohoFetcher:    cfg.ZohoFetcher,
 		docsURL:        cfg.DocsURL,
