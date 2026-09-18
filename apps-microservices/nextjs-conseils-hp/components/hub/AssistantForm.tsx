@@ -476,7 +476,13 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
     firedScreensRef.current.add(name);
 
     if (isContact) {
-      pushHubEvent('hub_form_email_view', 'projet', { form_id: 'assistant' });
+      // Même oubli que celui corrigé sur `hub_form_start` le 2026-09-16 : sans
+      // `hub_entry_point`, la porte d'entrée est perdue sur la marche qui précède
+      // la saisie d'e-mail, la plus décisive du tunnel projet.
+      pushHubEvent('hub_form_email_view', 'projet', {
+        form_id: 'assistant',
+        hub_entry_point: entryPoint,
+      });
       return;
     }
     // L'étape coordonnées n'a pas d'événement de vue : `hub_email_check`
