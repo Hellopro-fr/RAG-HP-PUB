@@ -585,11 +585,12 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
                 // Savoir QUEL CTA génère des abandons vaut autant que savoir
                 // lequel convertit : c'est le même arbitrage, pris à l'envers.
                 hub_entry_point: entryPoint,
-                // Même vocabulaire générique que `step_name` : c'est ce qui permet
-                // de croiser abandons et affichages dans un seul rapport.
-                last_step_name: screenName(),
+                // `step_name`/`step_index` et non des clés dédiées à l'abandon :
+                // même vocabulaire ET même dimension GA4 que les affichages, seul
+                // moyen de les croiser dans un rapport. Cf. `HubEventParams`.
+                step_name: screenName(),
                 step_id: screenId(),
-                last_step_index: step,
+                step_index: step,
               });
             }
             setClosing(true);
