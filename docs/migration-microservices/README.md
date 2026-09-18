@@ -50,6 +50,26 @@ Vérifie quand même les points 2 et 3.
 
 ---
 
+## Si l'option « par lots » est retenue
+
+La réunion du 18/09 tranche entre une bascule d'un coup le week-end et une bascule **par lots, par chaîne, en heures
+ouvrées**. La seconde option est préparée en détail :
+
+| Document | Ce qu'il contient |
+|---|---|
+| [`plan-bascule-par-lots.md`](plan-bascule-par-lots.md) | Les 7 lots, le calendrier (lun 21/09 → mer 30/09), les règles, le gel, la communication |
+| [`lots/L1.md`](lots/L1.md) … [`lots/L7.md`](lots/L7.md) | Une fiche par lot : composition exacte, secrets, vigilances, prérequis, feuille de lot |
+| [`procedure-bascule-un-lot.md`](procedure-bascule-un-lot.md) | La procédure commune, étape par étape, rollback inclus — exécutée par le DevSecOps |
+| [`suivi-bascule-par-lots.md`](suivi-bascule-par-lots.md) | Le tableau qui dit **qui est où** pendant la coexistence VM / GKE |
+
+⚠️ **Deux numérotations** : les **P1…P10** de l'inventaire sont des *priorités* ; les **L1…L7** du plan sont des
+*lots d'exécution*, qui ne couvrent que P1, P2 et P3. Si ton service est en P4 ou au-delà, cette série ne te
+concerne pas encore.
+
+**Ce que ça change pour toi si tu es en P1-P3** : ton pré-contrôle doit être remis **avant la veille du lot de ton
+service**, et un référent de ta chaîne doit être joignable entre 14h et 16h le jour du lot, puis le lendemain matin.
+La fiche de ton lot dit quel jour.
+
 ## Le calendrier
 
 | Quand | Quoi |

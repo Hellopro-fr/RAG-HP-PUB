@@ -34,7 +34,8 @@ une URL : si l'information n'est pas dans les documents, dis-le et laisse le dé
 | **CR** | Cloud Run | 
 | **GKE** | Kubernetes, pour les consommateurs de files et le cluster gateway |
 | **consumer** | Service qui s'abonne à une file RabbitMQ. **Il n'a pas d'adresse**, personne ne l'appelle |
-| **lot P1…P10** | Ordre de bascule. P1 = déjà traité, P10 = reste sur la VM. Voir l'inventaire |
+| **priorité P1…P10** | Classement de l'inventaire, pour les devs. P1 = consumers, P10 = reste sur la VM |
+| **lot L1…L7** | Lots **d'exécution** du plan par lots. Ne couvrent que P1, P2, P3. **Ne pas confondre avec P1…P10** — si un dev parle d'un « lot », demande lequel |
 
 ## Pièges de nommage — vérifie systématiquement
 
@@ -91,3 +92,7 @@ lot P1. Un pré-contrôle vide est un résultat valide, pas un échec.
 | `correspondance-endpoints-vm-cloud.md` | Ancienne adresse → nouvelle adresse → variable d'environnement |
 | `env-migration-matrix.md` | Variables d'environnement par service, et leur origine |
 | `strategie-bigbang-vs-par-lot.md` | Comparaison des deux stratégies de bascule (aide à la décision) |
+| `plan-bascule-par-lots.md` | **Si l'option par lots est retenue** : les 7 lots L1→L7, calendrier, règles, gel, communication |
+| `lots/L1.md` … `lots/L7.md` | Fiche de chaque lot : composition exacte, secrets à repointer, vigilances, prérequis |
+| `procedure-bascule-un-lot.md` | Procédure commune exécutée par le DevSecOps — le dev n'en lance aucune commande |
+| `suivi-bascule-par-lots.md` | État chaîne par chaîne pendant la coexistence VM / GKE |

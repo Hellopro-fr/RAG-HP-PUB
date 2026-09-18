@@ -1,5 +1,7 @@
 # Bascule d'un coup ou par lots — aide à la décision
 
+> **Option préparée en détail** : le plan par lots est écrit — [`plan-bascule-par-lots.md`](plan-bascule-par-lots.md), fiches [`lots/`](lots/), [`procedure-bascule-un-lot.md`](procedure-bascule-un-lot.md), [`suivi-bascule-par-lots.md`](suivi-bascule-par-lots.md). Il devient la référence si la décision le retient, et reste archivé sinon.
+>
 > **Pour la réunion du 2026-09-18.** Document d'entrée, pas de conclusion : la décision appartient au CTO,
 > au Lead Dev et au DevSecOps.
 >
