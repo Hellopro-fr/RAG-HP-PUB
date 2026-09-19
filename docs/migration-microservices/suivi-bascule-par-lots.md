@@ -16,7 +16,7 @@
 
 | Lot | Date proposée | Statut | Bascule | Obs. 24 h | Décision J+1 |
 |:--:|---|---|---|---|---|
-| **L1** | lun 21/09 | ⬜ à venir | | | |
+| **L1** | **sam 19/09** (anticipé) | 🟡 **en cours** — L1-a ✅ 09:52 · L1-b après 13h | L1-a : 09:41→09:44 (rollback réel 62 s, rebascule 1'50) | ⬜ | lun 21/09 9h30 |
 | **L2** | mar 22/09 | ⬜ à venir | | | |
 | **L3** | mer 23/09 | ⬜ à venir | | | |
 | **L4** | jeu 24/09 | ⬜ à venir | | | |
@@ -28,7 +28,7 @@
 
 | Lot | Service VM | Déploiement GKE | Jumeau VM | GKE | Réplicas | Date bascule | Validé DSO | Validé LEAD/dev | Obs. 24 h | Notes |
 |:--:|---|---|:--:|:--:|:--:|---|---|---|:--:|---|
-| L1 | `deepseek-metrics-collector-service` | `deepseek-metrics-collector-service` | UP | shadow | 1 | | | | ⬜ | |
+| L1 | `deepseek-metrics-collector-service` | `deepseek-metrics-collector-service` | **STOPPED** | **PROD** | 1 | 2026-09-19 09:52 | DSO 19/09 | ⬜ 1er msg réel lun | ⬜ | rollback réel joué (62 s) ; SIGTERM ignoré (Exited 137) ; [rapport](rapports/deepseek-metrics-collector-service.md) |
 | L1 | `nettoyage-bruit-ocr-service` | `nettoyage-bruit-ocr-service` | UP | shadow | 1 | | | | ⬜ | |
 | L2 | `qc-caracterisation` | `qc-caracterisation` | UP | shadow | 1 | | | | ⬜ | |
 | L2 | `qc-enrichissement` | `qc-enrichissement` | UP | shadow | 1 | | | | ⬜ | |

@@ -48,8 +48,9 @@ Ces confusions ont déjà coûté du temps. Elles ne se devinent pas, elles se v
 - **Certains noms perdent leur suffixe `-service` en passant sur le cloud** : `prix-milvus-processor-service` →
   `prix-milvus-processor`, `graph-rag-dlq-manager-service` → `graph-rag-dlq-manager`. L'inventaire donne le nom exact.
 - **Les variables `ZILLIZ_*` désignent Milvus**, pas le SaaS Zilliz Cloud (essai abandonné).
-- **`template-llm-service` se désabonne volontairement de sa file entre 06h et 10h UTC** pour éviter le tarif
-  double de DeepSeek. Une file sans consommateur à ces heures est **normale**, ce n'est pas une panne.
+- **Quatre services se désabonnent volontairement de leur file entre 01h-04h et 06h-10h UTC** (tarif double DeepSeek, lib partagée
+  `fenetre_tarifaire.py`) : `nettoyage-bruit-ocr-service`, `QC-caracterisation`, `template-llm-service`, `QC-fabricant-reference`.
+  Une file sans consommateur à ces heures est **normale**, ce n'est pas une panne.
 
 ## Ce qu'on cherche dans le code
 
@@ -96,3 +97,4 @@ lot P1. Un pré-contrôle vide est un résultat valide, pas un échec.
 | `lots/L1.md` … `lots/L7.md` | Fiche de chaque lot : composition exacte, secrets à repointer, vigilances, prérequis |
 | `procedure-bascule-un-lot.md` | Procédure commune exécutée par le DevSecOps — le dev n'en lance aucune commande |
 | `suivi-bascule-par-lots.md` | État chaîne par chaîne pendant la coexistence VM / GKE |
+| `rapports/<service>.md` | **Rapport de bascule par service** : avant/après, preuves, **accès dev (kubectl logs / exec / Cloud Logging, plus `docker logs` sur la VM)**, rollback, points ouverts. Gabarit `rapports/_TEMPLATE.md` |

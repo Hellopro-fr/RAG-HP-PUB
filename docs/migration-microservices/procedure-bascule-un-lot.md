@@ -10,6 +10,14 @@
 
 ---
 
+## Retours d'expérience intégrés (L1-a, 19/09)
+
+- **`rabbitmqctl` sépare par des tabulations** : `grep 'nom '` (espace) ne matche rien et laisse croire à une absence. Utiliser `grep -E '^nom\s'`.
+- **`kubectl logs deploy/…` pendant un rollout peut lire l'ancien pod** : pour la preuve, cibler le pod `Running` le plus récent par son nom.
+- **Fenêtre tarifaire DeepSeek** : 4 services se désabonnent 01h-04h et 06h-10h UTC. Basculer hors fenêtre, sinon la preuve broker attend.
+- **La cible d'un service peut encore être un placeholder shadow** : le pré-flight compare l'env GKE à l'env VM **avant** P2 (L1-a : `DEEPSEEK_METRICS_COLLECTOR_URL`).
+- **Chronos mesurés** : arrêt VM → preuve broker **3 min** (1re fois), **1 min 50** (rebascule) ; rollback complet **~2 min** (VM réabonnée en 62 s).
+
 ## Les deux invariants
 
 **Arrêter la VM avant de repointer GKE.** Un consumer s'abonne à une file ; deux jumeaux actifs se partagent les
@@ -130,7 +138,7 @@ information, pas un obstacle à contourner.
 
 ```bash
 # --- VM GPU ---
-xargs -a /tmp/${LOT}-vm-containers.txt docker stop        # stop, JAMAIS rm
+xargs -a /tmp/${LOT}-vm-containers.txt docker stop -t 30  # stop, JAMAIS rm ; -t 30 : grâce SIGTERM (certains services l'ignorent → Exited 137, sans conséquence sur file vide)
 docker ps -a --format '{{.Names}}\t{{.Status}}' | grep -Ff /tmp/${LOT}-vm-services.txt   # tous « Exited »
 ```
 
@@ -197,7 +205,7 @@ kubectl wait --for=condition=Available -n "$NS" \
 
 ```bash
 kubectl exec -n rabbitmq-v3 "$POD" -- rabbitmqctl list_queues -q name messages consumers \
-  | grep -Ff /tmp/${LOT}-queues.txt | grep -v '_dlq'
+  | grep -Ff /tmp/${LOT}-queues.txt | grep -v '_dlq'   # sortie rabbitmqctl séparée par TABULATIONS : ne jamais grep un nom suivi d'un espace
 # attendu : consumers >= 1 partout, messages qui baissent entre deux relevés à 60 s
 
 # logs d'un pod du lot : connexion au broker PROD, mot de passe masqué à l'affichage
@@ -273,7 +281,7 @@ xargs -a /tmp/${LOT}-vm-containers.txt docker start
 
 # R.3 — poste : preuve que la prod est reprise
 kubectl exec -n rabbitmq-v3 "$POD" -- rabbitmqctl list_queues -q name messages consumers \
-  | grep -Ff /tmp/${LOT}-queues.txt | grep -v '_dlq'          # consumers >= 1 partout
+  | grep -Ff /tmp/${LOT}-queues.txt | grep -v '_dlq'   # sortie rabbitmqctl séparée par TABULATIONS : ne jamais grep un nom suivi d'un espace          # consumers >= 1 partout
 
 # R.4 — poste : repointer les secrets vers le broker DEV (valeur depuis Secret Manager, même boucle qu'en P3)
 # puis remettre replicas=1 pour retrouver l'état shadow
