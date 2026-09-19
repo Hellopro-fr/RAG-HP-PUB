@@ -16,6 +16,7 @@
 - **`kubectl logs deploy/…` pendant un rollout peut lire l'ancien pod** : pour la preuve, cibler le pod `Running` le plus récent par son nom.
 - **Fenêtre tarifaire DeepSeek** : 4 services se désabonnent 01h-04h et 06h-10h UTC. Basculer hors fenêtre, sinon la preuve broker attend.
 - **La cible d'un service peut encore être un placeholder shadow** : le pré-flight compare l'env GKE à l'env VM **avant** P2 (L1-a : `DEEPSEEK_METRICS_COLLECTOR_URL`).
+- **Jamais de valeurs d'environnement à l'écran.** Le `.env` unique de la VM injecte ~40 secrets dans chaque conteneur ; un masque par motif de nom **rate toujours quelque chose** (le 19/09 : `NEO4J_PASSWORD`, à cause d'un chiffre dans le nom). Comparer les **noms** (`docker inspect … | cut -d= -f1`), puis lire une à une les seules variables non secrètes que le **code lit réellement** (grep `os.environ` dans l'app et ses modules `common_utils`).
 - **Chronos mesurés** : arrêt VM → preuve broker **3 min** (1re fois), **1 min 50** (rebascule) ; rollback complet **~2 min** (VM réabonnée en 62 s).
 
 ## Les deux invariants
