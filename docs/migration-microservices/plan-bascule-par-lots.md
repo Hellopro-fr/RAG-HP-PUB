@@ -152,6 +152,12 @@ par le VEX du 17/09 bloque le lot.
 
 ---
 
+## 7bis. Décision à prendre avant L2 — le tracking par fichier
+
+Le pré-flight local du 19/09 a trouvé un couplage qu'aucune fiche ne voyait : les 7 QC (L2) et 5 prix (L3) écrivent un fichier de suivi par message dans un **volume hôte** que `qc-tracking-service` — qui reste sur la VM — relit pour l'exposer aux devs. Sur GKE, sans volume, ces fichiers meurent avec le pod.
+
+Le flux métier n'est pas touché ; c'est un **outil de débogage** qui perd sa source. Trois options sont décrites dans F-HP-MIG-008. **Recommandation** : accepter la perte pour les services basculés (les logs pod sont dans Cloud Logging, 30 jours, recherchables) et ajouter un `emptyDir` pour que l'écriture ne plante jamais ; mettre la réécriture vers GCS au backlog. **Le LEAD tranche avant mardi 14h.** Sans décision, L2 ne part pas.
+
 ## 8. Ce qui autorise un lot, ce qui le fait revenir
 
 **GO du lot** (tous cochés, la veille au soir) :

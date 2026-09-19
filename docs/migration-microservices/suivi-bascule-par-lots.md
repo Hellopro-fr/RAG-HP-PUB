@@ -16,7 +16,7 @@
 
 | Lot | Date proposée | Statut | Bascule | Obs. 24 h | Décision J+1 |
 |:--:|---|---|---|---|---|
-| **L1** | **sam 19/09** (anticipé) | 🟡 **en cours** — L1-a ✅ 09:52 · L1-b après 13h | L1-a : 09:41→09:44 (rollback réel 62 s, rebascule 1'50) | ⬜ | lun 21/09 9h30 |
+| **L1** | **sam 19/09** (anticipé) | ✅ **basculé** — L1-a 06:44 UTC · L1-b 10:29 UTC | L1-a 3 min (rollback réel 62 s, rebascule 1'50) · L1-b **2 min 05** | 🟡 en cours → lun 21 | **lun 21/09 9h30** (1er message réel + décision L2) |
 | **L2** | mar 22/09 | ⬜ à venir | | | |
 | **L3** | mer 23/09 | ⬜ à venir | | | |
 | **L4** | jeu 24/09 | ⬜ à venir | | | |
@@ -29,7 +29,7 @@
 | Lot | Service VM | Déploiement GKE | Jumeau VM | GKE | Réplicas | Date bascule | Validé DSO | Validé LEAD/dev | Obs. 24 h | Notes |
 |:--:|---|---|:--:|:--:|:--:|---|---|---|:--:|---|
 | L1 | `deepseek-metrics-collector-service` | `deepseek-metrics-collector-service` | **STOPPED** | **PROD** | 1 | 2026-09-19 09:52 | DSO 19/09 | ⬜ 1er msg réel lun | ⬜ | rollback réel joué (62 s) ; SIGTERM ignoré (Exited 137) ; [rapport](rapports/deepseek-metrics-collector-service.md) |
-| L1 | `nettoyage-bruit-ocr-service` | `nettoyage-bruit-ocr-service` | UP | shadow | 1 | | | | ⬜ | |
+| L1 | `nettoyage-bruit-ocr-service` | `nettoyage-bruit-ocr-service` | **STOPPED** ×5 | **PROD** | **3** | 2026-09-19 10:29 UTC | DSO 19/09 | ⬜ 1er msg réel lun | ⬜ | plage tarifaire 06-10h/01-04h UTC = `consumers=0` nominal ; code bind-mount sur VM (ne pas `git pull` la VM pendant 7 j) ; [rapport](rapports/nettoyage-bruit-ocr-service.md) |
 | L2 | `qc-caracterisation` | `qc-caracterisation` | UP | shadow | 1 | | | | ⬜ | |
 | L2 | `qc-enrichissement` | `qc-enrichissement` | UP | shadow | 1 | | | | ⬜ | |
 | L2 | `qc-equivalence` | `qc-equivalence` | UP | shadow | 1 | | | | ⬜ | |

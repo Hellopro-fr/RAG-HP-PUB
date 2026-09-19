@@ -118,6 +118,8 @@ volume que s'il en a été déclaré un explicitement.
 Si ton service écrit des fichiers qui doivent survivre, c'est une décision d'architecture — remonte-la, ne la
 résous pas seul.
 
+**Cas réel trouvé le 19/09 (F-HP-MIG-008)** : les QC et les prix écrivent un fichier de suivi par message dans `/app/tracking`, monté sur le disque de la VM et relu par `qc-tracking-service`. Sur GKE, sans volume, ces fichiers disparaissent avec le pod. Si ton service utilise `get_tracking_filepath` ou écrit sous `tracking/`, **dis-le dans ta fiche** — c'est exactement ce point.
+
 ---
 
 ## Étape 5 — Variables d'environnement
