@@ -211,6 +211,23 @@ func (sg *ScopedGateway) handleToolsList(ctx context.Context, req *mcp.Request) 
 	// Zoho branching below reads sg.allowedIDs.
 	allowedIDs := sg.allowedIDsMinusGated(ctx)
 
+	// Backends hellodata : leur catalogue depend de l'appelant, donc il ne
+	// peut pas venir du cache du registre. On les retire de la fusion et
+	// on les interroge en direct.
+	hdBackends := sg.hellodataBackendsInScope(allowedIDs)
+	var hdTools []mcp.Tool
+	if len(hdBackends) > 0 {
+		sansHD := make(map[string]bool, len(allowedIDs))
+		for id, ok := range allowedIDs {
+			sansHD[id] = ok
+		}
+		for _, b := range hdBackends {
+			delete(sansHD, b.ID)
+			hdTools = append(hdTools, sg.fetchHellodataTools(ctx, b)...)
+		}
+		allowedIDs = sansHD
+	}
+
 	// Per-user Zoho tools/list — when an end-user identity is on the context
 	// AND the scope contains a Zoho-tagged backend, fetch the tool catalog
 	// live from mcp-zoho-service with the user's identity headers so the
@@ -221,6 +238,7 @@ func (sg *ScopedGateway) handleToolsList(ctx context.Context, req *mcp.Request) 
 	zohoBackends := sg.zohoBackendsInScope()
 	if !hasEmail || len(zohoBackends) == 0 {
 		tools := sg.registry.MergedToolsFilteredWithTools(allowedIDs, sg.allowedTools)
+		tools = append(tools, hdTools...)
 		return sg.toolsListResp(req.ID, tools, nil)
 	}
 
@@ -235,6 +253,7 @@ func (sg *ScopedGateway) handleToolsList(ctx context.Context, req *mcp.Request) 
 		if !state.Configured {
 			log.Printf("[scoped] tools/list email=%s: zoho catalog unconfigured (granted=%t) — omitting %d zoho backend(s) from result", email, granted, len(zohoBackends))
 			tools := sg.registry.MergedToolsFilteredWithTools(sg.nonZohoAllowedIDs(allowedIDs, zohoBackends), sg.allowedTools)
+			tools = append(tools, hdTools...)
 			return sg.toolsListResp(req.ID, tools, nil)
 		}
 	}
@@ -250,6 +269,7 @@ func (sg *ScopedGateway) handleToolsList(ctx context.Context, req *mcp.Request) 
 		}
 		tools = append(tools, zt...)
 	}
+	tools = append(tools, hdTools...)
 	return sg.toolsListResp(req.ID, tools, zohoIndex)
 }
 
@@ -395,6 +415,41 @@ func (sg *ScopedGateway) fetchZohoTools(ctx context.Context, b *BackendServer) [
 		})
 	}
 	return out
+}
+
+// hellodataBackendsInScope returns the allowed hellodata backends in the
+// current scope. Order is undefined.
+func (sg *ScopedGateway) hellodataBackendsInScope(allowedIDs map[string]bool) []*BackendServer {
+	var out []*BackendServer
+	for _, s := range sg.registry.All() {
+		if allowedIDs[s.ID] && s.ToolPrefix == hellodataToolPrefix {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// fetchHellodataTools queries the backend with the caller's identity. The
+// backend returns its four tools to an authorized caller, an empty list
+// otherwise.
+//
+// DELIBERATE DIVERGENCE from fetchZohoTools: on failure, the fallback is the
+// EMPTY LIST, not the cached catalog. Falling back to the cache would make
+// the tools visible to everyone the moment the backend is unreachable,
+// which is exactly what this hiding exists to prevent. Do not "harmonize"
+// with the Zoho path.
+func (sg *ScopedGateway) fetchHellodataTools(ctx context.Context, b *BackendServer) []mcp.Tool {
+	headers := sg.requestHeadersFor(ctx, b)
+	client := transport.NewBackendClientWithEndpoint(b.MessageURL, headers)
+	liveTools, err := client.ListTools(ctx)
+	if err != nil {
+		log.Printf("[scoped] hellodata tools/list live-fetch backend=%s err=%v — liste vide (pas de repli sur le cache)", b.ID, err)
+		return nil
+	}
+	if len(liveTools) == 0 {
+		return nil
+	}
+	return sg.registry.MergedToolsFilteredWithTools(map[string]bool{b.ID: true}, sg.allowedTools)
 }
 
 func (sg *ScopedGateway) handleToolsCall(ctx context.Context, req *mcp.Request) *mcp.Response {
