@@ -32,6 +32,10 @@ const corpsMax = 16 << 20
 // Prefixe de la ligne sentinelle qui cloture un export CSV.
 const sentinelleExport = "# fin-export;"
 
+// BOM UTF-8. Le moteur l'emet TOUJOURS en tete de l'export — sans lui
+// Excel affiche des mojibake — donc c'est au client de le tolerer.
+const bomUTF8 = "\xEF\xBB\xBF"
+
 type Client struct {
 	baseURL string
 	token   string
@@ -110,11 +114,19 @@ func (c *Client) ExporterCSV(ctx context.Context, d Demande) (PageCSV, error) {
 // analyserPageCSV separe le contenu CSV de la ligne sentinelle finale
 // "# fin-export;<lignes>;<next_cursor>". Son absence signale une reponse
 // coupee en cours de transfert.
+//
+// Sur une SELECTION VIDE, la sortie entiere vaut BOM + sentinelle : ni
+// en-tete ni donnees, donc le BOM colle au debut de la derniere ligne. Il
+// est retire avant la reconnaissance du prefixe, sinon un filtre
+// parfaitement legitime qui ne ramene rien serait rendu comme une reponse
+// tronquee. Il reste en revanche en tete de Contenu quand des donnees
+// suivent : c'est ce contenu-la qui est servi au telechargement, et le BOM
+// est ce qui evite les mojibake dans Excel.
 func analyserPageCSV(corps []byte) (PageCSV, error) {
 	fin := bytes.TrimRight(corps, "\n")
 	var derniereLigne, avantSentinelle []byte
 	if idx := bytes.LastIndexByte(fin, '\n'); idx == -1 {
-		derniereLigne = fin
+		derniereLigne = bytes.TrimPrefix(fin, []byte(bomUTF8))
 	} else {
 		derniereLigne = fin[idx+1:]
 		avantSentinelle = fin[:idx]

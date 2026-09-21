@@ -113,7 +113,9 @@ func TestExporterCSV_SentinellePresente(t *testing.T) {
 		if string(recu.Filtre) != `{}` {
 			t.Errorf("Filtre = %s", recu.Filtre)
 		}
-		io.WriteString(w, "id;ville\n1;Rennes\n2;Nantes\n# fin-export;2;17\n")
+		// Le vrai moteur emet TOUJOURS le BOM en tete (actions/export.php) :
+		// un faux moteur qui l'omet ne teste pas ce qui arrive en production.
+		io.WriteString(w, bomUTF8+"id;ville\n1;Rennes\n2;Nantes\n# fin-export;2;17\n")
 	})
 	got, err := c.ExporterCSV(context.Background(), Demande{Filtre: json.RawMessage(`{}`)})
 	if err != nil {
@@ -131,13 +133,18 @@ func TestExporterCSV_SentinellePresente(t *testing.T) {
 	if !strings.Contains(string(got.Contenu), "Rennes") || strings.Contains(string(got.Contenu), "fin-export") {
 		t.Errorf("Contenu = %q", got.Contenu)
 	}
+	// Le BOM reste en tete du contenu servi au telechargement : sans lui,
+	// Excel affiche des mojibake.
+	if !strings.HasPrefix(string(got.Contenu), bomUTF8) {
+		t.Errorf("le BOM doit rester en tete de Contenu, obtenu %q", got.Contenu)
+	}
 }
 
 // Une derniere page n'a pas de curseur suivant : la sentinelle porte un
 // next_cursor vide, ce qui doit se traduire par HasMore=false.
 func TestExporterCSV_DerniereBage_PasDeCurseurSuivant(t *testing.T) {
 	c := serveur(t, func(w http.ResponseWriter, r *http.Request) {
-		io.WriteString(w, "id;ville\n1;Rennes\n# fin-export;1;\n")
+		io.WriteString(w, bomUTF8+"id;ville\n1;Rennes\n# fin-export;1;\n")
 	})
 	got, err := c.ExporterCSV(context.Background(), Demande{Filtre: json.RawMessage(`{}`)})
 	if err != nil {
@@ -152,7 +159,7 @@ func TestExporterCSV_DerniereBage_PasDeCurseurSuivant(t *testing.T) {
 // elle doit echouer, jamais passer pour un CSV complet.
 func TestExporterCSV_SentinelleAbsente(t *testing.T) {
 	c := serveur(t, func(w http.ResponseWriter, r *http.Request) {
-		io.WriteString(w, "id;ville\n1;Rennes\n2;Nant")
+		io.WriteString(w, bomUTF8+"id;ville\n1;Rennes\n2;Nant")
 	})
 	got, err := c.ExporterCSV(context.Background(), Demande{Filtre: json.RawMessage(`{}`)})
 	if err == nil {
@@ -160,5 +167,28 @@ func TestExporterCSV_SentinelleAbsente(t *testing.T) {
 	}
 	if len(got.Contenu) != 0 {
 		t.Errorf("le contenu tronque ne doit pas etre rendu, obtenu %q", got.Contenu)
+	}
+}
+
+// Le test qui manquait : une selection vide. Le moteur emet le BOM puis la
+// seule sentinelle - ni en-tete ni donnees - et le BOM se retrouve colle au
+// debut de la derniere ligne. C'est un filtre legitime qui ne ramene rien,
+// pas une reponse tronquee.
+func TestExporterCSV_SelectionVide(t *testing.T) {
+	c := serveur(t, func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, bomUTF8+"# fin-export;0;\n")
+	})
+	got, err := c.ExporterCSV(context.Background(), Demande{Filtre: json.RawMessage(`{}`)})
+	if err != nil {
+		t.Fatalf("une selection vide n est pas une reponse tronquee: %v", err)
+	}
+	if got.Lignes != 0 {
+		t.Errorf("Lignes = %d, attendu 0", got.Lignes)
+	}
+	if got.HasMore || got.NextCursor != nil {
+		t.Errorf("attendu HasMore=false et NextCursor=nil, obtenu %+v", got)
+	}
+	if len(got.Contenu) != 0 {
+		t.Errorf("Contenu = %q, attendu vide", got.Contenu)
 	}
 }
