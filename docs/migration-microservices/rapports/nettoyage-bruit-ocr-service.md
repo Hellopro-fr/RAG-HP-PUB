@@ -69,7 +69,7 @@ resource.labels.namespace_name="apps-microservices"
 resource.labels.container_name="nettoyage-bruit-ocr-service"
 ```
 
-Trois pods, donc trois flux : ajoutez `jsonPayload.message:"<id du message>"` pour suivre un traitement précis.
+Trois pods, donc trois flux : ajoutez `textPayload:"<id du message>"` pour suivre un traitement précis. ⚠️ Collecte GKE active **depuis le 21/09 14h21 Paris** seulement (F-HP-OBS-004) ; toutes les lignes apparaissent en sévérité `ERROR` (stderr Python) : filtrer par texte. Guide : [`../acces-logs-services-migres.md`](../acces-logs-services-migres.md).
 
 ### Shell dans un pod
 

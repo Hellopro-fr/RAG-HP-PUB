@@ -10,6 +10,15 @@
 
 ---
 
+## Retours d'expérience intégrés (L2, 21/09 — rollback)
+
+- **Les noms de variables ne suffisent pas : P1 compare les VALEURS par empreinte.** Le 21/09, le secret K8s partagé `platform-llm-hp-secrets` portait encore ses placeholders (`hp-token` 35 caractères au lieu de 144) ; tous les appels API depuis GKE ont répondu 400, rollback à 14h57. Pour chaque variable secrète du lot : longueur + SHA-256 côté conteneur VM (`docker exec … printf "%s" "$VAR" | sha256sum`) et côté secret K8s (`kubectl get secret … | base64 -d | sha256sum`), **jamais la valeur**. Un écart = stop (F-HP-MIG-009).
+- **Après `scale 0`, attendre la disparition des pods avant `docker start`** : SIGTERM ignoré = 30 s de grâce ; le 21/09, 20 s de double consommation. `kubectl wait --for=delete pod -l app=<svc> -n apps-microservices --timeout=60s` pour chaque déploiement, ou vérifier `kubectl get pods | grep -c ^qc-` = 0.
+- **Preuve avant/après par sonde** : un pod jetable qui rejoue l'appel du service avec le secret K8s (`kubectl apply` d'un Pod `curlimages/curl` avec `secretKeyRef`) donne le code HTTP et le corps de réponse que les logs du service n'affichent pas (`Invalid format for the given token`).
+- **Git Bash / Windows** : `jq --slurpfile x <(…)` échoue (`/proc/<pid>/fd` illisible) → boucle `while read` par déploiement ; `gcloud --format='yaml(...)'`/`table(...)` peut sortir **vide sans erreur** → `--format=json` ou sortie brute ; un fichier `/tmp` écrit sous Windows porte des `\r` (`tr -d '\r'`).
+- **Le cluster est zonal (`europe-west1-b`)** : `--zone`, pas `--region`, sinon gcloud répond vide.
+- **Chronos L2** : bascule 2 min 39 (arrêt VM → 9 files reprises), rollback 1 min 31.
+
 ## Retours d'expérience intégrés (L1-a, 19/09)
 
 - **`rabbitmqctl` sépare par des tabulations** : `grep 'nom '` (espace) ne matche rien et laisse croire à une absence. Utiliser `grep -E '^nom\s'`.
@@ -121,6 +130,17 @@ wc -l < /tmp/${LOT}-vm-containers.txt              # = colonne « Réplicas VM �
 
 **Critère de passage** : les trois comptes correspondent à la fiche de lot. Sinon **stop** — un écart est une
 information, pas un obstacle à contourner.
+
+```bash
+# 5) parité des VALEURS secrètes VM vs K8s — empreintes seulement (F-HP-MIG-009). Pour chaque service du lot :
+#    côté K8s : les couples (secret, clé) référencés par le déploiement
+kubectl get deploy <nom-gke> -n "$NS" -o json | jq -r '.spec.template.spec.containers[].env[]? | select(.valueFrom.secretKeyRef) | "\(.name)\t\(.valueFrom.secretKeyRef.name)\t\(.valueFrom.secretKeyRef.key)"' \
+  | while IFS=$'\t' read -r VAR SEC KEY; do printf '%-28s K8S len=%s sha=%s\n' "$VAR" "$(kubectl get secret "$SEC" -n "$NS" -o jsonpath="{.data.$KEY}" | base64 -d | tr -d '\r\n' | wc -c)" "$(kubectl get secret "$SEC" -n "$NS" -o jsonpath="{.data.$KEY}" | base64 -d | tr -d '\r\n' | sha256sum | cut -c1-16)"; done
+#    côté VM (devhp) : mêmes variables, dans le conteneur réel
+docker exec rag-hp-pub-<service>-1 sh -c 'for v in HP_TOKEN DEEPSEEK_API_KEY GEMINI_API_KEY RABBITMQ_URL; do printf "%-28s VM  len=%s sha=%s\n" "$v" "$(printf "%s" "$(eval echo \$$v)" | wc -c)" "$(printf "%s" "$(eval echo \$$v)" | sha256sum | cut -c1-16)"; done'
+# Critère : mêmes longueurs et mêmes empreintes pour toutes les variables secrètes (RABBITMQ_URL diffère volontairement : dev vs prod jusqu'à P3).
+# Toute valeur de 33 ou 35 caractères avec l'empreinte fc40185a… ou f7636db3… est un PLACEHOLDER → stop.
+```
 
 > Deux pièges de nommage vérifiés au pré-flight : `webhook-service` et `mcp-google-templates-runner` n'ont **pas**
 > le préfixe `rag-hp-pub-` ; `prix-milvus-processor` et `graph-rag-dlq-manager` perdent leur `-service` sur GKE.
@@ -274,8 +294,9 @@ rollback**.
 | **Décision** | DSO + LEAD, CTO informé. Consigné dans le tableau de suivi, section Rollbacks |
 
 ```bash
-# R.1 — poste : libérer les files
+# R.1 — poste : libérer les files, et ATTENDRE la disparition des pods (SIGTERM ignoré = 30 s de grâce)
 while read -r D; do kubectl scale deploy/"$D" --replicas=0 -n "$NS"; done < /tmp/${LOT}-deploys.txt
+while read -r D; do kubectl wait --for=delete pod -l app="$D" -n "$NS" --timeout=60s; done < /tmp/${LOT}-deploys.txt   # sinon 2 flottes sur la file pendant ~20 s (L2, 21/09)
 
 # R.2 — VM GPU : la flotte VM se réabonne — MÊME fichier que P2, symétrique exact
 xargs -a /tmp/${LOT}-vm-containers.txt docker start
