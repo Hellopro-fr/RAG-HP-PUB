@@ -48,6 +48,16 @@ func parcourir(n Noeud, profondeur int, feuilles *int) error {
 	if profondeur > ProfondeurMax {
 		return fmt.Errorf("arbre_trop_complexe: profondeur superieure a %d", ProfondeurMax)
 	}
+	// Un noeud qui porte les deux etait traite comme une feuille et tout
+	// son sous-arbre disparaissait sans le moindre signal : le LLM
+	// obtenait une requete differente de celle qu'il croyait avoir
+	// demandee. Rien n'est jamais ignore silencieusement. Meme refus, meme
+	// code, meme formulation que arbre.php cote moteur.
+	if n.Critere != "" && n.Operateur != "" {
+		return fmt.Errorf("noeud_ambigu: un noeud porte a la fois 'critere' '%s' et 'operateur' '%s'. "+
+			"Choisir l un des deux : une feuille {critere, comparateur, valeur}, "+
+			"ou un groupe {operateur, conditions}", n.Critere, n.Operateur)
+	}
 	if n.estFeuille() {
 		*feuilles++
 		if *feuilles > FeuillesMax {

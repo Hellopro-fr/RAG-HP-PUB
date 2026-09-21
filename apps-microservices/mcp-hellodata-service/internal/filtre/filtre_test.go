@@ -121,3 +121,27 @@ func TestValider_DepuisJSON(t *testing.T) {
 		t.Errorf("feuilles = %d, attendu 3", f)
 	}
 }
+
+// Un noeud portant a la fois 'critere' et 'operateur' etait traite comme
+// une feuille : tout son sous-arbre disparaissait sans le moindre signal,
+// et le LLM recevait le resultat d'une requete qui n'est pas celle qu'il a
+// demandee. Meme refus que arbre.php cote moteur.
+func TestValider_NoeudAmbiguRefuse(t *testing.T) {
+	n := Noeud{
+		Critere:     "region",
+		Comparateur: "dans",
+		Valeur:      json.RawMessage(`[6]`),
+		Operateur:   "ET",
+		Conditions:  []Noeud{feuille(), feuille()},
+	}
+	_, err := Valider(n)
+	if err == nil {
+		t.Fatal("attendu un refus pour un noeud portant 'critere' et 'operateur'")
+	}
+	if !strings.Contains(err.Error(), "noeud_ambigu") {
+		t.Errorf("code attendu noeud_ambigu, obtenu: %v", err)
+	}
+	if !strings.Contains(err.Error(), "Choisir l un des deux") {
+		t.Errorf("le message doit dire lequel choisir, obtenu: %v", err)
+	}
+}
