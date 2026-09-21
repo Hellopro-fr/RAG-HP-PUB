@@ -850,13 +850,15 @@ non un oubli :
 
 ---
 
-## 13. Amendement du 2026-09-21 — export en flux, sans fichier
+## 13. Amendement du 2026-09-21 — export CSV paginé, plafonné à 2000 lignes
 
-### Ce qui a forcé le changement
+### Deux corrections, dans cet ordre
 
-La spec supposait un répertoire d'état **hors racine web** pour `jobs/`,
-`exports/` et `cache/` (§ 4.1). Vérification faite sur le BO de dev, ce
-répertoire **n'existe pas** :
+**Correction n° 1 — il n'y a pas de répertoire hors racine web.**
+
+La spec supposait un répertoire d'état hors `DOCUMENT_ROOT` pour `jobs/`,
+`exports/` et `cache/` (§ 4.1). Vérification faite sur le BO de dev, il
+n'existe pas :
 
 - le listage de `/` sur `sftp-mcp/dev-read-prod` rend des fichiers servis
   par le web (`maj_prod_bureaustore.php`, `test_serveur.php`,
@@ -865,113 +867,111 @@ répertoire **n'existe pas** :
   donc `DOCUMENT_ROOT` se termine par `/` et `/admin` est directement
   dessous.
 
-**La racine SFTP est le `DOCUMENT_ROOT`.** Aucun répertoire hors racine web
-n'est accessible par ce compte.
+**La racine SFTP est le `DOCUMENT_ROOT`.**
 
 Le repli documenté était un `.htaccess` `Deny from all`. Le test a été armé
-sur dev — un témoin **non protégé** déposé à
-`/admin/mcp/hellodata/temoin_public.txt` répond **200**, ce qui prouve que
-le chemin est bien servi et donc que le test aurait été concluant. Il n'a
-pas été mené à son terme : le MCP `sftp-reader` refuse d'écrire un
-`.htaccess` (motif de son `.sftpignore`, aux côtés de `*.env`, `*.key`,
-`*.pem`, `id_rsa`, `/secure`, `/log`), et cette garde n'a pas été levée.
+sur dev et il aurait été concluant — un témoin **non protégé** déposé à
+`/admin/mcp/hellodata/temoin_public.txt` a répondu **200**, prouvant que le
+chemin est servi. Il n'a pas été mené à terme : le MCP `sftp-reader` refuse
+d'écrire un `.htaccess` (motif de son `.sftpignore`), et cette garde n'a pas
+été levée. Décision : ne pas dépendre d'un fichier de contrôle d'accès dont
+l'échec sous `AllowOverride None` serait **muet**.
 
-**Décision** : ne pas dépendre d'un `.htaccess`. Un fichier de contrôle
-d'accès qui peut être ignoré en silence par un `AllowOverride None` est une
-garde qu'on ne peut pas vérifier une fois pour toutes — elle se réévalue à
-chaque changement de configuration Apache, et son échec est muet.
+**Correction n° 2 — l'export est plafonné à 2000 lignes, comme le reste.**
 
-### Le nouveau modèle d'export
+C'était la demande initiale, et la spec l'avait perdue de vue en traitant
+l'export comme une extraction illimitée : *« un select des données avec une
+limite max de 2000 lignes, puis une pagination pour récupérer les autres
+pages »*. Le plafond de 2000 ne s'applique pas qu'à l'échantillon : **il
+s'applique aussi au CSV**. Récupérer davantage, c'est demander la page
+suivante.
 
-**Le CSV n'est jamais écrit sur disque.** Le moteur le produit en flux, à la
-demande, et le wrapper le relaie au client.
+### Ce que les deux corrections produisent ensemble
 
-```
-LLM ──▶ hellodata_export_csv ──▶ le wrapper frappe un jeton, rend une URL
-                                  (rien n'est encore calcule)
+Un CSV de 2000 lignes pèse quelques centaines de kilo-octets et se calcule
+en une requête. **Toute la machinerie d'export asynchrone n'a plus lieu
+d'être.**
 
-Client ──▶ GET {wrapper}/download/{jeton}
-              │  le wrapper retrouve le filtre associe au jeton
-              ▼
-           POST {moteur}?action=export  ──▶ le moteur streame le CSV
-              │                              par tranches de 2000 lignes
-              ▼
-           le wrapper pipe le flux vers le client, sans jamais le bufferiser
-```
-
-#### Côté moteur
-
-- L'action `export` remplace `export_start`, `export_statut`,
-  `export_fetch` et le worker. **Un seul endpoint**, qui répond
-  `Content-Type: text/csv` et écrit sur `php://output`.
-- La boucle de tranches de la Task A8 est conservée telle quelle : 2000
-  lignes par requête, curseur avancé, `fputcsv` puis `flush()`. L'empreinte
-  mémoire reste bornée par construction.
-- Disparaissent : `export_commun.php`, `export_worker.php`,
-  `export_cli.php`, les handles, la purge à 24 h, et toute la question de
-  `fastcgi_finish_request`.
-- **Le cache de comptage reste**, mais il vit désormais dans
-  `sys_get_temp_dir()`, hors racine web par nature, et ne contient que des
-  entiers — aucune donnée personnelle.
-
-#### Côté wrapper
-
-- `hellodata_export_csv` rend **immédiatement** une URL, sans rien
-  calculer. Le jeton est 128 bits d'aléa, associé en mémoire au filtre et
-  aux colonnes demandés, avec un TTL court.
-- La table des jetons est **bornée** en nombre d'entrées et purgée par TTL :
-  un LLM en boucle ne doit pas pouvoir faire croître la mémoire du service.
-- `GET /download/{jeton}` retrouve le filtre, appelle le moteur et **pipe**
-  le flux. Comme aujourd'hui, l'appel est soumis à `Autorise` et
-  l'URL rendue pointe le wrapper, jamais le BO.
-
-#### Les tools passent de quatre à trois
-
-| Tool | Devenir |
+| Élément | Devenir |
 |---|---|
-| `hellodata_compter` | inchangé |
-| `hellodata_echantillon` | inchangé |
-| `hellodata_export_csv` | rend `{url}` au lieu de `{job_id}` |
-| ~~`hellodata_export_statut`~~ | **supprimé** — il n'y a plus de job à interroger |
+| Job, `job_id`, worker, `export_cli.php` | **supprimés** |
+| Handles sur disque, purge à 24 h | **supprimés** |
+| Répertoire d'état sur le BO | **supprimé** |
+| Dépendance à `fastcgi_finish_request` / `exec()` | **supprimée** |
+| Variable `MCP_HELLODATA_VAR` | **supprimée** |
+| `hellodata_export_statut` | **supprimé** — il n'y a plus de job à interroger |
+| Risque de CSV tronqué par timeout | **disparaît** — une page se calcule en une requête |
+| Cache de comptage | conservé, déplacé dans `sys_get_temp_dir()`, hors racine web par nature et sans donnée personnelle |
 
-### Ce qu'on gagne
+### Le modèle retenu
 
-- **Plus aucun fichier de données personnelles au repos** sur le BO. C'est
-  le gain principal : le problème des CSV devinables de
-  `/admin/hellodata/fichiers_exports/` ne peut pas se reproduire ici, parce
-  qu'il n'y a rien à deviner.
-- Plus de purge, plus de rétention à régler, plus de handle à valider
-  contre une traversée de chemin côté moteur.
-- Plus de dépendance à `fastcgi_finish_request` ni à `exec()`, dont la
-  disponibilité sur Ecritel était une précondition ouverte.
-- Un tool de moins à documenter pour le LLM.
+L'action `export` du moteur est **l'action `echantillon` rendue en CSV** :
+mêmes filtres, même plafond de 2000, même pagination par curseur, même code
+d'assemblage (§ 4.2). Seule la sérialisation change.
 
-### Ce qu'on perd, et qu'il faut assumer
+```
+LLM ──▶ hellodata_export_csv(filtre, colonnes, cursor)
+          │  le wrapper appelle le moteur, recoit le CSV de cette page,
+          │  le garde en memoire sous un jeton
+          ▼
+        rend {url, lignes, next_cursor, has_more}
 
-- **Un export long occupe une connexion HTTP de bout en bout**, du client
-  jusqu'à MySQL. Si le client se déconnecte à mi-parcours, le travail est
-  perdu et doit être refait entièrement.
-- **Aucune reprise.** Le job asynchrone permettait de repasser prendre le
-  fichier ; ici, un échec réseau à 40 000 lignes sur 50 000 impose de tout
-  relancer.
-- **Pas de progression observable.** `export_statut` donnait
-  `lignes_ecrites` ; il n'y a plus rien à interroger pendant le transfert.
-- **Le lien ne survit pas à un redémarrage du wrapper**, puisque la table
-  des jetons est en mémoire. C'est acceptable, et même souhaitable : un
-  lien mort vaut mieux qu'un lien orphelin qui reste valable.
-- Le budget de timeout de bout en bout doit être généreux (10 minutes,
-  § 8), et le serveur web d'Ecritel doit tolérer une réponse aussi longue —
-  **à vérifier** : un `max_execution_time` ou un timeout de proxy
-  couperaient le flux au milieu, et le client recevrait un CSV **tronqué
-  sans erreur visible**. C'est le principal risque de ce modèle, et il
-  remplace la précondition n° 1.
+Humain ──▶ GET {wrapper}/download/{jeton}  ──▶ le CSV de cette page
 
-### Précondition n° 1 — remplacée
+LLM ──▶ page suivante : rappeler l'outil avec cursor = next_cursor
+```
 
-L'ancienne question « où écrire hors racine web ? » n'a plus d'objet.
+**Le wrapper récupère le CSV au moment de l'appel**, pas au téléchargement.
+C'est ce qui lui permet de rendre `next_cursor` et `has_more` au LLM —
+sans quoi le modèle n'aurait aucun moyen de savoir qu'une page suivante
+existe. Le coût est celui d'une page, identique à `hellodata_echantillon`.
 
-La nouvelle : **jusqu'où Ecritel laisse-t-il courir une réponse HTTP ?**
-`max_execution_time`, `mod_fcgid`, timeouts de proxy. Un CSV tronqué qui ne
-se signale pas est pire qu'un export refusé — le moteur doit donc écrire
-une **ligne de fin de flux** que le wrapper vérifie, faute de quoi il
-signale une troncature au lieu de rendre un fichier incomplet.
+**Mémoire bornée** : au plus `JetonMax` pages en mémoire, TTL court. Avec
+2000 lignes par page, la borne est connue à l'avance et ne dépend pas de ce
+que demande le LLM. Un lien ne survit pas à un redémarrage du service —
+acceptable, et préférable à un lien orphelin qui resterait valable.
+
+**Sentinelle conservée.** Le moteur termine le CSV par
+`# fin-export;<lignes>;<next_cursor>`. Le risque de troncature est devenu
+faible, mais la vérification est gratuite et transforme une réponse coupée
+en erreur explicite plutôt qu'en fichier incomplet livré sans bruit.
+
+### Les trois tools
+
+| Tool | Entrée | Sortie |
+|---|---|---|
+| `hellodata_compter` | `filtre`, `exact` | `{count, exact, plafonne, depuis_cache}` |
+| `hellodata_echantillon` | `filtre`, `colonnes`, `cursor`, `taille` ≤ 2000 (défaut 50) | `{rows[], next_cursor, has_more}` |
+| `hellodata_export_csv` | `filtre`, `colonnes`, `cursor` | `{url, lignes, next_cursor, has_more}` |
+
+Le garde-fou du § 1 tient toujours, et plus simplement qu'avant :
+`echantillon` met des lignes dans le contexte du modèle — d'où le défaut à
+50 — tandis qu'`export_csv` produit un fichier destiné à un humain, à
+2000 lignes. Les deux sont plafonnés ; aucun des deux ne peut rapatrier la
+base.
+
+### Ce que ça coûte, et qu'il faut assumer
+
+**Une sélection de 50 000 contacts demande 25 téléchargements successifs.**
+C'est le changement de pratique par rapport au bouton « Lancer
+l'extraction » du BO, qui produit un fichier unique. C'est un choix
+délibéré : il n'existe plus aucun chemin par lequel un appel unique
+rapatrie une base entière, ni aucun fichier de données personnelles au
+repos sur le BO.
+
+Si le besoin d'un fichier unique de grande taille réapparaît, il devra
+passer par un mécanisme distinct — pas par ce MCP.
+
+### Préconditions — effet de cet amendement
+
+| # | Devenir |
+|---|---|
+| 1 | **Supprimée.** Plus de répertoire d'état, plus de question de racine web. La limite de durée HTTP n'est plus un enjeu : une page se calcule en une requête |
+| 3 | **Résolue** — `/admin/` rend 200 sans authentification HTTP |
+| 8 | **Allégée** — côté Ecritel, il ne reste que `MCP_HELLODATA_TOKEN` |
+| — | La précondition sur `fastcgi_finish_request` et `exec()` **disparaît** |
+
+Restent ouvertes et inchangées : n° 2 (version de PHP), n° 4 (joignabilité
+depuis l'hôte du wrapper), n° 5 (droit aux colonnes téléphone et e-mail),
+n° 6 (coût des sous-requêtes corrélées), n° 7 (isolation du port 8597),
+n° 9 (budget du live-fetch `tools/list`), n° 11 (schéma réel de `acheteur`).

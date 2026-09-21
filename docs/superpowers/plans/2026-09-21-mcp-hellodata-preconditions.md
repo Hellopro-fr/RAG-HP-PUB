@@ -13,7 +13,7 @@ Une précondition non résolue reste **ouverte**, elle n'est pas contournée.
 
 | # | Question | Pourquoi ça bloque |
 |---|---|---|
-| 1 | Jusqu'où Ecritel laisse-t-il courir une réponse HTTP ? | Un flux coupé livrerait un CSV tronqué sans erreur visible |
+| ~~1~~ | ~~Où écrire l'état hors racine web ?~~ | **Supprimée** — l'export ne produit plus de fichier, et une page se calcule en une requête |
 | 4 | Le wrapper joint-il le BO depuis son hôte ? | Sans ce chemin réseau, l'architecture ne tient pas |
 | 6 | Coût réel des sous-requêtes corrélées | Décide si la règle de composition § 4.3.3 est tenable |
 | 7 | Isolation du port 8597 en production | C'est **la** garantie du modèle d'accès |
@@ -21,18 +21,24 @@ Une précondition non résolue reste **ouverte**, elle n'est pas contournée.
 
 ## Détail
 
-### 1. Chemin hors racine web — **QUESTION REMPLACÉE**
+### 1. Chemin hors racine web — **SUPPRIMÉE**
 
-**Résolu par un changement de design**, pas par une réponse : l'export ne
-produit plus de fichier (§ 13 de la spec). Le CSV est streamé à la demande,
-rien ne reste au repos sur le BO, et le cache de comptage vit dans
-`sys_get_temp_dir()`, hors racine web par nature.
+**La question n'a plus d'objet**, pour deux raisons cumulées (§ 13 de la
+spec) :
 
-**La nouvelle question, qui hérite du caractère bloquant** : jusqu'où
-Ecritel laisse-t-il courir une réponse HTTP ? `max_execution_time`,
-`mod_fcgid`, timeouts de proxy. Un flux coupé au milieu livrerait un CSV
-**tronqué sans erreur visible** — d'où la ligne sentinelle `# fin-export;<n>`
-que le wrapper doit vérifier.
+1. l'export ne produit **aucun fichier** — le CSV est rendu dans la
+   réponse HTTP et rien ne reste au repos sur le BO ;
+2. l'export est **plafonné à 2000 lignes** comme le reste, donc une page
+   se calcule en une seule requête : il n'y a pas non plus de risque de
+   troncature par `max_execution_time`.
+
+Le cache de comptage vit dans `sys_get_temp_dir()`, hors racine web par
+nature, et ne contient que des entiers.
+
+La ligne sentinelle `# fin-export;<lignes>;<next_cursor>` est conservée
+malgré tout : la vérification est gratuite et transforme une réponse
+coupée en erreur explicite plutôt qu'en fichier incomplet livré sans
+bruit.
 
 **Observation qui a mené là** (conservée pour mémoire)
 
