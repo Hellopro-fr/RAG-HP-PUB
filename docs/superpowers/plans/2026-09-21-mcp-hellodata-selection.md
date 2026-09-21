@@ -4818,3 +4818,175 @@ schéma obtenu : la procédure est mécanique, une ligne par critère dans
 sans modification puisque chaque feuille est une expression autonome. La
 clé de jointure DI est déjà connue de `lancer_comptage_combine.php` :
 `DI.id_societe = A.id_source_a`.
+
+---
+
+## Amendement du 2026-09-21 — chemin de déploiement réel
+
+Décision de l'utilisateur, postérieure à la rédaction initiale : **deux
+chemins de déploiement distincts, et non un seul**.
+
+| Environnement | Mécanisme | Qui le fait |
+|---|---|---|
+| **BO de dev** | SFTP direct via `sftp-mcp/dev-write-prod` (écriture) et `sftp-mcp/dev-read-prod` (lecture) | L'agent, en autonomie |
+| **BO de production** | **MEP** — paquet `site/` + `backup/`, skill `prepare-mep` | Le développeur, manuellement |
+
+Vérifié le 2026-09-21 par `sftp_list_servers` : `dev-write-prod` porte bien
+`env=dev, WRITABLE` ; `prod` et `front` restent `read-only` par
+construction (`assertWritable()` dans `write.ts` du MCP `sftp-reader` exige
+`writable: true` **et** `env: dev`, et les entrées de production ne portent
+ni l'un ni l'autre).
+
+### Ce que cela change
+
+**La Task 0 cesse d'être bloquée sur l'extérieur.** Sept de ses onze
+vérifications deviennent exécutables par l'agent sur le BO de dev, au lieu
+d'attendre une réponse : chemin en écriture hors racine web, `.htaccess`
+sur `/admin/`, version de PHP, disponibilité de `fastcgi_finish_request`,
+schéma réel de `acheteur`, propagation de `HTTP_AUTHORIZATION`, et le
+comportement réel des sous-requêtes corrélées.
+
+Restent hors de portée de l'agent, donc toujours à fournir :
+
+- la **joignabilité réseau RAG → BO** depuis l'hôte qui exécutera
+  `mcp-hellodata-service` ;
+- **où sont injectées les variables d'environnement** en production ;
+- l'**isolation réelle du port 8597** sur le déploiement de production ;
+- le **droit aux colonnes téléphone et e-mail** pour un autorisé par liste,
+  qui est une décision métier et non une observation.
+
+**La Task A9 se scinde en deux.** Le déploiement de dev devient une étape
+outillée et répétable, exécutée avant chaque vérification de bout en bout ;
+la mise en production devient une tâche distincte, à la toute fin, par MEP.
+
+### Task A9 révisée — déploiement sur le BO de dev
+
+Remplace l'ancienne Task A9. Le document `.md` de déploiement reste dû,
+mais il devient le **livrable de la MEP** (Task A10), pas un préalable aux
+tests.
+
+- [ ] **Step 1: Créer l'arborescence distante**
+
+Par `sftp_mkdir` sur `dev-write-prod` : `/admin/mcp/hellodata` et
+`/admin/mcp/hellodata/actions`. Le répertoire d'état va hors racine web, au
+chemin retenu en Task 0 step 1.
+
+- [ ] **Step 2: Téléverser les fichiers du moteur**
+
+Un `sftp_write_file` par fichier, avec `sourcePath` pointant la copie
+locale sous `site/admin/mcp/hellodata/` — `sourcePath` lit le fichier brut,
+donc les fins de ligne et l'encodage survivent. Compte **~40 s par
+opération** : le bastion Wallix est lent, et un
+`getConnection: Timed out while waiting for handshake` est **transitoire**,
+pas un échec définitif — réessaie plutôt que de conclure à un problème.
+
+Enchaîne les envois **un fichier à la fois, en tâche de fond** : une série
+de dix fichiers dépasse largement un timeout de 180 s.
+
+- [ ] **Step 3: Vérifier chaque envoi**
+
+`sftp_write_file` relit la taille distante après `put` et signale un
+désaccord comme un **échec** — un envoi partiel ne doit pas se lire comme
+un succès. Vérifie que chaque appel rend bien un succès, ne te contente pas
+de l'absence d'erreur visible.
+
+- [ ] **Step 4: Dérouler les vérifications de la Task 0 sur dev**
+
+Maintenant que le moteur est en place, les steps 2, 3, 9 et 11 de la Task 0
+deviennent des `curl` contre le BO de dev. Consigne chaque résultat dans le
+compte rendu de préconditions.
+
+- [ ] **Step 5: Dérouler les tests de bout en bout des Tasks A5, A7 et A8**
+
+Les étapes `curl` de ces tâches, écrites contre `<hôte-bo>`, s'exécutent
+ici contre l'hôte de dev. **Y compris le contrôle négatif** : le CSV ne
+doit pas être joignable par URL directe.
+
+- [ ] **Step 6: Commiter la note de suivi**
+
+Préfixe `docs(mcp-hellodata):`, sujet `record dev deployment and checks`,
+corps bilingue décrivant ce qui a été déployé et ce que les vérifications
+ont donné.
+
+### Task A10 — mise en production par MEP
+
+À exécuter **en dernier**, après que la Phase C est recettée sur dev.
+
+- [ ] **Step 1: Invoquer le skill `prepare-mep`**
+
+Cible `BO` (donc serveur `prod` pour les sauvegardes). Les fichiers du
+moteur sont **nouveaux** : ils n'existent pas encore en production, donc le
+paquet ne contient que `site/`, sans `backup/`. C'est la convention
+existante pour les fichiers neufs, et `backup/` ne doit pas être créé vide.
+
+- [ ] **Step 2: Écrire le `.md` de déploiement**
+
+Dans `site/moteur_recherche/MCP_HELLODATA_MOTEUR_<date>.md` : liste des
+fichiers et leur chemin distant, contenu complet, les deux variables
+d'environnement (`MCP_HELLODATA_TOKEN`, `MCP_HELLODATA_VAR`) et où les
+poser, la création du répertoire d'état hors racine web en `0700`, et les
+tests post-déploiement. PR contenant **uniquement** ce `.md`
+(`site/CLAUDE.md`).
+
+- [ ] **Step 3: Rejouer les vérifications critiques sur la production**
+
+Après l'upload manuel par le développeur, trois contrôles, et pas un de
+moins :
+
+1. le CSV n'est **pas** joignable par URL directe ;
+2. sans en-tête `Authorization` → `401`, avec un mauvais jeton → `401`,
+   avec le bon → `200` ;
+3. le port 8597 n'est **pas** joignable depuis l'extérieur du réseau Docker
+   (précondition 7).
+
+Un échec sur l'un des trois : retirer le serveur du gateway jusqu'à
+correction.
+
+### Observation du 2026-09-21 — la racine SFTP est la racine web
+
+Listage de `/` sur `dev-read-prod` : le répertoire contient
+`maj_prod_bureaustore.php`, `redirection_lien_acheteur.php`,
+`test_serveur.php`, `mon_compte_acheteur/`, `comptabilite/`, `images_cmp/`.
+Ce sont des fichiers servis par le web.
+
+Recoupement avec la source de production : `lancer_comptage_combine.php`
+fait `require_once($_SERVER['DOCUMENT_ROOT']."admin/secure/check_session.php")`
+— donc `DOCUMENT_ROOT` se termine par `/` et `/admin` est directement
+dessous. **La racine SFTP `/` est donc le `DOCUMENT_ROOT` lui-même.**
+
+Conséquence : **aucun répertoire hors racine web n'est accessible par ce
+compte SFTP.** Le chemin nominal du § 4.1 de la spec n'est pas réalisable
+tel quel, et c'est le repli documenté qui s'applique — un répertoire sous
+`/admin/mcp/hellodata/var/` protégé par un `.htaccess` `Deny from all`.
+
+**Ce repli ne vaut que s'il est prouvé.** Un `.htaccess` est sans effet si
+Apache est configuré avec `AllowOverride None`, et l'échec serait
+silencieux : les CSV seraient téléchargeables par URL directe sans qu'aucune
+erreur ne le signale. La Task 0 step 1 doit donc se terminer par une preuve
+par `curl`, pas par la présence du fichier `.htaccess`.
+
+Trois issues possibles, à trancher à la lumière de ce test :
+
+1. **`.htaccess` efficace** → on l'utilise, et le test `curl` devient un
+   contrôle permanent rejoué à chaque déploiement (Task A9 step 5,
+   Task A10 step 3).
+2. **`.htaccess` sans effet** → le répertoire d'état ne peut pas vivre sous
+   la racine web. Il faut alors soit un chemin fourni par l'hébergeur hors
+   `DOCUMENT_ROOT`, soit renoncer au fichier CSV sur disque et faire
+   streamer l'export directement par le moteur vers le wrapper, sans
+   matérialisation. **C'est un changement de design, à remonter, pas à
+   décider seul.**
+3. **Un chemin hors racine existe mais n'est pas visible par SFTP** →
+   à confirmer auprès de l'hébergeur ; c'est la meilleure issue.
+
+### Ce qui manque encore pour dérouler les tests sur dev
+
+Le déploiement SFTP est ouvert, mais les vérifications de bout en bout sont
+des appels HTTP. Il manque donc :
+
+- **l'URL du BO de dev** — sans elle, aucun `curl` des Tasks A5, A7, A8 et
+  A9 ne peut être joué ;
+- **la valeur de `MCP_HELLODATA_TOKEN` sur dev**, et l'endroit où la poser
+  pour que PHP la lise (`getenv`) : selon l'hébergement, ce peut être un
+  `SetEnv` dans le `.htaccess`, un fichier de configuration PHP-FPM, ou un
+  `.env` lu par un include maison. À observer sur place.
