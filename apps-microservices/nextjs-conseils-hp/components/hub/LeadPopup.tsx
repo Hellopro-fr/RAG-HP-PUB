@@ -122,7 +122,7 @@ export function LeadPopup({
       pushHubEvent('hub_form_abandon', 'guide', {
         form_id: 'guide',
         hub_entry_point: 'popup_scroll',
-        last_step_name: lead.phase,
+        step_name: lead.phase,
       });
     }
     setOpen(false);

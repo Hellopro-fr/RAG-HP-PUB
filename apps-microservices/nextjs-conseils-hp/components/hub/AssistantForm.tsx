@@ -476,7 +476,13 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
     firedScreensRef.current.add(name);
 
     if (isContact) {
-      pushHubEvent('hub_form_email_view', 'projet', { form_id: 'assistant' });
+      // Même oubli que celui corrigé sur `hub_form_start` le 2026-09-16 : sans
+      // `hub_entry_point`, la porte d'entrée est perdue sur la marche qui précède
+      // la saisie d'e-mail, la plus décisive du tunnel projet.
+      pushHubEvent('hub_form_email_view', 'projet', {
+        form_id: 'assistant',
+        hub_entry_point: entryPoint,
+      });
       return;
     }
     // L'étape coordonnées n'a pas d'événement de vue : `hub_email_check`
@@ -579,11 +585,12 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
                 // Savoir QUEL CTA génère des abandons vaut autant que savoir
                 // lequel convertit : c'est le même arbitrage, pris à l'envers.
                 hub_entry_point: entryPoint,
-                // Même vocabulaire générique que `step_name` : c'est ce qui permet
-                // de croiser abandons et affichages dans un seul rapport.
-                last_step_name: screenName(),
+                // `step_name`/`step_index` et non des clés dédiées à l'abandon :
+                // même vocabulaire ET même dimension GA4 que les affichages, seul
+                // moyen de les croiser dans un rapport. Cf. `HubEventParams`.
+                step_name: screenName(),
                 step_id: screenId(),
-                last_step_index: step,
+                step_index: step,
               });
             }
             setClosing(true);
