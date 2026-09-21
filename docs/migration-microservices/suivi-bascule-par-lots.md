@@ -17,7 +17,7 @@
 | Lot | Date proposée | Statut | Bascule | Obs. 24 h | Décision J+1 |
 |:--:|---|---|---|---|---|
 | **L1** | **sam 19/09** (anticipé) | ✅ **basculé** — L1-a 06:44 UTC · L1-b 10:29 UTC | L1-a 3 min (rollback réel 62 s, rebascule 1'50) · L1-b **2 min 05** | 🟡 en cours → lun 21 | **lun 21/09 9h30** (1er message réel + décision L2) |
-| **L2** | mar 22/09 | ⬜ à venir | | | |
+| **L2** | **lun 21/09 14h Paris** (avancé) | 🟡 **prêt** (emptyDir ✅, re-scan ✅ VEX-01, gel ✅, réponses pré-contrôle LEAD ✅) | | | **mar 22/09 9h30** |
 | **L3** | mer 23/09 | ⬜ à venir | | | |
 | **L4** | jeu 24/09 | ⬜ à venir | | | |
 | **L5** | lun 28/09 | ⬜ à venir | | | |

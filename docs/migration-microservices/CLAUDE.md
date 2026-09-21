@@ -88,6 +88,7 @@ lot P1. Un pré-contrôle vide est un résultat valide, pas un échec.
 | Fichier | Contenu |
 |---|---|
 | `architecture-apres-migration.md` | **La référence** : plateformes, flux, CI/CD (PR gate → wrappers → Trivy image → deploy → rollback auto), observabilité, playbook « quand ça bloque », pièges, dettes. Lis-le avant de répondre à une question d'architecture ou de débogage |
+| `demande-pre-controle-lot.md` | Modèle du message DSO → Lead Dev pour le pré-contrôle d'un lot. Règle : toute demande aux devs est livrée **prête à envoyer** (quoi/comment/où/quand/forme de réponse), jamais comme consigne à reformuler |
 | `README.md` | Point d'entrée du développeur : quoi faire, quand, où remonter |
 | `guide-pre-check-service.md` | La procédure de vérification, étape par étape, avec les commandes de recherche |
 | `inventaire-services-migration-par-lot.md` | Les 117 services : migré ou non, équivalent exact, lot, points de vigilance |

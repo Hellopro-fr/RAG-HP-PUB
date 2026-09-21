@@ -22,6 +22,7 @@ sur la VM.
 
 | Étape | Document | Temps |
 |:--:|---|---|
+| **DSO** | [`demande-pre-controle-lot.md`](demande-pre-controle-lot.md) — le message de demande de pré-contrôle prêt à envoyer au Lead Dev la veille d'un lot (quoi, comment, où, pour quand, forme de réponse) | 5 min par lot |
 | **0** | [`architecture-apres-migration.md`](architecture-apres-migration.md) — **comment la plateforme fonctionne maintenant** : où tourne quoi, les flux, le chemin d'un commit jusqu'à la prod, où regarder, **quoi faire quand ça bloque** | 20 min, une fois |
 | **1** | [`inventaire-services-migration-par-lot.md`](inventaire-services-migration-par-lot.md) — trouve ton service, note son **lot** (P1 → P10) | 2 min |
 | **2** | [`guide-pre-check-service.md`](guide-pre-check-service.md) — la procédure de vérification, à faire **avec Claude** | 20-30 min par service |
