@@ -97,7 +97,8 @@ l'existant : il s'assure seulement que les nouveaux exports n'y participent pas.
 | D7 | Coût du comptage | **Comptage approché par défaut + cache court**, comptage exact sur demande |
 | D8 | Service MCP | **Service séparé** `mcp-hellodata-service`, distinct du MCP `bdd` |
 | D9 | Forme des filtres | **Arbre booléen imbriqué** (groupes ET / OU / NON contenant des sous-groupes et des feuilles), livré **en un seul appel** |
-| D10 | Accès au service | `min_role = admin`, **plus** une liste statique d'e-mails autorisés, dont les valeurs viennent d'une variable d'environnement. `server_authorizations` n'est **pas** utilisé (§ 7.1) |
+| D10 | Accès au service | Décidé **dans le wrapper**, sur l'e-mail et le rôle injectés par le gateway : `admin` OU présent dans une liste statique. `access_gate.go` n'est pas modifié ; `server_authorizations` n'est pas utilisé (§ 7.1) |
+| D11 | Visibilité des outils | Le wrapper sert un `tools/list` **variable selon l'appelant** — liste vide pour un non-autorisé. Le gateway l'interroge par requête, sur le modèle du live-fetch Zoho (§ 7.2) |
 
 ---
 
@@ -332,12 +333,11 @@ présentes et masquées après coup. Le moteur reçoit du wrapper un indicateur
 explicite ; il refuse la demande si une colonne restreinte est demandée sans
 le droit.
 
-Avec `min_role = admin` (§ 7.1), tout utilisateur admis est soit `admin`,
-soit présent dans la liste statique. La distinction ne porte donc plus entre
-rôles élevés et rôles bas, mais entre **admin** et **autorisé par liste** — et
-il reste à décider si ce dernier y a droit. C'est la précondition n° 4 du
-§ 12 ; tant qu'elle n'est pas tranchée, le moteur refuse ces colonnes à tout
-non-admin.
+Tout utilisateur admis est soit `admin`, soit présent dans la liste statique
+(§ 7.1). La distinction ne porte donc pas entre rôles élevés et rôles bas,
+mais entre **admin** et **autorisé par liste** — et il reste à décider si ce
+dernier y a droit. C'est la précondition n° 4 du § 12 ; tant qu'elle n'est
+pas tranchée, le wrapper ne demande ces colonnes que pour un `admin`.
 
 ### 4.5 Contrat HTTP
 
@@ -417,6 +417,9 @@ mcp-hellodata-service/
 │   ├── hellodata/
 │   │   ├── client.go           # Bearer, unwrap de l'enveloppe, budget par endpoint
 │   │   └── types.go            # DTO filtres / lignes / job
+│   ├── acces/
+│   │   ├── liste.go            # chargement + normalisation de HELLODATA_ALLOWED_EMAILS
+│   │   └── autorise.go         # Autorise(email, role) : admin OU liste (§ 7.1)
 │   ├── filtre/
 │   │   ├── arbre.go            # types du filtre imbriqué, parsing JSON
 │   │   └── valide.go           # bornes structurelles (profondeur, feuilles, arité)
@@ -433,8 +436,20 @@ mcp-hellodata-service/
 Toutes les URL et le token viennent de variables d'environnement
 (`.claude/rules/security.md` : aucune URL de service en dur).
 
-Le contrôle d'accès ne vit **pas** ici : il est appliqué en amont par le
-gateway (§ 7.1). Le wrapper ne porte aucune liste d'utilisateurs.
+**Le contrôle d'accès vit ici** (§ 7.1) : le wrapper lit
+`X-End-User-Email` et `X-End-User-Role` sur chaque requête et décide seul.
+Le gateway ne fait qu'injecter l'identité et poser une barrière de rôle
+minimale. C'est aussi ici que `tools/list` devient variable selon
+l'appelant (§ 7.2).
+
+Variables d'environnement propres au service :
+
+| Variable | Rôle |
+|---|---|
+| `HELLODATA_BASE_URL` | URL du moteur `/admin/mcp/hellodata/` |
+| `HELLODATA_TOKEN` | Bearer présenté au moteur |
+| `HELLODATA_ALLOWED_EMAILS` | Liste statique d'autorisés, en plus des `admin` (§ 7.1) |
+| `HELLODATA_PUBLIC_URL` | Base des liens `/download/{handle}` rendus au LLM |
 
 Le wrapper valide **la structure** de l'arbre (profondeur, nombre de
 feuilles, arité — § 4.3.2) pour rejeter tôt et donner un message utile au
@@ -473,125 +488,171 @@ authentification que le reste du service, donc au `min_role` du gateway.
 
 ## 7. Sécurité et autorisation
 
-### 7.1 Accès au service — `admin` + liste statique (D10)
+### 7.1 Accès au service — décidé dans le wrapper (D10)
 
 **Règle** : seuls les utilisateurs de rôle `admin` et ceux dont l'adresse
-figure dans une liste statique d'autorisés peuvent atteindre
-`mcp-hellodata-service`.
+figure dans une liste statique peuvent utiliser `mcp-hellodata-service`. La
+décision est prise **par le wrapper**, à partir de l'identité que le gateway
+lui transmet.
 
-#### Pourquoi pas `server_authorizations`
+#### Pourquoi pas dans le gateway
 
-La table `server_authorizations` **ne signifie pas** « peut atteindre ce
-serveur ». Elle n'est consultée qu'à un seul endroit,
-`internal/gateway/scoped_gateway.go:507`, dans le chemin d'**injection des
-en-têtes de filtrage** : une ligne y fait échapper un utilisateur au filtrage
-par utilisateur, elle ne lui ouvre aucune porte. Le commentaire du modèle
-(`internal/db/models.go:627`) est explicite : « grants a specific end-user
-full *unfiltered* access ». La détourner en mécanisme d'admission lui
-donnerait un second sens, incompatible avec le premier sur les backends qui
-subissent réellement une injection de filtres (`leexi`, `ringover`, `bdd`).
+Deux leviers du gateway ont été écartés, chacun pour une raison propre.
 
-Ce design ne la touche donc pas.
+**`server_authorizations`** ne signifie pas « peut atteindre ce serveur ».
+Elle n'est lue qu'à un endroit, `internal/gateway/scoped_gateway.go:507`,
+dans le chemin d'**injection des en-têtes de filtrage** : une ligne y fait
+échapper un utilisateur au filtrage, elle ne lui ouvre aucune porte
+(`internal/db/models.go:627` : « grants full *unfiltered* access »). La
+détourner lui donnerait un second sens, contradictoire sur les backends
+réellement filtrés (`leexi`, `ringover`, `bdd`).
 
-#### Le prédicat
+**Élargir `GateAllowsEmail`** aurait concentré la décision en un seul
+endroit, mais au prix de modifier un prédicat fail-closed sur ses cinq
+points d'appel (`scoped_gateway.go` 285, 423, 874, 908 et
+`FilterServersByGate`) — exactement la surface où les commits `e53e07df`,
+`bf44e7f0` et `58f13bf9` viennent de corriger des oublis. Ce risque est
+évité entièrement.
 
-Le prédicat d'accès actuel, `GateAllowsEmail` dans
-`internal/gateway/access_gate.go`, est purement basé sur le rôle : il compare
-`mcp_servers.min_role` à `gateway_users.role`. Rôles définis
-(`internal/auth/role.go`) : `admin` = 3, `readonly` = 2, `configonly` = 1,
-inconnu = 0.
+Le pattern retenu **existe déjà** : `mcp-zoho-service` autorise en aval sur
+`X-End-User-Email`, injecté par `injectZohoIdentity`
+(`scoped_gateway.go:811`).
 
-Il est élargi par une seconde voie, écrite fail-closed comme l'originale :
+#### Ce que le gateway injecte
+
+Un `case` supplémentaire dans le `switch` de `requestHeadersFor` — un
+dispatch, pas un prédicat de sécurité :
+
+| En-tête | Source | Absent quand |
+|---|---|---|
+| `X-End-User-Email` | `scopetoken.EndUserEmailFromContext(ctx)` | Sonde de santé, découverte, token de scope, `client_credentials` |
+| `X-End-User-Role` | `gatewayUsers.GetByEmail(email).Role` | Idem, plus toute résolution en échec |
+
+**`X-End-User-Role` doit être fail-closed à l'émission** : dépôt non câblé,
+erreur SQL, e-mail sans ligne dans `gateway_users` — on n'envoie pas
+d'en-tête de rôle. On n'envoie **jamais** une valeur par défaut, parce que
+côté wrapper une valeur par défaut deviendrait un rôle effectif.
+
+#### Ce que le wrapper décide
 
 ```go
-// staticGrants tient les e-mails autorisés par serveur, indexés par la clé
-// stable du backend (ToolPrefix). Renseigné une fois au démarrage depuis la
-// configuration ; jamais muté ensuite.
-//
-// Les ADRESSES ne sont pas en dur : le dépôt est public. Elles viennent de
-// HELLODATA_ALLOWED_EMAILS. Seule la structure vit dans le code.
-type staticGrants map[string]map[string]struct{} // serveur -> set d'e-mails
-
-// GateAllowsEmailWithGrant : rôle suffisant OU présence dans la liste
-// statique du serveur visé. Toute incertitude refuse.
-func GateAllowsEmailWithGrant(
-    minRole, serverKey, email string,
-    users gatewayUserFinder,
-    grants staticGrants,
-) bool {
-    if GateAllowsEmail(minRole, email, users) {
+// Autorise si le rôle est admin, ou si l'adresse figure dans la liste.
+// Toute absence refuse : un appel sans identité n'est pas un appel interne
+// de confiance, c'est un appel dont on ignore l'auteur.
+func (a *Acces) Autorise(email, role string) bool {
+    if email == "" {
+        return false
+    }
+    if role == roleAdmin {
         return true
     }
-    if grants == nil || serverKey == "" || email == "" {
-        return false
-    }
-    allowed, ok := grants[serverKey]
-    if !ok {
-        return false
-    }
-    _, ok = allowed[normaliseEmail(email)]
+    _, ok := a.autorises[normaliseEmail(email)]
     return ok
 }
 ```
 
-`normaliseEmail` applique un `strings.ToLower` et un `strings.TrimSpace` — la
-même normalisation est appliquée au chargement de la liste, pour qu'une
-différence de casse ne produise pas un refus silencieux.
+`normaliseEmail` applique `strings.ToLower` + `strings.TrimSpace`, et la même
+normalisation s'applique au chargement de la liste — une différence de casse
+ne doit pas produire un refus silencieux.
 
-#### Cinq propriétés à préserver
+Rôle admin : la constante est `admin` (`internal/auth/role.go`, niveau 3 ;
+les autres sont `readonly` = 2 et `configonly` = 1). Le wrapper compare à
+l'égalité stricte plutôt qu'à un niveau : il ne reçoit pas la table des
+niveaux et n'a pas à la dupliquer. Un rôle inconnu n'est donc pas admin.
 
-La branche courante vient de passer quinze commits à établir le
-comportement du gate. L'élargir ne doit rien en défaire.
-
-1. **Fail-closed sur l'incertitude.** La nouvelle voie ne transforme jamais
-   une absence de configuration en autorisation : liste nulle, serveur
-   inconnu, e-mail vide, tout refuse.
-2. **`min_role` inconnu reste un refus.** `GateAllowsEmail` refuse déjà
-   lorsqu'il ne reconnaît pas la valeur ; la liste statique ne contourne ce
-   garde-fou que pour les adresses qui y figurent nommément — ce qui est
-   l'intention, et doit être écrit comme tel en commentaire.
-3. **La liste est par serveur, jamais globale.** Une liste globale
-   ouvrirait *tous* les serveurs gatés à ses membres. La clé est le
-   `ToolPrefix` du backend, comme le sont déjà `leexiToolPrefix`,
-   `ringoverToolPrefix` et `bddToolPrefix`.
-4. **Les tokens de scope et `client_credentials` restent exclus.** L'e-mail
-   de l'utilisateur final n'est posé sur le contexte que sur le chemin OAuth2
-   bearer ; l'invariant est épinglé par
-   `TestScopeTokenPathLeavesEndUserEmailUnset`. La liste, qui se fonde sur
-   cet e-mail, hérite de cette exclusion — un token de scope ne devient pas
-   autorisé parce qu'une adresse figure dans la liste.
-5. **Tous les points d'appel doivent être modifiés.** Le prédicat est
-   consulté à cinq endroits : `scoped_gateway.go` lignes 285, 423, 874, 908,
-   et `FilterServersByGate` pour l'écran de consentement. En oublier un
-   reproduit exactement la classe de bug — les « registry drop sites » — que
-   les commits `e53e07df`, `bf44e7f0` et `58f13bf9` viennent de fermer.
-
-#### Configuration
-
-`min_role = admin` sur le serveur. Les non-admins n'y accèdent que si leur
-adresse figure dans la liste.
-
-Variable d'environnement, **côté `mcp-gateway-service`** — c'est lui qui
-porte le prédicat, pas le wrapper :
+Configuration, **côté `mcp-hellodata-service`** :
 
 | Variable | Rôle |
 |---|---|
-| `HELLODATA_ALLOWED_EMAILS` | Adresses séparées par des virgules, autorisées en plus des `admin`. Lue une fois au démarrage, normalisée en minuscules et détrimée. Vide ou absente = seuls les `admin` passent |
+| `HELLODATA_ALLOWED_EMAILS` | Adresses séparées par des virgules, autorisées en plus des `admin`. Lue une fois au démarrage, normalisée. Vide ou absente = seuls les `admin` passent |
 
 **Les adresses ne sont pas écrites dans le code** : `Hellopro-fr/RAG-HP-PUB`
-est un dépôt **public**, et une adresse commitée y resterait dans
-l'historique même après suppression. Seule la mécanique vit dans le source ;
-les valeurs viennent de l'environnement, sont chargées une fois au
-démarrage et normalisées à ce moment-là.
+est un dépôt **public** ; une adresse commitée resterait dans l'historique
+même après suppression. Seule la mécanique vit dans le source.
 
-**Caractère provisoire assumé.** Cette liste est statique par choix, pour ne
-pas construire une gestion dynamique avant d'en avoir le besoin. La
-conséquence à connaître : modifier la liste demande un redémarrage du
-gateway, et il n'existe ni trace d'audit ni écran d'administration pour ces
-accès. Le jour où l'un des deux manque, c'est le signal qu'il faut une vraie
-table — pas un signal qu'il fallait la faire d'emblée.
+#### `min_role = readonly` reste nécessaire
 
-### 7.2 Surfaces
+Le gateway n'est pas déchargé de tout. `min_role` reste posé à `readonly`,
+pour une raison précise : `GateAllows` refuse quand aucun e-mail n'est sur le
+contexte, ce qui n'arrive que sur le chemin OAuth2 bearer. Les **tokens de
+scope et les grants `client_credentials` sont ainsi exclus du service**,
+puisqu'ils ne portent jamais d'identité — et un service qui exporte des
+e-mails et des téléphones d'acheteurs n'a rien à faire derrière une
+authentification sans utilisateur.
+
+Avec `min_role` vide, ces chemins passeraient et le wrapper devrait les
+refuser lui-même. Deux barrières valent mieux qu'une lorsque la seconde est
+déjà écrite et testée.
+
+#### La frontière réseau devient la garantie
+
+Déplacer la décision dans le wrapper rend l'autorisation **aussi solide que
+l'isolation réseau**. Si quoi que ce soit d'autre que le gateway peut joindre
+`mcp-hellodata-service:8597`, `X-End-User-Role: admin` est forgeable et la
+liste ne vaut rien.
+
+C'est l'exposition que `mcp-zoho-service` accepte déjà, mais le rayon
+d'impact n'est pas le même : ici l'appelant obtient un export CSV de
+coordonnées d'acheteurs. Trois exigences, non négociables :
+
+1. **`expose:` et jamais `ports:`** dans `docker-compose.yml`
+   (`.claude/rules/docker-security.md` l'impose déjà) — le service n'est
+   joignable que depuis le réseau Docker interne.
+2. **Aucune identité = refus.** L'absence de `X-End-User-Email` n'est pas
+   « appel interne, donc de confiance ». Seul `/health` répond sans
+   identité, et il ne renvoie aucune donnée métier.
+3. **Journaliser l'adresse sur chaque appel accepté**, en particulier sur
+   `hellodata_export_csv`. C'est la seule trace qui existera, puisque la
+   liste statique n'en fournit aucune.
+
+#### Caractère provisoire assumé
+
+La liste est statique par choix, pour ne pas construire une gestion dynamique
+avant d'en avoir le besoin. Les deux coûts à connaître : modifier la liste
+demande un redémarrage du wrapper, et il n'existe aucun écran
+d'administration pour ces accès. Le jour où l'un des deux manque, c'est le
+signal qu'il faut une vraie table — pas un signal qu'il fallait la faire
+d'emblée.
+
+### 7.2 Visibilité des outils — `tools/list` variable (D11)
+
+**Contrainte mécanique à connaître** : un tool MCP ne peut pas masquer ses
+voisins. Le `tools/list` du gateway est servi depuis son registre, peuplé par
+le health-checker, et filtré par requête **uniquement** sur `min_role`
+(`gatedOutIDs`, `scoped_gateway.go:282`). Un outil de diagnostic qui
+répondrait « tu n'as pas accès » laisserait les autres outils listés, et rien
+n'empêcherait le LLM de les appeler.
+
+Le masquage réel passe donc par le seul mécanisme qui existe : **le gateway
+interroge le backend à chaque `tools/list`**, comme il le fait déjà pour Zoho
+(`scoped_gateway.go:363`, live-fetch avec repli sur le cache en cas
+d'échec).
+
+La pré-vérification est donc le `tools/list` du wrapper lui-même :
+
+| Appelant | Réponse du wrapper |
+|---|---|
+| `admin`, ou adresse dans la liste | Les 4 tools |
+| Identité connue mais non autorisée | **Liste vide** |
+| Aucune identité | **Liste vide** |
+
+Conséquences à assumer :
+
+- **Un second cas particulier dans le gateway**, à côté de celui de Zoho.
+  C'est le prix du masquage ; il est explicitement moins cher que d'élargir
+  le prédicat d'accès, mais il n'est pas nul.
+- **Un aller-retour par `tools/list`.** Le repli du chemin Zoho — servir le
+  cache quand le live-fetch échoue — doit ici se replier sur **la liste
+  vide**, pas sur le cache : un backend injoignable ne doit pas rendre les
+  outils visibles à tout le monde. C'est une divergence délibérée d'avec
+  Zoho, et elle doit être écrite en commentaire à côté du code.
+- **Un non-autorisé ne voit rien**, donc son LLM n'invente pas d'explication
+  sur un outil qu'il ne peut pas appeler.
+
+Un appel direct à `tools/call` sur un outil non listé reste refusé par
+`Autorise` (§ 7.1) : le masquage est du confort, pas la barrière.
+
+### 7.3 Surfaces
 
 | Surface | Mesure |
 |---|---|
@@ -602,7 +663,11 @@ table — pas un signal qu'il fallait la faire d'emblée.
 | Fichiers CSV | Hors racine web, nom à jeton, servis uniquement par endpoint authentifié, purge à 24 h |
 | Cache | Le niveau de rôle fait partie de la clé (§ 4.6) |
 | Fuite par message d'erreur | Codes stables, aucun SQL ni message MySQL dans les réponses (§ 4.8) |
-| Accès LLM | `min_role = admin` + liste statique d'e-mails, valeurs en variable d'environnement (§ 7.1) |
+| Accès LLM | Décidé dans le wrapper sur `X-End-User-Email` + `X-End-User-Role` : `admin` OU liste statique (§ 7.1) |
+| Isolation du wrapper | `expose:` et jamais `ports:`. La liste ne vaut que ce que vaut la frontière réseau (§ 7.1) |
+| Appel sans identité | Refusé. Seul `/health` répond sans identité, et sans donnée métier (§ 7.1) |
+| Chemins sans utilisateur | `min_role = readonly` exclut tokens de scope et `client_credentials`, qui ne portent pas d'e-mail (§ 7.1) |
+| Visibilité des outils | `tools/list` variable servi par le wrapper ; repli sur liste vide, jamais sur le cache (§ 7.2) |
 | Arbre de filtres | Profondeur, nombre de feuilles et arité bornés avant compilation (§ 4.3.2) |
 
 ---
@@ -632,6 +697,21 @@ comme un résultat vide.
 
 - `internal/hellodata/client_test.go` — `httptest`, déballage de l'enveloppe,
   propagation des codes d'erreur, respect des budgets de timeout.
+- `internal/acces/autorise_test.go` — le test central de cette v1 :
+  - un `admin` passe ; un `readonly` absent de la liste est refusé ; le même
+    `readonly` **présent** dans la liste passe ;
+  - e-mail vide, rôle vide, en-têtes absents : refus dans les trois cas.
+    L'absence d'identité ne vaut **jamais** confiance ;
+  - un rôle inconnu (`""`, `Admin`, `superadmin`) n'est pas `admin` —
+    comparaison stricte, pas de niveau ;
+  - casse et espaces : `  A@Hellopro.FR ` correspond à `a@hellopro.fr`,
+    dans les deux sens de normalisation ;
+  - `HELLODATA_ALLOWED_EMAILS` vide ou absente : seuls les `admin` passent,
+    et c'est le contrôle positif qui prouve que le test de refus ne passe
+    pas par accident.
+- `internal/tools/liste_test.go` — `tools/list` rend les 4 outils à un
+  autorisé, **une liste vide** à un non-autorisé, et une liste vide en
+  l'absence d'identité.
 - `internal/filtre/valide_test.go` — arbre au-delà de la profondeur 5, plus
   de 50 feuilles, groupe vide, `NON` à deux enfants : chacun refusé avec la
   limite nommée. Et un arbre valide de profondeur 5 accepté, pour que le test
@@ -643,24 +723,23 @@ comme un résultat vide.
 
 ### 9.2 Côté gateway (en CI)
 
-Le changement du § 7.1 touche un prédicat de sécurité. À couvrir :
+`access_gate.go` n'est **pas** modifié, donc aucun test de prédicat à
+reprendre. Restent l'injection d'identité et le `tools/list` variable :
 
-- un `admin` passe ; un `readonly` absent de la liste est refusé ; le même
-  `readonly` **présent** dans la liste passe ;
-- liste nulle, serveur absent de la liste, e-mail vide : refus dans les
-  trois cas ;
-- casse et espaces : `  A@Hellopro.FR ` dans la requête correspond à
-  `a@hellopro.fr` dans la liste, dans les deux sens de normalisation ;
-- **la liste est par serveur** : une adresse autorisée sur `hellodata`
-  n'ouvre aucun autre serveur gaté. Le test doit inclure un second serveur
-  gaté comme contrôle négatif ;
-- `min_role` inconnu : refus maintenu pour un utilisateur absent de la
-  liste ;
-- un token de scope n'atteint pas le serveur, même si l'adresse figure dans
-  la liste — l'e-mail n'est pas sur le contexte ;
-- un test qui énumère les cinq points d'appel du prédicat et échoue si l'un
-  d'eux appelle encore l'ancienne forme, sur le modèle des tests
-  d'invariant déjà présents (`min_role_registration_regression_test.go`).
+- `requestHeadersFor` pose `X-End-User-Email` **et** `X-End-User-Role` pour
+  le backend hellodata, et **ne les pose pas** pour les autres backends —
+  un test par branche, sur le modèle de
+  `TestRequestHeadersFor_BDDFilterIgnoredForNonBDDBackend` ;
+- **fail-closed à l'émission** : dépôt `gatewayUsers` non câblé, erreur de
+  résolution, e-mail sans ligne dans `gateway_users` — aucun en-tête de rôle
+  n'est envoyé. Jamais de valeur par défaut ;
+- un token de scope n'atteint pas le backend (`min_role = readonly`, pas
+  d'e-mail sur le contexte) — l'invariant reste celui de
+  `TestScopeTokenPathLeavesEndUserEmailUnset` ;
+- **le repli du live-fetch `tools/list` est la liste vide, pas le cache** :
+  backend injoignable ⇒ aucun outil visible. C'est la divergence délibérée
+  d'avec le chemin Zoho (§ 7.2), et elle mérite son propre test parce que
+  copier le repli Zoho serait l'erreur naturelle.
 
 ### 9.3 Côté PHP (local, hors CI puisque non tracké)
 
@@ -692,9 +771,9 @@ local, livré à côté de la spec de déploiement. Cas à couvrir :
 | Composant | Suivi git | Déploiement |
 |---|---|---|
 | `mcp-hellodata-service/` (Go) | Tracké, PR normale | CI `ci_services_*` + CD `cd_build_push_*`, `docker-compose.yml` |
-| Enregistrement dans le gateway | Tracké, PR normale | Configuration `min_role = admin` |
-| Élargissement du prédicat d'accès (§ 7.1) | Tracké, PR normale | Modification de `internal/gateway/access_gate.go` et de ses cinq points d'appel. **Doit faire l'objet d'une PR distincte** de celle du service : c'est un changement de sécurité, il mérite d'être relu seul |
-| `HELLODATA_ALLOWED_EMAILS` | **Jamais** dans git | Variable d'environnement de déploiement du gateway. Le dépôt est public ; aucune adresse ne doit apparaître dans un fichier tracké, y compris un `.env.example` |
+| Enregistrement dans le gateway | Tracké, PR normale | Configuration `min_role = readonly` (§ 7.1) |
+| Injection d'identité + `tools/list` variable | Tracké, PR normale | Un `case` dans `requestHeadersFor` et un cas de live-fetch dans le chemin `tools/list`, tous deux dans `scoped_gateway.go`. `access_gate.go` **n'est pas touché**. PR distincte de celle du service, pour être relue seule |
+| `HELLODATA_ALLOWED_EMAILS` | **Jamais** dans git | Variable d'environnement de déploiement de `mcp-hellodata-service`. Le dépôt est public ; aucune adresse ne doit apparaître dans un fichier tracké, y compris un `.env.example` |
 | `/admin/mcp/hellodata/` (PHP) | **Non tracké** (D6) | Upload FTP manuel sur Ecritel, avec une spec `.md` de déploiement en PR, conformément à `site/CLAUDE.md` |
 
 La spec `.md` de déploiement du PHP contiendra les fichiers complets, le
@@ -725,8 +804,11 @@ non un oubli :
   d'administration, trace d'audit des accès. La v1 s'en tient à la liste
   statique du § 7.1, avec les deux limites que cela implique — redémarrage
   pour modifier, et aucune trace d'audit.
-- Tout usage de `server_authorizations` : ce design ne la lit ni ne l'écrit
-  (§ 7.1).
+- Tout usage de `server_authorizations`, et toute modification de
+  `access_gate.go` : ce design ne touche ni l'une ni l'autre (§ 7.1).
+- Un outil de diagnostic d'accès exposé au LLM. Il ne masquerait rien
+  (§ 7.2) et dupliquerait une information que la liste vide de `tools/list`
+  transmet déjà.
 
 ---
 
@@ -740,11 +822,11 @@ non un oubli :
    atteindre le BO Ecritel en HTTPS. À confirmer avant toute implémentation.
 3. **Absence de `.htaccess`** imposant une authentification sur `/admin/` qui
    empêcherait le moteur de répondre à un Bearer.
-4. **Correspondance rôle ↔ `$debloque_tel_mail`** : quel niveau du gateway
-   équivaut au droit BO actuel sur téléphone et email. Avec `min_role = admin`
-   (§ 7.1), la question devient : un utilisateur admis **par la liste
-   statique** a-t-il droit aux colonnes téléphone et email ? Si la réponse
-   diffère d'un membre à l'autre de la liste, alors la liste plate ne suffit
+4. **Correspondance droit d'accès ↔ `$debloque_tel_mail`** : l'équivalent du
+   droit BO actuel sur téléphone et email. Avec l'accès décidé dans le
+   wrapper (§ 7.1), la question est : un utilisateur admis **par la liste
+   statique** a-t-il droit à ces colonnes, ou seul un `admin` ? Si la réponse
+   diffère d'un membre à l'autre de la liste, alors une liste plate ne suffit
    plus et il faut une seconde liste — ou la table que le § 11 écarte.
 5. **Coût réel des sous-requêtes corrélées** (§ 4.3.3) sur `acheteur`
    (5,6 M lignes). À mesurer sur un arbre représentatif — un `OU` entre deux
@@ -752,11 +834,16 @@ non un oubli :
    coût est prohibitif, l'alternative est de restreindre les critères sur
    tables liées à la chaîne `ET` de premier niveau et de le documenter comme
    une limite du moteur, plutôt que de livrer une requête qui ne revient pas.
-6. **Revue du changement de prédicat d'accès** (§ 7.1) par quelqu'un qui a
-   travaillé les commits `min_role` de cette branche. Élargir un prédicat
-   fail-closed est le genre de modification où une relecture indépendante
-   vaut plus qu'un test de plus.
-7. **Où sont injectées les variables d'environnement du gateway en
-   production**, pour y poser `HELLODATA_ALLOWED_EMAILS` sans qu'elle
-   transite par un fichier tracké. Le dépôt étant public, c'est une
-   vérification à faire avant la première mise en service, pas après.
+6. **Isolation réseau réelle de `mcp-hellodata-service`** en production.
+   C'est devenu **la** garantie du modèle d'accès (§ 7.1) : si un autre
+   composant que le gateway peut joindre le port 8597, `X-End-User-Role:
+   admin` est forgeable et la liste ne protège rien. À vérifier sur le
+   déploiement réel, pas seulement dans `docker-compose.yml`.
+7. **Où sont injectées les variables d'environnement en production**, pour y
+   poser `HELLODATA_ALLOWED_EMAILS` sans qu'elle transite par un fichier
+   tracké. Le dépôt étant public, c'est une vérification à faire avant la
+   première mise en service, pas après.
+8. **Comportement du live-fetch `tools/list`** quand le backend est lent :
+   vérifier que le budget de cette sonde est court et qu'un dépassement
+   donne bien une liste vide, sans pénaliser le `tools/list` des autres
+   backends agrégés dans la même réponse.
