@@ -65,7 +65,7 @@ func TestToolsCall_RefuseUnNonAutorise(t *testing.T) {
 	appele := false
 	h := handler(t, func(w http.ResponseWriter, r *http.Request) { appele = true })
 	r := h.Traiter(context.Background(), Identite{"dave@example.test", "readonly"},
-		req("tools/call", `{"name":"hellodata_compter","arguments":{"filtre":{"critere":"region","comparateur":"dans","valeur":[6]}}}`))
+		req("tools/call", `{"name":"compter","arguments":{"filtre":{"critere":"region","comparateur":"dans","valeur":[6]}}}`))
 	if r.Error == nil {
 		t.Fatal("attendu une erreur pour un appelant non autorise")
 	}
@@ -79,7 +79,7 @@ func TestCompter_CheminNominal(t *testing.T) {
 		io.WriteString(w, `{"code":200,"response":{"count":42,"exact":false,"plafonne":false,"depuis_cache":false}}`)
 	})
 	r := h.Traiter(context.Background(), Identite{"alice@example.test", "readonly"},
-		req("tools/call", `{"name":"hellodata_compter","arguments":{"filtre":{"critere":"region","comparateur":"dans","valeur":[6]}}}`))
+		req("tools/call", `{"name":"compter","arguments":{"filtre":{"critere":"region","comparateur":"dans","valeur":[6]}}}`))
 	if r.Error != nil {
 		t.Fatalf("erreur inattendue: %+v", r.Error)
 	}
@@ -98,7 +98,7 @@ func TestEchantillon_ArbreTropProfondRefuseAvantAppel(t *testing.T) {
 		profond = `{"operateur":"ET","conditions":[` + profond + `]}`
 	}
 	r := h.Traiter(context.Background(), Identite{"alice@example.test", "readonly"},
-		req("tools/call", `{"name":"hellodata_echantillon","arguments":{"filtre":`+profond+`}}`))
+		req("tools/call", `{"name":"echantillon","arguments":{"filtre":`+profond+`}}`))
 	if r.Error == nil || !strings.Contains(r.Error.Message, "arbre_trop_complexe") {
 		t.Fatalf("attendu arbre_trop_complexe, obtenu %+v", r.Error)
 	}
@@ -112,7 +112,7 @@ func TestEchantillon_PlafondDeTaille(t *testing.T) {
 		io.WriteString(w, `{"code":200,"response":{"rows":[],"next_cursor":null,"has_more":false}}`)
 	})
 	r := h.Traiter(context.Background(), Identite{"alice@example.test", "readonly"},
-		req("tools/call", `{"name":"hellodata_echantillon","arguments":{"filtre":{"critere":"a_siret","comparateur":"=","valeur":true},"taille":5000}}`))
+		req("tools/call", `{"name":"echantillon","arguments":{"filtre":{"critere":"a_siret","comparateur":"=","valeur":true},"taille":5000}}`))
 	if r.Error == nil || !strings.Contains(r.Error.Message, "2000") {
 		t.Fatalf("attendu un refus citant 2000, obtenu %+v", r.Error)
 	}
@@ -124,7 +124,7 @@ func TestEchantillon_ColonneRestreinteSansDroit(t *testing.T) {
 	appele := false
 	h := handler(t, func(w http.ResponseWriter, r *http.Request) { appele = true })
 	r := h.Traiter(context.Background(), Identite{"alice@example.test", "readonly"},
-		req("tools/call", `{"name":"hellodata_echantillon","arguments":{"filtre":{"critere":"a_siret","comparateur":"=","valeur":true},"colonnes":["email"]}}`))
+		req("tools/call", `{"name":"echantillon","arguments":{"filtre":{"critere":"a_siret","comparateur":"=","valeur":true},"colonnes":["email"]}}`))
 	if r.Error == nil || !strings.Contains(r.Error.Message, "colonne_restreinte") {
 		t.Fatalf("attendu colonne_restreinte, obtenu %+v", r.Error)
 	}
@@ -142,7 +142,7 @@ func TestExportCSV_LUrlPointeLeWrapper(t *testing.T) {
 		io.WriteString(w, "siren,region\n123456789,6\n# fin-export;1;\n")
 	})
 	r := h.Traiter(context.Background(), Identite{"alice@example.test", "readonly"},
-		req("tools/call", `{"name":"hellodata_export_csv","arguments":{"filtre":{"critere":"a_siret","comparateur":"=","valeur":true}}}`))
+		req("tools/call", `{"name":"export_csv","arguments":{"filtre":{"critere":"a_siret","comparateur":"=","valeur":true}}}`))
 	if r.Error != nil {
 		t.Fatalf("erreur inattendue: %+v", r.Error)
 	}
@@ -164,7 +164,7 @@ func TestExportCSV_ColonneRestreinteSansDroit(t *testing.T) {
 	appele := false
 	h := handler(t, func(w http.ResponseWriter, r *http.Request) { appele = true })
 	r := h.Traiter(context.Background(), Identite{"alice@example.test", "readonly"},
-		req("tools/call", `{"name":"hellodata_export_csv","arguments":{"filtre":{"critere":"a_siret","comparateur":"=","valeur":true},"colonnes":["mobile"]}}`))
+		req("tools/call", `{"name":"export_csv","arguments":{"filtre":{"critere":"a_siret","comparateur":"=","valeur":true},"colonnes":["mobile"]}}`))
 	if r.Error == nil || !strings.Contains(r.Error.Message, "colonne_restreinte") {
 		t.Fatalf("attendu colonne_restreinte, obtenu %+v", r.Error)
 	}
@@ -186,5 +186,23 @@ func TestInitialize_RepondSansIdentite(t *testing.T) {
 	r := h.Traiter(context.Background(), Identite{}, req("initialize", `{}`))
 	if r.Error != nil {
 		t.Fatalf("initialize doit repondre meme sans identite: %+v", r.Error)
+	}
+}
+
+// Les noms sont SANS prefixe : le gateway ajoute 'hellodata_'. Les
+// prefixer ici aussi donnerait hellodata_hellodata_compter au LLM.
+func TestDefinitions_NomsSansPrefixe(t *testing.T) {
+	attendus := []string{"compter", "echantillon", "export_csv"}
+	defs := Definitions()
+	if len(defs) != len(attendus) {
+		t.Fatalf("%d outils, attendu %d", len(defs), len(attendus))
+	}
+	for i, nom := range attendus {
+		if defs[i].Nom != nom {
+			t.Errorf("outil %d = %q, attendu %q", i, defs[i].Nom, nom)
+		}
+		if strings.HasPrefix(defs[i].Nom, "hellodata_") {
+			t.Errorf("%q porte deja le prefixe que le gateway ajoute", defs[i].Nom)
+		}
 	}
 }

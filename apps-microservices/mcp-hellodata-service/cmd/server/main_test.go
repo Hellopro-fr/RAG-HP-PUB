@@ -31,7 +31,7 @@ func TestHandlerJetons_RendLaTableQuAlimenteLExport(t *testing.T) {
 	rep := h.Traiter(context.Background(), tools.Identite{Email: "alice@example.test", Role: "readonly"},
 		mcp.Requete{
 			JSONRPC: "2.0", ID: json.RawMessage(`1`), Methode: "tools/call",
-			Params: json.RawMessage(`{"name":"hellodata_export_csv","arguments":{"filtre":{"critere":"a_siret","comparateur":"=","valeur":true}}}`),
+			Params: json.RawMessage(`{"name":"export_csv","arguments":{"filtre":{"critere":"a_siret","comparateur":"=","valeur":true}}}`),
 		})
 	if rep.Error != nil {
 		t.Fatalf("erreur inattendue: %+v", rep.Error)

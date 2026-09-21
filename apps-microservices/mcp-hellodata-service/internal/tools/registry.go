@@ -44,6 +44,11 @@ func objet(props map[string]interface{}, requis ...string) map[string]interface{
 // Definitions rend les trois outils exposes au LLM. hellodata_export_statut
 // n'existe pas : l'export tient sur une seule page, plafonnee a 2000
 // lignes, rendue directement par hellodata_export_csv.
+//
+// Les noms sont SANS le prefixe 'hellodata_' : c'est le gateway qui
+// l'ajoute (tool_prefix = "hellodata", PrefixedToolName), comme
+// bdd_query_readonly est le prefixe 'bdd' plus l'outil 'query_readonly'.
+// Le renommer ici donnerait hellodata_hellodata_compter au LLM.
 func Definitions() []mcp.Outil {
 	colonnes := map[string]interface{}{
 		"type":        "array",
@@ -56,7 +61,7 @@ func Definitions() []mcp.Outil {
 	}
 	return []mcp.Outil{
 		{
-			Nom: "hellodata_compter",
+			Nom: "compter",
 			Description: "Compte les acheteurs correspondant a un arbre de filtres. " +
 				"Approche par defaut et plafonne a 10000, ce qui suffit pour affiner un ciblage " +
 				"et repond en quelques secondes ; exact=true rend le compte reel mais peut prendre " +
@@ -68,7 +73,7 @@ func Definitions() []mcp.Outil {
 			}, "filtre"),
 		},
 		{
-			Nom: "hellodata_echantillon",
+			Nom: "echantillon",
 			Description: "Lit les acheteurs correspondant au filtre, page par page. " +
 				"Maximum 2000 lignes par appel, 50 par defaut. Pour la page suivante, repasser " +
 				"next_cursor dans cursor. Pour recuperer l'integralite d'une selection volumineuse, " +
@@ -84,7 +89,7 @@ func Definitions() []mcp.Outil {
 			}, "filtre"),
 		},
 		{
-			Nom: "hellodata_export_csv",
+			Nom: "export_csv",
 			Description: "Rend le CSV d'une page de la selection, au plus 2000 lignes, sous forme " +
 				"d'URL de telechargement. Pour la suite, rappeler avec cursor = next_cursor. " +
 				"Le lien expire apres 15 minutes et ne survit pas a un redemarrage du service.",

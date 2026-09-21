@@ -38,7 +38,7 @@ mcp-hellodata-service/
 │   ├── acces/acces.go               # Authorization decision (admin role OR static allowlist)
 │   ├── filtre/filtre.go             # Filter-tree validation/translation
 │   ├── tools/
-│   │   ├── registry.go              # Tool definitions (hellodata_compter, _echantillon, _export_csv)
+│   │   ├── registry.go              # Tool definitions (compter, echantillon, export_csv)
 │   │   ├── handler.go                # MCP request handler (initialize, tools/list, tools/call)
 │   │   ├── selection.go             # Tool implementations, calls into hellodata.Client
 │   │   └── jetons.go                 # Download-token issuance/table for the CSV export flow
@@ -50,11 +50,16 @@ mcp-hellodata-service/
 
 ## MCP Tools
 
-| Tool | Description |
-|------|-------------|
-| `hellodata_compter` | Counts buyers matching a filter tree. Fast approximate mode (capped at 10000) by default; `exact=true` gives the real count but can take over a minute. |
-| `hellodata_echantillon` | Reads buyers matching the filter, page by page (up to 2000 rows/call, 50 by default, cursor-based pagination). |
-| `hellodata_export_csv` | Renders one page (≤2000 rows) of the selection as a CSV download URL. Link expires after 15 minutes and does not survive a service restart. |
+The service names its tools WITHOUT the `hellodata_` prefix: the gateway
+adds it (`tool_prefix = "hellodata"`, `PrefixedToolName`), exactly as
+`bdd_query_readonly` is the `bdd` prefix plus the `query_readonly` tool.
+The name below is the one the LLM finally sees.
+
+| Tool (name seen by the LLM) | Backend name | Description |
+|------|------|-------------|
+| `hellodata_compter` | `compter` | Counts buyers matching a filter tree. Fast approximate mode (capped at 10000) by default; `exact=true` gives the real count but can take over a minute. |
+| `hellodata_echantillon` | `echantillon` | Reads buyers matching the filter, page by page (up to 2000 rows/call, 50 by default, cursor-based pagination). |
+| `hellodata_export_csv` | `export_csv` | Renders one page (≤2000 rows) of the selection as a CSV download URL. Link expires after 15 minutes and does not survive a service restart. |
 
 There is no `hellodata_export_statut` tool: exports are single-page and
 rendered directly by `hellodata_export_csv` — no async job to poll.

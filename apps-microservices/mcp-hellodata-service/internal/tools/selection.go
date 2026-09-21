@@ -45,7 +45,7 @@ func (h *Handler) appeler(ctx context.Context, id Identite, rpcID json.RawMessag
 	admin := h.acces.EstAdmin(id.Role)
 
 	switch nom {
-	case "hellodata_compter":
+	case "compter":
 		d, errRep := h.demande(rpcID, a, admin, false)
 		if errRep != nil {
 			return *errRep
@@ -57,7 +57,7 @@ func (h *Handler) appeler(ctx context.Context, id Identite, rpcID json.RawMessag
 		}
 		return contenu(rpcID, res)
 
-	case "hellodata_echantillon":
+	case "echantillon":
 		if a.Taille < 0 || a.Taille > TailleMax {
 			return mcp.Echec(rpcID, mcp.CodeParamsInvalides,
 				fmt.Sprintf("taille_invalide: %d hors bornes 1..%d", a.Taille, TailleMax))
@@ -76,7 +76,7 @@ func (h *Handler) appeler(ctx context.Context, id Identite, rpcID json.RawMessag
 		}
 		return contenu(rpcID, res)
 
-	case "hellodata_export_csv":
+	case "export_csv":
 		// Une seule page, plafonnee a 2000 lignes cote moteur : pas de
 		// statut a interroger, le CSV revient dans cet appel.
 		d, errRep := h.demande(rpcID, a, admin, true)
