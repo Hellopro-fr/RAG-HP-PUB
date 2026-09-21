@@ -22,6 +22,7 @@ sur la VM.
 
 | Étape | Document | Temps |
 |:--:|---|---|
+| **0** | [`architecture-apres-migration.md`](architecture-apres-migration.md) — **comment la plateforme fonctionne maintenant** : où tourne quoi, les flux, le chemin d'un commit jusqu'à la prod, où regarder, **quoi faire quand ça bloque** | 20 min, une fois |
 | **1** | [`inventaire-services-migration-par-lot.md`](inventaire-services-migration-par-lot.md) — trouve ton service, note son **lot** (P1 → P10) | 2 min |
 | **2** | [`guide-pre-check-service.md`](guide-pre-check-service.md) — la procédure de vérification, à faire **avec Claude** | 20-30 min par service |
 | **3** | [`correspondance-endpoints-vm-cloud.md`](correspondance-endpoints-vm-cloud.md) — l'ancienne adresse de chaque service et la nouvelle | consultation |
