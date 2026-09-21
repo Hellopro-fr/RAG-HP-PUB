@@ -847,3 +847,131 @@ non un oubli :
    vérifier que le budget de cette sonde est court et qu'un dépassement
    donne bien une liste vide, sans pénaliser le `tools/list` des autres
    backends agrégés dans la même réponse.
+
+---
+
+## 13. Amendement du 2026-09-21 — export en flux, sans fichier
+
+### Ce qui a forcé le changement
+
+La spec supposait un répertoire d'état **hors racine web** pour `jobs/`,
+`exports/` et `cache/` (§ 4.1). Vérification faite sur le BO de dev, ce
+répertoire **n'existe pas** :
+
+- le listage de `/` sur `sftp-mcp/dev-read-prod` rend des fichiers servis
+  par le web (`maj_prod_bureaustore.php`, `test_serveur.php`,
+  `mon_compte_acheteur/`, `comptabilite/`) ;
+- la source de production résout `$_SERVER['DOCUMENT_ROOT']."admin/…"`,
+  donc `DOCUMENT_ROOT` se termine par `/` et `/admin` est directement
+  dessous.
+
+**La racine SFTP est le `DOCUMENT_ROOT`.** Aucun répertoire hors racine web
+n'est accessible par ce compte.
+
+Le repli documenté était un `.htaccess` `Deny from all`. Le test a été armé
+sur dev — un témoin **non protégé** déposé à
+`/admin/mcp/hellodata/temoin_public.txt` répond **200**, ce qui prouve que
+le chemin est bien servi et donc que le test aurait été concluant. Il n'a
+pas été mené à son terme : le MCP `sftp-reader` refuse d'écrire un
+`.htaccess` (motif de son `.sftpignore`, aux côtés de `*.env`, `*.key`,
+`*.pem`, `id_rsa`, `/secure`, `/log`), et cette garde n'a pas été levée.
+
+**Décision** : ne pas dépendre d'un `.htaccess`. Un fichier de contrôle
+d'accès qui peut être ignoré en silence par un `AllowOverride None` est une
+garde qu'on ne peut pas vérifier une fois pour toutes — elle se réévalue à
+chaque changement de configuration Apache, et son échec est muet.
+
+### Le nouveau modèle d'export
+
+**Le CSV n'est jamais écrit sur disque.** Le moteur le produit en flux, à la
+demande, et le wrapper le relaie au client.
+
+```
+LLM ──▶ hellodata_export_csv ──▶ le wrapper frappe un jeton, rend une URL
+                                  (rien n'est encore calcule)
+
+Client ──▶ GET {wrapper}/download/{jeton}
+              │  le wrapper retrouve le filtre associe au jeton
+              ▼
+           POST {moteur}?action=export  ──▶ le moteur streame le CSV
+              │                              par tranches de 2000 lignes
+              ▼
+           le wrapper pipe le flux vers le client, sans jamais le bufferiser
+```
+
+#### Côté moteur
+
+- L'action `export` remplace `export_start`, `export_statut`,
+  `export_fetch` et le worker. **Un seul endpoint**, qui répond
+  `Content-Type: text/csv` et écrit sur `php://output`.
+- La boucle de tranches de la Task A8 est conservée telle quelle : 2000
+  lignes par requête, curseur avancé, `fputcsv` puis `flush()`. L'empreinte
+  mémoire reste bornée par construction.
+- Disparaissent : `export_commun.php`, `export_worker.php`,
+  `export_cli.php`, les handles, la purge à 24 h, et toute la question de
+  `fastcgi_finish_request`.
+- **Le cache de comptage reste**, mais il vit désormais dans
+  `sys_get_temp_dir()`, hors racine web par nature, et ne contient que des
+  entiers — aucune donnée personnelle.
+
+#### Côté wrapper
+
+- `hellodata_export_csv` rend **immédiatement** une URL, sans rien
+  calculer. Le jeton est 128 bits d'aléa, associé en mémoire au filtre et
+  aux colonnes demandés, avec un TTL court.
+- La table des jetons est **bornée** en nombre d'entrées et purgée par TTL :
+  un LLM en boucle ne doit pas pouvoir faire croître la mémoire du service.
+- `GET /download/{jeton}` retrouve le filtre, appelle le moteur et **pipe**
+  le flux. Comme aujourd'hui, l'appel est soumis à `Autorise` et
+  l'URL rendue pointe le wrapper, jamais le BO.
+
+#### Les tools passent de quatre à trois
+
+| Tool | Devenir |
+|---|---|
+| `hellodata_compter` | inchangé |
+| `hellodata_echantillon` | inchangé |
+| `hellodata_export_csv` | rend `{url}` au lieu de `{job_id}` |
+| ~~`hellodata_export_statut`~~ | **supprimé** — il n'y a plus de job à interroger |
+
+### Ce qu'on gagne
+
+- **Plus aucun fichier de données personnelles au repos** sur le BO. C'est
+  le gain principal : le problème des CSV devinables de
+  `/admin/hellodata/fichiers_exports/` ne peut pas se reproduire ici, parce
+  qu'il n'y a rien à deviner.
+- Plus de purge, plus de rétention à régler, plus de handle à valider
+  contre une traversée de chemin côté moteur.
+- Plus de dépendance à `fastcgi_finish_request` ni à `exec()`, dont la
+  disponibilité sur Ecritel était une précondition ouverte.
+- Un tool de moins à documenter pour le LLM.
+
+### Ce qu'on perd, et qu'il faut assumer
+
+- **Un export long occupe une connexion HTTP de bout en bout**, du client
+  jusqu'à MySQL. Si le client se déconnecte à mi-parcours, le travail est
+  perdu et doit être refait entièrement.
+- **Aucune reprise.** Le job asynchrone permettait de repasser prendre le
+  fichier ; ici, un échec réseau à 40 000 lignes sur 50 000 impose de tout
+  relancer.
+- **Pas de progression observable.** `export_statut` donnait
+  `lignes_ecrites` ; il n'y a plus rien à interroger pendant le transfert.
+- **Le lien ne survit pas à un redémarrage du wrapper**, puisque la table
+  des jetons est en mémoire. C'est acceptable, et même souhaitable : un
+  lien mort vaut mieux qu'un lien orphelin qui reste valable.
+- Le budget de timeout de bout en bout doit être généreux (10 minutes,
+  § 8), et le serveur web d'Ecritel doit tolérer une réponse aussi longue —
+  **à vérifier** : un `max_execution_time` ou un timeout de proxy
+  couperaient le flux au milieu, et le client recevrait un CSV **tronqué
+  sans erreur visible**. C'est le principal risque de ce modèle, et il
+  remplace la précondition n° 1.
+
+### Précondition n° 1 — remplacée
+
+L'ancienne question « où écrire hors racine web ? » n'a plus d'objet.
+
+La nouvelle : **jusqu'où Ecritel laisse-t-il courir une réponse HTTP ?**
+`max_execution_time`, `mod_fcgid`, timeouts de proxy. Un CSV tronqué qui ne
+se signale pas est pire qu'un export refusé — le moteur doit donc écrire
+une **ligne de fin de flux** que le wrapper vérifie, faute de quoi il
+signale une troncature au lieu de rendre un fichier incomplet.

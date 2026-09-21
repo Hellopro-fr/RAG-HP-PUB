@@ -4990,3 +4990,252 @@ des appels HTTP. Il manque donc :
   pour que PHP la lise (`getenv`) : selon l'hébergement, ce peut être un
   `SetEnv` dans le `.htaccess`, un fichier de configuration PHP-FPM, ou un
   `.env` lu par un include maison. À observer sur place.
+
+---
+
+## Amendement du 2026-09-21 (2) — export en flux
+
+Découle du § 13 de la spec. Motif : la racine SFTP **est** le
+`DOCUMENT_ROOT` (vérifié sur dev), et le repli `.htaccess` a été écarté
+parce qu'un `AllowOverride None` le rendrait inopérant **en silence**.
+
+Le test avait été armé sur dev et il était concluant : un témoin non
+protégé déposé à `/admin/mcp/hellodata/temoin_public.txt` a répondu
+**200**, prouvant que le chemin est servi. Les témoins ont été supprimés et
+vérifiés en 404 ; le répertoire `var/` a été retiré.
+
+### Task A8 — remplacée
+
+L'ancienne Task A8 (job asynchrone, worker, handles, purge) est
+**annulée**. Elle est remplacée par une tâche plus petite.
+
+**Files:**
+- Create: `site/admin/mcp/hellodata/actions/export.php`
+- Test: vérification par `curl` sur dev (aucune partie pure : la boucle de
+  tranches est celle de A4, déjà testée)
+
+**Interfaces:**
+- Consumes: A3, A4, A5
+- Produces: l'action `export` — répond `text/csv` en flux, se termine par
+  une ligne sentinelle
+
+- [ ] **Step 1: Écrire l'action**
+
+```php
+<?php
+// actions/export.php — streame le CSV. Rien n'est ecrit sur disque :
+// aucun fichier de donnees personnelles ne doit rester au repos sur le BO.
+
+require_once __DIR__ . '/../requete.php';
+require_once __DIR__ . '/../bdd.php';
+
+define('EXPORT_TRANCHE', 2000);
+// Ecrite en derniere ligne. C'est ce qui permet au wrapper de distinguer
+// un flux complet d'un flux coupe par un timeout : sans elle, un CSV
+// tronque arriverait au client sans la moindre erreur visible.
+define('EXPORT_SENTINELLE', '# fin-export');
+
+$filtre = isset($corps['filtre']) ? $corps['filtre'] : null;
+if (!is_array($filtre)) { echouer('filtre_manquant', "le champ 'filtre' est requis"); }
+$colonnes = isset($corps['colonnes']) && is_array($corps['colonnes']) && $corps['colonnes']
+          ? $corps['colonnes'] : array('id_acheteur', 'raison_sociale', 'ville', 'code_postal');
+$blocage  = isset($corps['type_blocage']) ? (int)$corps['type_blocage'] : 1;
+$restr    = !empty($corps['colonnes_restreintes_autorisees']);
+
+// On compile AVANT d'emettre le moindre octet : une fois les en-teetes
+// partis, on ne peut plus rendre une erreur HTTP propre.
+try {
+    $c = compiler_arbre($filtre);
+    requete_construire($c['sql'], $c['params'], array(
+        'colonnes' => $colonnes, 'type_blocage' => $blocage,
+        'limite' => 1, 'mode' => 'lignes',
+        'colonnes_restreintes_autorisees' => $restr,
+    ));
+} catch (ArbreErreur $e)   { echouer('arbre_trop_complexe', $e->getMessage()); }
+  catch (CritereErreur $e) { echouer('critere_invalide', $e->getMessage()); }
+  catch (RequeteErreur $e) { echouer('requete_invalide', $e->getMessage()); }
+
+// Le client peut partir en cours de route ; on veut que la boucle s'arrete
+// alors, pas qu'elle continue a marteler MySQL pour personne.
+ignore_user_abort(false);
+@set_time_limit(0);
+
+header('Content-Type: text/csv; charset=utf-8');
+header('Content-Disposition: attachment; filename="selection.csv"');
+while (ob_get_level() > 0) { ob_end_flush(); }
+
+$sortie = fopen('php://output', 'w');
+fwrite($sortie, "\xEF\xBB\xBF"); // BOM : sans lui Excel affiche des mojibake
+
+$entete_ecrit = false;
+$curseur = null;
+$total = 0;
+
+while (true) {
+    $r = requete_construire($c['sql'], $c['params'], array(
+        'colonnes' => $colonnes, 'type_blocage' => $blocage,
+        'curseur' => $curseur, 'limite' => EXPORT_TRANCHE, 'mode' => 'lignes',
+        'colonnes_restreintes_autorisees' => $restr,
+    ));
+    $stmt = bdd_executer($r['sql'], $r['params']);
+    $res = mysqli_stmt_get_result($stmt);
+    $n = 0;
+    while ($l = mysqli_fetch_assoc($res)) {
+        unset($l['rn']);
+        if (!$entete_ecrit) { fputcsv($sortie, array_keys($l), ';'); $entete_ecrit = true; }
+        fputcsv($sortie, array_values($l), ';');
+        $curseur = (int)$l['id_acheteur'];
+        $n++; $total++;
+    }
+    mysqli_stmt_close($stmt);
+    // Une tranche a la fois : l'empreinte memoire est bornee par
+    // EXPORT_TRANCHE, quelle que soit la taille du resultat. Pas de
+    // ini_set("memory_limit", -1) comme dans le script du BO.
+    flush();
+    if ($n < EXPORT_TRANCHE) { break; }
+    if (connection_aborted()) { journaliser('export', 'client parti apres ' . $total . ' lignes'); return; }
+}
+
+fwrite($sortie, EXPORT_SENTINELLE . ';' . $total . "\n");
+fclose($sortie);
+journaliser('export', 'flux termine lignes=' . $total);
+```
+
+- [ ] **Step 2: Retirer `export` du plan de route des fichiers supprimés**
+
+Ne créent plus rien : `export_commun.php`, `export_worker.php`,
+`export_cli.php`, `export_start.php`, `export_statut.php`,
+`export_fetch.php`. La route `export` remplace les cinq dans le tableau de
+`index.php` :
+
+```php
+$routes = array(
+    'comptage'    => 'actions/comptage.php',
+    'echantillon' => 'actions/echantillon.php',
+    'export'      => 'actions/export.php',
+);
+```
+
+- [ ] **Step 3: Faire vivre le cache hors racine web**
+
+`cache_repertoire()` ne doit plus dépendre de `MCP_HELLODATA_VAR` : il n'y
+a pas de répertoire d'état sur le BO. `sys_get_temp_dir()` est hors racine
+web par nature, et le cache ne contient que des entiers — aucune donnée
+personnelle.
+
+```php
+function cache_repertoire() {
+    $dir = sys_get_temp_dir() . '/mcp-hellodata-cache';
+    if (!is_dir($dir)) { @mkdir($dir, 0700, true); }
+    return $dir;
+}
+```
+
+`MCP_HELLODATA_VAR` disparaît des variables d'environnement à poser.
+
+- [ ] **Step 4: Vérifier sur dev — le flux complet**
+
+```
+curl -s -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"filtre":{"critere":"region","comparateur":"dans","valeur":[6]}}' \
+  -X POST 'https://dev-bo.hellopro.fr/admin/mcp/hellodata/index.php?action=export' \
+  | tail -2
+```
+
+Attendu : l'avant-dernière ligne est une ligne de données, la dernière est
+`# fin-export;<n>`. **La sentinelle est le test**, pas le fait d'obtenir
+des octets.
+
+- [ ] **Step 5: Vérifier que rien n'est écrit sur le BO**
+
+```
+curl -s -o /dev/null -w '%{http_code}\n' 'https://dev-bo.hellopro.fr/admin/mcp/hellodata/selection.csv'
+```
+
+Attendu : `404`. Et un `sftp_list_dir` sur `/admin/mcp/hellodata` ne doit
+montrer **aucun** `.csv`.
+
+- [ ] **Step 6: Éprouver la limite de durée — la nouvelle précondition n° 1**
+
+Lance un export volumineux et **chronomètre-le**. Si le flux s'arrête sans
+sentinelle, Ecritel coupe : relève `max_execution_time` et les timeouts de
+proxy, et remonte la valeur observée. Un CSV tronqué qui ne se signale pas
+est le principal risque de ce modèle.
+
+### Task B4 — delta
+
+Remplacer `DemarrerExport`, `StatutExport` et `RecupererExport` par une
+seule méthode :
+
+```go
+// Exporter ouvre le flux CSV. L'appelant DOIT fermer. Rien n'est
+// bufferise : le corps est relaye tel quel vers le client.
+func (c *Client) Exporter(ctx context.Context, d Demande) (io.ReadCloser, error)
+```
+
+Elle poste sur `?action=export` avec le budget `BudgetExportFetch`
+(10 minutes) et rend `resp.Body` enveloppé dans le `fluxAnnulable` déjà
+écrit. Les types `Job` et `Statut` disparaissent.
+
+### Task B5 — delta
+
+- `hellodata_export_statut` est **supprimé**. Les définitions passent de
+  quatre à trois outils.
+- `hellodata_export_csv` rend `{url}` immédiatement, sans appeler le
+  moteur. Sa description devient : « Rend une URL de téléchargement du CSV
+  complet. Le calcul démarre au téléchargement, pas ici. Le lien expire
+  après 15 minutes et ne survit pas à un redémarrage du service. »
+- Le handler frappe un jeton et le mémorise :
+
+```go
+// jetons associe un jeton a la demande qu'il rejouera. En memoire, borne
+// et purge par TTL : un LLM en boucle ne doit pas faire croitre la
+// memoire du service. Un lien mort apres redemarrage vaut mieux qu'un
+// lien orphelin qui reste valable.
+type jetons struct {
+	mu      sync.Mutex
+	entrees map[string]entree
+}
+
+type entree struct {
+	demande hellodata.Demande
+	expire  time.Time
+}
+
+const (
+	JetonTTL = 15 * time.Minute
+	JetonMax = 256
+)
+```
+
+`Frapper(d) (string, error)` purge les entrées expirées, refuse au-delà de
+`JetonMax`, tire 128 bits d'aléa et rend le jeton en hexadécimal
+minuscule — le même format que la liste blanche de `download.Nouveau`
+accepte déjà.
+
+### Task B6 — delta
+
+`download.Nouveau` prend en plus la table de jetons. `ServeHTTP` :
+autorisation, validation du format du jeton, **résolution du jeton en
+demande** (un jeton inconnu ou expiré rend 404), puis `client.Exporter` et
+`io.Copy`.
+
+Ajouter un test : un jeton expiré rend 404 et **n'atteint pas le moteur**.
+
+### Préconditions — mises à jour
+
+| # | Devenir |
+|---|---|
+| 1 | **Remplacée.** La question n'est plus « où écrire hors racine web » mais « jusqu'où Ecritel laisse courir une réponse HTTP ». Un CSV tronqué silencieux est le risque à couvrir, d'où la sentinelle |
+| 2 | Inchangée — version de PHP |
+| 3 | **Résolue** — `/admin/` rend 200 sans authentification HTTP |
+| 4 | Inchangée — joignabilité depuis l'hôte du wrapper |
+| 5 | Inchangée — droit aux colonnes téléphone et e-mail |
+| 6 | Inchangée — coût des sous-requêtes corrélées |
+| 7 | Inchangée — isolation du port 8597 |
+| 8 | **Allégée** — `MCP_HELLODATA_VAR` disparaît, il ne reste que `MCP_HELLODATA_TOKEN` côté Ecritel |
+| 9 | Inchangée — budget du live-fetch `tools/list` |
+| 11 | Inchangée — schéma réel de `acheteur` |
+
+La précondition sur `fastcgi_finish_request` et `exec()` **disparaît** : il
+n'y a plus de tâche de fond.

@@ -13,7 +13,7 @@ Une précondition non résolue reste **ouverte**, elle n'est pas contournée.
 
 | # | Question | Pourquoi ça bloque |
 |---|---|---|
-| 1 | Où écrire l'état hors racine web ? | Sans réponse, les exports CSV sont servables par URL directe |
+| 1 | Jusqu'où Ecritel laisse-t-il courir une réponse HTTP ? | Un flux coupé livrerait un CSV tronqué sans erreur visible |
 | 4 | Le wrapper joint-il le BO depuis son hôte ? | Sans ce chemin réseau, l'architecture ne tient pas |
 | 6 | Coût réel des sous-requêtes corrélées | Décide si la règle de composition § 4.3.3 est tenable |
 | 7 | Isolation du port 8597 en production | C'est **la** garantie du modèle d'accès |
@@ -21,7 +21,20 @@ Une précondition non résolue reste **ouverte**, elle n'est pas contournée.
 
 ## Détail
 
-### 1. Chemin accessible en écriture hors racine web — **OUVERT, bloquant**
+### 1. Chemin hors racine web — **QUESTION REMPLACÉE**
+
+**Résolu par un changement de design**, pas par une réponse : l'export ne
+produit plus de fichier (§ 13 de la spec). Le CSV est streamé à la demande,
+rien ne reste au repos sur le BO, et le cache de comptage vit dans
+`sys_get_temp_dir()`, hors racine web par nature.
+
+**La nouvelle question, qui hérite du caractère bloquant** : jusqu'où
+Ecritel laisse-t-il courir une réponse HTTP ? `max_execution_time`,
+`mod_fcgid`, timeouts de proxy. Un flux coupé au milieu livrerait un CSV
+**tronqué sans erreur visible** — d'où la ligne sentinelle `# fin-export;<n>`
+que le wrapper doit vérifier.
+
+**Observation qui a mené là** (conservée pour mémoire)
 
 **Observation.** Le listage de `/` sur `dev-read-prod` rend des fichiers
 servis par le web : `maj_prod_bureaustore.php`,
@@ -35,10 +48,18 @@ donc `DOCUMENT_ROOT` se termine par `/` et `/admin` est directement dessous.
 **Conclusion : la racine SFTP `/` est le `DOCUMENT_ROOT`.** Aucun
 répertoire hors racine web n'est accessible par ce compte.
 
-**En cours.** Test du repli documenté — `/admin/mcp/hellodata/var/` protégé
-par un `.htaccess` `Deny from all`, avec **preuve par `curl`** et non par la
-présence du fichier : un `AllowOverride None` rendrait le `.htaccess`
-inopérant en silence.
+**Test du repli `.htaccess` : armé, non mené à terme.** Un témoin **non
+protégé** déposé à `/admin/mcp/hellodata/temoin_public.txt` a répondu
+**200**, ce qui prouve que le chemin est servi et donc que le test aurait
+été concluant. Il s'est arrêté là : le MCP `sftp-reader` refuse d'écrire un
+`.htaccess` (motif de son `.sftpignore`, avec `*.env`, `*.key`, `*.pem`,
+`id_rsa`, `/secure`, `/log`), et cette garde n'a pas été levée.
+
+**Décision prise** : ne pas dépendre d'un `.htaccess`, dont l'échec sous
+`AllowOverride None` serait muet. L'export passe en flux (§ 13 de la spec).
+
+**Nettoyage effectué et vérifié** : les deux témoins et le répertoire
+`var/` ont été supprimés, et les deux URL répondent désormais `404`.
 
 ### 2. Version de PHP sur Ecritel — **ouvert**
 
@@ -105,9 +126,10 @@ forgeable et la liste d'autorisés ne protège rien.
 
 Deux jeux distincts :
 
-- côté Ecritel : `MCP_HELLODATA_TOKEN` et `MCP_HELLODATA_VAR`, lues par
-  `getenv()` dans le moteur. Le mécanisme dépend de l'hébergement —
-  `SetEnv` dans un `.htaccess`, configuration PHP-FPM, ou un include
+- côté Ecritel : `MCP_HELLODATA_TOKEN` seule, lue par `getenv()` dans le
+  moteur. `MCP_HELLODATA_VAR` **a disparu** avec le passage à l'export en
+  flux : il n'y a plus de répertoire d'état. Le mécanisme d'injection
+  dépend de l'hébergement — `SetEnv`, configuration PHP-FPM, ou un include
   maison. À observer sur place.
 - côté RAG : `HELLODATA_ALLOWED_EMAILS`, qui contient des adresses
   d'employés. Le dépôt étant **public**, elle ne doit transiter par aucun
