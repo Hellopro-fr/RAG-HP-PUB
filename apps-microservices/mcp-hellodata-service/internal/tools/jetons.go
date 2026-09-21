@@ -20,22 +20,27 @@ type entreeJeton struct {
 	expire  time.Time
 }
 
-// jetons est la table en memoire des pages CSV exportees, adressables par
+// Jetons est la table en memoire des pages CSV exportees, adressables par
 // jeton. Elle ne survit pas a un redemarrage du service : c'est le contrat
 // annonce au LLM dans la description de hellodata_export_csv.
-type jetons struct {
+//
+// Exportee pour que internal/download puisse relire, via (*Handler).Jetons,
+// exactement l'instance que hellodata_export_csv alimente — meme table,
+// pas une copie. Les champs internes (mu, table) restent prives : seules
+// Frapper et Lire forment le contrat public.
+type Jetons struct {
 	mu    sync.Mutex
 	table map[string]entreeJeton
 }
 
-func nouveauxJetons() *jetons {
-	return &jetons{table: make(map[string]entreeJeton)}
+func NouveauxJetons() *Jetons {
+	return &Jetons{table: make(map[string]entreeJeton)}
 }
 
 // Frapper purge les entrees expirees, refuse au-dela de JetonMax, tire 128
 // bits d'alea et rend le jeton en hexadecimal minuscule — le format que
 // /download validera.
-func (j *jetons) Frapper(contenu []byte) (string, error) {
+func (j *Jetons) Frapper(contenu []byte) (string, error) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 
@@ -58,9 +63,9 @@ func (j *jetons) Frapper(contenu []byte) (string, error) {
 	return jeton, nil
 }
 
-// Lire rend le contenu associe a un jeton non expire. Utilise par le futur
-// handler /download, hors perimetre de cette tache.
-func (j *jetons) Lire(jeton string) ([]byte, bool) {
+// Lire rend le contenu associe a un jeton non expire. Utilise par
+// internal/download/proxy.go via (*Handler).Jetons.
+func (j *Jetons) Lire(jeton string) ([]byte, bool) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	e, ok := j.table[jeton]

@@ -21,11 +21,20 @@ type Handler struct {
 	client    *hellodata.Client
 	acces     *acces.Acces
 	publicURL string
-	jetons    *jetons
+	jetons    *Jetons
 }
 
 func Nouveau(c *hellodata.Client, a *acces.Acces, publicURL string) *Handler {
-	return &Handler{client: c, acces: a, publicURL: publicURL, jetons: nouveauxJetons()}
+	return &Handler{client: c, acces: a, publicURL: publicURL, jetons: NouveauxJetons()}
+}
+
+// Jetons rend la table de jetons de ce Handler — la MEME instance que
+// celle que hellodata_export_csv alimente (internal/tools/selection.go),
+// pas une copie. C'est le point d'accroche public de internal/download :
+// il permet de relier le proxy de telechargement a la table reelle par une
+// API ordinaire, sans reflexion ni acces a un champ prive.
+func (h *Handler) Jetons() *Jetons {
+	return h.jetons
 }
 
 func (h *Handler) Traiter(ctx context.Context, id Identite, req mcp.Requete) mcp.Reponse {
