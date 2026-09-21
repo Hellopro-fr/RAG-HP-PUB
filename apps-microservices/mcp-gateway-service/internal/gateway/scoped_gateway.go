@@ -449,7 +449,20 @@ func (sg *ScopedGateway) fetchHellodataTools(ctx context.Context, b *BackendServ
 	if len(liveTools) == 0 {
 		return nil
 	}
-	return sg.registry.MergedToolsFilteredWithTools(map[string]bool{b.ID: true}, sg.allowedTools)
+	// Le catalogue vient du live-fetch, JAMAIS du registre : celui-ci est
+	// alimente par DiscoverAndRegister, qui interroge le backend sans
+	// X-End-User-Email et recoit donc toujours la liste vide. S'appuyer sur
+	// lui rendrait la liste vide pour tout le monde, y compris un admin.
+	out := make([]mcp.Tool, 0, len(liveTools))
+	for _, t := range liveTools {
+		out = append(out, mcp.Tool{
+			Name:        PrefixedToolName(b.ToolPrefix, t.Name),
+			Description: t.Description,
+			InputSchema: t.InputSchema,
+			IsActive:    true,
+		})
+	}
+	return out
 }
 
 func (sg *ScopedGateway) handleToolsCall(ctx context.Context, req *mcp.Request) *mcp.Response {
