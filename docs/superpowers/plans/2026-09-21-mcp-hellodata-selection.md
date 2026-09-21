@@ -433,6 +433,13 @@ function arbre_parcourir($noeud, $profondeur, &$feuilles) {
     if (!is_array($noeud)) {
         throw new ArbreErreur('noeud_invalide: un noeud doit etre un objet');
     }
+    // La profondeur se verifie AVANT de distinguer feuille et groupe.
+    // Places apres, ce test ne s'appliquerait qu'aux groupes : une feuille
+    // au niveau 6 entrerait dans la branche feuille et passerait, alors
+    // qu'elle est precisement ce qui rend l'arbre trop profond.
+    if ($profondeur > ARBRE_PROFONDEUR_MAX) {
+        throw new ArbreErreur('arbre_trop_complexe: profondeur superieure a ' . ARBRE_PROFONDEUR_MAX);
+    }
     if (arbre_est_feuille($noeud)) {
         $feuilles++;
         if ($feuilles > ARBRE_FEUILLES_MAX) {
@@ -446,9 +453,6 @@ function arbre_parcourir($noeud, $profondeur, &$feuilles) {
     $op = $noeud['operateur'];
     if ($op !== 'ET' && $op !== 'OU' && $op !== 'NON') {
         throw new ArbreErreur("operateur_inconnu: '$op' (attendus: ET, OU, NON)");
-    }
-    if ($profondeur > ARBRE_PROFONDEUR_MAX) {
-        throw new ArbreErreur('arbre_trop_complexe: profondeur superieure a ' . ARBRE_PROFONDEUR_MAX);
     }
     $enfants = isset($noeud['conditions']) ? $noeud['conditions'] : null;
     if (!is_array($enfants) || count($enfants) === 0) {
@@ -2913,6 +2917,12 @@ func Valider(n Noeud) (int, error) {
 // parcourir entierement avant de le refuser serait le deni de service
 // qu'on veut eviter.
 func parcourir(n Noeud, profondeur int, feuilles *int) error {
+	// La profondeur se verifie AVANT de distinguer feuille et groupe : place
+	// apres, ce test ne s'appliquerait qu'aux groupes, et une feuille au
+	// niveau 6 passerait alors qu'elle est ce qui rend l'arbre trop profond.
+	if profondeur > ProfondeurMax {
+		return fmt.Errorf("arbre_trop_complexe: profondeur superieure a %d", ProfondeurMax)
+	}
 	if n.estFeuille() {
 		*feuilles++
 		if *feuilles > FeuillesMax {
@@ -2925,9 +2935,6 @@ func parcourir(n Noeud, profondeur int, feuilles *int) error {
 	}
 	if n.Operateur != "ET" && n.Operateur != "OU" && n.Operateur != "NON" {
 		return fmt.Errorf("operateur_inconnu: %q (attendus: ET, OU, NON)", n.Operateur)
-	}
-	if profondeur > ProfondeurMax {
-		return fmt.Errorf("arbre_trop_complexe: profondeur superieure a %d", ProfondeurMax)
 	}
 	if len(n.Conditions) == 0 {
 		return fmt.Errorf("groupe_vide: %q doit porter au moins une condition", n.Operateur)
