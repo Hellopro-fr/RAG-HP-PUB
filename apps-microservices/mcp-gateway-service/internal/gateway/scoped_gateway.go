@@ -47,6 +47,20 @@ const ringoverToolPrefix = "ringover"
 // OAuth2 client declares a BDD scope.
 const bddToolPrefix = "bdd"
 
+// hellodataToolPrefix identifies the mcp-hellodata-service backend. It
+// receives the end-user's identity because IT decides authorization: the
+// gateway only posts a minimal min_role gate on this server, which excludes
+// paths without a user.
+const hellodataToolPrefix = "hellodata"
+
+// Identity headers. X-End-User-Email already existed as a literal on the
+// Zoho path (injectZohoIdentity); it is named here and the literal is
+// replaced with the constant.
+const (
+	EndUserEmailHeader = "X-End-User-Email"
+	EndUserRoleHeader  = "X-End-User-Role"
+)
+
 // LeexiAllowedParticipantsHeader mirrors the constant defined in mcp-leexi-service
 // (transport.AllowedParticipantsHeader). Duplicated here to avoid a cross-module
 // import; both sides MUST stay in sync.
@@ -485,9 +499,37 @@ func (sg *ScopedGateway) requestHeadersFor(ctx context.Context, backend *Backend
 			sg.injectRingoverHeader(ctx, headers)
 		case bddToolPrefix:
 			sg.injectBDDHeader(ctx, headers)
+		case hellodataToolPrefix:
+			sg.injectHellodataIdentity(ctx, headers)
 		}
 	}
 	return headers
+}
+
+// injectHellodataIdentity posts the end-user's identity for
+// mcp-hellodata-service, which alone decides authorization (admin or static
+// allow-list).
+//
+// Fail-closed at emission: when the role cannot be resolved — repository not
+// wired, SQL error, email with no row in gateway_users — NO role header is
+// sent at all. Never a default value: downstream, a default would become an
+// effective role.
+//
+// With no email on the context, nothing is posted at all. That covers scope
+// tokens, client_credentials grants, and health probes; the backend will
+// refuse, and that is the intended behavior.
+func (sg *ScopedGateway) injectHellodataIdentity(ctx context.Context, headers map[string]string) {
+	email, ok := scopetoken.EndUserEmailFromContext(ctx)
+	if !ok || email == "" {
+		return
+	}
+	headers[EndUserEmailHeader] = email
+	role, ok := gatewayUserRole(sg.gatewayUsers, email)
+	if !ok {
+		log.Printf("[scoped] hellodata: role non resolu pour %s — aucun en-tete de role envoye", email)
+		return
+	}
+	headers[EndUserRoleHeader] = role
 }
 
 // isServerAuthorized returns true when the request's end-user has an explicit
@@ -808,7 +850,7 @@ func (sg *ScopedGateway) injectZohoIdentity(ctx context.Context, headers map[str
 	// filter feature: these are always injected on Zoho backends when an end-user
 	// is on context, so the downstream router can pick the right per-user upstream.
 	if email, ok := scopetoken.EndUserEmailFromContext(ctx); ok {
-		headers["X-End-User-Email"] = email
+		headers[EndUserEmailHeader] = email
 		if at := strings.IndexByte(email, '@'); at > 0 {
 			headers["X-End-User-Login"] = email[:at]
 		}
