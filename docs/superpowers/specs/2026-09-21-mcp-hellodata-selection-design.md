@@ -91,11 +91,13 @@ l'existant : il s'assure seulement que les nouveaux exports n'y participent pas.
 | D1 | Usage visé | **Les deux**, avec garde-fou : exploration par défaut, extraction complète explicite et tracée, via des tools distincts |
 | D2 | Architecture | **Moteur PHP côté Ecritel + wrapper Go côté RAG-HP-PUB** ; le moteur exécute et renvoie, le wrapper traduit en MCP |
 | D3 | Matérialisation | **Aucune** — les filtres sont rejoués à chaque appel. Conséquence obligatoire : le dédoublonnage passe en SQL (§ 4.2) |
-| D4 | Périmètre des critères | **Sous-ensemble curé**, pas les 545. Le moteur n'est explicitement **pas** un miroir de l'écran BO |
+| D4 | Périmètre des critères | **Sous-ensemble curé**, pas les 545. Le moteur n'est explicitement **pas** un miroir de l'écran BO. Les critères retenus sont les **feuilles** de l'arbre de D9 |
 | D5 | Livraison du CSV | **Le wrapper proxifie le téléchargement** : le moteur rend un handle, jamais une URL ; le lien vu par le LLM est une URL du wrapper |
 | D6 | Emplacement git du PHP | **Non tracké**, spec `.md` seule, conformément à `site/CLAUDE.md`. Chemin serveur : `/admin/mcp/hellodata/` |
 | D7 | Coût du comptage | **Comptage approché par défaut + cache court**, comptage exact sur demande |
 | D8 | Service MCP | **Service séparé** `mcp-hellodata-service`, distinct du MCP `bdd` |
+| D9 | Forme des filtres | **Arbre booléen imbriqué** (groupes ET / OU / NON contenant des sous-groupes et des feuilles), livré **en un seul appel** |
+| D10 | Accès au service | `min_role = admin`, **plus** une dérogation nominative par `server_authorizations`. Exige d'élargir le prédicat d'accès du gateway (§ 7.1) |
 
 ---
 
@@ -170,7 +172,7 @@ FROM (
   FROM acheteur A
     <jointures conditionnelles>
   WHERE A.id_acheteur != 0 AND A.bloquage_a = 0
-    <fragments des critères validés>
+    AND ( <prédicat compilé depuis l'arbre de filtres, § 4.3> )
 ) d
 WHERE d.rn = 1
   AND d.id_acheteur > :cursor
@@ -192,7 +194,100 @@ curseur** — coût identique page 1 et page 40, là où `OFFSET 40000` relancer
 le scan complet. Un curseur ne saute ni ne duplique de lignes déjà vues quand
 la base bouge entre deux appels.
 
-### 4.3 Les critères de la v1
+### 4.3 Les filtres — un arbre booléen imbriqué
+
+Le filtre n'est pas une liste plate de champs : c'est un **arbre**. Un groupe
+englobe un sous-ensemble de conditions, qui peuvent elles-mêmes être des
+groupes. L'arbre entier est livré **en un seul appel** ; il n'y a pas de
+construction incrémentale sur plusieurs échanges, ce qui reste cohérent avec
+l'absence de matérialisation (D3).
+
+#### 4.3.1 Grammaire
+
+Deux types de nœuds.
+
+**Groupe** — un opérateur booléen et ses enfants :
+
+```json
+{ "operateur": "ET" | "OU" | "NON", "conditions": [ <nœud>, … ] }
+```
+
+**Feuille** — un critère de la liste blanche, un comparateur, une valeur :
+
+```json
+{ "critere": "region", "comparateur": "dans", "valeur": ["Bretagne", "Normandie"] }
+```
+
+Exemple complet :
+
+```json
+{
+  "operateur": "ET",
+  "conditions": [
+    { "critere": "region", "comparateur": "dans", "valeur": ["Bretagne"] },
+    { "critere": "effectif", "comparateur": ">=", "valeur": 10 },
+    { "operateur": "OU", "conditions": [
+        { "critere": "nb_di_recues",        "comparateur": ">=", "valeur": 3 },
+        { "critere": "nb_emailing_ouverts", "comparateur": ">=", "valeur": 5 }
+    ]},
+    { "operateur": "NON", "conditions": [
+        { "critere": "npai", "comparateur": "=", "valeur": true }
+    ]}
+  ]
+}
+```
+
+Comparateurs autorisés, par type de critère :
+
+| Type de critère | Comparateurs |
+|---|---|
+| Liste (région, NAF, rubrique, pays…) | `dans`, `pas_dans` |
+| Numérique (effectif, compteurs) | `=`, `!=`, `<`, `<=`, `>`, `>=`, `entre` |
+| Date / période | `avant`, `apres`, `entre` |
+| Booléen (NPAI, optin, a_siret…) | `=` |
+| Texte (nom commercial, raison sociale) | `contient`, `ne_contient_pas`, `commence_par` |
+
+#### 4.3.2 Garde-fous structurels
+
+Un LLM peut produire un arbre arbitrairement large ; le moteur le refuse
+avant de compiler quoi que ce soit.
+
+| Limite | Valeur | Raison |
+|---|---|---|
+| Profondeur maximale | 5 | Au-delà, l'arbre est illisible et le SQL explose |
+| Nombre total de feuilles | 50 | Borne le coût de la requête compilée |
+| Enfants par groupe | 1 à 20 | Un groupe vide n'a pas de sens |
+| Enfants d'un `NON` | exactement 1 | `NON` est unaire ; un `NON` à deux enfants est ambigu |
+
+Un dépassement est un refus explicite (`arbre_trop_complexe`), avec la limite
+franchie nommée — pas une troncature silencieuse.
+
+#### 4.3.3 Règle de composition — le piège des jointures
+
+C'est la conséquence non évidente de l'imbrication, et elle commande
+l'implémentation.
+
+Aujourd'hui, les jointures du script BO sont **conditionnelles à la présence**
+d'un critère : si un critère DI est posé, on joint `demande_information`. Cela
+fonctionne parce que tous les critères sont combinés en `AND`. **Dès qu'un
+critère apparaît sous un `OU` ou un `NON`, une `INNER JOIN` devient fausse** :
+elle éliminerait des lignes qui auraient dû satisfaire l'autre branche.
+
+Règle retenue :
+
+1. **Toute feuille est un prédicat autonome.** Un critère portant sur une
+   table liée s'exprime en sous-requête corrélée (`EXISTS`, `NOT EXISTS`, ou
+   un scalaire `(SELECT COUNT(…) …)`), pas en jointure.
+2. **Exception d'optimisation** : un critère situé dans la chaîne `ET` de
+   premier niveau — donc obligatoirement vrai pour toute ligne du résultat —
+   peut être compilé en `INNER JOIN`. Le compilateur ne l'applique que là.
+3. Toute jointure restante nécessaire à la projection des colonnes est une
+   `LEFT JOIN`, jamais une `INNER JOIN`, pour ne pas filtrer implicitement.
+
+Le coût de la règle 1 sur une table de 5,6 M lignes est réel et doit être
+**mesuré**, pas supposé : c'est la précondition n° 5 du § 12.
+
+#### 4.3.4 Les critères disponibles en feuille
 
 Une trentaine de critères métier, soit **46 champs** une fois comptées les
 bornes de période et les opérateurs de comparaison.
@@ -209,13 +304,15 @@ bornes de période et les opérateurs de comparaison.
 | Fiche | `fiche_creation_debut/fin`, `fiche_maj_debut/fin` |
 | Technique | `type_blocage` (mode de dédoublonnage, cf. § 4.2) |
 
-`criteres.php` est une **liste blanche stricte**. Tout paramètre inconnu
-provoque un refus explicite qui **renvoie la liste des critères connus** — le
-LLM apprend le vocabulaire par l'erreur plutôt que d'inventer. Un paramètre
-inconnu n'est **jamais** ignoré silencieusement.
+`criteres.php` est une **liste blanche stricte**. Un `critere` inconnu en
+feuille, un `comparateur` incompatible avec le type du critère, ou une valeur
+hors domaine provoquent un refus explicite qui **renvoie la liste des critères
+connus et leurs comparateurs** — le LLM apprend le vocabulaire par l'erreur
+plutôt que d'inventer. Rien n'est **jamais** ignoré silencieusement.
 
-Aucun SQL n'entre par la porte : le wrapper n'envoie que des filtres
-structurés, validés en type et en domaine côté PHP.
+Aucun SQL n'entre par la porte : le wrapper n'envoie qu'un arbre structuré,
+dont chaque feuille est validée en critère, en comparateur et en domaine de
+valeur côté PHP, et dont chaque valeur passe en requête préparée.
 
 ### 4.4 Colonnes restituables
 
@@ -230,10 +327,17 @@ Dérivées de la table d'extraction de l'écran actuel :
 **Colonnes sous condition de rôle** (équivalent du `$debloque_tel_mail` du
 script actuel) : `email`, `telephone`, `telephone_md5`, `fax`.
 
-Sans le niveau de rôle requis, ces colonnes sont **absentes du résultat** — pas
+Sans le droit requis, ces colonnes sont **absentes du résultat** — pas
 présentes et masquées après coup. Le moteur reçoit du wrapper un indicateur
-dérivé du `min_role` du gateway ; il refuse la demande si une colonne
-restreinte est demandée sans le droit.
+explicite ; il refuse la demande si une colonne restreinte est demandée sans
+le droit.
+
+Avec `min_role = admin` (§ 7.1), tout utilisateur admis est soit `admin`, soit
+porteur d'une dérogation nominative. La distinction ne porte donc plus entre
+rôles élevés et rôles bas, mais entre **admin** et **dérogataire** — et il
+reste à décider si un dérogataire y a droit. C'est la précondition n° 4 du
+§ 12 ; tant qu'elle n'est pas tranchée, le moteur refuse ces colonnes à tout
+non-admin.
 
 ### 4.5 Contrat HTTP
 
@@ -242,9 +346,9 @@ Enveloppe `{"code": 200, "response": {...}}` — identique à celle que
 
 | Action | Méthode | Entrée | Sortie |
 |---|---|---|---|
-| `comptage` | POST | filtres, `exact` (bool, défaut `false`) | `{count, exact, plafonne, duree_ms, depuis_cache}` |
-| `echantillon` | POST | filtres, `colonnes[]`, `cursor`, `taille` | `{rows[], next_cursor, has_more}` |
-| `export_start` | POST | filtres, `colonnes[]` | `{job_id}` |
+| `comptage` | POST | `filtre` (arbre), `exact` (bool, défaut `false`) | `{count, exact, plafonne, duree_ms, depuis_cache}` |
+| `echantillon` | POST | `filtre` (arbre), `colonnes[]`, `cursor`, `taille` | `{rows[], next_cursor, has_more}` |
+| `export_start` | POST | `filtre` (arbre), `colonnes[]` | `{job_id}` |
 | `export_statut` | GET | `job_id` | `{state, lignes_ecrites, handle?, erreur?}` |
 | `export_fetch` | GET | `handle` | flux `text/csv` |
 
@@ -261,8 +365,12 @@ qu'un LLM affine un ciblage par itérations.
 **Sur demande (`exact: true`)** : `COUNT(*)` complet sur la sous-requête
 dédoublonnée. Lent par nature, budget de timeout dédié.
 
-**Cache** : clé = hash SHA-256 des filtres normalisés (tri des clés,
-normalisation des listes) + `exact` + niveau de rôle. TTL court, de l'ordre de
+**Cache** : clé = hash SHA-256 de la **forme canonique de l'arbre de
+filtres** (tri des clés d'objet, tri des enfants d'un `ET` ou d'un `OU` —
+commutatifs — tri et dédoublonnage des valeurs de liste, `NON` laissé en
+place car unaire) + `exact` + niveau de rôle. La canonicalisation garantit
+que deux arbres sémantiquement identiques écrits dans un ordre différent par
+le LLM touchent la même entrée de cache. TTL court, de l'ordre de
 5 minutes, purge paresseuse à l'écriture. Le cache s'applique aux deux modes.
 La réponse porte `depuis_cache` pour que le comportement reste lisible.
 
@@ -309,6 +417,9 @@ mcp-hellodata-service/
 │   ├── hellodata/
 │   │   ├── client.go           # Bearer, unwrap de l'enveloppe, budget par endpoint
 │   │   └── types.go            # DTO filtres / lignes / job
+│   ├── filtre/
+│   │   ├── arbre.go            # types du filtre imbriqué, parsing JSON
+│   │   └── valide.go           # bornes structurelles (profondeur, feuilles, arité)
 │   ├── tools/
 │   │   ├── registry.go
 │   │   ├── handler.go          # initialize, tools/list, tools/call
@@ -322,15 +433,21 @@ mcp-hellodata-service/
 Toutes les URL et le token viennent de variables d'environnement
 (`.claude/rules/security.md` : aucune URL de service en dur).
 
+Le wrapper valide **la structure** de l'arbre (profondeur, nombre de
+feuilles, arité — § 4.3.2) pour rejeter tôt et donner un message utile au
+LLM. Il ne valide **pas** les critères eux-mêmes : la liste blanche reste
+côté moteur, en un seul endroit. Un wrapper qui dupliquerait la liste
+divergerait d'elle.
+
 ---
 
 ## 6. Les 4 tools MCP
 
 | Tool | Entrée | Sortie | Rôle |
 |---|---|---|---|
-| `hellodata_compter` | `filtres`, `exact` (défaut `false`) | `{count, exact, plafonne, depuis_cache}` | L'appel bon marché que le LLM répète pour affiner son ciblage |
-| `hellodata_echantillon` | `filtres`, `colonnes[]`, `cursor`, `taille` (≤ **2000**, défaut 50) | `{rows[], next_cursor, has_more}` | Lecture paginée par curseur |
-| `hellodata_export_csv` | `filtres`, `colonnes[]` | `{job_id}` | Démarre l'extraction complète. Explicite, jamais implicite |
+| `hellodata_compter` | `filtre` (arbre), `exact` (défaut `false`) | `{count, exact, plafonne, depuis_cache}` | L'appel bon marché que le LLM répète pour affiner son ciblage |
+| `hellodata_echantillon` | `filtre` (arbre), `colonnes[]`, `cursor`, `taille` (≤ **2000**, défaut 50) | `{rows[], next_cursor, has_more}` | Lecture paginée par curseur |
+| `hellodata_export_csv` | `filtre` (arbre), `colonnes[]` | `{job_id}` | Démarre l'extraction complète. Explicite, jamais implicite |
 | `hellodata_export_statut` | `job_id` | `{state, lignes, url?}` | `url` pointe le wrapper, jamais le BO |
 
 **C'est là que vit le garde-fou de D1** : `compter` et `echantillon` ne
@@ -353,6 +470,81 @@ authentification que le reste du service, donc au `min_role` du gateway.
 
 ## 7. Sécurité et autorisation
 
+### 7.1 Accès au service — `admin` + dérogation nominative (D10)
+
+**Règle voulue** : seuls les `admin` et les utilisateurs explicitement
+autorisés dans `/server-authorizations` peuvent atteindre
+`mcp-hellodata-service`.
+
+**Écart avec l'existant, à traiter comme un vrai changement.** Le prédicat
+d'accès actuel, `GateAllows` dans `internal/gateway/access_gate.go`, est
+**purement basé sur le rôle** : il compare `mcp_servers.min_role` à
+`gateway_users.role`. La table `server_authorizations` n'est consultée qu'à un
+seul endroit, `internal/gateway/scoped_gateway.go:507`, dans le chemin
+d'**injection des en-têtes de filtrage** — c'est une dérogation au filtrage
+par utilisateur, **pas** une admission. Le commentaire du modèle
+(`internal/db/models.go:627`) le dit : « grants a specific end-user full
+*unfiltered* access ».
+
+Rôles définis (`internal/auth/role.go`) : `admin` = 3, `readonly` = 2,
+`configonly` = 1, inconnu = 0.
+
+**Changement requis** — un prédicat élargi, à écrire fail-closed comme
+l'original :
+
+```go
+// GateAllowsEmailWithGrant : rôle suffisant OU dérogation nominative.
+// Toute incertitude (dépôt non câblé, erreur, email vide) refuse.
+func GateAllowsEmailWithGrant(
+    minRole, serverID, email string,
+    users gatewayUserFinder,
+    grants serverAuthorizer,
+) bool {
+    if GateAllowsEmail(minRole, email, users) {
+        return true
+    }
+    if grants == nil || email == "" || serverID == "" {
+        return false
+    }
+    return grants.IsAuthorized(serverID, email)
+}
+```
+
+**Quatre propriétés à préserver**, parce que la branche courante vient de
+passer quinze commits à les établir :
+
+1. **Fail-closed sur l'incertitude.** La nouvelle branche `OU` ne doit jamais
+   transformer une erreur de dépôt en autorisation. Dépôt absent, erreur SQL,
+   email vide : refus.
+2. **`min_role` inconnu reste un refus.** `GateAllowsEmail` refuse déjà
+   lorsqu'il ne reconnaît pas la valeur ; la branche `OU` ne doit pas
+   contourner ce garde-fou pour les utilisateurs sans dérogation.
+3. **Les tokens de scope et `client_credentials` restent exclus.** L'email de
+   l'utilisateur final n'est posé sur le contexte que sur le chemin OAuth2
+   bearer ; l'invariant est épinglé par
+   `TestScopeTokenPathLeavesEndUserEmailUnset`. La dérogation nominative,
+   qui se fonde sur cet email, hérite naturellement de cette exclusion.
+4. **Tous les points d'appel doivent être modifiés.** Le prédicat est
+   consulté à cinq endroits : `scoped_gateway.go` lignes 285, 423, 874, 908,
+   et `FilterServersByGate` pour l'écran de consentement. En oublier un
+   reproduit exactement la classe de bug — les « registry drop sites » — que
+   les commits `e53e07df`, `bf44e7f0` et `58f13bf9` viennent de fermer.
+
+**Sur la surcharge sémantique.** Une ligne de `server_authorizations`
+signifierait désormais deux choses : « peut atteindre ce serveur » **et**
+« échappe à l'injection de filtres ». Pour `mcp-hellodata-service` c'est sans
+conséquence : l'injection ne vise que les préfixes `leexi`, `ringover` et
+`bdd`, donc la dérogation au filtrage y est un no-op. **Cela cesserait d'être
+vrai** si ce service recevait un jour une injection de filtres par
+utilisateur : il faudrait alors séparer les deux notions. À écrire en
+commentaire à côté du prédicat.
+
+**Configuration du serveur** : `min_role = admin`. Les non-admins n'y
+accèdent que par une ligne de `server_authorizations`, posée par l'API
+d'administration.
+
+### 7.2 Surfaces
+
 | Surface | Mesure |
 |---|---|
 | Wrapper → moteur | Bearer token (`HELLODATA_TOKEN`), en variable d'environnement, jamais en dur. Allowlist IP côté Ecritel |
@@ -362,7 +554,8 @@ authentification que le reste du service, donc au `min_role` du gateway.
 | Fichiers CSV | Hors racine web, nom à jeton, servis uniquement par endpoint authentifié, purge à 24 h |
 | Cache | Le niveau de rôle fait partie de la clé (§ 4.6) |
 | Fuite par message d'erreur | Codes stables, aucun SQL ni message MySQL dans les réponses (§ 4.8) |
-| Accès LLM | Enregistrement du backend dans `mcp-gateway-service` avec `min_role` |
+| Accès LLM | `min_role = admin` + dérogation nominative par `server_authorizations` (§ 7.1) |
+| Arbre de filtres | Profondeur, nombre de feuilles et arité bornés avant compilation (§ 4.3.2) |
 
 ---
 
@@ -391,19 +584,49 @@ comme un résultat vide.
 
 - `internal/hellodata/client_test.go` — `httptest`, déballage de l'enveloppe,
   propagation des codes d'erreur, respect des budgets de timeout.
+- `internal/filtre/valide_test.go` — arbre au-delà de la profondeur 5, plus
+  de 50 feuilles, groupe vide, `NON` à deux enfants : chacun refusé avec la
+  limite nommée. Et un arbre valide de profondeur 5 accepté, pour que le test
+  d'absence ait un contrôle positif.
 - `internal/tools/selection_test.go` — validation des arguments, plafond de
   2000 sur `taille`, rejet des colonnes restreintes sans le rôle.
 - `internal/download/proxy_test.go` — handle invalide, streaming, absence de
   fuite de l'URL du moteur dans la réponse.
 
-### 9.2 Côté PHP (local, hors CI puisque non tracké)
+### 9.2 Côté gateway (en CI)
+
+Le changement du § 7.1 touche un prédicat de sécurité. À couvrir :
+
+- un `admin` passe ; un `readonly` sans dérogation est refusé ; le même
+  `readonly` **avec** une ligne `server_authorizations` passe ;
+- dépôt de dérogations non câblé, erreur de dépôt, email vide : refus dans
+  les trois cas ;
+- `min_role` inconnu : refus maintenu pour un utilisateur sans dérogation ;
+- un token de scope n'atteint pas le serveur, même si l'email figure dans
+  `server_authorizations` — l'email n'est pas sur le contexte ;
+- un test qui énumère les cinq points d'appel du prédicat et échoue si l'un
+  d'eux appelle encore l'ancienne forme, sur le modèle des tests
+  d'invariant déjà présents (`min_role_registration_regression_test.go`).
+
+### 9.3 Côté PHP (local, hors CI puisque non tracké)
 
 `criteres.php` et `requete.php` sont **purs** : filtres en entrée, fragment SQL
 en sortie, sans base ni serveur. Ils sont donc testables par un script de test
 local, livré à côté de la spec de déploiement. Cas à couvrir :
 
-- chaque critère produit le fragment attendu ;
-- un critère inconnu est refusé et la liste des critères connus est rendue ;
+- chaque critère produit le fragment attendu, pour chaque comparateur
+  autorisé de son type ;
+- un critère inconnu, un comparateur incompatible et une valeur hors domaine
+  sont refusés, et la liste des critères connus est rendue ;
+- **compilation de l'arbre** : un `OU` contenant un critère sur table liée
+  produit une sous-requête corrélée, pas une `INNER JOIN` (§ 4.3.3) — c'est
+  le test qui protège la correction sémantique du nesting ;
+- un `NON` produit bien la négation, y compris sur un groupe entier ;
+- un critère seul dans la chaîne `ET` de premier niveau peut emprunter le
+  chemin `INNER JOIN`, et le résultat est identique à sa forme en
+  sous-requête (test d'équivalence) ;
+- la forme canonique de l'arbre est stable : deux arbres identiques à l'ordre
+  près produisent la même clé de cache (§ 4.6) ;
 - les trois clés de partition de `type_blocage` (§ 4.2) ;
 - une colonne restreinte demandée sans le droit est refusée ;
 - le plafonnement à 10 001 du comptage approché.
@@ -415,7 +638,8 @@ local, livré à côté de la spec de déploiement. Cas à couvrir :
 | Composant | Suivi git | Déploiement |
 |---|---|---|
 | `mcp-hellodata-service/` (Go) | Tracké, PR normale | CI `ci_services_*` + CD `cd_build_push_*`, `docker-compose.yml` |
-| Enregistrement dans le gateway | Tracké | Migration + configuration `min_role` |
+| Enregistrement dans le gateway | Tracké, PR normale | Configuration `min_role = admin` |
+| Élargissement du prédicat d'accès (§ 7.1) | Tracké, PR normale | Modification de `internal/gateway/access_gate.go` et de ses cinq points d'appel. **Doit faire l'objet d'une PR distincte** de celle du service : c'est un changement de sécurité, il mérite d'être relu seul |
 | `/admin/mcp/hellodata/` (PHP) | **Non tracké** (D6) | Upload FTP manuel sur Ecritel, avec une spec `.md` de déploiement en PR, conformément à `site/CLAUDE.md` |
 
 La spec `.md` de déploiement du PHP contiendra les fichiers complets, le
@@ -432,8 +656,10 @@ non un oubli :
 - La très large majorité des 545 paramètres de l'écran BO (D4).
   `/admin/mcp/hellodata/` n'est pas un miroir de cet écran et n'a pas
   vocation à le devenir.
-- Les liaisons ET/OU entre familles (`liason1..7`) : la v1 combine tous les
-  critères en `AND`.
+- La reproduction fidèle de la sémantique des `liason1..7` de l'écran BO.
+  La v1 offre un arbre ET / OU / NON générique (§ 4.3), qui est **plus**
+  expressif sur la forme, mais ne prétend pas reproduire le comportement
+  exact des sept liaisons de l'écran.
 - Les critères fournisseur (`if_*`) et opération emailing (`oe_*`).
 - Le filtre profiling (`filtre-profiling`) et le comptage ventilé.
 - La correction des CSV devinables existants dans
@@ -453,5 +679,18 @@ non un oubli :
    atteindre le BO Ecritel en HTTPS. À confirmer avant toute implémentation.
 3. **Absence de `.htaccess`** imposant une authentification sur `/admin/` qui
    empêcherait le moteur de répondre à un Bearer.
-4. **Correspondance `min_role` ↔ `$debloque_tel_mail`** : quel niveau de rôle
-   du gateway équivaut au droit BO actuel sur téléphone et email.
+4. **Correspondance rôle ↔ `$debloque_tel_mail`** : quel niveau du gateway
+   équivaut au droit BO actuel sur téléphone et email. Avec `min_role = admin`
+   (§ 7.1), la question devient : un utilisateur admis par **dérogation
+   nominative** a-t-il droit aux colonnes téléphone et email, ou faut-il un
+   second indicateur sur la ligne de `server_authorizations` ?
+5. **Coût réel des sous-requêtes corrélées** (§ 4.3.3) sur `acheteur`
+   (5,6 M lignes). À mesurer sur un arbre représentatif — un `OU` entre deux
+   critères sur tables liées — avant de figer la règle de composition. Si le
+   coût est prohibitif, l'alternative est de restreindre les critères sur
+   tables liées à la chaîne `ET` de premier niveau et de le documenter comme
+   une limite du moteur, plutôt que de livrer une requête qui ne revient pas.
+6. **Revue du changement de prédicat d'accès** (§ 7.1) par quelqu'un qui a
+   travaillé les commits `min_role` de cette branche. Élargir un prédicat
+   fail-closed est le genre de modification où une relecture indépendante
+   vaut plus qu'un test de plus.
