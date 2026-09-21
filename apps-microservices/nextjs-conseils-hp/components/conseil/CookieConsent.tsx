@@ -7,6 +7,7 @@ import {
   storeConsentV2,
   pushConsentUpdate,
   fireConsentAuditPixel,
+  CONSENT_RESOLVED_EVENT,
 } from '@/lib/consent/cookies';
 
 /**
@@ -105,6 +106,14 @@ export function CookieConsent() {
 
   function close() {
     setShow(false);
+    // Signale que le consentement vient d'être tranché (le bandeau se ferme) — pour
+    // qu'une action différée puisse s'enchaîner (cf. `HubDeepLink`). Additif :
+    // aucun autre composant n'écoute cet événement.
+    try {
+      window.dispatchEvent(new CustomEvent(CONSENT_RESOLVED_EVENT));
+    } catch {
+      /* non bloquant */
+    }
   }
 
   /* Refuser tout / Continuer sans accepter → hp_consent=1 */

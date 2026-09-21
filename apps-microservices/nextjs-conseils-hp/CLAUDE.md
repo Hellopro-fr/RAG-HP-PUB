@@ -759,6 +759,10 @@ components/hub/
   HubOverlays.tsx        'use client' — charge guide+pop-up en LAZY (ssr:false),
                          armés au 1er clic guide / 1er scroll (hors bundle initial,
                          sans fenêtre morte grâce à `autoOpenOnMount` du dialog guide)
+  HubDeepLink.tsx        'use client' — deep-link externe : `?hub_cta=projet` ouvre
+                         l'AssistantForm sur sa 1re question, `?hub_cta=guide` ouvre
+                         la pop-up guide (réutilise les openers → condition e-mail
+                         préservée). Nettoie le param d'URL après ouverture.
   triggers.tsx           'use client' — GuideButton / AssistantButton
 components/ui/dialog.tsx  primitive Radix (écrite à la main, pas via la CLI shadcn)
 lib/hub/sanitize.ts       allowlist stricte, zéro attribut conservé

@@ -123,6 +123,24 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
   // ⚠️ Contrairement au guide/pop-up, le questionnaire N'A PAS de raccourci
   // « e-mail mémorisé » : l'étape e-mail est TOUJOURS affichée.
   const totalSteps = data.steps.length + 2;
+  /**
+   * DEUX compteurs, et les confondre est une erreur visible par le visiteur.
+   *
+   * `totalSteps` compte les ÉCRANS (questions + e-mail + coordonnées) : c'est la
+   * bonne base pour la barre de progression et pour `step_total` côté analytics,
+   * qui mesurent l'avancement dans le parcours complet.
+   *
+   * `totalQuestions` compte les QUESTIONS, et rien d'autre. C'est ce que doit
+   * afficher la pastille « Question 1/N » : l'écran e-mail et l'écran coordonnées
+   * ne sont pas des questions, les annoncer comme telles promet au visiteur deux
+   * questions qu'il ne verra jamais.
+   *
+   * Le bug d'origine (corrigé le 2026-09-03) : la pastille utilisait `totalSteps`
+   * et annonçait donc « 1/6 » pour 4 questions. Il est passé inaperçu parce que
+   * les TROIS pages HUB ont exactement 4 questions — la valeur avait l'air figée
+   * à 6 alors qu'elle était calculée, à partir du mauvais total.
+   */
+  const totalQuestions = data.steps.length;
   const isContact = step === data.steps.length;
   const isCoordinates = step === data.steps.length + 1;
   const current = step < data.steps.length ? data.steps[step] : null;
@@ -384,6 +402,17 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
       const index = data.steps.findIndex((s) => s.id === id);
       pushHubEvent('hub_form_start', 'projet', {
         form_id: 'assistant',
+        // `hub_entry_point` avait ete oublie ici (corrige le 2026-09-16), alors
+        // qu'il est porte par `hub_form_step`, `hub_form_abandon` et
+        // `hub_form_submission`. Consequence dans GA4 : la dimension arrivait
+        // VIDE sur les demarrages — on pouvait ventiler les etapes, les abandons
+        // et les conversions par porte d'entree, mais pas les demarrages, soit
+        // precisement la marche ou se mesure l'attractivite d'une porte.
+        //
+        // Rien ne le signalait : une cle absente est poussee a `undefined`, le
+        // tag GA4 ne l'emet pas, et la dimension reste vide. Meme defaut
+        // silencieux que sur `hub_form_submission` en aout.
+        hub_entry_point: entryPoint,
         step_name: questionStepName(index < 0 ? 0 : index),
         step_id: id,
         answer_label: option,
@@ -482,7 +511,7 @@ export function AssistantForm({ data, idPageHub }: { data: HubAssistant; idPageH
                 (2026-08-07) — c'est la QUESTION en dessous qui porte le `h2`. */}
             <p className="text-lg font-bold text-foreground sm:text-xl">{data.cardTitle}</p>
             <span className="shrink-0 rounded-full bg-cta/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-cta">
-              Question 1/{totalSteps}
+              Question 1/{totalQuestions}
             </span>
           </div>
           {/* Amorce fixe et non `progressPct` : ce bloc est l'écran d'entrée du

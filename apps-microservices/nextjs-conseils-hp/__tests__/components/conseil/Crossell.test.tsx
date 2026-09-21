@@ -48,10 +48,15 @@ describe('Crossell', () => {
     expect(screen.getByText('Conseil')).toBeDefined();
   });
 
-  it('renders CitedProductsCarousel when liensIntexts provided', () => {
+  /**
+   * `findBy` et non `getBy` : `Crossell` charge désormais `CitedProductsCarousel`
+   * via `next/dynamic` (cf. `lazyBlocks`), donc le composant n'est pas dans le DOM
+   * au retour de `render` — il arrive après résolution du chunk.
+   */
+  it('renders CitedProductsCarousel when liensIntexts provided', async () => {
     const liens = [{ id: 1, type: 0 as const, photo: '', titre: 'Produit', description: '', url: '/p' }];
     render(<Crossell liensIntexts={liens} />);
-    expect(screen.getByTestId('cited-products')).toBeDefined();
+    expect(await screen.findByTestId('cited-products')).toBeDefined();
   });
 
   it('does not render CitedProductsCarousel when no liensIntexts', () => {

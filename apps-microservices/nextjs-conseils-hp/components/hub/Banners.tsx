@@ -49,7 +49,10 @@ function Banner({ id, tag, tagIcon, title, text, ctaLabel, ctaIcon, image, actio
         {/* MOBILE : pile badge (haut-gauche) → image → titre+bouton → texte.
             DESKTOP (lg) : grille image à gauche, badge au-dessus du contenu à
             droite. Un seul markup (3 blocs réordonnés par la grille), pas de doublon. */}
-        <div className="flex flex-col gap-4 px-5 py-6 sm:px-6 lg:grid lg:grid-cols-[160px_minmax(0,1fr)] lg:items-center lg:gap-x-8 lg:gap-y-2 lg:px-8 lg:py-5">
+        {/* `lg:gap-y-0` : la pastille et le titre sont deux lignes de la MÊME grille,
+            tout écart entre eux vient d'ici. Cf. la note de l'image ci-dessous pour
+            le reste de l'espace. */}
+        <div className="flex flex-col gap-4 px-5 py-6 sm:px-6 lg:grid lg:grid-cols-[160px_minmax(0,1fr)] lg:items-center lg:gap-x-8 lg:gap-y-0 lg:px-8 lg:py-5">
           {/* Badge — mobile : tout en haut à gauche ; desktop : haut de la colonne droite. */}
           <div className="lg:col-start-2 lg:row-start-1">
             <CategoryTag icon={tagIcon}>{tag}</CategoryTag>
@@ -58,7 +61,16 @@ function Banner({ id, tag, tagIcon, title, text, ctaLabel, ctaIcon, image, actio
           {image ? (
             // Boîte carrée + `object-contain` : le ratio réel est préservé sans
             // qu'on ait à déclarer les dimensions du fichier.
-            <div className="relative mx-auto h-32 w-full max-w-[140px] lg:col-start-1 lg:row-span-2 lg:row-start-1 lg:self-center">
+            //
+            // ⚠️ `lg:h-24` n'est PAS un réglage esthétique. Cette boîte enjambe les
+            // deux lignes de la grille (`lg:row-span-2`) : le moteur de grille
+            // impose donc que ligne1 + gap + ligne2 fasse au moins sa hauteur, et
+            // répartit l'excédent en mou dans les DEUX lignes. À 128 px pour 100 px
+            // de contenu réel, cela injectait 10 px entre la pastille et le titre —
+            // un espace qu'aucune marge ne pouvait retirer. À 96 px la boîte ne
+            // contraint plus rien et les lignes retombent sur leur contenu.
+            // L'agrandir de nouveau ré-ouvrira l'écart, sans que rien ne le signale.
+            <div className="relative mx-auto h-32 w-full max-w-[140px] lg:col-start-1 lg:row-span-2 lg:row-start-1 lg:h-24 lg:self-center">
               <Image
                 src={image.src}
                 alt={image.alt}

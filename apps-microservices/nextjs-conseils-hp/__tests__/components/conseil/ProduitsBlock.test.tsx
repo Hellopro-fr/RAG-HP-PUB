@@ -40,20 +40,16 @@ describe('ProduitsBlock', () => {
     expect(screen.getByText('Prix sur demande')).toBeDefined();
   });
 
-  it('injecte le script prod_intern_gtm avec les données GTM', () => {
-    const gtmProduits = [
-      { id: '11454124', name: 'Produit A', image: '/img/a.jpg', priceHt: null, url: '/a',
-        brand: 'Marque A', category: '1002121', variant: 'cert' },
-    ];
-    const { container } = render(
-      <ProduitsBlock data={{ productIds: [], produits: gtmProduits }} />
-    );
-    const script = container.querySelector('script');
-    expect(script?.innerHTML).toContain('prod_intern_gtm[1]');
-    expect(script?.innerHTML).toContain('"id": "11454124"');
-    expect(script?.innerHTML).toContain('"category": "1002121"');
-    expect(script?.innerHTML).toContain('"variant": "cert"');
-    expect(script?.innerHTML).toContain('"list": "lien interne"');
-    expect(script?.innerHTML).toContain('"position": 1');
-  });
+  /**
+   * Le test « injecte le script prod_intern_gtm » a été DÉPLACÉ dans
+   * `ConseilTemplate.test.tsx` (2026-09-07).
+   *
+   * `ProduitsBlock` n'émet plus ce script : la collecte a été remontée dans
+   * `ConseilTemplate`, qui parcourt TOUS les blocs produits de la page pour
+   * numéroter les `position` de façon continue — ce qu'un bloc isolé ne peut pas
+   * faire. Ici, `container.querySelector('script')` renvoyait `null`, d'où
+   * l'échec sur `undefined`.
+   *
+   * Ce qui reste de GTM dans ce composant est `pushEecAddDevis`, au clic.
+   */
 });

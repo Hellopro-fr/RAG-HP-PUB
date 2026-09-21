@@ -1639,6 +1639,38 @@ services:
       timeout: 10s
       retries: 5
 
+  neo4j_new:
+    image: neo4j:5.15.0
+    ports:
+      - "7476:7474" # Browser
+      - "7689:7687" # Bolt
+    profiles: [ "graph-rag" ]
+    environment:
+      # NEO4J_AUTH: neo4j/password
+      NEO4J_dbms_memory_heap_initial__size: 512m
+      NEO4J_dbms_memory_heap_max__size: 2G
+      NEO4J_AUTH: "${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-password}"
+      # NEO4J_PLUGINS=["apoc", "graph-data-science"]
+      NEO4J_PLUGINS: '["apoc", "graph-data-science"]'
+      NEO4J_apoc_export_file_enabled: true
+      NEO4J_dbms_security_procedures_unrestricted: apoc.*,gds.*
+
+      # NEO4J_server_bolt_advertised__address: neo4j1.hellopro.eu:7687
+      # NEO4J_server_http_advertised__address: neo4j1.hellopro.eu:443
+      # NEO4J_dbms_connector_bolt_advertised__address: neo4j1.hellopro.eu:7687
+    volumes:
+      - gr_neo4j_new_data:/data
+      - gr_neo4j_new_logs:/logs
+    networks:
+      - services-net
+      - services-ext-net
+      - services-global-net
+    healthcheck:
+      test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider localhost:7474 || exit 1" ]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
   graph-rag-database-connector-service:
     build:
       context: .
@@ -2730,6 +2762,22 @@ services:
       timeout: 5s
       retries: 3
 
+  tailscale:
+    image: tailscale/tailscale:stable
+    container_name: tailscale-gateway
+    hostname: api-hellopro-gateway        # le nom qui apparaîtra dans le tailnet
+    network_mode: host
+    cap_add: [NET_ADMIN]
+    devices: ["/dev/net/tun:/dev/net/tun"]
+    volumes:
+      - tailscale_state:/var/lib/tailscale   # l'identité de la machine : à ne jamais perdre
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY}            # clé d'auth pré-approuvée, réutilisable, taguée
+      TS_EXTRA_ARGS: --advertise-tags=tag:gateway
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_USERSPACE: "false"
+    restart: unless-stopped
+
   account-service-frontend:
     build:
       context: ./apps-microservices/account-service-frontend
@@ -2812,4 +2860,7 @@ volumes:
   prometheus_data:
   gr_neo4j_data:
   gr_neo4j_logs:
+  gr_neo4j_new_data:
+  gr_neo4j_new_logs:
   gateway_mysql_data:
+  tailscale_state:

@@ -79,6 +79,28 @@ afterEach(() => {
 });
 
 describe('AssistantForm', () => {
+
+  /**
+   * Chaque evenement du tunnel doit porter sa porte d'entree. L'oubli ne se voit
+   * nulle part : la cle manquante part a `undefined`, le tag GA4 ne l'emet pas, et
+   * la dimension reste vide dans les rapports. D'ou ce test plutot qu'une relecture.
+   */
+  it('porte hub_entry_point sur hub_form_start', () => {
+    render(<AssistantForm data={data} idPageHub={ID_PAGE_HUB} />);
+    fireEvent.click(screen.getByText(data.steps[0].options[0]));
+    const start = dl().find((e) => e.event === 'hub_form_start');
+    expect(start?.hub_entry_point).toBe('hero');
+  });
+
+  /** Deep-link externe : la valeur ne doit pas retomber sur le defaut. */
+  it('porte la porte d entree du deep-link sur hub_form_start', async () => {
+    render(<AssistantForm data={data} idPageHub={ID_PAGE_HUB} />);
+    openAssistantDialog('external_projet');
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeDefined());
+    fireEvent.click(within(screen.getByRole('dialog')).getByText(data.steps[0].options[0]));
+    const start = dl().find((e) => e.event === 'hub_form_start');
+    expect(start?.hub_entry_point).toBe('external_projet');
+  });
   it('rend l’étape 1 inline dans le hero, sans clic', () => {
     render(<AssistantForm data={data} idPageHub={ID_PAGE_HUB} />);
     expect(screen.getByText(data.cardTitle)).toBeDefined();
@@ -86,6 +108,37 @@ describe('AssistantForm', () => {
     for (const option of data.steps[0].options) {
       expect(screen.getByText(option)).toBeDefined();
     }
+  });
+
+  /**
+   * La pastille compte les QUESTIONS, pas les écrans (2026-09-03).
+   *
+   * Le bug corrigé ici affichait « Question 1/6 » pour 4 questions, parce que la
+   * pastille lisait `totalSteps` — qui inclut l'écran e-mail et l'écran
+   * coordonnées. Il est resté invisible parce que les trois pages HUB ont
+   * exactement 4 questions : la valeur avait l'air figée à 6, alors qu'elle était
+   * calculée à partir du mauvais total.
+   *
+   * ⚠️ D'où un nombre de questions VOLONTAIREMENT différent de 4 dans ce test :
+   * avec 4, l'assertion passerait aussi bien avec l'ancien code de la page 1000,
+   * et ne prouverait rien.
+   */
+  it('annonce le nombre exact de questions, pas le nombre d’écrans', () => {
+    const troisQuestions = { ...data, steps: data.steps.slice(0, 3) };
+    render(<AssistantForm data={troisQuestions} idPageHub={ID_PAGE_HUB} />);
+    expect(screen.getByText('Question 1/3')).toBeDefined();
+    expect(screen.queryByText('Question 1/5')).toBeNull();
+  });
+
+  it('suit le nombre de questions de la page, sans valeur figée', () => {
+    const { unmount } = render(
+      <AssistantForm data={{ ...data, steps: data.steps.slice(0, 2) }} idPageHub={ID_PAGE_HUB} />
+    );
+    expect(screen.getByText('Question 1/2')).toBeDefined();
+    unmount();
+
+    render(<AssistantForm data={data} idPageHub={ID_PAGE_HUB} />);
+    expect(screen.getByText(`Question 1/${data.steps.length}`)).toBeDefined();
   });
 
   it('désactive le bouton de démarrage tant qu’aucune réponse n’est choisie', () => {

@@ -18,6 +18,19 @@
 
 const COOKIE_DOMAIN = '.hellopro.fr';
 
+/**
+ * Événement window émis quand l'utilisateur a TRANCHÉ le consentement (accepter /
+ * refuser / enregistrer) et que le bandeau se ferme.
+ *
+ * Sert à enchaîner une action qui ne doit pas s'afficher PAR-DESSUS le bandeau
+ * modal (ex. `HubDeepLink`, qui n'ouvre son dialog qu'après). On s'appuie sur cet
+ * événement plutôt que sur le cookie `hp_consent` : ce dernier est écrit en
+ * `domain=.hellopro.fr;Secure` et n'est donc pas relisible dans tous les
+ * environnements (domaine de test hors `.hellopro.fr`, HTTP), alors que l'action
+ * de l'utilisateur, elle, est toujours observable.
+ */
+export const CONSENT_RESOLVED_EVENT = 'hp:consent-resolved';
+
 export type ConsentValue = 'granted' | 'denied';
 
 export interface ConsentStateV2 {

@@ -93,12 +93,16 @@ questionnaire) et `guideDialog.download` (tunnel guide).
 |---|---|---|
 | 1000 élevage | `public/guides/lancer-elevage-poules-pondeuses.pdf` | ✅ livré |
 | 1002 laverie | `public/guides/ouvrir-laverie-automatique.pdf` | ✅ livré |
-| 1001 food truck | `public/guides/ouvrir-food-truck.pdf` | ⏳ **placeholder** |
+| 1001 food truck | `public/guides/ouvrir-food-truck.pdf` | ✅ livré le 2026-09-07 |
 
-⚠️ La page 1001 sert encore `/seo_masterclass_detailed.pdf`, un document sans
-rapport avec la verticale. C'est le seul point de cette liste qui soit un
-engagement vis-à-vis du visiteur — il laisse son adresse en échange de ce
-fichier — et non une question d'esthétique. À solder avant mise en ligne.
+**Les trois guides sont livrés.** La page 1001 servait jusque-là
+`/seo_masterclass_detailed.pdf`, un résidu du prototype Lovable sans rapport avec
+la verticale — c'était le seul point de cette liste qui soit un engagement vis-à-vis
+du visiteur, et non une question d'esthétique.
+
+Ce placeholder n'est plus référencé nulle part dans le code. Le fichier
+`public/seo_masterclass_detailed.pdf` peut donc être retiré du dépôt : il part
+sinon dans chaque image Docker pour rien.
 
 Deux limites à connaître :
 

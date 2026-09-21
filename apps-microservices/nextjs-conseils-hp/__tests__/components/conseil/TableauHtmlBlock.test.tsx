@@ -66,12 +66,19 @@ describe('TableauHtmlBlock', () => {
       expect(screen.getAllByText('Hangar bois').length).toBeGreaterThanOrEqual(1);
     });
 
+    /**
+     * Les cellules de carte portent désormais les classes factorisées
+     * `conseil-card-th` (libellé) et `conseil-card-td` (valeur), définies dans
+     * `globals.css` avec un `@apply` qui produit toujours `text-muted-foreground`
+     * et `text-foreground`. Le rendu visuel est inchangé — seul le sélecteur du
+     * test était périmé, et il comptait donc 0 au lieu de 6.
+     */
     it('corps de carte : libellés des colonnes restantes en muted, valeurs en foreground', () => {
       const { container } = render(<TableauHtmlBlock data={{ headers: HEADERS_4, rows: ROWS_4 }} />);
       const mobileZone = container.querySelector('.md\\:hidden');
-      const labelCells = mobileZone?.querySelectorAll('td.text-muted-foreground');
-      // 3 colonnes restantes × 2 lignes = 6 cellules label
-      expect(labelCells?.length).toBe(6);
+      // 3 colonnes restantes × 2 lignes = 6 cellules de chaque sorte
+      expect(mobileZone?.querySelectorAll('td.conseil-card-th')).toHaveLength(6);
+      expect(mobileZone?.querySelectorAll('td.conseil-card-td')).toHaveLength(6);
     });
 
     it('première colonne mobile en poids normal (pas de font-semibold sur la valeur du titre)', () => {

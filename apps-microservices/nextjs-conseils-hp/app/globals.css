@@ -100,6 +100,27 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
+
+  /* Curseur main sur les boutons — régression Tailwind v4, pas un choix de design.
+
+     Le Preflight de Tailwind v3 posait `cursor: pointer` sur `button`. Celui de v4
+     ne le fait plus et laisse le défaut du navigateur, qui est `cursor: default`.
+     Mesuré le 2026-09-03 sur la page 1001 : 44 boutons sur 49 en `default`. Les 3
+     restants en `pointer` venaient du bandeau cookies, dont le CSS est servi par le
+     PHP historique — d'où l'incohérence visible entre le bandeau et la page.
+
+     C'est la règle donnée par le guide de migration v4, et elle est mise ici plutôt
+     qu'en `cursor-pointer` au point d'appel : le défaut doit être bon partout, y
+     compris sur les flèches de carrousel, les options du questionnaire, l'accordéon
+     FAQ et la croix des dialogs — qu'on n'aurait pas pensé à annoter un par un.
+
+     `:not(:disabled)` compte : le CTA « Démarrer l'étude du projet » est désactivé
+     tant qu'aucune réponse n'est choisie, et lui donner un curseur main promettrait
+     une action indisponible. */
+  button:not(:disabled),
+  [role='button']:not(:disabled) {
+    cursor: pointer;
+  }
 }
 
 @layer components {

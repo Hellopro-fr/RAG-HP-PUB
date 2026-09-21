@@ -40,18 +40,28 @@ function triggerIntersection(isIntersecting: boolean) {
 }
 
 describe('StickyCtaBar', () => {
+  /**
+   * Le témoin est `translate-y-0`, la classe de l'état VISIBLE.
+   *
+   * Ces deux tests visaient `translate-y-full`, qui n'est plus la classe de
+   * masquage : la barre a une marge basse, donc 100% ne la sortait pas
+   * complètement de l'écran et elle est passée à `translate-y-[120%]`. Viser la
+   * classe de masquage rendait le test dépendant de cette distance ; viser
+   * `translate-y-0` teste ce que le composant décide vraiment — visible ou non —
+   * et survivra au prochain ajustement de la valeur.
+   */
   it('est caché initialement puis visible après scroll hors hero', () => {
     render(<StickyCtaBar ctaSticky={baseProps} />);
-    expect(screen.getByRole('region').className).toContain('translate-y-full');
+    expect(screen.getByRole('region').className).not.toContain('translate-y-0');
     triggerIntersection(false);
-    expect(screen.getByRole('region').className).not.toContain('translate-y-full');
+    expect(screen.getByRole('region').className).toContain('translate-y-0');
   });
 
   it('redevient caché quand le hero redevient visible', () => {
     render(<StickyCtaBar ctaSticky={baseProps} />);
     triggerIntersection(false);
     triggerIntersection(true);
-    expect(screen.getByRole('region').className).toContain('translate-y-full');
+    expect(screen.getByRole('region').className).not.toContain('translate-y-0');
   });
 
   it('affiche le wording et le bouton CTA', () => {

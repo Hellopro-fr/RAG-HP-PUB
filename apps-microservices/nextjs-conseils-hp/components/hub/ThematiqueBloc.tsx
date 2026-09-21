@@ -3,6 +3,7 @@ import { HubSection, CategoryTag, HubIcon, CheckBullet } from './primitives';
 import { CardCarousel } from './CardCarousel';
 import { HubCardCarousel } from './HubCardCarousel';
 import { AssistantButton, GuideButton } from './triggers';
+import { STRETCHED_LINK } from './stretchedLink';
 import {
   CARD_BODY,
   CARD_TITLE,
@@ -160,7 +161,7 @@ function OverlayCard({ data }: { data: HubOverlayCard }) {
             {data.href ? (
               <a
                 href={data.href}
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-cta px-5 text-sm font-semibold text-cta-foreground shadow-cta transition hover:bg-cta-hover"
+                className={`inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-cta px-5 text-sm font-semibold text-cta-foreground shadow-cta transition hover:bg-cta-hover ${STRETCHED_LINK}`}
               >
                 {data.ctaLabel}
                 <HubIcon name="arrow-right" className="h-4 w-4" />
@@ -207,7 +208,8 @@ function CardColumn({ cards, guideLabel }: { cards: HubInfoCard[]; guideLabel?: 
  */
 function InfoCard({ data }: { data: HubInfoCard }) {
   return (
-    <article className="rounded-2xl border border-border bg-surface-muted p-5">
+    // `relative` : ancre du lien étiré de la ligne « Lire l'article ». Cf. STRETCHED_LINK.
+    <article className="relative rounded-2xl border border-border bg-surface-muted p-5">
       <div className="flex items-start gap-4">
         {data.icon && (
           <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-card text-primary shadow-sm">
@@ -238,7 +240,7 @@ function InfoCard({ data }: { data: HubInfoCard }) {
             {data.href ? (
               <a
                 href={data.href}
-                className={`flex w-full items-center justify-between gap-3 ${LINK_LABEL} text-foreground hover:underline`}
+                className={`flex w-full items-center justify-between gap-3 ${LINK_LABEL} text-foreground hover:underline ${STRETCHED_LINK}`}
               >
                 <span>{data.linkLabel}</span>
                 <HubIcon name="arrow-right" className="h-4 w-4" />
@@ -282,7 +284,7 @@ function ArticleLink({ href }: { href?: string }) {
   return (
     <a
       href={href}
-      className={`inline-flex items-center gap-2 ${LINK_LABEL} text-primary hover:underline`}
+      className={`inline-flex items-center gap-2 ${LINK_LABEL} text-primary hover:underline ${STRETCHED_LINK}`}
     >
       Lire l’article
       <HubIcon name="arrow-right" className="h-4 w-4" />
@@ -293,7 +295,8 @@ function ArticleLink({ href }: { href?: string }) {
 /** Carte article : visuel en tête (si livré), titre, liens. */
 function ArticleCard({ data }: { data: HubInfoCard }) {
   return (
-    <article className="flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm transition hover:-translate-y-1 hover:shadow-elegant">
+    // `relative` : ancre du lien étiré de « Lire l'article ». Cf. STRETCHED_LINK.
+    <article className="relative flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm transition hover:-translate-y-1 hover:shadow-elegant">
       {data.image ? (
         <div className="relative h-52 w-full shrink-0">
           <Image
