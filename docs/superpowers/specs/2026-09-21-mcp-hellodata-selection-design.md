@@ -97,7 +97,7 @@ l'existant : il s'assure seulement que les nouveaux exports n'y participent pas.
 | D7 | Coût du comptage | **Comptage approché par défaut + cache court**, comptage exact sur demande |
 | D8 | Service MCP | **Service séparé** `mcp-hellodata-service`, distinct du MCP `bdd` |
 | D9 | Forme des filtres | **Arbre booléen imbriqué** (groupes ET / OU / NON contenant des sous-groupes et des feuilles), livré **en un seul appel** |
-| D10 | Accès au service | `min_role = admin`, **plus** une dérogation nominative par `server_authorizations`. Exige d'élargir le prédicat d'accès du gateway (§ 7.1) |
+| D10 | Accès au service | `min_role = admin`, **plus** une liste statique d'e-mails autorisés, dont les valeurs viennent d'une variable d'environnement. `server_authorizations` n'est **pas** utilisé (§ 7.1) |
 
 ---
 
@@ -332,10 +332,10 @@ présentes et masquées après coup. Le moteur reçoit du wrapper un indicateur
 explicite ; il refuse la demande si une colonne restreinte est demandée sans
 le droit.
 
-Avec `min_role = admin` (§ 7.1), tout utilisateur admis est soit `admin`, soit
-porteur d'une dérogation nominative. La distinction ne porte donc plus entre
-rôles élevés et rôles bas, mais entre **admin** et **dérogataire** — et il
-reste à décider si un dérogataire y a droit. C'est la précondition n° 4 du
+Avec `min_role = admin` (§ 7.1), tout utilisateur admis est soit `admin`,
+soit présent dans la liste statique. La distinction ne porte donc plus entre
+rôles élevés et rôles bas, mais entre **admin** et **autorisé par liste** — et
+il reste à décider si ce dernier y a droit. C'est la précondition n° 4 du
 § 12 ; tant qu'elle n'est pas tranchée, le moteur refuse ces colonnes à tout
 non-admin.
 
@@ -433,6 +433,9 @@ mcp-hellodata-service/
 Toutes les URL et le token viennent de variables d'environnement
 (`.claude/rules/security.md` : aucune URL de service en dur).
 
+Le contrôle d'accès ne vit **pas** ici : il est appliqué en amont par le
+gateway (§ 7.1). Le wrapper ne porte aucune liste d'utilisateurs.
+
 Le wrapper valide **la structure** de l'arbre (profondeur, nombre de
 feuilles, arité — § 4.3.2) pour rejeter tôt et donner un message utile au
 LLM. Il ne valide **pas** les critères eux-mêmes : la liste blanche reste
@@ -470,78 +473,123 @@ authentification que le reste du service, donc au `min_role` du gateway.
 
 ## 7. Sécurité et autorisation
 
-### 7.1 Accès au service — `admin` + dérogation nominative (D10)
+### 7.1 Accès au service — `admin` + liste statique (D10)
 
-**Règle voulue** : seuls les `admin` et les utilisateurs explicitement
-autorisés dans `/server-authorizations` peuvent atteindre
+**Règle** : seuls les utilisateurs de rôle `admin` et ceux dont l'adresse
+figure dans une liste statique d'autorisés peuvent atteindre
 `mcp-hellodata-service`.
 
-**Écart avec l'existant, à traiter comme un vrai changement.** Le prédicat
-d'accès actuel, `GateAllows` dans `internal/gateway/access_gate.go`, est
-**purement basé sur le rôle** : il compare `mcp_servers.min_role` à
-`gateway_users.role`. La table `server_authorizations` n'est consultée qu'à un
-seul endroit, `internal/gateway/scoped_gateway.go:507`, dans le chemin
-d'**injection des en-têtes de filtrage** — c'est une dérogation au filtrage
-par utilisateur, **pas** une admission. Le commentaire du modèle
-(`internal/db/models.go:627`) le dit : « grants a specific end-user full
-*unfiltered* access ».
+#### Pourquoi pas `server_authorizations`
 
-Rôles définis (`internal/auth/role.go`) : `admin` = 3, `readonly` = 2,
-`configonly` = 1, inconnu = 0.
+La table `server_authorizations` **ne signifie pas** « peut atteindre ce
+serveur ». Elle n'est consultée qu'à un seul endroit,
+`internal/gateway/scoped_gateway.go:507`, dans le chemin d'**injection des
+en-têtes de filtrage** : une ligne y fait échapper un utilisateur au filtrage
+par utilisateur, elle ne lui ouvre aucune porte. Le commentaire du modèle
+(`internal/db/models.go:627`) est explicite : « grants a specific end-user
+full *unfiltered* access ». La détourner en mécanisme d'admission lui
+donnerait un second sens, incompatible avec le premier sur les backends qui
+subissent réellement une injection de filtres (`leexi`, `ringover`, `bdd`).
 
-**Changement requis** — un prédicat élargi, à écrire fail-closed comme
-l'original :
+Ce design ne la touche donc pas.
+
+#### Le prédicat
+
+Le prédicat d'accès actuel, `GateAllowsEmail` dans
+`internal/gateway/access_gate.go`, est purement basé sur le rôle : il compare
+`mcp_servers.min_role` à `gateway_users.role`. Rôles définis
+(`internal/auth/role.go`) : `admin` = 3, `readonly` = 2, `configonly` = 1,
+inconnu = 0.
+
+Il est élargi par une seconde voie, écrite fail-closed comme l'originale :
 
 ```go
-// GateAllowsEmailWithGrant : rôle suffisant OU dérogation nominative.
-// Toute incertitude (dépôt non câblé, erreur, email vide) refuse.
+// staticGrants tient les e-mails autorisés par serveur, indexés par la clé
+// stable du backend (ToolPrefix). Renseigné une fois au démarrage depuis la
+// configuration ; jamais muté ensuite.
+//
+// Les ADRESSES ne sont pas en dur : le dépôt est public. Elles viennent de
+// HELLODATA_ALLOWED_EMAILS. Seule la structure vit dans le code.
+type staticGrants map[string]map[string]struct{} // serveur -> set d'e-mails
+
+// GateAllowsEmailWithGrant : rôle suffisant OU présence dans la liste
+// statique du serveur visé. Toute incertitude refuse.
 func GateAllowsEmailWithGrant(
-    minRole, serverID, email string,
+    minRole, serverKey, email string,
     users gatewayUserFinder,
-    grants serverAuthorizer,
+    grants staticGrants,
 ) bool {
     if GateAllowsEmail(minRole, email, users) {
         return true
     }
-    if grants == nil || email == "" || serverID == "" {
+    if grants == nil || serverKey == "" || email == "" {
         return false
     }
-    return grants.IsAuthorized(serverID, email)
+    allowed, ok := grants[serverKey]
+    if !ok {
+        return false
+    }
+    _, ok = allowed[normaliseEmail(email)]
+    return ok
 }
 ```
 
-**Quatre propriétés à préserver**, parce que la branche courante vient de
-passer quinze commits à les établir :
+`normaliseEmail` applique un `strings.ToLower` et un `strings.TrimSpace` — la
+même normalisation est appliquée au chargement de la liste, pour qu'une
+différence de casse ne produise pas un refus silencieux.
 
-1. **Fail-closed sur l'incertitude.** La nouvelle branche `OU` ne doit jamais
-   transformer une erreur de dépôt en autorisation. Dépôt absent, erreur SQL,
-   email vide : refus.
+#### Cinq propriétés à préserver
+
+La branche courante vient de passer quinze commits à établir le
+comportement du gate. L'élargir ne doit rien en défaire.
+
+1. **Fail-closed sur l'incertitude.** La nouvelle voie ne transforme jamais
+   une absence de configuration en autorisation : liste nulle, serveur
+   inconnu, e-mail vide, tout refuse.
 2. **`min_role` inconnu reste un refus.** `GateAllowsEmail` refuse déjà
-   lorsqu'il ne reconnaît pas la valeur ; la branche `OU` ne doit pas
-   contourner ce garde-fou pour les utilisateurs sans dérogation.
-3. **Les tokens de scope et `client_credentials` restent exclus.** L'email de
-   l'utilisateur final n'est posé sur le contexte que sur le chemin OAuth2
+   lorsqu'il ne reconnaît pas la valeur ; la liste statique ne contourne ce
+   garde-fou que pour les adresses qui y figurent nommément — ce qui est
+   l'intention, et doit être écrit comme tel en commentaire.
+3. **La liste est par serveur, jamais globale.** Une liste globale
+   ouvrirait *tous* les serveurs gatés à ses membres. La clé est le
+   `ToolPrefix` du backend, comme le sont déjà `leexiToolPrefix`,
+   `ringoverToolPrefix` et `bddToolPrefix`.
+4. **Les tokens de scope et `client_credentials` restent exclus.** L'e-mail
+   de l'utilisateur final n'est posé sur le contexte que sur le chemin OAuth2
    bearer ; l'invariant est épinglé par
-   `TestScopeTokenPathLeavesEndUserEmailUnset`. La dérogation nominative,
-   qui se fonde sur cet email, hérite naturellement de cette exclusion.
-4. **Tous les points d'appel doivent être modifiés.** Le prédicat est
+   `TestScopeTokenPathLeavesEndUserEmailUnset`. La liste, qui se fonde sur
+   cet e-mail, hérite de cette exclusion — un token de scope ne devient pas
+   autorisé parce qu'une adresse figure dans la liste.
+5. **Tous les points d'appel doivent être modifiés.** Le prédicat est
    consulté à cinq endroits : `scoped_gateway.go` lignes 285, 423, 874, 908,
    et `FilterServersByGate` pour l'écran de consentement. En oublier un
    reproduit exactement la classe de bug — les « registry drop sites » — que
    les commits `e53e07df`, `bf44e7f0` et `58f13bf9` viennent de fermer.
 
-**Sur la surcharge sémantique.** Une ligne de `server_authorizations`
-signifierait désormais deux choses : « peut atteindre ce serveur » **et**
-« échappe à l'injection de filtres ». Pour `mcp-hellodata-service` c'est sans
-conséquence : l'injection ne vise que les préfixes `leexi`, `ringover` et
-`bdd`, donc la dérogation au filtrage y est un no-op. **Cela cesserait d'être
-vrai** si ce service recevait un jour une injection de filtres par
-utilisateur : il faudrait alors séparer les deux notions. À écrire en
-commentaire à côté du prédicat.
+#### Configuration
 
-**Configuration du serveur** : `min_role = admin`. Les non-admins n'y
-accèdent que par une ligne de `server_authorizations`, posée par l'API
-d'administration.
+`min_role = admin` sur le serveur. Les non-admins n'y accèdent que si leur
+adresse figure dans la liste.
+
+Variable d'environnement, **côté `mcp-gateway-service`** — c'est lui qui
+porte le prédicat, pas le wrapper :
+
+| Variable | Rôle |
+|---|---|
+| `HELLODATA_ALLOWED_EMAILS` | Adresses séparées par des virgules, autorisées en plus des `admin`. Lue une fois au démarrage, normalisée en minuscules et détrimée. Vide ou absente = seuls les `admin` passent |
+
+**Les adresses ne sont pas écrites dans le code** : `Hellopro-fr/RAG-HP-PUB`
+est un dépôt **public**, et une adresse commitée y resterait dans
+l'historique même après suppression. Seule la mécanique vit dans le source ;
+les valeurs viennent de l'environnement, sont chargées une fois au
+démarrage et normalisées à ce moment-là.
+
+**Caractère provisoire assumé.** Cette liste est statique par choix, pour ne
+pas construire une gestion dynamique avant d'en avoir le besoin. La
+conséquence à connaître : modifier la liste demande un redémarrage du
+gateway, et il n'existe ni trace d'audit ni écran d'administration pour ces
+accès. Le jour où l'un des deux manque, c'est le signal qu'il faut une vraie
+table — pas un signal qu'il fallait la faire d'emblée.
 
 ### 7.2 Surfaces
 
@@ -554,7 +602,7 @@ d'administration.
 | Fichiers CSV | Hors racine web, nom à jeton, servis uniquement par endpoint authentifié, purge à 24 h |
 | Cache | Le niveau de rôle fait partie de la clé (§ 4.6) |
 | Fuite par message d'erreur | Codes stables, aucun SQL ni message MySQL dans les réponses (§ 4.8) |
-| Accès LLM | `min_role = admin` + dérogation nominative par `server_authorizations` (§ 7.1) |
+| Accès LLM | `min_role = admin` + liste statique d'e-mails, valeurs en variable d'environnement (§ 7.1) |
 | Arbre de filtres | Profondeur, nombre de feuilles et arité bornés avant compilation (§ 4.3.2) |
 
 ---
@@ -597,13 +645,19 @@ comme un résultat vide.
 
 Le changement du § 7.1 touche un prédicat de sécurité. À couvrir :
 
-- un `admin` passe ; un `readonly` sans dérogation est refusé ; le même
-  `readonly` **avec** une ligne `server_authorizations` passe ;
-- dépôt de dérogations non câblé, erreur de dépôt, email vide : refus dans
-  les trois cas ;
-- `min_role` inconnu : refus maintenu pour un utilisateur sans dérogation ;
-- un token de scope n'atteint pas le serveur, même si l'email figure dans
-  `server_authorizations` — l'email n'est pas sur le contexte ;
+- un `admin` passe ; un `readonly` absent de la liste est refusé ; le même
+  `readonly` **présent** dans la liste passe ;
+- liste nulle, serveur absent de la liste, e-mail vide : refus dans les
+  trois cas ;
+- casse et espaces : `  A@Hellopro.FR ` dans la requête correspond à
+  `a@hellopro.fr` dans la liste, dans les deux sens de normalisation ;
+- **la liste est par serveur** : une adresse autorisée sur `hellodata`
+  n'ouvre aucun autre serveur gaté. Le test doit inclure un second serveur
+  gaté comme contrôle négatif ;
+- `min_role` inconnu : refus maintenu pour un utilisateur absent de la
+  liste ;
+- un token de scope n'atteint pas le serveur, même si l'adresse figure dans
+  la liste — l'e-mail n'est pas sur le contexte ;
 - un test qui énumère les cinq points d'appel du prédicat et échoue si l'un
   d'eux appelle encore l'ancienne forme, sur le modèle des tests
   d'invariant déjà présents (`min_role_registration_regression_test.go`).
@@ -640,6 +694,7 @@ local, livré à côté de la spec de déploiement. Cas à couvrir :
 | `mcp-hellodata-service/` (Go) | Tracké, PR normale | CI `ci_services_*` + CD `cd_build_push_*`, `docker-compose.yml` |
 | Enregistrement dans le gateway | Tracké, PR normale | Configuration `min_role = admin` |
 | Élargissement du prédicat d'accès (§ 7.1) | Tracké, PR normale | Modification de `internal/gateway/access_gate.go` et de ses cinq points d'appel. **Doit faire l'objet d'une PR distincte** de celle du service : c'est un changement de sécurité, il mérite d'être relu seul |
+| `HELLODATA_ALLOWED_EMAILS` | **Jamais** dans git | Variable d'environnement de déploiement du gateway. Le dépôt est public ; aucune adresse ne doit apparaître dans un fichier tracké, y compris un `.env.example` |
 | `/admin/mcp/hellodata/` (PHP) | **Non tracké** (D6) | Upload FTP manuel sur Ecritel, avec une spec `.md` de déploiement en PR, conformément à `site/CLAUDE.md` |
 
 La spec `.md` de déploiement du PHP contiendra les fichiers complets, le
@@ -666,6 +721,12 @@ non un oubli :
   `/admin/hellodata/fichiers_exports/` (§ 1.5) — constat signalé, chantier
   distinct.
 - L'échappatoire `raw_params` : écartée, elle contournerait la liste blanche.
+- Toute gestion **dynamique** des autorisations : table dédiée, écran
+  d'administration, trace d'audit des accès. La v1 s'en tient à la liste
+  statique du § 7.1, avec les deux limites que cela implique — redémarrage
+  pour modifier, et aucune trace d'audit.
+- Tout usage de `server_authorizations` : ce design ne la lit ni ne l'écrit
+  (§ 7.1).
 
 ---
 
@@ -681,9 +742,10 @@ non un oubli :
    empêcherait le moteur de répondre à un Bearer.
 4. **Correspondance rôle ↔ `$debloque_tel_mail`** : quel niveau du gateway
    équivaut au droit BO actuel sur téléphone et email. Avec `min_role = admin`
-   (§ 7.1), la question devient : un utilisateur admis par **dérogation
-   nominative** a-t-il droit aux colonnes téléphone et email, ou faut-il un
-   second indicateur sur la ligne de `server_authorizations` ?
+   (§ 7.1), la question devient : un utilisateur admis **par la liste
+   statique** a-t-il droit aux colonnes téléphone et email ? Si la réponse
+   diffère d'un membre à l'autre de la liste, alors la liste plate ne suffit
+   plus et il faut une seconde liste — ou la table que le § 11 écarte.
 5. **Coût réel des sous-requêtes corrélées** (§ 4.3.3) sur `acheteur`
    (5,6 M lignes). À mesurer sur un arbre représentatif — un `OU` entre deux
    critères sur tables liées — avant de figer la règle de composition. Si le
@@ -694,3 +756,7 @@ non un oubli :
    travaillé les commits `min_role` de cette branche. Élargir un prédicat
    fail-closed est le genre de modification où une relecture indépendante
    vaut plus qu'un test de plus.
+7. **Où sont injectées les variables d'environnement du gateway en
+   production**, pour y poser `HELLODATA_ALLOWED_EMAILS` sans qu'elle
+   transite par un fichier tracké. Le dépôt étant public, c'est une
+   vérification à faire avant la première mise en service, pas après.
