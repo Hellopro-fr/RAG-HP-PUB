@@ -228,7 +228,7 @@ le rail n'est pas généralisé — demande-le.
 
 | Quoi | Cloud Run | GKE | VM (ce qui y reste) |
 |---|---|---|---|
-| **Logs** | `gcloud run services logs read <svc> --region europe-west1` · Cloud Logging `resource.type="cloud_run_revision"` | `kubectl -n apps-microservices logs deploy/<svc> --all-pods --prefix -f` · Cloud Logging `resource.type="k8s_container"` | `docker logs <conteneur>` · ELK local |
+| **Logs** | `gcloud run services logs read <svc> --region europe-west1` · Cloud Logging `resource.type="cloud_run_revision"` | `kubectl -n apps-microservices logs deploy/<svc> --all-pods --prefix -f` · Cloud Logging `resource.type="k8s_container"` (**collecté depuis le 21/09 14h21** — F-HP-OBS-004 ; lignes Python en sévérité `ERROR` car stderr ; `print()` exclu par choix FinOps — guide [`acces-logs-services-migres.md`](acces-logs-services-migres.md)) | `docker logs <conteneur>` · ELK local |
 | **État** | `gcloud run revisions list --service <svc>` | `kubectl get pods -l app=<svc>` · `describe pod` (événements, `RESTARTS`) | `docker ps` |
 | **Shell** | — (pas d'exec sur Cloud Run) | `kubectl exec -it deploy/<svc> -- /bin/sh` | `docker exec -it` |
 | **Métriques** | Cloud Monitoring (latence, 5xx, instances) | Prometheus GKE pour les services qui exposent `/metrics` ; les consumers « option B » **n'exposent rien** — leur santé se lit sur la file | Prometheus / Grafana VM |
