@@ -23,6 +23,7 @@ sur la VM.
 | Étape | Document | Temps |
 |:--:|---|---|
 | **Dev** | [`acces-logs-services-migres.md`](acces-logs-services-migres.md) — **lire les logs d'un service migré** (console Logs Explorer ou `gcloud`), table des noms VM → GKE / Cloud Run, note sévérité, règles | 10 min |
+| **LEAD** | [`spec-tracking-push-http.md`](spec-tracking-push-http.md) — **à décider avant L3** : rétablir le tracking QC/prix (interface `qc_tracking-service`) après migration, par push HTTP ; code des deux côtés, config, ordre de mise en service | 15 min |
 | **DSO** | [`demande-pre-controle-lot.md`](demande-pre-controle-lot.md) — le message de demande de pré-contrôle prêt à envoyer au Lead Dev la veille d'un lot (quoi, comment, où, pour quand, forme de réponse) | 5 min par lot |
 | **0** | [`architecture-apres-migration.md`](architecture-apres-migration.md) — **comment la plateforme fonctionne maintenant** : où tourne quoi, les flux, le chemin d'un commit jusqu'à la prod, où regarder, **quoi faire quand ça bloque** | 20 min, une fois |
 | **1** | [`inventaire-services-migration-par-lot.md`](inventaire-services-migration-par-lot.md) — trouve ton service, note son **lot** (P1 → P10) | 2 min |

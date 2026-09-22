@@ -4,6 +4,7 @@ Fonctions utilitaires pour la génération de questions et caractéristiques
 import json
 import re
 import os
+import urllib.request
 from pathlib import Path
 from typing import Dict, Any, Optional
 import logging
@@ -228,14 +229,45 @@ def get_tracking_filepath(
     
     return os.path.join(directory, filename)
 
-def write_log(filepath: str, message: str):
-    """Écrit un message dans un fichier de log"""
+def write_log(filepath: str, message: str) -> None:
+    """Écrit une ligne de tracking en local et, si configuré, la pousse au qc-tracking-service.
+
+    Sur GKE le dossier tracking est un emptyDir invisible du qc-tracking-service (VM) ;
+    quand TRACKING_API_URL et TRACKING_SERVICE sont définis, chaque ligne est aussi envoyée
+    en POST /api/append (F-HP-MIG-010). Jamais bloquant : une erreur réseau est loggée, le
+    pipeline continue et la ligne reste écrite en local.
+    """
     try:
         ensure_directory(os.path.dirname(filepath))
         with open(filepath, 'a', encoding='utf-8') as f:
             f.write(f"{message}\n")
     except Exception as e:
         logger.error(f"Erreur lors de l'écriture du log: {e}")
+    _push_tracking_line(filepath, message)
+
+
+def _push_tracking_line(filepath: str, message: str) -> None:
+    """POST de la ligne vers le qc-tracking-service (stdlib uniquement, timeout court)."""
+    api_url = os.environ.get("TRACKING_API_URL")
+    service = os.environ.get("TRACKING_SERVICE")
+    if not api_url or not service:
+        return
+    try:
+        rel_path = os.path.relpath(filepath, "tracking").replace(os.sep, "/")
+        body = json.dumps({"service": service, "path": rel_path, "line": message}).encode("utf-8")
+        req = urllib.request.Request(
+            f"{api_url.rstrip('/')}/api/append",
+            data=body,
+            method="POST",
+            headers={
+                "Content-Type": "application/json",
+                "X-Tracking-Token": os.environ.get("TRACKING_API_TOKEN", ""),
+            },
+        )
+        with urllib.request.urlopen(req, timeout=2):
+            pass
+    except Exception as e:  # réseau, 401, 5xx : on ne bloque jamais le pipeline
+        logger.warning(f"Tracking push KO ({e.__class__.__name__}) : ligne conservée en local uniquement")
 
 async def get_prompt(id_prompt: str) -> Dict[str, Any]:
     # Récupérer le prompt
