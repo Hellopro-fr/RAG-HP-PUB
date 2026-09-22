@@ -118,6 +118,116 @@ mise en service). Le tracking-service publie `0.0.0.0:8590` sur la VM.
 
 Repli à chaque étape : retirer `TRACKING_API_URL` du manifeste (les services reviennent à l'écriture locale seule).
 
+## 5bis. Cartes d'exécution (23/09, après le GO L2 de 9h30 et le merge de la PR)
+
+Ordre et niveaux : 0 🟢 · 1 🔴 (secrets) · 2 🟠 (VM) · 3 🟢 · 4 🟡 (shadow) · 5 🟠 (prod, un QC à la fois) · 6 🟡.
+Rien ne se joue pendant une fenêtre de bascule ; le tracking-service est le premier, les QC en prod les derniers.
+
+### 0 — Prérequis (🟢)
+
+```bash
+cd /h/Works/Hellopro/account-pro/RAG-HP-PUB && git branch --show-current && git pull --ff-only origin prod   # prod, contient la PR
+git log --oneline -3 -- apps-microservices/QC-tracking-service/main.py                                     # le commit "feat(tracking)" est là
+gcloud --configuration=default compute instances describe vm-embedding-g2-std-24-use --zone us-east4-c --project hellopro-rag-project --format=json | grep -m1 '"networkIP"'
+```
+
+L'IP interne relevée = `<IP_VM>` dans les cartes suivantes.
+
+### 1 — Jeton : Secret Manager → secret K8s → `.env` VM (🔴, jamais affiché)
+
+```bash
+gcloud config configurations activate default
+P=hellopro-rag-project
+TF=$(mktemp /tmp/trk.XXXXXX); chmod 600 "$TF"; openssl rand -hex 32 | tr -d '\r\n' > "$TF"           # 64 caractères
+gcloud secrets create platform-tracking-api-token --project $P --replication-policy=automatic --data-file="$TF" \
+  --labels=service=platform,usage=tracking-push 2>/dev/null || gcloud secrets versions add platform-tracking-api-token --project $P --data-file="$TF"
+gcloud secrets add-iam-policy-binding platform-tracking-api-token --project $P \
+  --member="serviceAccount:cloudrun-services@hellopro-rag-project.iam.gserviceaccount.com" --role=roles/secretmanager.secretAccessor >/dev/null
+# secret K8s (nouveau) — clé api-token
+PF=$(mktemp /tmp/trk-k8s.XXXXXX); chmod 600 "$PF"; printf '{"stringData":{"api-token":"%s"}}' "$(cat "$TF")" > "$PF"
+gcloud config configurations activate kubectl-local
+kubectl create secret generic platform-tracking-secrets -n apps-microservices --from-literal=api-token=placeholder
+kubectl patch secret platform-tracking-secrets -n apps-microservices --type merge --patch-file "$PF"
+kubectl label secret platform-tracking-secrets -n apps-microservices app.kubernetes.io/managed-by=manifest environment=prod owner=devsecops cost-center=ia-rag
+# empreinte de référence (à comparer côté VM)
+sha256sum < "$TF" | cut -c1-16
+# .env VM : copie du fichier temporaire puis ajout de la ligne, sans jamais l'afficher
+gcloud --configuration=default compute scp "$TF" vm-embedding-g2-std-24-use:/tmp/trk.token --zone us-east4-c --project hellopro-rag-project --tunnel-through-iap
+rm -f "$TF" "$PF"
+```
+
+```bash
+# --- VM GPU, devhp, ~/RAG-HP-PUB
+grep -c '^TRACKING_API_TOKEN=' .env                                           # 0 attendu
+printf 'TRACKING_API_TOKEN=%s\n' "$(tr -d '\r\n' < /tmp/trk.token)" >> .env && shred -u /tmp/trk.token
+grep -E '^TRACKING_API_TOKEN=' .env | cut -d= -f2- | tr -d '\r\n' | sha256sum | cut -c1-16     # = empreinte K8s
+```
+
+### 2 — Tracking-service sur la VM : image depuis `prod`, sans toucher au checkout `features/poc` (🟠)
+
+```bash
+# --- VM GPU, devhp
+[ -d ~/RAG-HP-PUB-prod ] || git clone --branch prod --depth 1 git@github.com:Hellopro-fr/RAG-HP-PUB.git ~/RAG-HP-PUB-prod
+cd ~/RAG-HP-PUB-prod && git pull --ff-only && git log --oneline -1
+docker build -t rag-hp-pub-qc-tracking-service:tracking-push -f apps-microservices/QC-tracking-service/Dockerfile .
+docker tag rag-hp-pub-qc-tracking-service:tracking-push rag-hp-pub-qc-tracking-service:latest      # nom attendu par le compose
+# variable d'env : via docker-compose.override.yml (déjà hors dépôt, F-HP-IaC-004), pas de modification du compose poc
+cd ~/RAG-HP-PUB && cp docker-compose.override.yml /tmp/override.bak.$(date +%s)
+python3 - <<'EOF'
+import yaml,io
+p='docker-compose.override.yml'; d=yaml.safe_load(io.open(p)) or {}
+svc=d.setdefault('services',{}).setdefault('qc-tracking-service',{}); env=svc.setdefault('environment',[])
+if isinstance(env,dict): env['TRACKING_API_TOKEN']='${TRACKING_API_TOKEN}'
+elif 'TRACKING_API_TOKEN=${TRACKING_API_TOKEN}' not in env: env.append('TRACKING_API_TOKEN=${TRACKING_API_TOKEN}')
+io.open(p,'w').write(yaml.safe_dump(d,sort_keys=False)); print('override MAJ')
+EOF
+docker compose config qc-tracking-service | grep -A3 'environment' | grep -c TRACKING_API_TOKEN     # 1
+docker compose up -d --no-build --force-recreate qc-tracking-service && sleep 5 && docker ps --format '{{.Names}}\t{{.Status}}\t{{.Image}}' | grep tracking
+# tests : 401 sans jeton, 200 avec, fichier créé puis supprimé
+curl -s -o /dev/null -w '%{http_code}\n' -X POST http://127.0.0.1:8590/api/append -H 'Content-Type: application/json' -d '{"service":"caracterisation","path":"2026/09/zz-test.txt","line":"test"}'
+curl -s -o /dev/null -w '%{http_code}\n' -X POST http://127.0.0.1:8590/api/append -H "X-Tracking-Token: $(grep -E '^TRACKING_API_TOKEN=' .env | cut -d= -f2- | tr -d '\r\n')" -H 'Content-Type: application/json' -d '{"service":"caracterisation","path":"2026/09/zz-test.txt","line":"test"}'
+ls -la /mnt/data/docker/images/generation-question-caracteristiques/qc-caracterisation/2026/09/zz-test.txt && rm -f /mnt/data/docker/images/generation-question-caracteristiques/qc-caracterisation/2026/09/zz-test.txt
+```
+
+Repli : `docker compose up -d --no-build --force-recreate qc-tracking-service` après `docker tag <ancienne image> …:latest` (l'ancienne image reste dans `docker images`), et restauration de l'override depuis `/tmp/override.bak.*`.
+
+### 3 — Réseau GKE → VM :8590 (🟢)
+
+```bash
+kubectl run trk-probe --image=curlimages/curl:8.10.1 --restart=Never -n apps-microservices -- curl -s -o /dev/null -w '%{http_code}\n' http://<IP_VM>:8590/
+sleep 15; kubectl logs trk-probe -n apps-microservices; kubectl delete pod trk-probe -n apps-microservices --wait=false      # 200 attendu
+```
+
+### 4 — Images QC + prix depuis `prod`, en shadow d'abord (🟡)
+
+```bash
+# poste — build des 11 images (script du 15/09, tag daté), REPO = checkout prod propre
+cd /c/Users/ANTHONNY/AppData/Local/Temp/claude/h--Works-Hellopro-account-pro/336fc722-f419-428e-a7c6-fd1a65d18dbe/scratchpad/cutover-rebuild
+gcloud config configurations activate default
+TAG=tracking-2026-09-23 ONLY="QC-caracterisation QC-enrichissement QC-equivalence QC-generation-caracteristiques QC-generation-question1 QC-generation-question2aN QC-generation-valeurs prix-caracterisation prix-extraction-devis prix-extraction-message prix-extraction-produits" bash gke-rebuild-j0.sh build
+TAG=tracking-2026-09-23 bash gke-rebuild-j0.sh wait
+# manifestes : image :tracking-2026-09-23 + 3 variables (script scratchpad/patch_tracking_env.py, IP_VM en argument), commit infra
+# prix (shadow) : apply + rollout — zéro impact prod
+gcloud config configurations activate kubectl-local
+for d in prix-caracterisation prix-extraction-devis prix-extraction-message prix-extraction-produits; do kubectl apply -f <infra>/manifest/apps/$d/22-deployment.yaml -n apps-microservices && kubectl rollout status deploy/$d -n apps-microservices --timeout=180s; done
+```
+
+### 5 — QC en prod, un par un, hors fenêtre de bascule (🟠)
+
+```bash
+for d in qc-enrichissement qc-equivalence qc-generation-caracteristiques qc-generation-question1 qc-generation-question2an qc-generation-valeurs qc-caracterisation; do
+  D=$(ls -d <infra>/manifest/apps/QC-* | grep -i "/${d/qc-/QC-}$" )   # dossier QC-… correspondant
+  kubectl apply -f "$D/22-deployment.yaml" -n apps-microservices && kubectl rollout status deploy/$d -n apps-microservices --timeout=180s
+  kubectl exec -n rabbitmq-v3 $(kubectl get pods -n rabbitmq-v3 -o name | head -1) -- rabbitmqctl list_queues -q name messages consumers | grep -E "^qc_.*\s" | grep -vE '_dlq|_retry'
+done
+```
+
+Chaque rollout = quelques secondes sans consommateur sur la file du service (messages conservés). Preuve finale : un message réel → fichier visible dans <https://api.hellopro.eu/qc_tracking-service/> sous le dossier du service.
+
+### 6 — Repli
+
+Retirer `TRACKING_API_URL` du manifeste concerné et ré-appliquer : le service revient à l'écriture locale seule, sans rebuild.
+
 ## 6. Ce qui n'est pas dans cette version
 
 - Pas de reprise des lignes écrites entre le 22/09 12h48 et la mise en service (elles sont dans les `emptyDir` des pods
