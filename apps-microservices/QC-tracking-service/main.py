@@ -5,12 +5,13 @@ import os
 import io
 import zipfile
 from datetime import datetime, date, timedelta
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Header
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional, Dict
 import logging
+import secrets
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -22,6 +23,27 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Base path for tracking files - mounted via Docker volume
 TRACKING_BASE_PATH = os.environ.get("TRACKING_BASE_PATH", "/app/tracking")
+
+# F-HP-MIG-010 : les services migrés sur GKE poussent leurs lignes de tracking en HTTP
+# (leur dossier tracking est un emptyDir invisible d'ici). Jeton partagé, chemin contrôlé.
+TRACKING_API_TOKEN = os.environ.get("TRACKING_API_TOKEN", "")
+# clé envoyée par le service (TRACKING_SERVICE) -> sous-dossier de TRACKING_BASE_PATH (= montages docker-compose)
+SERVICE_DIRS = {
+    "question1": "question1",
+    "question2aN": "question2aN",
+    "caracteristiques": "caracteristiques",
+    "valeurs": "valeurs",
+    "enrichissement": "enrichissement",
+    "equivalence": "equivalence",
+    "caracterisation": "caracterisation",
+    "fabricant-reference": "fabricant-reference",
+    "prix-extraction-produits": "prix-extraction-produits",
+    "prix-extraction-siteweb": "prix-extraction-siteweb",
+    "prix-extraction-message": "prix-extraction-message",
+    "prix-extraction-devis": "prix-extraction-devis",
+    "prix-caracterisation": "prix-caracterisation",
+    "prix-traitement": "prix-traitement",
+}
 
 
 class FileItem(BaseModel):
@@ -51,6 +73,33 @@ async def root():
     """Serve the main HTML page"""
     with open("static/index.html", "r", encoding="utf-8") as f:
         return f.read()
+
+
+class AppendBody(BaseModel):
+    service: str
+    path: str   # relatif au dossier du service : "2026/09/2026-09-22-12-48-tracking-generation-....txt"
+    line: str
+
+
+@app.post("/api/append")
+def append_tracking_line(body: AppendBody, x_tracking_token: str = Header(default="")):
+    """Ajoute une ligne à un fichier de tracking, pour les services qui tournent hors de la VM (F-HP-MIG-010)."""
+    if not TRACKING_API_TOKEN or not secrets.compare_digest(x_tracking_token, TRACKING_API_TOKEN):
+        raise HTTPException(status_code=401, detail="Jeton invalide")
+    sub_dir = SERVICE_DIRS.get(body.service)
+    if sub_dir is None:
+        raise HTTPException(status_code=400, detail="Service inconnu")
+    safe_path = os.path.normpath(body.path).replace("\\", "/").lstrip("/")
+    if safe_path.startswith("..") or "/../" in safe_path or safe_path in ("", "."):
+        raise HTTPException(status_code=400, detail="Chemin invalide")
+    base = os.path.abspath(os.path.join(TRACKING_BASE_PATH, sub_dir))
+    full_path = os.path.abspath(os.path.join(base, safe_path))
+    if not full_path.startswith(base + os.sep):
+        raise HTTPException(status_code=400, detail="Chemin invalide")
+    os.makedirs(os.path.dirname(full_path), exist_ok=True)
+    with open(full_path, "a", encoding="utf-8") as f:
+        f.write(body.line + "\n")
+    return {"ok": True, "path": os.path.join(sub_dir, safe_path)}
 
 
 @app.get("/api/browse")

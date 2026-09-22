@@ -89,6 +89,7 @@ lot P1. Un pré-contrôle vide est un résultat valide, pas un échec.
 |---|---|
 | `architecture-apres-migration.md` | **La référence** : plateformes, flux, CI/CD (PR gate → wrappers → Trivy image → deploy → rollback auto), observabilité, playbook « quand ça bloque », pièges, dettes. Lis-le avant de répondre à une question d'architecture ou de débogage |
 | `acces-logs-services-migres.md` | Guide dev : où sont les logs (GKE `k8s_container` / Cloud Run `cloud_run_revision`), table des noms de filtre générée depuis l'inventaire, **pièges** : logs GKE collectés depuis le 21/09 seulement, lignes Python en sévérité `ERROR` (stderr), `print()` non collecté (exclusions FinOps) |
+| `spec-tracking-push-http.md` | F-HP-MIG-010 : le tracking fichier des QC/prix migrés n'atteint plus `qc-tracking-service` (emptyDir). Solution retenue à proposer : `write_log()` pousse aussi en HTTP vers le tracking-service (jeton, chemin contrôlé). Ne pas proposer Filestore/GCS FUSE (pas de WI, coût) |
 | `demande-pre-controle-lot.md` | Modèle du message DSO → Lead Dev pour le pré-contrôle d'un lot. Règle : toute demande aux devs est livrée **prête à envoyer** (quoi/comment/où/quand/forme de réponse), jamais comme consigne à reformuler |
 | `README.md` | Point d'entrée du développeur : quoi faire, quand, où remonter |
 | `guide-pre-check-service.md` | La procédure de vérification, étape par étape, avec les commandes de recherche |
