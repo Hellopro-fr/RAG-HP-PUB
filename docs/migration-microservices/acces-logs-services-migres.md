@@ -220,8 +220,24 @@ gcloud beta logging tail \
 4. **Les logs coûtent** (ingestion facturée au-delà de 50 GiB/mois). Pas de log par ligne de boucle, pas de dump de
    payload complet en INFO. Le volume est suivi par le DevSecOps ; un service trop bavard sera ramené à `WARNING`.
 
+## Voir les pods (console GKE ou `kubectl`) — ouvert le 22/09
+
+Les 13 comptes de la liste ont la lecture du cluster (rôles `container.viewer`, `container.clusterViewer`, `gkehub.gatewayReader`, et un RoleBinding `view` sur `apps-microservices`). Aucun secret n'est lisible, aucune écriture possible.
+
+- **Console** : <https://console.cloud.google.com/kubernetes/workload/overview?project=hellopro-rag-project> → filtre namespace `apps-microservices`. Onglet **Logs** d'un pod = la même chose que Logs Explorer.
+- **`kubectl` depuis ton poste** (une fois) :
+
+```bash
+gcloud components install gke-gcloud-auth-plugin
+gcloud container fleet memberships get-credentials matching-api-dev-k8s --project hellopro-rag-project   # Connect Gateway, cluster à endpoint privé
+kubectl get pods -n apps-microservices
+kubectl logs -n apps-microservices deploy/qc-caracterisation --since=1h -f          # équivalent de docker logs -f
+```
+
+`kubectl exec`, `delete`, `edit` : refusés, c'est voulu.
+
 ## Pour aller plus loin (sur demande au DevSecOps)
 
-- `kubectl logs -f` / `kubectl exec` depuis ton poste via Connect Gateway (rôles GKE + RBAC lecture sur le namespace).
+- `kubectl exec` (shell dans un pod) : droits supplémentaires, au cas par cas.
 - Un tableau de bord Logs par chaîne (QC, prix, graph-rag).
 - Logs JSON structurés côté code (F-HP-OBS-005) pour retrouver une vraie sévérité et pouvoir filtrer `severity>=ERROR`.
