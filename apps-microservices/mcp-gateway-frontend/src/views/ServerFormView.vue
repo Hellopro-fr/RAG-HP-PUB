@@ -151,6 +151,20 @@
             </template>
           </FormField>
 
+          <FormField
+            v-if="auth.isAdmin"
+            label="Niveau d'accès requis"
+            hint="Public = visible par tous. Sinon le serveur est masqué sur l'écran de consentement OAuth2 et ses outils sont refusés aux rôles inférieurs, ainsi qu'à tous les scope tokens."
+          >
+            <template #default="{ id }">
+              <BaseSelect :id="id" v-model="form.min_role">
+                <option v-for="opt in MIN_ROLE_OPTIONS" :key="opt.value" :value="opt.value">
+                  {{ opt.label }}
+                </option>
+              </BaseSelect>
+            </template>
+          </FormField>
+
           <!-- Auto-discover (create only) -->
           <div v-if="!isEdit" class="flex items-center gap-2">
             <input
@@ -284,6 +298,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useServersStore } from '@/stores/servers'
+import { useAuthStore } from '@/stores/auth'
 import { useToast } from '@/composables/useToast'
 import { serversApi } from '@/api/servers'
 import StepTabs from '@/components/shared/StepTabs.vue'
@@ -295,10 +310,12 @@ import BaseButton from '@/components/ui/BaseButton.vue'
 import FormField from '@/components/ui/FormField.vue'
 import { toErrorMessage } from '@/utils/error'
 import type { CreateServerRequest } from '@/types/server'
+import { MIN_ROLE_OPTIONS } from '@/types/server'
 
 const route = useRoute()
 const router = useRouter()
 const serversStore = useServersStore()
+const auth = useAuthStore()
 const toast = useToast()
 
 const stepLabels = ['Informations de base', 'Tags et configuration', 'Vérification']
@@ -324,6 +341,7 @@ const form = reactive<{
   mcp_command: string
   tags: string[]
   tool_prefix: string
+  min_role: string
   icon: string
   auto_discover: boolean
 }>({
@@ -335,6 +353,7 @@ const form = reactive<{
   mcp_command: '',
   tags: [],
   tool_prefix: '',
+  min_role: '',
   icon: '',
   auto_discover: true
 })
@@ -381,6 +400,7 @@ onMounted(async () => {
       form.mcp_command = server.mcp_command || ''
       form.tags = server.tags ? [...server.tags] : []
       form.tool_prefix = server.tool_prefix || ''
+      form.min_role = server.min_role || ''
       form.icon = server.icon || ''
 
       if (server.mcp_args?.length) {
@@ -461,6 +481,7 @@ async function handleSubmit() {
       mcp_transport: form.mcp_transport,
       tags: form.tags.length ? form.tags : undefined,
       tool_prefix: form.tool_prefix || undefined,
+      min_role: form.min_role,
       icon: form.icon || undefined
     }
 

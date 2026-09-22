@@ -158,11 +158,11 @@ func (sg *ScopedGateway) Handle(ctx context.Context, req *mcp.Request) *mcp.Resp
 	case "tools/call":
 		return sg.handleToolsCall(ctx, req)
 	case "resources/list":
-		return sg.handleResourcesList(req)
+		return sg.handleResourcesList(ctx, req)
 	case "resources/read":
 		return sg.handleResourcesRead(ctx, req)
 	case "prompts/list":
-		return sg.handlePromptsList(req)
+		return sg.handlePromptsList(ctx, req)
 	case "prompts/get":
 		return sg.handlePromptsGet(ctx, req)
 	default:
@@ -193,6 +193,10 @@ func (sg *ScopedGateway) handleInitialize(ctx context.Context, req *mcp.Request)
 }
 
 func (sg *ScopedGateway) handleToolsList(ctx context.Context, req *mcp.Request) *mcp.Response {
+	// Narrow the scope to backends this caller may reach before any of the
+	// Zoho branching below reads sg.allowedIDs.
+	allowedIDs := sg.allowedIDsMinusGated(ctx)
+
 	// Per-user Zoho tools/list — when an end-user identity is on the context
 	// AND the scope contains a Zoho-tagged backend, fetch the tool catalog
 	// live from mcp-zoho-service with the user's identity headers so the
@@ -202,7 +206,7 @@ func (sg *ScopedGateway) handleToolsList(ctx context.Context, req *mcp.Request) 
 	email, hasEmail := scopetoken.EndUserEmailFromContext(ctx)
 	zohoBackends := sg.zohoBackendsInScope()
 	if !hasEmail || len(zohoBackends) == 0 {
-		tools := sg.registry.MergedToolsFilteredWithTools(sg.allowedIDs, sg.allowedTools)
+		tools := sg.registry.MergedToolsFilteredWithTools(allowedIDs, sg.allowedTools)
 		return sg.toolsListResp(req.ID, tools, nil)
 	}
 
@@ -216,12 +220,12 @@ func (sg *ScopedGateway) handleToolsList(ctx context.Context, req *mcp.Request) 
 		state := sg.zohoCatalog.StateForEmail(ctx, email, granted)
 		if !state.Configured {
 			log.Printf("[scoped] tools/list email=%s: zoho catalog unconfigured (granted=%t) — omitting %d zoho backend(s) from result", email, granted, len(zohoBackends))
-			tools := sg.registry.MergedToolsFilteredWithTools(sg.nonZohoAllowedIDs(zohoBackends), sg.allowedTools)
+			tools := sg.registry.MergedToolsFilteredWithTools(sg.nonZohoAllowedIDs(allowedIDs, zohoBackends), sg.allowedTools)
 			return sg.toolsListResp(req.ID, tools, nil)
 		}
 	}
 
-	tools := sg.registry.MergedToolsFilteredWithTools(sg.nonZohoAllowedIDs(zohoBackends), sg.allowedTools)
+	tools := sg.registry.MergedToolsFilteredWithTools(sg.nonZohoAllowedIDs(allowedIDs, zohoBackends), sg.allowedTools)
 	// Live-fetched Zoho tools are absent from the registry index — record
 	// their owning backend so per-server instruction rows still reach them.
 	zohoIndex := make(map[string]string)
@@ -254,17 +258,51 @@ func (sg *ScopedGateway) toolsListResp(id json.RawMessage, tools []mcp.Tool, ext
 	return okResp(id, mcp.ListToolsResult{Tools: tools})
 }
 
-// nonZohoAllowedIDs returns sg.allowedIDs minus every backend in zohoBackends.
+// nonZohoAllowedIDs returns allowedIDs minus every backend in zohoBackends.
 // Used by handleToolsList to split the merged-from-registry result from the
 // per-user Zoho live-fetch (or the unconfigured-viewer omission).
-func (sg *ScopedGateway) nonZohoAllowedIDs(zohoBackends []*BackendServer) map[string]bool {
+func (sg *ScopedGateway) nonZohoAllowedIDs(allowedIDs map[string]bool, zohoBackends []*BackendServer) map[string]bool {
 	zohoIDs := make(map[string]bool, len(zohoBackends))
 	for _, b := range zohoBackends {
 		zohoIDs[b.ID] = true
 	}
+	out := make(map[string]bool, len(allowedIDs))
+	for id, ok := range allowedIDs {
+		if ok && !zohoIDs[id] {
+			out[id] = true
+		}
+	}
+	return out
+}
+
+// gatedOutIDs returns the subset of sg.allowedIDs whose backend carries a
+// min_role the caller behind ctx does not meet. Modelled on
+// nonZohoAllowedIDs: the scope is narrowed per request rather than at cache
+// build time, because the answer depends on who is asking.
+func (sg *ScopedGateway) gatedOutIDs(ctx context.Context) map[string]bool {
+	out := make(map[string]bool)
+	for _, s := range sg.registry.All() {
+		if !sg.allowedIDs[s.ID] || s.MinRole == "" {
+			continue
+		}
+		if !GateAllows(s.MinRole, ctx, sg.gatewayUsers) {
+			out[s.ID] = true
+		}
+	}
+	return out
+}
+
+// allowedIDsMinusGated returns sg.allowedIDs without the gated-out backends.
+// Returns sg.allowedIDs itself when nothing is gated, so the overwhelmingly
+// common all-public case allocates nothing.
+func (sg *ScopedGateway) allowedIDsMinusGated(ctx context.Context) map[string]bool {
+	gated := sg.gatedOutIDs(ctx)
+	if len(gated) == 0 {
+		return sg.allowedIDs
+	}
 	out := make(map[string]bool, len(sg.allowedIDs))
 	for id, ok := range sg.allowedIDs {
-		if ok && !zohoIDs[id] {
+		if ok && !gated[id] {
 			out[id] = true
 		}
 	}
@@ -380,6 +418,12 @@ func (sg *ScopedGateway) handleToolsCall(ctx context.Context, req *mcp.Request) 
 		if backend == nil {
 			return errorResp(req.ID, mcp.ErrInvalidParams, fmt.Sprintf("unknown tool: %s", params.Name))
 		}
+	}
+
+	if !GateAllows(backend.MinRole, ctx, sg.gatewayUsers) {
+		email, _ := scopetoken.EndUserEmailFromContext(ctx)
+		log.Printf("[scoped] tools/call DENIED name=%s backend=%s min_role=%q email=%q — caller does not meet the server's required role", params.Name, backend.ID, backend.MinRole, email)
+		return errorResp(req.ID, mcp.ErrInvalidParams, fmt.Sprintf("tool %q is not allowed: this server requires the gateway role %q", params.Name, backend.MinRole))
 	}
 
 	// Compute per-request backend headers, starting from the static auth
@@ -544,15 +588,15 @@ func (sg *ScopedGateway) tryAutoSelfLeexi(ctx context.Context) (string, bool) {
 // isGatewayAdmin returns true when the email belongs to a gateway_users row
 // with Role=admin. Returns false when the repo isn't configured, the row is
 // missing, or the role is anything else.
+//
+// Note the asymmetry with the access gate: here false means "not an admin, so
+// fall through to the admin-configured filter" — permissive by design for the
+// Leexi/Ringover auto-self override. GateAllowsEmail treats the same
+// uncertainty as a denial. Both share gatewayUserRole; only the reading of a
+// failed lookup differs.
 func (sg *ScopedGateway) isGatewayAdmin(email string) bool {
-	if sg.gatewayUsers == nil {
-		return false
-	}
-	user, err := sg.gatewayUsers.GetByEmail(email)
-	if err != nil || user == nil {
-		return false
-	}
-	return user.Role == auth.RoleAdmin
+	role, ok := gatewayUserRole(sg.gatewayUsers, email)
+	return ok && role == auth.RoleAdmin
 }
 
 // injectRingoverHeader is the Ringover-side mirror of injectLeexiHeader:
@@ -804,8 +848,12 @@ func (sg *ScopedGateway) injectZohoHeader(ctx context.Context, headers map[strin
 	}
 }
 
-func (sg *ScopedGateway) handleResourcesList(req *mcp.Request) *mcp.Response {
-	resources := sg.registry.MergedResourcesFiltered(sg.allowedIDs)
+func (sg *ScopedGateway) handleResourcesList(ctx context.Context, req *mcp.Request) *mcp.Response {
+	// Narrow the scope to backends this caller may reach — mirrors
+	// handleToolsList so a gated backend's resources never appear for a
+	// caller that doesn't meet its min_role (including mcp_… scope tokens
+	// and client_credentials grants, which never carry an end-user email).
+	resources := sg.registry.MergedResourcesFiltered(sg.allowedIDsMinusGated(ctx))
 	if resources == nil {
 		resources = []mcp.Resource{}
 	}
@@ -823,6 +871,12 @@ func (sg *ScopedGateway) handleResourcesRead(ctx context.Context, req *mcp.Reque
 		return errorResp(req.ID, mcp.ErrInvalidParams, fmt.Sprintf("unknown resource: %s", params.URI))
 	}
 
+	if !GateAllows(backend.MinRole, ctx, sg.gatewayUsers) {
+		email, _ := scopetoken.EndUserEmailFromContext(ctx)
+		log.Printf("[scoped] resources/read DENIED uri=%s backend=%s min_role=%q email=%q — caller does not meet the server's required role", params.URI, backend.ID, backend.MinRole, email)
+		return errorResp(req.ID, mcp.ErrInvalidParams, fmt.Sprintf("resource %q is not allowed: this server requires the gateway role %q", params.URI, backend.MinRole))
+	}
+
 	client := transport.NewBackendClientWithEndpoint(backend.MessageURL, backend.AuthHeaders)
 	result, err := client.ReadResource(ctx, params)
 	if err != nil {
@@ -831,8 +885,9 @@ func (sg *ScopedGateway) handleResourcesRead(ctx context.Context, req *mcp.Reque
 	return okResp(req.ID, result)
 }
 
-func (sg *ScopedGateway) handlePromptsList(req *mcp.Request) *mcp.Response {
-	prompts := sg.registry.MergedPromptsFiltered(sg.allowedIDs)
+func (sg *ScopedGateway) handlePromptsList(ctx context.Context, req *mcp.Request) *mcp.Response {
+	// See handleResourcesList: same gate-aware narrowing.
+	prompts := sg.registry.MergedPromptsFiltered(sg.allowedIDsMinusGated(ctx))
 	if prompts == nil {
 		prompts = []mcp.Prompt{}
 	}
@@ -848,6 +903,12 @@ func (sg *ScopedGateway) handlePromptsGet(ctx context.Context, req *mcp.Request)
 	backend := sg.registry.FindByPromptFiltered(params.Name, sg.allowedIDs)
 	if backend == nil {
 		return errorResp(req.ID, mcp.ErrInvalidParams, fmt.Sprintf("unknown prompt: %s", params.Name))
+	}
+
+	if !GateAllows(backend.MinRole, ctx, sg.gatewayUsers) {
+		email, _ := scopetoken.EndUserEmailFromContext(ctx)
+		log.Printf("[scoped] prompts/get DENIED name=%s backend=%s min_role=%q email=%q — caller does not meet the server's required role", params.Name, backend.ID, backend.MinRole, email)
+		return errorResp(req.ID, mcp.ErrInvalidParams, fmt.Sprintf("prompt %q is not allowed: this server requires the gateway role %q", params.Name, backend.MinRole))
 	}
 
 	client := transport.NewBackendClientWithEndpoint(backend.MessageURL, backend.AuthHeaders)
