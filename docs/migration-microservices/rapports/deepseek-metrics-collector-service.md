@@ -150,3 +150,7 @@ C'est le DevSecOps qui l'exécute. Les devs **signalent**, ils ne rollbackent pa
 | 2 | **Le service ignore SIGTERM** : `docker stop` finit en `Exited (137)` (SIGKILL) même avec 30 s de grâce. Sans conséquence sur une file vide ; sur un service chargé, un message peut rester non acquitté et être requeué. À corriger côté code (`aio_pika` : fermer la connexion sur le signal) | LEAD |
 | 3 | Un conteneur orphelin `df2145682135_rag-hp-pub-deepseek-metrics-collector-service-1` en état `Created` traîne sur la VM (ancienne recréation Compose). Inoffensif, à nettoyer hors fenêtre | DevSecOps |
 | 4 | Le mot de passe du broker apparaît dans les logs au démarrage (F-HP-SEC-021) — masquer avant tout partage | Tous, en attendant le correctif |
+
+## Validation — 22/09/2026 9h30
+
+✅ **Lot L1 validé** : traitements réels confirmés par le dev le 21/09 (`deepseek-metrics-collector-service` : lignes `[SUCCESS]` / files consommées), 0 `Traceback`, 0 redémarrage sur la nuit du 21 au 22. Jumeaux VM `Exited` conservés jusqu'au **26/09**, puis retrait (`docker rm` + neutralisation dans `docker-compose.yml`).
