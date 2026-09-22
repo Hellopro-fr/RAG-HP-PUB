@@ -131,3 +131,7 @@ Exécuté par le DevSecOps. Les devs signalent, ils ne rollbackent pas.
 | 3 | **SIGTERM ignoré** (`Exited 137` ×5) — confirmé sur un second service : la correction (F-HP-DEV-006) vaut pour toute la famille de consumers `aio_pika` | LEAD |
 | 4 | **Code en bind-mount sur la VM** : tant que les jumeaux existent, un `git pull` sur la VM change le code qu'ils exécuteraient au redémarrage (rollback). Ne pas toucher au checkout VM pendant la fenêtre de rollback (7 jours) | DevSecOps |
 | 5 | Mot de passe du broker dans les logs au démarrage (F-HP-SEC-021) — masquer avant partage | Tous |
+
+## Validation — 22/09/2026 9h30
+
+✅ **Lot L1 validé** : traitements réels confirmés par le dev le 21/09 (`nettoyage-bruit-ocr-service` : lignes `[SUCCESS]` / files consommées), 0 `Traceback`, 0 redémarrage sur la nuit du 21 au 22. Jumeaux VM `Exited` conservés jusqu'au **26/09**, puis retrait (`docker rm` + neutralisation dans `docker-compose.yml`).

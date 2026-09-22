@@ -113,6 +113,10 @@ générées depuis [`inventaire-services-migration-par-lot.md`](inventaire-servi
 
 Les services absents de ces tables ne sont pas migrés : `docker logs` sur la VM, comme avant.
 
+> ⚠️ **Piège vu le 21/09** : `gcloud run services logs read nettoyage-bruit-ocr-service` ne rend rien, et c'est normal :
+> ce service est sur **GKE**. `gcloud run …` ne sert qu'aux services de la table Cloud Run. Pour GKE, c'est `gcloud logging read`
+> avec `resource.type="k8s_container"`, ou la console.
+
 ## Option 1 — la console (le plus simple)
 
 1. Ouvre **Logs Explorer** : <https://console.cloud.google.com/logs/query?project=hellopro-rag-project>
@@ -131,7 +135,7 @@ resource.type="cloud_run_revision"
 resource.labels.service_name="api-recherche"
 ```
 
-3. Choisis la plage de temps en haut à droite (par défaut 1 h ; conservation **30 jours**).
+3. Choisis la plage de temps en haut à droite (par défaut 1 h ; conservation **15 jours** (rétention du bucket `_Default`)).
 4. **Run query**. Les lignes récentes sont en bas ; **Stream logs** pour suivre en direct.
 
 Variantes utiles, à ajouter à la requête (une par ligne = ET logique) :
@@ -151,9 +155,11 @@ Astuce : **Save query** pour garder « mes QC en erreur » sous la main, et **Sh
 
 ### Note sévérité — à lire une fois
 
-Les services Python écrivent leurs logs sur **stderr**. GKE marque tout ce qui sort sur stderr en sévérité **`ERROR`**,
-y compris un simple `INFO - En attente sur la file`. Dans Logs Explorer, tu verras donc les logs GKE **tous en rouge** :
-ce n'est pas une alerte. Filtre par **texte** (`ERROR`, `Traceback`, `❌`), jamais par `severity`. Cloud Run est mieux
+La sévérité affichée dépend du **flux**, pas du niveau Python. Les services en `logging.basicConfig()` (les QC, par exemple)
+écrivent sur **stderr** → tout en **`ERROR`**, même un `INFO - En attente sur la file`. Les services qui passent par
+`setup_logging()` de `common-utils` (nettoyage-bruit-ocr, les processors…) écrivent sur **stdout** → tout en **`INFO`**, même un
+`logger.error`. Dans les deux cas : filtre par **texte** (`ERROR`, `Traceback`, `❌`), jamais par `severity`, jusqu'au chantier
+logs JSON (F-HP-OBS-005). Cloud Run est mieux
 loti : les requêtes HTTP ont une vraie sévérité, seuls les logs applicatifs stderr ont le même défaut.
 
 ## Option 2 — depuis ton poste, en ligne de commande
@@ -186,8 +192,11 @@ gcloud beta logging tail \
   --format='value(timestamp,textPayload)'
 ```
 
-`--freshness` accepte `10m`, `2h`, `3d`. Sans `--order=asc`, le plus récent sort en premier. Sur ce poste Windows,
-évite `--format='yaml(...)'` / `table(...)` qui peuvent sortir vide : `--format=json` ou `value(...)`.
+`--freshness` accepte `10m`, `2h`, `3d`. Sans `--order=asc`, le plus récent sort en premier.
+
+> **Si une commande `gcloud` rend une sortie vide alors que la console montre des lignes** : vérifie `gcloud config list` ;
+> avec `accessibility/screen_reader = True`, les formateurs `value(...)`, `yaml(...)`, `table(...)` peuvent ne rien afficher
+> (vu le 21/09). Corrige avec `gcloud config set accessibility/screen_reader false`, ou utilise `--format=json`.
 
 ## Ce qui change par rapport à la VM
 
@@ -195,9 +204,9 @@ gcloud beta logging tail \
 |---|---|
 | `docker logs rag-hp-pub-qc-caracterisation-1` puis `-2` | une seule requête, tous les pods du service ; le pod est dans `resource.labels.pod_name` |
 | Fichiers de suivi `/app/tracking` lus par `qc-tracking-service` | **plus de fichier** pour les services migrés (décision Lead Dev du 21/09) : l'information est dans les logs du pod |
-| Logs perdus au `docker rm` | conservés 30 jours quoi qu'il arrive au pod |
+| Logs perdus au `docker rm` | conservés 15 jours quoi qu'il arrive au pod |
 | Heure locale de la VM (UTC) | horodatage UTC dans Logging ; la console affiche dans **ton** fuseau (réglable en haut à droite) |
-| `print()` visible dans `docker logs` | **`print()` (stdout) n'est pas collecté** : seules les lignes stderr (`logging`) le sont, par choix FinOps. Loggue avec `logging`, pas `print` |
+| `print()` visible dans `docker logs` | collecté aussi, en sévérité `INFO` (depuis le 21/09 soir : le namespace `apps-microservices` est épargné par les exclusions FinOps, seul le bruit `/health` est jeté). Loggue quand même avec `logging`, pas `print` |
 
 ## Quatre règles
 
