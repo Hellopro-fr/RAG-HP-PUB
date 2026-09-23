@@ -17,8 +17,8 @@
 | Lot | Date proposée | Statut | Bascule | Obs. 24 h | Décision J+1 |
 |:--:|---|---|---|---|---|
 | **L1** | **sam 19/09** (anticipé) | ✅ **basculé et VALIDÉ** (GO 22/09 9h30 : traitements réels 21/09, 0 erreur, 0 restart) | L1-a 3 min (rollback réel 62 s, rebascule 1'50) · L1-b **2 min 05** | ✅ close | ✅ **GO 22/09 9h30** — jumeaux VM à retirer le 26/09 |
-| **L2** | lun 21/09 → 🔴 rollback (F-HP-MIG-009) · **rejeu mar 22/09 12h45 Paris ✅** | ✅ **basculé** — 9 files à `consumers=1`, 1er message réel `CAT-1002121` traité en 4 min (16 × 200, 0 × 400) | 21/09 : 2 min 39 / rollback 1 min 31 · 22/09 : **3 min 12** | 🟡 en cours → mer 23 | **mer 23/09 9h30** |
-| **L3** | mer 23/09 | ⬜ à venir | | | |
+| **L2** | lun 21/09 → 🔴 rollback (F-HP-MIG-009) · **rejeu mar 22/09 12h45 Paris ✅** | ✅ **basculé** — 9 files à `consumers=1`, 1er message réel `CAT-1002121` traité en 4 min (16 × 200, 0 × 400) | 21/09 : 2 min 39 / rollback 1 min 31 · 22/09 : **3 min 12** | ✅ nuit 22→23 : 223 × 200 sur qc-caracterisation, 0 × 400, 0 restart | ✅ **GO 23/09 ~7h30** (LEAD + dev, GO étendu à L3 prix) |
+| **L3** | **mer 23/09 9h28 Paris** (anticipé) | ✅ **basculé** — 5 prix sur GKE, 1re écriture Milvus prod (URI `milvus-prod`, identifiants SM `platform-zilliz-*`), borne `max id 467759069053297382` | **~4 min 10** | 🟡 en cours → jeu 24 (tests réels OK, F-HP-MIG-012 corrigé en cours de lot) | **jeu 24/09 9h30** |
 | **L4** | jeu 24/09 | ⬜ à venir | | | |
 | **L5** | lun 28/09 | ⬜ à venir | | | |
 | **L6** | mar 29/09 | ⬜ à venir | | | |
@@ -30,18 +30,18 @@
 |:--:|---|---|:--:|:--:|:--:|---|---|---|:--:|---|
 | L1 | `deepseek-metrics-collector-service` | `deepseek-metrics-collector-service` | **STOPPED** | **PROD** | 1 | 2026-09-19 09:52 | DSO 19/09 | ✅ dev 21/09 (traitements réels) | ✅ 22/09 9h30 | rollback réel joué (62 s) ; SIGTERM ignoré (Exited 137) ; [rapport](rapports/deepseek-metrics-collector-service.md) |
 | L1 | `nettoyage-bruit-ocr-service` | `nettoyage-bruit-ocr-service` | **STOPPED** ×5 | **PROD** | **3** | 2026-09-19 10:29 UTC | DSO 19/09 | ✅ dev 21/09 (traitements réels) | ✅ 22/09 9h30 | plage tarifaire 06-10h/01-04h UTC = `consumers=0` nominal ; code bind-mount sur VM (ne pas `git pull` la VM pendant 7 j) ; [rapport](rapports/nettoyage-bruit-ocr-service.md) |
-| L2 | `qc-caracterisation` | `qc-caracterisation` | **STOPPED** | **PROD** | 1 | 2026-09-22 10:48 UTC (rejeu ; 21/09 rollback) | DSO 22/09 | ⬜ écrit référent (test 1002121 OK 12:34 UTC) | ⬜ | 21/09 rollback HP_TOKEN placeholder (F-HP-MIG-009) ; 22/09 rejeu propre ; tracking → push HTTP à venir (F-HP-MIG-010) |
-| L2 | `qc-enrichissement` | `qc-enrichissement` | **STOPPED** | **PROD** | 1 | 2026-09-22 10:48 UTC (rejeu ; 21/09 rollback) | DSO 22/09 | ⬜ écrit référent (test 1002121 OK 12:34 UTC) | ⬜ | 21/09 rollback HP_TOKEN placeholder (F-HP-MIG-009) ; 22/09 rejeu propre ; tracking → push HTTP à venir (F-HP-MIG-010) |
-| L2 | `qc-equivalence` | `qc-equivalence` | **STOPPED** | **PROD** | 1 | 2026-09-22 10:48 UTC (rejeu ; 21/09 rollback) | DSO 22/09 | ⬜ écrit référent (test 1002121 OK 12:34 UTC) | ⬜ | 21/09 rollback HP_TOKEN placeholder (F-HP-MIG-009) ; 22/09 rejeu propre ; tracking → push HTTP à venir (F-HP-MIG-010) |
-| L2 | `qc-generation-caracteristiques` | `qc-generation-caracteristiques` | **STOPPED** | **PROD** | 1 | 2026-09-22 10:48 UTC (rejeu ; 21/09 rollback) | DSO 22/09 | ⬜ écrit référent (test 1002121 OK 12:34 UTC) | ⬜ | 21/09 rollback HP_TOKEN placeholder (F-HP-MIG-009) ; 22/09 rejeu propre ; tracking → push HTTP à venir (F-HP-MIG-010) |
-| L2 | `qc-generation-question1` | `qc-generation-question1` | **STOPPED** | **PROD** | 1 | 2026-09-22 10:48 UTC (rejeu ; 21/09 rollback) | DSO 22/09 | ⬜ écrit référent (test 1002121 OK 12:34 UTC) | ⬜ | 21/09 rollback HP_TOKEN placeholder (F-HP-MIG-009) ; 22/09 rejeu propre ; tracking → push HTTP à venir (F-HP-MIG-010) |
-| L2 | `qc-generation-question2an` | `qc-generation-question2an` | **STOPPED** | **PROD** | 1 | 2026-09-22 10:48 UTC (rejeu ; 21/09 rollback) | DSO 22/09 | ⬜ écrit référent (test 1002121 OK 12:34 UTC) | ⬜ | 21/09 rollback HP_TOKEN placeholder (F-HP-MIG-009) ; 22/09 rejeu propre ; tracking → push HTTP à venir (F-HP-MIG-010) |
-| L2 | `qc-generation-valeurs` | `qc-generation-valeurs` | **STOPPED** | **PROD** | 1 | 2026-09-22 10:48 UTC (rejeu ; 21/09 rollback) | DSO 22/09 | ⬜ écrit référent (test 1002121 OK 12:34 UTC) | ⬜ | 21/09 rollback HP_TOKEN placeholder (F-HP-MIG-009) ; 22/09 rejeu propre ; tracking → push HTTP à venir (F-HP-MIG-010) |
-| L3 | `prix-extraction-produits` | `prix-extraction-produits` | UP | shadow | 1 | | | | ⬜ | |
-| L3 | `prix-extraction-message` | `prix-extraction-message` | UP | shadow | 1 | | | | ⬜ | |
-| L3 | `prix-extraction-devis` | `prix-extraction-devis` | UP | shadow | 1 | | | | ⬜ | |
-| L3 | `prix-caracterisation` | `prix-caracterisation` | UP | shadow | 1 | | | | ⬜ | |
-| L3 | `prix-milvus-processor-service` | `prix-milvus-processor` | UP | shadow | 1 | | | | ⬜ | |
+| L2 | `qc-caracterisation` | `qc-caracterisation` | **STOPPED** | **PROD** | 1 | 2026-09-22 10:48 UTC (rejeu ; 21/09 rollback) | DSO 22/09 | ✅ LEAD + dev 23/09 | ✅ 23/09 | 21/09 rollback HP_TOKEN placeholder (F-HP-MIG-009) ; 22/09 rejeu propre ; tracking → push HTTP à venir (F-HP-MIG-010) |
+| L2 | `qc-enrichissement` | `qc-enrichissement` | **STOPPED** | **PROD** | 1 | 2026-09-22 10:48 UTC (rejeu ; 21/09 rollback) | DSO 22/09 | ✅ LEAD + dev 23/09 | ✅ 23/09 | 21/09 rollback HP_TOKEN placeholder (F-HP-MIG-009) ; 22/09 rejeu propre ; tracking → push HTTP à venir (F-HP-MIG-010) |
+| L2 | `qc-equivalence` | `qc-equivalence` | **STOPPED** | **PROD** | 1 | 2026-09-22 10:48 UTC (rejeu ; 21/09 rollback) | DSO 22/09 | ✅ LEAD + dev 23/09 | ✅ 23/09 | 21/09 rollback HP_TOKEN placeholder (F-HP-MIG-009) ; 22/09 rejeu propre ; tracking → push HTTP à venir (F-HP-MIG-010) |
+| L2 | `qc-generation-caracteristiques` | `qc-generation-caracteristiques` | **STOPPED** | **PROD** | 1 | 2026-09-22 10:48 UTC (rejeu ; 21/09 rollback) | DSO 22/09 | ✅ LEAD + dev 23/09 | ✅ 23/09 | 21/09 rollback HP_TOKEN placeholder (F-HP-MIG-009) ; 22/09 rejeu propre ; tracking → push HTTP à venir (F-HP-MIG-010) |
+| L2 | `qc-generation-question1` | `qc-generation-question1` | **STOPPED** | **PROD** | 1 | 2026-09-22 10:48 UTC (rejeu ; 21/09 rollback) | DSO 22/09 | ✅ LEAD + dev 23/09 | ✅ 23/09 | 21/09 rollback HP_TOKEN placeholder (F-HP-MIG-009) ; 22/09 rejeu propre ; tracking → push HTTP à venir (F-HP-MIG-010) |
+| L2 | `qc-generation-question2an` | `qc-generation-question2an` | **STOPPED** | **PROD** | 1 | 2026-09-22 10:48 UTC (rejeu ; 21/09 rollback) | DSO 22/09 | ✅ LEAD + dev 23/09 | ✅ 23/09 | 21/09 rollback HP_TOKEN placeholder (F-HP-MIG-009) ; 22/09 rejeu propre ; tracking → push HTTP à venir (F-HP-MIG-010) |
+| L2 | `qc-generation-valeurs` | `qc-generation-valeurs` | **STOPPED** | **PROD** | 1 | 2026-09-22 10:48 UTC (rejeu ; 21/09 rollback) | DSO 22/09 | ✅ LEAD + dev 23/09 | ✅ 23/09 | 21/09 rollback HP_TOKEN placeholder (F-HP-MIG-009) ; 22/09 rejeu propre ; tracking → push HTTP à venir (F-HP-MIG-010) |
+| L3 | `prix-extraction-produits` | `prix-extraction-produits` | **STOPPED** | **PROD** | 1 | 2026-09-23 07:32 UTC | DSO 23/09 | ✅ tests réels 23/09 (101 insertions, 0 doublon) ; écrit dev ⬜ | ⬜ | |
+| L3 | `prix-extraction-message` | `prix-extraction-message` | **STOPPED** | **PROD** | 1 | 2026-09-23 07:32 UTC | DSO 23/09 | ✅ tests réels 23/09 (101 insertions, 0 doublon) ; écrit dev ⬜ | ⬜ | |
+| L3 | `prix-extraction-devis` | `prix-extraction-devis` | **STOPPED** | **PROD** | 1 | 2026-09-23 07:32 UTC | DSO 23/09 | ✅ tests réels 23/09 (101 insertions, 0 doublon) ; écrit dev ⬜ | ⬜ | |
+| L3 | `prix-caracterisation` | `prix-caracterisation` | **STOPPED** | **PROD** | 1 | 2026-09-23 07:32 UTC | DSO 23/09 | ✅ tests réels 23/09 (101 insertions, 0 doublon) ; écrit dev ⬜ | ⬜ | |
+| L3 | `prix-milvus-processor-service` | `prix-milvus-processor` | **STOPPED** ×4 | **PROD** | 2 | 2026-09-23 07:32 UTC | DSO 23/09 | ✅ tests réels 23/09 (101 insertions, 0 doublon) ; écrit dev ⬜ | ⬜ | |
 | L4 | `website-processor-service` | `website-processor-service` | UP | shadow | 1 | | | | ⬜ | |
 | L4 | `product-processor-service` | `product-processor-service` | UP | shadow | 1 | | | | ⬜ | |
 | L4 | `echange-processor-service` | `echange-processor-service` | UP | shadow | 1 | | | | ⬜ | |

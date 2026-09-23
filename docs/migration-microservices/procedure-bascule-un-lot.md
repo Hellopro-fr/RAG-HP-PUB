@@ -10,6 +10,14 @@
 
 ---
 
+## Retours d'expérience intégrés (L3, 23/09)
+
+- **Les défauts du code aussi** : un service peut vivre sur une valeur **par défaut** qui n'existe que sur la VM (noms Docker des clients gRPC `common_utils.grpc_clients` : `database-recherche-service:50054`…). P1 : `grep -rE "grpc_clients|_SERVICE_URL" apps-microservices/<svc>/app` ; chaque client utilisé = variable d'adresse déclarée dans le manifeste, vers le proxy de la VM `10.11.0.2:15051-15054` (F-HP-MIG-012).
+- **Parité des variables utilisées, pas seulement présentes** : lire le code (`os.environ`, `settings.py`) pour lister ce que le service **consomme** ; la VM passe tout le `.env` commun, le manifeste doit porter ce qui est lu (F-HP-MIG-011 : `prix-caracterisation` sans `DEEPSEEK_API_KEY` ni `ZILLIZ_*`).
+- **Premier écrivain d'une base** : relever une borne (`max id` auto-généré) **après** l'arrêt des jumeaux, via un conteneur jetable portant les mêmes variables ; vérifier la sauvegarde de la nuit ; le rollback données devient une suppression `id > borne`.
+- **Couper avant de corriger** : un service qui part en DLQ se met à `replicas=0` (la file accumule sans perte), on corrige, on remet à 1 ; les autres services du lot continuent.
+- **Chrono L3** : arrêt VM → preuve broker **~4 min 10** (8 conteneurs, 5 services, Milvus inclus).
+
 ## Retours d'expérience intégrés (L2, 21/09 — rollback)
 
 - **Les noms de variables ne suffisent pas : P1 compare les VALEURS par empreinte.** Le 21/09, le secret K8s partagé `platform-llm-hp-secrets` portait encore ses placeholders (`hp-token` 35 caractères au lieu de 144) ; tous les appels API depuis GKE ont répondu 400, rollback à 14h57. Pour chaque variable secrète du lot : longueur + SHA-256 côté conteneur VM (`docker exec … printf "%s" "$VAR" | sha256sum`) et côté secret K8s (`kubectl get secret … | base64 -d | sha256sum`), **jamais la valeur**. Un écart = stop (F-HP-MIG-009).
