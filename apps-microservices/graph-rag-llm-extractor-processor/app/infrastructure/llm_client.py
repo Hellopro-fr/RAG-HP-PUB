@@ -33,7 +33,6 @@ class LLMClient:
 
         try:
             print(f"Provider: {self.provider}")
-            print(f"API Key: {api_key}")
             print(f"Model: {model}")
             return LLMFactory.create_client(
                 provider=self.provider,
