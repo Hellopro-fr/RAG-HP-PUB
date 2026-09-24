@@ -295,9 +295,20 @@ abandoning silently, because it has a result to deliver.
   `Timeout pool navigateurs`. It also covers a permit granted in the same tick as the
   cancellation (the task is already done; `add_done_callback` still fires). Pinned by the
   two `…cancel…` tests in `tests/test_await_or_raise.py`.
-- **Residual, assumed:** a `playwright.start` that completes after being abandoned is not
-  reclaimed (`p.stop()` is never called) — same trade `_close_or_abandon` already makes
-  for browsers. `page.content` inside the challenge-poll loop is bounded too: the `while`
+- **A driver delivered after we stopped waiting is stopped** (2026-09-24). Until then a
+  `playwright.start` that completed after being abandoned was never reclaimed — no
+  `p.stop()` could reach it, and it lived until the container restarted: PROD 2026-09-24
+  counted 42 Playwright drivers (`MainThread`) for 4 browsers, and 39 driver-only
+  survivors (~97 MB RSS each) once the episode had cleared. `_await_or_raise` now takes an
+  optional `reclaim`, attached — like the permit callback — on **both** result-less exits
+  (timeout and caller cancellation) and never before the await, since on success the
+  driver belongs to the caller. For the two `playwright.start` call sites it schedules
+  `_close_or_abandon(p.stop(), TEARDOWN_TIMEOUT_S, "playwright.stop (tardif) …")`, so an
+  abandoned late stop is counted under `detect_teardown_abandoned_total{op="playwright.stop"}`;
+  each reclaim logs `résultat livré après abandon, récupéré`. Pinned by
+  `TestLateDriverIsStopped` in `tests/test_await_or_raise.py`. **Still not counted
+  anywhere:** live drivers have no gauge (`BROWSERS_UNCLOSED` counts browsers only).
+  `page.content` inside the challenge-poll loop is bounded too: the `while`
   guard only re-evaluates between iterations, so a hung read there made the 45s poll
   ceiling inoperative.
 - **NOT bounded, on purpose:** the inflight-dedup follower's `await fut`
