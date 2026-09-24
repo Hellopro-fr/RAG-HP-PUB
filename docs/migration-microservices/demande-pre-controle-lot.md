@@ -40,3 +40,4 @@
 |---|---|---|---|
 | L1 | — (lot pilote, vérifications DSO) | — | `lots/L1.md` |
 | L2 | 21/09 (oral, via le LEAD) | 21/09 : tracking seul fichier écrit · toutes variables dans la matrice · double traitement « déjà géré » | `lots/L2.md` |
+| L4 | 24/09 matin (écrit, message prêt à envoyer) | 24/09 : aucune écriture disque · seules `RABBITMQ_URL`/`REDIS_URL`/`ZILLIZ_*` · double traitement « identique, sans doublon ni perte » | `lots/L4.md` |

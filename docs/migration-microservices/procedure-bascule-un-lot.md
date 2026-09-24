@@ -10,11 +10,24 @@
 
 ---
 
+## Retours d'expérience intégrés (L4, 24/09)
+
+- **Écrivains qui suppriment ou mettent à jour** : « supprimer `id > borne` » ne défait pas une suppression. Filet retenu : **sauvegarde Milvus à la demande juste après P2** (`kubectl -n milvus-prod create job --from=cronjob/milvus-backup-daily <nom>`, ~4 min 10), VM arrêtée, avant la première écriture GKE — point de retour exact. Les files attendent pendant la sauvegarde, sans perte. Le job du CronJob crée sans jamais purger.
+- **P3 scripté avec garde-fous** : lecture Secret Manager, empreintes attendues vérifiées **avant** tout patch (arrêt sinon), copie in-cluster `<secret>-prel4` de chaque secret, patch clé par clé et **relecture de chaque empreinte posée**. Aucune valeur affichée ni écrite sur disque hors fichier de patch 600 supprimé.
+- **URL broker prod** : valeur `platform-rabbitmq-url` réécrite en DNS interne ; vérifiée égale au secret prod du lot précédent avant patch.
+- **Mémoire du cluster** : requests à 86-93 % → montée en réplicas **par paliers** avec `kubectl top nodes` entre deux ; un service à file vide reste à 1 (monté sur constat de backlog).
+- **Parité aussi côté VM** : empreintes des variables lues **dans les conteneurs VM qui tournent** (`docker exec … printenv`, jamais la valeur) comparées à Secret Manager — Redis n'avait jamais été comparé.
+- **Pré-contrôle écrit du LEAD** avec la question d'idempotence posée par écrivain (message prêt à envoyer) : réponses en 1 h.
+- **Git Bash** : un `python -c` multi-ligne local échoue (shim Windows) ; utiliser `jq`/`jsonpath` en local, le multi-ligne seulement dans un `kubectl exec`.
+- **Manifeste d'un service sous wrapper CD** (`product-processor-service`) : son tag d'image dans le dépôt peut être en retard sur le cluster ; l'aligner avant tout `kubectl apply`, sinon l'apply ramène une vieille image.
+- **Chrono L4** : arrêt VM → preuve broker **~12 min 25** (39 conteneurs, 9 services, dont 4 min 10 de sauvegarde).
+
 ## Retours d'expérience intégrés (L3, 23/09)
 
 - **Les défauts du code aussi** : un service peut vivre sur une valeur **par défaut** qui n'existe que sur la VM (noms Docker des clients gRPC `common_utils.grpc_clients` : `database-recherche-service:50054`…). P1 : `grep -rE "grpc_clients|_SERVICE_URL" apps-microservices/<svc>/app` ; chaque client utilisé = variable d'adresse déclarée dans le manifeste, vers le proxy de la VM `10.11.0.2:15051-15054` (F-HP-MIG-012).
 - **Parité des variables utilisées, pas seulement présentes** : lire le code (`os.environ`, `settings.py`) pour lister ce que le service **consomme** ; la VM passe tout le `.env` commun, le manifeste doit porter ce qui est lu (F-HP-MIG-011 : `prix-caracterisation` sans `DEEPSEEK_API_KEY` ni `ZILLIZ_*`).
 - **Premier écrivain d'une base** : relever une borne (`max id` auto-généré) **après** l'arrêt des jumeaux, via un conteneur jetable portant les mêmes variables ; vérifier la sauvegarde de la nuit ; le rollback données devient une suppression `id > borne`.
+- **Le provider LLM de chaque service, pas celui du voisin** : trois services d'une même famille peuvent forcer des providers différents (`prix-extraction-message`/`-devis` → Gemini, `prix-extraction-produits` → DeepSeek). Lire la constante `LLM_PROVIDER` et le défaut `settings` **service par service** ; toute clé du provider utilisé est déclarée dans le manifeste (F-HP-MIG-011 bis, 24/09).
 - **Couper avant de corriger** : un service qui part en DLQ se met à `replicas=0` (la file accumule sans perte), on corrige, on remet à 1 ; les autres services du lot continuent.
 - **Chrono L3** : arrêt VM → preuve broker **~4 min 10** (8 conteneurs, 5 services, Milvus inclus).
 
@@ -81,6 +94,8 @@ Entre P2 et P4, les queues du lot **accumulent** : c'est attendu, et c'est bref 
 5. **Gel vérifié** : aucun merge `prod` touchant les services du lot depuis le re-scan.
 6. **Message J-1** aux devs concernés (modèle dans le plan, §9).
 7. **Ligne du lot** dans le tableau de suivi : `⬜ à venir` → `🟡 prêt`.
+
+8. **Registre des services qui restent sur la VM** (tableau de suivi) relu : aucun n'entre dans la liste des jumeaux à arrêter ; noter ce que le lot leur doit (file, URL, tracking).
 
 ---
 
@@ -287,7 +302,7 @@ ne sont pas dupliquées. Sans cet écrit, le lot reste en observation prolongée
 
 Message J-soir à l'équipe (plan, §9). Tableau de suivi mis à jour : jumeau VM `STOPPED`, GKE `PROD`, réplicas,
 heure, validations. Pendant la nuit, personne ne touche à rien. À 9h30, décision : **lot suivant / prolonger /
-rollback**.
+rollback**. Registre **Services qui restent sur la VM** complété si le lot en a révélé un.
 
 ---
 
