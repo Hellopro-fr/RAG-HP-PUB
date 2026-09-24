@@ -26783,7 +26783,7 @@
       "label": "scrape_html()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
-      "source_location": "L549",
+      "source_location": "L597",
       "community": 6,
       "norm_label": "scrape_html()",
       "id": "scraper_scrape_html"
@@ -26792,7 +26792,7 @@
       "label": "scrape_html_with_redirects()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
-      "source_location": "L823",
+      "source_location": "L873",
       "community": 6,
       "norm_label": "scrape_html_with_redirects()",
       "id": "scraper_scrape_html_with_redirects"
@@ -91463,7 +91463,7 @@
       "label": "_teardown_targets()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
-      "source_location": "L504",
+      "source_location": "L552",
       "community": 6,
       "norm_label": "_teardown_targets()",
       "id": "scraper_teardown_targets"
@@ -117189,7 +117189,7 @@
       "label": "_await_or_raise()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
-      "source_location": "L470",
+      "source_location": "L502",
       "community": 6,
       "norm_label": "_await_or_raise()",
       "id": "scraper_await_or_raise"
@@ -124335,6 +124335,252 @@
       "community": 275,
       "norm_label": "prompt_title_description_tbip : 'oui' peut signifier 'rien ne s'oppose au crawl' sans aucun appel modele (title+meta absents), pas une validation du modele",
       "id": "tbip_prompt_title_description_oui_default_trap"
+    },
+    {
+      "label": "_reclaim_if_delivered()",
+      "file_type": "code",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
+      "source_location": "L475",
+      "community": 6,
+      "norm_label": "_reclaim_if_delivered()",
+      "id": "scraper_reclaim_if_delivered"
+    },
+    {
+      "label": "_stop_late_driver()",
+      "file_type": "code",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
+      "source_location": "L493",
+      "community": 6,
+      "norm_label": "_stop_late_driver()",
+      "id": "scraper_stop_late_driver"
+    },
+    {
+      "label": "Un r\u00e9sultat livr\u00e9 apr\u00e8s qu'on a cess\u00e9 de l'attendre est rendu \u00e0 `reclaim`.",
+      "file_type": "rationale",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
+      "source_location": "L476",
+      "community": 6,
+      "norm_label": "un resultat livre apres qu'on a cesse de l'attendre est rendu a `reclaim`.",
+      "id": "scraper_rationale_476"
+    },
+    {
+      "label": "`reclaim` des `playwright.start` : arr\u00eate le driver avec la borne des d\u00e9montages",
+      "file_type": "rationale",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
+      "source_location": "L494",
+      "community": 6,
+      "norm_label": "`reclaim` des `playwright.start` : arrete le driver avec la borne des demontages",
+      "id": "scraper_rationale_494"
+    },
+    {
+      "label": "Borne un `await` qui n'a AUCUN timeout natif, et rend son r\u00e9sultat.      Fr\u00e8re",
+      "file_type": "rationale",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
+      "source_location": "L503",
+      "community": 6,
+      "norm_label": "borne un `await` qui n'a aucun timeout natif, et rend son resultat.      frere",
+      "id": "scraper_rationale_503"
+    },
+    {
+      "label": "Tear down page/context/browser, skipping targets that are already dead.      O",
+      "file_type": "rationale",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
+      "source_location": "L553",
+      "community": 6,
+      "norm_label": "tear down page/context/browser, skipping targets that are already dead.      o",
+      "id": "scraper_rationale_553"
+    },
+    {
+      "label": "R\u00e9cup\u00e8re le contenu HTML d'une URL via Playwright avec proxy obligatoire.",
+      "file_type": "rationale",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
+      "source_location": "L603",
+      "community": 6,
+      "norm_label": "recupere le contenu html d'une url via playwright avec proxy obligatoire.",
+      "id": "scraper_rationale_603"
+    },
+    {
+      "label": "R\u00e9cup\u00e8re le contenu HTML et suit les redirections via Playwright.      Utilis\u00e9",
+      "file_type": "rationale",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
+      "source_location": "L878",
+      "community": 6,
+      "norm_label": "recupere le contenu html et suit les redirections via playwright.      utilise",
+      "id": "scraper_rationale_878"
+    },
+    {
+      "label": "_Driver",
+      "file_type": "code",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
+      "source_location": "L220",
+      "community": 6,
+      "norm_label": "_driver",
+      "id": "test_await_or_raise_driver"
+    },
+    {
+      "label": ".__init__()",
+      "file_type": "code",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
+      "source_location": "L223",
+      "community": 6,
+      "norm_label": ".__init__()",
+      "id": "test_await_or_raise_driver_init"
+    },
+    {
+      "label": ".stop()",
+      "file_type": "code",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
+      "source_location": "L226",
+      "community": 6,
+      "norm_label": ".stop()",
+      "id": "test_await_or_raise_driver_stop"
+    },
+    {
+      "label": "_install_late_driver()",
+      "file_type": "code",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
+      "source_location": "L230",
+      "community": 6,
+      "norm_label": "_install_late_driver()",
+      "id": "test_await_or_raise_install_late_driver"
+    },
+    {
+      "label": "_until()",
+      "file_type": "code",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
+      "source_location": "L249",
+      "community": 6,
+      "norm_label": "_until()",
+      "id": "test_await_or_raise_until"
+    },
+    {
+      "label": "_scrapers()",
+      "file_type": "code",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
+      "source_location": "L255",
+      "community": 6,
+      "norm_label": "_scrapers()",
+      "id": "test_await_or_raise_scrapers"
+    },
+    {
+      "label": "TestLateDriverIsStopped",
+      "file_type": "code",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
+      "source_location": "L261",
+      "community": 6,
+      "norm_label": "testlatedriverisstopped",
+      "id": "test_await_or_raise_testlatedriverisstopped"
+    },
+    {
+      "label": "test_a_driver_delivered_after_the_timeout_is_stopped()",
+      "file_type": "code",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
+      "source_location": "L272",
+      "community": 6,
+      "norm_label": "test_a_driver_delivered_after_the_timeout_is_stopped()",
+      "id": "test_await_or_raise_test_a_driver_delivered_after_the_timeout_is_stopped"
+    },
+    {
+      "label": "test_a_driver_delivered_after_the_caller_was_cancelled_is_stopped()",
+      "file_type": "code",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
+      "source_location": "L291",
+      "community": 6,
+      "norm_label": "test_a_driver_delivered_after_the_caller_was_cancelled_is_stopped()",
+      "id": "test_await_or_raise_test_a_driver_delivered_after_the_caller_was_cancelled_is_stopped"
+    },
+    {
+      "label": "test_a_driver_delivered_in_time_is_stopped_once_not_twice()",
+      "file_type": "code",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
+      "source_location": "L316",
+      "community": 6,
+      "norm_label": "test_a_driver_delivered_in_time_is_stopped_once_not_twice()",
+      "id": "test_await_or_raise_test_a_driver_delivered_in_time_is_stopped_once_not_twice"
+    },
+    {
+      "label": "Faux `Playwright` : ne compte que les appels \u00e0 `stop()`.",
+      "file_type": "rationale",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
+      "source_location": "L221",
+      "community": 6,
+      "norm_label": "faux `playwright` : ne compte que les appels a `stop()`.",
+      "id": "test_await_or_raise_rationale_221"
+    },
+    {
+      "label": "`async_playwright().start()` ne livre `driver` qu'une fois `gate` lev\u00e9.      P",
+      "file_type": "rationale",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
+      "source_location": "L231",
+      "community": 6,
+      "norm_label": "`async_playwright().start()` ne livre `driver` qu'une fois `gate` leve.      p",
+      "id": "test_await_or_raise_rationale_231"
+    },
+    {
+      "label": "Un driver livr\u00e9 APR\u00c8S qu'on a cess\u00e9 de l'attendre doit \u00eatre arr\u00eat\u00e9.      PROD",
+      "file_type": "rationale",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
+      "source_location": "L262",
+      "community": 6,
+      "norm_label": "un driver livre apres qu'on a cesse de l'attendre doit etre arrete.      prod",
+      "id": "test_await_or_raise_rationale_262"
+    },
+    {
+      "label": "L'autre sortie sans r\u00e9sultat : le `wait_for` de l'item, `_abandon_job`.",
+      "file_type": "rationale",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
+      "source_location": "L294",
+      "community": 281,
+      "norm_label": "l'autre sortie sans resultat : le `wait_for` de l'item, `_abandon_job`.",
+      "id": "test_await_or_raise_rationale_294"
+    },
+    {
+      "label": "Garde : le driver livr\u00e9 \u00e0 temps n'est arr\u00eat\u00e9 que par le `finally` normal.",
+      "file_type": "rationale",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
+      "source_location": "L319",
+      "community": 282,
+      "norm_label": "garde : le driver livre a temps n'est arrete que par le `finally` normal.",
+      "id": "test_await_or_raise_rationale_319"
+    },
+    {
+      "label": "A Playwright driver delivered after its start was abandoned is now stopped (2026-09-24): `_await_or_raise` takes an optional `reclaim`, attached - like the permit callback - on BOTH result-less exits (timeout and caller cancellation) and NEVER before the await, since on success the driver belongs to the caller; for the two `playwright.start` call sites it schedules `_close_or_abandon(p.stop(), TEARDOWN_TIMEOUT_S, \"playwright.stop (tardif) ...\")`, so an abandoned late stop is counted under detect_teardown_abandoned_total{op=\"playwright.stop\"} and each reclaim logs `resultat livre apres abandon, recupere`; pinned by TestLateDriverIsStopped in tests/test_await_or_raise.py",
+      "file_type": "document",
+      "source_file": "apps-microservices/api-detection-langue-fr/CLAUDE.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 6,
+      "id": "detfr_v62_late_driver_reclaimed",
+      "norm_label": "a playwright driver delivered after its start was abandoned is now stopped (2026-09-24): `_await_or_raise` takes an optional `reclaim`, attached - like the permit callback - on both result-less exits (timeout and caller cancellation) and never before the await, since on success the driver belongs to the caller; for the two `playwright.start` call sites it schedules `_close_or_abandon(p.stop(), teardown_timeout_s, \"playwright.stop (tardif) ...\")`, so an abandoned late stop is counted under detect_teardown_abandoned_total{op=\"playwright.stop\"} and each reclaim logs `resultat livre apres abandon, recupere`; pinned by testlatedriverisstopped in tests/test_await_or_raise.py"
+    },
+    {
+      "label": "The PROD measurement that motivated the reclaim (2026-09-24): 42 Playwright drivers (`MainThread`) for 4 browsers, and 39 driver-only survivors of ~97 MB RSS each once the episode had cleared - before the fix no `p.stop()` could reach a driver whose `playwright.start` completed after being abandoned, so it lived until the container restarted; same trade `_close_or_abandon` already makes for browsers, now closed for drivers",
+      "file_type": "document",
+      "source_file": "apps-microservices/api-detection-langue-fr/CLAUDE.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 6,
+      "id": "detfr_v62_prod_driver_survivor_measurement",
+      "norm_label": "the prod measurement that motivated the reclaim (2026-09-24): 42 playwright drivers (`mainthread`) for 4 browsers, and 39 driver-only survivors of ~97 mb rss each once the episode had cleared - before the fix no `p.stop()` could reach a driver whose `playwright.start` completed after being abandoned, so it lived until the container restarted; same trade `_close_or_abandon` already makes for browsers, now closed for drivers"
+    },
+    {
+      "label": "Still not counted anywhere (2026-09-24): live Playwright drivers have NO gauge - `detect_browsers_unclosed` counts browsers only, so a driver leak stays invisible to metrics and was found by inspecting the container's threads, not by an alert",
+      "file_type": "document",
+      "source_file": "apps-microservices/api-detection-langue-fr/CLAUDE.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "community": 6,
+      "id": "detfr_v62_live_drivers_have_no_gauge",
+      "norm_label": "still not counted anywhere (2026-09-24): live playwright drivers have no gauge - `detect_browsers_unclosed` counts browsers only, so a driver leak stays invisible to metrics and was found by inspecting the container's threads, not by an alert"
     }
   ],
   "links": [
@@ -296934,7 +297180,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
-      "source_location": "L549",
+      "source_location": "L597",
       "weight": 1.0,
       "confidence_score": 1.0,
       "_src": "app_services_scraper_py",
@@ -296946,7 +297192,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
-      "source_location": "L823",
+      "source_location": "L873",
       "weight": 1.0,
       "confidence_score": 1.0,
       "_src": "app_services_scraper_py",
@@ -297029,7 +297275,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
-      "source_location": "L504",
+      "source_location": "L552",
       "weight": 1.0,
       "_src": "app_services_scraper_py",
       "_tgt": "scraper_teardown_targets",
@@ -297089,13 +297335,37 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
-      "source_location": "L470",
+      "source_location": "L502",
       "weight": 1.0,
       "_src": "app_services_scraper_py",
       "_tgt": "scraper_await_or_raise",
       "confidence_score": 1.0,
       "source": "app_services_scraper_py",
       "target": "scraper_await_or_raise"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
+      "source_location": "L475",
+      "weight": 1.0,
+      "_src": "app_services_scraper_py",
+      "_tgt": "scraper_reclaim_if_delivered",
+      "confidence_score": 1.0,
+      "source": "app_services_scraper_py",
+      "target": "scraper_reclaim_if_delivered"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
+      "source_location": "L493",
+      "weight": 1.0,
+      "_src": "app_services_scraper_py",
+      "_tgt": "scraper_stop_late_driver",
+      "confidence_score": 1.0,
+      "source": "app_services_scraper_py",
+      "target": "scraper_stop_late_driver"
     },
     {
       "relation": "rationale_for",
@@ -297113,11 +297383,11 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
-      "source_location": "L806",
+      "source_location": "L856",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "scraper_scrape_html",
-      "_tgt": "scraper_scraperesult",
+      "_src": "scraper_scraperesult",
+      "_tgt": "scraper_scrape_html",
       "source": "scraper_scraperesult",
       "target": "scraper_scrape_html"
     },
@@ -297799,8 +298069,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
       "source_location": "L25",
       "weight": 1.0,
-      "_src": "scraper_rationale_25",
-      "_tgt": "scraper_scraperesult",
+      "_src": "scraper_scraperesult",
+      "_tgt": "scraper_rationale_25",
       "confidence_score": 1.0,
       "source": "scraper_scraperesult",
       "target": "scraper_rationale_25"
@@ -298759,8 +299029,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
       "source_location": "L38",
       "weight": 1.0,
-      "_src": "scraper_rationale_38",
-      "_tgt": "scraper_build_proxy_url",
+      "_src": "scraper_build_proxy_url",
+      "_tgt": "scraper_rationale_38",
       "confidence_score": 1.0,
       "source": "scraper_build_proxy_url",
       "target": "scraper_rationale_38"
@@ -298793,11 +299063,11 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
-      "source_location": "L590",
+      "source_location": "L638",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "scraper_scrape_html",
-      "_tgt": "scraper_parse_proxy",
+      "_src": "scraper_parse_proxy",
+      "_tgt": "scraper_scrape_html",
       "source": "scraper_parse_proxy",
       "target": "scraper_scrape_html"
     },
@@ -298805,11 +299075,11 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
-      "source_location": "L852",
+      "source_location": "L902",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "scraper_scrape_html_with_redirects",
-      "_tgt": "scraper_parse_proxy",
+      "_src": "scraper_parse_proxy",
+      "_tgt": "scraper_scrape_html_with_redirects",
       "source": "scraper_parse_proxy",
       "target": "scraper_scrape_html_with_redirects"
     },
@@ -298951,8 +299221,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
       "source_location": "L237",
       "weight": 1.0,
-      "_src": "scraper_rationale_237",
-      "_tgt": "scraper_parse_proxy",
+      "_src": "scraper_parse_proxy",
+      "_tgt": "scraper_rationale_237",
       "confidence_score": 1.0,
       "source": "scraper_parse_proxy",
       "target": "scraper_rationale_237"
@@ -298973,11 +299243,11 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
-      "source_location": "L608",
+      "source_location": "L658",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "scraper_scrape_html",
-      "_tgt": "scraper_launch_browser",
+      "_src": "scraper_launch_browser",
+      "_tgt": "scraper_scrape_html",
       "source": "scraper_launch_browser",
       "target": "scraper_scrape_html"
     },
@@ -298985,11 +299255,11 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
-      "source_location": "L870",
+      "source_location": "L921",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "scraper_scrape_html_with_redirects",
-      "_tgt": "scraper_launch_browser",
+      "_src": "scraper_launch_browser",
+      "_tgt": "scraper_scrape_html_with_redirects",
       "source": "scraper_launch_browser",
       "target": "scraper_scrape_html_with_redirects"
     },
@@ -299132,8 +299402,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
       "source_location": "L260",
       "weight": 1.0,
-      "_src": "scraper_rationale_260",
-      "_tgt": "scraper_launch_browser",
+      "_src": "scraper_launch_browser",
+      "_tgt": "scraper_rationale_260",
       "confidence_score": 1.0,
       "source": "scraper_launch_browser",
       "target": "scraper_rationale_260"
@@ -299154,11 +299424,11 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
-      "source_location": "L655",
+      "source_location": "L705",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "scraper_scrape_html",
-      "_tgt": "scraper_setup_resource_blocking",
+      "_src": "scraper_setup_resource_blocking",
+      "_tgt": "scraper_scrape_html",
       "source": "scraper_setup_resource_blocking",
       "target": "scraper_scrape_html"
     },
@@ -299166,11 +299436,11 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
-      "source_location": "L906",
+      "source_location": "L957",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "scraper_scrape_html_with_redirects",
-      "_tgt": "scraper_setup_resource_blocking",
+      "_src": "scraper_setup_resource_blocking",
+      "_tgt": "scraper_scrape_html_with_redirects",
       "source": "scraper_setup_resource_blocking",
       "target": "scraper_scrape_html_with_redirects"
     },
@@ -299276,8 +299546,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
       "source_location": "L322",
       "weight": 1.0,
-      "_src": "scraper_rationale_322",
-      "_tgt": "scraper_setup_resource_blocking",
+      "_src": "scraper_setup_resource_blocking",
+      "_tgt": "scraper_rationale_322",
       "confidence_score": 1.0,
       "source": "scraper_setup_resource_blocking",
       "target": "scraper_rationale_322"
@@ -299298,11 +299568,11 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
-      "source_location": "L642",
+      "source_location": "L692",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "scraper_scrape_html",
-      "_tgt": "scraper_inject_cookie_consent",
+      "_src": "scraper_inject_cookie_consent",
+      "_tgt": "scraper_scrape_html",
       "source": "scraper_inject_cookie_consent",
       "target": "scraper_scrape_html"
     },
@@ -299310,11 +299580,11 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
-      "source_location": "L895",
+      "source_location": "L946",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "scraper_scrape_html_with_redirects",
-      "_tgt": "scraper_inject_cookie_consent",
+      "_src": "scraper_inject_cookie_consent",
+      "_tgt": "scraper_scrape_html_with_redirects",
       "source": "scraper_inject_cookie_consent",
       "target": "scraper_scrape_html_with_redirects"
     },
@@ -299420,8 +299690,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
       "source_location": "L355",
       "weight": 1.0,
-      "_src": "scraper_rationale_355",
-      "_tgt": "scraper_inject_cookie_consent",
+      "_src": "scraper_inject_cookie_consent",
+      "_tgt": "scraper_rationale_355",
       "confidence_score": 1.0,
       "source": "scraper_inject_cookie_consent",
       "target": "scraper_rationale_355"
@@ -299502,7 +299772,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
-      "source_location": "L820",
+      "source_location": "L870",
       "weight": 1.0,
       "_src": "scraper_scrape_html",
       "_tgt": "scraper_close_or_abandon",
@@ -299658,7 +299928,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
-      "source_location": "L818",
+      "source_location": "L868",
       "weight": 1.0,
       "_src": "scraper_scrape_html",
       "_tgt": "scraper_teardown_targets",
@@ -299778,7 +300048,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
-      "source_location": "L582",
+      "source_location": "L630",
       "weight": 1.0,
       "_src": "scraper_scrape_html",
       "_tgt": "scraper_record_failure",
@@ -300019,7 +300289,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
-      "source_location": "L602",
+      "source_location": "L651",
       "weight": 1.0,
       "_src": "scraper_scrape_html",
       "_tgt": "scraper_await_or_raise",
@@ -300069,11 +300339,47 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
       "source_location": "L555",
       "weight": 1.0,
-      "_src": "scraper_rationale_555",
-      "_tgt": "scraper_scrape_html",
+      "_src": "scraper_scrape_html",
+      "_tgt": "scraper_rationale_555",
       "confidence_score": 1.0,
       "source": "scraper_scrape_html",
       "target": "scraper_rationale_555"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
+      "source_location": "L655",
+      "weight": 1.0,
+      "_src": "scraper_scrape_html",
+      "_tgt": "scraper_stop_late_driver",
+      "confidence_score": 1.0,
+      "source": "scraper_scrape_html",
+      "target": "scraper_stop_late_driver"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
+      "source_location": "L603",
+      "weight": 1.0,
+      "_src": "scraper_scrape_html",
+      "_tgt": "scraper_rationale_603",
+      "confidence_score": 1.0,
+      "source": "scraper_scrape_html",
+      "target": "scraper_rationale_603"
+    },
+    {
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
+      "source_location": "L870",
+      "weight": 1.0,
+      "_src": "scraper_scrape_html",
+      "_tgt": "test_await_or_raise_driver_stop",
+      "source": "scraper_scrape_html",
+      "target": "test_await_or_raise_driver_stop"
     },
     {
       "relation": "rationale_for",
@@ -300103,7 +300409,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
-      "source_location": "L958",
+      "source_location": "L1009",
       "weight": 1.0,
       "_src": "scraper_scrape_html_with_redirects",
       "_tgt": "scraper_close_or_abandon",
@@ -300175,7 +300481,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
-      "source_location": "L956",
+      "source_location": "L1007",
       "weight": 1.0,
       "_src": "scraper_scrape_html_with_redirects",
       "_tgt": "scraper_teardown_targets",
@@ -300296,7 +300602,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
-      "source_location": "L864",
+      "source_location": "L914",
       "weight": 1.0,
       "_src": "scraper_scrape_html_with_redirects",
       "_tgt": "scraper_await_or_raise",
@@ -300322,11 +300628,47 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
       "source_location": "L828",
       "weight": 1.0,
-      "_src": "scraper_rationale_828",
-      "_tgt": "scraper_scrape_html_with_redirects",
+      "_src": "scraper_scrape_html_with_redirects",
+      "_tgt": "scraper_rationale_828",
       "confidence_score": 1.0,
       "source": "scraper_scrape_html_with_redirects",
       "target": "scraper_rationale_828"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
+      "source_location": "L918",
+      "weight": 1.0,
+      "_src": "scraper_scrape_html_with_redirects",
+      "_tgt": "scraper_stop_late_driver",
+      "confidence_score": 1.0,
+      "source": "scraper_scrape_html_with_redirects",
+      "target": "scraper_stop_late_driver"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
+      "source_location": "L878",
+      "weight": 1.0,
+      "_src": "scraper_scrape_html_with_redirects",
+      "_tgt": "scraper_rationale_878",
+      "confidence_score": 1.0,
+      "source": "scraper_scrape_html_with_redirects",
+      "target": "scraper_rationale_878"
+    },
+    {
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
+      "source_location": "L1009",
+      "weight": 1.0,
+      "_src": "scraper_scrape_html_with_redirects",
+      "_tgt": "test_await_or_raise_driver_stop",
+      "source": "scraper_scrape_html_with_redirects",
+      "target": "test_await_or_raise_driver_stop"
     },
     {
       "relation": "rationale_for",
@@ -307992,6 +308334,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": "section 2",
       "weight": 1.0,
+      "_src": "mcp_gateway_service",
+      "_tgt": "mcp_table_service_existing_state",
       "source": "mcp_gateway_service",
       "target": "mcp_table_service_existing_state"
     },
@@ -308686,6 +309030,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": "section 5.1",
       "weight": 1.0,
+      "_src": "scoped_gateway_request_headers_for",
+      "_tgt": "mcp_table_service_privilege_flow",
       "source": "scoped_gateway_request_headers_for",
       "target": "mcp_table_service_privilege_flow"
     },
@@ -321833,6 +322179,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": "section 5.3",
       "weight": 1.0,
+      "_src": "mcp_zoho_service",
+      "_tgt": "mcp_table_service_gateway_change_identity_forwarding",
       "source": "mcp_zoho_service",
       "target": "mcp_table_service_gateway_change_identity_forwarding"
     },
@@ -321843,6 +322191,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": "section 2, 5.2",
       "weight": 0.9,
+      "_src": "mcp_zoho_service",
+      "_tgt": "mcp_table_service_gateway_change_actas",
       "source": "mcp_zoho_service",
       "target": "mcp_table_service_gateway_change_actas"
     },
@@ -321853,6 +322203,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": "section 2",
       "weight": 0.65,
+      "_src": "mcp_zoho_service",
+      "_tgt": "mcp_table_service_service_layout",
       "source": "mcp_zoho_service",
       "target": "mcp_table_service_service_layout"
     },
@@ -321863,6 +322215,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "Task 2",
       "weight": 1.0,
+      "_src": "mcp_zoho_service",
+      "_tgt": "mcp_table_service_task2_identity_forwarding",
       "source": "mcp_zoho_service",
       "target": "mcp_table_service_task2_identity_forwarding"
     },
@@ -321873,6 +322227,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "Task 1",
       "weight": 0.65,
+      "_src": "mcp_zoho_service",
+      "_tgt": "mcp_table_service_task1_actas_branch",
       "source": "mcp_zoho_service",
       "target": "mcp_table_service_task1_actas_branch"
     },
@@ -321883,6 +322239,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "line 4824",
       "weight": 0.85,
+      "_src": "mcp_zoho_service",
+      "_tgt": "mcp_table_service_docker_compose_block",
       "source": "mcp_zoho_service",
       "target": "mcp_table_service_docker_compose_block"
     },
@@ -322587,6 +322945,8 @@
       "source_file": "apps-microservices/api-detection-langue-fr/CLAUDE.md",
       "source_location": "L294",
       "weight": 1.0,
+      "_src": "browser_semaphore",
+      "_tgt": "detfr_v61_prod_incident_permit_drain_20260924",
       "source": "browser_semaphore",
       "target": "detfr_v61_prod_incident_permit_drain_20260924"
     },
@@ -322736,6 +323096,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": "section 8 (Registration)",
       "weight": 1.0,
+      "_src": "mcp_servers_table",
+      "_tgt": "mcp_table_service_configuration",
       "source": "mcp_servers_table",
       "target": "mcp_table_service_configuration"
     },
@@ -322746,6 +323108,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "line 4953",
       "weight": 0.55,
+      "_src": "mcp_servers_table",
+      "_tgt": "mcp_table_service_docker_compose_block",
       "source": "mcp_servers_table",
       "target": "mcp_table_service_docker_compose_block"
     },
@@ -322756,6 +323120,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": "section 5.3",
       "weight": 1.0,
+      "_src": "x_end_user_email_header",
+      "_tgt": "mcp_table_service_gateway_change_identity_forwarding",
       "source": "x_end_user_email_header",
       "target": "mcp_table_service_gateway_change_identity_forwarding"
     },
@@ -322766,6 +323132,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "Task 2",
       "weight": 1.0,
+      "_src": "x_end_user_email_header",
+      "_tgt": "mcp_table_service_task2_identity_forwarding",
       "source": "x_end_user_email_header",
       "target": "mcp_table_service_task2_identity_forwarding"
     },
@@ -379062,6 +379430,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": "section 6.2",
       "weight": 0.6,
+      "_src": "bdd_doc_enrichment_workflow_design_six_bdd_tools",
+      "_tgt": "mcp_table_service_tools_catalog",
       "source": "bdd_doc_enrichment_workflow_design_six_bdd_tools",
       "target": "mcp_table_service_tools_catalog"
     },
@@ -379204,6 +379574,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": "section 2",
       "weight": 1.0,
+      "_src": "bdd_doc_enrichment_workflow_design_curated_registry",
+      "_tgt": "mcp_table_service_existing_state",
       "source": "bdd_doc_enrichment_workflow_design_curated_registry",
       "target": "mcp_table_service_existing_state"
     },
@@ -379274,6 +379646,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": "section 1-2",
       "weight": 1.0,
+      "_src": "bdd_doc_enrichment_workflow_design_dashboard_view",
+      "_tgt": "mcp_table_service_existing_state",
       "source": "bdd_doc_enrichment_workflow_design_dashboard_view",
       "target": "mcp_table_service_existing_state"
     },
@@ -379512,6 +379886,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": "section 2",
       "weight": 1.0,
+      "_src": "bdd_doc_enrichment_workflow_design_database_id_mapping",
+      "_tgt": "mcp_table_service_existing_state",
       "source": "bdd_doc_enrichment_workflow_design_database_id_mapping",
       "target": "mcp_table_service_existing_state"
     },
@@ -379522,6 +379898,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": "section 6.4",
       "weight": 1.0,
+      "_src": "bdd_doc_enrichment_workflow_design_database_id_mapping",
+      "_tgt": "mcp_table_service_tool_conventions",
       "source": "bdd_doc_enrichment_workflow_design_database_id_mapping",
       "target": "mcp_table_service_tool_conventions"
     },
@@ -379736,6 +380114,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": "section 6.4",
       "weight": 1.0,
+      "_src": "bdd_doc_enrichment_workflow_design_g4_identifier_regex",
+      "_tgt": "mcp_table_service_tool_conventions",
       "source": "bdd_doc_enrichment_workflow_design_g4_identifier_regex",
       "target": "mcp_table_service_tool_conventions"
     },
@@ -408044,6 +408424,8 @@
       "source_file": "apps-microservices/api-detection-langue-fr/CLAUDE.md",
       "source_location": "L292",
       "weight": 1.0,
+      "_src": "async_jobs_jobmanager_abandon_job",
+      "_tgt": "detfr_v61_permit_release_both_exits",
       "source": "async_jobs_jobmanager_abandon_job",
       "target": "detfr_v61_permit_release_both_exits"
     },
@@ -408123,10 +408505,10 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
-      "source_location": "L530",
+      "source_location": "L578",
       "weight": 1.0,
-      "_src": "scraper_teardown_targets",
-      "_tgt": "scraper_close_or_abandon",
+      "_src": "scraper_close_or_abandon",
+      "_tgt": "scraper_teardown_targets",
       "confidence_score": 1.0,
       "source": "scraper_close_or_abandon",
       "target": "scraper_teardown_targets"
@@ -408450,8 +408832,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
       "source_location": "L426",
       "weight": 1.0,
-      "_src": "scraper_rationale_426",
-      "_tgt": "scraper_close_or_abandon",
+      "_src": "scraper_close_or_abandon",
+      "_tgt": "scraper_rationale_426",
       "confidence_score": 1.0,
       "source": "scraper_close_or_abandon",
       "target": "scraper_rationale_426"
@@ -408463,8 +408845,34 @@
       "source_file": "apps-microservices/api-detection-langue-fr/CLAUDE.md",
       "source_location": "L269",
       "weight": 1.0,
+      "_src": "scraper_close_or_abandon",
+      "_tgt": "detfr_v61_why_semaphore_callback_deferred",
       "source": "scraper_close_or_abandon",
       "target": "detfr_v61_why_semaphore_callback_deferred"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "apps-microservices/api-detection-langue-fr/CLAUDE.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "detfr_v62_late_driver_reclaimed",
+      "_tgt": "scraper_close_or_abandon",
+      "source": "scraper_close_or_abandon",
+      "target": "detfr_v62_late_driver_reclaimed"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "apps-microservices/api-detection-langue-fr/CLAUDE.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "detfr_v62_prod_driver_survivor_measurement",
+      "_tgt": "scraper_close_or_abandon",
+      "source": "scraper_close_or_abandon",
+      "target": "detfr_v62_prod_driver_survivor_measurement"
     },
     {
       "relation": "contains",
@@ -421985,8 +422393,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
       "source_location": "L386",
       "weight": 1.0,
-      "_src": "scraper_rationale_386",
-      "_tgt": "scraper_drain_orphan_exception",
+      "_src": "scraper_drain_orphan_exception",
+      "_tgt": "scraper_rationale_386",
       "confidence_score": 1.0,
       "source": "scraper_drain_orphan_exception",
       "target": "scraper_rationale_386"
@@ -422225,11 +422633,23 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
       "source_location": "L505",
       "weight": 1.0,
-      "_src": "scraper_rationale_505",
-      "_tgt": "scraper_teardown_targets",
+      "_src": "scraper_teardown_targets",
+      "_tgt": "scraper_rationale_505",
       "confidence_score": 1.0,
       "source": "scraper_teardown_targets",
       "target": "scraper_rationale_505"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
+      "source_location": "L553",
+      "weight": 1.0,
+      "_src": "scraper_teardown_targets",
+      "_tgt": "scraper_rationale_553",
+      "confidence_score": 1.0,
+      "source": "scraper_teardown_targets",
+      "target": "scraper_rationale_553"
     },
     {
       "relation": "contains",
@@ -440676,6 +441096,18 @@
       "target": "detfr_v60_why_bounds_do_not_cancel"
     },
     {
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.7,
+      "source_file": "apps-microservices/api-detection-langue-fr/CLAUDE.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "detfr_v62_live_drivers_have_no_gauge",
+      "_tgt": "detection_claudemd_orphaned_futures_metric",
+      "source": "detection_claudemd_orphaned_futures_metric",
+      "target": "detfr_v62_live_drivers_have_no_gauge"
+    },
+    {
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
@@ -443477,8 +443909,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
       "source_location": "L213",
       "weight": 1.0,
-      "_src": "scraper_rationale_213",
-      "_tgt": "scraper_record_failure",
+      "_src": "scraper_record_failure",
+      "_tgt": "scraper_rationale_213",
       "confidence_score": 1.0,
       "source": "scraper_record_failure",
       "target": "scraper_rationale_213"
@@ -450468,6 +450900,8 @@
       "source_file": "docs/superpowers/runbooks/examples/eligibilite_v2_tables.doc.json",
       "source_location": null,
       "weight": 1.0,
+      "_src": "enrichissement_fournisseur_mcp_scope_rgpd_exclusion",
+      "_tgt": "eligibilite_v2_tables_mcp_scope_exclusions",
       "source": "enrichissement_fournisseur_mcp_scope_rgpd_exclusion",
       "target": "eligibilite_v2_tables_mcp_scope_exclusions"
     },
@@ -450526,6 +450960,8 @@
       "source_file": "docs/superpowers/runbooks/examples/semrush_domaine_societe.doc.json",
       "source_location": null,
       "weight": 1.0,
+      "_src": "enrichissement_fournisseur_enable_flag_shell_wrapper_only",
+      "_tgt": "semrush_domaine_societe_shell_flag_bypass",
       "source": "enrichissement_fournisseur_enable_flag_shell_wrapper_only",
       "target": "semrush_domaine_societe_shell_flag_bypass"
     },
@@ -456081,8 +456517,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
       "source_location": "L376",
       "weight": 1.0,
-      "_src": "scraper_rationale_376",
-      "_tgt": "scraper_teardown_op",
+      "_src": "scraper_teardown_op",
+      "_tgt": "scraper_rationale_376",
       "confidence_score": 1.0,
       "source": "scraper_teardown_op",
       "target": "scraper_rationale_376"
@@ -456985,6 +457421,18 @@
       "target": "detfr_v60_residual_abandoned_playwright_start"
     },
     {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "apps-microservices/api-detection-langue-fr/CLAUDE.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "detfr_v62_late_driver_reclaimed",
+      "_tgt": "detfr_v59_teardown_abandoned_metric",
+      "source": "detfr_v59_teardown_abandoned_metric",
+      "target": "detfr_v62_late_driver_reclaimed"
+    },
+    {
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
@@ -457021,6 +457469,30 @@
       "_tgt": "detfr_v60_residual_abandoned_playwright_start",
       "source": "detfr_v59_browsers_unclosed_gauge",
       "target": "detfr_v60_residual_abandoned_playwright_start"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "apps-microservices/api-detection-langue-fr/CLAUDE.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "detfr_v62_prod_driver_survivor_measurement",
+      "_tgt": "detfr_v59_browsers_unclosed_gauge",
+      "source": "detfr_v59_browsers_unclosed_gauge",
+      "target": "detfr_v62_prod_driver_survivor_measurement"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "apps-microservices/api-detection-langue-fr/CLAUDE.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "detfr_v62_live_drivers_have_no_gauge",
+      "_tgt": "detfr_v59_browsers_unclosed_gauge",
+      "source": "detfr_v59_browsers_unclosed_gauge",
+      "target": "detfr_v62_live_drivers_have_no_gauge"
     },
     {
       "relation": "rationale_for",
@@ -459044,8 +459516,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
       "source_location": "L101",
       "weight": 1.0,
-      "_src": "scraper_rationale_101",
-      "_tgt": "scraper_boundedbrowsersemaphore",
+      "_src": "scraper_boundedbrowsersemaphore",
+      "_tgt": "scraper_rationale_101",
       "confidence_score": 1.0,
       "source": "scraper_boundedbrowsersemaphore",
       "target": "scraper_rationale_101"
@@ -459057,8 +459529,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
       "source_location": "L82",
       "weight": 1.0,
-      "_src": "test_await_or_raise_test_grants_a_free_permit_without_waiting",
-      "_tgt": "scraper_boundedbrowsersemaphore",
+      "_src": "scraper_boundedbrowsersemaphore",
+      "_tgt": "test_await_or_raise_test_grants_a_free_permit_without_waiting",
       "source": "scraper_boundedbrowsersemaphore",
       "target": "test_await_or_raise_test_grants_a_free_permit_without_waiting"
     },
@@ -459069,8 +459541,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
       "source_location": "L89",
       "weight": 1.0,
-      "_src": "test_await_or_raise_test_raises_when_no_permit_frees_up",
-      "_tgt": "scraper_boundedbrowsersemaphore",
+      "_src": "scraper_boundedbrowsersemaphore",
+      "_tgt": "test_await_or_raise_test_raises_when_no_permit_frees_up",
       "source": "scraper_boundedbrowsersemaphore",
       "target": "test_await_or_raise_test_raises_when_no_permit_frees_up"
     },
@@ -459081,8 +459553,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
       "source_location": "L109",
       "weight": 1.0,
-      "_src": "test_await_or_raise_test_a_permit_granted_after_we_gave_up_goes_back_to_the_pool",
-      "_tgt": "scraper_boundedbrowsersemaphore",
+      "_src": "scraper_boundedbrowsersemaphore",
+      "_tgt": "test_await_or_raise_test_a_permit_granted_after_we_gave_up_goes_back_to_the_pool",
       "source": "scraper_boundedbrowsersemaphore",
       "target": "test_await_or_raise_test_a_permit_granted_after_we_gave_up_goes_back_to_the_pool"
     },
@@ -459093,8 +459565,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
       "source_location": "L205",
       "weight": 1.0,
-      "_src": "test_await_or_raise_test_holds_no_permit_when_entry_failed",
-      "_tgt": "scraper_boundedbrowsersemaphore",
+      "_src": "scraper_boundedbrowsersemaphore",
+      "_tgt": "test_await_or_raise_test_holds_no_permit_when_entry_failed",
       "source": "scraper_boundedbrowsersemaphore",
       "target": "test_await_or_raise_test_holds_no_permit_when_entry_failed"
     },
@@ -459117,8 +459589,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
       "source_location": "L143",
       "weight": 1.0,
-      "_src": "test_await_or_raise_test_a_permit_granted_after_the_caller_was_cancelled_goes_back_to_the_pool",
-      "_tgt": "scraper_boundedbrowsersemaphore",
+      "_src": "scraper_boundedbrowsersemaphore",
+      "_tgt": "test_await_or_raise_test_a_permit_granted_after_the_caller_was_cancelled_goes_back_to_the_pool",
       "source": "scraper_boundedbrowsersemaphore",
       "target": "test_await_or_raise_test_a_permit_granted_after_the_caller_was_cancelled_goes_back_to_the_pool"
     },
@@ -459129,8 +459601,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
       "source_location": "L182",
       "weight": 1.0,
-      "_src": "test_await_or_raise_test_a_permit_granted_in_the_same_tick_as_the_cancellation_goes_back_to_the_pool",
-      "_tgt": "scraper_boundedbrowsersemaphore",
+      "_src": "scraper_boundedbrowsersemaphore",
+      "_tgt": "test_await_or_raise_test_a_permit_granted_in_the_same_tick_as_the_cancellation_goes_back_to_the_pool",
       "source": "scraper_boundedbrowsersemaphore",
       "target": "test_await_or_raise_test_a_permit_granted_in_the_same_tick_as_the_cancellation_goes_back_to_the_pool"
     },
@@ -459141,6 +459613,8 @@
       "source_file": "apps-microservices/api-detection-langue-fr/CLAUDE.md",
       "source_location": "L291-297",
       "weight": 1.0,
+      "_src": "scraper_boundedbrowsersemaphore",
+      "_tgt": "detfr_v61_permit_release_both_exits",
       "source": "scraper_boundedbrowsersemaphore",
       "target": "detfr_v61_permit_release_both_exits"
     },
@@ -459151,6 +459625,8 @@
       "source_file": "apps-microservices/api-detection-langue-fr/CLAUDE.md",
       "source_location": "L270-271",
       "weight": 1.0,
+      "_src": "scraper_boundedbrowsersemaphore",
+      "_tgt": "detfr_v61_why_semaphore_callback_deferred",
       "source": "scraper_boundedbrowsersemaphore",
       "target": "detfr_v61_why_semaphore_callback_deferred"
     },
@@ -459196,8 +459672,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
       "source_location": "L155",
       "weight": 1.0,
-      "_src": "scraper_rationale_155",
-      "_tgt": "scraper_boundedbrowsersemaphore_release_if_granted",
+      "_src": "scraper_boundedbrowsersemaphore_release_if_granted",
+      "_tgt": "scraper_rationale_155",
       "confidence_score": 1.0,
       "source": "scraper_boundedbrowsersemaphore_release_if_granted",
       "target": "scraper_rationale_155"
@@ -459221,8 +459697,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
       "source_location": "L28",
       "weight": 1.0,
-      "_src": "test_await_or_raise_test_returns_the_result_when_it_arrives_in_time",
-      "_tgt": "scraper_await_or_raise",
+      "_src": "scraper_await_or_raise",
+      "_tgt": "test_await_or_raise_test_returns_the_result_when_it_arrives_in_time",
       "source": "scraper_await_or_raise",
       "target": "test_await_or_raise_test_returns_the_result_when_it_arrives_in_time"
     },
@@ -459233,8 +459709,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
       "source_location": "L33",
       "weight": 1.0,
-      "_src": "test_await_or_raise_test_raises_when_the_call_never_answers",
-      "_tgt": "scraper_await_or_raise",
+      "_src": "scraper_await_or_raise",
+      "_tgt": "test_await_or_raise_test_raises_when_the_call_never_answers",
       "source": "scraper_await_or_raise",
       "target": "test_await_or_raise_test_raises_when_the_call_never_answers"
     },
@@ -459245,8 +459721,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
       "source_location": "L46",
       "weight": 1.0,
-      "_src": "test_await_or_raise_test_message_carries_a_variant_pointless_token",
-      "_tgt": "scraper_await_or_raise",
+      "_src": "scraper_await_or_raise",
+      "_tgt": "test_await_or_raise_test_message_carries_a_variant_pointless_token",
       "source": "scraper_await_or_raise",
       "target": "test_await_or_raise_test_message_carries_a_variant_pointless_token"
     },
@@ -459257,8 +459733,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
       "source_location": "L65",
       "weight": 1.0,
-      "_src": "test_await_or_raise_test_does_not_cancel_the_overrunning_call",
-      "_tgt": "scraper_await_or_raise",
+      "_src": "scraper_await_or_raise",
+      "_tgt": "test_await_or_raise_test_does_not_cancel_the_overrunning_call",
       "source": "scraper_await_or_raise",
       "target": "test_await_or_raise_test_does_not_cancel_the_overrunning_call"
     },
@@ -459269,8 +459745,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
       "source_location": "L76",
       "weight": 1.0,
-      "_src": "test_await_or_raise_test_propagates_the_calls_own_exception_unmasked",
-      "_tgt": "scraper_await_or_raise",
+      "_src": "scraper_await_or_raise",
+      "_tgt": "test_await_or_raise_test_propagates_the_calls_own_exception_unmasked",
       "source": "scraper_await_or_raise",
       "target": "test_await_or_raise_test_propagates_the_calls_own_exception_unmasked"
     },
@@ -459304,8 +459780,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
       "source_location": "L471",
       "weight": 1.0,
-      "_src": "scraper_rationale_471",
-      "_tgt": "scraper_await_or_raise",
+      "_src": "scraper_await_or_raise",
+      "_tgt": "scraper_rationale_471",
       "confidence_score": 1.0,
       "source": "scraper_await_or_raise",
       "target": "scraper_rationale_471"
@@ -459317,8 +459793,34 @@
       "source_file": "apps-microservices/api-detection-langue-fr/CLAUDE.md",
       "source_location": "L270",
       "weight": 1.0,
+      "_src": "scraper_await_or_raise",
+      "_tgt": "detfr_v61_why_semaphore_callback_deferred",
       "source": "scraper_await_or_raise",
       "target": "detfr_v61_why_semaphore_callback_deferred"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
+      "source_location": "L503",
+      "weight": 1.0,
+      "_src": "scraper_await_or_raise",
+      "_tgt": "scraper_rationale_503",
+      "confidence_score": 1.0,
+      "source": "scraper_await_or_raise",
+      "target": "scraper_rationale_503"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "apps-microservices/api-detection-langue-fr/CLAUDE.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "detfr_v62_late_driver_reclaimed",
+      "_tgt": "scraper_await_or_raise",
+      "source": "scraper_await_or_raise",
+      "target": "detfr_v62_late_driver_reclaimed"
     },
     {
       "relation": "contains",
@@ -459494,8 +459996,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
       "source_location": "L33",
       "weight": 1.0,
-      "_src": "test_await_or_raise_test_raises_when_the_call_never_answers",
-      "_tgt": "test_await_or_raise_hangs",
+      "_src": "test_await_or_raise_hangs",
+      "_tgt": "test_await_or_raise_test_raises_when_the_call_never_answers",
       "confidence_score": 1.0,
       "source": "test_await_or_raise_hangs",
       "target": "test_await_or_raise_test_raises_when_the_call_never_answers"
@@ -459506,8 +460008,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
       "source_location": "L46",
       "weight": 1.0,
-      "_src": "test_await_or_raise_test_message_carries_a_variant_pointless_token",
-      "_tgt": "test_await_or_raise_hangs",
+      "_src": "test_await_or_raise_hangs",
+      "_tgt": "test_await_or_raise_test_message_carries_a_variant_pointless_token",
       "confidence_score": 1.0,
       "source": "test_await_or_raise_hangs",
       "target": "test_await_or_raise_test_message_carries_a_variant_pointless_token"
@@ -459518,8 +460020,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
       "source_location": "L18",
       "weight": 1.0,
-      "_src": "tests_test_await_or_raise_py",
-      "_tgt": "test_await_or_raise_hangs",
+      "_src": "test_await_or_raise_hangs",
+      "_tgt": "tests_test_await_or_raise_py",
       "confidence_score": 1.0,
       "source": "test_await_or_raise_hangs",
       "target": "tests_test_await_or_raise_py"
@@ -459530,8 +460032,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
       "source_location": "L22",
       "weight": 1.0,
-      "_src": "tests_test_await_or_raise_py",
-      "_tgt": "test_await_or_raise_testawaitorraise",
+      "_src": "test_await_or_raise_testawaitorraise",
+      "_tgt": "tests_test_await_or_raise_py",
       "confidence_score": 1.0,
       "source": "test_await_or_raise_testawaitorraise",
       "target": "tests_test_await_or_raise_py"
@@ -459542,8 +460044,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
       "source_location": "L24",
       "weight": 1.0,
-      "_src": "tests_test_await_or_raise_py",
-      "_tgt": "test_await_or_raise_test_returns_the_result_when_it_arrives_in_time",
+      "_src": "test_await_or_raise_test_returns_the_result_when_it_arrives_in_time",
+      "_tgt": "tests_test_await_or_raise_py",
       "confidence_score": 1.0,
       "source": "test_await_or_raise_test_returns_the_result_when_it_arrives_in_time",
       "target": "tests_test_await_or_raise_py"
@@ -459554,8 +460056,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
       "source_location": "L31",
       "weight": 1.0,
-      "_src": "tests_test_await_or_raise_py",
-      "_tgt": "test_await_or_raise_test_raises_when_the_call_never_answers",
+      "_src": "test_await_or_raise_test_raises_when_the_call_never_answers",
+      "_tgt": "tests_test_await_or_raise_py",
       "confidence_score": 1.0,
       "source": "test_await_or_raise_test_raises_when_the_call_never_answers",
       "target": "tests_test_await_or_raise_py"
@@ -459578,8 +460080,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
       "source_location": "L36",
       "weight": 1.0,
-      "_src": "tests_test_await_or_raise_py",
-      "_tgt": "test_await_or_raise_test_message_carries_a_variant_pointless_token",
+      "_src": "test_await_or_raise_test_message_carries_a_variant_pointless_token",
+      "_tgt": "tests_test_await_or_raise_py",
       "confidence_score": 1.0,
       "source": "test_await_or_raise_test_message_carries_a_variant_pointless_token",
       "target": "tests_test_await_or_raise_py"
@@ -459602,8 +460104,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
       "source_location": "L50",
       "weight": 1.0,
-      "_src": "tests_test_await_or_raise_py",
-      "_tgt": "test_await_or_raise_test_does_not_cancel_the_overrunning_call",
+      "_src": "test_await_or_raise_test_does_not_cancel_the_overrunning_call",
+      "_tgt": "tests_test_await_or_raise_py",
       "confidence_score": 1.0,
       "source": "test_await_or_raise_test_does_not_cancel_the_overrunning_call",
       "target": "tests_test_await_or_raise_py"
@@ -459614,8 +460116,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
       "source_location": "L71",
       "weight": 1.0,
-      "_src": "tests_test_await_or_raise_py",
-      "_tgt": "test_await_or_raise_test_propagates_the_calls_own_exception_unmasked",
+      "_src": "test_await_or_raise_test_propagates_the_calls_own_exception_unmasked",
+      "_tgt": "tests_test_await_or_raise_py",
       "confidence_score": 1.0,
       "source": "test_await_or_raise_test_propagates_the_calls_own_exception_unmasked",
       "target": "tests_test_await_or_raise_py"
@@ -459626,8 +460128,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
       "source_location": "L79",
       "weight": 1.0,
-      "_src": "tests_test_await_or_raise_py",
-      "_tgt": "test_await_or_raise_testboundedbrowsersemaphore",
+      "_src": "test_await_or_raise_testboundedbrowsersemaphore",
+      "_tgt": "tests_test_await_or_raise_py",
       "confidence_score": 1.0,
       "source": "test_await_or_raise_testboundedbrowsersemaphore",
       "target": "tests_test_await_or_raise_py"
@@ -459638,8 +460140,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
       "source_location": "L81",
       "weight": 1.0,
-      "_src": "tests_test_await_or_raise_py",
-      "_tgt": "test_await_or_raise_test_grants_a_free_permit_without_waiting",
+      "_src": "test_await_or_raise_test_grants_a_free_permit_without_waiting",
+      "_tgt": "tests_test_await_or_raise_py",
       "confidence_score": 1.0,
       "source": "test_await_or_raise_test_grants_a_free_permit_without_waiting",
       "target": "tests_test_await_or_raise_py"
@@ -459650,8 +460152,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
       "source_location": "L87",
       "weight": 1.0,
-      "_src": "tests_test_await_or_raise_py",
-      "_tgt": "test_await_or_raise_test_raises_when_no_permit_frees_up",
+      "_src": "test_await_or_raise_test_raises_when_no_permit_frees_up",
+      "_tgt": "tests_test_await_or_raise_py",
       "confidence_score": 1.0,
       "source": "test_await_or_raise_test_raises_when_no_permit_frees_up",
       "target": "tests_test_await_or_raise_py"
@@ -459674,8 +460176,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
       "source_location": "L97",
       "weight": 1.0,
-      "_src": "tests_test_await_or_raise_py",
-      "_tgt": "test_await_or_raise_test_a_permit_granted_after_we_gave_up_goes_back_to_the_pool",
+      "_src": "test_await_or_raise_test_a_permit_granted_after_we_gave_up_goes_back_to_the_pool",
+      "_tgt": "tests_test_await_or_raise_py",
       "confidence_score": 1.0,
       "source": "test_await_or_raise_test_a_permit_granted_after_we_gave_up_goes_back_to_the_pool",
       "target": "tests_test_await_or_raise_py"
@@ -459686,8 +460188,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
       "source_location": "L203",
       "weight": 1.0,
-      "_src": "tests_test_await_or_raise_py",
-      "_tgt": "test_await_or_raise_test_holds_no_permit_when_entry_failed",
+      "_src": "test_await_or_raise_test_holds_no_permit_when_entry_failed",
+      "_tgt": "tests_test_await_or_raise_py",
       "confidence_score": 1.0,
       "source": "test_await_or_raise_test_holds_no_permit_when_entry_failed",
       "target": "tests_test_await_or_raise_py"
@@ -460318,12 +460820,26 @@
       "target": "detfr_v60_why_dedup_follower_await_left_unbounded"
     },
     {
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "apps-microservices/api-detection-langue-fr/CLAUDE.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "detfr_v62_late_driver_reclaimed",
+      "_tgt": "detfr_v60_bounded_setup_awaits",
+      "source": "detfr_v60_bounded_setup_awaits",
+      "target": "detfr_v62_late_driver_reclaimed"
+    },
+    {
       "relation": "references",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "apps-microservices/api-detection-langue-fr/CLAUDE.md",
       "source_location": "L291-297",
       "weight": 1.0,
+      "_src": "detfr_v60_why_late_permit_returns_to_pool",
+      "_tgt": "detfr_v61_permit_release_both_exits",
       "source": "detfr_v60_why_late_permit_returns_to_pool",
       "target": "detfr_v61_permit_release_both_exits"
     },
@@ -460334,6 +460850,8 @@
       "source_file": "apps-microservices/api-detection-langue-fr/CLAUDE.md",
       "source_location": "L293-296",
       "weight": 1.0,
+      "_src": "detfr_v60_why_late_permit_returns_to_pool",
+      "_tgt": "detfr_v61_prod_incident_permit_drain_20260924",
       "source": "detfr_v60_why_late_permit_returns_to_pool",
       "target": "detfr_v61_prod_incident_permit_drain_20260924"
     },
@@ -460344,8 +460862,22 @@
       "source_file": "apps-microservices/api-detection-langue-fr/CLAUDE.md",
       "source_location": "L269-274",
       "weight": 1.0,
+      "_src": "detfr_v60_why_bounds_do_not_cancel",
+      "_tgt": "detfr_v61_why_semaphore_callback_deferred",
       "source": "detfr_v60_why_bounds_do_not_cancel",
       "target": "detfr_v61_why_semaphore_callback_deferred"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "apps-microservices/api-detection-langue-fr/CLAUDE.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "detfr_v62_late_driver_reclaimed",
+      "_tgt": "detfr_v60_why_bounds_do_not_cancel",
+      "source": "detfr_v60_why_bounds_do_not_cancel",
+      "target": "detfr_v62_late_driver_reclaimed"
     },
     {
       "relation": "rationale_for",
@@ -464997,6 +465529,8 @@
       "source_file": "docs/superpowers/runbooks/examples/semrush_domaine_societe.doc.json",
       "source_location": null,
       "weight": 1.0,
+      "_src": "fournisseur_profil_v2_sp_table_doc",
+      "_tgt": "semrush_domaine_societe_table_doc",
       "source": "fournisseur_profil_v2_sp_table_doc",
       "target": "semrush_domaine_societe_table_doc"
     },
@@ -465079,6 +465613,8 @@
       "source_file": "docs/superpowers/runbooks/examples/semrush_domaine_societe.doc.json",
       "source_location": null,
       "weight": 1.0,
+      "_src": "fournisseur_profil_v2_sp_no_business_consumer",
+      "_tgt": "semrush_domaine_societe_no_business_consumer",
       "source": "fournisseur_profil_v2_sp_no_business_consumer",
       "target": "semrush_domaine_societe_no_business_consumer"
     },
@@ -467759,8 +468295,106 @@
       "source_file": "apps-microservices/api-detection-langue-fr/CLAUDE.md",
       "source_location": "L297",
       "weight": 1.0,
+      "_src": "tests_test_await_or_raise_py",
+      "_tgt": "detfr_v61_permit_release_pinned_by_cancel_tests",
       "source": "tests_test_await_or_raise_py",
       "target": "detfr_v61_permit_release_pinned_by_cancel_tests"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
+      "source_location": "L220",
+      "weight": 1.0,
+      "_src": "tests_test_await_or_raise_py",
+      "_tgt": "test_await_or_raise_driver",
+      "confidence_score": 1.0,
+      "source": "tests_test_await_or_raise_py",
+      "target": "test_await_or_raise_driver"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
+      "source_location": "L230",
+      "weight": 1.0,
+      "_src": "tests_test_await_or_raise_py",
+      "_tgt": "test_await_or_raise_install_late_driver",
+      "confidence_score": 1.0,
+      "source": "tests_test_await_or_raise_py",
+      "target": "test_await_or_raise_install_late_driver"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
+      "source_location": "L249",
+      "weight": 1.0,
+      "_src": "tests_test_await_or_raise_py",
+      "_tgt": "test_await_or_raise_until",
+      "confidence_score": 1.0,
+      "source": "tests_test_await_or_raise_py",
+      "target": "test_await_or_raise_until"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
+      "source_location": "L255",
+      "weight": 1.0,
+      "_src": "tests_test_await_or_raise_py",
+      "_tgt": "test_await_or_raise_scrapers",
+      "confidence_score": 1.0,
+      "source": "tests_test_await_or_raise_py",
+      "target": "test_await_or_raise_scrapers"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
+      "source_location": "L261",
+      "weight": 1.0,
+      "_src": "tests_test_await_or_raise_py",
+      "_tgt": "test_await_or_raise_testlatedriverisstopped",
+      "confidence_score": 1.0,
+      "source": "tests_test_await_or_raise_py",
+      "target": "test_await_or_raise_testlatedriverisstopped"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
+      "source_location": "L272",
+      "weight": 1.0,
+      "_src": "tests_test_await_or_raise_py",
+      "_tgt": "test_await_or_raise_test_a_driver_delivered_after_the_timeout_is_stopped",
+      "confidence_score": 1.0,
+      "source": "tests_test_await_or_raise_py",
+      "target": "test_await_or_raise_test_a_driver_delivered_after_the_timeout_is_stopped"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
+      "source_location": "L291",
+      "weight": 1.0,
+      "_src": "tests_test_await_or_raise_py",
+      "_tgt": "test_await_or_raise_test_a_driver_delivered_after_the_caller_was_cancelled_is_stopped",
+      "confidence_score": 1.0,
+      "source": "tests_test_await_or_raise_py",
+      "target": "test_await_or_raise_test_a_driver_delivered_after_the_caller_was_cancelled_is_stopped"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
+      "source_location": "L316",
+      "weight": 1.0,
+      "_src": "tests_test_await_or_raise_py",
+      "_tgt": "test_await_or_raise_test_a_driver_delivered_in_time_is_stopped_once_not_twice",
+      "confidence_score": 1.0,
+      "source": "tests_test_await_or_raise_py",
+      "target": "test_await_or_raise_test_a_driver_delivered_in_time_is_stopped_once_not_twice"
     },
     {
       "relation": "rationale_for",
@@ -467769,6 +468403,8 @@
       "source_file": "apps-microservices/api-detection-langue-fr/CLAUDE.md",
       "source_location": "L293-296",
       "weight": 1.0,
+      "_src": "detfr_v61_permit_release_both_exits",
+      "_tgt": "detfr_v61_prod_incident_permit_drain_20260924",
       "source": "detfr_v61_permit_release_both_exits",
       "target": "detfr_v61_prod_incident_permit_drain_20260924"
     },
@@ -467779,6 +468415,8 @@
       "source_file": "apps-microservices/api-detection-langue-fr/CLAUDE.md",
       "source_location": "L269-274",
       "weight": 1.0,
+      "_src": "detfr_v61_permit_release_both_exits",
+      "_tgt": "detfr_v61_why_semaphore_callback_deferred",
       "source": "detfr_v61_permit_release_both_exits",
       "target": "detfr_v61_why_semaphore_callback_deferred"
     },
@@ -467789,8 +468427,22 @@
       "source_file": "apps-microservices/api-detection-langue-fr/CLAUDE.md",
       "source_location": "L296-297",
       "weight": 1.0,
+      "_src": "detfr_v61_permit_release_both_exits",
+      "_tgt": "detfr_v61_permit_release_pinned_by_cancel_tests",
       "source": "detfr_v61_permit_release_both_exits",
       "target": "detfr_v61_permit_release_pinned_by_cancel_tests"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.9,
+      "source_file": "apps-microservices/api-detection-langue-fr/CLAUDE.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "detfr_v62_late_driver_reclaimed",
+      "_tgt": "detfr_v61_permit_release_both_exits",
+      "source": "detfr_v61_permit_release_both_exits",
+      "target": "detfr_v62_late_driver_reclaimed"
     },
     {
       "relation": "references",
@@ -467799,6 +468451,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": null,
       "weight": 1.0,
+      "_src": "mcp_table_service_design_doc",
+      "_tgt": "mcp_table_service_problem",
       "source": "mcp_table_service_design_doc",
       "target": "mcp_table_service_problem"
     },
@@ -467809,6 +468463,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": null,
       "weight": 1.0,
+      "_src": "mcp_table_service_design_doc",
+      "_tgt": "mcp_table_service_existing_state",
       "source": "mcp_table_service_design_doc",
       "target": "mcp_table_service_existing_state"
     },
@@ -467819,6 +468475,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": null,
       "weight": 1.0,
+      "_src": "mcp_table_service_design_doc",
+      "_tgt": "mcp_table_service_decision_privilege_model",
       "source": "mcp_table_service_design_doc",
       "target": "mcp_table_service_decision_privilege_model"
     },
@@ -467829,6 +468487,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": null,
       "weight": 1.0,
+      "_src": "mcp_table_service_design_doc",
+      "_tgt": "mcp_table_service_decision_catalog_browsing",
       "source": "mcp_table_service_design_doc",
       "target": "mcp_table_service_decision_catalog_browsing"
     },
@@ -467839,6 +468499,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": null,
       "weight": 1.0,
+      "_src": "mcp_table_service_design_doc",
+      "_tgt": "mcp_table_service_decision_architecture_a",
       "source": "mcp_table_service_design_doc",
       "target": "mcp_table_service_decision_architecture_a"
     },
@@ -467849,6 +468511,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": null,
       "weight": 1.0,
+      "_src": "mcp_table_service_design_doc",
+      "_tgt": "mcp_table_service_decision_activation_rule",
       "source": "mcp_table_service_design_doc",
       "target": "mcp_table_service_decision_activation_rule"
     },
@@ -467859,6 +468523,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": null,
       "weight": 1.0,
+      "_src": "mcp_table_service_design_doc",
+      "_tgt": "mcp_table_service_decision_completeness",
       "source": "mcp_table_service_design_doc",
       "target": "mcp_table_service_decision_completeness"
     },
@@ -467869,6 +468535,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": null,
       "weight": 1.0,
+      "_src": "mcp_table_service_design_doc",
+      "_tgt": "mcp_table_service_goals",
       "source": "mcp_table_service_design_doc",
       "target": "mcp_table_service_goals"
     },
@@ -467879,6 +468547,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": null,
       "weight": 1.0,
+      "_src": "mcp_table_service_design_doc",
+      "_tgt": "mcp_table_service_non_goals",
       "source": "mcp_table_service_design_doc",
       "target": "mcp_table_service_non_goals"
     },
@@ -467889,6 +468559,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": null,
       "weight": 1.0,
+      "_src": "mcp_table_service_design_doc",
+      "_tgt": "mcp_table_service_privilege_flow",
       "source": "mcp_table_service_design_doc",
       "target": "mcp_table_service_privilege_flow"
     },
@@ -467899,6 +468571,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": null,
       "weight": 1.0,
+      "_src": "mcp_table_service_design_doc",
+      "_tgt": "mcp_table_service_service_layout",
       "source": "mcp_table_service_design_doc",
       "target": "mcp_table_service_service_layout"
     },
@@ -467909,6 +468583,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": null,
       "weight": 1.0,
+      "_src": "mcp_table_service_design_doc",
+      "_tgt": "mcp_table_service_error_handling",
       "source": "mcp_table_service_design_doc",
       "target": "mcp_table_service_error_handling"
     },
@@ -467919,6 +468595,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": null,
       "weight": 1.0,
+      "_src": "mcp_table_service_design_doc",
+      "_tgt": "mcp_table_service_configuration",
       "source": "mcp_table_service_design_doc",
       "target": "mcp_table_service_configuration"
     },
@@ -467929,6 +468607,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": null,
       "weight": 1.0,
+      "_src": "mcp_table_service_design_doc",
+      "_tgt": "mcp_table_service_deployment",
       "source": "mcp_table_service_design_doc",
       "target": "mcp_table_service_deployment"
     },
@@ -467939,6 +468619,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": null,
       "weight": 1.0,
+      "_src": "mcp_table_service_design_doc",
+      "_tgt": "mcp_table_service_testing",
       "source": "mcp_table_service_design_doc",
       "target": "mcp_table_service_testing"
     },
@@ -467949,6 +468631,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": null,
       "weight": 1.0,
+      "_src": "mcp_table_service_design_doc",
+      "_tgt": "mcp_table_service_documentation_section",
       "source": "mcp_table_service_design_doc",
       "target": "mcp_table_service_documentation_section"
     },
@@ -467959,6 +468643,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": null,
       "weight": 1.0,
+      "_src": "mcp_table_service_design_doc",
+      "_tgt": "mcp_table_service_acceptance",
       "source": "mcp_table_service_design_doc",
       "target": "mcp_table_service_acceptance"
     },
@@ -467969,6 +468655,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "line 11",
       "weight": 1.0,
+      "_src": "mcp_table_service_design_doc",
+      "_tgt": "mcp_table_service_plan_doc",
       "source": "mcp_table_service_design_doc",
       "target": "mcp_table_service_plan_doc"
     },
@@ -467979,6 +468667,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": "section 2-3",
       "weight": 1.0,
+      "_src": "mcp_table_service_existing_state",
+      "_tgt": "mcp_table_service_decision_privilege_model",
       "source": "mcp_table_service_existing_state",
       "target": "mcp_table_service_decision_privilege_model"
     },
@@ -467989,6 +468679,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": "section 5.1",
       "weight": 1.0,
+      "_src": "mcp_table_service_decision_privilege_model",
+      "_tgt": "mcp_table_service_privilege_flow",
       "source": "mcp_table_service_decision_privilege_model",
       "target": "mcp_table_service_privilege_flow"
     },
@@ -467999,6 +468691,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": "section 6.1",
       "weight": 1.0,
+      "_src": "mcp_table_service_decision_privilege_model",
+      "_tgt": "mcp_table_service_tools_read",
       "source": "mcp_table_service_decision_privilege_model",
       "target": "mcp_table_service_tools_read"
     },
@@ -468009,6 +468703,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": "section 4",
       "weight": 0.7,
+      "_src": "mcp_table_service_decision_privilege_model",
+      "_tgt": "mcp_table_service_non_goals",
       "source": "mcp_table_service_decision_privilege_model",
       "target": "mcp_table_service_non_goals"
     },
@@ -468019,6 +468715,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": "section 3",
       "weight": 1.0,
+      "_src": "mcp_table_service_decision_architecture_a",
+      "_tgt": "mcp_table_service_rejected_alt_b",
       "source": "mcp_table_service_decision_architecture_a",
       "target": "mcp_table_service_rejected_alt_b"
     },
@@ -468029,6 +468727,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": "section 3",
       "weight": 1.0,
+      "_src": "mcp_table_service_decision_architecture_a",
+      "_tgt": "mcp_table_service_rejected_alt_c",
       "source": "mcp_table_service_decision_architecture_a",
       "target": "mcp_table_service_rejected_alt_c"
     },
@@ -468039,6 +468739,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": "section 6.3",
       "weight": 1.0,
+      "_src": "mcp_table_service_decision_activation_rule",
+      "_tgt": "mcp_table_service_tools_write",
       "source": "mcp_table_service_decision_activation_rule",
       "target": "mcp_table_service_tools_write"
     },
@@ -468049,6 +468751,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": "section 4",
       "weight": 0.8,
+      "_src": "mcp_table_service_goals",
+      "_tgt": "mcp_table_service_tools_read",
       "source": "mcp_table_service_goals",
       "target": "mcp_table_service_tools_read"
     },
@@ -468059,6 +468763,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": "section 4",
       "weight": 0.8,
+      "_src": "mcp_table_service_goals",
+      "_tgt": "mcp_table_service_tools_write",
       "source": "mcp_table_service_goals",
       "target": "mcp_table_service_tools_write"
     },
@@ -468069,6 +468775,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": "section 5.1",
       "weight": 1.0,
+      "_src": "mcp_table_service_privilege_flow",
+      "_tgt": "mcp_table_service_gateway_change_actas",
       "source": "mcp_table_service_privilege_flow",
       "target": "mcp_table_service_gateway_change_actas"
     },
@@ -468079,6 +468787,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": "section 5.1",
       "weight": 1.0,
+      "_src": "mcp_table_service_privilege_flow",
+      "_tgt": "mcp_table_service_gateway_change_identity_forwarding",
       "source": "mcp_table_service_privilege_flow",
       "target": "mcp_table_service_gateway_change_identity_forwarding"
     },
@@ -468089,6 +468799,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": "section 7",
       "weight": 1.0,
+      "_src": "mcp_table_service_gateway_change_actas",
+      "_tgt": "mcp_table_service_error_handling",
       "source": "mcp_table_service_gateway_change_actas",
       "target": "mcp_table_service_error_handling"
     },
@@ -468099,6 +468811,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": "section 8",
       "weight": 1.0,
+      "_src": "mcp_table_service_gateway_change_actas",
+      "_tgt": "mcp_table_service_configuration",
       "source": "mcp_table_service_gateway_change_actas",
       "target": "mcp_table_service_configuration"
     },
@@ -468109,6 +468823,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": "section 10",
       "weight": 1.0,
+      "_src": "mcp_table_service_gateway_change_actas",
+      "_tgt": "mcp_table_service_testing",
       "source": "mcp_table_service_gateway_change_actas",
       "target": "mcp_table_service_testing"
     },
@@ -468119,6 +468835,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "Task 1",
       "weight": 1.0,
+      "_src": "mcp_table_service_gateway_change_actas",
+      "_tgt": "mcp_table_service_task1_actas_branch",
       "source": "mcp_table_service_gateway_change_actas",
       "target": "mcp_table_service_task1_actas_branch"
     },
@@ -468129,6 +468847,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "lines 4977-4988",
       "weight": 1.0,
+      "_src": "mcp_table_service_gateway_change_actas",
+      "_tgt": "mcp_table_service_rationale_addendum_sso",
       "source": "mcp_table_service_gateway_change_actas",
       "target": "mcp_table_service_rationale_addendum_sso"
     },
@@ -468139,6 +468859,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": "section 10",
       "weight": 1.0,
+      "_src": "mcp_table_service_gateway_change_identity_forwarding",
+      "_tgt": "mcp_table_service_testing",
       "source": "mcp_table_service_gateway_change_identity_forwarding",
       "target": "mcp_table_service_testing"
     },
@@ -468149,6 +468871,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "Task 2",
       "weight": 1.0,
+      "_src": "mcp_table_service_gateway_change_identity_forwarding",
+      "_tgt": "mcp_table_service_task2_identity_forwarding",
       "source": "mcp_table_service_gateway_change_identity_forwarding",
       "target": "mcp_table_service_task2_identity_forwarding"
     },
@@ -468159,6 +468883,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": "section 5.4",
       "weight": 1.0,
+      "_src": "mcp_table_service_service_layout",
+      "_tgt": "mcp_table_service_tools_read",
       "source": "mcp_table_service_service_layout",
       "target": "mcp_table_service_tools_read"
     },
@@ -468169,6 +468895,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": "section 5.4",
       "weight": 1.0,
+      "_src": "mcp_table_service_service_layout",
+      "_tgt": "mcp_table_service_tools_catalog",
       "source": "mcp_table_service_service_layout",
       "target": "mcp_table_service_tools_catalog"
     },
@@ -468179,6 +468907,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": "section 5.4",
       "weight": 1.0,
+      "_src": "mcp_table_service_service_layout",
+      "_tgt": "mcp_table_service_tools_write",
       "source": "mcp_table_service_service_layout",
       "target": "mcp_table_service_tools_write"
     },
@@ -468189,6 +468919,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": "section 9",
       "weight": 1.0,
+      "_src": "mcp_table_service_service_layout",
+      "_tgt": "mcp_table_service_deployment",
       "source": "mcp_table_service_service_layout",
       "target": "mcp_table_service_deployment"
     },
@@ -468199,6 +468931,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "Task 3",
       "weight": 1.0,
+      "_src": "mcp_table_service_service_layout",
+      "_tgt": "mcp_table_service_task3_service_scaffold",
       "source": "mcp_table_service_service_layout",
       "target": "mcp_table_service_task3_service_scaffold"
     },
@@ -468209,6 +468943,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "Task 4",
       "weight": 0.8,
+      "_src": "mcp_table_service_service_layout",
+      "_tgt": "mcp_table_service_task4_gateway_client",
       "source": "mcp_table_service_service_layout",
       "target": "mcp_table_service_task4_gateway_client"
     },
@@ -468219,6 +468955,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": "section 10",
       "weight": 0.8,
+      "_src": "mcp_table_service_tools_read",
+      "_tgt": "mcp_table_service_testing",
       "source": "mcp_table_service_tools_read",
       "target": "mcp_table_service_testing"
     },
@@ -468229,6 +468967,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "Task 6",
       "weight": 1.0,
+      "_src": "mcp_table_service_tools_read",
+      "_tgt": "mcp_table_service_task6_read_tools",
       "source": "mcp_table_service_tools_read",
       "target": "mcp_table_service_task6_read_tools"
     },
@@ -468239,6 +468979,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": "section 6.4",
       "weight": 1.0,
+      "_src": "mcp_table_service_tools_catalog",
+      "_tgt": "mcp_table_service_tool_conventions",
       "source": "mcp_table_service_tools_catalog",
       "target": "mcp_table_service_tool_conventions"
     },
@@ -468249,6 +468991,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "Task 7",
       "weight": 1.0,
+      "_src": "mcp_table_service_tools_catalog",
+      "_tgt": "mcp_table_service_task7_catalog_tools",
       "source": "mcp_table_service_tools_catalog",
       "target": "mcp_table_service_task7_catalog_tools"
     },
@@ -468259,6 +469003,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": "section 6.4",
       "weight": 1.0,
+      "_src": "mcp_table_service_tools_write",
+      "_tgt": "mcp_table_service_tool_conventions",
       "source": "mcp_table_service_tools_write",
       "target": "mcp_table_service_tool_conventions"
     },
@@ -468269,6 +469015,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": "section 10",
       "weight": 1.0,
+      "_src": "mcp_table_service_tools_write",
+      "_tgt": "mcp_table_service_testing",
       "source": "mcp_table_service_tools_write",
       "target": "mcp_table_service_testing"
     },
@@ -468279,6 +469027,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "Task 8",
       "weight": 1.0,
+      "_src": "mcp_table_service_tools_write",
+      "_tgt": "mcp_table_service_task8_add_tables",
       "source": "mcp_table_service_tools_write",
       "target": "mcp_table_service_task8_add_tables"
     },
@@ -468289,6 +469039,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "Task 9",
       "weight": 1.0,
+      "_src": "mcp_table_service_tools_write",
+      "_tgt": "mcp_table_service_task9_field_tools",
       "source": "mcp_table_service_tools_write",
       "target": "mcp_table_service_task9_field_tools"
     },
@@ -468299,6 +469051,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "Task 10",
       "weight": 1.0,
+      "_src": "mcp_table_service_tools_write",
+      "_tgt": "mcp_table_service_task10_update_sync",
       "source": "mcp_table_service_tools_write",
       "target": "mcp_table_service_task10_update_sync"
     },
@@ -468309,6 +469063,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "Task 11",
       "weight": 1.0,
+      "_src": "mcp_table_service_tools_write",
+      "_tgt": "mcp_table_service_task11_activate_delete_contract",
       "source": "mcp_table_service_tools_write",
       "target": "mcp_table_service_task11_activate_delete_contract"
     },
@@ -468319,6 +469075,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "Global Constraints",
       "weight": 1.0,
+      "_src": "mcp_table_service_tool_conventions",
+      "_tgt": "mcp_table_service_plan_constraints",
       "source": "mcp_table_service_tool_conventions",
       "target": "mcp_table_service_plan_constraints"
     },
@@ -468329,6 +469087,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": "section 9",
       "weight": 1.0,
+      "_src": "mcp_table_service_configuration",
+      "_tgt": "mcp_table_service_deployment",
       "source": "mcp_table_service_configuration",
       "target": "mcp_table_service_deployment"
     },
@@ -468339,6 +469099,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": "section 11",
       "weight": 1.0,
+      "_src": "mcp_table_service_configuration",
+      "_tgt": "mcp_table_service_documentation_section",
       "source": "mcp_table_service_configuration",
       "target": "mcp_table_service_documentation_section"
     },
@@ -468349,6 +469111,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "Task 12",
       "weight": 1.0,
+      "_src": "mcp_table_service_configuration",
+      "_tgt": "mcp_table_service_task12_deployment_docs",
       "source": "mcp_table_service_configuration",
       "target": "mcp_table_service_task12_deployment_docs"
     },
@@ -468359,6 +469123,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": "section 12",
       "weight": 1.0,
+      "_src": "mcp_table_service_deployment",
+      "_tgt": "mcp_table_service_acceptance",
       "source": "mcp_table_service_deployment",
       "target": "mcp_table_service_acceptance"
     },
@@ -468369,6 +469135,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "Task 12",
       "weight": 1.0,
+      "_src": "mcp_table_service_deployment",
+      "_tgt": "mcp_table_service_task12_deployment_docs",
       "source": "mcp_table_service_deployment",
       "target": "mcp_table_service_task12_deployment_docs"
     },
@@ -468379,6 +469147,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": "section 12",
       "weight": 1.0,
+      "_src": "mcp_table_service_testing",
+      "_tgt": "mcp_table_service_acceptance",
       "source": "mcp_table_service_testing",
       "target": "mcp_table_service_acceptance"
     },
@@ -468389,6 +469159,8 @@
       "source_file": "docs/superpowers/specs/2026-09-07-mcp-table-service-design.md",
       "source_location": "section 12",
       "weight": 1.0,
+      "_src": "mcp_table_service_documentation_section",
+      "_tgt": "mcp_table_service_acceptance",
       "source": "mcp_table_service_documentation_section",
       "target": "mcp_table_service_acceptance"
     },
@@ -468399,6 +469171,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "Task 12",
       "weight": 1.0,
+      "_src": "mcp_table_service_documentation_section",
+      "_tgt": "mcp_table_service_task12_deployment_docs",
       "source": "mcp_table_service_documentation_section",
       "target": "mcp_table_service_task12_deployment_docs"
     },
@@ -468409,6 +469183,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "lines 4866-4961",
       "weight": 1.0,
+      "_src": "mcp_table_service_documentation_section",
+      "_tgt": "mcp_table_service_claude_md_service",
       "source": "mcp_table_service_documentation_section",
       "target": "mcp_table_service_claude_md_service"
     },
@@ -468419,6 +469195,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "lines 5000-5008",
       "weight": 1.0,
+      "_src": "mcp_table_service_acceptance",
+      "_tgt": "mcp_table_service_acceptance_mapping",
       "source": "mcp_table_service_acceptance",
       "target": "mcp_table_service_acceptance_mapping"
     },
@@ -468429,6 +469207,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": null,
       "weight": 1.0,
+      "_src": "mcp_table_service_plan_doc",
+      "_tgt": "mcp_table_service_plan_constraints",
       "source": "mcp_table_service_plan_doc",
       "target": "mcp_table_service_plan_constraints"
     },
@@ -468439,6 +469219,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": null,
       "weight": 1.0,
+      "_src": "mcp_table_service_plan_doc",
+      "_tgt": "mcp_table_service_plan_file_structure",
       "source": "mcp_table_service_plan_doc",
       "target": "mcp_table_service_plan_file_structure"
     },
@@ -468449,6 +469231,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": null,
       "weight": 1.0,
+      "_src": "mcp_table_service_plan_doc",
+      "_tgt": "mcp_table_service_task1_actas_branch",
       "source": "mcp_table_service_plan_doc",
       "target": "mcp_table_service_task1_actas_branch"
     },
@@ -468459,6 +469243,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": null,
       "weight": 1.0,
+      "_src": "mcp_table_service_plan_doc",
+      "_tgt": "mcp_table_service_task2_identity_forwarding",
       "source": "mcp_table_service_plan_doc",
       "target": "mcp_table_service_task2_identity_forwarding"
     },
@@ -468469,6 +469255,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": null,
       "weight": 1.0,
+      "_src": "mcp_table_service_plan_doc",
+      "_tgt": "mcp_table_service_task3_service_scaffold",
       "source": "mcp_table_service_plan_doc",
       "target": "mcp_table_service_task3_service_scaffold"
     },
@@ -468479,6 +469267,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": null,
       "weight": 1.0,
+      "_src": "mcp_table_service_plan_doc",
+      "_tgt": "mcp_table_service_task4_gateway_client",
       "source": "mcp_table_service_plan_doc",
       "target": "mcp_table_service_task4_gateway_client"
     },
@@ -468489,6 +469279,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": null,
       "weight": 1.0,
+      "_src": "mcp_table_service_plan_doc",
+      "_tgt": "mcp_table_service_task5_tool_infrastructure",
       "source": "mcp_table_service_plan_doc",
       "target": "mcp_table_service_task5_tool_infrastructure"
     },
@@ -468499,6 +469291,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": null,
       "weight": 1.0,
+      "_src": "mcp_table_service_plan_doc",
+      "_tgt": "mcp_table_service_task6_read_tools",
       "source": "mcp_table_service_plan_doc",
       "target": "mcp_table_service_task6_read_tools"
     },
@@ -468509,6 +469303,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": null,
       "weight": 1.0,
+      "_src": "mcp_table_service_plan_doc",
+      "_tgt": "mcp_table_service_task7_catalog_tools",
       "source": "mcp_table_service_plan_doc",
       "target": "mcp_table_service_task7_catalog_tools"
     },
@@ -468519,6 +469315,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": null,
       "weight": 1.0,
+      "_src": "mcp_table_service_plan_doc",
+      "_tgt": "mcp_table_service_task8_add_tables",
       "source": "mcp_table_service_plan_doc",
       "target": "mcp_table_service_task8_add_tables"
     },
@@ -468529,6 +469327,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": null,
       "weight": 1.0,
+      "_src": "mcp_table_service_plan_doc",
+      "_tgt": "mcp_table_service_task9_field_tools",
       "source": "mcp_table_service_plan_doc",
       "target": "mcp_table_service_task9_field_tools"
     },
@@ -468539,6 +469339,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": null,
       "weight": 1.0,
+      "_src": "mcp_table_service_plan_doc",
+      "_tgt": "mcp_table_service_task10_update_sync",
       "source": "mcp_table_service_plan_doc",
       "target": "mcp_table_service_task10_update_sync"
     },
@@ -468549,6 +469351,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": null,
       "weight": 1.0,
+      "_src": "mcp_table_service_plan_doc",
+      "_tgt": "mcp_table_service_task11_activate_delete_contract",
       "source": "mcp_table_service_plan_doc",
       "target": "mcp_table_service_task11_activate_delete_contract"
     },
@@ -468559,6 +469363,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": null,
       "weight": 1.0,
+      "_src": "mcp_table_service_plan_doc",
+      "_tgt": "mcp_table_service_task12_deployment_docs",
       "source": "mcp_table_service_plan_doc",
       "target": "mcp_table_service_task12_deployment_docs"
     },
@@ -468569,6 +469375,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "line 4974",
       "weight": 1.0,
+      "_src": "mcp_table_service_task1_actas_branch",
+      "_tgt": "mcp_table_service_task12_deployment_docs",
       "source": "mcp_table_service_task1_actas_branch",
       "target": "mcp_table_service_task12_deployment_docs"
     },
@@ -468579,6 +469387,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "Task 1-2",
       "weight": 0.7,
+      "_src": "mcp_table_service_task1_actas_branch",
+      "_tgt": "mcp_table_service_task2_identity_forwarding",
       "source": "mcp_table_service_task1_actas_branch",
       "target": "mcp_table_service_task2_identity_forwarding"
     },
@@ -468589,6 +469399,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "line 98",
       "weight": 1.0,
+      "_src": "mcp_table_service_task1_actas_branch",
+      "_tgt": "mcp_table_service_rationale_dual_middleware",
       "source": "mcp_table_service_task1_actas_branch",
       "target": "mcp_table_service_rationale_dual_middleware"
     },
@@ -468599,6 +469411,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "lines 278-282",
       "weight": 1.0,
+      "_src": "mcp_table_service_task1_actas_branch",
+      "_tgt": "mcp_table_service_rationale_actas_path_scope",
       "source": "mcp_table_service_task1_actas_branch",
       "target": "mcp_table_service_rationale_actas_path_scope"
     },
@@ -468609,6 +469423,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "lines 4977-4988",
       "weight": 1.0,
+      "_src": "mcp_table_service_task1_actas_branch",
+      "_tgt": "mcp_table_service_rationale_addendum_sso",
       "source": "mcp_table_service_task1_actas_branch",
       "target": "mcp_table_service_rationale_addendum_sso"
     },
@@ -468619,6 +469435,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "line 723",
       "weight": 1.0,
+      "_src": "mcp_table_service_task3_service_scaffold",
+      "_tgt": "mcp_table_service_task4_gateway_client",
       "source": "mcp_table_service_task3_service_scaffold",
       "target": "mcp_table_service_task4_gateway_client"
     },
@@ -468629,6 +469447,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "line 736",
       "weight": 1.0,
+      "_src": "mcp_table_service_task3_service_scaffold",
+      "_tgt": "mcp_table_service_rationale_ringover_scope_not_copied",
       "source": "mcp_table_service_task3_service_scaffold",
       "target": "mcp_table_service_rationale_ringover_scope_not_copied"
     },
@@ -468639,6 +469459,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "line 1902",
       "weight": 1.0,
+      "_src": "mcp_table_service_task4_gateway_client",
+      "_tgt": "mcp_table_service_task5_tool_infrastructure",
       "source": "mcp_table_service_task4_gateway_client",
       "target": "mcp_table_service_task5_tool_infrastructure"
     },
@@ -468649,6 +469471,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "line 2780",
       "weight": 1.0,
+      "_src": "mcp_table_service_task5_tool_infrastructure",
+      "_tgt": "mcp_table_service_task6_read_tools",
       "source": "mcp_table_service_task5_tool_infrastructure",
       "target": "mcp_table_service_task6_read_tools"
     },
@@ -468659,6 +469483,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "line 3017",
       "weight": 1.0,
+      "_src": "mcp_table_service_task5_tool_infrastructure",
+      "_tgt": "mcp_table_service_task7_catalog_tools",
       "source": "mcp_table_service_task5_tool_infrastructure",
       "target": "mcp_table_service_task7_catalog_tools"
     },
@@ -468669,6 +469495,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "line 3336",
       "weight": 1.0,
+      "_src": "mcp_table_service_task5_tool_infrastructure",
+      "_tgt": "mcp_table_service_task8_add_tables",
       "source": "mcp_table_service_task5_tool_infrastructure",
       "target": "mcp_table_service_task8_add_tables"
     },
@@ -468679,6 +469507,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "line 3715",
       "weight": 0.8,
+      "_src": "mcp_table_service_task5_tool_infrastructure",
+      "_tgt": "mcp_table_service_task9_field_tools",
       "source": "mcp_table_service_task5_tool_infrastructure",
       "target": "mcp_table_service_task9_field_tools"
     },
@@ -468689,6 +469519,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "lines 5000-5008",
       "weight": 1.0,
+      "_src": "mcp_table_service_task6_read_tools",
+      "_tgt": "mcp_table_service_acceptance_mapping",
       "source": "mcp_table_service_task6_read_tools",
       "target": "mcp_table_service_acceptance_mapping"
     },
@@ -468699,6 +469531,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "line 3715",
       "weight": 1.0,
+      "_src": "mcp_table_service_task8_add_tables",
+      "_tgt": "mcp_table_service_task9_field_tools",
       "source": "mcp_table_service_task8_add_tables",
       "target": "mcp_table_service_task9_field_tools"
     },
@@ -468709,6 +469543,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "line 4193",
       "weight": 1.0,
+      "_src": "mcp_table_service_task8_add_tables",
+      "_tgt": "mcp_table_service_task10_update_sync",
       "source": "mcp_table_service_task8_add_tables",
       "target": "mcp_table_service_task10_update_sync"
     },
@@ -468719,6 +469555,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "line 4494",
       "weight": 1.0,
+      "_src": "mcp_table_service_task8_add_tables",
+      "_tgt": "mcp_table_service_task11_activate_delete_contract",
       "source": "mcp_table_service_task8_add_tables",
       "target": "mcp_table_service_task11_activate_delete_contract"
     },
@@ -468729,6 +469567,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "line 4933",
       "weight": 1.0,
+      "_src": "mcp_table_service_task8_add_tables",
+      "_tgt": "mcp_table_service_rationale_batch_error_shape",
       "source": "mcp_table_service_task8_add_tables",
       "target": "mcp_table_service_rationale_batch_error_shape"
     },
@@ -468739,6 +469579,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "lines 5000-5008",
       "weight": 1.0,
+      "_src": "mcp_table_service_task8_add_tables",
+      "_tgt": "mcp_table_service_acceptance_mapping",
       "source": "mcp_table_service_task8_add_tables",
       "target": "mcp_table_service_acceptance_mapping"
     },
@@ -468749,6 +469591,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "line 4198",
       "weight": 1.0,
+      "_src": "mcp_table_service_task9_field_tools",
+      "_tgt": "mcp_table_service_task10_update_sync",
       "source": "mcp_table_service_task9_field_tools",
       "target": "mcp_table_service_task10_update_sync"
     },
@@ -468759,6 +469603,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "line 4931",
       "weight": 1.0,
+      "_src": "mcp_table_service_task9_field_tools",
+      "_tgt": "mcp_table_service_rationale_activation_step",
       "source": "mcp_table_service_task9_field_tools",
       "target": "mcp_table_service_rationale_activation_step"
     },
@@ -468769,6 +469615,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "line 4933",
       "weight": 0.8,
+      "_src": "mcp_table_service_task9_field_tools",
+      "_tgt": "mcp_table_service_rationale_batch_error_shape",
       "source": "mcp_table_service_task9_field_tools",
       "target": "mcp_table_service_rationale_batch_error_shape"
     },
@@ -468779,6 +469627,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "line 4986",
       "weight": 1.0,
+      "_src": "mcp_table_service_task9_field_tools",
+      "_tgt": "mcp_table_service_rationale_all_fields_uncapped",
       "source": "mcp_table_service_task9_field_tools",
       "target": "mcp_table_service_rationale_all_fields_uncapped"
     },
@@ -468789,6 +469639,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "lines 5000-5008",
       "weight": 1.0,
+      "_src": "mcp_table_service_task9_field_tools",
+      "_tgt": "mcp_table_service_acceptance_mapping",
       "source": "mcp_table_service_task9_field_tools",
       "target": "mcp_table_service_acceptance_mapping"
     },
@@ -468799,6 +469651,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "line 5005",
       "weight": 1.0,
+      "_src": "mcp_table_service_task11_activate_delete_contract",
+      "_tgt": "mcp_table_service_task12_deployment_docs",
       "source": "mcp_table_service_task11_activate_delete_contract",
       "target": "mcp_table_service_task12_deployment_docs"
     },
@@ -468809,6 +469663,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "line 4931",
       "weight": 1.0,
+      "_src": "mcp_table_service_task11_activate_delete_contract",
+      "_tgt": "mcp_table_service_rationale_activation_step",
       "source": "mcp_table_service_task11_activate_delete_contract",
       "target": "mcp_table_service_rationale_activation_step"
     },
@@ -468819,6 +469675,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "lines 5000-5008",
       "weight": 1.0,
+      "_src": "mcp_table_service_task11_activate_delete_contract",
+      "_tgt": "mcp_table_service_acceptance_mapping",
       "source": "mcp_table_service_task11_activate_delete_contract",
       "target": "mcp_table_service_acceptance_mapping"
     },
@@ -468829,6 +469687,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "lines 4977-4988",
       "weight": 1.0,
+      "_src": "mcp_table_service_task12_deployment_docs",
+      "_tgt": "mcp_table_service_rationale_addendum_sso",
       "source": "mcp_table_service_task12_deployment_docs",
       "target": "mcp_table_service_rationale_addendum_sso"
     },
@@ -468839,6 +469699,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "lines 4866-4961",
       "weight": 1.0,
+      "_src": "mcp_table_service_task12_deployment_docs",
+      "_tgt": "mcp_table_service_claude_md_service",
       "source": "mcp_table_service_task12_deployment_docs",
       "target": "mcp_table_service_claude_md_service"
     },
@@ -468849,6 +469711,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "lines 4822-4859",
       "weight": 1.0,
+      "_src": "mcp_table_service_task12_deployment_docs",
+      "_tgt": "mcp_table_service_docker_compose_block",
       "source": "mcp_table_service_task12_deployment_docs",
       "target": "mcp_table_service_docker_compose_block"
     },
@@ -468859,6 +469723,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "lines 5000-5008",
       "weight": 1.0,
+      "_src": "mcp_table_service_task12_deployment_docs",
+      "_tgt": "mcp_table_service_acceptance_mapping",
       "source": "mcp_table_service_task12_deployment_docs",
       "target": "mcp_table_service_acceptance_mapping"
     },
@@ -468869,6 +469735,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "line 5010",
       "weight": 1.0,
+      "_src": "mcp_table_service_task12_deployment_docs",
+      "_tgt": "mcp_table_service_manual_smoke_test",
       "source": "mcp_table_service_task12_deployment_docs",
       "target": "mcp_table_service_manual_smoke_test"
     },
@@ -468879,6 +469747,8 @@
       "source_file": "docs/superpowers/plans/2026-09-07-mcp-table-service.md",
       "source_location": "line 5010",
       "weight": 0.8,
+      "_src": "mcp_table_service_acceptance_mapping",
+      "_tgt": "mcp_table_service_manual_smoke_test",
       "source": "mcp_table_service_acceptance_mapping",
       "target": "mcp_table_service_manual_smoke_test"
     },
@@ -468889,6 +469759,8 @@
       "source_file": "docs/superpowers/runbooks/examples/domain_blacklist.doc.json",
       "source_location": null,
       "weight": 1.0,
+      "_src": "domain_blacklist_table_doc",
+      "_tgt": "domain_blacklist_dual_semantics_trap",
       "source": "domain_blacklist_table_doc",
       "target": "domain_blacklist_dual_semantics_trap"
     },
@@ -468899,6 +469771,8 @@
       "source_file": "docs/superpowers/runbooks/examples/domain_blacklist.doc.json",
       "source_location": null,
       "weight": 1.0,
+      "_src": "domain_blacklist_table_doc",
+      "_tgt": "domain_blacklist_not_the_only_list",
       "source": "domain_blacklist_table_doc",
       "target": "domain_blacklist_not_the_only_list"
     },
@@ -468909,6 +469783,8 @@
       "source_file": "docs/superpowers/runbooks/examples/domain_blacklist.doc.json",
       "source_location": null,
       "weight": 1.0,
+      "_src": "domain_blacklist_table_doc",
+      "_tgt": "domain_blacklist_no_writer_in_repo",
       "source": "domain_blacklist_table_doc",
       "target": "domain_blacklist_no_writer_in_repo"
     },
@@ -468919,6 +469795,8 @@
       "source_file": "docs/superpowers/runbooks/examples/domain_blacklist.doc.json",
       "source_location": null,
       "weight": 1.0,
+      "_src": "domain_blacklist_table_doc",
+      "_tgt": "domain_blacklist_data_corruption_root_cause",
       "source": "domain_blacklist_table_doc",
       "target": "domain_blacklist_data_corruption_root_cause"
     },
@@ -468929,6 +469807,8 @@
       "source_file": "docs/superpowers/runbooks/examples/domain_blacklist.doc.json",
       "source_location": null,
       "weight": 1.0,
+      "_src": "domain_blacklist_table_doc",
+      "_tgt": "eligibilite_fournisseur_table_doc",
       "source": "domain_blacklist_table_doc",
       "target": "eligibilite_fournisseur_table_doc"
     },
@@ -468939,6 +469819,8 @@
       "source_file": "docs/superpowers/runbooks/examples/domain_blacklist.doc.json",
       "source_location": null,
       "weight": 1.0,
+      "_src": "domain_blacklist_table_doc",
+      "_tgt": "cld_domaine_compte_zoho_table_doc",
       "source": "domain_blacklist_table_doc",
       "target": "cld_domaine_compte_zoho_table_doc"
     },
@@ -468949,6 +469831,8 @@
       "source_file": "docs/superpowers/runbooks/examples/domain_blacklist.doc.json",
       "source_location": null,
       "weight": 1.0,
+      "_src": "domain_blacklist_table_doc",
+      "_tgt": "cld_journal_eligibilite_table_doc",
       "source": "domain_blacklist_table_doc",
       "target": "cld_journal_eligibilite_table_doc"
     },
@@ -468959,6 +469843,8 @@
       "source_file": "docs/superpowers/runbooks/examples/eligibilite_v2_tables.doc.json",
       "source_location": null,
       "weight": 1.0,
+      "_src": "eligibilite_fournisseur_table_doc",
+      "_tgt": "cld_file_jugement_table_doc",
       "source": "eligibilite_fournisseur_table_doc",
       "target": "cld_file_jugement_table_doc"
     },
@@ -468969,6 +469855,8 @@
       "source_file": "docs/superpowers/runbooks/examples/eligibilite_v2_tables.doc.json",
       "source_location": null,
       "weight": 1.0,
+      "_src": "eligibilite_fournisseur_table_doc",
+      "_tgt": "cld_domaine_compte_zoho_table_doc",
       "source": "eligibilite_fournisseur_table_doc",
       "target": "cld_domaine_compte_zoho_table_doc"
     },
@@ -468979,6 +469867,8 @@
       "source_file": "docs/superpowers/runbooks/examples/eligibilite_v2_tables.doc.json",
       "source_location": null,
       "weight": 1.0,
+      "_src": "eligibilite_fournisseur_table_doc",
+      "_tgt": "cld_journal_eligibilite_table_doc",
       "source": "eligibilite_fournisseur_table_doc",
       "target": "cld_journal_eligibilite_table_doc"
     },
@@ -468989,6 +469879,8 @@
       "source_file": "docs/superpowers/runbooks/examples/eligibilite_v2_tables.doc.json",
       "source_location": null,
       "weight": 1.0,
+      "_src": "eligibilite_fournisseur_table_doc",
+      "_tgt": "eligibilite_v2_c1_c4_criteria",
       "source": "eligibilite_fournisseur_table_doc",
       "target": "eligibilite_v2_c1_c4_criteria"
     },
@@ -468999,6 +469891,8 @@
       "source_file": "docs/superpowers/runbooks/examples/eligibilite_v2_tables.doc.json",
       "source_location": null,
       "weight": 1.0,
+      "_src": "eligibilite_fournisseur_table_doc",
+      "_tgt": "eligibilite_v2_verdict_lifecycle_append_only",
       "source": "eligibilite_fournisseur_table_doc",
       "target": "eligibilite_v2_verdict_lifecycle_append_only"
     },
@@ -469009,6 +469903,8 @@
       "source_file": "docs/superpowers/runbooks/examples/eligibilite_v2_tables.doc.json",
       "source_location": null,
       "weight": 1.0,
+      "_src": "eligibilite_fournisseur_table_doc",
+      "_tgt": "eligibilite_v2_zoho_tagging_columns",
       "source": "eligibilite_fournisseur_table_doc",
       "target": "eligibilite_v2_zoho_tagging_columns"
     },
@@ -469019,6 +469915,8 @@
       "source_file": "docs/superpowers/runbooks/examples/eligibilite_v2_tables.doc.json",
       "source_location": null,
       "weight": 1.0,
+      "_src": "eligibilite_fournisseur_table_doc",
+      "_tgt": "eligibilite_v2_tables_mcp_scope_exclusions",
       "source": "eligibilite_fournisseur_table_doc",
       "target": "eligibilite_v2_tables_mcp_scope_exclusions"
     },
@@ -469029,6 +469927,8 @@
       "source_file": "docs/superpowers/runbooks/examples/eligibilite_v2_tables.doc.json",
       "source_location": null,
       "weight": 1.0,
+      "_src": "eligibilite_fournisseur_table_doc",
+      "_tgt": "eligibilite_v2_engine_absent_from_repo",
       "source": "eligibilite_fournisseur_table_doc",
       "target": "eligibilite_v2_engine_absent_from_repo"
     },
@@ -469039,6 +469939,8 @@
       "source_file": "docs/superpowers/runbooks/examples/tableau_bord_identification_prospects.doc.json",
       "source_location": null,
       "weight": 1.0,
+      "_src": "eligibilite_fournisseur_table_doc",
+      "_tgt": "tbip_eligibilite_tbip_not_authoritative",
       "source": "eligibilite_fournisseur_table_doc",
       "target": "tbip_eligibilite_tbip_not_authoritative"
     },
@@ -469049,6 +469951,8 @@
       "source_file": "docs/superpowers/runbooks/examples/eligibilite_v2_tables.doc.json",
       "source_location": null,
       "weight": 1.0,
+      "_src": "cld_journal_eligibilite_table_doc",
+      "_tgt": "eligibilite_v2_journal_no_pk_trace_only",
       "source": "cld_journal_eligibilite_table_doc",
       "target": "eligibilite_v2_journal_no_pk_trace_only"
     },
@@ -469059,6 +469963,8 @@
       "source_file": "docs/superpowers/runbooks/examples/eligibilite_v2_tables.doc.json",
       "source_location": null,
       "weight": 1.0,
+      "_src": "cld_journal_eligibilite_table_doc",
+      "_tgt": "eligibilite_v2_pont_kill_switch_gap",
       "source": "cld_journal_eligibilite_table_doc",
       "target": "eligibilite_v2_pont_kill_switch_gap"
     },
@@ -469069,6 +469975,8 @@
       "source_file": "docs/superpowers/runbooks/examples/eligibilite_v2_tables.doc.json",
       "source_location": null,
       "weight": 1.0,
+      "_src": "cld_domaine_compte_zoho_table_doc",
+      "_tgt": "cld_file_jugement_table_doc",
       "source": "cld_domaine_compte_zoho_table_doc",
       "target": "cld_file_jugement_table_doc"
     },
@@ -469079,6 +469987,8 @@
       "source_file": "docs/superpowers/runbooks/examples/eligibilite_v2_tables.doc.json",
       "source_location": null,
       "weight": 1.0,
+      "_src": "cld_domaine_compte_zoho_table_doc",
+      "_tgt": "eligibilite_v2_domain_dedup_count_trap",
       "source": "cld_domaine_compte_zoho_table_doc",
       "target": "eligibilite_v2_domain_dedup_count_trap"
     },
@@ -469089,6 +469999,8 @@
       "source_file": "docs/superpowers/runbooks/examples/eligibilite_v2_tables.doc.json",
       "source_location": null,
       "weight": 1.0,
+      "_src": "cld_domaine_compte_zoho_table_doc",
+      "_tgt": "eligibilite_v2_tables_mcp_scope_exclusions",
       "source": "cld_domaine_compte_zoho_table_doc",
       "target": "eligibilite_v2_tables_mcp_scope_exclusions"
     },
@@ -469099,6 +470011,8 @@
       "source_file": "docs/superpowers/runbooks/examples/eligibilite_v2_tables.doc.json",
       "source_location": null,
       "weight": 1.0,
+      "_src": "cld_file_jugement_table_doc",
+      "_tgt": "eligibilite_v2_deferred_judgment_flow",
       "source": "cld_file_jugement_table_doc",
       "target": "eligibilite_v2_deferred_judgment_flow"
     },
@@ -469109,6 +470023,8 @@
       "source_file": "docs/superpowers/runbooks/examples/semrush_domaine_societe.doc.json",
       "source_location": null,
       "weight": 1.0,
+      "_src": "semrush_domaine_societe_table_doc",
+      "_tgt": "semrush_domaine_societe_palier_null_semantics",
       "source": "semrush_domaine_societe_table_doc",
       "target": "semrush_domaine_societe_palier_null_semantics"
     },
@@ -469119,6 +470035,8 @@
       "source_file": "docs/superpowers/runbooks/examples/semrush_domaine_societe.doc.json",
       "source_location": null,
       "weight": 1.0,
+      "_src": "semrush_domaine_societe_table_doc",
+      "_tgt": "semrush_domaine_societe_quota_guards",
       "source": "semrush_domaine_societe_table_doc",
       "target": "semrush_domaine_societe_quota_guards"
     },
@@ -469129,6 +470047,8 @@
       "source_file": "docs/superpowers/runbooks/examples/semrush_domaine_societe.doc.json",
       "source_location": null,
       "weight": 1.0,
+      "_src": "semrush_domaine_societe_table_doc",
+      "_tgt": "semrush_domaine_societe_no_business_consumer",
       "source": "semrush_domaine_societe_table_doc",
       "target": "semrush_domaine_societe_no_business_consumer"
     },
@@ -469139,6 +470059,8 @@
       "source_file": "docs/superpowers/runbooks/examples/semrush_domaine_societe.doc.json",
       "source_location": null,
       "weight": 1.0,
+      "_src": "semrush_domaine_societe_table_doc",
+      "_tgt": "semrush_domaine_societe_shell_flag_bypass",
       "source": "semrush_domaine_societe_table_doc",
       "target": "semrush_domaine_societe_shell_flag_bypass"
     },
@@ -469149,6 +470071,8 @@
       "source_file": "docs/superpowers/runbooks/examples/semrush_domaine_societe.doc.json",
       "source_location": null,
       "weight": 1.0,
+      "_src": "semrush_domaine_societe_table_doc",
+      "_tgt": "semrush_domaine_societe_apex_inheritance_flag",
       "source": "semrush_domaine_societe_table_doc",
       "target": "semrush_domaine_societe_apex_inheritance_flag"
     },
@@ -469159,6 +470083,8 @@
       "source_file": "docs/superpowers/runbooks/examples/tableau_bord_identification_prospects.doc.json",
       "source_location": null,
       "weight": 1.0,
+      "_src": "tableau_bord_identification_prospects_table_doc",
+      "_tgt": "tbip_frozen_snapshot_at_insertion",
       "source": "tableau_bord_identification_prospects_table_doc",
       "target": "tbip_frozen_snapshot_at_insertion"
     },
@@ -469169,6 +470095,8 @@
       "source_file": "docs/superpowers/runbooks/examples/tableau_bord_identification_prospects.doc.json",
       "source_location": null,
       "weight": 1.0,
+      "_src": "tableau_bord_identification_prospects_table_doc",
+      "_tgt": "tbip_aggregate_state_columns_not_independently_interpretable",
       "source": "tableau_bord_identification_prospects_table_doc",
       "target": "tbip_aggregate_state_columns_not_independently_interpretable"
     },
@@ -469179,6 +470107,8 @@
       "source_file": "docs/superpowers/runbooks/examples/tableau_bord_identification_prospects.doc.json",
       "source_location": null,
       "weight": 1.0,
+      "_src": "tableau_bord_identification_prospects_table_doc",
+      "_tgt": "tbip_eligibilite_tbip_not_authoritative",
       "source": "tableau_bord_identification_prospects_table_doc",
       "target": "tbip_eligibilite_tbip_not_authoritative"
     },
@@ -469189,6 +470119,8 @@
       "source_file": "docs/superpowers/runbooks/examples/tableau_bord_identification_prospects.doc.json",
       "source_location": null,
       "weight": 1.0,
+      "_src": "tableau_bord_identification_prospects_table_doc",
+      "_tgt": "tbip_multivalued_societe_columns_join_trap",
       "source": "tableau_bord_identification_prospects_table_doc",
       "target": "tbip_multivalued_societe_columns_join_trap"
     },
@@ -469199,8 +470131,226 @@
       "source_file": "docs/superpowers/runbooks/examples/tableau_bord_identification_prospects.doc.json",
       "source_location": null,
       "weight": 1.0,
+      "_src": "tableau_bord_identification_prospects_table_doc",
+      "_tgt": "tbip_prompt_title_description_oui_default_trap",
       "source": "tableau_bord_identification_prospects_table_doc",
       "target": "tbip_prompt_title_description_oui_default_trap"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
+      "source_location": "L476",
+      "weight": 1.0,
+      "_src": "scraper_reclaim_if_delivered",
+      "_tgt": "scraper_rationale_476",
+      "confidence_score": 1.0,
+      "source": "scraper_reclaim_if_delivered",
+      "target": "scraper_rationale_476"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\app\\services\\scraper.py",
+      "source_location": "L494",
+      "weight": 1.0,
+      "_src": "scraper_stop_late_driver",
+      "_tgt": "scraper_rationale_494",
+      "confidence_score": 1.0,
+      "source": "scraper_stop_late_driver",
+      "target": "scraper_rationale_494"
+    },
+    {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
+      "source_location": "L223",
+      "weight": 1.0,
+      "_src": "test_await_or_raise_driver",
+      "_tgt": "test_await_or_raise_driver_init",
+      "confidence_score": 1.0,
+      "source": "test_await_or_raise_driver",
+      "target": "test_await_or_raise_driver_init"
+    },
+    {
+      "relation": "method",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
+      "source_location": "L226",
+      "weight": 1.0,
+      "_src": "test_await_or_raise_driver",
+      "_tgt": "test_await_or_raise_driver_stop",
+      "confidence_score": 1.0,
+      "source": "test_await_or_raise_driver",
+      "target": "test_await_or_raise_driver_stop"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
+      "source_location": "L276",
+      "weight": 1.0,
+      "_src": "test_await_or_raise_driver",
+      "_tgt": "test_await_or_raise_test_a_driver_delivered_after_the_timeout_is_stopped",
+      "confidence_score": 1.0,
+      "source": "test_await_or_raise_driver",
+      "target": "test_await_or_raise_test_a_driver_delivered_after_the_timeout_is_stopped"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
+      "source_location": "L301",
+      "weight": 1.0,
+      "_src": "test_await_or_raise_driver",
+      "_tgt": "test_await_or_raise_test_a_driver_delivered_after_the_caller_was_cancelled_is_stopped",
+      "confidence_score": 1.0,
+      "source": "test_await_or_raise_driver",
+      "target": "test_await_or_raise_test_a_driver_delivered_after_the_caller_was_cancelled_is_stopped"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
+      "source_location": "L326",
+      "weight": 1.0,
+      "_src": "test_await_or_raise_driver",
+      "_tgt": "test_await_or_raise_test_a_driver_delivered_in_time_is_stopped_once_not_twice",
+      "confidence_score": 1.0,
+      "source": "test_await_or_raise_driver",
+      "target": "test_await_or_raise_test_a_driver_delivered_in_time_is_stopped_once_not_twice"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
+      "source_location": "L221",
+      "weight": 1.0,
+      "_src": "test_await_or_raise_driver",
+      "_tgt": "test_await_or_raise_rationale_221",
+      "confidence_score": 1.0,
+      "source": "test_await_or_raise_driver",
+      "target": "test_await_or_raise_rationale_221"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
+      "source_location": "L277",
+      "weight": 1.0,
+      "_src": "test_await_or_raise_install_late_driver",
+      "_tgt": "test_await_or_raise_test_a_driver_delivered_after_the_timeout_is_stopped",
+      "confidence_score": 1.0,
+      "source": "test_await_or_raise_install_late_driver",
+      "target": "test_await_or_raise_test_a_driver_delivered_after_the_timeout_is_stopped"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
+      "source_location": "L302",
+      "weight": 1.0,
+      "_src": "test_await_or_raise_install_late_driver",
+      "_tgt": "test_await_or_raise_test_a_driver_delivered_after_the_caller_was_cancelled_is_stopped",
+      "confidence_score": 1.0,
+      "source": "test_await_or_raise_install_late_driver",
+      "target": "test_await_or_raise_test_a_driver_delivered_after_the_caller_was_cancelled_is_stopped"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
+      "source_location": "L328",
+      "weight": 1.0,
+      "_src": "test_await_or_raise_install_late_driver",
+      "_tgt": "test_await_or_raise_test_a_driver_delivered_in_time_is_stopped_once_not_twice",
+      "confidence_score": 1.0,
+      "source": "test_await_or_raise_install_late_driver",
+      "target": "test_await_or_raise_test_a_driver_delivered_in_time_is_stopped_once_not_twice"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
+      "source_location": "L231",
+      "weight": 1.0,
+      "_src": "test_await_or_raise_install_late_driver",
+      "_tgt": "test_await_or_raise_rationale_231",
+      "confidence_score": 1.0,
+      "source": "test_await_or_raise_install_late_driver",
+      "target": "test_await_or_raise_rationale_231"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
+      "source_location": "L286",
+      "weight": 1.0,
+      "_src": "test_await_or_raise_until",
+      "_tgt": "test_await_or_raise_test_a_driver_delivered_after_the_timeout_is_stopped",
+      "confidence_score": 1.0,
+      "source": "test_await_or_raise_until",
+      "target": "test_await_or_raise_test_a_driver_delivered_after_the_timeout_is_stopped"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
+      "source_location": "L311",
+      "weight": 1.0,
+      "_src": "test_await_or_raise_until",
+      "_tgt": "test_await_or_raise_test_a_driver_delivered_after_the_caller_was_cancelled_is_stopped",
+      "confidence_score": 1.0,
+      "source": "test_await_or_raise_until",
+      "target": "test_await_or_raise_test_a_driver_delivered_after_the_caller_was_cancelled_is_stopped"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\api-detection-langue-fr\\tests\\test_await_or_raise.py",
+      "source_location": "L262",
+      "weight": 1.0,
+      "_src": "test_await_or_raise_testlatedriverisstopped",
+      "_tgt": "test_await_or_raise_rationale_262",
+      "confidence_score": 1.0,
+      "source": "test_await_or_raise_testlatedriverisstopped",
+      "target": "test_await_or_raise_rationale_262"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "apps-microservices/api-detection-langue-fr/CLAUDE.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "detfr_v62_late_driver_reclaimed",
+      "_tgt": "test_await_or_raise_testlatedriverisstopped",
+      "source": "test_await_or_raise_testlatedriverisstopped",
+      "target": "detfr_v62_late_driver_reclaimed"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "apps-microservices/api-detection-langue-fr/CLAUDE.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "detfr_v62_prod_driver_survivor_measurement",
+      "_tgt": "detfr_v62_late_driver_reclaimed",
+      "source": "detfr_v62_late_driver_reclaimed",
+      "target": "detfr_v62_prod_driver_survivor_measurement"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "apps-microservices/api-detection-langue-fr/CLAUDE.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "detfr_v62_live_drivers_have_no_gauge",
+      "_tgt": "detfr_v62_late_driver_reclaimed",
+      "source": "detfr_v62_late_driver_reclaimed",
+      "target": "detfr_v62_live_drivers_have_no_gauge"
     }
   ],
   "hyperedges": [

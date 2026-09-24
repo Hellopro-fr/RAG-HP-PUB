@@ -1,12 +1,12 @@
-# Graph Report - .  (2026-09-24)
+# Graph Report - apps-microservices/api-detection-langue-fr (--update, doc pass)  (2026-09-24)
 
 ## Corpus Check
-- 957 files · ~0 words
+- 1 files · ~0 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 12129 nodes · 28726 edges · 234 communities detected
-- Extraction: 65% EXTRACTED · 35% INFERRED · 0% AMBIGUOUS · INFERRED: 10147 edges (avg confidence: 0.61)
+- 12155 nodes · 28772 edges · 236 communities detected
+- Extraction: 65% EXTRACTED · 35% INFERRED · 0% AMBIGUOUS · INFERRED: 10155 edges (avg confidence: 0.61)
 - Token cost: 0 input · 0 output
 
 ## Community Hubs (Navigation)
@@ -244,6 +244,8 @@
 - [[_COMMUNITY_Eligibility v2 Event Journal|Eligibility v2 Event Journal]]
 - [[_COMMUNITY_Zoho Domain Pool & Deferred Judgment Queue|Zoho Domain Pool & Deferred Judgment Queue]]
 - [[_COMMUNITY_Prospect Dashboard Snapshot Table|Prospect Dashboard Snapshot Table]]
+- [[_COMMUNITY_Item-Level Abandon Rationale (test)|Item-Level Abandon Rationale (test)]]
+- [[_COMMUNITY_On-Time Driver Teardown Guard (test)|On-Time Driver Teardown Guard (test)]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `CrawlerManager` - 550 edges
@@ -383,7 +385,7 @@ Nodes (63): GuardConfig, GuardMetrics, Prometheus metrics for MilvusConcurrencyG
 
 ### Community 6 - "Detection FR Scraper & Redirects"
 Cohesion: 0.01
-Nodes (490): Configuration de l'application, reconcile_running_jobs_count(), scheduled_archive_cleanup(), validation_exception_handler(), startup_event(), shutdown_event(), read_root(), Periodically checks the actual number of 'running' jobs in Redis and corrects (+482 more)
+Nodes (511): Configuration de l'application, reconcile_running_jobs_count(), scheduled_archive_cleanup(), validation_exception_handler(), startup_event(), shutdown_event(), read_root(), Periodically checks the actual number of 'running' jobs in Redis and corrects (+503 more)
 
 ### Community 104 - "crawler-service: redisClient.test.ts"
 Cohesion: 1.0
@@ -1265,6 +1267,14 @@ Nodes (4): Table cld_domaine_compte_zoho — vivier des domaines déclarés sur 
 Cohesion: 0.33
 Nodes (6): Table tableau_bord_identification_prospects — instantané figé du pipeline Identification Prospects, 1 ligne = 1 domaine, Instantané figé à l'insertion : 22 des 30 colonnes ne sont JAMAIS rafraîchies après l'INSERT ; requêter la table amont pour un état à jour, etat_serp/etat_cheerio/etat_chatgpt : agrégats calculés une fois, la valeur 1 est ambiguë (terminé sans résultat = introuvable = aucune ligne), eligibilite_tbip n'est PAS l'autorité du verdict prospect : figée à l'insertion, -1 a trois causes indiscernables, id_societe_existant_tbip est multi-valuée (CSV dans un varchar) — une jointure directe par égalité matche silencieusement la première valeur seule, prompt_title_description_tbip : 'OUI' peut signifier 'rien ne s'oppose au crawl' sans aucun appel modèle (title+meta absents), pas une validation du modèle
 
+### Community 281 - "Item-Level Abandon Rationale (test)"
+Cohesion: 1.0
+Nodes (1): L'autre sortie sans résultat : le `wait_for` de l'item, `_abandon_job`.
+
+### Community 282 - "On-Time Driver Teardown Guard (test)"
+Cohesion: 1.0
+Nodes (1): Garde : le driver livré à temps n'est arrêté que par le `finally` normal.
+
 ## Ambiguous Edges - Review These
 - `security-auditor agent (proposed)` → `Removed agents @code-reviewer and @debugger, superseded by superpowers skills`  [AMBIGUOUS]
   docs/claude-code-team-guide-en.md · relation: conceptually_related_to
@@ -1350,7 +1360,7 @@ Nodes (6): Table tableau_bord_identification_prospects — instantané figé du 
   docs/superpowers/runbooks/examples/tracking_mail2bdd_tables.doc.json · relation: conceptually_related_to
 
 ## Knowledge Gaps
-- **3506 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+3501 more)
+- **3517 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+3512 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **Thin community `graphify-guide-en.md: Limitation: ID collision on sha...`** (1 nodes): `Creates a dictionary of headers for a DLQ message, compatible with both pika and`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -1611,6 +1621,10 @@ Nodes (6): Table tableau_bord_identification_prospects — instantané figé du 
 - **Thin community `graphify-guide-en.md: PreToolUse hook on Glob|Grep (n...`** (1 nodes): `Détermine si l'URL a un signal très fort de site français.                  Le`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `superpowers: Faux-négatifs — suite de référence avant chantier`** (2 nodes): `Référence de suite AVANT chantier : 7 échecs préexistants + 1 erreur de collecte, à comparer et jamais compter comme introduits`, `PIÈGE D'OUTILLAGE : une erreur de collecte pytest préexistante INTERROMPT tout le run, si bien qu'aucune commande l'incluant n'est exploitable — la contourner par --ignore, ne pas la réparer (hors périmètre)`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Item-Level Abandon Rationale (test)`** (1 nodes): `L'autre sortie sans résultat : le `wait_for` de l'item, `_abandon_job`.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `On-Time Driver Teardown Guard (test)`** (1 nodes): `Garde : le driver livré à temps n'est arrêté que par le `finally` normal.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 
 ## Suggested Questions
