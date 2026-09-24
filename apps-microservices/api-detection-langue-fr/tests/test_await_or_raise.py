@@ -212,3 +212,124 @@ class TestBoundedBrowserSemaphore:
         async with sem:
             async with sem:
                 pass
+
+
+_PROXY = "http://user:pass@proxy.test:8000"
+
+
+class _Driver:
+    """Faux `Playwright` : ne compte que les appels à `stop()`."""
+
+    def __init__(self) -> None:
+        self.stop_calls = 0
+
+    async def stop(self) -> None:
+        self.stop_calls += 1
+
+
+def _install_late_driver(monkeypatch, gate: asyncio.Event, driver: _Driver) -> None:
+    """`async_playwright().start()` ne livre `driver` qu'une fois `gate` levé.
+
+    Posé aux DEUX endroits d'où le code le lit : l'import de module de
+    `scrape_html`, et l'import local de `scrape_html_with_redirects`.
+    """
+    import playwright.async_api
+
+    from app.services import scraper
+
+    class _Manager:
+        async def start(self):
+            await gate.wait()
+            return driver
+
+    monkeypatch.setattr(scraper, "async_playwright", _Manager)
+    monkeypatch.setattr(playwright.async_api, "async_playwright", _Manager)
+
+
+async def _until(predicate, timeout: float = 1.0) -> None:
+    deadline = asyncio.get_running_loop().time() + timeout
+    while not predicate() and asyncio.get_running_loop().time() < deadline:
+        await asyncio.sleep(0.01)
+
+
+def _scrapers():
+    from app.services import scraper
+
+    return [scraper.scrape_html, scraper.scrape_html_with_redirects]
+
+
+class TestLateDriverIsStopped:
+    """Un driver livré APRÈS qu'on a cessé de l'attendre doit être arrêté.
+
+    PROD 2026-09-24 : 42 drivers Playwright (`MainThread`) pour 4 navigateurs,
+    39 encore vivants sans aucun navigateur une fois l'épisode résorbé — chacun
+    né d'un `playwright.start` abandonné puis livré en retard, que plus rien ne
+    référençait et que seul un redémarrage du conteneur tuait.
+    """
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("scrape", _scrapers(), ids=lambda f: f.__name__)
+    async def test_a_driver_delivered_after_the_timeout_is_stopped(
+        self, scrape, monkeypatch
+    ):
+        monkeypatch.setattr(settings, "BROWSER_OP_TIMEOUT_S", 0.05, raising=False)
+        gate, driver = asyncio.Event(), _Driver()
+        _install_late_driver(monkeypatch, gate, driver)
+
+        try:
+            await scrape("http://site.test/page", proxy=_PROXY)
+        except TimeoutError:
+            pass  # scrape_html lève ; la variante redirects rend un dict d'échec
+        assert driver.stop_calls == 0  # rien à arrêter tant qu'il n'est pas livré
+
+        gate.set()
+        await _until(lambda: driver.stop_calls > 0)
+        assert driver.stop_calls == 1
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("scrape", _scrapers(), ids=lambda f: f.__name__)
+    async def test_a_driver_delivered_after_the_caller_was_cancelled_is_stopped(
+        self, scrape, monkeypatch
+    ):
+        """L'autre sortie sans résultat : le `wait_for` de l'item, `_abandon_job`.
+
+        `asyncio.wait` n'annule pas la tâche de démarrage — la leçon de R2 : une
+        ressource prise par une tâche détachée doit avoir un propriétaire sur
+        CHAQUE sortie de l'appelant, annulation comprise.
+        """
+        monkeypatch.setattr(settings, "BROWSER_OP_TIMEOUT_S", 30, raising=False)
+        gate, driver = asyncio.Event(), _Driver()
+        _install_late_driver(monkeypatch, gate, driver)
+
+        caller = asyncio.ensure_future(scrape("http://site.test/page", proxy=_PROXY))
+        await asyncio.sleep(0.05)  # l'appelant attend le driver
+        caller.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await caller
+
+        gate.set()
+        await _until(lambda: driver.stop_calls > 0)
+        assert driver.stop_calls == 1
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("scrape", _scrapers(), ids=lambda f: f.__name__)
+    async def test_a_driver_delivered_in_time_is_stopped_once_not_twice(
+        self, scrape, monkeypatch
+    ):
+        """Garde : le driver livré à temps n'est arrêté que par le `finally` normal."""
+        from app.services import scraper
+
+        async def launch_fails(*_a, **_k):
+            raise RuntimeError("launch KO")
+
+        monkeypatch.setattr(scraper, "_launch_browser", launch_fails)
+        gate, driver = asyncio.Event(), _Driver()
+        gate.set()
+        _install_late_driver(monkeypatch, gate, driver)
+
+        try:
+            await scrape("http://site.test/page", proxy=_PROXY)
+        except RuntimeError:
+            pass
+        await asyncio.sleep(0.1)  # laisse à un éventuel second arrêt le temps de partir
+        assert driver.stop_calls == 1
