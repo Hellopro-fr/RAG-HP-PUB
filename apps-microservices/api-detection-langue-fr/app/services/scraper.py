@@ -114,6 +114,17 @@ class _BoundedBrowserSemaphore:
     `CancelledError`) — l'image est `python:3.10-slim` et ce code ne doit pas
     dépendre de laquelle. On laisse donc l'acquisition courir, et un
     done-callback rend au pool le permis accordé trop tard.
+
+    Contrairement à `_close_or_abandon`, le callback ne peut pas être attaché
+    AVANT l'await : sur succès, le permis appartient à l'appelant et ne doit
+    pas être rendu. Il s'attache donc sur les DEUX sorties sans permis :
+    l'échéance, et l'annulation de l'appelant pendant l'attente (`wait_for` de
+    l'item, `_abandon_job` dans `async_jobs.py`) — `asyncio.wait` n'annule pas
+    `t` non plus. Sans la seconde, `BROWSER_SEMAPHORE_SIZE` annulations vidaient
+    le pool pour la vie du process, et chaque détection levait ce timeout
+    (PROD, 2026-09-24). Elle couvre aussi le permis accordé dans le même tick
+    que l'annulation : `t` est alors déjà fini, et `add_done_callback` le
+    rend quand même.
     """
 
     def __init__(self, size: int) -> None:
@@ -121,9 +132,13 @@ class _BoundedBrowserSemaphore:
 
     async def __aenter__(self) -> None:
         t = asyncio.ensure_future(self._sem.acquire())
-        done, _pending = await asyncio.wait(
-            {t}, timeout=settings.BROWSER_POOL_WAIT_S
-        )
+        try:
+            done, _pending = await asyncio.wait(
+                {t}, timeout=settings.BROWSER_POOL_WAIT_S
+            )
+        except BaseException:
+            t.add_done_callback(self._release_if_granted)
+            raise
         if not done:
             t.add_done_callback(self._release_if_granted)
             raise TimeoutError(

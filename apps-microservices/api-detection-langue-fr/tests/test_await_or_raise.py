@@ -128,6 +128,78 @@ class TestBoundedBrowserSemaphore:
             pass  # ne lève pas => le pool n'a pas rétréci
 
     @pytest.mark.asyncio
+    async def test_a_permit_granted_after_the_caller_was_cancelled_goes_back_to_the_pool(
+        self, monkeypatch
+    ):
+        """L'annulation pendant l'attente est l'autre sortie, et la plus fréquente.
+
+        L'appelant est annulé par le `wait_for` de l'item (300 s, `routes.py`)
+        ou par `_abandon_job` (`async_jobs.py`). `asyncio.wait` n'annule pas la
+        tâche d'acquisition : elle obtient le permis plus tard, et sans
+        propriétaire personne ne le rend — `BROWSER_SEMAPHORE_SIZE` annulations
+        suffisent à vider le pool pour la vie du process.
+        """
+        monkeypatch.setattr(settings, "BROWSER_POOL_WAIT_S", 30, raising=False)
+        sem = _BoundedBrowserSemaphore(1)
+        may_release = asyncio.Event()
+
+        async def holder():
+            async with sem:
+                await may_release.wait()
+
+        async def entrant():
+            async with sem:
+                pass
+
+        h = asyncio.ensure_future(holder())
+        await asyncio.sleep(0.01)  # laisse holder prendre le permis
+        e = asyncio.ensure_future(entrant())
+        await asyncio.sleep(0.01)  # laisse entrant se bloquer dans l'attente du pool
+
+        e.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await e
+
+        may_release.set()
+        await h
+        await asyncio.sleep(0.05)  # laisse l'acquisition orpheline prendre puis rendre
+
+        monkeypatch.setattr(settings, "BROWSER_POOL_WAIT_S", 0.05, raising=False)
+        async with sem:
+            pass  # ne lève pas => le pool n'a pas rétréci
+
+    @pytest.mark.asyncio
+    async def test_a_permit_granted_in_the_same_tick_as_the_cancellation_goes_back_to_the_pool(
+        self, monkeypatch
+    ):
+        """Le permis est accordé, puis l'appelant annulé, avant qu'il reprenne.
+
+        L'acquisition est déjà terminée quand l'annulation atteint
+        `asyncio.wait` : c'est le cas où un callback attaché « si pas fini »
+        ne suffirait pas.
+        """
+        monkeypatch.setattr(settings, "BROWSER_POOL_WAIT_S", 30, raising=False)
+        sem = _BoundedBrowserSemaphore(1)
+
+        async def entrant():
+            async with sem:
+                pass
+
+        async with sem:
+            e = asyncio.ensure_future(entrant())
+            await asyncio.sleep(0.01)  # laisse entrant se bloquer dans l'attente du pool
+        # `__aexit__` ne suspend pas : rien n'a tourné entre la libération
+        # ci-dessus et l'annulation ci-dessous.
+        e.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await e
+        await asyncio.sleep(0.05)  # laisse le permis revenir au pool
+
+        monkeypatch.setattr(settings, "BROWSER_POOL_WAIT_S", 0.05, raising=False)
+        async with sem:
+            pass  # ne lève pas => le pool n'a pas rétréci
+
+    @pytest.mark.asyncio
     async def test_holds_no_permit_when_entry_failed(self, monkeypatch):
         monkeypatch.setattr(settings, "BROWSER_POOL_WAIT_S", 0.05, raising=False)
         sem = _BoundedBrowserSemaphore(2)

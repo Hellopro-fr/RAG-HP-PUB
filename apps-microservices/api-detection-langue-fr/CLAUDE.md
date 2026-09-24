@@ -267,7 +267,8 @@ in the BO's crawling report.
 `_await_or_raise` (`app/services/scraper.py`) now bounds each of them at
 `BROWSER_OP_TIMEOUT_S`, and `_BoundedBrowserSemaphore` bounds the permit wait at
 `BROWSER_POOL_WAIT_S`. Both keep `_close_or_abandon`'s **non-cancelling** shape
-(`asyncio.wait`, drain callback attached before the await): cancelling a Playwright call
+(`asyncio.wait`; `_await_or_raise` attaches its drain callback before the await, the
+semaphore cannot — see the permit bullet below): cancelling a Playwright call
 mid-protocol is what orphaned `page.goto`'s callback and produced the
 "Future exception was never retrieved" flood. `_await_or_raise` raises instead of
 abandoning silently, because it has a result to deliver.
@@ -287,6 +288,13 @@ abandoning silently, because it has a result to deliver.
   Deliberately not relying on `Semaphore.acquire`'s own cancellation handling: CPython
   3.12 hands the permit back, the image is `python:3.10-slim`, and this code must not
   depend on which.
+  The callback is attached on **both** permit-less exits: the timeout, and the caller being
+  **cancelled** during the wait (the per-item `wait_for`, `_abandon_job`) — `asyncio.wait`
+  does not cancel the acquisition task either. Missing the second exit drained the pool in
+  PROD on 2026-09-24: `BROWSER_SEMAPHORE_SIZE` cancellations and every detection raised
+  `Timeout pool navigateurs`. It also covers a permit granted in the same tick as the
+  cancellation (the task is already done; `add_done_callback` still fires). Pinned by the
+  two `…cancel…` tests in `tests/test_await_or_raise.py`.
 - **Residual, assumed:** a `playwright.start` that completes after being abandoned is not
   reclaimed (`p.stop()` is never called) — same trade `_close_or_abandon` already makes
   for browsers. `page.content` inside the challenge-poll loop is bounded too: the `while`
