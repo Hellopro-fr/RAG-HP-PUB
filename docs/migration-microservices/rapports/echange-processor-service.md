@@ -1,6 +1,6 @@
 # Rapport de bascule — `echange-processor-service`
 
-> **Lot L4 · basculé le 2026-09-24 à 08:58 UTC (10:58 Paris)** · exécuté par le DevSecOps · pré-contrôle du LEAD reçu le 24/09 ; validation fonctionnelle **sur le trafic réel** (aucun test possible) ; décision du lot **vendredi 25/09 9h30**.
+> **Lot L4 · basculé le 2026-09-24 à 08:58 UTC (10:58 Paris)** · exécuté par le DevSecOps · pré-contrôle du LEAD reçu le 24/09 ; validation sur le trafic réel ; **lot validé le 25/09 (GO LEAD)** après une nuit de production (≈ 33 000 produits traités, files et DLQ à 0, 0 redémarrage).
 > Ce rapport dit ce qui a changé, ce qui a été prouvé, et **comment vous accédez maintenant au service** pour le déboguer.
 
 ---
@@ -29,7 +29,7 @@
 | Parité des valeurs VM / GKE | ✅ empreintes identiques (broker) |
 | Abonnement à la file **prod** | ✅ 24/09 08:58 UTC : `consumers=1`, jumeaux VM arrêtés ; 2 après le palier 1 |
 | Santé depuis la bascule | ✅ pods `Running`, 0 redémarrage, 0 Traceback, 0 erreur |
-| Traitement de bout en bout sur données réelles | ⬜ validation sur le trafic réel : relevés 24/09 après-midi et 25/09 9h30 |
+| Traitement de bout en bout sur données réelles | ✅ trafic réel 24-25/09 : files et DLQ à 0, 0 redémarrage ; seules erreurs = coupures `pika` préexistantes, reprises |
 
 ---
 
