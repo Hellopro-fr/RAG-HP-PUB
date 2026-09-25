@@ -19,10 +19,10 @@
 | **L1** | **sam 19/09** (anticipé) | ✅ **basculé et VALIDÉ** (GO 22/09 9h30 : traitements réels 21/09, 0 erreur, 0 restart) | L1-a 3 min (rollback réel 62 s, rebascule 1'50) · L1-b **2 min 05** | ✅ close | ✅ **GO 22/09 9h30** — jumeaux VM à retirer le 26/09 |
 | **L2** | lun 21/09 → 🔴 rollback (F-HP-MIG-009) · **rejeu mar 22/09 12h45 Paris ✅** | ✅ **basculé** — 9 files à `consumers=1`, 1er message réel `CAT-1002121` traité en 4 min (16 × 200, 0 × 400) | 21/09 : 2 min 39 / rollback 1 min 31 · 22/09 : **3 min 12** | ✅ nuit 22→23 : 223 × 200 sur qc-caracterisation, 0 × 400, 0 restart | ✅ **GO 23/09 ~7h30** (LEAD + dev, GO étendu à L3 prix) |
 | **L3** | **mer 23/09 9h28 Paris** (anticipé) | ✅ **basculé** — 5 prix sur GKE, 1re écriture Milvus prod (URI `milvus-prod`, identifiants SM `platform-zilliz-*`), borne `max id 467759069053297382` | **~4 min 10** | ✅ nuit 23→24 : 104 lignes Milvus, 0 doublon, 0 restart, 0 Traceback ; F-HP-MIG-011 bis (`prix-extraction-produits`) corrigé 24/09 | ✅ **GO 24/09 9h30** |
-| **L4** | **jeu 24/09 ~10h45 Paris** (avancé) | ✅ **basculé** — 9 services sur GKE, écritures Milvus prod à l'échelle (supprime/insère), Redis prod ; sauvegarde à la demande `daily_20260924_084629` | **~12 min 25** (dont 4 min 10 de sauvegarde) | 🟡 en cours (palier 1 : 8 déploiements à 2 ; validation sur trafic réel) | **ven 25/09 9h30** |
+| **L4** | **jeu 24/09 ~10h45 Paris** (avancé) | ✅ **basculé** — 9 services sur GKE, écritures Milvus prod à l'échelle (supprime/insère), Redis prod ; sauvegarde à la demande `daily_20260924_084629` | **~12 min 25** (dont 4 min 10 de sauvegarde) | ✅ nuit 24→25 : ≈ 33 000 produits, files/DLQ à 0, 0 restart ; seules erreurs = coupures `pika` préexistantes | ✅ **GO 25/09** |
 | **L5** | lun 28/09 | ⬜ à venir | | | |
 | **L6** | mar 29/09 | ⬜ à venir | | | |
-| **L7** | mer 30/09 | ⬜ à venir | | | |
+| **L7** | ~~mer 30/09~~ | ⏭️ **remplacé le 25/09** : services gateway / admin / DLQ basculent **avec leur trafic** (vague 2) ; 30/09 = préparation de la vague 2 | | | |
 
 ## État des services
 
@@ -42,15 +42,15 @@
 | L3 | `prix-extraction-devis` | `prix-extraction-devis` | **STOPPED** | **PROD** | 1 | 2026-09-23 07:32 UTC | DSO 23/09 | ✅ tests réels 23/09 (101 insertions, 0 doublon) ; écrit dev ⬜ | ✅ 24/09 9h30 | |
 | L3 | `prix-caracterisation` | `prix-caracterisation` | **STOPPED** | **PROD** | 1 | 2026-09-23 07:32 UTC | DSO 23/09 | ✅ tests réels 23/09 (101 insertions, 0 doublon) ; écrit dev ⬜ | ✅ 24/09 9h30 | |
 | L3 | `prix-milvus-processor-service` | `prix-milvus-processor` | **STOPPED** ×4 | **PROD** | 2 | 2026-09-23 07:32 UTC | DSO 23/09 | ✅ tests réels 23/09 (101 insertions, 0 doublon) ; écrit dev ⬜ | ✅ 24/09 9h30 | |
-| L4 | `website-processor-service` | `website-processor-service` | **STOPPED** ×7 | **PROD** | 1 | 2026-09-24 08:58 UTC | DSO 24/09 | ⬜ trafic réel (pas de test possible) | ⬜ | |
-| L4 | `product-processor-service` | `product-processor-service` | **STOPPED** ×4 | **PROD** | 2 | 2026-09-24 08:58 UTC | DSO 24/09 | ⬜ trafic réel (pas de test possible) | ⬜ | |
-| L4 | `echange-processor-service` | `echange-processor-service` | **STOPPED** ×4 | **PROD** | 2 | 2026-09-24 08:58 UTC | DSO 24/09 | ⬜ trafic réel (pas de test possible) | ⬜ | |
-| L4 | `devis-processor-service` | `devis-processor-service` | **STOPPED** ×4 | **PROD** | 2 | 2026-09-24 08:58 UTC | DSO 24/09 | ⬜ trafic réel (pas de test possible) | ⬜ | |
-| L4 | `website-database-qdrant-service` | `website-database-qdrant-service` | **STOPPED** ×4 | **PROD** | 2 | 2026-09-24 08:58 UTC | DSO 24/09 | ⬜ trafic réel (pas de test possible) | ⬜ | |
-| L4 | `product-database-qdrant-service` | `product-database-qdrant-service` | **STOPPED** ×4 | **PROD** | 2 | 2026-09-24 08:58 UTC | DSO 24/09 | ⬜ trafic réel (pas de test possible) | ⬜ | |
-| L4 | `echange-database-qdrant-service` | `echange-database-qdrant-service` | **STOPPED** ×4 | **PROD** | 2 | 2026-09-24 08:58 UTC | DSO 24/09 | ⬜ trafic réel (pas de test possible) | ⬜ | |
-| L4 | `document-database-qdrant-service` | `document-database-qdrant-service` | **STOPPED** ×4 | **PROD** | 2 | 2026-09-24 08:58 UTC | DSO 24/09 | ⬜ trafic réel (pas de test possible) | ⬜ | |
-| L4 | `di-database-qdrant-service` | `di-database-qdrant-service` | **STOPPED** ×4 | **PROD** | 2 | 2026-09-24 08:58 UTC | DSO 24/09 | ⬜ trafic réel (pas de test possible) | ⬜ | |
+| L4 | `website-processor-service` | `website-processor-service` | **STOPPED** ×7 | **PROD** | 1 | 2026-09-24 08:58 UTC | DSO 24/09 | ✅ trafic réel 24-25/09 | ✅ 25/09 | |
+| L4 | `product-processor-service` | `product-processor-service` | **STOPPED** ×4 | **PROD** | 2 | 2026-09-24 08:58 UTC | DSO 24/09 | ✅ trafic réel 24-25/09 | ✅ 25/09 | |
+| L4 | `echange-processor-service` | `echange-processor-service` | **STOPPED** ×4 | **PROD** | 2 | 2026-09-24 08:58 UTC | DSO 24/09 | ✅ trafic réel 24-25/09 | ✅ 25/09 | |
+| L4 | `devis-processor-service` | `devis-processor-service` | **STOPPED** ×4 | **PROD** | 2 | 2026-09-24 08:58 UTC | DSO 24/09 | ✅ trafic réel 24-25/09 | ✅ 25/09 | |
+| L4 | `website-database-qdrant-service` | `website-database-qdrant-service` | **STOPPED** ×4 | **PROD** | 2 | 2026-09-24 08:58 UTC | DSO 24/09 | ✅ trafic réel 24-25/09 | ✅ 25/09 | |
+| L4 | `product-database-qdrant-service` | `product-database-qdrant-service` | **STOPPED** ×4 | **PROD** | 2 | 2026-09-24 08:58 UTC | DSO 24/09 | ✅ trafic réel 24-25/09 | ✅ 25/09 | |
+| L4 | `echange-database-qdrant-service` | `echange-database-qdrant-service` | **STOPPED** ×4 | **PROD** | 2 | 2026-09-24 08:58 UTC | DSO 24/09 | ✅ trafic réel 24-25/09 | ✅ 25/09 | |
+| L4 | `document-database-qdrant-service` | `document-database-qdrant-service` | **STOPPED** ×4 | **PROD** | 2 | 2026-09-24 08:58 UTC | DSO 24/09 | ✅ trafic réel 24-25/09 | ✅ 25/09 | |
+| L4 | `di-database-qdrant-service` | `di-database-qdrant-service` | **STOPPED** ×4 | **PROD** | 2 | 2026-09-24 08:58 UTC | DSO 24/09 | ✅ trafic réel 24-25/09 | ✅ 25/09 | |
 | L5 | `graph-rag-produit-processor` | `graph-rag-produit-processor` | UP | shadow | 1 | | | | ⬜ | |
 | L5 | `graph-rag-etl-processor` | `graph-rag-etl-processor` | UP | shadow | 1 | | | | ⬜ | |
 | L5 | `graph-rag-fournisseur-processor` | `graph-rag-fournisseur-processor` | UP | shadow | 1 | | | | ⬜ | |
@@ -68,7 +68,7 @@
 | L7 | `mcp-google-templates-runner` | `mcp-google-templates-runner` | N/A | shadow | 1 | | | | ⬜ | |
 | L7 | `graph-rag-api-admin-service` | `graph-rag-api-admin-service` | N/A | shadow | 1 | | | | ⬜ | |
 | L7 | `graph-rag-dlq-manager-service` | `graph-rag-dlq-manager` | N/A | shadow | 1 | | | | ⬜ | |
-| L7 | `dlq-manager-service` | `dlq-manager-service` | UP | shadow | 1 | | | | ⬜ | |
+| L7 | `dlq-manager-service` | `dlq-manager-service` | **désactivé** (`profiles: [disabled]`) | shadow | 1 | | | | — | sort de la série : activation = décision métier |
 
 ## Services qui restent sur la VM (hors lots L1→L7)
 
@@ -80,7 +80,7 @@
 | `prix-traitement` | HTTP, port 8591 | Service HTTP : shadow Cloud Run `prix-traitement` (P4), bascule avec la vague HTTP | Ne pas l'arrêter avec les consumers prix (L3) | Bascule Cloud Run, vague HTTP |
 | `prix-extraction-siteweb` | Consumer | Non migré (P9) : embarque `api-recherche`, 14 paramètres de configuration à fournir en réel | Publie dans les files prix consommées par GKE depuis L3 (30 insertions `siteweb` le 23/09) | Image GKE à créer, lot à définir |
 
-Autres services VM sans équivalent GKE, déjà notés dans `correspondance-endpoints-vm-cloud.md` : `document-echange-processor-service` (lot à définir) et `qc-fabricant-reference` (L2-bis prévu). Le GPU et ses dépendants restent sur la VM par conception.
+Autres services VM sans équivalent GKE, déjà notés dans `correspondance-endpoints-vm-cloud.md` : `document-echange-processor-service` (lot à définir) et `qc-fabricant-reference` (L2-bis prévu). Le GPU et ses dépendants restent sur la VM par conception, dont les **services gRPC graph-rag** joints par l'enabler `10.11.0.2` : `graph-rag-milvus-service` (`15055`), `graph-rag-database-connector-service` (`15056`, écrit dans Neo4j GKE `10.0.1.218`), `graph-rag-normalize-unite-service` (`15057`), **`graph-rag-spacy-service` (`15058`)**, ajouté le 24/09 par le pré-contrôle L5 (dépendance de `graph-rag-llm-extractor-processor`).
 
 ## Rollbacks
 

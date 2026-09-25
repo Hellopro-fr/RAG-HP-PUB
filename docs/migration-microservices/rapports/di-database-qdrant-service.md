@@ -1,6 +1,6 @@
 # Rapport de bascule — `di-database-qdrant-service`
 
-> **Lot L4 · basculé le 2026-09-24 à 08:58 UTC (10:58 Paris)** · exécuté par le DevSecOps · pré-contrôle du LEAD reçu le 24/09 ; validation fonctionnelle **sur le trafic réel** (aucun test possible) ; décision du lot **vendredi 25/09 9h30**.
+> **Lot L4 · basculé le 2026-09-24 à 08:58 UTC (10:58 Paris)** · exécuté par le DevSecOps · pré-contrôle du LEAD reçu le 24/09 ; validation sur le trafic réel ; **lot validé le 25/09 (GO LEAD)** après une nuit de production (≈ 33 000 produits traités, files et DLQ à 0, 0 redémarrage).
 > Ce service **écrit dans Milvus prod**. Ce rapport dit ce qui a changé, ce qui a été prouvé, comment revenir en arrière sur les données, et **comment vous accédez maintenant au service**.
 
 ---
@@ -40,7 +40,7 @@ Toutes les empreintes posées ont été relues et sont identiques à celles des 
 | `ZILLIZ_URI` effectif dans les pods | ✅ `milvus-prod.hello.dev.private.com` |
 | Santé depuis la bascule | ✅ 0 redémarrage, 0 Traceback, 0 erreur |
 | Point de retour données | ✅ sauvegarde `daily_20260924_084629` (VM arrêtée, avant la 1re écriture GKE) |
-| Écritures réelles justes et **une seule fois** | ⬜ validation sur le trafic réel : relevés 24/09 après-midi et 25/09 9h30 (deltas d'entités, échantillon d'identifiants) |
+| Écritures réelles justes et **une seule fois** | ✅ écritures Milvus sur les collections du lot (deltas d'entités) ; échantillon `produits_3` : lignes = chunks, pas de doublon |
 
 ---
 

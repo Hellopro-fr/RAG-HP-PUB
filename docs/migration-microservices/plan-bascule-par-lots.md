@@ -72,7 +72,7 @@ Un lot par jour ouvré, **jamais un vendredi** : l'observation de 24 heures doit
 | ven 25/09 | — | **Tampon.** Bilan de la première semaine, correction de la procédure si besoin | — |
 | lun 28/09 | **L5** | 14h00-16h00 | mar 29 · 9h30 |
 | mar 29/09 | **L6** | **14h00-16h00** (contrainte : après 13h, cf. `template-llm-service`) | mer 30 · 9h30 |
-| mer 30/09 | **L7** | 14h00-16h00 | jeu 1/10 · 9h30 |
+| mer 30/09 | ~~**L7**~~ → **préparation de la vague 2** (décision du 25/09, voir `lots/L7.md`) | journée | — |
 | jeu 1 – ven 2/10 | — | **Tampon.** Marge pour un lot rejoué, et bilan de la série | — |
 
 **Date de fin engagée : mercredi 30 septembre**, marge jusqu'au vendredi 2 octobre. Au-delà, la série est
@@ -212,6 +212,8 @@ plus élevée le premier jour.
 ---
 
 ## 11. Après L7
+
+> **25/09** : L7 remplacé par la préparation de la vague 2 ; les services gateway / admin / DLQ basculent avec leur trafic. `dlq-manager-service` sort de la série (activation = décision métier).
 
 La série close, les 41 services de P1-P3 tournent sur GKE avec les données de production. Les jumeaux VM des
 consumers restent **arrêtés mais présents** pendant sept jours, puis sont supprimés. La vague 2 — priorités P4 à P9,
