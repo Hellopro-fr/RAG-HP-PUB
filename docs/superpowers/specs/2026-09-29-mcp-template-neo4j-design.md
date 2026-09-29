@@ -49,14 +49,14 @@ The LLM sees each instance as a separate backend with its own tool prefix, e.g.
 
 ```
 Admin (mcp-gateway-frontend)
-   │  Neo4j form: name, tool_prefix, URI, user, password, database, [x] Read-only
+   │  Neo4j form: name, tool_prefix, URI, user, password, database, [x] Lecture seule
    ▼
 mcp-gateway-service (Go, 8581)
    │  templates.runner = "neo4j"  → neo4j runner client
    │  credentials {uri,username,password,database} → EncryptedCredentials
    │  extra_env {"NEO4J_READ_ONLY":"true"|"false"}
    ▼  POST /admin/instances (X-Admin-Token)
-mcp-template-neo4j-service (Python, 8597)
+mcp-template-neo4j-service (Python, 8598)
    │  port pool 15100–15199, supervisor, reconcile
    ├─ mcp-proxy :15100 -- mcp-neo4j-cypher   (neo4jprod,    read-only)
    └─ mcp-proxy :15101 -- mcp-neo4j-cypher   (neo4jstaging, read-write)
@@ -77,13 +77,23 @@ Same layout as `mcp-google-templates-runner`: `app/{config,auth,models,port_pool
 - **No secret file.** `credentials_json` is parsed as `{uri, username, password, database}` and
   mapped to `NEO4J_URI`, `NEO4J_USERNAME`, `NEO4J_PASSWORD`, `NEO4J_DATABASE` in the subprocess
   environment. `NEO4J_READ_ONLY` comes from `env` (the gateway's merged `default_env` + `extra_env`).
-  Credential-derived variables are applied **after** the template env so they cannot be overridden.
-- **Connectivity pre-check** before spawning: `neo4j` driver `verify_connectivity()` with a 5 s
-  timeout. Failure → HTTP 422 with `detail.code` = `neo4j_unreachable` or `neo4j_auth_failed`,
-  no process started, no port consumed.
+  Credential-derived variables are applied **after** the template env so they cannot be overridden;
+  `NEO4J_URL` (which wins over `NEO4J_URI` upstream), `NEO4J_TRANSPORT` and `NEO4J_MCP_SERVER_*`
+  are stripped from the template env. Connection/transport CLI flags in `stdio_args` (`--db-url`,
+  `--password`, `--transport`, `--server-*`, … and their argparse abbreviations such as `--pass`)
+  are rejected, because upstream CLI flags win over env vars. The password is replaced by `***`
+  in the stderr tail shown in the instance detail view.
+- **Connectivity pre-check** on `POST /admin/instances` only (gateway create / rotate), never on
+  reconcile: open a session on the configured database and run `RETURN 1` (timeout
+  `NEO4J_PRECHECK_TIMEOUT_SEC`, default 5 s; `verify_connectivity()` alone would not detect a
+  missing database). Failure → HTTP 422 `{"detail":{"code","message"}}` with code
+  `neo4j_invalid_credentials`, `neo4j_invalid_uri`, `neo4j_auth_failed`, `neo4j_database_not_found`,
+  `neo4j_unreachable` or `neo4j_error`; no process started, no port consumed, and a running
+  instance with the same id keeps serving. Skipping it on reconcile means a Neo4j blip while the
+  runner restarts never orphans instances.
 - Command: `mcp-proxy --port <p> --host 0.0.0.0 --pass-environment --stateless -- mcp-neo4j-cypher`
   (same flags as the static `mcp-neo4j-service`, minus `--allow-origin *`, which the gateway does not need).
-- Env: `MCP_GATEWAY_URL`, `MCP_GATEWAY_ADMIN_TOKEN`, `RUNNER_ADMIN_TOKEN`, `RUNNER_PORT=8597`,
+- Env: `MCP_GATEWAY_URL`, `MCP_GATEWAY_ADMIN_TOKEN`, `RUNNER_ADMIN_TOKEN`, `RUNNER_PORT=8598`,
   `RUNNER_INSTANCE_PORT_START=15100`, `RUNNER_INSTANCE_PORT_END=15199`.
 - `requirements.txt`: `fastapi`, `uvicorn[standard]`, `pydantic`, `pydantic-settings`, `httpx`,
   `mcp-proxy`, `mcp-neo4j-cypher>=0.6.0`, `neo4j`. Verified in 0.6.0: `utils.py` reads
@@ -99,18 +109,26 @@ Same layout as `mcp-google-templates-runner`: `app/{config,auth,models,port_pool
 - Seed row in `init-db/init-mcp-gateway-db.sql`:
   `slug='neo4j'`, `name='Neo4j'`, `stdio_command='mcp-neo4j-cypher'`, `stdio_args='[]'`,
   `default_env='{"NEO4J_READ_ONLY":"true"}'`,
-  `required_extra_env='[{"key":"NEO4J_READ_ONLY","label":"Read-only","required":false}]'`,
-  `tool_prefix='neo4j'`, `tags='["database","neo4j","graph"]'`, `kind='stdio'`, `runner='neo4j'`.
+  `required_extra_env='[{"key":"NEO4J_READ_ONLY","label":"Lecture seule","required":false}]'`,
+  `icon='/images/servers/neo4j.svg'`, `tool_prefix=''`, `tags='["database","neo4j","graph"]'`,
+  `kind='stdio'`, `runner='neo4j'`.
+- `tool_prefix` is empty on purpose: the static `mcp-neo4j-service` already owns `neo4j` and the
+  gateway has no tool-name collision check, so every Neo4j instance must set its own prefix
+  (e.g. `neo4jprod`); create returns 400 for an empty prefix or `neo4j`.
 - Template export/import carries `runner`; an import row without `runner` defaults to `google`.
+  The import refuses (409) to change the runner of a template that has instances.
 
 ### 3. Gateway — runner routing
 
-- Config: `NEO4J_TEMPLATES_RUNNER_URL`, `NEO4J_TEMPLATES_RUNNER_ADMIN_TOKEN`.
-- `app.go` builds `map[string]*runnerclient.Client{"google": …, "neo4j": …}` (entries only for configured runners).
-- `Handler.runnerFor(tpl) (*runnerclient.Client, runnerURL string, error)` replaces every direct
-  `h.runner.X` call: create (`createInstanceFromSpec`), rotate, restart, delete, list (detail view
-  stderr tail), and the server-delete cascade in `server_handlers.go`. Unconfigured runner →
-  `errRunnerNotConfigured` → HTTP 503 `runner <name> not configured`.
+- Config: `NEO4J_TEMPLATES_RUNNER_URL`, `NEO4J_TEMPLATES_RUNNER_ADMIN_TOKEN` (must differ from the
+  Google token; equal tokens disable the Neo4j runner and make the sync endpoint refuse both).
+- `app.go` passes the non-Google runners to `Handler.SetRunners(map[string]RunnerEndpoint)`
+  (`RunnerEndpoint{Client, URL, AdminToken}`); the Google runner stays the one given to `NewHandler`.
+- `runnerForTemplate` / `runnerForInstance` replace every direct `h.runner.X` call: create
+  (`createInstanceFromSpec`), rotate, restart, delete, list (detail view stderr tail), and the
+  server-delete cascade in `server_handlers.go`. Unconfigured runner → HTTP 503
+  `runner <name> not configured`. A runner 422 pre-check failure → HTTP 422 `"<code>: <message>"`
+  (`runnerclient.StatusError.Detail()`).
 - Instance URL host is derived from the selected runner's URL, not `GoogleTemplatesRunnerURL`.
 
 ### 4. Gateway — credentials validation
@@ -122,9 +140,13 @@ Same layout as `mcp-google-templates-runner`: `app/{config,auth,models,port_pool
     `neo4j+s`, `neo4j+ssc` with a non-empty host; username and password non-empty; database
     defaults to `neo4j`, matches `^[A-Za-z0-9._-]{1,63}$`. Serialized to canonical JSON, then the
     existing encrypt + SHA-256 path.
-- `NEO4J_READ_ONLY` in `extra_env` must be `"true"` or `"false"` (400 otherwise).
+- Neo4j `extra_env` accepts only `NEO4J_READ_ONLY` = `"true"` | `"false"` (400 otherwise): any
+  other `NEO4J_*` key could redirect the connection.
 - Rotate on a Neo4j instance accepts the same fields and an optional `extra_env`, so toggling
-  read-only or changing the password is one call followed by the existing respawn.
+  read-only or changing the password is one call. Unlike Google (DB first), a Neo4j rotate
+  persists the new credentials only **after** the runner accepted them: a rejected rotate returns
+  422 without touching the DB, and a reconcile racing with it keeps the previous credentials.
+- Google Sheets instance import is refused for non-Google runners.
 
 ### 5. Gateway — runner sync isolation (required fix)
 
@@ -136,13 +158,14 @@ no `mcp-neo4j-cypher`, and vice versa) and would kill-loop.
 ### 6. Frontend — `mcp-gateway-frontend`
 
 `TemplateInstanceFormView.vue`: when `template.runner === 'neo4j'`, render URI, user, password
-(`type="password"`, never pre-filled on edit), database (placeholder `neo4j`) and a "Read-only"
-checkbox checked by default, instead of the SA JSON file upload. Rotate view reuses the same fields.
-`TemplatesView.vue` shows the Neo4j card from the catalog; no other view changes.
+(`type="password"`, never pre-filled on edit), database (placeholder `neo4j`) and a "Lecture seule"
+checkbox checked by default, instead of the SA JSON file upload, and require a tool prefix other
+than `neo4j`. `RotateCredentialsModal.vue` reuses the same fields. `TemplateDetailView.vue` hides
+"Import depuis Sheets" for Neo4j templates. `TemplatesView.vue` shows the Neo4j card from the catalog.
 
 ### 7. `docker-compose.yml`
 
-New service `mcp-template-neo4j-service`, profile `mcp`, `expose:` 8597 and 15100–15199 (no host
+New service `mcp-template-neo4j-service`, profile `mcp`, `expose:` 8598 and 15100–15199 (no host
 `ports:`), healthcheck on `/admin/health`, `json-file` logging (`max-size: 10m`, `max-file: 3`),
 same network as the gateway. Gateway service gets the two `NEO4J_TEMPLATES_RUNNER_*` variables.
 
@@ -160,7 +183,9 @@ same network as the gateway. Gateway service gets the two `NEO4J_TEMPLATES_RUNNE
 | Case | Behaviour |
 |---|---|
 | Invalid URI / empty field / bad `NEO4J_READ_ONLY` | 400 from the gateway, nothing persisted |
-| Neo4j unreachable or auth failure | Runner 422 → gateway returns 422 with the code, rolls back the row (existing spawn-failure path) |
+| Neo4j refuses the pre-check | Runner 422 `{"detail":{"code","message"}}` → gateway returns 422 `"<code>: <message>"`; create rolls back the row (existing spawn-failure path), rotate leaves the DB and the running instance untouched |
+| Missing or `neo4j` tool prefix | 400 from the gateway (collision with the static Neo4j server) |
+| Catalog import changes the runner of a template with instances | 409, nothing imported |
 | Neo4j runner not configured | 503 on create/rotate/restart; Google templates unaffected |
 | Subprocess crash | Inherited supervisor backoff; `runner_status=failed` + `stderr_tail` in the detail view |
 | Runner restart | `gateway_sync` → filtered sync → re-spawn on the stored `RunnerPort` |
