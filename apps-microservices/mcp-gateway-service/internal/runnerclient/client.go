@@ -17,6 +17,32 @@ type Client struct {
 	http       *http.Client
 }
 
+// StatusError is returned for any runner response with status >= 400. The
+// Error() text is unchanged from the untyped error it replaces.
+type StatusError struct {
+	Method     string
+	Path       string
+	StatusCode int
+	Body       map[string]any
+}
+
+func (e *StatusError) Error() string {
+	return fmt.Sprintf("runner %s %s: status %d: %v", e.Method, e.Path, e.StatusCode, e.Body)
+}
+
+// Detail returns detail.code / detail.message from a runner body shaped
+// {"detail":{"code":…,"message":…}} (the Neo4j runner's pre-check 422).
+// Both are empty for any other body.
+func (e *StatusError) Detail() (code, message string) {
+	d, ok := e.Body["detail"].(map[string]any)
+	if !ok {
+		return "", ""
+	}
+	code, _ = d["code"].(string)
+	message, _ = d["message"].(string)
+	return code, message
+}
+
 func New(baseURL, adminToken string) *Client {
 	// http.Client has no overall Timeout — per-call deadlines are enforced via
 	// context.WithTimeout in each method (Spawn=30s, Kill/Restart/List=15s,
@@ -59,7 +85,7 @@ func (c *Client) do(ctx context.Context, method, path string, body any, out any)
 	if resp.StatusCode >= 400 {
 		var errBody map[string]any
 		_ = json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&errBody)
-		return fmt.Errorf("runner %s %s: status %d: %v", method, path, resp.StatusCode, errBody)
+		return &StatusError{Method: method, Path: path, StatusCode: resp.StatusCode, Body: errBody}
 	}
 	if out != nil {
 		return json.NewDecoder(resp.Body).Decode(out)
