@@ -10,6 +10,15 @@
 
 ---
 
+## Retours d'expérience intégrés (L6, 29-30/09)
+
+- **Une file vide à la bascule ne dit rien de la charge.** Avant P5, calculer la **capacité en vol VM** (réplicas × `PREFETCH_COUNT`) et regarder l'**historique horaire VM** (`docker logs -t --since 48h`, rafales nocturnes). Un service à timeout long ou à trafic en rafales démarre **à la parité VM** ; les paliers ne valent que pour les files régulières. Cas L6 : `embedding-service` laissé à 1 réplica (VM : 4 × 2) → 11 662 messages en attente au matin, corrigé par la parité (file vidée en 14 min).
+- **Creux de trafic ≠ panne** : un flux en rafales peut rester muet une heure après la bascule. Trancher avec l'historique VM heure par heure et l'activité du producteur, avant toute action.
+- **Webhook sortant** : pas de message de test artificiel ; sonde `GET` sans signature en P1 (joignabilité), puis surveillance des **premiers envois réels** avec coupure automatique au premier `401/403` (`l6_webhook_watch.sh`). Le service regroupe les messages (50 par appel ou 5 s) : reçus ≠ appels, c'est normal.
+- **Relevés** : `kubectl logs deploy/<x>` ne lit **qu'un pod** ; compter les erreurs avec `-l app=<x> --prefix`. Filtrer les files par **nom exact** (`awk '$1 in q'`), pas par motif.
+- **Commandes VM** : vérifier le prompt (`deploy@vm-embedding…`) avant `docker stop` — lancée dans le Git Bash local, la commande échoue sans effet, mais retarde P2.
+- **Chrono L6** : arrêt VM → preuve broker **~4 min 30** (9 conteneurs, 3 services).
+
 ## Retours d'expérience intégrés (L4, 24/09)
 
 - **Écrivains qui suppriment ou mettent à jour** : « supprimer `id > borne` » ne défait pas une suppression. Filet retenu : **sauvegarde Milvus à la demande juste après P2** (`kubectl -n milvus-prod create job --from=cronjob/milvus-backup-daily <nom>`, ~4 min 10), VM arrêtée, avant la première écriture GKE — point de retour exact. Les files attendent pendant la sauvegarde, sans perte. Le job du CronJob crée sans jamais purger.
