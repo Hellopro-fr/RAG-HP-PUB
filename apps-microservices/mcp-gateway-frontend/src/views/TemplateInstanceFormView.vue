@@ -67,7 +67,7 @@
 
             <!-- Required extra env -->
             <div
-              v-if="template.required_extra_env && template.required_extra_env.length > 0"
+              v-if="!isNeo4j && template.required_extra_env && template.required_extra_env.length > 0"
               class="space-y-3 border border-gray-200 dark:border-gray-800 rounded-md p-4"
             >
               <p class="text-xs font-semibold text-gray-700 dark:text-gray-300">
@@ -100,7 +100,7 @@
             </div>
 
             <!-- Service account JSON file -->
-            <div>
+            <div v-if="!isNeo4j">
               <label
                 for="instance-credentials"
                 class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
@@ -130,6 +130,84 @@
               </p>
               <p class="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
                 Fichier JSON (max 16 Ko). Le contenu ne quitte jamais le navigateur tant que vous ne cliquez pas sur Créer.
+              </p>
+            </div>
+            <!-- Neo4j connection (runner = neo4j) -->
+            <div
+              v-else
+              class="space-y-3 border border-gray-200 dark:border-gray-800 rounded-md p-4"
+            >
+              <p class="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                Connexion Neo4j
+              </p>
+              <div>
+                <label for="neo4j-uri" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  URI <span class="text-red-500">*</span>
+                </label>
+                <input
+                  id="neo4j-uri"
+                  v-model="form.neo4j.uri"
+                  type="text"
+                  autocomplete="off"
+                  placeholder="bolt://neo4j:7687"
+                  class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
+                />
+              </div>
+              <div>
+                <label for="neo4j-username" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Utilisateur <span class="text-red-500">*</span>
+                </label>
+                <input
+                  id="neo4j-username"
+                  v-model="form.neo4j.username"
+                  type="text"
+                  autocomplete="off"
+                  class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
+                />
+              </div>
+              <div>
+                <label for="neo4j-password" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Mot de passe <span class="text-red-500">*</span>
+                </label>
+                <input
+                  id="neo4j-password"
+                  v-model="form.neo4j.password"
+                  type="password"
+                  autocomplete="new-password"
+                  class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
+                />
+              </div>
+              <div>
+                <label for="neo4j-database" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Base de données
+                </label>
+                <input
+                  id="neo4j-database"
+                  v-model="form.neo4j.database"
+                  type="text"
+                  autocomplete="off"
+                  placeholder="neo4j"
+                  class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30"
+                />
+              </div>
+              <label class="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
+                <input id="neo4j-read-only" v-model="form.read_only" type="checkbox" class="mt-0.5" />
+                <span>
+                  Lecture seule
+                  <span class="block text-xs text-gray-500 dark:text-gray-400">
+                    Masque l'outil <code class="font-mono">write_neo4j_cypher</code> pour tous les utilisateurs de cette instance.
+                  </span>
+                </span>
+              </label>
+              <p
+                v-if="neo4jTouched && neo4jError"
+                class="text-xs text-error-600 dark:text-error-400 flex items-center gap-1"
+              >
+                <i class="pi pi-exclamation-triangle text-[11px]" />
+                {{ neo4jError }}
+              </p>
+              <p class="text-[11px] text-gray-500 dark:text-gray-400">
+                La connexion est vérifiée à la création. Le mot de passe est chiffré et ne sera plus affiché.
               </p>
             </div>
           </div>
@@ -195,6 +273,7 @@
                 placeholder="myprefix"
               />
               <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">Alphanumérique uniquement</p>
+              <p v-if="neo4jPrefixError" class="text-xs text-error-600 dark:text-error-400 mt-1">{{ neo4jPrefixError }}</p>
             </div>
 
             <!-- Auto-discover -->
@@ -229,7 +308,7 @@
               </div>
 
               <!-- Credentials -->
-              <div class="py-2 grid grid-cols-3 gap-4">
+              <div v-if="!isNeo4j" class="py-2 grid grid-cols-3 gap-4">
                 <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Compte de service</dt>
                 <dd class="text-sm text-gray-900 dark:text-white col-span-2 font-mono text-xs break-all">
                   {{ fileInfo || (form.file ? form.file.name : '—') }}
@@ -238,7 +317,7 @@
 
               <!-- Extra env -->
               <div
-                v-if="template.required_extra_env && template.required_extra_env.length > 0"
+                v-if="!isNeo4j && template.required_extra_env && template.required_extra_env.length > 0"
                 class="py-2 grid grid-cols-3 gap-4"
               >
                 <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Variables env</dt>
@@ -251,6 +330,16 @@
                     <span class="text-gray-500 dark:text-gray-400">{{ field.key }}</span> =
                     <span>{{ form.extra_env[field.key] || '—' }}</span>
                   </div>
+                </dd>
+              </div>
+
+              <!-- Neo4j connection recap (password never shown) -->
+              <div v-if="isNeo4j" class="py-2 grid grid-cols-3 gap-4">
+                <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Connexion Neo4j</dt>
+                <dd class="text-sm text-gray-900 dark:text-white col-span-2 font-mono text-xs space-y-0.5">
+                  <div>{{ form.neo4j.uri }}</div>
+                  <div>{{ form.neo4j.username }} @ {{ form.neo4j.database || 'neo4j' }}</div>
+                  <div class="font-sans">{{ form.read_only ? 'Lecture seule' : 'Lecture et écriture' }}</div>
                 </dd>
               </div>
 
@@ -351,6 +440,13 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
+import {
+  emptyNeo4jConnection,
+  isNeo4jTemplate,
+  readOnlyExtraEnv,
+  validateNeo4jConnection
+} from '@/components/templates/neo4jConnection'
+import type { Neo4jConnectionInput } from '@/components/templates/neo4jConnection'
 import { useRouter } from 'vue-router'
 import { useTemplatesStore } from '@/stores/templates'
 import { useServersStore } from '@/stores/servers'
@@ -382,6 +478,12 @@ const fileError = ref('')
 const submitError = ref('')
 
 const template = ref<Template | null>(null)
+const isNeo4j = computed(() => isNeo4jTemplate(template.value))
+const neo4jError = computed(() => (isNeo4j.value ? validateNeo4jConnection(form.neo4j) : null))
+// Show the validation message only once the admin has started typing.
+const neo4jTouched = computed(
+  () => !!(form.neo4j.uri || form.neo4j.username || form.neo4j.password)
+)
 
 const form = reactive<{
   name: string
@@ -391,6 +493,8 @@ const form = reactive<{
   icon: string
   tool_prefix: string
   auto_discover: boolean
+  neo4j: Neo4jConnectionInput
+  read_only: boolean
 }>({
   name: '',
   extra_env: {},
@@ -398,7 +502,9 @@ const form = reactive<{
   tags: [],
   icon: '',
   tool_prefix: '',
-  auto_discover: true
+  auto_discover: true,
+  neo4j: emptyNeo4jConnection(),
+  read_only: true
 })
 
 const toolPrefixValid = computed(() => {
@@ -408,9 +514,13 @@ const toolPrefixValid = computed(() => {
 
 const isStep0Valid = computed(() => {
   if (!form.name.trim()) return false
-  if (!form.file) return false
-  if (fileError.value) return false
-  if (template.value?.required_extra_env) {
+  if (isNeo4j.value) {
+    if (neo4jError.value) return false
+  } else {
+    if (!form.file) return false
+    if (fileError.value) return false
+  }
+  if (!isNeo4j.value && template.value?.required_extra_env) {
     for (const field of template.value.required_extra_env) {
       if (field.required) {
         const v = form.extra_env[field.key]
@@ -421,7 +531,15 @@ const isStep0Valid = computed(() => {
   return true
 })
 
-const isStep1Valid = computed(() => toolPrefixValid.value)
+const neo4jPrefixError = computed(() => {
+  if (!isNeo4j.value) return null
+  const p = form.tool_prefix.trim()
+  if (!p) return 'Préfixe obligatoire pour une instance Neo4j (ex. neo4jprod)'
+  if (p.toLowerCase() === 'neo4j') return 'Préfixe déjà utilisé par le serveur Neo4j statique : choisissez-en un autre'
+  return null
+})
+
+const isStep1Valid = computed(() => toolPrefixValid.value && !neo4jPrefixError.value)
 
 const completedStepsArray = computed(() => {
   const completed: number[] = []
@@ -521,7 +639,8 @@ async function onFile(e: Event): Promise<void> {
 }
 
 async function handleSubmit(): Promise<void> {
-  if (!form.file || !template.value) return
+  if (!template.value) return
+  if (!isNeo4j.value && !form.file) return
   submitting.value = true
   submitError.value = ''
   try {
@@ -529,11 +648,13 @@ async function handleSubmit(): Promise<void> {
     for (const [k, v] of Object.entries(form.extra_env)) {
       if (v && v.trim()) extraEnvCleaned[k] = v
     }
+    const extraEnv = isNeo4j.value ? readOnlyExtraEnv(form.read_only) : extraEnvCleaned
     await store.createInstance({
       template_slug: template.value.slug,
       name: form.name,
-      extra_env: Object.keys(extraEnvCleaned).length ? extraEnvCleaned : undefined,
-      credentials: form.file,
+      extra_env: Object.keys(extraEnv).length ? extraEnv : undefined,
+      credentials: isNeo4j.value ? undefined : form.file ?? undefined,
+      neo4j: isNeo4j.value ? { ...form.neo4j } : undefined,
       tags: form.tags.length ? form.tags : undefined,
       icon: form.icon || undefined,
       tool_prefix: form.tool_prefix || undefined,
