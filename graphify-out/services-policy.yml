@@ -230,6 +230,8 @@ not_graphed:
     reason: templated_wrapper
   - path: apps-microservices/mcp-google-templates-runner
     reason: templated_wrapper
+  - path: apps-microservices/mcp-template-neo4j-service
+    reason: templated_wrapper
   - path: apps-microservices/mcp-leexi-service
     reason: templated_wrapper
   - path: apps-microservices/mcp-ringover-service
