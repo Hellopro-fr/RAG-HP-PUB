@@ -27,7 +27,7 @@ This is **service-level** access (who may reach the MCP server). It is independe
 | # | Topic | Decision |
 |---|---|---|
 | G1 | Which servers | **Neo4j template instances only**: a backend is *restricted* when `TemplateSlug != ""` and the template with that slug has `runner = "neo4j"` (so it also covers Neo4j templates created later from the "Créer" page). No new column, no generic per-server flag (explicitly not chosen). |
-| G2 | Rule | Allowed ⇔ the request carries an end-user email **and** (`gateway_users.role == "admin"` **or** `server_authorizations(server_id, email)` exists). |
+| G2 | Rule | Allowed ⇔ the request carries an end-user email **and** (`gateway_users.role == "admin"` with `is_allowed = true` **or** `server_authorizations(server_id, email)` exists). An admin disabled on the Users page (`is_allowed = false`) is not an admin for this gate, so offboarding also closes access through still-valid OAuth2 tokens. `is_allowed` is **not** applied to the grant path (account-synced users are created with `is_allowed = false`). |
 | G3 | Callers without email | `mcp_…` scope tokens and `client_credentials` OAuth2 grants carry no end-user email → **always denied** on restricted servers. |
 | G4 | Failure mode | **Fail-closed**: template / user lookup errors and unwired repositories → denied. A missing template row for a non-empty `template_slug` (FK is RESTRICT, so only a corrupted DB) → treated as restricted and denied. |
 | G5 | Unrestricted servers | Behaviour unchanged, including the static `mcp-neo4j-service` (no `template_slug`), Google, Zoho, leexi, ringover, bdd, hellodata. |
@@ -79,6 +79,7 @@ Build one `Neo4jAccess` from the existing `TemplateRepo`, `UserRepo` and `Server
 | `ScopedGateway.handleToolsCall` | JSON-RPC error `access denied: this server requires an admin role or a server authorization`; the call is not forwarded |
 | `ScopedGateway.handleResourcesList` / `handlePromptsList` | the backend's resources / prompts are omitted — these two handlers gain a `ctx context.Context` parameter (they have none on poc) |
 | `ScopedGateway.handleResourcesRead` / `handlePromptsGet` | same JSON-RPC error, not forwarded |
+| `ScopedGateway.handleInitialize` | capabilities are computed from the visible backends only, and every `per_server` LLM instruction none of whose `ServerIDs` is visible is dropped from `instructions` (an instruction bound to a hidden instance typically carries its graph schema); `general` instructions are kept |
 | `AuthServer.renderConsent` (HTML) and `buildServerList` (JSON API) | the server is omitted from the list shown to the viewer |
 | Consent **submission** (the POST that stores the selected servers) | a submitted server id the viewer is not allowed to see is dropped (never stored in the consent / OAuth2 client scope) |
 
@@ -113,4 +114,5 @@ Viewer identity: `scopetoken.EndUserEmailFromContext(ctx)` in the scoped gateway
 - A generic per-server "grant required" flag and switching HelloData to it (HelloData keeps its own spec).
 - `min_role` on template instances.
 - Frontend badges / hints for restricted instances.
+- REST/UI listings (GET /api/v1/servers incl. include_all, GET /api/v1/servers/{id}, /api/v1/tools|resources|prompts) still list Neo4j instances and tool names to every authenticated web user — names only, no data or calls; follow-up: inject Neo4jAccess into api.Handler and filter these listings / refuse selecting a denied server in token and client forms.
 - Reconciling with #807's `min_role` gate: when #807 is merged into poc, both gates sit at the same enforcement points and must be merged into one predicate — a known, mechanical follow-up.
