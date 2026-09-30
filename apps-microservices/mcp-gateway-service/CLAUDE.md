@@ -197,6 +197,7 @@ Scope-token accepts and rejects log an `auth_source=x-mcp-scope-token|bearer` ta
 ### Template Catalog (`/api/v1/`)
 - `GET /templates` — list available templates (seeded: GA4, GSC, Neo4j) with live instance counts
 - `GET /templates/{slug}` — template detail
+- `POST /templates` — create ONE template (admin-only, insert-only; body = one export row; 201, 400 on validation incl. slug `^[a-z0-9][a-z0-9-]{0,31}$` and reserved slugs `export|import|new`, 409 when the slug exists, active or not)
 - `GET /templates/export` — download the full catalog as JSON (active + inactive)
 - `POST /templates/import` — upsert templates from JSON (slug-keyed, transactional, no instances)
 - `GET/POST /template-instances` — list / create instance (POST is multipart: template_slug, name, extra_env JSON, plus a credentials file (Google runner) or neo4j_uri / neo4j_username / neo4j_password / neo4j_database fields (Neo4j runner))

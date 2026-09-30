@@ -11,12 +11,14 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"mcp-gateway/internal/auth"
 	"mcp-gateway/internal/db"
+	"mcp-gateway/internal/repository"
 	"mcp-gateway/internal/runnerclient"
 	"mcp-gateway/internal/validation"
 	"gorm.io/gorm"
@@ -1044,6 +1046,75 @@ func (h *Handler) handleImportTemplates(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]int{"imported": len(rows)})
+}
+
+// templateSlugPattern matches the templates.slug column (varchar(32)) and
+// keeps slugs URL-safe for /templates/{slug}.
+var templateSlugPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
+
+// reservedTemplateSlugs collide with literal routes under /templates/ (API)
+// and /admin/templates/ (frontend).
+var reservedTemplateSlugs = map[string]bool{"export": true, "import": true, "new": true}
+
+// handleCreateTemplate inserts ONE template from a TemplateExportRow body.
+// Insert-only: an existing slug (active or not) is a 409, never an overwrite.
+// Row validation mirrors handleImportTemplates.
+func (h *Handler) handleCreateTemplate(w http.ResponseWriter, r *http.Request) {
+	if h.templateRepo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: "templates feature not configured"})
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxTemplateImportBody)
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		var mbe *http.MaxBytesError
+		if errors.As(err, &mbe) {
+			writeJSON(w, http.StatusRequestEntityTooLarge, ErrorResponse{Error: "payload too large (max 256 KB)"})
+			return
+		}
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "read body: " + err.Error()})
+		return
+	}
+	var row TemplateExportRow
+	if err := json.Unmarshal(body, &row); err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid JSON: " + err.Error()})
+		return
+	}
+	kind := row.Kind
+	if kind == "" {
+		kind = "stdio"
+	}
+	if strings.TrimSpace(row.Slug) == "" || strings.TrimSpace(row.Name) == "" {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "slug and name are required"})
+		return
+	}
+	if !templateSlugPattern.MatchString(row.Slug) {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "slug must match ^[a-z0-9][a-z0-9-]{0,31}$"})
+		return
+	}
+	if reservedTemplateSlugs[row.Slug] {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: fmt.Sprintf("slug %q is reserved", row.Slug)})
+		return
+	}
+	if kind == "stdio" && strings.TrimSpace(row.StdioCommand) == "" {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "stdio_command is required for stdio templates"})
+		return
+	}
+	tpl, err := fromTemplateExportRow(row)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
+		return
+	}
+	if err := h.templateRepo.Create(&tpl); err != nil {
+		if errors.Is(err, repository.ErrTemplateExists) {
+			writeJSON(w, http.StatusConflict, ErrorResponse{Error: "template slug already used: " + row.Slug})
+			return
+		}
+		log.Printf("[templates] create failed: %v", err)
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "create failed"})
+		return
+	}
+	writeJSON(w, http.StatusCreated, toTemplateResponse(tpl, 0))
 }
 
 // fromTemplateExportRow re-encodes the decoded JSON fields back to
