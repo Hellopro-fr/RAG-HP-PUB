@@ -226,6 +226,11 @@ func (h *Handler) importSingleEntry(r *http.Request, name string, entry mcpJSONE
 
 	// Auto-discover for remote servers only
 	// Use mcpHeaders directly because repo.Create() encrypted srv.AuthHeaders in-place
+	// Known gap: this path cannot set min_role (the .mcp.json import format has
+	// no such field) so it never pushes SetMinRole — harmless today since the
+	// DB value and the registry both default to "". If min_role ever becomes
+	// settable on this import path, add the push (see CLAUDE.md's min_role
+	// invariant).
 	if autoDiscover && mcpTransport != "stdio" && serverURL != "" {
 		if err := h.gw.DiscoverAndRegister(r.Context(), id, srv.URL, mcpHeaders); err != nil {
 			log.Printf("[api] import auto-discover failed for %s (%s): %v", name, srv.URL, err)

@@ -2519,6 +2519,40 @@ services:
       - services-net
     logging: *logging_defaults
 
+  # ── MCP HelloData Service ───────────────────────────────────────────────
+  mcp-hellodata-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/mcp-hellodata-service/Dockerfile
+    container_name: mcp-hellodata-service
+    profiles: [ "mcp" ]
+    restart: unless-stopped
+    # expose, PAS ports. L'autorisation de ce service repose sur des
+    # en-tetes non signes (X-End-User-Email, X-End-User-Role) : si un tiers
+    # peut joindre 8597 directement, X-End-User-Role: admin est forgeable
+    # et la liste HELLODATA_ALLOWED_EMAILS ne protege plus rien. La
+    # frontiere reseau EST la garantie (spec design § 7.1). mcp-leexi-service
+    # ci-dessus publie 8589:8589 ; cette divergence est deliberee, pas un
+    # oubli — ne pas "corriger" en ajoutant ports: ici.
+    expose:
+      - "8597"
+    environment:
+      - MCP_PORT=8597
+      - HELLODATA_BASE_URL=${HELLODATA_BASE_URL}
+      - HELLODATA_TOKEN=${HELLODATA_TOKEN}
+      - HELLODATA_PUBLIC_URL=${HELLODATA_PUBLIC_URL}
+      # Adresses separees par des virgules, autorisees en plus des admin.
+      # JAMAIS de valeur ici ni dans un .env.example : le depot est public.
+      - HELLODATA_ALLOWED_EMAILS=${HELLODATA_ALLOWED_EMAILS}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8597/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - services-net
+    logging: *logging_defaults
+
   # ── MCP Classification Produit Service ──────────────────────────────────
   mcp-classification-produit-service:
     build:
@@ -2603,6 +2637,9 @@ services:
       # Google Templates runner sidecar (dynamic SA-JSON-backed MCP instances)
       - GOOGLE_TEMPLATES_RUNNER_URL=http://mcp-google-templates-runner:8595
       - GOOGLE_TEMPLATES_RUNNER_ADMIN_TOKEN=${GOOGLE_TEMPLATES_RUNNER_ADMIN_TOKEN}
+      # Neo4j template runner (token must differ from the Google runner's)
+      - NEO4J_TEMPLATES_RUNNER_URL=http://mcp-template-neo4j-service:8598
+      - NEO4J_TEMPLATES_RUNNER_ADMIN_TOKEN=${NEO4J_TEMPLATES_RUNNER_ADMIN_TOKEN}
       # Zoho MCP sidecar (per-user credential routing)
       - ZOHO_INTERNAL_URL=http://mcp-zoho-service:8596
       - ZOHO_ADMIN_TOKEN=${ZOHO_GATEWAY_TOKEN}
@@ -2653,6 +2690,34 @@ services:
       - /tmp/secrets:mode=700,uid=1000,size=16m
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8595/admin/health" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    depends_on:
+      - mcp-gateway-service
+    networks:
+      - services-net
+    logging: *logging_defaults
+
+  mcp-template-neo4j-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/mcp-template-neo4j-service/Dockerfile
+    container_name: mcp-template-neo4j-service
+    profiles: [ "mcp" ]
+    restart: unless-stopped
+    expose:
+      - "8598"
+      - "15100-15199"
+    environment:
+      - MCP_GATEWAY_URL=http://mcp-gateway-service:8592
+      - MCP_GATEWAY_ADMIN_TOKEN=${NEO4J_TEMPLATES_RUNNER_ADMIN_TOKEN}
+      - RUNNER_ADMIN_TOKEN=${NEO4J_TEMPLATES_RUNNER_ADMIN_TOKEN}
+      - RUNNER_PORT=8598
+      - RUNNER_INSTANCE_PORT_START=15100
+      - RUNNER_INSTANCE_PORT_END=15199
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8598/admin/health" ]
       interval: 30s
       timeout: 5s
       retries: 3

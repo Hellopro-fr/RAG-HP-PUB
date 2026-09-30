@@ -161,8 +161,9 @@ func (g *Gateway) DiscoverAndRegister(ctx context.Context, id string, url string
 	}
 
 	// Preserve metadata that lives on the registry but wasn't fetched from
-	// the upstream init result: TemplateSlug, CreatedBy, Tags. Health-checker
-	// re-discovery would otherwise wipe them every probe cycle.
+	// the upstream init result: TemplateSlug, CreatedBy, Tags, ToolPrefix,
+	// MinRole. Health-checker re-discovery would otherwise wipe them every
+	// probe cycle — for MinRole that would silently un-gate the backend.
 	if prev := g.registry.FindByID(id); prev != nil {
 		if srv.TemplateSlug == "" {
 			srv.TemplateSlug = prev.TemplateSlug
@@ -175,6 +176,9 @@ func (g *Gateway) DiscoverAndRegister(ctx context.Context, id string, url string
 		}
 		if srv.ToolPrefix == "" {
 			srv.ToolPrefix = prev.ToolPrefix
+		}
+		if srv.MinRole == "" {
+			srv.MinRole = prev.MinRole
 		}
 	}
 

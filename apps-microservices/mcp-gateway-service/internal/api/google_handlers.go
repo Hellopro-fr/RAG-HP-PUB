@@ -404,6 +404,14 @@ func (h *Handler) handleImportInstancesFromSheet(w http.ResponseWriter, r *http.
 		})
 		return
 	}
+	// Sheet rows carry a service-account JSON cell: only Google-runner
+	// templates can be imported this way.
+	if runner := templateRunnerName(tpl); runner != RunnerGoogle {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{
+			Error: fmt.Sprintf("template %s does not support Google Sheets import (runner=%s)", tpl.Slug, runner),
+		})
+		return
+	}
 
 	// Every required schema field MUST be mapped before any network work. We
 	// reuse the template_dto schema shape (key + required).
@@ -847,6 +855,11 @@ func (h *Handler) importSheetRow(r *http.Request, rowNum int, row []string, colI
 	result.Status = "imported"
 
 	// Auto-discover for remote servers
+	// Known gap: this Google-templates import path cannot set min_role (no
+	// such field in the request), so it never pushes SetMinRole — harmless
+	// today since the DB value and the registry both default to "". If
+	// min_role ever becomes settable here, add the push (see CLAUDE.md's
+	// min_role invariant).
 	if req.AutoDiscover && srv.MCPTransport != "stdio" && serverURL != "" {
 		authHeaders := parseAuthHeaders(srv.AuthHeaders)
 		if err := h.gw.DiscoverAndRegister(r.Context(), id, srv.URL, authHeaders); err != nil {

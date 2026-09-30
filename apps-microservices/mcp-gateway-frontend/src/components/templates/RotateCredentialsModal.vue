@@ -6,16 +6,21 @@
         class="fixed left-1/2 top-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-lg bg-white dark:bg-gray-900 p-6 shadow-theme-xl max-h-[90vh] overflow-y-auto"
       >
         <DialogTitle class="text-lg font-semibold text-gray-900 dark:text-white">
-          Renouveler la clé &mdash; {{ instance?.name ?? '' }}
+          {{ isNeo4j ? 'Modifier la connexion' : 'Renouveler la clé' }} &mdash; {{ instance?.name ?? '' }}
         </DialogTitle>
         <DialogDescription class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          Téléversez une nouvelle clé JSON de compte de service. L'instance sera
-          redémarrée avec les nouvelles identifiants. L'ancienne clé est détruite.
+          <template v-if="!isNeo4j">
+            Téléversez une nouvelle clé JSON de compte de service. L'instance sera
+            redémarrée avec les nouvelles identifiants. L'ancienne clé est détruite.
+          </template>
+          <template v-else>
+            Saisissez les identifiants Neo4j (le mot de passe est obligatoire à chaque modification). La connexion est vérifiée avant de redémarrer l'instance ; en cas d'échec, l'instance continue avec les anciens identifiants.
+          </template>
         </DialogDescription>
 
         <form class="mt-5 space-y-5" @submit.prevent="submit">
           <!-- Service account JSON file -->
-          <div>
+          <div v-if="!isNeo4j">
             <label
               for="rotate-credentials"
               class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1"
@@ -48,6 +53,74 @@
               Fichier JSON (max 16 Ko). Le contenu ne quitte jamais le navigateur tant que vous ne cliquez pas sur Renouveler.
             </p>
           </div>
+          <!-- Neo4j connection -->
+          <div v-else class="space-y-3">
+            <div>
+              <label for="rotate-neo4j-uri" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                URI <span class="text-error-500">*</span>
+              </label>
+              <input
+                id="rotate-neo4j-uri"
+                v-model="neo4j.uri"
+                type="text"
+                autocomplete="off"
+                placeholder="bolt://neo4j:7687"
+                class="h-10 w-full rounded-lg border border-gray-300 bg-transparent px-3 text-sm text-gray-800 dark:border-gray-700 dark:text-white/90"
+              />
+            </div>
+            <div>
+              <label for="rotate-neo4j-username" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Utilisateur <span class="text-error-500">*</span>
+              </label>
+              <input
+                id="rotate-neo4j-username"
+                v-model="neo4j.username"
+                type="text"
+                autocomplete="off"
+                class="h-10 w-full rounded-lg border border-gray-300 bg-transparent px-3 text-sm text-gray-800 dark:border-gray-700 dark:text-white/90"
+              />
+            </div>
+            <div>
+              <label for="rotate-neo4j-password" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Mot de passe <span class="text-error-500">*</span>
+              </label>
+              <input
+                id="rotate-neo4j-password"
+                v-model="neo4j.password"
+                type="password"
+                autocomplete="new-password"
+                class="h-10 w-full rounded-lg border border-gray-300 bg-transparent px-3 text-sm text-gray-800 dark:border-gray-700 dark:text-white/90"
+              />
+            </div>
+            <div>
+              <label for="rotate-neo4j-database" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Base de données
+              </label>
+              <input
+                id="rotate-neo4j-database"
+                v-model="neo4j.database"
+                type="text"
+                autocomplete="off"
+                placeholder="neo4j"
+                class="h-10 w-full rounded-lg border border-gray-300 bg-transparent px-3 text-sm text-gray-800 dark:border-gray-700 dark:text-white/90"
+              />
+            </div>
+            <label class="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
+              <input id="rotate-neo4j-read-only" v-model="readOnly" type="checkbox" class="mt-0.5" />
+              <span>
+                Lecture seule
+                <span class="block text-xs text-gray-500 dark:text-gray-400">
+                  Masque l'outil <code class="font-mono">write_neo4j_cypher</code> pour tous les utilisateurs de cette instance.
+                </span>
+              </span>
+            </label>
+            <p
+              v-if="neo4jError && (neo4j.uri || neo4j.username || neo4j.password)"
+              class="text-xs text-error-600 dark:text-error-400"
+            >
+              {{ neo4jError }}
+            </p>
+          </div>
 
           <!-- Submit error -->
           <div
@@ -73,7 +146,7 @@
               class="px-4 py-2 text-sm font-medium text-white bg-brand-500 hover:bg-brand-600 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
               :disabled="!canSubmit"
             >
-              {{ submitting ? 'Rotation…' : 'Renouveler' }}
+              {{ submitting ? 'Rotation…' : (isNeo4j ? 'Enregistrer' : 'Renouveler') }}
             </button>
           </div>
         </form>
@@ -95,11 +168,18 @@ import {
 import { useTemplatesStore } from '@/stores/templates'
 import { ApiError } from '@/types/api'
 import { validateSaJson } from './validateSaJson'
+import {
+  emptyNeo4jConnection,
+  isReadOnly,
+  readOnlyExtraEnv,
+  validateNeo4jConnection
+} from './neo4jConnection'
 import type { TemplateInstance } from '@/types/templates'
 
 const props = defineProps<{
   instance: TemplateInstance | null
   open: boolean
+  runner?: string
 }>()
 
 const emit = defineEmits<{
@@ -115,9 +195,16 @@ const fileError = ref('')
 const submitError = ref('')
 const submitting = ref(false)
 
-const canSubmit = computed(
-  () => !!file.value && !fileError.value && !submitting.value && !!props.instance
-)
+const isNeo4j = computed(() => props.runner === 'neo4j')
+const neo4j = ref(emptyNeo4jConnection())
+const readOnly = ref(true)
+const neo4jError = computed(() => (isNeo4j.value ? validateNeo4jConnection(neo4j.value) : null))
+
+const canSubmit = computed(() => {
+  if (submitting.value || !props.instance) return false
+  if (isNeo4j.value) return !neo4jError.value
+  return !!file.value && !fileError.value
+})
 
 function resetForm(): void {
   file.value = null
@@ -125,13 +212,13 @@ function resetForm(): void {
   fileError.value = ''
   submitError.value = ''
   submitting.value = false
+  neo4j.value = emptyNeo4jConnection()
+  readOnly.value = isReadOnly(props.instance?.extra_env)
 }
 
 watch(
   () => props.open,
-  (o) => {
-    if (!o) resetForm()
-  }
+  () => resetForm()
 )
 
 async function onFile(e: Event): Promise<void> {
@@ -150,11 +237,19 @@ async function onFile(e: Event): Promise<void> {
 }
 
 async function submit(): Promise<void> {
-  if (!file.value || !props.instance) return
+  if (!props.instance) return
+  if (!isNeo4j.value && !file.value) return
   submitting.value = true
   submitError.value = ''
   try {
-    await store.rotateCredentials(props.instance.id, file.value)
+    if (isNeo4j.value) {
+      await store.rotateCredentials(props.instance.id, {
+        neo4j: { ...neo4j.value },
+        extra_env: readOnlyExtraEnv(readOnly.value)
+      })
+    } else {
+      await store.rotateCredentials(props.instance.id, file.value as File)
+    }
     emit('rotated')
     emit('update:open', false)
   } catch (e: unknown) {

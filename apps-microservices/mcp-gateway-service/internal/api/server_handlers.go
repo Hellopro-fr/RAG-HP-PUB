@@ -14,14 +14,14 @@ import (
 	"mcp-gateway/internal/auth"
 	"mcp-gateway/internal/bddcatalog"
 	"mcp-gateway/internal/config"
+	"mcp-gateway/internal/crypto"
 	"mcp-gateway/internal/db"
 	"mcp-gateway/internal/gateway"
 	goGoogle "mcp-gateway/internal/google"
-	"mcp-gateway/internal/crypto"
 	"mcp-gateway/internal/leexiadmin"
-	"mcp-gateway/internal/ringoveradmin"
 	oauth2pkg "mcp-gateway/internal/oauth2"
 	"mcp-gateway/internal/repository"
+	"mcp-gateway/internal/ringoveradmin"
 	"mcp-gateway/internal/runnerclient"
 	"mcp-gateway/internal/slack"
 	"mcp-gateway/internal/urlvalidation"
@@ -97,7 +97,10 @@ type Handler struct {
 	templateRepo *repository.TemplateRepo
 	instanceRepo *repository.InstanceRepo
 	runner       *runnerclient.Client
-	config       *config.Config
+	// runners holds the non-Google template runners (see SetRunners); the
+	// Google runner is `runner` above.
+	runners map[string]RunnerEndpoint
+	config  *config.Config
 	// slack is the optional Slack notification client. nil disables all
 	// discovery-time notifications (ToolsRegression). Wired via SetSlack.
 	slack *slack.Client
@@ -263,6 +266,11 @@ func (h *Handler) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !ValidMinRole(req.MinRole) {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "min_role must be one of: \"\", config-only, read-only, admin"})
+		return
+	}
+
 	id := uuid.New().String()
 	srv := db.MCPServer{
 		ID:                  id,
@@ -275,6 +283,7 @@ func (h *Handler) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 		MCPTransport:        mcpTransport,
 		MCPCommand:          req.MCPCommand,
 		ToolPrefix:          req.ToolPrefix,
+		MinRole:             req.MinRole,
 		Icon:                req.Icon,
 		DocSlug:             generateDocSlug(req.Name, id),
 		CreatedBy:           auth.UserEmailFromContext(r.Context()),
@@ -328,6 +337,12 @@ func (h *Handler) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 			// (zoho injector) sees them on first registration.
 			if len(req.Tags) > 0 {
 				h.registry.SetTags(id, req.Tags)
+			}
+			// This is a brand-new id, so gateway.go's rediscovery
+			// preservation clause has no prev entry to fall back to —
+			// push min_role explicitly or a gated server registers public.
+			if req.MinRole != "" {
+				h.registry.SetMinRole(id, req.MinRole)
 			}
 			// Récupère le serveur mis à jour pour sauvegarder les capabilities
 			if backend := h.registry.FindByID(id); backend != nil {
@@ -486,6 +501,13 @@ func (h *Handler) handleUpdateServer(w http.ResponseWriter, r *http.Request) {
 		}
 		updates["tool_prefix"] = *req.ToolPrefix
 	}
+	if req.MinRole != nil {
+		if !ValidMinRole(*req.MinRole) {
+			writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "min_role must be one of: \"\", config-only, read-only, admin"})
+			return
+		}
+		updates["min_role"] = *req.MinRole
+	}
 	if req.Icon != nil {
 		updates["icon"] = *req.Icon
 	}
@@ -530,6 +552,12 @@ func (h *Handler) handleUpdateServer(w http.ResponseWriter, r *http.Request) {
 		h.registry.SetToolPrefix(id, *req.ToolPrefix)
 	}
 
+	// Update min_role on the in-memory registry if changed (even without
+	// re-discovery) so the access gate takes effect immediately.
+	if req.MinRole != nil {
+		h.registry.SetMinRole(id, *req.MinRole)
+	}
+
 	// Re-discover if URL or auth headers changed
 	if (urlChanged || authChanged) && existing.IsActive {
 		h.registry.Unregister(id)
@@ -548,6 +576,10 @@ func (h *Handler) handleUpdateServer(w http.ResponseWriter, r *http.Request) {
 				refreshedTags = append(refreshedTags, t.Tag)
 			}
 			h.registry.SetTags(id, refreshedTags)
+			// Same reasoning for min_role: Unregister above drops the
+			// preservation clause's `prev`, so push the persisted value
+			// back in after the fresh init result lands.
+			h.registry.SetMinRole(id, refreshed.MinRole)
 			if backend := h.registry.FindByID(id); backend != nil {
 				h.saveBackendCapabilities(id, backend)
 			}
@@ -580,10 +612,10 @@ func (h *Handler) handleDeleteServer(w http.ResponseWriter, r *http.Request) {
 	// mcp_server_id.
 	if h.instanceRepo != nil {
 		if inst, ferr := h.instanceRepo.FindByMCPServerID(id); ferr == nil && inst != nil {
-			if h.runner != nil {
-				if kerr := h.runner.Kill(r.Context(), inst.ID); kerr != nil {
-					log.Printf("[api] runner kill failed for template instance %s (continuing with DB delete): %v", inst.ID, kerr)
-				}
+			if ep, rerr := h.runnerForInstance(inst); rerr != nil {
+				log.Printf("[api][WARN] %v — skipping kill for template instance %s (continuing with DB delete)", rerr, inst.ID)
+			} else if kerr := ep.Client.Kill(r.Context(), inst.ID); kerr != nil {
+				log.Printf("[api] runner kill failed for template instance %s (continuing with DB delete): %v", inst.ID, kerr)
 			}
 			if derr := h.instanceRepo.DeleteWithMCPServer(inst.ID); derr != nil {
 				log.Printf("[api] template-aware delete failed for %s: %v", inst.ID, derr)
@@ -627,6 +659,10 @@ func (h *Handler) handleEnableServer(w http.ResponseWriter, r *http.Request) {
 		_ = h.repo.UpdateHealth(id, "unhealthy", err.Error())
 	} else {
 		h.registry.SetToolPrefix(id, srv.ToolPrefix)
+		// handleDisableServer unregisters the backend outright, so a
+		// disable→enable cycle leaves gateway.go's preservation clause
+		// with no prev entry — push min_role explicitly here too.
+		h.registry.SetMinRole(id, srv.MinRole)
 		if backend := h.registry.FindByID(id); backend != nil {
 			h.saveBackendCapabilities(id, backend)
 		}
@@ -683,6 +719,10 @@ func (h *Handler) handleDiscoverServer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.registry.SetToolPrefix(id, srv.ToolPrefix)
+	// The explicit Unregister above wipes gateway.go's preservation clause's
+	// prev entry, same as the enable path — push min_role back in or a
+	// re-discover silently makes a gated server public.
+	h.registry.SetMinRole(id, srv.MinRole)
 	if backend := h.registry.FindByID(id); backend != nil {
 		h.saveBackendCapabilities(id, backend)
 	}
@@ -761,11 +801,11 @@ func (h *Handler) handleDisableTool(w http.ResponseWriter, r *http.Request, serv
 func (h *Handler) saveBackendCapabilities(id string, backend *gateway.BackendServer) {
 	capsRaw, _ := json.Marshal(backend.Capabilities)
 	dbSrv := &db.MCPServer{
-		ID:            id,
-		MessageURL:    backend.MessageURL,
-		TransportType: backend.TransportType,
-		ServerName:    backend.Name,
-		ServerVersion: backend.Version,
+		ID:              id,
+		MessageURL:      backend.MessageURL,
+		TransportType:   backend.TransportType,
+		ServerName:      backend.Name,
+		ServerVersion:   backend.Version,
 		CapabilitiesRaw: capsRaw,
 	}
 	for _, t := range backend.Tools {
@@ -898,6 +938,7 @@ func toServerResponse(srv *db.MCPServer) ServerResponse {
 		LastError:           srv.LastError,
 		LastDiscoveredAt:    srv.LastDiscoveredAt,
 		ToolPrefix:          srv.ToolPrefix,
+		MinRole:             srv.MinRole,
 		Icon:                srv.Icon,
 		ToolsCount:          len(srv.Tools),
 		ToolNames:           toolNames,

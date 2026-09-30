@@ -68,6 +68,7 @@
         <!-- Stdio-only header actions: hidden for Zoho templates -->
         <div v-if="!isZohoTemplate" class="flex items-center gap-2 shrink-0">
           <router-link
+            v-if="template?.runner !== 'neo4j'"
             :to="{ name: 'template-instance-sheet-import', params: { slug } }"
             class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-white/5 flex items-center gap-2 shrink-0"
           >
@@ -191,6 +192,7 @@
     <RotateCredentialsModal
       v-if="!isZohoTemplate"
       :instance="rotateTarget"
+      :runner="template?.runner"
       :open="rotateTarget !== null"
       @update:open="(o) => { if (!o) rotateTarget = null }"
       @rotated="onRotated"
