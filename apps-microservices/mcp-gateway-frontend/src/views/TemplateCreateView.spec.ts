@@ -136,4 +136,27 @@ describe('TemplateCreateView', () => {
     expect(w.find('#tpl-submit-error').text()).toMatch(/default_env/)
     expect(createTemplate).not.toHaveBeenCalled()
   })
+
+  it('still redirects when the catalog refresh fails after a successful create', async () => {
+    createTemplate.mockResolvedValue({ slug: 'my-tpl' })
+    fetchTemplates.mockRejectedValue(new Error('boom'))
+    const w = render()
+    await w.find('#tpl-slug').setValue('my-tpl')
+    await w.find('#tpl-name').setValue('My tpl')
+    await w.find('#tpl-command').setValue('mcp-x')
+    await w.find('form').trigger('submit')
+    await flushPromises()
+    expect(toastSuccess).toHaveBeenCalledWith('Template créé')
+    expect(push).toHaveBeenCalledWith({ name: 'template-detail', params: { slug: 'my-tpl' } })
+    expect(w.find('#tpl-submit-error').exists()).toBe(false)
+  })
+
+  it('does not throw on a malformed file and warns about an unknown runner', async () => {
+    const w = render()
+    await pickFile(w, JSON.stringify({ slug: 'x', name: 7, stdio_command: 'c', stdio_args: 'oops', tags: 'a', runner: 'mystery' }))
+    expect(w.find('#import-error').exists()).toBe(false)
+    expect((w.find('#tpl-slug').element as HTMLInputElement).value).toBe('x')
+    expect((w.find('#tpl-runner').element as HTMLSelectElement).value).toBe('mystery')
+    expect(w.find('#tpl-runner-warning').text()).toMatch(/Valeur inconnue : mystery/)
+  })
 })

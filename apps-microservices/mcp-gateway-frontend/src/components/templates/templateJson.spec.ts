@@ -111,4 +111,47 @@ describe('rowToForm / formToRow', () => {
     })
     expect(r).toMatchObject({ row: { slug: 'a', name: 'A', stdio_args: ['x', 'y'], tags: ['t1', 't2'] } })
   })
+
+  it('does not throw on malformed imported values and yields sane strings', () => {
+    const form = rowToForm({
+      slug: 5,
+      name: { a: 1 },
+      description: ['x'],
+      icon: null,
+      stdio_command: 12,
+      stdio_args: 'x',
+      tags: 'a',
+      tool_prefix: false
+    } as unknown as Partial<TemplateExportRow>)
+    expect(form.slug).toBe('5')
+    expect(form.name).toBe('')
+    expect(form.description).toBe('')
+    expect(form.icon).toBe('')
+    expect(form.stdio_command).toBe('12')
+    expect(form.stdio_args).toBe('')
+    expect(form.tags).toBe('')
+    expect(form.tool_prefix).toBe('')
+  })
+
+  it('keeps only string items of array fields', () => {
+    const form = rowToForm({ stdio_args: ['a', 1, null, 'b'], tags: ['t', {}] } as unknown as Partial<TemplateExportRow>)
+    expect(form.stdio_args).toBe('a\nb')
+    expect(form.tags).toBe('t')
+  })
+
+  it('ignores default_env / required_extra_env of the wrong shape', () => {
+    const form = rowToForm({ default_env: 'x', required_extra_env: {} } as unknown as Partial<TemplateExportRow>)
+    expect(form.default_env).toBe('{}')
+    expect(form.required_extra_env).toBe('[]')
+    const form2 = rowToForm({ default_env: [], required_extra_env: 'y' } as unknown as Partial<TemplateExportRow>)
+    expect(form2.default_env).toBe('{}')
+    expect(form2.required_extra_env).toBe('[]')
+  })
+
+  it('keeps an unknown runner / kind so the backend can reject it', () => {
+    const form = rowToForm({ runner: 'mystery', kind: 'weird' } as unknown as Partial<TemplateExportRow>)
+    expect(form.runner).toBe('mystery')
+    expect(form.kind).toBe('weird')
+    expect(formToRow(form)).toMatchObject({ row: { runner: 'mystery', kind: 'weird' } })
+  })
 })

@@ -110,14 +110,22 @@
             <select id="tpl-kind" v-model="form.kind" class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30">
               <option value="stdio">stdio</option>
               <option value="http_batch">http_batch</option>
+              <option v-if="kindUnknown" :value="form.kind">{{ form.kind }}</option>
             </select>
+            <p v-if="kindUnknown" id="tpl-kind-warning" class="text-xs text-warning-600 dark:text-warning-400 mt-1">
+              Valeur inconnue : {{ form.kind }} (la passerelle refusera ce template)
+            </p>
           </div>
           <div>
             <label for="tpl-runner" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Runner</label>
             <select id="tpl-runner" v-model="form.runner" class="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 shadow-theme-xs placeholder:text-gray-400 focus:border-brand-300 focus:outline-hidden focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:placeholder:text-white/30">
               <option value="google">google</option>
               <option value="neo4j">neo4j</option>
+              <option v-if="runnerUnknown" :value="form.runner">{{ form.runner }}</option>
             </select>
+            <p v-if="runnerUnknown" id="tpl-runner-warning" class="text-xs text-warning-600 dark:text-warning-400 mt-1">
+              Valeur inconnue : {{ form.runner }} (la passerelle refusera ce template)
+            </p>
           </div>
         </div>
 
@@ -267,6 +275,9 @@ const slugError = computed(() => {
   return ''
 })
 
+const kindUnknown = computed(() => !['stdio', 'http_batch'].includes(form.kind))
+const runnerUnknown = computed(() => !['google', 'neo4j'].includes(form.runner))
+
 const toolPrefixValid = computed(() => /^[a-zA-Z0-9]*$/.test(form.tool_prefix))
 
 const isValid = computed(() => {
@@ -323,7 +334,12 @@ async function handleSubmit(): Promise<void> {
   submitError.value = ''
   try {
     const created = await store.createTemplate(built.row)
-    await store.fetchTemplates()
+    // Best-effort: the template exists, a failed list refresh is not a failed create.
+    try {
+      await store.fetchTemplates()
+    } catch (refreshError) {
+      console.warn('Template list refresh failed', refreshError)
+    }
     toast.success('Template créé')
     router.push({ name: 'template-detail', params: { slug: created.slug } })
   } catch (e: unknown) {

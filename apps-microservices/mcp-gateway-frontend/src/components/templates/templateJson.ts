@@ -8,8 +8,10 @@ export interface TemplateForm {
   name: string
   description: string
   icon: string
-  kind: 'stdio' | 'http_batch'
-  runner: 'google' | 'neo4j'
+  // Plain strings: an unknown value from an imported file is kept as-is so
+  // the gateway answers 400 instead of the UI silently rewriting it.
+  kind: string
+  runner: string
   stdio_command: string
   // One argument per line.
   stdio_args: string
@@ -68,21 +70,35 @@ export function emptyTemplateForm(): TemplateForm {
   }
 }
 
+// Imported files are untrusted: coerce every field to the type the form needs.
+function str(v: unknown): string {
+  if (typeof v === 'string') return v
+  if (typeof v === 'number') return String(v)
+  return ''
+}
+
+function strList(v: unknown): string[] {
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []
+}
+
 export function rowToForm(row: Partial<TemplateExportRow>): TemplateForm {
+  const r = row as Record<string, unknown>
+  const env = r.default_env
+  const required = r.required_extra_env
   return {
-    slug: row.slug ?? '',
-    name: row.name ?? '',
-    description: row.description ?? '',
-    icon: row.icon ?? '',
-    kind: row.kind === 'http_batch' ? 'http_batch' : 'stdio',
-    runner: row.runner === 'neo4j' ? 'neo4j' : 'google',
-    stdio_command: row.stdio_command ?? '',
-    stdio_args: (row.stdio_args ?? []).join('\n'),
-    tool_prefix: row.tool_prefix ?? '',
-    tags: (row.tags ?? []).join(', '),
-    default_env: JSON.stringify(row.default_env ?? {}, null, 2),
-    required_extra_env: JSON.stringify(row.required_extra_env ?? [], null, 2),
-    is_active: row.is_active ?? true
+    slug: str(r.slug),
+    name: str(r.name),
+    description: str(r.description),
+    icon: str(r.icon),
+    kind: str(r.kind) || 'stdio',
+    runner: str(r.runner) || 'google',
+    stdio_command: str(r.stdio_command),
+    stdio_args: strList(r.stdio_args).join('\n'),
+    tool_prefix: str(r.tool_prefix),
+    tags: strList(r.tags).join(', '),
+    default_env: JSON.stringify(env && typeof env === 'object' && !Array.isArray(env) ? env : {}, null, 2),
+    required_extra_env: JSON.stringify(Array.isArray(required) ? required : [], null, 2),
+    is_active: typeof r.is_active === 'boolean' ? r.is_active : true
   }
 }
 
@@ -122,8 +138,8 @@ export function formToRow(form: TemplateForm): { row: TemplateExportRow } | { er
       required_extra_env: required as Array<Record<string, unknown>>,
       tool_prefix: form.tool_prefix,
       tags: form.tags.split(',').map(s => s.trim()).filter(Boolean),
-      kind: form.kind,
-      runner: form.runner,
+      kind: form.kind as TemplateExportRow['kind'],
+      runner: form.runner as TemplateExportRow['runner'],
       is_active: form.is_active
     }
   }
