@@ -1,12 +1,14 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"mcp-gateway/internal/auth"
 	"mcp-gateway/internal/db"
 )
 
@@ -101,5 +103,31 @@ func TestIsAdminOnly_TemplatesCreate(t *testing.T) {
 	}
 	if isAdminOnly("/api/v1/templates", http.MethodGet) {
 		t.Error("GET /api/v1/templates must stay open to authenticated users")
+	}
+}
+
+// Through the real route registration (Register + middleware chain), as admin.
+func TestRegister_TemplatesCollection_PostCreatesAndOtherMethods405(t *testing.T) {
+	h, _ := newTemplateAPITestHandler(t)
+	mux := http.NewServeMux()
+	h.Register(mux)
+	ctx := context.WithValue(context.Background(), auth.ContextKeyUserRole, auth.RoleAdmin)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/templates",
+		strings.NewReader(`{"slug":"via-mux","name":"Via mux","stdio_command":"c","is_active":true}`)).WithContext(ctx)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("POST status = %d body=%s", rr.Code, rr.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodPut, "/api/v1/templates", nil).WithContext(ctx)
+	rr = httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+	if rr.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("PUT status = %d", rr.Code)
+	}
+	if got := rr.Header().Get("Allow"); got != "GET, POST" {
+		t.Errorf("Allow = %q, want %q", got, "GET, POST")
 	}
 }
