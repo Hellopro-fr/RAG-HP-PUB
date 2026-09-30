@@ -1,10 +1,15 @@
 package api
 
 import (
+	"errors"
+	"fmt"
+	"net/http"
 	"strings"
 	"testing"
 
+	"mcp-gateway/internal/config"
 	"mcp-gateway/internal/db"
+	"mcp-gateway/internal/runnerclient"
 )
 
 func TestTemplateRunnerName(t *testing.T) {
@@ -52,5 +57,101 @@ func TestFromTemplateExportRow_RunnerDefaultsAndValidation(t *testing.T) {
 	_, err = fromTemplateExportRow(TemplateExportRow{Slug: "x", Name: "X", StdioCommand: "x", Runner: "docker"})
 	if err == nil || !strings.Contains(err.Error(), `unknown runner "docker"`) {
 		t.Fatalf("unknown runner: err = %v", err)
+	}
+}
+
+func TestRunnerEndpoint_Resolution(t *testing.T) {
+	google := runnerclient.New("http://mcp-google-templates-runner:8595", "google-tok")
+	neo := runnerclient.New("http://mcp-template-neo4j-service:8598", "neo-tok")
+	h := &Handler{
+		runner: google,
+		config: &config.Config{GoogleTemplatesRunnerURL: "http://mcp-google-templates-runner:8595", GoogleTemplatesRunnerAdminToken: "google-tok"},
+	}
+	h.SetRunners(map[string]RunnerEndpoint{RunnerNeo4j: {Client: neo, URL: "http://mcp-template-neo4j-service:8598", AdminToken: "neo-tok"}})
+
+	ep, err := h.runnerEndpoint(RunnerGoogle)
+	if err != nil || ep.Client != google || ep.URL != "http://mcp-google-templates-runner:8595" {
+		t.Fatalf("google: %+v err=%v", ep, err)
+	}
+	ep, err = h.runnerForTemplate(&db.Template{Slug: "neo4j", Runner: RunnerNeo4j})
+	if err != nil || ep.Client != neo {
+		t.Fatalf("neo4j: %+v err=%v", ep, err)
+	}
+
+	bare := &Handler{}
+	_, err = bare.runnerEndpoint(RunnerNeo4j)
+	if !isRunnerNotConfigured(err) || err.Error() != "runner neo4j not configured" {
+		t.Fatalf("missing neo4j: err=%v", err)
+	}
+	if _, err := bare.runnerEndpoint(RunnerGoogle); !isRunnerNotConfigured(err) {
+		t.Fatalf("missing google: err=%v", err)
+	}
+}
+
+func TestRunnerNameForToken(t *testing.T) {
+	h := &Handler{config: &config.Config{GoogleTemplatesRunnerAdminToken: "google-tok"}}
+	h.SetRunners(map[string]RunnerEndpoint{RunnerNeo4j: {Client: runnerclient.New("http://x:8598", "neo-tok"), URL: "http://x:8598", AdminToken: "neo-tok"}})
+	cases := []struct {
+		token string
+		want  string
+		ok    bool
+	}{
+		{"google-tok", RunnerGoogle, true}, // accepted even without a Google client (previous behaviour)
+		{"neo-tok", RunnerNeo4j, true},
+		{"wrong", "", false},
+		{"", "", false},
+	}
+	for _, c := range cases {
+		got, ok := h.runnerNameForToken(c.token)
+		if got != c.want || ok != c.ok {
+			t.Errorf("token %q: got (%q,%v), want (%q,%v)", c.token, got, ok, c.want, c.ok)
+		}
+	}
+
+	// Equal tokens: nobody can be identified, so nobody gets instances.
+	same := &Handler{config: &config.Config{GoogleTemplatesRunnerAdminToken: "same", Neo4jTemplatesRunnerAdminToken: "same"}}
+	if got, ok := same.runnerNameForToken("same"); ok || got != "" {
+		t.Errorf("equal tokens: got (%q,%v), want refusal", got, ok)
+	}
+}
+
+func TestRunnerHost(t *testing.T) {
+	cases := map[string]string{
+		"http://mcp-template-neo4j-service:8598":    "mcp-template-neo4j-service",
+		"https://mcp-google-templates-runner:8595/": "mcp-google-templates-runner",
+		"http://runner": "runner",
+		"runner:8598":   "runner",
+	}
+	for in, want := range cases {
+		if got := runnerHost(in); got != want {
+			t.Errorf("runnerHost(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestRunnerPrecheckMessage(t *testing.T) {
+	pre := &runnerclient.StatusError{StatusCode: http.StatusUnprocessableEntity, Body: map[string]any{
+		"detail": map[string]any{"code": "neo4j_auth_failed", "message": "Neo4j rejected the username or password"},
+	}}
+	if msg, ok := runnerPrecheckMessage(fmt.Errorf("wrapped: %w", pre)); !ok || msg != "neo4j_auth_failed: Neo4j rejected the username or password" {
+		t.Errorf("got %q %v", msg, ok)
+	}
+	if _, ok := runnerPrecheckMessage(&runnerclient.StatusError{StatusCode: http.StatusBadGateway}); ok {
+		t.Error("502 must not be a pre-check failure")
+	}
+	if _, ok := runnerPrecheckMessage(errors.New("dial tcp: refused")); ok {
+		t.Error("transport error must not be a pre-check failure")
+	}
+}
+
+func TestClassifyCreateInstanceError_NewKinds(t *testing.T) {
+	status, msg := classifyCreateInstanceError(&createInstanceError{Kind: createInstanceErrRunnerMissing, Err: runnerNotConfiguredError{name: RunnerNeo4j}})
+	if status != http.StatusServiceUnavailable || msg != "runner neo4j not configured" {
+		t.Errorf("runner missing: %d %q", status, msg)
+	}
+	pre := &runnerclient.StatusError{StatusCode: 422, Body: map[string]any{"detail": map[string]any{"code": "neo4j_unreachable", "message": "Neo4j unreachable at bolt://x:7687"}}}
+	status, msg = classifyCreateInstanceError(&createInstanceError{Kind: createInstanceErrPrecheck, Err: pre})
+	if status != http.StatusUnprocessableEntity || msg != "neo4j_unreachable: Neo4j unreachable at bolt://x:7687" {
+		t.Errorf("precheck: %d %q", status, msg)
 	}
 }
