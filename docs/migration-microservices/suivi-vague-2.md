@@ -21,9 +21,9 @@ Une ligne par adresse. C'est la vue « où en est chaque aiguillage ».
 | `rag.hellopro.eu` | VM `:8550` | Cloud Run `api-html-recherche` | A Gandi | V2-d | ⬜ | ⬜ | | | laissé up |
 | `login.hellopro.eu` | VM `:8601` | Cloud Run `account-service-frontend` | A Gandi | V2-d | ⬜ | ⬜ | | | laissé up |
 | `cmf.hellopro.eu` | VM `:3002` | front à créer | A Gandi | V2-d | ⬜ | ⬜ | | | laissé up |
-| `formulaire.hellopro.eu` | VM `:8579` | Cloud Run `nextjs-formulaire-hp` | A Gandi | V2-d (après Next 15) | ⬜ | ⬜ | | | laissé up |
+| `formulaire.hellopro.eu` | VM `:8579` | Cloud Run `nextjs-formulaire-hp` (shadow) | — | ⏭️ hors vague 2 (décision 3) | — | — | | | reste seul |
 | `nextjs-conseils.hellopro.eu` (derrière `conseils.hellopro.fr`) | VM `:8610` | Cloud Run `nextjs-conseils-hp` | A Gandi (± règle Ecritel) | V2-d (après GO PROD) | ⬜ | ⬜ | | | laissé up |
-| `dlq.hellopro.eu` | VM `:8585` (`dlq-manager-service`, profil `disabled`) | à décider | — | décision § 5 | — | — | | | |
+| `dlq.hellopro.eu` | VM `:8585` (`dlq-manager-service`, **UP**) — **restreint aux IP Hellopro depuis le 30/09** (F-HP-SEC-028 atténué) | à décider (décision 5) | — | — | — | — | | | |
 | `mep.hellopro.eu` | VM `:8321` | hors migration applicative | — | à qualifier | — | — | | | |
 
 ## 2. Routes internes
@@ -74,12 +74,15 @@ Une ligne par adresse. C'est la vue « où en est chaque aiguillage ».
 | 0.3 | Load balancer HTTPS prod (back-ends Cloud Run) | DSO | jeu 1/10 | ⬜ | IP du LB : |
 | 0.4 | Certificats par validation DNS (CNAME `_acme-challenge` chez Gandi) | DSO | jeu 1/10 | ⬜ | |
 | 0.5 | NEG GKE pour `api.` et `mcp.` rattachés au LB | DSO | ven 2/10 | ⬜ | |
-| 0.6 | TTL 300 s sur les 7 adresses | DSO | ven 2/10 | ⬜ | voir journal Gandi |
+| 0.6 | TTL 300 s sur les 6 adresses | DSO | ven 2/10 | ⬜ | voir journal Gandi |
 | 0.7 | Cloud Armor en observation sur le LB prod | DSO | ven 2/10 | ⬜ | |
 | 0.8 | Liste des URL en dur par service → tickets devs | DSO → devs | jeu 1/10 (liste) | ⬜ | |
 | 0.9 | Test VM → Cloud Run (entrée, authentification) | DSO | jeu 1/10 | ⬜ | résultat : OUI / NON → ordre V2-a |
 | 0.10 | Runbook HTTP + scripts P1 / bascule / relevés | DSO | ven 2/10 | ⬜ | |
 | 0.11 | Message à Ecritel | DSO | jeu 1/10 | ⬜ | voir § 4 |
+| 0.13 | Usage réel des services P9 sur la VM (logs 7 jours, appelants, routes `.env.url`) | DSO | jeu 1/10 | ⬜ | entrée de la décision 4 |
+| 0.14 | **F-HP-SEC-028** : journal d'accès `dlq.hellopro.eu`, puis fermeture de l'accès public (nginx) | DSO | **30/09 – 1/10, prioritaire** | ✅ | 30/09 12:44 UTC : allowlist 8 IP Hellopro + `deny all` ; `403` hors liste, accès bureau / télétravail / Ecritel OK ; aucune modification ni lecture de messages externe dans le journal |
+| 0.15 | Clé SSH ajoutée aux métadonnées **du projet** par `gcloud compute scp` (30/09, utilisateur `deploy`) : décider de la garder ou la retirer (accès à toutes les VM qui acceptent les clés projet) | DSO | fin de vague | ⬜ | |
 | 0.12 | Jeton Gandi LiveDNS temporaire (`hellopro.eu` seul, expiration ≈ 23/10) → Secret Manager `gandi-livedns-pat` ; scripts `GET`/`PUT`/`GET` | titulaire Gandi (création), DSO | jeu 1/10 | ⬜ | révocation prévue en fin de vague |
 
 ### V2-a — Routes gateway (lun 5 → mar 6/10)
@@ -121,7 +124,7 @@ Une ligne par adresse. C'est la vue « où en est chaque aiguillage ».
 | d.2 | `login.hellopro.eu` | DSO | d.1 + clients OAuth (devs SSO) | ⬜ | |
 | d.3 | `rag.hellopro.eu` | DSO | test de connexion par un dev | ⬜ | |
 | d.4 | `cmf.hellopro.eu`, front `mcp.` | devs puis DSO | fronts construits | ⬜ | |
-| d.5 | `formulaire.hellopro.eu` | devs puis DSO | Next 15 livré (F-HP-SEC-019) | ⬜ | |
+| d.5 | `formulaire.hellopro.eu` | — | — | ⏭️ | hors vague 2 (décision 3 du 30/09) |
 | d.6 | `conseils.hellopro.fr` (via `nextjs-conseils.hellopro.eu`) | PROD décide, DSO exécute | GO PROD + réponse Ecritel | ⬜ | |
 
 ### V2-e — Stockage (sem. du 19/10)
@@ -154,17 +157,19 @@ Une ligne par modification, **avant** de la faire (valeur d'origine notée = ret
 
 ## 5. Décisions
 
+Le détail de chaque décision (pourquoi, objectif, options, recommandation, conséquence si on ne tranche pas) : [`plan-vague-2.md` § 6](plan-vague-2.md#6-décisions--pourquoi-objectif-options-recommandation).
+
 | # | Décision | Qui | Échéance | Statut | Décision prise |
 |---|---|---|---|:--:|---|
 | 1 | Plan et calendrier ; un dev par service P4/P5 | CTO, LEAD | jeu 1/10 | ⬜ | |
-| 2 | Bascule de `conseils` (SEO, pages PHP non migrées) | PROD, LEAD | avant V2-d | ⬜ | |
-| 3 | Date de livraison Next 15 du formulaire | LEAD | jeu 1/10 | ⬜ | |
-| 4 | P9 à trancher (`api-gateway-service`, `api-model`, `api-chatbot`, `…-debug`, `SERVICE_CRAWLING`, `SERVICE_OPTIMOTEUR`) | LEAD | jeu 8/10 | ⬜ | |
-| 5 | `dlq-manager-service` : activer ou retirer `dlq.hellopro.eu` | métier, CTO | avant V2-c | ⬜ | |
-| 6 | Cloud Armor : critères de passage en blocage | RSSI | avant V2-d | ⬜ | |
-| 7 | CD GKE prod (F-HP-IND-005) : calage | CTO | jeu 1/10 | ⬜ | |
-| 8 | Certificats par validation DNS (évolution du module LB) | CTO, DSO | jeu 1/10 | ⬜ | |
-| 9 | Jeton API Gandi temporaire plutôt que l'interface | CTO, DSO | jeu 1/10 | ⬜ | |
+| 2 | Bascule de `conseils` (SEO, pages PHP non migrées) | PROD, LEAD | avant V2-d | ✅ | **30/09 : GO reco** — back-end seul ; comparaison préalable Cloud Run / VM, **contenus identiques exigés** |
+| 3 | Formulaire Next.js | LEAD | jeu 1/10 | ✅ | **30/09 : hors vague 2** — pas en production, fonctionnalités en cours ; Next 15 non urgent |
+| 4 | P9 à trancher (`api-gateway-service`, `api-model`, `api-chatbot`, `…-debug`, `SERVICE_CRAWLING`, `SERVICE_OPTIMOTEUR`) | LEAD | jeu 8/10 | 🔄 | 30/09 : **revérifier l'usage réel sur la VM d'abord** (action 0.13, DSO), puis décision service par service |
+| 5 | `dlq-manager-service` / `dlq.hellopro.eu` | métier, CTO | avant V2-c | 🔄 | ⚠️ 30/09 : service **UP depuis 2 mois** sur la VM, **exposé sans authentification** (F-HP-SEC-028 CRITICAL) → **accès fermé aux IP Hellopro le 30/09** (0.14 ✅). Journal : outil **utilisé** (requeue quotidien par le bureau, appels Ecritel) → la décision penche vers **migrer derrière authentification en V2-c** |
+| 6 | Cloud Armor : critères de passage en blocage | RSSI | avant V2-d | ✅ | **30/09 : option A** — observation, blocage adresse par adresse après 7 jours sans faux positif, limite de débit sur `login.` (« la sécurité est importante ») |
+| 7 | CD GKE prod (F-HP-IND-005) : calage | CTO | jeu 1/10 | ✅ | **30/09 : GO, progressif** — cadrage 1-2/10, puis **un service par jour**, testé et validé avant le suivant (à partir du 19/10) |
+| 8 | Certificats par validation DNS (évolution du module LB) | CTO, DSO | jeu 1/10 | ✅ | **30/09 : GO reco** (Certificate Manager, CNAME Gandi) |
+| 9 | Jeton API Gandi temporaire plutôt que l'interface | CTO, DSO | jeu 1/10 | ✅ | **30/09 : GO** — le jeton va être créé (action 0.12) |
 
 ---
 
@@ -172,4 +177,4 @@ Une ligne par modification, **avant** de la faire (valeur d'origine notée = ret
 
 | Date | Événement |
 |---|---|
-| 30/09 | Série des consumers close (GO L6). Inventaire vague 2 : 85 services encore sur la VM. Faits confirmés : DNS `hellopro.fr` / `hellopro.eu` pilotés par nous sur Gandi ; Apache `hellopro.fr` = Ecritel ; `*.hellopro.eu` Gandi → VM directe ; `conseils.hellopro.fr` résout vers le front Ecritel (45.223.103.188) ; vhost VM `nextjs-conseils.hellopro.eu` → `:8610`. Plan et suivi rédigés, à valider le 1/10. |
+| 30/09 | Série des consumers close (GO L6). Inventaire vague 2 : 85 services encore sur la VM. Faits confirmés : DNS `hellopro.fr` / `hellopro.eu` pilotés par nous sur Gandi ; Apache `hellopro.fr` = Ecritel ; `*.hellopro.eu` Gandi → VM directe ; `conseils.hellopro.fr` résout vers le front Ecritel (45.223.103.188) ; vhost VM `nextjs-conseils.hellopro.eu` → `:8610`. Plan et suivi rédigés, à valider le 1/10. Décision 3 prise : formulaire hors vague 2 (pas en production). Détail des décisions ajouté au plan (§ 6). Soir : décisions 2, 6, 7, 8, 9 prises ; 4 = revérifier l'usage sur la VM ; **5 : `dlq-manager-service` UP depuis 2 mois et `dlq.hellopro.eu` exposé sans authentification → F-HP-SEC-028 (CRITICAL)**, mesure immédiate. |
