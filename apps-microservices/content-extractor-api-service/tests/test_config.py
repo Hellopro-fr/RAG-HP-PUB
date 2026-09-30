@@ -11,7 +11,7 @@ def test_new_defaults():
     assert settings.REDIS_URL.startswith("redis://")
     assert settings.RESULT_CACHE_ENABLED is True
     assert settings.RESULT_CACHE_TTL_S == 86400
-    assert settings.RESULT_CACHE_VERSION == "v1"
+    assert settings.RESULT_CACHE_VERSION == "v2"
     assert settings.SYNC_MAX_INFLIGHT == 0
     assert settings.ASYNC_JOBS_ENABLED is True
     assert settings.MAX_ACTIVE_JOBS == 8

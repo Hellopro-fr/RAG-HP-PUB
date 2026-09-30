@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     # --- Result cache ---
     RESULT_CACHE_ENABLED: bool = True
     RESULT_CACHE_TTL_S: int = 86400          # 24h (HTML drifts; crawler re-crawls)
-    RESULT_CACHE_VERSION: str = "v1"         # bump on extractor/boilerpy3 algo change
+    RESULT_CACHE_VERSION: str = "v2"         # bump on extractor/boilerpy3 algo change
 
     # --- Sync admission (0 = disabled, always admit) ---
     SYNC_MAX_INFLIGHT: int = 0
