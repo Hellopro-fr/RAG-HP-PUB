@@ -6,7 +6,7 @@ Python sidecar that hosts the Neo4j template instances spawned by the gateway's 
 
 - Python 3.11, FastAPI, Uvicorn, asyncio
 - `mcp-proxy` wraps the stdio MCP server into SSE/HTTP
-- Upstream package: `mcp-neo4j-cypher>=0.6.0`; `neo4j` driver for the pre-check
+- Upstream packages: `mcp-neo4j-cypher>=0.6.0,<0.7` and `mcp-proxy>=0.11.0,<0.13` (isolation verified against 0.6.x; re-verify env/flag names on each bump); `neo4j` driver for the pre-check
 
 ## Credentials
 
