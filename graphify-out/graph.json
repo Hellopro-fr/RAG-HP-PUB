@@ -4572,8 +4572,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\extractor\\HeaderFooterExtractor.py",
       "source_location": "L1",
       "community": 30,
-      "id": "libs_common_utils_src_common_utils_extractor_headerfooterextractor_py",
-      "norm_label": "headerfooterextractor.py"
+      "norm_label": "headerfooterextractor.py",
+      "id": "libs_common_utils_src_common_utils_extractor_headerfooterextractor_py"
     },
     {
       "label": "HeaderFooterExtractor",
@@ -4581,8 +4581,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\extractor\\HeaderFooterExtractor.py",
       "source_location": "L8",
       "community": 30,
-      "id": "headerfooterextractor_headerfooterextractor",
-      "norm_label": "headerfooterextractor"
+      "norm_label": "headerfooterextractor",
+      "id": "headerfooterextractor_headerfooterextractor"
     },
     {
       "label": ".__init__()",
@@ -4590,8 +4590,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\extractor\\HeaderFooterExtractor.py",
       "source_location": "L42",
       "community": 30,
-      "id": "headerfooterextractor_headerfooterextractor_init",
-      "norm_label": ".__init__()"
+      "norm_label": ".__init__()",
+      "id": "headerfooterextractor_headerfooterextractor_init"
     },
     {
       "label": ".get_cleaned_text()",
@@ -4599,8 +4599,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\extractor\\HeaderFooterExtractor.py",
       "source_location": "L58",
       "community": 30,
-      "id": "headerfooterextractor_headerfooterextractor_get_cleaned_text",
-      "norm_label": ".get_cleaned_text()"
+      "norm_label": ".get_cleaned_text()",
+      "id": "headerfooterextractor_headerfooterextractor_get_cleaned_text"
     },
     {
       "label": ".extract_header()",
@@ -4608,8 +4608,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\extractor\\HeaderFooterExtractor.py",
       "source_location": "L91",
       "community": 30,
-      "id": "headerfooterextractor_headerfooterextractor_extract_header",
-      "norm_label": ".extract_header()"
+      "norm_label": ".extract_header()",
+      "id": "headerfooterextractor_headerfooterextractor_extract_header"
     },
     {
       "label": ".extract_footer()",
@@ -4617,8 +4617,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\extractor\\HeaderFooterExtractor.py",
       "source_location": "L201",
       "community": 30,
-      "id": "headerfooterextractor_headerfooterextractor_extract_footer",
-      "norm_label": ".extract_footer()"
+      "norm_label": ".extract_footer()",
+      "id": "headerfooterextractor_headerfooterextractor_extract_footer"
     },
     {
       "label": "._get_signature_class()",
@@ -4626,8 +4626,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\extractor\\HeaderFooterExtractor.py",
       "source_location": "L317",
       "community": 30,
-      "id": "headerfooterextractor_headerfooterextractor_get_signature_class",
-      "norm_label": "._get_signature_class()"
+      "norm_label": "._get_signature_class()",
+      "id": "headerfooterextractor_headerfooterextractor_get_signature_class"
     },
     {
       "label": "._get_signature_structural()",
@@ -4635,8 +4635,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\extractor\\HeaderFooterExtractor.py",
       "source_location": "L323",
       "community": 30,
-      "id": "headerfooterextractor_headerfooterextractor_get_signature_structural",
-      "norm_label": "._get_signature_structural()"
+      "norm_label": "._get_signature_structural()",
+      "id": "headerfooterextractor_headerfooterextractor_get_signature_structural"
     },
     {
       "label": "._get_element_path_segment()",
@@ -4644,8 +4644,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\extractor\\HeaderFooterExtractor.py",
       "source_location": "L342",
       "community": 30,
-      "id": "headerfooterextractor_headerfooterextractor_get_element_path_segment",
-      "norm_label": "._get_element_path_segment()"
+      "norm_label": "._get_element_path_segment()",
+      "id": "headerfooterextractor_headerfooterextractor_get_element_path_segment"
     },
     {
       "label": "._is_cookie_banner()",
@@ -4653,8 +4653,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\extractor\\HeaderFooterExtractor.py",
       "source_location": "L377",
       "community": 30,
-      "id": "headerfooterextractor_headerfooterextractor_is_cookie_banner",
-      "norm_label": "._is_cookie_banner()"
+      "norm_label": "._is_cookie_banner()",
+      "id": "headerfooterextractor_headerfooterextractor_is_cookie_banner"
     },
     {
       "label": ".run_intersection_logic()",
@@ -4662,8 +4662,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\extractor\\HeaderFooterExtractor.py",
       "source_location": "L391",
       "community": 30,
-      "id": "headerfooterextractor_headerfooterextractor_run_intersection_logic",
-      "norm_label": ".run_intersection_logic()"
+      "norm_label": ".run_intersection_logic()",
+      "id": "headerfooterextractor_headerfooterextractor_run_intersection_logic"
     },
     {
       "label": ".extract_with_fallback()",
@@ -4671,8 +4671,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\extractor\\HeaderFooterExtractor.py",
       "source_location": "L671",
       "community": 30,
-      "id": "headerfooterextractor_headerfooterextractor_extract_with_fallback",
-      "norm_label": ".extract_with_fallback()"
+      "norm_label": ".extract_with_fallback()",
+      "id": "headerfooterextractor_headerfooterextractor_extract_with_fallback"
     },
     {
       "label": ".extract_all_debug()",
@@ -4680,8 +4680,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\extractor\\HeaderFooterExtractor.py",
       "source_location": "L691",
       "community": 30,
-      "id": "headerfooterextractor_headerfooterextractor_extract_all_debug",
-      "norm_label": ".extract_all_debug()"
+      "norm_label": ".extract_all_debug()",
+      "id": "headerfooterextractor_headerfooterextractor_extract_all_debug"
     },
     {
       "label": "A class to extract header and footer text from HTML content.     It uses Beauti",
@@ -4689,8 +4689,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\extractor\\HeaderFooterExtractor.py",
       "source_location": "L9",
       "community": 30,
-      "id": "headerfooterextractor_rationale_9",
-      "norm_label": "a class to extract header and footer text from html content.     it uses beauti"
+      "norm_label": "a class to extract header and footer text from html content.     it uses beauti",
+      "id": "headerfooterextractor_rationale_9"
     },
     {
       "label": "Extracts and cleans the text from a BeautifulSoup element.         It removes s",
@@ -71744,8 +71744,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\extractor\\HeaderFooterExtractor.py",
       "source_location": "L350",
       "community": 30,
-      "id": "headerfooterextractor_headerfooterextractor_build_structural_sig_map",
-      "norm_label": "._build_structural_sig_map()"
+      "norm_label": "._build_structural_sig_map()",
+      "id": "headerfooterextractor_headerfooterextractor_build_structural_sig_map"
     },
     {
       "label": "Detects if a text block is likely a cookie/consent banner using robust regex pat",
@@ -100716,29 +100716,29 @@
       "id": "graphify_cross_link_invention_gotcha"
     },
     {
-      "label": "Gotcha: community re-clustering shuffles labels.json",
+      "label": "Gotcha: community labels after a merge \u2014 assert 0 drift, name the new communities, audit the ones that received nodes",
       "file_type": "document",
       "source_file": "docs/graphify-guide-en.md",
-      "source_location": "L310-322",
+      "source_location": "L310-326",
       "source_url": null,
       "captured_at": null,
       "author": null,
       "contributor": null,
       "community": 74,
-      "norm_label": "gotcha: community re-clustering shuffles labels.json",
+      "norm_label": "gotcha: community labels after a merge \u2014 assert 0 drift, name the new communities, audit the ones that received nodes",
       "id": "graphify_community_relabeling_gotcha"
     },
     {
-      "label": "Rationale: labels should derive from community content, not be human-assigned",
+      "label": "Rule: labels come from community content; no hand relabel of the largest communities when drift is 0",
       "file_type": "document",
       "source_file": "docs/graphify-guide-en.md",
-      "source_location": "L324",
+      "source_location": "L313-314,326",
       "source_url": null,
       "captured_at": null,
       "author": null,
       "contributor": null,
       "community": 74,
-      "norm_label": "rationale: labels should derive from community content, not be human-assigned",
+      "norm_label": "rule: labels come from community content; no hand relabel of the largest communities when drift is 0",
       "id": "graphify_label_derivation_rationale"
     },
     {
@@ -124588,8 +124588,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\extractor\\HeaderFooterExtractor.py",
       "source_location": "L644",
       "community": 30,
-      "id": "headerfooterextractor_headerfooterextractor_select_by_priority",
-      "norm_label": "._select_by_priority()"
+      "norm_label": "._select_by_priority()",
+      "id": "headerfooterextractor_headerfooterextractor_select_by_priority"
     },
     {
       "label": "Extracts and cleans the text from a BeautifulSoup element.         It removes s",
@@ -124597,8 +124597,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\extractor\\HeaderFooterExtractor.py",
       "source_location": "L59",
       "community": 30,
-      "id": "headerfooterextractor_rationale_59",
-      "norm_label": "extracts and cleans the text from a beautifulsoup element.         it removes s"
+      "norm_label": "extracts and cleans the text from a beautifulsoup element.         it removes s",
+      "id": "headerfooterextractor_rationale_59"
     },
     {
       "label": "Analyzes a BeautifulSoup object to robustly find and extract the text content of",
@@ -124606,8 +124606,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\extractor\\HeaderFooterExtractor.py",
       "source_location": "L92",
       "community": 30,
-      "id": "headerfooterextractor_rationale_92",
-      "norm_label": "analyzes a beautifulsoup object to robustly find and extract the text content of"
+      "norm_label": "analyzes a beautifulsoup object to robustly find and extract the text content of",
+      "id": "headerfooterextractor_rationale_92"
     },
     {
       "label": "Analyzes a BeautifulSoup object to robustly find and extract the text content of",
@@ -124615,8 +124615,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\extractor\\HeaderFooterExtractor.py",
       "source_location": "L202",
       "community": 30,
-      "id": "headerfooterextractor_rationale_202",
-      "norm_label": "analyzes a beautifulsoup object to robustly find and extract the text content of"
+      "norm_label": "analyzes a beautifulsoup object to robustly find and extract the text content of",
+      "id": "headerfooterextractor_rationale_202"
     },
     {
       "label": "Original signature strategy: Tag + Sorted Class Names.",
@@ -124624,8 +124624,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\extractor\\HeaderFooterExtractor.py",
       "source_location": "L318",
       "community": 30,
-      "id": "headerfooterextractor_rationale_318",
-      "norm_label": "original signature strategy: tag + sorted class names."
+      "norm_label": "original signature strategy: tag + sorted class names.",
+      "id": "headerfooterextractor_rationale_318"
     },
     {
       "label": "ZONE A Improvement: Structural signature based on DOM path.         Example: bo",
@@ -124633,8 +124633,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\extractor\\HeaderFooterExtractor.py",
       "source_location": "L324",
       "community": 30,
-      "id": "headerfooterextractor_rationale_324",
-      "norm_label": "zone a improvement: structural signature based on dom path.         example: bo"
+      "norm_label": "zone a improvement: structural signature based on dom path.         example: bo",
+      "id": "headerfooterextractor_rationale_324"
     },
     {
       "label": "Helper to get 'tag:nth-of-type(i)' string.",
@@ -124642,8 +124642,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\extractor\\HeaderFooterExtractor.py",
       "source_location": "L343",
       "community": 30,
-      "id": "headerfooterextractor_rationale_343",
-      "norm_label": "helper to get 'tag:nth-of-type(i)' string."
+      "norm_label": "helper to get 'tag:nth-of-type(i)' string.",
+      "id": "headerfooterextractor_rationale_343"
     },
     {
       "label": "O(N) batch equivalent of calling _get_signature_structural on every         des",
@@ -124651,8 +124651,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\extractor\\HeaderFooterExtractor.py",
       "source_location": "L351",
       "community": 30,
-      "id": "headerfooterextractor_rationale_351",
-      "norm_label": "o(n) batch equivalent of calling _get_signature_structural on every         des"
+      "norm_label": "o(n) batch equivalent of calling _get_signature_structural on every         des",
+      "id": "headerfooterextractor_rationale_351"
     },
     {
       "label": "Detects if a text block is likely a cookie/consent banner using robust regex pat",
@@ -124660,8 +124660,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\extractor\\HeaderFooterExtractor.py",
       "source_location": "L378",
       "community": 30,
-      "id": "headerfooterextractor_rationale_378",
-      "norm_label": "detects if a text block is likely a cookie/consent banner using robust regex pat"
+      "norm_label": "detects if a text block is likely a cookie/consent banner using robust regex pat",
+      "id": "headerfooterextractor_rationale_378"
     },
     {
       "label": "Uses boilerpy3 to strip noisy elements, then performs a structural tree",
@@ -124669,8 +124669,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\extractor\\HeaderFooterExtractor.py",
       "source_location": "L392",
       "community": 30,
-      "id": "headerfooterextractor_rationale_392",
-      "norm_label": "uses boilerpy3 to strip noisy elements, then performs a structural tree"
+      "norm_label": "uses boilerpy3 to strip noisy elements, then performs a structural tree",
+      "id": "headerfooterextractor_rationale_392"
     },
     {
       "label": "Pick header and footer along SELECTION_PRIORITY.          text_of(strategy, pa",
@@ -124678,8 +124678,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\extractor\\HeaderFooterExtractor.py",
       "source_location": "L645",
       "community": 30,
-      "id": "headerfooterextractor_rationale_645",
-      "norm_label": "pick header and footer along selection_priority.          text_of(strategy, pa"
+      "norm_label": "pick header and footer along selection_priority.          text_of(strategy, pa",
+      "id": "headerfooterextractor_rationale_645"
     },
     {
       "label": "Production Logic: Structural -> Class -> Original (SELECTION_PRIORITY)",
@@ -124687,8 +124687,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\extractor\\HeaderFooterExtractor.py",
       "source_location": "L672",
       "community": 30,
-      "id": "headerfooterextractor_rationale_672",
-      "norm_label": "production logic: structural -> class -> original (selection_priority)"
+      "norm_label": "production logic: structural -> class -> original (selection_priority)",
+      "id": "headerfooterextractor_rationale_672"
     },
     {
       "label": "header_footer_pages.py",
@@ -124696,8 +124696,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\header_footer_pages.py",
       "source_location": "L1",
       "community": 30,
-      "id": "libs_common_utils_tests_header_footer_pages_py",
-      "norm_label": "header_footer_pages.py"
+      "norm_label": "header_footer_pages.py",
+      "id": "libs_common_utils_tests_header_footer_pages_py"
     },
     {
       "label": "page()",
@@ -124705,8 +124705,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\header_footer_pages.py",
       "source_location": "L30",
       "community": 30,
-      "id": "header_footer_pages_page",
-      "norm_label": "page()"
+      "norm_label": "page()",
+      "id": "header_footer_pages_page"
     },
     {
       "label": "references()",
@@ -124714,8 +124714,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\header_footer_pages.py",
       "source_location": "L49",
       "community": 30,
-      "id": "header_footer_pages_references",
-      "norm_label": "references()"
+      "norm_label": "references()",
+      "id": "header_footer_pages_references"
     },
     {
       "label": "Synthetic pages shared by the HeaderFooterExtractor tests.  Page shape (common",
@@ -124723,8 +124723,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\header_footer_pages.py",
       "source_location": "L1",
       "community": 30,
-      "id": "header_footer_pages_rationale_1",
-      "norm_label": "synthetic pages shared by the headerfooterextractor tests.  page shape (common"
+      "norm_label": "synthetic pages shared by the headerfooterextractor tests.  page shape (common",
+      "id": "header_footer_pages_rationale_1"
     },
     {
       "label": "Reference pages, with `top` and/or `bottom` overridden.",
@@ -124732,8 +124732,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\header_footer_pages.py",
       "source_location": "L50",
       "community": 30,
-      "id": "header_footer_pages_rationale_50",
-      "norm_label": "reference pages, with `top` and/or `bottom` overridden."
+      "norm_label": "reference pages, with `top` and/or `bottom` overridden.",
+      "id": "header_footer_pages_rationale_50"
     },
     {
       "label": "test_HeaderFooterExtractor_fallback_characterization.py",
@@ -124741,8 +124741,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_HeaderFooterExtractor_fallback_characterization.py",
       "source_location": "L1",
       "community": 30,
-      "id": "libs_common_utils_tests_test_headerfooterextractor_fallback_characterization_py",
-      "norm_label": "test_headerfooterextractor_fallback_characterization.py"
+      "norm_label": "test_headerfooterextractor_fallback_characterization.py",
+      "id": "libs_common_utils_tests_test_headerfooterextractor_fallback_characterization_py"
     },
     {
       "label": "calls()",
@@ -124750,8 +124750,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_HeaderFooterExtractor_fallback_characterization.py",
       "source_location": "L107",
       "community": 30,
-      "id": "test_headerfooterextractor_fallback_characterization_calls",
-      "norm_label": "calls()"
+      "norm_label": "calls()",
+      "id": "test_headerfooterextractor_fallback_characterization_calls"
     },
     {
       "label": "test_production_output_is_frozen()",
@@ -124759,8 +124759,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_HeaderFooterExtractor_fallback_characterization.py",
       "source_location": "L133",
       "community": 30,
-      "id": "test_headerfooterextractor_fallback_characterization_test_production_output_is_frozen",
-      "norm_label": "test_production_output_is_frozen()"
+      "norm_label": "test_production_output_is_frozen()",
+      "id": "test_headerfooterextractor_fallback_characterization_test_production_output_is_frozen"
     },
     {
       "label": "test_production_short_circuit_is_frozen()",
@@ -124768,8 +124768,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_HeaderFooterExtractor_fallback_characterization.py",
       "source_location": "L140",
       "community": 30,
-      "id": "test_headerfooterextractor_fallback_characterization_test_production_short_circuit_is_frozen",
-      "norm_label": "test_production_short_circuit_is_frozen()"
+      "norm_label": "test_production_short_circuit_is_frozen()",
+      "id": "test_headerfooterextractor_fallback_characterization_test_production_short_circuit_is_frozen"
     },
     {
       "label": "Characterization of extract_with_fallback, the production path (R10 a).  Freez",
@@ -124777,8 +124777,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_HeaderFooterExtractor_fallback_characterization.py",
       "source_location": "L1",
       "community": 30,
-      "id": "test_headerfooterextractor_fallback_characterization_rationale_1",
-      "norm_label": "characterization of extract_with_fallback, the production path (r10 a).  freez"
+      "norm_label": "characterization of extract_with_fallback, the production path (r10 a).  freez",
+      "id": "test_headerfooterextractor_fallback_characterization_rationale_1"
     },
     {
       "label": "Record which strategies production runs, in order.",
@@ -124786,8 +124786,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_HeaderFooterExtractor_fallback_characterization.py",
       "source_location": "L108",
       "community": 30,
-      "id": "test_headerfooterextractor_fallback_characterization_rationale_108",
-      "norm_label": "record which strategies production runs, in order."
+      "norm_label": "record which strategies production runs, in order.",
+      "id": "test_headerfooterextractor_fallback_characterization_rationale_108"
     },
     {
       "label": "test_HeaderFooterExtractor_strategy_order.py",
@@ -124795,8 +124795,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_HeaderFooterExtractor_strategy_order.py",
       "source_location": "L1",
       "community": 30,
-      "id": "libs_common_utils_tests_test_headerfooterextractor_strategy_order_py",
-      "norm_label": "test_headerfooterextractor_strategy_order.py"
+      "norm_label": "test_headerfooterextractor_strategy_order.py",
+      "id": "libs_common_utils_tests_test_headerfooterextractor_strategy_order_py"
     },
     {
       "label": "both_paths()",
@@ -124804,8 +124804,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_HeaderFooterExtractor_strategy_order.py",
       "source_location": "L21",
       "community": 30,
-      "id": "test_headerfooterextractor_strategy_order_both_paths",
-      "norm_label": "both_paths()"
+      "norm_label": "both_paths()",
+      "id": "test_headerfooterextractor_strategy_order_both_paths"
     },
     {
       "label": "test_fixture_makes_strategies_disagree()",
@@ -124813,8 +124813,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_HeaderFooterExtractor_strategy_order.py",
       "source_location": "L27",
       "community": 30,
-      "id": "test_headerfooterextractor_strategy_order_test_fixture_makes_strategies_disagree",
-      "norm_label": "test_fixture_makes_strategies_disagree()"
+      "norm_label": "test_fixture_makes_strategies_disagree()",
+      "id": "test_headerfooterextractor_strategy_order_test_fixture_makes_strategies_disagree"
     },
     {
       "label": "test_debug_selects_what_production_selects()",
@@ -124822,8 +124822,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_HeaderFooterExtractor_strategy_order.py",
       "source_location": "L36",
       "community": 30,
-      "id": "test_headerfooterextractor_strategy_order_test_debug_selects_what_production_selects",
-      "norm_label": "test_debug_selects_what_production_selects()"
+      "norm_label": "test_debug_selects_what_production_selects()",
+      "id": "test_headerfooterextractor_strategy_order_test_debug_selects_what_production_selects"
     },
     {
       "label": "test_debug_reports_the_production_method()",
@@ -124831,8 +124831,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_HeaderFooterExtractor_strategy_order.py",
       "source_location": "L42",
       "community": 30,
-      "id": "test_headerfooterextractor_strategy_order_test_debug_reports_the_production_method",
-      "norm_label": "test_debug_reports_the_production_method()"
+      "norm_label": "test_debug_reports_the_production_method()",
+      "id": "test_headerfooterextractor_strategy_order_test_debug_reports_the_production_method"
     },
     {
       "label": "debug=true and debug=false must select the same header/footer (R10 a).  extrac",
@@ -124840,8 +124840,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_HeaderFooterExtractor_strategy_order.py",
       "source_location": "L1",
       "community": 30,
-      "id": "test_headerfooterextractor_strategy_order_rationale_1",
-      "norm_label": "debug=true and debug=false must select the same header/footer (r10 a).  extrac"
+      "norm_label": "debug=true and debug=false must select the same header/footer (r10 a).  extrac",
+      "id": "test_headerfooterextractor_strategy_order_rationale_1"
     },
     {
       "label": "Guard: the page must keep original and intersection apart, or the     consisten",
@@ -124849,8 +124849,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_HeaderFooterExtractor_strategy_order.py",
       "source_location": "L28",
       "community": 30,
-      "id": "test_headerfooterextractor_strategy_order_rationale_28",
-      "norm_label": "guard: the page must keep original and intersection apart, or the     consisten"
+      "norm_label": "guard: the page must keep original and intersection apart, or the     consisten",
+      "id": "test_headerfooterextractor_strategy_order_rationale_28"
     },
     {
       "label": "HeaderFooterExtractor SELECTION_PRIORITY: the one header/footer selection table, read by extract_with_fallback (production) and extract_all_debug \u2014 per part Structural \u2192 Class \u2192 Original, first non-empty text wins, production method labels",
@@ -124887,6 +124887,786 @@
       "norm_label": "changing selection_priority changes what website-processor-service ingests and what content-extractor-api-service serves: bump the latter's result_cache_version",
       "community": 30,
       "id": "cu_v63_table_change_requires_cache_bump"
+    },
+    {
+      "label": "_preserve_and_place merge (since 37247ad5, 2026-08-07): prior nodes keep their community, only new nodes are placed",
+      "file_type": "document",
+      "source_file": "docs/graphify-guide-en.md",
+      "source_location": "L310",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "_preserve_and_place merge (since 37247ad5, 2026-08-07): prior nodes keep their community, only new nodes are placed",
+      "community": 74,
+      "id": "graphify_preserve_and_place_merge"
+    },
+    {
+      "label": "mcp-template-neo4j-service design spec (admin-created named Neo4j MCP template instances)",
+      "file_type": "document",
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": "2026-09-29",
+      "author": null,
+      "contributor": null,
+      "norm_label": "mcp-template-neo4j-service design spec (admin-created named neo4j mcp template instances)",
+      "community": 27,
+      "id": "mcp_template_neo4j_design_doc"
+    },
+    {
+      "label": "Goal: admin creates any number of named Neo4j MCP instances (own URI/user/password/database, read-only or read-write), each a separate gateway backend with its own tool prefix (e.g. neo4jprod_read_neo4j_cypher)",
+      "file_type": "document",
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Goal, lines 7-15",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "goal: admin creates any number of named neo4j mcp instances (own uri/user/password/database, read-only or read-write), each a separate gateway backend with its own tool prefix (e.g. neo4jprod_read_neo4j_cypher)",
+      "community": 27,
+      "id": "mcp_template_neo4j_goal"
+    },
+    {
+      "label": "Current state: Neo4j served by one static mcp-neo4j-service (port 8587, mcp-proxy wrapping mcp-neo4j-cypher, single .env credential set, prefix neo4j)",
+      "file_type": "document",
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Current state, lines 17-24",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "current state: neo4j served by one static mcp-neo4j-service (port 8587, mcp-proxy wrapping mcp-neo4j-cypher, single .env credential set, prefix neo4j)",
+      "community": 27,
+      "id": "mcp_template_neo4j_current_static_server"
+    },
+    {
+      "label": "Current state: template flow is Google-specific in five places (SA JSON check on create, GOOGLE_APPLICATION_CREDENTIALS in supervisor, single runner client, instance host from Google runner URL, runner sync returns every instance)",
+      "file_type": "document",
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Current state, lines 25-35",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "current state: template flow is google-specific in five places (sa json check on create, google_application_credentials in supervisor, single runner client, instance host from google runner url, runner sync returns every instance)",
+      "community": 27,
+      "id": "mcp_template_neo4j_current_google_specific_flow"
+    },
+    {
+      "label": "Current state: template extra_env stored as plaintext JSON; only EncryptedCredentials is encrypted",
+      "file_type": "document",
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Current state, line 36",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "current state: template extra_env stored as plaintext json; only encryptedcredentials is encrypted",
+      "community": 27,
+      "id": "mcp_template_neo4j_current_extra_env_plaintext"
+    },
+    {
+      "label": "Decision: one instance = one named connection (URI + user + password + database + read-only flag), covering several databases and several access profiles on one database",
+      "file_type": "document",
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Decisions, line 42",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "decision: one instance = one named connection (uri + user + password + database + read-only flag), covering several databases and several access profiles on one database",
+      "community": 27,
+      "id": "mcp_template_neo4j_decision_instance_model"
+    },
+    {
+      "label": "Decision: Neo4j credentials entered as form fields, serialized to JSON by the gateway and stored in EncryptedCredentials (same encryption as Google), never in extra_env",
+      "file_type": "document",
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Decisions, line 43",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "decision: neo4j credentials entered as form fields, serialized to json by the gateway and stored in encryptedcredentials (same encryption as google), never in extra_env",
+      "community": 27,
+      "id": "mcp_template_neo4j_decision_credentials_storage"
+    },
+    {
+      "label": "Decision: access control = per-instance NEO4J_READ_ONLY flag applied to every user of the instance; no per-user differentiation, min_role out of scope",
+      "file_type": "document",
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Decisions, line 44",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "decision: access control = per-instance neo4j_read_only flag applied to every user of the instance; no per-user differentiation, min_role out of scope",
+      "community": 27,
+      "id": "mcp_template_neo4j_decision_read_only_flag"
+    },
+    {
+      "label": "Decision: Architecture A - separate runner service mcp-template-neo4j-service plus runner routing in the gateway",
+      "file_type": "document",
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Decisions, line 45",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "decision: architecture a - separate runner service mcp-template-neo4j-service plus runner routing in the gateway",
+      "community": 27,
+      "id": "mcp_template_neo4j_decision_architecture_a"
+    },
+    {
+      "label": "Decision: static mcp-neo4j-service left untouched; migrating it to a template instance is out of scope",
+      "file_type": "document",
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Decisions, line 46",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "decision: static mcp-neo4j-service left untouched; migrating it to a template instance is out of scope",
+      "community": 27,
+      "id": "mcp_template_neo4j_decision_static_untouched"
+    },
+    {
+      "label": "Architecture flow: admin Neo4j form -> mcp-gateway-service (8581, templates.runner=neo4j) -> POST /admin/instances -> runner (8598) -> one mcp-proxy + mcp-neo4j-cypher per instance on ports 15100-15199, each registered as an mcp_servers backend",
+      "file_type": "document",
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Architecture, lines 48-65",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "architecture flow: admin neo4j form -> mcp-gateway-service (8581, templates.runner=neo4j) -> post /admin/instances -> runner (8598) -> one mcp-proxy + mcp-neo4j-cypher per instance on ports 15100-15199, each registered as an mcp_servers backend",
+      "community": 27,
+      "id": "mcp_template_neo4j_architecture_flow"
+    },
+    {
+      "label": "Component 1: new runner mcp-template-neo4j-service - same layout and admin API contract as mcp-google-templates-runner (gateway runnerclient reused unchanged), python:3.11-slim, non-root",
+      "file_type": "document",
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Components section 1, lines 69-76 and 94-103",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "component 1: new runner mcp-template-neo4j-service - same layout and admin api contract as mcp-google-templates-runner (gateway runnerclient reused unchanged), python:3.11-slim, non-root",
+      "community": 27,
+      "id": "mcp_template_neo4j_runner_component"
+    },
+    {
+      "label": "No secret file: credentials_json mapped to NEO4J_URI/USERNAME/PASSWORD/DATABASE after the template env; NEO4J_URL, NEO4J_TRANSPORT, NEO4J_MCP_SERVER_* stripped; connection stdio_args flags (incl. argparse abbreviations like --pass) rejected; password masked in stderr tail",
+      "file_type": "document",
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Components section 1, lines 77-85",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "no secret file: credentials_json mapped to neo4j_uri/username/password/database after the template env; neo4j_url, neo4j_transport, neo4j_mcp_server_* stripped; connection stdio_args flags (incl. argparse abbreviations like --pass) rejected; password masked in stderr tail",
+      "community": 27,
+      "id": "mcp_template_neo4j_env_injection"
+    },
+    {
+      "label": "Connectivity pre-check on POST /admin/instances only: session on the configured database + RETURN 1 (5 s default; verify_connectivity() alone misses a missing database) -> HTTP 422 neo4j_* error code, no process started, no port consumed",
+      "file_type": "document",
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Components section 1, lines 86-93",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "connectivity pre-check on post /admin/instances only: session on the configured database + return 1 (5 s default; verify_connectivity() alone misses a missing database) -> http 422 neo4j_* error code, no process started, no port consumed",
+      "community": 27,
+      "id": "mcp_template_neo4j_connectivity_precheck"
+    },
+    {
+      "label": "Rationale: pre-check skipped on reconcile so a Neo4j blip while the runner restarts never orphans instances",
+      "file_type": "document",
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Components section 1, lines 92-93",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "rationale: pre-check skipped on reconcile so a neo4j blip while the runner restarts never orphans instances",
+      "community": 27,
+      "id": "mcp_template_neo4j_rationale_no_precheck_on_reconcile"
+    },
+    {
+      "label": "Verified in mcp-neo4j-cypher 0.6.0: read-only registers write_neo4j_cypher with enabled=not read_only, so the write tool disappears from tools/list instead of merely rejecting writes",
+      "file_type": "document",
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Components section 1, lines 98-102",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "verified in mcp-neo4j-cypher 0.6.0: read-only registers write_neo4j_cypher with enabled=not read_only, so the write tool disappears from tools/list instead of merely rejecting writes",
+      "community": 27,
+      "id": "mcp_template_neo4j_read_only_hides_write_tool"
+    },
+    {
+      "label": "Component 2: templates.runner varchar(16) NOT NULL DEFAULT 'google' + neo4j seed row (mcp-neo4j-cypher, NEO4J_READ_ONLY=true default); export/import carries runner, 409 if an import changes the runner of a template with instances",
+      "file_type": "document",
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Components section 2, lines 105-119",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "component 2: templates.runner varchar(16) not null default 'google' + neo4j seed row (mcp-neo4j-cypher, neo4j_read_only=true default); export/import carries runner, 409 if an import changes the runner of a template with instances",
+      "community": 27,
+      "id": "mcp_template_neo4j_catalog_runner_column"
+    },
+    {
+      "label": "Rationale: seed tool_prefix left empty because the static mcp-neo4j-service already owns 'neo4j' and the gateway has no tool-name collision check; create returns 400 for an empty or 'neo4j' prefix",
+      "file_type": "document",
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Components section 2, lines 115-117",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "rationale: seed tool_prefix left empty because the static mcp-neo4j-service already owns 'neo4j' and the gateway has no tool-name collision check; create returns 400 for an empty or 'neo4j' prefix",
+      "community": 27,
+      "id": "mcp_template_neo4j_rationale_empty_tool_prefix"
+    },
+    {
+      "label": "Component 3: gateway runner routing - NEO4J_TEMPLATES_RUNNER_URL/ADMIN_TOKEN, SetRunners registry, runnerForTemplate/runnerForInstance replace every h.runner call, 503 when unconfigured, runner 422 relayed via StatusError.Detail(), instance host from the selected runner",
+      "file_type": "document",
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Components section 3, lines 121-132",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "component 3: gateway runner routing - neo4j_templates_runner_url/admin_token, setrunners registry, runnerfortemplate/runnerforinstance replace every h.runner call, 503 when unconfigured, runner 422 relayed via statuserror.detail(), instance host from the selected runner",
+      "community": 27,
+      "id": "mcp_template_neo4j_runner_routing"
+    },
+    {
+      "label": "Component 4: create/rotate branch on tpl.Runner - neo4j_* multipart fields checked by ValidateNeo4jCredentials (bolt/neo4j URI schemes with host, non-empty user/password, database regex, default neo4j) then the existing encrypt + SHA-256 path",
+      "file_type": "document",
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Components section 4, lines 134-142",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "component 4: create/rotate branch on tpl.runner - neo4j_* multipart fields checked by validateneo4jcredentials (bolt/neo4j uri schemes with host, non-empty user/password, database regex, default neo4j) then the existing encrypt + sha-256 path",
+      "community": 27,
+      "id": "mcp_template_neo4j_credentials_validation"
+    },
+    {
+      "label": "Rationale: Neo4j extra_env accepts only NEO4J_READ_ONLY = true|false (400 otherwise) because any other NEO4J_* key could redirect the connection",
+      "file_type": "document",
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Components section 4, lines 143-144",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "rationale: neo4j extra_env accepts only neo4j_read_only = true|false (400 otherwise) because any other neo4j_* key could redirect the connection",
+      "community": 27,
+      "id": "mcp_template_neo4j_rationale_extra_env_whitelist"
+    },
+    {
+      "label": "Neo4j rotate persists new credentials only after the runner accepted them (Google stays DB-first): a rejected rotate returns 422 without touching the DB and a racing reconcile keeps the previous credentials",
+      "file_type": "document",
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Components section 4, lines 145-148",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "neo4j rotate persists new credentials only after the runner accepted them (google stays db-first): a rejected rotate returns 422 without touching the db and a racing reconcile keeps the previous credentials",
+      "community": 27,
+      "id": "mcp_template_neo4j_rotate_after_runner_accepts"
+    },
+    {
+      "label": "Google Sheets instance import refused for non-Google runners (TemplateDetailView hides 'Import depuis Sheets' for Neo4j templates)",
+      "file_type": "document",
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Components section 4, line 149",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "google sheets instance import refused for non-google runners (templatedetailview hides 'import depuis sheets' for neo4j templates)",
+      "community": 27,
+      "id": "mcp_template_neo4j_sheets_import_google_only"
+    },
+    {
+      "label": "Component 5 (required fix): handleRunnerSync identifies the caller by constant-time X-Admin-Token comparison against each runner token and returns only instances whose template has that runner",
+      "file_type": "document",
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Components section 5, lines 151-154",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "component 5 (required fix): handlerunnersync identifies the caller by constant-time x-admin-token comparison against each runner token and returns only instances whose template has that runner",
+      "community": 27,
+      "id": "mcp_template_neo4j_runner_sync_isolation"
+    },
+    {
+      "label": "Rationale: without sync isolation each runner's reconcile would spawn the other's instances (the Google image has no mcp-neo4j-cypher, and vice versa) and kill-loop",
+      "file_type": "document",
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Components section 5, lines 155-156",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "rationale: without sync isolation each runner's reconcile would spawn the other's instances (the google image has no mcp-neo4j-cypher, and vice versa) and kill-loop",
+      "community": 27,
+      "id": "mcp_template_neo4j_rationale_sync_kill_loop"
+    },
+    {
+      "label": "Component 6: mcp-gateway-frontend Neo4j form - URI, user, password (never pre-filled), database and a 'Lecture seule' checkbox checked by default instead of the SA JSON upload; RotateCredentialsModal reuses the fields",
+      "file_type": "document",
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Components section 6, lines 158-164",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "component 6: mcp-gateway-frontend neo4j form - uri, user, password (never pre-filled), database and a 'lecture seule' checkbox checked by default instead of the sa json upload; rotatecredentialsmodal reuses the fields",
+      "community": 27,
+      "id": "mcp_template_neo4j_frontend_form"
+    },
+    {
+      "label": "Component 7: docker-compose service mcp-template-neo4j-service - profile mcp, expose 8598 and 15100-15199 (no host ports), healthcheck /admin/health, json-file logging; gateway gets NEO4J_TEMPLATES_RUNNER_* vars",
+      "file_type": "document",
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Components section 7, lines 166-170",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "component 7: docker-compose service mcp-template-neo4j-service - profile mcp, expose 8598 and 15100-15199 (no host ports), healthcheck /admin/health, json-file logging; gateway gets neo4j_templates_runner_* vars",
+      "community": 27,
+      "id": "mcp_template_neo4j_compose_service"
+    },
+    {
+      "label": "Data flow - create: multipart POST /api/v1/template-instances -> validate + encrypt + template_instances row -> runnerFor(tpl).Spawn (pre-check, port) -> TCP-ready -> mcp_servers row + tool auto-discovery (3 tools, 2 when read-only)",
+      "file_type": "document",
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Data flow, lines 172-179",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "data flow - create: multipart post /api/v1/template-instances -> validate + encrypt + template_instances row -> runnerfor(tpl).spawn (pre-check, port) -> tcp-ready -> mcp_servers row + tool auto-discovery (3 tools, 2 when read-only)",
+      "community": 27,
+      "id": "mcp_template_neo4j_create_data_flow"
+    },
+    {
+      "label": "Error handling table: 400 bad fields / NEO4J_READ_ONLY / 'neo4j' prefix, 422 pre-check refusal (create rolls back, rotate untouched), 409 runner change on import, 503 runner not configured, supervisor backoff, password never logged",
+      "file_type": "document",
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Error handling, lines 181-192",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "error handling table: 400 bad fields / neo4j_read_only / 'neo4j' prefix, 422 pre-check refusal (create rolls back, rotate untouched), 409 runner change on import, 503 runner not configured, supervisor backoff, password never logged",
+      "community": 27,
+      "id": "mcp_template_neo4j_error_handling"
+    },
+    {
+      "label": "Testing plan: runner pytest (env mapping, pre-check 422 without spawn, reconcile), gateway go test (runnerFor, ValidateNeo4jCredentials, sync filtered by token, ga/gsc SA JSON regression), frontend vitest, manual read-only vs read-write check",
+      "file_type": "document",
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Testing, lines 194-208",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "testing plan: runner pytest (env mapping, pre-check 422 without spawn, reconcile), gateway go test (runnerfor, validateneo4jcredentials, sync filtered by token, ga/gsc sa json regression), frontend vitest, manual read-only vs read-write check",
+      "community": 27,
+      "id": "mcp_template_neo4j_testing"
+    },
+    {
+      "label": "Out of scope: per-user access / min_role on template instances, migrating the static mcp-neo4j-service, Google Sheets batch import for Neo4j instances",
+      "file_type": "document",
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Out of scope, lines 210-214",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "out of scope: per-user access / min_role on template instances, migrating the static mcp-neo4j-service, google sheets batch import for neo4j instances",
+      "community": 27,
+      "id": "mcp_template_neo4j_out_of_scope"
+    },
+    {
+      "label": "Neo4j MCP template implementation plan overview: Python runner spawning mcp-proxy + mcp-neo4j-cypher per instance, gateway templates.runner column + runner registry, Vue connection form (10 tasks)",
+      "file_type": "document",
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "lines 1-11",
+      "source_url": null,
+      "captured_at": "2026-09-29",
+      "author": null,
+      "contributor": null,
+      "norm_label": "neo4j mcp template implementation plan overview: python runner spawning mcp-proxy + mcp-neo4j-cypher per instance, gateway templates.runner column + runner registry, vue connection form (10 tasks)",
+      "community": 27,
+      "id": "mcp_template_neo4j_plan_doc"
+    },
+    {
+      "label": "Global constraints: runner admin port 8598 + pool 15100-15199, runner values google|neo4j, credentials JSON shape, accepted URI schemes, NEO4J_READ_ONLY-only extra_env, password never logged/echoed/returned/pre-filled, static mcp-neo4j-service untouched",
+      "file_type": "document",
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "lines 13-23",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "global constraints: runner admin port 8598 + pool 15100-15199, runner values google|neo4j, credentials json shape, accepted uri schemes, neo4j_read_only-only extra_env, password never logged/echoed/returned/pre-filled, static mcp-neo4j-service untouched",
+      "community": 27,
+      "id": "mcp_template_neo4j_plan_global_constraints"
+    },
+    {
+      "label": "Docker-only test commands (no local Go/pytest); gateway baseline of 86 pre-existing sqlite/cgo failures diffed after each gateway task, plus go vet and gofmt limited to created or baseline-clean files",
+      "file_type": "document",
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "lines 24-32",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "docker-only test commands (no local go/pytest); gateway baseline of 86 pre-existing sqlite/cgo failures diffed after each gateway task, plus go vet and gofmt limited to created or baseline-clean files",
+      "community": 27,
+      "id": "mcp_template_neo4j_plan_docker_test_baseline"
+    },
+    {
+      "label": "Review focus: five pinned risks - template env/stdio_args overriding the connection, wrong-password rotate, one runner receiving the other's instances, password in the stderr tail, Neo4j down at runner boot",
+      "file_type": "document",
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "lines 34-40",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "review focus: five pinned risks - template env/stdio_args overriding the connection, wrong-password rotate, one runner receiving the other's instances, password in the stderr tail, neo4j down at runner boot",
+      "community": 27,
+      "id": "mcp_template_neo4j_plan_review_focus"
+    },
+    {
+      "label": "File structure: new runner app/ modules (neo4j_env, precheck, supervisor + copies of the Google runner), gateway runners.go / template_credentials.go / validation/neo4j.go / runnerclient StatusError, frontend neo4jConnection.ts + views, root docker-compose.yml",
+      "file_type": "document",
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "lines 44-92",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "file structure: new runner app/ modules (neo4j_env, precheck, supervisor + copies of the google runner), gateway runners.go / template_credentials.go / validation/neo4j.go / runnerclient statuserror, frontend neo4jconnection.ts + views, root docker-compose.yml",
+      "community": 27,
+      "id": "mcp_template_neo4j_plan_file_structure"
+    },
+    {
+      "label": "Task 1: runner scaffold + credentials/env builder (neo4j_env.py parse_credentials, check_stdio_args, build_process_env; auth/models/port_pool copied from the Google runner)",
+      "file_type": "document",
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "Task 1, line 96",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "task 1: runner scaffold + credentials/env builder (neo4j_env.py parse_credentials, check_stdio_args, build_process_env; auth/models/port_pool copied from the google runner)",
+      "community": 27,
+      "id": "mcp_template_neo4j_task1_runner_scaffold_env_builder"
+    },
+    {
+      "label": "Task 2: connectivity pre-check (precheck.verify_connection -> PrecheckError neo4j_invalid_uri / auth_failed / database_not_found / unreachable / error)",
+      "file_type": "document",
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "Task 2, line 448",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "task 2: connectivity pre-check (precheck.verify_connection -> precheckerror neo4j_invalid_uri / auth_failed / database_not_found / unreachable / error)",
+      "community": 27,
+      "id": "mcp_template_neo4j_task2_connectivity_precheck"
+    },
+    {
+      "label": "Task 3: supervisor with stderr password redaction, admin API (422 on invalid credentials or failed pre-check), copied gateway_sync, main, Dockerfile/entrypoint/CLAUDE.md, image build",
+      "file_type": "document",
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "Task 3, line 694",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "task 3: supervisor with stderr password redaction, admin api (422 on invalid credentials or failed pre-check), copied gateway_sync, main, dockerfile/entrypoint/claude.md, image build",
+      "community": 27,
+      "id": "mcp_template_neo4j_task3_supervisor_admin_api_packaging"
+    },
+    {
+      "label": "Task 4: gateway templates.runner column, runner in TemplateResponse/TemplateExportRow, export/import defaulting, repo Upsert, neo4j seed row",
+      "file_type": "document",
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "Task 4, line 1515",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "task 4: gateway templates.runner column, runner in templateresponse/templateexportrow, export/import defaulting, repo upsert, neo4j seed row",
+      "community": 27,
+      "id": "mcp_template_neo4j_task4_templates_runner_column"
+    },
+    {
+      "label": "Task 5: gateway runnerclient typed StatusError with Detail() reading {detail:{code,message}}",
+      "file_type": "document",
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "Task 5, line 1776",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "task 5: gateway runnerclient typed statuserror with detail() reading {detail:{code,message}}",
+      "community": 27,
+      "id": "mcp_template_neo4j_task5_typed_runner_errors"
+    },
+    {
+      "label": "Task 6: gateway runner registry (RunnerEndpoint, SetRunners, runnerForTemplate/ForInstance/NameForToken, runnerHost) routing every runner call, 503/422 error kinds, NEO4J_TEMPLATES_RUNNER_* config + app.go wiring",
+      "file_type": "document",
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "Task 6, line 1884",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "task 6: gateway runner registry (runnerendpoint, setrunners, runnerfortemplate/forinstance/namefortoken, runnerhost) routing every runner call, 503/422 error kinds, neo4j_templates_runner_* config + app.go wiring",
+      "community": 27,
+      "id": "mcp_template_neo4j_task6_runner_registry_routing"
+    },
+    {
+      "label": "Task 7: gateway Neo4j credentials (ValidateNeo4jCredentials, credentialsFromRequest, validateRunnerExtraEnv), rotate rollback, UpdateExtraEnv, Google-only sheet import, 409 on catalog runner change",
+      "file_type": "document",
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "Task 7, line 2609",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "task 7: gateway neo4j credentials (validateneo4jcredentials, credentialsfromrequest, validaterunnerextraenv), rotate rollback, updateextraenv, google-only sheet import, 409 on catalog runner change",
+      "community": 27,
+      "id": "mcp_template_neo4j_task7_credentials_extra_env_rotate"
+    },
+    {
+      "label": "Task 8: gateway runner sync isolation - POST /api/v1/internal/runner/sync returns only the calling runner's instances, unknown token -> 401",
+      "file_type": "document",
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "Task 8, line 3357",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "task 8: gateway runner sync isolation - post /api/v1/internal/runner/sync returns only the calling runner's instances, unknown token -> 401",
+      "community": 27,
+      "id": "mcp_template_neo4j_task8_runner_sync_isolation"
+    },
+    {
+      "label": "Task 9: frontend Neo4j form and rotate dialog (neo4jConnection.ts helpers, types/api/store, TemplateInstanceFormView, RotateCredentialsModal, TemplateDetailView)",
+      "file_type": "document",
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "Task 9, line 3501",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "task 9: frontend neo4j form and rotate dialog (neo4jconnection.ts helpers, types/api/store, templateinstanceformview, rotatecredentialsmodal, templatedetailview)",
+      "community": 27,
+      "id": "mcp_template_neo4j_task9_frontend_neo4j_form"
+    },
+    {
+      "label": "Task 10: docker-compose service + gateway env, gateway/frontend/root CLAUDE.md updates, full test sweep, deployment and manual end-to-end check",
+      "file_type": "document",
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "Task 10, line 4179",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "task 10: docker-compose service + gateway env, gateway/frontend/root claude.md updates, full test sweep, deployment and manual end-to-end check",
+      "community": 27,
+      "id": "mcp_template_neo4j_task10_compose_docs_e2e"
+    },
+    {
+      "label": "Rationale: mcp-neo4j-cypher reads NEO4J_URL before NEO4J_URI and NEO4J_TRANSPORT / NEO4J_MCP_SERVER_* would take it off stdio (mcp-proxy needs stdio), so connection variables are runner-owned, never template env",
+      "file_type": "document",
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "line 318",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "rationale: mcp-neo4j-cypher reads neo4j_url before neo4j_uri and neo4j_transport / neo4j_mcp_server_* would take it off stdio (mcp-proxy needs stdio), so connection variables are runner-owned, never template env",
+      "community": 27,
+      "id": "mcp_template_neo4j_plan_rationale_reserved_env_keys"
+    },
+    {
+      "label": "Rationale: mcp-neo4j-cypher CLI flags win over env vars and argparse allow_abbrev makes --pass mean --password, so stdio_args carrying a reserved connection flag or its prefix are rejected (also keeps the password out of ps)",
+      "file_type": "document",
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "line 374",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "rationale: mcp-neo4j-cypher cli flags win over env vars and argparse allow_abbrev makes --pass mean --password, so stdio_args carrying a reserved connection flag or its prefix are rejected (also keeps the password out of ps)",
+      "community": 27,
+      "id": "mcp_template_neo4j_plan_rationale_reserved_cli_flags"
+    },
+    {
+      "label": "Rationale: the supervisor parses credentials and stdio_args before touching state, and the admin API pre-checks before killing the running process, so bad input consumes no port and a rejected rotate leaves the old instance serving",
+      "file_type": "document",
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "lines 930, 1266",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "rationale: the supervisor parses credentials and stdio_args before touching state, and the admin api pre-checks before killing the running process, so bad input consumes no port and a rejected rotate leaves the old instance serving",
+      "community": 27,
+      "id": "mcp_template_neo4j_plan_rationale_validate_before_state"
+    },
+    {
+      "label": "Rationale: reconcile runs no pre-check because it restores desired state and must not drop instances while Neo4j is briefly unavailable (mcp-neo4j-cypher reconnects on its own)",
+      "file_type": "document",
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "lines 610, 1309",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "rationale: reconcile runs no pre-check because it restores desired state and must not drop instances while neo4j is briefly unavailable (mcp-neo4j-cypher reconnects on its own)",
+      "community": 27,
+      "id": "mcp_template_neo4j_plan_rationale_reconcile_skips_precheck"
+    },
+    {
+      "label": "Rationale: the runner admin token doubles as the runner's identity on /api/v1/internal/runner/sync, so an equal Google/Neo4j token disables the Neo4j runner and makes sync refuse both",
+      "file_type": "document",
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "line 2563",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "rationale: the runner admin token doubles as the runner's identity on /api/v1/internal/runner/sync, so an equal google/neo4j token disables the neo4j runner and makes sync refuse both",
+      "community": 27,
+      "id": "mcp_template_neo4j_plan_rationale_distinct_runner_tokens"
+    },
+    {
+      "label": "Rationale: instance URLs are http://<selected runner host>:<port> on the shared Docker network; dialing the Google runner host for a Neo4j instance would end in createInstanceErrUnhealthy",
+      "file_type": "document",
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "lines 2195, 2365",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "rationale: instance urls are http://<selected runner host>:<port> on the shared docker network; dialing the google runner host for a neo4j instance would end in createinstanceerrunhealthy",
+      "community": 27,
+      "id": "mcp_template_neo4j_plan_rationale_selected_runner_host"
+    },
+    {
+      "label": "Rationale: runnerForInstance falls back to the Google runner when the template row is missing (FK RESTRICT) - the only runner that existed before templates.runner",
+      "file_type": "document",
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "line 2317",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "rationale: runnerforinstance falls back to the google runner when the template row is missing (fk restrict) - the only runner that existed before templates.runner",
+      "community": 27,
+      "id": "mcp_template_neo4j_plan_rationale_google_fallback"
+    },
+    {
+      "label": "Rationale: Neo4j rotate persists credentials only after runner acceptance (Google keeps DB-first), looks up instance/template before reading credentials, and passes RunnerPort so the respawn keeps the port stored in mcp_servers.url",
+      "file_type": "document",
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "line 3257",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "rationale: neo4j rotate persists credentials only after runner acceptance (google keeps db-first), looks up instance/template before reading credentials, and passes runnerport so the respawn keeps the port stored in mcp_servers.url",
+      "community": 27,
+      "id": "mcp_template_neo4j_plan_rationale_rotate_ordering"
+    },
+    {
+      "label": "Rationale: changing templates.runner while instances exist would hand their credentials to the other runner on its next sync, so catalog import refuses with 409 (ListAll: inactive templates can still have instances)",
+      "file_type": "document",
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "line 3288",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "rationale: changing templates.runner while instances exist would hand their credentials to the other runner on its next sync, so catalog import refuses with 409 (listall: inactive templates can still have instances)",
+      "community": 27,
+      "id": "mcp_template_neo4j_plan_rationale_runner_change_conflict"
+    },
+    {
+      "label": "Rationale: sheet rows carry a service-account JSON cell, so handleImportInstancesFromSheet accepts only Google-runner templates",
+      "file_type": "document",
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "line 3275",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "rationale: sheet rows carry a service-account json cell, so handleimportinstancesfromsheet accepts only google-runner templates",
+      "community": 27,
+      "id": "mcp_template_neo4j_plan_rationale_sheet_import_google_only"
+    },
+    {
+      "label": "Rationale: frontend neo4jConnection helpers only give the admin immediate feedback; the gateway's ValidateNeo4jCredentials stays the source of truth",
+      "file_type": "document",
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "line 3694",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "rationale: frontend neo4jconnection helpers only give the admin immediate feedback; the gateway's validateneo4jcredentials stays the source of truth",
+      "community": 27,
+      "id": "mcp_template_neo4j_plan_rationale_frontend_feedback_only"
+    },
+    {
+      "label": "graphify services-policy entry: mcp-template-neo4j-service classified not_graphed / templated_wrapper so the graphify-coverage-check CI does not fail on an unclassified service",
+      "file_type": "document",
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "Task 3 Step 13, line 1493",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "graphify services-policy entry: mcp-template-neo4j-service classified not_graphed / templated_wrapper so the graphify-coverage-check ci does not fail on an unclassified service",
+      "community": 27,
+      "id": "mcp_template_neo4j_plan_graphify_policy"
+    },
+    {
+      "label": "Deployment + manual verification: distinct runner token, neo4jprod read-only vs neo4jstaging read-write, write tool only on read-write, Produit count parity with the static neo4j backend (34 089), wrong-password rotate 422, runner restart keeps ports",
+      "file_type": "document",
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "Task 10 Step 7, lines 4272-4283",
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "norm_label": "deployment + manual verification: distinct runner token, neo4jprod read-only vs neo4jstaging read-write, write tool only on read-write, produit count parity with the static neo4j backend (34 089), wrong-password rotate 422, runner restart keeps ports",
+      "community": 27,
+      "id": "mcp_template_neo4j_plan_manual_verification"
     }
   ],
   "links": [
@@ -141521,11 +142301,11 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_HeaderFooterExtractor_fallback_characterization.py",
       "source_location": "L15",
       "weight": 1.0,
-      "_src": "libs_common_utils_tests_test_headerfooterextractor_fallback_characterization_py",
-      "_tgt": "libs_common_utils_src_common_utils_extractor_headerfooterextractor_py",
+      "_src": "libs_common_utils_src_common_utils_extractor_headerfooterextractor_py",
+      "_tgt": "libs_common_utils_tests_test_headerfooterextractor_fallback_characterization_py",
+      "confidence_score": 1.0,
       "source": "libs_common_utils_src_common_utils_extractor_headerfooterextractor_py",
-      "target": "libs_common_utils_tests_test_headerfooterextractor_fallback_characterization_py",
-      "confidence_score": 1.0
+      "target": "libs_common_utils_tests_test_headerfooterextractor_fallback_characterization_py"
     },
     {
       "relation": "imports_from",
@@ -141533,11 +142313,11 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_HeaderFooterExtractor_strategy_order.py",
       "source_location": "L13",
       "weight": 1.0,
-      "_src": "libs_common_utils_tests_test_headerfooterextractor_strategy_order_py",
-      "_tgt": "libs_common_utils_src_common_utils_extractor_headerfooterextractor_py",
+      "_src": "libs_common_utils_src_common_utils_extractor_headerfooterextractor_py",
+      "_tgt": "libs_common_utils_tests_test_headerfooterextractor_strategy_order_py",
+      "confidence_score": 1.0,
       "source": "libs_common_utils_src_common_utils_extractor_headerfooterextractor_py",
-      "target": "libs_common_utils_tests_test_headerfooterextractor_strategy_order_py",
-      "confidence_score": 1.0
+      "target": "libs_common_utils_tests_test_headerfooterextractor_strategy_order_py"
     },
     {
       "relation": "method",
@@ -141678,8 +142458,8 @@
       "source_location": "L9",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "headerfooterextractor_rationale_9",
-      "_tgt": "headerfooterextractor_headerfooterextractor",
+      "_src": "headerfooterextractor_headerfooterextractor",
+      "_tgt": "headerfooterextractor_rationale_9",
       "source": "headerfooterextractor_headerfooterextractor",
       "target": "headerfooterextractor_rationale_9"
     },
@@ -141725,11 +142505,11 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_HeaderFooterExtractor_fallback_characterization.py",
       "source_location": "L15",
       "weight": 0.8,
-      "_src": "test_headerfooterextractor_fallback_characterization_rationale_1",
-      "_tgt": "headerfooterextractor_headerfooterextractor",
+      "_src": "headerfooterextractor_headerfooterextractor",
+      "_tgt": "test_headerfooterextractor_fallback_characterization_rationale_1",
+      "confidence_score": 0.5,
       "source": "headerfooterextractor_headerfooterextractor",
-      "target": "test_headerfooterextractor_fallback_characterization_rationale_1",
-      "confidence_score": 0.5
+      "target": "test_headerfooterextractor_fallback_characterization_rationale_1"
     },
     {
       "relation": "uses",
@@ -141737,11 +142517,11 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_HeaderFooterExtractor_fallback_characterization.py",
       "source_location": "L15",
       "weight": 0.8,
-      "_src": "test_headerfooterextractor_fallback_characterization_rationale_108",
-      "_tgt": "headerfooterextractor_headerfooterextractor",
+      "_src": "headerfooterextractor_headerfooterextractor",
+      "_tgt": "test_headerfooterextractor_fallback_characterization_rationale_108",
+      "confidence_score": 0.5,
       "source": "headerfooterextractor_headerfooterextractor",
-      "target": "test_headerfooterextractor_fallback_characterization_rationale_108",
-      "confidence_score": 0.5
+      "target": "test_headerfooterextractor_fallback_characterization_rationale_108"
     },
     {
       "relation": "uses",
@@ -141749,11 +142529,11 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_HeaderFooterExtractor_strategy_order.py",
       "source_location": "L13",
       "weight": 0.8,
-      "_src": "test_headerfooterextractor_strategy_order_rationale_1",
-      "_tgt": "headerfooterextractor_headerfooterextractor",
+      "_src": "headerfooterextractor_headerfooterextractor",
+      "_tgt": "test_headerfooterextractor_strategy_order_rationale_1",
+      "confidence_score": 0.5,
       "source": "headerfooterextractor_headerfooterextractor",
-      "target": "test_headerfooterextractor_strategy_order_rationale_1",
-      "confidence_score": 0.5
+      "target": "test_headerfooterextractor_strategy_order_rationale_1"
     },
     {
       "relation": "uses",
@@ -141761,11 +142541,11 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_HeaderFooterExtractor_strategy_order.py",
       "source_location": "L13",
       "weight": 0.8,
-      "_src": "test_headerfooterextractor_strategy_order_rationale_28",
-      "_tgt": "headerfooterextractor_headerfooterextractor",
+      "_src": "headerfooterextractor_headerfooterextractor",
+      "_tgt": "test_headerfooterextractor_strategy_order_rationale_28",
+      "confidence_score": 0.5,
       "source": "headerfooterextractor_headerfooterextractor",
-      "target": "test_headerfooterextractor_strategy_order_rationale_28",
-      "confidence_score": 0.5
+      "target": "test_headerfooterextractor_strategy_order_rationale_28"
     },
     {
       "relation": "calls",
@@ -141774,8 +142554,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_HeaderFooterExtractor_fallback_characterization.py",
       "source_location": "L135",
       "weight": 1.0,
-      "_src": "test_headerfooterextractor_fallback_characterization_test_production_output_is_frozen",
-      "_tgt": "headerfooterextractor_headerfooterextractor",
+      "_src": "headerfooterextractor_headerfooterextractor",
+      "_tgt": "test_headerfooterextractor_fallback_characterization_test_production_output_is_frozen",
       "source": "headerfooterextractor_headerfooterextractor",
       "target": "test_headerfooterextractor_fallback_characterization_test_production_output_is_frozen"
     },
@@ -141786,8 +142566,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_HeaderFooterExtractor_fallback_characterization.py",
       "source_location": "L142",
       "weight": 1.0,
-      "_src": "test_headerfooterextractor_fallback_characterization_test_production_short_circuit_is_frozen",
-      "_tgt": "headerfooterextractor_headerfooterextractor",
+      "_src": "headerfooterextractor_headerfooterextractor",
+      "_tgt": "test_headerfooterextractor_fallback_characterization_test_production_short_circuit_is_frozen",
       "source": "headerfooterextractor_headerfooterextractor",
       "target": "test_headerfooterextractor_fallback_characterization_test_production_short_circuit_is_frozen"
     },
@@ -141798,8 +142578,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_HeaderFooterExtractor_strategy_order.py",
       "source_location": "L22",
       "weight": 1.0,
-      "_src": "test_headerfooterextractor_strategy_order_both_paths",
-      "_tgt": "headerfooterextractor_headerfooterextractor",
+      "_src": "headerfooterextractor_headerfooterextractor",
+      "_tgt": "test_headerfooterextractor_strategy_order_both_paths",
       "source": "headerfooterextractor_headerfooterextractor",
       "target": "test_headerfooterextractor_strategy_order_both_paths"
     },
@@ -141820,8 +142600,8 @@
       "source_location": "L291",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "headerfooterextractor_headerfooterextractor_extract_footer",
-      "_tgt": "headerfooterextractor_headerfooterextractor_get_cleaned_text",
+      "_src": "headerfooterextractor_headerfooterextractor_get_cleaned_text",
+      "_tgt": "headerfooterextractor_headerfooterextractor_extract_footer",
       "source": "headerfooterextractor_headerfooterextractor_get_cleaned_text",
       "target": "headerfooterextractor_headerfooterextractor_extract_footer"
     },
@@ -141832,8 +142612,8 @@
       "source_location": "L185",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "headerfooterextractor_headerfooterextractor_extract_header",
-      "_tgt": "headerfooterextractor_headerfooterextractor_get_cleaned_text",
+      "_src": "headerfooterextractor_headerfooterextractor_get_cleaned_text",
+      "_tgt": "headerfooterextractor_headerfooterextractor_extract_header",
       "source": "headerfooterextractor_headerfooterextractor_get_cleaned_text",
       "target": "headerfooterextractor_headerfooterextractor_extract_header"
     },
@@ -141844,8 +142624,8 @@
       "source_location": "L462",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "headerfooterextractor_headerfooterextractor_run_intersection_logic",
-      "_tgt": "headerfooterextractor_headerfooterextractor_get_cleaned_text",
+      "_src": "headerfooterextractor_headerfooterextractor_get_cleaned_text",
+      "_tgt": "headerfooterextractor_headerfooterextractor_run_intersection_logic",
       "source": "headerfooterextractor_headerfooterextractor_get_cleaned_text",
       "target": "headerfooterextractor_headerfooterextractor_run_intersection_logic"
     },
@@ -141867,8 +142647,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\extractor\\HeaderFooterExtractor.py",
       "source_location": "L59",
       "weight": 1.0,
-      "_src": "headerfooterextractor_rationale_59",
-      "_tgt": "headerfooterextractor_headerfooterextractor_get_cleaned_text",
+      "_src": "headerfooterextractor_headerfooterextractor_get_cleaned_text",
+      "_tgt": "headerfooterextractor_rationale_59",
       "confidence_score": 1.0,
       "source": "headerfooterextractor_headerfooterextractor_get_cleaned_text",
       "target": "headerfooterextractor_rationale_59"
@@ -141880,8 +142660,8 @@
       "source_location": "L695",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "headerfooterextractor_headerfooterextractor_extract_all_debug",
-      "_tgt": "headerfooterextractor_headerfooterextractor_extract_header",
+      "_src": "headerfooterextractor_headerfooterextractor_extract_header",
+      "_tgt": "headerfooterextractor_headerfooterextractor_extract_all_debug",
       "source": "headerfooterextractor_headerfooterextractor_extract_header",
       "target": "headerfooterextractor_headerfooterextractor_extract_all_debug"
     },
@@ -141915,8 +142695,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\extractor\\HeaderFooterExtractor.py",
       "source_location": "L92",
       "weight": 1.0,
-      "_src": "headerfooterextractor_rationale_92",
-      "_tgt": "headerfooterextractor_headerfooterextractor_extract_header",
+      "_src": "headerfooterextractor_headerfooterextractor_extract_header",
+      "_tgt": "headerfooterextractor_rationale_92",
       "confidence_score": 1.0,
       "source": "headerfooterextractor_headerfooterextractor_extract_header",
       "target": "headerfooterextractor_rationale_92"
@@ -141928,8 +142708,8 @@
       "source_location": "L696",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "headerfooterextractor_headerfooterextractor_extract_all_debug",
-      "_tgt": "headerfooterextractor_headerfooterextractor_extract_footer",
+      "_src": "headerfooterextractor_headerfooterextractor_extract_footer",
+      "_tgt": "headerfooterextractor_headerfooterextractor_extract_all_debug",
       "source": "headerfooterextractor_headerfooterextractor_extract_footer",
       "target": "headerfooterextractor_headerfooterextractor_extract_all_debug"
     },
@@ -141963,8 +142743,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\extractor\\HeaderFooterExtractor.py",
       "source_location": "L202",
       "weight": 1.0,
-      "_src": "headerfooterextractor_rationale_202",
-      "_tgt": "headerfooterextractor_headerfooterextractor_extract_footer",
+      "_src": "headerfooterextractor_headerfooterextractor_extract_footer",
+      "_tgt": "headerfooterextractor_rationale_202",
       "confidence_score": 1.0,
       "source": "headerfooterextractor_headerfooterextractor_extract_footer",
       "target": "headerfooterextractor_rationale_202"
@@ -141987,8 +142767,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\extractor\\HeaderFooterExtractor.py",
       "source_location": "L318",
       "weight": 1.0,
-      "_src": "headerfooterextractor_rationale_318",
-      "_tgt": "headerfooterextractor_headerfooterextractor_get_signature_class",
+      "_src": "headerfooterextractor_headerfooterextractor_get_signature_class",
+      "_tgt": "headerfooterextractor_rationale_318",
       "confidence_score": 1.0,
       "source": "headerfooterextractor_headerfooterextractor_get_signature_class",
       "target": "headerfooterextractor_rationale_318"
@@ -142023,8 +142803,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\extractor\\HeaderFooterExtractor.py",
       "source_location": "L324",
       "weight": 1.0,
-      "_src": "headerfooterextractor_rationale_324",
-      "_tgt": "headerfooterextractor_headerfooterextractor_get_signature_structural",
+      "_src": "headerfooterextractor_headerfooterextractor_get_signature_structural",
+      "_tgt": "headerfooterextractor_rationale_324",
       "confidence_score": 1.0,
       "source": "headerfooterextractor_headerfooterextractor_get_signature_structural",
       "target": "headerfooterextractor_rationale_324"
@@ -142047,8 +142827,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\extractor\\HeaderFooterExtractor.py",
       "source_location": "L343",
       "weight": 1.0,
-      "_src": "headerfooterextractor_rationale_343",
-      "_tgt": "headerfooterextractor_headerfooterextractor_get_element_path_segment",
+      "_src": "headerfooterextractor_headerfooterextractor_get_element_path_segment",
+      "_tgt": "headerfooterextractor_rationale_343",
       "confidence_score": 1.0,
       "source": "headerfooterextractor_headerfooterextractor_get_element_path_segment",
       "target": "headerfooterextractor_rationale_343"
@@ -142060,8 +142840,8 @@
       "source_location": "L489",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "headerfooterextractor_headerfooterextractor_run_intersection_logic",
-      "_tgt": "headerfooterextractor_headerfooterextractor_is_cookie_banner",
+      "_src": "headerfooterextractor_headerfooterextractor_is_cookie_banner",
+      "_tgt": "headerfooterextractor_headerfooterextractor_run_intersection_logic",
       "source": "headerfooterextractor_headerfooterextractor_is_cookie_banner",
       "target": "headerfooterextractor_headerfooterextractor_run_intersection_logic"
     },
@@ -142095,8 +142875,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\extractor\\HeaderFooterExtractor.py",
       "source_location": "L378",
       "weight": 1.0,
-      "_src": "headerfooterextractor_rationale_378",
-      "_tgt": "headerfooterextractor_headerfooterextractor_is_cookie_banner",
+      "_src": "headerfooterextractor_headerfooterextractor_is_cookie_banner",
+      "_tgt": "headerfooterextractor_rationale_378",
       "confidence_score": 1.0,
       "source": "headerfooterextractor_headerfooterextractor_is_cookie_banner",
       "target": "headerfooterextractor_rationale_378"
@@ -142108,8 +142888,8 @@
       "source_location": "L699",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "headerfooterextractor_headerfooterextractor_extract_all_debug",
-      "_tgt": "headerfooterextractor_headerfooterextractor_run_intersection_logic",
+      "_src": "headerfooterextractor_headerfooterextractor_run_intersection_logic",
+      "_tgt": "headerfooterextractor_headerfooterextractor_extract_all_debug",
       "source": "headerfooterextractor_headerfooterextractor_run_intersection_logic",
       "target": "headerfooterextractor_headerfooterextractor_extract_all_debug"
     },
@@ -142167,8 +142947,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\extractor\\HeaderFooterExtractor.py",
       "source_location": "L392",
       "weight": 1.0,
-      "_src": "headerfooterextractor_rationale_392",
-      "_tgt": "headerfooterextractor_headerfooterextractor_run_intersection_logic",
+      "_src": "headerfooterextractor_headerfooterextractor_run_intersection_logic",
+      "_tgt": "headerfooterextractor_rationale_392",
       "confidence_score": 1.0,
       "source": "headerfooterextractor_headerfooterextractor_run_intersection_logic",
       "target": "headerfooterextractor_rationale_392"
@@ -142215,8 +142995,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\extractor\\HeaderFooterExtractor.py",
       "source_location": "L672",
       "weight": 1.0,
-      "_src": "headerfooterextractor_rationale_672",
-      "_tgt": "headerfooterextractor_headerfooterextractor_extract_with_fallback",
+      "_src": "headerfooterextractor_headerfooterextractor_extract_with_fallback",
+      "_tgt": "headerfooterextractor_rationale_672",
       "confidence_score": 1.0,
       "source": "headerfooterextractor_headerfooterextractor_extract_with_fallback",
       "target": "headerfooterextractor_rationale_672"
@@ -142228,8 +143008,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_HeaderFooterExtractor_fallback_characterization.py",
       "source_location": "L135",
       "weight": 1.0,
-      "_src": "test_headerfooterextractor_fallback_characterization_test_production_output_is_frozen",
-      "_tgt": "headerfooterextractor_headerfooterextractor_extract_with_fallback",
+      "_src": "headerfooterextractor_headerfooterextractor_extract_with_fallback",
+      "_tgt": "test_headerfooterextractor_fallback_characterization_test_production_output_is_frozen",
       "source": "headerfooterextractor_headerfooterextractor_extract_with_fallback",
       "target": "test_headerfooterextractor_fallback_characterization_test_production_output_is_frozen"
     },
@@ -142240,8 +143020,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_HeaderFooterExtractor_fallback_characterization.py",
       "source_location": "L142",
       "weight": 1.0,
-      "_src": "test_headerfooterextractor_fallback_characterization_test_production_short_circuit_is_frozen",
-      "_tgt": "headerfooterextractor_headerfooterextractor_extract_with_fallback",
+      "_src": "headerfooterextractor_headerfooterextractor_extract_with_fallback",
+      "_tgt": "test_headerfooterextractor_fallback_characterization_test_production_short_circuit_is_frozen",
       "source": "headerfooterextractor_headerfooterextractor_extract_with_fallback",
       "target": "test_headerfooterextractor_fallback_characterization_test_production_short_circuit_is_frozen"
     },
@@ -142252,8 +143032,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_HeaderFooterExtractor_strategy_order.py",
       "source_location": "L22",
       "weight": 1.0,
-      "_src": "test_headerfooterextractor_strategy_order_both_paths",
-      "_tgt": "headerfooterextractor_headerfooterextractor_extract_with_fallback",
+      "_src": "headerfooterextractor_headerfooterextractor_extract_with_fallback",
+      "_tgt": "test_headerfooterextractor_strategy_order_both_paths",
       "source": "headerfooterextractor_headerfooterextractor_extract_with_fallback",
       "target": "test_headerfooterextractor_strategy_order_both_paths"
     },
@@ -142286,8 +143066,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_HeaderFooterExtractor_strategy_order.py",
       "source_location": "L23",
       "weight": 1.0,
-      "_src": "test_headerfooterextractor_strategy_order_both_paths",
-      "_tgt": "headerfooterextractor_headerfooterextractor_extract_all_debug",
+      "_src": "headerfooterextractor_headerfooterextractor_extract_all_debug",
+      "_tgt": "test_headerfooterextractor_strategy_order_both_paths",
       "source": "headerfooterextractor_headerfooterextractor_extract_all_debug",
       "target": "test_headerfooterextractor_strategy_order_both_paths"
     },
@@ -309006,6 +309786,42 @@
       "target": "mcp_table_service_existing_state"
     },
     {
+      "relation": "uses",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "line 12",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_goal",
+      "_tgt": "mcp_gateway_service",
+      "source": "mcp_gateway_service",
+      "target": "mcp_template_neo4j_goal"
+    },
+    {
+      "relation": "uses",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "line 54",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_architecture_flow",
+      "_tgt": "mcp_gateway_service",
+      "source": "mcp_gateway_service",
+      "target": "mcp_template_neo4j_architecture_flow"
+    },
+    {
+      "relation": "uses",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "line 5",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_doc",
+      "_tgt": "mcp_gateway_service",
+      "source": "mcp_gateway_service",
+      "target": "mcp_template_neo4j_plan_doc"
+    },
+    {
       "relation": "references",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
@@ -309088,6 +309904,30 @@
       "_tgt": "zoho_template_add_button",
       "source": "mcp_gateway_frontend",
       "target": "zoho_template_add_button"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "line 158",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_frontend_form",
+      "_tgt": "mcp_gateway_frontend",
+      "source": "mcp_gateway_frontend",
+      "target": "mcp_template_neo4j_frontend_form"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "line 3503",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_task9_frontend_neo4j_form",
+      "_tgt": "mcp_gateway_frontend",
+      "source": "mcp_gateway_frontend",
+      "target": "mcp_template_neo4j_task9_frontend_neo4j_form"
     },
     {
       "relation": "conceptually_related_to",
@@ -323415,6 +324255,30 @@
       "target": "zoho_user_create_endpoint"
     },
     {
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "line 163",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_sheets_import_google_only",
+      "_tgt": "template_detail_view",
+      "source": "template_detail_view",
+      "target": "mcp_template_neo4j_sheets_import_google_only"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "line 4001",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_task9_frontend_neo4j_form",
+      "_tgt": "template_detail_view",
+      "source": "template_detail_view",
+      "target": "mcp_template_neo4j_task9_frontend_neo4j_form"
+    },
+    {
       "relation": "references",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
@@ -323780,6 +324644,42 @@
       "target": "mcp_table_service_docker_compose_block"
     },
     {
+      "relation": "uses",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "line 64",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_architecture_flow",
+      "_tgt": "mcp_servers_table",
+      "source": "mcp_servers_table",
+      "target": "mcp_template_neo4j_architecture_flow"
+    },
+    {
+      "relation": "uses",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "line 178",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_create_data_flow",
+      "_tgt": "mcp_servers_table",
+      "source": "mcp_servers_table",
+      "target": "mcp_template_neo4j_create_data_flow"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "line 3257",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_rationale_rotate_ordering",
+      "_tgt": "mcp_servers_table",
+      "source": "mcp_servers_table",
+      "target": "mcp_template_neo4j_plan_rationale_rotate_ordering"
+    },
+    {
       "relation": "references",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
@@ -323802,6 +324702,30 @@
       "_tgt": "mcp_table_service_task2_identity_forwarding",
       "source": "x_end_user_email_header",
       "target": "mcp_table_service_task2_identity_forwarding"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "line 149",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_sheets_import_google_only",
+      "_tgt": "sheet_import_handler",
+      "source": "sheet_import_handler",
+      "target": "mcp_template_neo4j_sheets_import_google_only"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "line 3275",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_rationale_sheet_import_google_only",
+      "_tgt": "sheet_import_handler",
+      "source": "sheet_import_handler",
+      "target": "mcp_template_neo4j_plan_rationale_sheet_import_google_only"
     },
     {
       "relation": "contains",
@@ -390675,8 +391599,8 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "weight": 1.0,
-      "_src": "cu_v63_table_change_requires_cache_bump",
-      "_tgt": "extractor_result_cache_key",
+      "_src": "extractor_result_cache_key",
+      "_tgt": "cu_v63_table_change_requires_cache_bump",
       "source": "extractor_result_cache_key",
       "target": "cu_v63_table_change_requires_cache_bump"
     },
@@ -391574,8 +392498,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\extractor\\HeaderFooterExtractor.py",
       "source_location": "L351",
       "weight": 1.0,
-      "_src": "headerfooterextractor_rationale_351",
-      "_tgt": "headerfooterextractor_headerfooterextractor_build_structural_sig_map",
+      "_src": "headerfooterextractor_headerfooterextractor_build_structural_sig_map",
+      "_tgt": "headerfooterextractor_rationale_351",
       "confidence_score": 1.0,
       "source": "headerfooterextractor_headerfooterextractor_build_structural_sig_map",
       "target": "headerfooterextractor_rationale_351"
@@ -439052,6 +439976,18 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "docs/graphify-guide-en.md",
+      "source_location": "L310",
+      "weight": 1.0,
+      "_src": "graphify_preserve_and_place_merge",
+      "_tgt": "graphify_rebuild_scoped_script",
+      "source": "graphify_rebuild_scoped_script",
+      "target": "graphify_preserve_and_place_merge"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/graphify-guide-en.md",
       "source_location": "L84-92",
       "weight": 1.0,
       "_src": "graphify_status_script",
@@ -439178,6 +440114,30 @@
       "_tgt": "graphify_service_addition_checklist",
       "source": "graphify_community_relabeling_gotcha",
       "target": "graphify_service_addition_checklist"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/graphify-guide-en.md",
+      "source_location": "L310",
+      "weight": 1.0,
+      "_src": "graphify_community_relabeling_gotcha",
+      "_tgt": "graphify_preserve_and_place_merge",
+      "source": "graphify_community_relabeling_gotcha",
+      "target": "graphify_preserve_and_place_merge"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/graphify-guide-en.md",
+      "source_location": "L326",
+      "weight": 1.0,
+      "_src": "graphify_preserve_and_place_merge",
+      "_tgt": "graphify_label_derivation_rationale",
+      "source": "graphify_label_derivation_rationale",
+      "target": "graphify_preserve_and_place_merge"
     },
     {
       "relation": "implements",
@@ -471046,8 +472006,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\extractor\\HeaderFooterExtractor.py",
       "source_location": "L645",
       "weight": 1.0,
-      "_src": "headerfooterextractor_rationale_645",
-      "_tgt": "headerfooterextractor_headerfooterextractor_select_by_priority",
+      "_src": "headerfooterextractor_headerfooterextractor_select_by_priority",
+      "_tgt": "headerfooterextractor_rationale_645",
       "confidence_score": 1.0,
       "source": "headerfooterextractor_headerfooterextractor_select_by_priority",
       "target": "headerfooterextractor_rationale_645"
@@ -471070,9 +472030,9 @@
       "weight": 1.0,
       "_src": "libs_common_utils_tests_header_footer_pages_py",
       "_tgt": "header_footer_pages_page",
+      "confidence_score": 1.0,
       "source": "libs_common_utils_tests_header_footer_pages_py",
-      "target": "header_footer_pages_page",
-      "confidence_score": 1.0
+      "target": "header_footer_pages_page"
     },
     {
       "relation": "contains",
@@ -471082,9 +472042,9 @@
       "weight": 1.0,
       "_src": "libs_common_utils_tests_header_footer_pages_py",
       "_tgt": "header_footer_pages_references",
+      "confidence_score": 1.0,
       "source": "libs_common_utils_tests_header_footer_pages_py",
-      "target": "header_footer_pages_references",
-      "confidence_score": 1.0
+      "target": "header_footer_pages_references"
     },
     {
       "relation": "rationale_for",
@@ -471092,11 +472052,11 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\header_footer_pages.py",
       "source_location": "L1",
       "weight": 1.0,
-      "_src": "header_footer_pages_rationale_1",
-      "_tgt": "libs_common_utils_tests_header_footer_pages_py",
+      "_src": "libs_common_utils_tests_header_footer_pages_py",
+      "_tgt": "header_footer_pages_rationale_1",
+      "confidence_score": 1.0,
       "source": "libs_common_utils_tests_header_footer_pages_py",
-      "target": "header_footer_pages_rationale_1",
-      "confidence_score": 1.0
+      "target": "header_footer_pages_rationale_1"
     },
     {
       "relation": "imports_from",
@@ -471104,11 +472064,11 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_HeaderFooterExtractor_fallback_characterization.py",
       "source_location": "L17",
       "weight": 1.0,
-      "_src": "libs_common_utils_tests_test_headerfooterextractor_fallback_characterization_py",
-      "_tgt": "libs_common_utils_tests_header_footer_pages_py",
+      "_src": "libs_common_utils_tests_header_footer_pages_py",
+      "_tgt": "libs_common_utils_tests_test_headerfooterextractor_fallback_characterization_py",
+      "confidence_score": 1.0,
       "source": "libs_common_utils_tests_header_footer_pages_py",
-      "target": "libs_common_utils_tests_test_headerfooterextractor_fallback_characterization_py",
-      "confidence_score": 1.0
+      "target": "libs_common_utils_tests_test_headerfooterextractor_fallback_characterization_py"
     },
     {
       "relation": "imports_from",
@@ -471116,11 +472076,11 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_HeaderFooterExtractor_strategy_order.py",
       "source_location": "L15",
       "weight": 1.0,
-      "_src": "libs_common_utils_tests_test_headerfooterextractor_strategy_order_py",
-      "_tgt": "libs_common_utils_tests_header_footer_pages_py",
+      "_src": "libs_common_utils_tests_header_footer_pages_py",
+      "_tgt": "libs_common_utils_tests_test_headerfooterextractor_strategy_order_py",
+      "confidence_score": 1.0,
       "source": "libs_common_utils_tests_header_footer_pages_py",
-      "target": "libs_common_utils_tests_test_headerfooterextractor_strategy_order_py",
-      "confidence_score": 1.0
+      "target": "libs_common_utils_tests_test_headerfooterextractor_strategy_order_py"
     },
     {
       "relation": "calls",
@@ -471128,11 +472088,11 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\header_footer_pages.py",
       "source_location": "L51",
       "weight": 1.0,
-      "_src": "header_footer_pages_references",
-      "_tgt": "header_footer_pages_page",
+      "_src": "header_footer_pages_page",
+      "_tgt": "header_footer_pages_references",
+      "confidence_score": 1.0,
       "source": "header_footer_pages_page",
-      "target": "header_footer_pages_references",
-      "confidence_score": 1.0
+      "target": "header_footer_pages_references"
     },
     {
       "relation": "rationale_for",
@@ -471140,11 +472100,11 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\header_footer_pages.py",
       "source_location": "L50",
       "weight": 1.0,
-      "_src": "header_footer_pages_rationale_50",
-      "_tgt": "header_footer_pages_references",
+      "_src": "header_footer_pages_references",
+      "_tgt": "header_footer_pages_rationale_50",
+      "confidence_score": 1.0,
       "source": "header_footer_pages_references",
-      "target": "header_footer_pages_rationale_50",
-      "confidence_score": 1.0
+      "target": "header_footer_pages_rationale_50"
     },
     {
       "relation": "contains",
@@ -471154,9 +472114,9 @@
       "weight": 1.0,
       "_src": "libs_common_utils_tests_test_headerfooterextractor_fallback_characterization_py",
       "_tgt": "test_headerfooterextractor_fallback_characterization_calls",
+      "confidence_score": 1.0,
       "source": "libs_common_utils_tests_test_headerfooterextractor_fallback_characterization_py",
-      "target": "test_headerfooterextractor_fallback_characterization_calls",
-      "confidence_score": 1.0
+      "target": "test_headerfooterextractor_fallback_characterization_calls"
     },
     {
       "relation": "contains",
@@ -471166,9 +472126,9 @@
       "weight": 1.0,
       "_src": "libs_common_utils_tests_test_headerfooterextractor_fallback_characterization_py",
       "_tgt": "test_headerfooterextractor_fallback_characterization_test_production_output_is_frozen",
+      "confidence_score": 1.0,
       "source": "libs_common_utils_tests_test_headerfooterextractor_fallback_characterization_py",
-      "target": "test_headerfooterextractor_fallback_characterization_test_production_output_is_frozen",
-      "confidence_score": 1.0
+      "target": "test_headerfooterextractor_fallback_characterization_test_production_output_is_frozen"
     },
     {
       "relation": "contains",
@@ -471178,9 +472138,9 @@
       "weight": 1.0,
       "_src": "libs_common_utils_tests_test_headerfooterextractor_fallback_characterization_py",
       "_tgt": "test_headerfooterextractor_fallback_characterization_test_production_short_circuit_is_frozen",
+      "confidence_score": 1.0,
       "source": "libs_common_utils_tests_test_headerfooterextractor_fallback_characterization_py",
-      "target": "test_headerfooterextractor_fallback_characterization_test_production_short_circuit_is_frozen",
-      "confidence_score": 1.0
+      "target": "test_headerfooterextractor_fallback_characterization_test_production_short_circuit_is_frozen"
     },
     {
       "relation": "rationale_for",
@@ -471188,11 +472148,11 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_HeaderFooterExtractor_fallback_characterization.py",
       "source_location": "L1",
       "weight": 1.0,
-      "_src": "test_headerfooterextractor_fallback_characterization_rationale_1",
-      "_tgt": "libs_common_utils_tests_test_headerfooterextractor_fallback_characterization_py",
+      "_src": "libs_common_utils_tests_test_headerfooterextractor_fallback_characterization_py",
+      "_tgt": "test_headerfooterextractor_fallback_characterization_rationale_1",
+      "confidence_score": 1.0,
       "source": "libs_common_utils_tests_test_headerfooterextractor_fallback_characterization_py",
-      "target": "test_headerfooterextractor_fallback_characterization_rationale_1",
-      "confidence_score": 1.0
+      "target": "test_headerfooterextractor_fallback_characterization_rationale_1"
     },
     {
       "relation": "references",
@@ -471210,11 +472170,11 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_HeaderFooterExtractor_fallback_characterization.py",
       "source_location": "L108",
       "weight": 1.0,
-      "_src": "test_headerfooterextractor_fallback_characterization_rationale_108",
-      "_tgt": "test_headerfooterextractor_fallback_characterization_calls",
+      "_src": "test_headerfooterextractor_fallback_characterization_calls",
+      "_tgt": "test_headerfooterextractor_fallback_characterization_rationale_108",
+      "confidence_score": 1.0,
       "source": "test_headerfooterextractor_fallback_characterization_calls",
-      "target": "test_headerfooterextractor_fallback_characterization_rationale_108",
-      "confidence_score": 1.0
+      "target": "test_headerfooterextractor_fallback_characterization_rationale_108"
     },
     {
       "relation": "references",
@@ -471244,9 +472204,9 @@
       "weight": 1.0,
       "_src": "libs_common_utils_tests_test_headerfooterextractor_strategy_order_py",
       "_tgt": "test_headerfooterextractor_strategy_order_both_paths",
+      "confidence_score": 1.0,
       "source": "libs_common_utils_tests_test_headerfooterextractor_strategy_order_py",
-      "target": "test_headerfooterextractor_strategy_order_both_paths",
-      "confidence_score": 1.0
+      "target": "test_headerfooterextractor_strategy_order_both_paths"
     },
     {
       "relation": "contains",
@@ -471256,9 +472216,9 @@
       "weight": 1.0,
       "_src": "libs_common_utils_tests_test_headerfooterextractor_strategy_order_py",
       "_tgt": "test_headerfooterextractor_strategy_order_test_fixture_makes_strategies_disagree",
+      "confidence_score": 1.0,
       "source": "libs_common_utils_tests_test_headerfooterextractor_strategy_order_py",
-      "target": "test_headerfooterextractor_strategy_order_test_fixture_makes_strategies_disagree",
-      "confidence_score": 1.0
+      "target": "test_headerfooterextractor_strategy_order_test_fixture_makes_strategies_disagree"
     },
     {
       "relation": "contains",
@@ -471268,9 +472228,9 @@
       "weight": 1.0,
       "_src": "libs_common_utils_tests_test_headerfooterextractor_strategy_order_py",
       "_tgt": "test_headerfooterextractor_strategy_order_test_debug_selects_what_production_selects",
+      "confidence_score": 1.0,
       "source": "libs_common_utils_tests_test_headerfooterextractor_strategy_order_py",
-      "target": "test_headerfooterextractor_strategy_order_test_debug_selects_what_production_selects",
-      "confidence_score": 1.0
+      "target": "test_headerfooterextractor_strategy_order_test_debug_selects_what_production_selects"
     },
     {
       "relation": "contains",
@@ -471280,9 +472240,9 @@
       "weight": 1.0,
       "_src": "libs_common_utils_tests_test_headerfooterextractor_strategy_order_py",
       "_tgt": "test_headerfooterextractor_strategy_order_test_debug_reports_the_production_method",
+      "confidence_score": 1.0,
       "source": "libs_common_utils_tests_test_headerfooterextractor_strategy_order_py",
-      "target": "test_headerfooterextractor_strategy_order_test_debug_reports_the_production_method",
-      "confidence_score": 1.0
+      "target": "test_headerfooterextractor_strategy_order_test_debug_reports_the_production_method"
     },
     {
       "relation": "rationale_for",
@@ -471290,11 +472250,11 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_HeaderFooterExtractor_strategy_order.py",
       "source_location": "L1",
       "weight": 1.0,
-      "_src": "test_headerfooterextractor_strategy_order_rationale_1",
-      "_tgt": "libs_common_utils_tests_test_headerfooterextractor_strategy_order_py",
+      "_src": "libs_common_utils_tests_test_headerfooterextractor_strategy_order_py",
+      "_tgt": "test_headerfooterextractor_strategy_order_rationale_1",
+      "confidence_score": 1.0,
       "source": "libs_common_utils_tests_test_headerfooterextractor_strategy_order_py",
-      "target": "test_headerfooterextractor_strategy_order_rationale_1",
-      "confidence_score": 1.0
+      "target": "test_headerfooterextractor_strategy_order_rationale_1"
     },
     {
       "relation": "rationale_for",
@@ -471302,11 +472262,11 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\tests\\test_HeaderFooterExtractor_strategy_order.py",
       "source_location": "L28",
       "weight": 1.0,
-      "_src": "test_headerfooterextractor_strategy_order_rationale_28",
-      "_tgt": "test_headerfooterextractor_strategy_order_test_fixture_makes_strategies_disagree",
+      "_src": "test_headerfooterextractor_strategy_order_test_fixture_makes_strategies_disagree",
+      "_tgt": "test_headerfooterextractor_strategy_order_rationale_28",
+      "confidence_score": 1.0,
       "source": "test_headerfooterextractor_strategy_order_test_fixture_makes_strategies_disagree",
-      "target": "test_headerfooterextractor_strategy_order_rationale_28",
-      "confidence_score": 1.0
+      "target": "test_headerfooterextractor_strategy_order_rationale_28"
     },
     {
       "relation": "references",
@@ -471333,8 +472293,8 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "weight": 1.0,
-      "_src": "cu_v63_debug_order_drift_r10a",
-      "_tgt": "cu_v63_hfe_selection_priority",
+      "_src": "cu_v63_hfe_selection_priority",
+      "_tgt": "cu_v63_debug_order_drift_r10a",
       "source": "cu_v63_hfe_selection_priority",
       "target": "cu_v63_debug_order_drift_r10a"
     },
@@ -471343,8 +472303,8 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "weight": 1.0,
-      "_src": "cu_v63_production_output_frozen",
-      "_tgt": "cu_v63_hfe_selection_priority",
+      "_src": "cu_v63_hfe_selection_priority",
+      "_tgt": "cu_v63_production_output_frozen",
       "source": "cu_v63_hfe_selection_priority",
       "target": "cu_v63_production_output_frozen"
     },
@@ -471353,10 +472313,1510 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "weight": 1.0,
-      "_src": "cu_v63_table_change_requires_cache_bump",
-      "_tgt": "cu_v63_hfe_selection_priority",
+      "_src": "cu_v63_hfe_selection_priority",
+      "_tgt": "cu_v63_table_change_requires_cache_bump",
       "source": "cu_v63_hfe_selection_priority",
       "target": "cu_v63_table_change_requires_cache_bump"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Goal, lines 7-15",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_design_doc",
+      "_tgt": "mcp_template_neo4j_goal",
+      "source": "mcp_template_neo4j_design_doc",
+      "target": "mcp_template_neo4j_goal"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Current state, lines 17-24",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_design_doc",
+      "_tgt": "mcp_template_neo4j_current_static_server",
+      "source": "mcp_template_neo4j_design_doc",
+      "target": "mcp_template_neo4j_current_static_server"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Current state, lines 25-35",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_design_doc",
+      "_tgt": "mcp_template_neo4j_current_google_specific_flow",
+      "source": "mcp_template_neo4j_design_doc",
+      "target": "mcp_template_neo4j_current_google_specific_flow"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Current state, line 36",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_design_doc",
+      "_tgt": "mcp_template_neo4j_current_extra_env_plaintext",
+      "source": "mcp_template_neo4j_design_doc",
+      "target": "mcp_template_neo4j_current_extra_env_plaintext"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Decisions, line 42",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_design_doc",
+      "_tgt": "mcp_template_neo4j_decision_instance_model",
+      "source": "mcp_template_neo4j_design_doc",
+      "target": "mcp_template_neo4j_decision_instance_model"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Decisions, line 43",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_design_doc",
+      "_tgt": "mcp_template_neo4j_decision_credentials_storage",
+      "source": "mcp_template_neo4j_design_doc",
+      "target": "mcp_template_neo4j_decision_credentials_storage"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Decisions, line 44",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_design_doc",
+      "_tgt": "mcp_template_neo4j_decision_read_only_flag",
+      "source": "mcp_template_neo4j_design_doc",
+      "target": "mcp_template_neo4j_decision_read_only_flag"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Decisions, line 45",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_design_doc",
+      "_tgt": "mcp_template_neo4j_decision_architecture_a",
+      "source": "mcp_template_neo4j_design_doc",
+      "target": "mcp_template_neo4j_decision_architecture_a"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Decisions, line 46",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_design_doc",
+      "_tgt": "mcp_template_neo4j_decision_static_untouched",
+      "source": "mcp_template_neo4j_design_doc",
+      "target": "mcp_template_neo4j_decision_static_untouched"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Architecture, lines 48-65",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_design_doc",
+      "_tgt": "mcp_template_neo4j_architecture_flow",
+      "source": "mcp_template_neo4j_design_doc",
+      "target": "mcp_template_neo4j_architecture_flow"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Components section 1, lines 69-76 and 94-103",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_design_doc",
+      "_tgt": "mcp_template_neo4j_runner_component",
+      "source": "mcp_template_neo4j_design_doc",
+      "target": "mcp_template_neo4j_runner_component"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Components section 1, lines 77-85",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_design_doc",
+      "_tgt": "mcp_template_neo4j_env_injection",
+      "source": "mcp_template_neo4j_design_doc",
+      "target": "mcp_template_neo4j_env_injection"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Components section 1, lines 86-93",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_design_doc",
+      "_tgt": "mcp_template_neo4j_connectivity_precheck",
+      "source": "mcp_template_neo4j_design_doc",
+      "target": "mcp_template_neo4j_connectivity_precheck"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Components section 1, lines 92-93",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_design_doc",
+      "_tgt": "mcp_template_neo4j_rationale_no_precheck_on_reconcile",
+      "source": "mcp_template_neo4j_design_doc",
+      "target": "mcp_template_neo4j_rationale_no_precheck_on_reconcile"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Components section 1, lines 98-102",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_design_doc",
+      "_tgt": "mcp_template_neo4j_read_only_hides_write_tool",
+      "source": "mcp_template_neo4j_design_doc",
+      "target": "mcp_template_neo4j_read_only_hides_write_tool"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Components section 2, lines 105-119",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_design_doc",
+      "_tgt": "mcp_template_neo4j_catalog_runner_column",
+      "source": "mcp_template_neo4j_design_doc",
+      "target": "mcp_template_neo4j_catalog_runner_column"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Components section 2, lines 115-117",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_design_doc",
+      "_tgt": "mcp_template_neo4j_rationale_empty_tool_prefix",
+      "source": "mcp_template_neo4j_design_doc",
+      "target": "mcp_template_neo4j_rationale_empty_tool_prefix"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Components section 3, lines 121-132",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_design_doc",
+      "_tgt": "mcp_template_neo4j_runner_routing",
+      "source": "mcp_template_neo4j_design_doc",
+      "target": "mcp_template_neo4j_runner_routing"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Components section 4, lines 134-142",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_design_doc",
+      "_tgt": "mcp_template_neo4j_credentials_validation",
+      "source": "mcp_template_neo4j_design_doc",
+      "target": "mcp_template_neo4j_credentials_validation"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Components section 4, lines 143-144",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_design_doc",
+      "_tgt": "mcp_template_neo4j_rationale_extra_env_whitelist",
+      "source": "mcp_template_neo4j_design_doc",
+      "target": "mcp_template_neo4j_rationale_extra_env_whitelist"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Components section 4, lines 145-148",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_design_doc",
+      "_tgt": "mcp_template_neo4j_rotate_after_runner_accepts",
+      "source": "mcp_template_neo4j_design_doc",
+      "target": "mcp_template_neo4j_rotate_after_runner_accepts"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Components section 4, line 149",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_design_doc",
+      "_tgt": "mcp_template_neo4j_sheets_import_google_only",
+      "source": "mcp_template_neo4j_design_doc",
+      "target": "mcp_template_neo4j_sheets_import_google_only"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Components section 5, lines 151-154",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_design_doc",
+      "_tgt": "mcp_template_neo4j_runner_sync_isolation",
+      "source": "mcp_template_neo4j_design_doc",
+      "target": "mcp_template_neo4j_runner_sync_isolation"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Components section 5, lines 155-156",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_design_doc",
+      "_tgt": "mcp_template_neo4j_rationale_sync_kill_loop",
+      "source": "mcp_template_neo4j_design_doc",
+      "target": "mcp_template_neo4j_rationale_sync_kill_loop"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Components section 6, lines 158-164",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_design_doc",
+      "_tgt": "mcp_template_neo4j_frontend_form",
+      "source": "mcp_template_neo4j_design_doc",
+      "target": "mcp_template_neo4j_frontend_form"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Components section 7, lines 166-170",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_design_doc",
+      "_tgt": "mcp_template_neo4j_compose_service",
+      "source": "mcp_template_neo4j_design_doc",
+      "target": "mcp_template_neo4j_compose_service"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Data flow, lines 172-179",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_design_doc",
+      "_tgt": "mcp_template_neo4j_create_data_flow",
+      "source": "mcp_template_neo4j_design_doc",
+      "target": "mcp_template_neo4j_create_data_flow"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Error handling, lines 181-192",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_design_doc",
+      "_tgt": "mcp_template_neo4j_error_handling",
+      "source": "mcp_template_neo4j_design_doc",
+      "target": "mcp_template_neo4j_error_handling"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Testing, lines 194-208",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_design_doc",
+      "_tgt": "mcp_template_neo4j_testing",
+      "source": "mcp_template_neo4j_design_doc",
+      "target": "mcp_template_neo4j_testing"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "Out of scope, lines 210-214",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_design_doc",
+      "_tgt": "mcp_template_neo4j_out_of_scope",
+      "source": "mcp_template_neo4j_design_doc",
+      "target": "mcp_template_neo4j_out_of_scope"
+    },
+    {
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "line 11",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_doc",
+      "_tgt": "mcp_template_neo4j_design_doc",
+      "source": "mcp_template_neo4j_design_doc",
+      "target": "mcp_template_neo4j_plan_doc"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_decision_instance_model",
+      "_tgt": "mcp_template_neo4j_goal",
+      "source": "mcp_template_neo4j_goal",
+      "target": "mcp_template_neo4j_decision_instance_model"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_current_static_server",
+      "_tgt": "mcp_template_neo4j_decision_static_untouched",
+      "source": "mcp_template_neo4j_current_static_server",
+      "target": "mcp_template_neo4j_decision_static_untouched"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_current_static_server",
+      "_tgt": "mcp_template_neo4j_rationale_empty_tool_prefix",
+      "source": "mcp_template_neo4j_current_static_server",
+      "target": "mcp_template_neo4j_rationale_empty_tool_prefix"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "INFERRED",
+      "confidence_score": 0.7,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_current_google_specific_flow",
+      "_tgt": "mcp_template_neo4j_decision_architecture_a",
+      "source": "mcp_template_neo4j_current_google_specific_flow",
+      "target": "mcp_template_neo4j_decision_architecture_a"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_current_google_specific_flow",
+      "_tgt": "mcp_template_neo4j_runner_sync_isolation",
+      "source": "mcp_template_neo4j_current_google_specific_flow",
+      "target": "mcp_template_neo4j_runner_sync_isolation"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_current_extra_env_plaintext",
+      "_tgt": "mcp_template_neo4j_decision_credentials_storage",
+      "source": "mcp_template_neo4j_current_extra_env_plaintext",
+      "target": "mcp_template_neo4j_decision_credentials_storage"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "lines 141-142",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_decision_credentials_storage",
+      "_tgt": "mcp_template_neo4j_credentials_validation",
+      "source": "mcp_template_neo4j_decision_credentials_storage",
+      "target": "mcp_template_neo4j_credentials_validation"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "INFERRED",
+      "confidence_score": 0.75,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_read_only_hides_write_tool",
+      "_tgt": "mcp_template_neo4j_decision_read_only_flag",
+      "source": "mcp_template_neo4j_decision_read_only_flag",
+      "target": "mcp_template_neo4j_read_only_hides_write_tool"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.75,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_decision_read_only_flag",
+      "_tgt": "mcp_template_neo4j_frontend_form",
+      "source": "mcp_template_neo4j_decision_read_only_flag",
+      "target": "mcp_template_neo4j_frontend_form"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "line 212",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_out_of_scope",
+      "_tgt": "mcp_template_neo4j_decision_read_only_flag",
+      "source": "mcp_template_neo4j_decision_read_only_flag",
+      "target": "mcp_template_neo4j_out_of_scope"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "line 45",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_decision_architecture_a",
+      "_tgt": "mcp_template_neo4j_runner_component",
+      "source": "mcp_template_neo4j_decision_architecture_a",
+      "target": "mcp_template_neo4j_runner_component"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "line 45",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_decision_architecture_a",
+      "_tgt": "mcp_template_neo4j_runner_routing",
+      "source": "mcp_template_neo4j_decision_architecture_a",
+      "target": "mcp_template_neo4j_runner_routing"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_architecture_flow",
+      "_tgt": "mcp_template_neo4j_decision_architecture_a",
+      "source": "mcp_template_neo4j_decision_architecture_a",
+      "target": "mcp_template_neo4j_architecture_flow"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "line 213",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_out_of_scope",
+      "_tgt": "mcp_template_neo4j_decision_static_untouched",
+      "source": "mcp_template_neo4j_decision_static_untouched",
+      "target": "mcp_template_neo4j_out_of_scope"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "line 22",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_global_constraints",
+      "_tgt": "mcp_template_neo4j_decision_static_untouched",
+      "source": "mcp_template_neo4j_decision_static_untouched",
+      "target": "mcp_template_neo4j_plan_global_constraints"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_env_injection",
+      "_tgt": "mcp_template_neo4j_runner_component",
+      "source": "mcp_template_neo4j_runner_component",
+      "target": "mcp_template_neo4j_env_injection"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_connectivity_precheck",
+      "_tgt": "mcp_template_neo4j_runner_component",
+      "source": "mcp_template_neo4j_runner_component",
+      "target": "mcp_template_neo4j_connectivity_precheck"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_compose_service",
+      "_tgt": "mcp_template_neo4j_runner_component",
+      "source": "mcp_template_neo4j_runner_component",
+      "target": "mcp_template_neo4j_compose_service"
+    },
+    {
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_task3_supervisor_admin_api_packaging",
+      "_tgt": "mcp_template_neo4j_runner_component",
+      "source": "mcp_template_neo4j_runner_component",
+      "target": "mcp_template_neo4j_task3_supervisor_admin_api_packaging"
+    },
+    {
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "lines 46-61",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_file_structure",
+      "_tgt": "mcp_template_neo4j_runner_component",
+      "source": "mcp_template_neo4j_runner_component",
+      "target": "mcp_template_neo4j_plan_file_structure"
+    },
+    {
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_task1_runner_scaffold_env_builder",
+      "_tgt": "mcp_template_neo4j_env_injection",
+      "source": "mcp_template_neo4j_env_injection",
+      "target": "mcp_template_neo4j_task1_runner_scaffold_env_builder"
+    },
+    {
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_rationale_reserved_env_keys",
+      "_tgt": "mcp_template_neo4j_env_injection",
+      "source": "mcp_template_neo4j_env_injection",
+      "target": "mcp_template_neo4j_plan_rationale_reserved_env_keys"
+    },
+    {
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_rationale_reserved_cli_flags",
+      "_tgt": "mcp_template_neo4j_env_injection",
+      "source": "mcp_template_neo4j_env_injection",
+      "target": "mcp_template_neo4j_plan_rationale_reserved_cli_flags"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "lines 92-93",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_rationale_no_precheck_on_reconcile",
+      "_tgt": "mcp_template_neo4j_connectivity_precheck",
+      "source": "mcp_template_neo4j_connectivity_precheck",
+      "target": "mcp_template_neo4j_rationale_no_precheck_on_reconcile"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "line 186",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_rotate_after_runner_accepts",
+      "_tgt": "mcp_template_neo4j_connectivity_precheck",
+      "source": "mcp_template_neo4j_connectivity_precheck",
+      "target": "mcp_template_neo4j_rotate_after_runner_accepts"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "line 186",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_error_handling",
+      "_tgt": "mcp_template_neo4j_connectivity_precheck",
+      "source": "mcp_template_neo4j_connectivity_precheck",
+      "target": "mcp_template_neo4j_error_handling"
+    },
+    {
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_task2_connectivity_precheck",
+      "_tgt": "mcp_template_neo4j_connectivity_precheck",
+      "source": "mcp_template_neo4j_connectivity_precheck",
+      "target": "mcp_template_neo4j_task2_connectivity_precheck"
+    },
+    {
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_rationale_reconcile_skips_precheck",
+      "_tgt": "mcp_template_neo4j_rationale_no_precheck_on_reconcile",
+      "source": "mcp_template_neo4j_rationale_no_precheck_on_reconcile",
+      "target": "mcp_template_neo4j_plan_rationale_reconcile_skips_precheck"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_read_only_hides_write_tool",
+      "_tgt": "mcp_template_neo4j_create_data_flow",
+      "source": "mcp_template_neo4j_read_only_hides_write_tool",
+      "target": "mcp_template_neo4j_create_data_flow"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "lines 115-117",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_rationale_empty_tool_prefix",
+      "_tgt": "mcp_template_neo4j_catalog_runner_column",
+      "source": "mcp_template_neo4j_catalog_runner_column",
+      "target": "mcp_template_neo4j_rationale_empty_tool_prefix"
+    },
+    {
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_task4_templates_runner_column",
+      "_tgt": "mcp_template_neo4j_catalog_runner_column",
+      "source": "mcp_template_neo4j_catalog_runner_column",
+      "target": "mcp_template_neo4j_task4_templates_runner_column"
+    },
+    {
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_task5_typed_runner_errors",
+      "_tgt": "mcp_template_neo4j_runner_routing",
+      "source": "mcp_template_neo4j_runner_routing",
+      "target": "mcp_template_neo4j_task5_typed_runner_errors"
+    },
+    {
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_task6_runner_registry_routing",
+      "_tgt": "mcp_template_neo4j_runner_routing",
+      "source": "mcp_template_neo4j_runner_routing",
+      "target": "mcp_template_neo4j_task6_runner_registry_routing"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "lines 143-144",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_rationale_extra_env_whitelist",
+      "_tgt": "mcp_template_neo4j_credentials_validation",
+      "source": "mcp_template_neo4j_credentials_validation",
+      "target": "mcp_template_neo4j_rationale_extra_env_whitelist"
+    },
+    {
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_task7_credentials_extra_env_rotate",
+      "_tgt": "mcp_template_neo4j_credentials_validation",
+      "source": "mcp_template_neo4j_credentials_validation",
+      "target": "mcp_template_neo4j_task7_credentials_extra_env_rotate"
+    },
+    {
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_task7_credentials_extra_env_rotate",
+      "_tgt": "mcp_template_neo4j_rotate_after_runner_accepts",
+      "source": "mcp_template_neo4j_rotate_after_runner_accepts",
+      "target": "mcp_template_neo4j_task7_credentials_extra_env_rotate"
+    },
+    {
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_rationale_rotate_ordering",
+      "_tgt": "mcp_template_neo4j_rotate_after_runner_accepts",
+      "source": "mcp_template_neo4j_rotate_after_runner_accepts",
+      "target": "mcp_template_neo4j_plan_rationale_rotate_ordering"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "line 214",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_out_of_scope",
+      "_tgt": "mcp_template_neo4j_sheets_import_google_only",
+      "source": "mcp_template_neo4j_sheets_import_google_only",
+      "target": "mcp_template_neo4j_out_of_scope"
+    },
+    {
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_task7_credentials_extra_env_rotate",
+      "_tgt": "mcp_template_neo4j_sheets_import_google_only",
+      "source": "mcp_template_neo4j_sheets_import_google_only",
+      "target": "mcp_template_neo4j_task7_credentials_extra_env_rotate"
+    },
+    {
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_rationale_sheet_import_google_only",
+      "_tgt": "mcp_template_neo4j_sheets_import_google_only",
+      "source": "mcp_template_neo4j_sheets_import_google_only",
+      "target": "mcp_template_neo4j_plan_rationale_sheet_import_google_only"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "lines 155-156",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_rationale_sync_kill_loop",
+      "_tgt": "mcp_template_neo4j_runner_sync_isolation",
+      "source": "mcp_template_neo4j_runner_sync_isolation",
+      "target": "mcp_template_neo4j_rationale_sync_kill_loop"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/specs/2026-09-29-mcp-template-neo4j-design.md",
+      "source_location": "lines 200-201",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_testing",
+      "_tgt": "mcp_template_neo4j_runner_sync_isolation",
+      "source": "mcp_template_neo4j_runner_sync_isolation",
+      "target": "mcp_template_neo4j_testing"
+    },
+    {
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_task8_runner_sync_isolation",
+      "_tgt": "mcp_template_neo4j_runner_sync_isolation",
+      "source": "mcp_template_neo4j_runner_sync_isolation",
+      "target": "mcp_template_neo4j_task8_runner_sync_isolation"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.75,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_rationale_distinct_runner_tokens",
+      "_tgt": "mcp_template_neo4j_runner_sync_isolation",
+      "source": "mcp_template_neo4j_runner_sync_isolation",
+      "target": "mcp_template_neo4j_plan_rationale_distinct_runner_tokens"
+    },
+    {
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_task9_frontend_neo4j_form",
+      "_tgt": "mcp_template_neo4j_frontend_form",
+      "source": "mcp_template_neo4j_frontend_form",
+      "target": "mcp_template_neo4j_task9_frontend_neo4j_form"
+    },
+    {
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_task10_compose_docs_e2e",
+      "_tgt": "mcp_template_neo4j_compose_service",
+      "source": "mcp_template_neo4j_compose_service",
+      "target": "mcp_template_neo4j_task10_compose_docs_e2e"
+    },
+    {
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.75,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_manual_verification",
+      "_tgt": "mcp_template_neo4j_testing",
+      "source": "mcp_template_neo4j_testing",
+      "target": "mcp_template_neo4j_plan_manual_verification"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "lines 13-23",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_doc",
+      "_tgt": "mcp_template_neo4j_plan_global_constraints",
+      "source": "mcp_template_neo4j_plan_doc",
+      "target": "mcp_template_neo4j_plan_global_constraints"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "lines 24-32",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_doc",
+      "_tgt": "mcp_template_neo4j_plan_docker_test_baseline",
+      "source": "mcp_template_neo4j_plan_doc",
+      "target": "mcp_template_neo4j_plan_docker_test_baseline"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "lines 34-40",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_doc",
+      "_tgt": "mcp_template_neo4j_plan_review_focus",
+      "source": "mcp_template_neo4j_plan_doc",
+      "target": "mcp_template_neo4j_plan_review_focus"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "lines 44-92",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_doc",
+      "_tgt": "mcp_template_neo4j_plan_file_structure",
+      "source": "mcp_template_neo4j_plan_doc",
+      "target": "mcp_template_neo4j_plan_file_structure"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "Task 1, line 96",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_doc",
+      "_tgt": "mcp_template_neo4j_task1_runner_scaffold_env_builder",
+      "source": "mcp_template_neo4j_plan_doc",
+      "target": "mcp_template_neo4j_task1_runner_scaffold_env_builder"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "Task 2, line 448",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_doc",
+      "_tgt": "mcp_template_neo4j_task2_connectivity_precheck",
+      "source": "mcp_template_neo4j_plan_doc",
+      "target": "mcp_template_neo4j_task2_connectivity_precheck"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "Task 3, line 694",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_doc",
+      "_tgt": "mcp_template_neo4j_task3_supervisor_admin_api_packaging",
+      "source": "mcp_template_neo4j_plan_doc",
+      "target": "mcp_template_neo4j_task3_supervisor_admin_api_packaging"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "Task 4, line 1515",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_doc",
+      "_tgt": "mcp_template_neo4j_task4_templates_runner_column",
+      "source": "mcp_template_neo4j_plan_doc",
+      "target": "mcp_template_neo4j_task4_templates_runner_column"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "Task 5, line 1776",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_doc",
+      "_tgt": "mcp_template_neo4j_task5_typed_runner_errors",
+      "source": "mcp_template_neo4j_plan_doc",
+      "target": "mcp_template_neo4j_task5_typed_runner_errors"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "Task 6, line 1884",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_doc",
+      "_tgt": "mcp_template_neo4j_task6_runner_registry_routing",
+      "source": "mcp_template_neo4j_plan_doc",
+      "target": "mcp_template_neo4j_task6_runner_registry_routing"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "Task 7, line 2609",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_doc",
+      "_tgt": "mcp_template_neo4j_task7_credentials_extra_env_rotate",
+      "source": "mcp_template_neo4j_plan_doc",
+      "target": "mcp_template_neo4j_task7_credentials_extra_env_rotate"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "Task 8, line 3357",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_doc",
+      "_tgt": "mcp_template_neo4j_task8_runner_sync_isolation",
+      "source": "mcp_template_neo4j_plan_doc",
+      "target": "mcp_template_neo4j_task8_runner_sync_isolation"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "Task 9, line 3501",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_doc",
+      "_tgt": "mcp_template_neo4j_task9_frontend_neo4j_form",
+      "source": "mcp_template_neo4j_plan_doc",
+      "target": "mcp_template_neo4j_task9_frontend_neo4j_form"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "Task 10, line 4179",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_doc",
+      "_tgt": "mcp_template_neo4j_task10_compose_docs_e2e",
+      "source": "mcp_template_neo4j_plan_doc",
+      "target": "mcp_template_neo4j_task10_compose_docs_e2e"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "line 318",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_doc",
+      "_tgt": "mcp_template_neo4j_plan_rationale_reserved_env_keys",
+      "source": "mcp_template_neo4j_plan_doc",
+      "target": "mcp_template_neo4j_plan_rationale_reserved_env_keys"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "line 374",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_doc",
+      "_tgt": "mcp_template_neo4j_plan_rationale_reserved_cli_flags",
+      "source": "mcp_template_neo4j_plan_doc",
+      "target": "mcp_template_neo4j_plan_rationale_reserved_cli_flags"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "lines 930, 1266",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_doc",
+      "_tgt": "mcp_template_neo4j_plan_rationale_validate_before_state",
+      "source": "mcp_template_neo4j_plan_doc",
+      "target": "mcp_template_neo4j_plan_rationale_validate_before_state"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "lines 610, 1309",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_doc",
+      "_tgt": "mcp_template_neo4j_plan_rationale_reconcile_skips_precheck",
+      "source": "mcp_template_neo4j_plan_doc",
+      "target": "mcp_template_neo4j_plan_rationale_reconcile_skips_precheck"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "line 2563",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_doc",
+      "_tgt": "mcp_template_neo4j_plan_rationale_distinct_runner_tokens",
+      "source": "mcp_template_neo4j_plan_doc",
+      "target": "mcp_template_neo4j_plan_rationale_distinct_runner_tokens"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "lines 2195, 2365",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_doc",
+      "_tgt": "mcp_template_neo4j_plan_rationale_selected_runner_host",
+      "source": "mcp_template_neo4j_plan_doc",
+      "target": "mcp_template_neo4j_plan_rationale_selected_runner_host"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "line 2317",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_doc",
+      "_tgt": "mcp_template_neo4j_plan_rationale_google_fallback",
+      "source": "mcp_template_neo4j_plan_doc",
+      "target": "mcp_template_neo4j_plan_rationale_google_fallback"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "line 3257",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_doc",
+      "_tgt": "mcp_template_neo4j_plan_rationale_rotate_ordering",
+      "source": "mcp_template_neo4j_plan_doc",
+      "target": "mcp_template_neo4j_plan_rationale_rotate_ordering"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "line 3288",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_doc",
+      "_tgt": "mcp_template_neo4j_plan_rationale_runner_change_conflict",
+      "source": "mcp_template_neo4j_plan_doc",
+      "target": "mcp_template_neo4j_plan_rationale_runner_change_conflict"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "line 3275",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_doc",
+      "_tgt": "mcp_template_neo4j_plan_rationale_sheet_import_google_only",
+      "source": "mcp_template_neo4j_plan_doc",
+      "target": "mcp_template_neo4j_plan_rationale_sheet_import_google_only"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "line 3694",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_doc",
+      "_tgt": "mcp_template_neo4j_plan_rationale_frontend_feedback_only",
+      "source": "mcp_template_neo4j_plan_doc",
+      "target": "mcp_template_neo4j_plan_rationale_frontend_feedback_only"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "Task 3 Step 13, line 1493",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_doc",
+      "_tgt": "mcp_template_neo4j_plan_graphify_policy",
+      "source": "mcp_template_neo4j_plan_doc",
+      "target": "mcp_template_neo4j_plan_graphify_policy"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "Task 10 Step 7, lines 4272-4283",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_doc",
+      "_tgt": "mcp_template_neo4j_plan_manual_verification",
+      "source": "mcp_template_neo4j_plan_doc",
+      "target": "mcp_template_neo4j_plan_manual_verification"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "line 24",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_docker_test_baseline",
+      "_tgt": "mcp_template_neo4j_plan_global_constraints",
+      "source": "mcp_template_neo4j_plan_global_constraints",
+      "target": "mcp_template_neo4j_plan_docker_test_baseline"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "line 27",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_docker_test_baseline",
+      "_tgt": "mcp_template_neo4j_task4_templates_runner_column",
+      "source": "mcp_template_neo4j_plan_docker_test_baseline",
+      "target": "mcp_template_neo4j_task4_templates_runner_column"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "lines 36-40",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_review_focus",
+      "_tgt": "mcp_template_neo4j_task1_runner_scaffold_env_builder",
+      "source": "mcp_template_neo4j_plan_review_focus",
+      "target": "mcp_template_neo4j_task1_runner_scaffold_env_builder"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "lines 36-40",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_review_focus",
+      "_tgt": "mcp_template_neo4j_task3_supervisor_admin_api_packaging",
+      "source": "mcp_template_neo4j_plan_review_focus",
+      "target": "mcp_template_neo4j_task3_supervisor_admin_api_packaging"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "lines 36-40",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_review_focus",
+      "_tgt": "mcp_template_neo4j_task6_runner_registry_routing",
+      "source": "mcp_template_neo4j_plan_review_focus",
+      "target": "mcp_template_neo4j_task6_runner_registry_routing"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "lines 36-40",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_review_focus",
+      "_tgt": "mcp_template_neo4j_task7_credentials_extra_env_rotate",
+      "source": "mcp_template_neo4j_plan_review_focus",
+      "target": "mcp_template_neo4j_task7_credentials_extra_env_rotate"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "lines 36-40",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_review_focus",
+      "_tgt": "mcp_template_neo4j_task8_runner_sync_isolation",
+      "source": "mcp_template_neo4j_plan_review_focus",
+      "target": "mcp_template_neo4j_task8_runner_sync_isolation"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_rationale_reserved_env_keys",
+      "_tgt": "mcp_template_neo4j_task1_runner_scaffold_env_builder",
+      "source": "mcp_template_neo4j_task1_runner_scaffold_env_builder",
+      "target": "mcp_template_neo4j_plan_rationale_reserved_env_keys"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_rationale_reserved_cli_flags",
+      "_tgt": "mcp_template_neo4j_task1_runner_scaffold_env_builder",
+      "source": "mcp_template_neo4j_task1_runner_scaffold_env_builder",
+      "target": "mcp_template_neo4j_plan_rationale_reserved_cli_flags"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_rationale_validate_before_state",
+      "_tgt": "mcp_template_neo4j_task3_supervisor_admin_api_packaging",
+      "source": "mcp_template_neo4j_task3_supervisor_admin_api_packaging",
+      "target": "mcp_template_neo4j_plan_rationale_validate_before_state"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_rationale_reconcile_skips_precheck",
+      "_tgt": "mcp_template_neo4j_task3_supervisor_admin_api_packaging",
+      "source": "mcp_template_neo4j_task3_supervisor_admin_api_packaging",
+      "target": "mcp_template_neo4j_plan_rationale_reconcile_skips_precheck"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "line 1493",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_graphify_policy",
+      "_tgt": "mcp_template_neo4j_task3_supervisor_admin_api_packaging",
+      "source": "mcp_template_neo4j_task3_supervisor_admin_api_packaging",
+      "target": "mcp_template_neo4j_plan_graphify_policy"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_rationale_distinct_runner_tokens",
+      "_tgt": "mcp_template_neo4j_task6_runner_registry_routing",
+      "source": "mcp_template_neo4j_task6_runner_registry_routing",
+      "target": "mcp_template_neo4j_plan_rationale_distinct_runner_tokens"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_rationale_selected_runner_host",
+      "_tgt": "mcp_template_neo4j_task6_runner_registry_routing",
+      "source": "mcp_template_neo4j_task6_runner_registry_routing",
+      "target": "mcp_template_neo4j_plan_rationale_selected_runner_host"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_rationale_google_fallback",
+      "_tgt": "mcp_template_neo4j_task6_runner_registry_routing",
+      "source": "mcp_template_neo4j_task6_runner_registry_routing",
+      "target": "mcp_template_neo4j_plan_rationale_google_fallback"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_rationale_rotate_ordering",
+      "_tgt": "mcp_template_neo4j_task7_credentials_extra_env_rotate",
+      "source": "mcp_template_neo4j_task7_credentials_extra_env_rotate",
+      "target": "mcp_template_neo4j_plan_rationale_rotate_ordering"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_rationale_runner_change_conflict",
+      "_tgt": "mcp_template_neo4j_task7_credentials_extra_env_rotate",
+      "source": "mcp_template_neo4j_task7_credentials_extra_env_rotate",
+      "target": "mcp_template_neo4j_plan_rationale_runner_change_conflict"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_rationale_sheet_import_google_only",
+      "_tgt": "mcp_template_neo4j_task7_credentials_extra_env_rotate",
+      "source": "mcp_template_neo4j_task7_credentials_extra_env_rotate",
+      "target": "mcp_template_neo4j_plan_rationale_sheet_import_google_only"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": null,
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_rationale_frontend_feedback_only",
+      "_tgt": "mcp_template_neo4j_task9_frontend_neo4j_form",
+      "source": "mcp_template_neo4j_task9_frontend_neo4j_form",
+      "target": "mcp_template_neo4j_plan_rationale_frontend_feedback_only"
+    },
+    {
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "docs/superpowers/plans/2026-09-29-mcp-template-neo4j.md",
+      "source_location": "line 4272",
+      "weight": 1.0,
+      "_src": "mcp_template_neo4j_plan_manual_verification",
+      "_tgt": "mcp_template_neo4j_task10_compose_docs_e2e",
+      "source": "mcp_template_neo4j_task10_compose_docs_e2e",
+      "target": "mcp_template_neo4j_plan_manual_verification"
     }
   ],
   "hyperedges": [

@@ -1,12 +1,12 @@
-# Graph Report - libs (--update, AST + doc pass)  (2026-09-30)
+# Graph Report - docs (--update, doc pass)  (2026-09-30)
 
 ## Corpus Check
-- 5 files · ~0 words
+- 4 files · ~0 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 12189 nodes · 28833 edges · 236 communities detected
-- Extraction: 65% EXTRACTED · 35% INFERRED · 0% AMBIGUOUS · INFERRED: 10173 edges (avg confidence: 0.61)
+- 12249 nodes · 28973 edges · 236 communities detected
+- Extraction: 65% EXTRACTED · 35% INFERRED · 0% AMBIGUOUS · INFERRED: 10188 edges (avg confidence: 0.61)
 - Token cost: 0 input · 0 output
 
 ## Community Hubs (Navigation)
@@ -75,7 +75,7 @@
 - [[_COMMUNITY_CrawlerManager Core & Reconcile|CrawlerManager Core & Reconcile]]
 - [[_COMMUNITY_superpowers 7 import gotchas (G1-G7)|superpowers: 7 import gotchas (G1-G7)]]
 - [[_COMMUNITY_superpowers robots.txt Total Block Detectio...|superpowers: robots.txt Total Block Detectio...]]
-- [[_COMMUNITY_superpowers SSO, MCP Zoho & Consent Specs|superpowers: SSO, MCP Zoho & Consent Specs]]
+- [[_COMMUNITY_superpowers MCP gateway specs (SSO, Zoho, consent, Neo4j templates)|superpowers: MCP gateway specs (SSO, Zoho, consent, Neo4j templates)]]
 - [[_COMMUNITY_Detection Langue FR Core|Detection Langue FR Core]]
 - [[_COMMUNITY_common-utils __init__.py|common-utils: __init__.py]]
 - [[_COMMUNITY_api-detection-langue-fr __init__.py|api-detection-langue-fr: __init__.py]]
@@ -222,7 +222,7 @@
 - [[_COMMUNITY_graphify-guide-en.md scriptsgraphify_plan_update.py...|graphify-guide-en.md: scripts/graphify_plan_update.py...]]
 - [[_COMMUNITY_crawler-service PushedSet.test.ts|crawler-service: PushedSet.test.ts]]
 - [[_COMMUNITY_crawler-service UpdateChecker.test.ts|crawler-service: UpdateChecker.test.ts]]
-- [[_COMMUNITY_crawler-service test_admin_redis_debug.py|crawler-service: test_admin_redis_debug.py]]
+- [[_COMMUNITY_graphify guide unified-graph merge process & gotchas|graphify guide: unified-graph merge process & gotchas]]
 - [[_COMMUNITY_api-detection-langue-fr Noscript Repair Fallback (clean...|api-detection-langue-fr: Noscript Repair Fallback (clean...]]
 - [[_COMMUNITY_graphify-guide-en.md graphify-outmemory (saved Q&A...|graphify-guide-en.md: graphify-out/memory/ (saved Q&A...]]
 - [[_COMMUNITY_crawler-service crawler-service Phase-2 limitDi...|crawler-service: crawler-service Phase-2 limitDi...]]
@@ -591,9 +591,9 @@ Nodes (34): TimingRecorder, assert(), tmpDir(), mkEntry(), mkSample(), test1(), 
 Cohesion: 0.67
 Nodes (3): Crawler Monitor UI Redesign (oklch tokens, Linear/Vercel/Stripe aesthetic), Crawler Monitor design system: oklch tokens + Tailwind theme + primitives (Pill, StatTile, Sparkline, Timeline, CapacityRing, AreaChart, LogLine, KV, ProjCard), Refondue pages: Overview, Job Details, Domains, Capacity Planning, Health, Audit, Albums, Dark Mode, Mobile responsive
 
-### Community 27 - "superpowers: SSO, MCP Zoho & Consent Specs"
-Cohesion: 0.04
-Nodes (77): account-service SSO, account-service-backend, account-service-frontend, OAuth 2.1 Authorization Server module (lifted from mcp-gateway authserver, consent stripped), PKCE S256 mandatory (code_verifier + code_challenge SHA-256), Refresh token rotation + reuse detection (chain revocation by sid + Slack alert), Logout broadcaster (HMAC-SHA256 webhook + 4 worker goroutines + retries 1s/2s/4s + logout_events table), MySQL schema: users, oauth2_clients, oauth2_authorization_codes, oauth2_refresh_tokens, logout_events, audit_logs (+69 more)
+### Community 27 - "superpowers: MCP gateway specs (SSO, Zoho, consent, Neo4j templates)"
+Cohesion: 0.03
+Nodes (136): account-service SSO, account-service-backend, account-service-frontend, OAuth 2.1 Authorization Server module (lifted from mcp-gateway authserver, consent stripped), PKCE S256 mandatory (code_verifier + code_challenge SHA-256), Refresh token rotation + reuse detection (chain revocation by sid + Slack alert), Logout broadcaster (HMAC-SHA256 webhook + 4 worker goroutines + retries 1s/2s/4s + logout_events table), MySQL schema: users, oauth2_clients, oauth2_authorization_codes, oauth2_refresh_tokens, logout_events, audit_logs (+128 more)
 
 ### Community 2 - "Detection Langue FR Core"
 Cohesion: 0.01
@@ -1179,9 +1179,9 @@ Nodes (1): graphify-out/memory/ (saved Q&A, promoted to nodes)
 Cohesion: 1.0
 Nodes (1): Upstream `graphify hook install` unscoped rescan (gotcha)
 
-### Community 74 - "crawler-service: test_admin_redis_debug.py"
-Cohesion: 0.33
-Nodes (7): Gotcha: invented cross-link target IDs, Gotcha: community re-clustering shuffles labels.json, Rationale: labels should derive from community content, not be human-assigned, Decision: one unified graph over per-service graphs, 4-step checklist: add a service to the unified graph, .github/workflows/graphify-auto-rebuild.yml, scripts/graphify_check_service.py (classifier)
+### Community 74 - "graphify guide: unified-graph merge process & gotchas"
+Cohesion: 0.32
+Nodes (8): Gotcha: invented cross-link target IDs, Gotcha: community labels after a merge — assert 0 drift, name the new communities, audit the ones that received nodes, Rule: labels come from community content; no hand relabel of the largest communities when drift is 0, Decision: one unified graph over per-service graphs, 4-step checklist: add a service to the unified graph, .github/workflows/graphify-auto-rebuild.yml, scripts/graphify_check_service.py (classifier), _preserve_and_place merge (since 37247ad5, 2026-08-07): prior nodes keep their community, only new nodes are placed
 
 ### Community 257 - "api-detection-langue-fr: Noscript Repair Fallback (clean..."
 Cohesion: 1.0
@@ -1360,7 +1360,7 @@ Nodes (1): Garde : le driver livré à temps n'est arrêté que par le `finally`
   docs/superpowers/runbooks/examples/tracking_mail2bdd_tables.doc.json · relation: conceptually_related_to
 
 ## Knowledge Gaps
-- **3528 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+3523 more)
+- **3524 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+3519 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **Thin community `graphify-guide-en.md: Limitation: ID collision on sha...`** (1 nodes): `Creates a dictionary of headers for a DLQ message, compatible with both pika and`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
