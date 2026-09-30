@@ -1,12 +1,12 @@
-# Graph Report - apps-microservices/api-detection-langue-fr (--update, doc pass)  (2026-09-24)
+# Graph Report - libs (--update, AST + doc pass)  (2026-09-30)
 
 ## Corpus Check
-- 1 files · ~0 words
+- 5 files · ~0 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 12155 nodes · 28772 edges · 236 communities detected
-- Extraction: 65% EXTRACTED · 35% INFERRED · 0% AMBIGUOUS · INFERRED: 10155 edges (avg confidence: 0.61)
+- 12189 nodes · 28833 edges · 236 communities detected
+- Extraction: 65% EXTRACTED · 35% INFERRED · 0% AMBIGUOUS · INFERRED: 10173 edges (avg confidence: 0.61)
 - Token cost: 0 input · 0 output
 
 ## Community Hubs (Navigation)
@@ -19,7 +19,7 @@
 - [[_COMMUNITY_common-utils Creates a dictionary of headers...|common-utils: Creates a dictionary of headers...]]
 - [[_COMMUNITY_common-utils OCR Extractor & CleanHTML|common-utils: OCR Extractor & CleanHTML]]
 - [[_COMMUNITY_common-utils Creates pika.BasicProperties fo...|common-utils: Creates pika.BasicProperties fo...]]
-- [[_COMMUNITY_superpowers crawler-service CLAUDE|superpowers: crawler-service CLAUDE.md]]
+- [[_COMMUNITY_common-utils HTML Extractors (HeaderFooter + Trafilatura)|common-utils: HTML Extractors (HeaderFooter + Trafilatura)]]
 - [[_COMMUNITY_API Gateway Go (routingauthcatalog)|API Gateway Go (routing/auth/catalog)]]
 - [[_COMMUNITY_Detection FR Response Models|Detection FR Response Models]]
 - [[_COMMUNITY_common-utils Milvus Concurrency Guard|common-utils: Milvus Concurrency Guard]]
@@ -61,7 +61,7 @@
 - [[_COMMUNITY_rust-common-utils mod.rs|rust-common-utils: mod.rs]]
 - [[_COMMUNITY_common-utils get_message_or_stop()|common-utils: get_message_or_stop()]]
 - [[_COMMUNITY_superpowers GCS Archive Audit Tool Plan|superpowers: GCS Archive Audit Tool Plan]]
-- [[_COMMUNITY_crawler-service test_crawler_capacity_disk.py|crawler-service: test_crawler_capacity_disk.py]]
+- [[_COMMUNITY_content-extractor API Design Spec|content-extractor: API Design Spec]]
 - [[_COMMUNITY_Crawler - Detection Client Seam (docs)|Crawler <-> Detection Client Seam (docs)]]
 - [[_COMMUNITY_crawler-service test_crawler_version.py|crawler-service: test_crawler_version.py]]
 - [[_COMMUNITY_api-detection-langue-fr INFLIGHT_REQUESTS Gauge Semanti...|api-detection-langue-fr: INFLIGHT_REQUESTS Gauge Semanti...]]
@@ -367,9 +367,9 @@ Nodes (86): gen_email_uuid(), AnonymizeText, CleanHTML, Class base to clean data
 Cohesion: 1.0
 Nodes (1): Cleans up whitespace and removes control characters.
 
-### Community 30 - "superpowers: crawler-service CLAUDE.md"
-Cohesion: 0.07
-Nodes (27): TrafilaturaHp, _normalize_sentence(), _normalize_whitespace(), Normalizes a sentence for accurate comparison., Cleans up whitespace and removes control characters., Pre-processes the HTML content:         1. Removes script/style/noscript tags., Post-processes the extracted content:         1. Extracts article content (produ, Extrait le texte avec BeautifulSoup en ciblant les balises pertinentes. (+19 more)
+### Community 30 - "common-utils: HTML Extractors (HeaderFooter + Trafilatura)"
+Cohesion: 0.04
+Nodes (57): TrafilaturaHp, _normalize_sentence(), _normalize_whitespace(), Normalizes a sentence for accurate comparison., Cleans up whitespace and removes control characters., Pre-processes the HTML content:         1. Removes script/style/noscript tags., Post-processes the extracted content:         1. Extracts article content (produ, Extrait le texte avec BeautifulSoup en ciblant les balises pertinentes. (+49 more)
 
 ### Community 5 - "API Gateway Go (routing/auth/catalog)"
 Cohesion: 0.01
@@ -535,7 +535,7 @@ Nodes (5): Archive Disk Space Pre-flight Check, 503 Rejection + Fail-Open Diagno
 Cohesion: 0.17
 Nodes (12): GCS Archive Audit Tool Plan, Archive Classifications (OK/CORRUPTED/WRONG_NAME/...), gcloud Storage CLI Shell Wrappers (no Python GCS lib), GCS Audit Multi-Source Domain Resolution, _resolve_domain_name Multi-Source Helper, GCS Audit Prefix Fix + Quarantine Restore, _normalize_member_name (handles ./ prefix), --restore-from-quarantine Flag (+4 more)
 
-### Community 87 - "crawler-service: test_crawler_capacity_disk.py"
+### Community 87 - "content-extractor: API Design Spec"
 Cohesion: 0.5
 Nodes (4): content-extractor-api-service Design Spec, boilerpy3 /clean Endpoint, HeaderFooterExtractor /extract Endpoint, Thin Wrapper Over libs/common-utils
 
@@ -1360,7 +1360,7 @@ Nodes (1): Garde : le driver livré à temps n'est arrêté que par le `finally`
   docs/superpowers/runbooks/examples/tracking_mail2bdd_tables.doc.json · relation: conceptually_related_to
 
 ## Knowledge Gaps
-- **3517 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+3512 more)
+- **3528 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+3523 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **Thin community `graphify-guide-en.md: Limitation: ID collision on sha...`** (1 nodes): `Creates a dictionary of headers for a DLQ message, compatible with both pika and`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
