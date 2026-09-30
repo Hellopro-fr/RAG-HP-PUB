@@ -242,6 +242,7 @@ func (s *AuthServer) renderConsent(w http.ResponseWriter, r *http.Request, clien
 	hasPreConfiguredScope := len(client.Servers) > 0
 
 	servers, _ := s.serverRepo.ListActive()
+	servers = visibleServers(servers, s.serverAccess, userEmail)
 
 	// Build server lookup for name resolution + identify Zoho-tagged servers
 	// so the per-user catalog override can substitute their tools below.
@@ -462,6 +463,11 @@ func (s *AuthServer) handleConsent(w http.ResponseWriter, r *http.Request, clien
 			return
 		}
 		scope.ServerIDs = serverIDs
+	}
+	scope = filterScopeForViewer(scope, s.serverAccess, session.Email)
+	if len(client.Servers) == 0 && len(scope.ServerIDs) == 0 {
+		http.Error(w, "select at least one server", http.StatusBadRequest)
+		return
 	}
 
 	s.consentRepo.Upsert(&db.OAuth2Consent{
