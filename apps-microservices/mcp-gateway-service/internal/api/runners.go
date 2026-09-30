@@ -81,7 +81,9 @@ func (h *Handler) runnerForTemplate(tpl *db.Template) (RunnerEndpoint, error) {
 func (h *Handler) runnerForInstance(inst *db.TemplateInstance) (RunnerEndpoint, error) {
 	var tpl *db.Template
 	if h.templateRepo != nil && inst != nil {
-		if t, err := h.templateRepo.GetBySlug(inst.TemplateSlug); err == nil {
+		// GetBySlugAny: a deactivated template must keep routing its
+		// instances to its own runner.
+		if t, err := h.templateRepo.GetBySlugAny(inst.TemplateSlug); err == nil {
 			tpl = t
 		}
 	}

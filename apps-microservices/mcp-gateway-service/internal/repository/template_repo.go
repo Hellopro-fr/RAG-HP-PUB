@@ -37,6 +37,17 @@ func (r *TemplateRepo) GetBySlug(slug string) (*db.Template, error) {
 	return &t, nil
 }
 
+// GetBySlugAny returns a template by slug whether or not it is active. Used
+// to route an existing instance to its runner: deactivating a template must not
+// re-route its instances to another runner.
+func (r *TemplateRepo) GetBySlugAny(slug string) (*db.Template, error) {
+	var t db.Template
+	if err := r.db.First(&t, "slug = ?", slug).Error; err != nil {
+		return nil, err
+	}
+	return &t, nil
+}
+
 // ListAll returns every template row, active + inactive, ordered by slug.
 // Used by the export handler; routine catalog listing should keep using
 // ListActive so inactive seeds stay hidden from the UI.
@@ -220,6 +231,32 @@ func (r *InstanceRepo) UpdateCredentials(id string, credentialsPlain []byte, has
 	result := r.db.Model(&db.TemplateInstance{}).Where("id = ?", id).Updates(map[string]any{
 		"encrypted_credentials": ct,
 		"credentials_hash":      hashHex,
+	})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
+}
+
+// UpdateCredentialsAndExtraEnv writes the encrypted credentials, their hash and
+// extra_env in ONE UPDATE, so a failure cannot leave the row half-rotated.
+// RowsAffected == 0 means the row is gone: the ciphertext always changes
+// (random nonce), so a matching row always reports one affected row.
+func (r *InstanceRepo) UpdateCredentialsAndExtraEnv(id string, credentialsPlain []byte, hashHex string, extraEnv json.RawMessage) error {
+	if r.encryptor == nil {
+		return fmt.Errorf("encryptor required for template instances")
+	}
+	ct, err := r.encryptor.Encrypt(credentialsPlain)
+	if err != nil {
+		return fmt.Errorf("encrypt: %w", err)
+	}
+	result := r.db.Model(&db.TemplateInstance{}).Where("id = ?", id).Updates(map[string]any{
+		"encrypted_credentials": ct,
+		"credentials_hash":      hashHex,
+		"extra_env":             extraEnv,
 	})
 	if result.Error != nil {
 		return result.Error
