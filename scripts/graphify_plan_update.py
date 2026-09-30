@@ -260,7 +260,9 @@ def main() -> int:
             print(f"      raison: {reason}")
         print()
     print("  Lancer les commandes ci-dessus depuis une session Claude Code, dans cet ordre,")
-    print("  puis re-labelliser une seule fois a la fin (chaque merge re-clusterise).")
+    print("  puis labelliser une seule fois apres le dernier merge. Un merge ne re-clusterise")
+    print("  plus (_preserve_and_place) : verifier une derive de 0 %, nommer les communautes")
+    print("  neuves, auditer celles qui ont recu des noeuds (/graphify-refresh, etape 3).")
     advisory()
     return 1
 
