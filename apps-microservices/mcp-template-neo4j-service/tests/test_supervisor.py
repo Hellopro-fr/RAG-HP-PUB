@@ -118,3 +118,17 @@ async def test_mcp_proxy_argv(supervisor, monkeypatch):
     assert seen["env"]["NEO4J_PASSWORD"] == "s3cret"
     # The failed spawn released its port.
     assert supervisor._pool.used() == []
+
+
+@pytest.mark.asyncio
+async def test_respawn_same_id_keeps_port(supervisor):
+    first = await supervisor.spawn(_spec("r1", "sleep 3600"), bypass_mcp_proxy=True)
+    port = first.port
+    spec = _spec("r1", "sleep 3600")
+    spec.credentials_hash = "h2"
+    second = await supervisor.spawn(spec, bypass_mcp_proxy=True)
+    assert second is not first
+    assert second.port == port
+    assert supervisor._pool.used() == [port]
+    await supervisor.kill("r1")
+    assert supervisor._pool.used() == []
