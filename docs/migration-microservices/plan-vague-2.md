@@ -50,7 +50,7 @@ Légende des lieux : **Gandi** = interface DNS · **TF** = Terraform `infra-micr
 |---|---|---|---|---|---|---|
 | 0.1 | Revue du plan, décisions du § 6 | CTO, LEAD, DSO, PROD | réunion 1 h | — | **jeu 1/10 matin** | plan validé, devs nommés par service |
 | 0.2 | Mesures VM : volume horaire par adresse, que sert `dlq.hellopro.eu`, taille des volumes | DSO | commandes du § 7 (lecture seule) | VM | jeu 1/10 | chiffres dans ce document |
-| 0.3 | **Load balancer HTTPS prod** (une IP publique fixe, un routage par nom d'hôte) avec les back-ends Cloud Run (`rag`, `login`, `formulaire`, `nextjs-conseils`) | DSO | module TF `https_lb_cloud_run` (déjà éprouvé sur `crlb-demo.hellopro.eu`), `plan` relu puis `apply -target` | TF | jeu 1/10 | IP du LB ; chaque hôte répond via `curl --resolve <hôte>:443:<IP LB>` |
+| 0.3 | **Load balancer HTTPS prod** (une IP publique fixe, un routage par nom d'hôte) avec les back-ends Cloud Run (`rag`, `login`, `nextjs-conseils`) | DSO | module TF `https_lb_cloud_run` (déjà éprouvé sur `crlb-demo.hellopro.eu`), `plan` relu puis `apply -target` | TF | jeu 1/10 | IP du LB ; chaque hôte répond via `curl --resolve <hôte>:443:<IP LB>` |
 | 0.4 | **Certificats** des adresses de la vague, **émis avant** toute bascule DNS | DSO | Certificate Manager, validation par DNS : un enregistrement `CNAME _acme-challenge.<hôte>` par adresse | TF + **Gandi** | jeu 1/10 (émission : quelques minutes à quelques heures) | certificats `ACTIVE` |
 | 0.5 | Entrée GKE pour `api.` et `mcp.` (le module actuel ne sait brancher que du Cloud Run) | DSO | NEG autonomes sur les Services K8s (`cloud.google.com/neg`) rattachés au même LB | K8s + TF | ven 2/10 | `curl --resolve api.hellopro.eu:443:<IP LB>` → gateway GKE (shadow) |
 | 0.6 | **TTL à 300 s** sur toutes les adresses de la vague | DSO | modifier le TTL de chaque enregistrement A (valeur inchangée : `35.245.31.1`) | **Gandi** | **ven 2/10** (≥ 48 h avant la 1re bascule) | `dig +noall +answer <hôte>` montre 300 |
@@ -105,7 +105,7 @@ C'est le morceau le plus risqué : la gateway migre le schéma de sa base au dé
 | d.2 | `login.hellopro.eu` | DSO | A → IP LB | **Gandi** | d.1 ; clients OAuth enregistrés (**devs SSO**) |
 | d.3 | `rag.hellopro.eu` | DSO | A → IP LB | **Gandi** | test de connexion par un dev |
 | d.4 | `cmf.hellopro.eu`, front de `mcp.` | **devs** (création des fronts SSO) puis DSO | A → IP LB | Gandi | fronts construits et testés |
-| d.5 | `formulaire.hellopro.eu` | **devs** (Next 15) puis DSO | A → IP LB | Gandi | migration Next 15 livrée (F-HP-SEC-019) |
+| d.5 | ~~`formulaire.hellopro.eu`~~ | — | — | — | ⏭️ **hors vague 2** (décision 3 du 30/09 : pas en production, fonctionnalités en cours) |
 | d.6 | `conseils.hellopro.fr` | **PROD** décide, DSO exécute | A de **`nextjs-conseils.hellopro.eu`** → IP LB (voir § 5) ; Ecritel seulement si sa règle vise une IP | Gandi (± Ecritel) | GO PROD/SEO + réponse Ecritel |
 
 ### V2-e — Stockage images et crawler · après la vague 2
@@ -148,7 +148,7 @@ C'est le morceau le plus risqué : la gateway migre le schéma de sa base au dé
 | Quand | Enregistrement | Action |
 |---|---|---|
 | jeu 1/10 | `_acme-challenge.<hôte>` (un par adresse de la vague) | **ajouter** le CNAME fourni par Certificate Manager (émission des certificats) |
-| ven 2/10 | A de `api`, `mcp`, `rag`, `login`, `cmf`, `formulaire`, `nextjs-conseils` (`.hellopro.eu`) | **TTL → 300 s**, valeur inchangée |
+| ven 2/10 | A de `api`, `mcp`, `rag`, `login`, `cmf`, `nextjs-conseils` (`.hellopro.eu`) | **TTL → 300 s**, valeur inchangée |
 | jour de chaque bascule | A de l'adresse basculée | valeur `35.245.31.1` → **IP du LB** |
 | rollback | idem | valeur → `35.245.31.1` |
 | fin de vague | adresses basculées | TTL remonté (3600 s) |
@@ -174,17 +174,90 @@ C'est le morceau le plus risqué : la gateway migre le schéma de sa base au dé
 
 ---
 
-## 6. Décisions attendues à la revue du 1/10
+## 6. Décisions — pourquoi, objectif, options, recommandation
 
-| # | Décision | Qui |
+Chaque décision a un propriétaire et une échéance (tableau dans [`suivi-vague-2.md`](suivi-vague-2.md) § 5). Ce qui suit donne à chacun de quoi trancher en revue.
+
+### Décision 1 — Plan, calendrier, un dev par service · CTO, LEAD · jeu 1/10
+
+- **Pourquoi** : la vague 2 ne se fait pas sans les devs. Chaque route basculée (V2-a) et chaque serveur MCP (V2-b) doit être testé sur son parcours réel par quelqu'un qui connaît le service, et les URL en dur (F-HP-DEV-005) sont des correctifs de code.
+- **Objectif** : que chacun sache, dès jeudi, quels jours il est mobilisé et sur quel service.
+- **Options** : (A) le plan tel quel, point d'étape jeu 8/10 ; (B) ne valider que V2-0 et V2-a, et replanifier la suite après le bilan du 8/10.
+- **Recommandation DSO** : **A**, avec le point d'étape du 8/10 comme porte de sortie. Il faut un nom par service P4/P5 (14 routes, 8 MCP) ; un même dev peut en couvrir plusieurs.
+- **Si on ne tranche pas** : V2-a ne peut pas démarrer le 5/10 (pas de testeur, pas de correctif d'URL).
+
+### Décision 2 — `conseils.hellopro.fr` · PROD, LEAD · avant V2-d
+
+- **Pourquoi** : `nextjs-conseils-hp` remplace **progressivement** des pages PHP. Le front Apache d'Ecritel décide quels chemins vont à Next.js ; le reste reste en PHP. Basculer tout le sous-domaine casserait les pages non migrées — ce n'est **pas** ce qu'on propose.
+- **Ce qu'on bascule réellement** : seulement le **back-end** Next.js, en changeant l'adresse de `nextjs-conseils.hellopro.eu` (si Ecritel proxifie par ce nom — question du § 5). Les chemins servis par Next.js ne changent pas ; le SEO n'est pas touché si le contenu est identique.
+- **Objectif** : sortir ce front de la VM sans changement visible pour les visiteurs ni pour les moteurs de recherche.
+- **Risques à couvrir** : la version Cloud Run est reconstruite depuis `prod` (Next 15.5.24, correctif de sécurité F-HP-SEC-019) — elle peut différer de la VM ; démarrage à froid si le service descend à zéro instance.
+- **Options** : (A) basculer le back-end en V2-d, `min instances = 1`, après comparaison de pages par PROD ; (B) attendre la fin de la refonte progressive.
+- **Recommandation DSO** : **A**. Avant la bascule, PROD compare un échantillon de pages servies par Cloud Run (`curl --resolve`, sans rien changer pour le public) avec les mêmes pages servies par la VM.
+- **Décision (30/09)** : ✅ **GO A** — on compare et on vérifie d'abord ; **les contenus ne doivent pas différer** (condition de bascule).
+- **Si on ne tranche pas** : `conseils` reste sur la VM, qui ne peut pas être libérée de ses entrées publiques.
+
+### Décision 3 — Formulaire Next.js · LEAD · ✅ prise le 30/09
+
+- **Décision** : **hors vague 2.** `nextjs-formulaire-hp` n'est pas déployé en production (fonctionnalités en cours de développement) ; la migration Next 15 n'est pas urgente.
+- **Conséquences** : `formulaire.hellopro.eu` reste sur la VM et n'est pas inclus dans les TTL ni les certificats de V2-0 ; action d.5 reportée. Le Cloud Run `nextjs-formulaire-hp` reste en shadow. À reprendre quand le LEAD annonce une mise en production — il faudra alors vérifier la règle Ecritel sur `www.hellopro.fr` (le vhost VM `formulaire` accepte aussi ce nom).
+
+### Décision 4 — Services P9 à trancher · LEAD · jeu 8/10
+
+- **Pourquoi** : ces services n'ont ni cible ni avenir décidés. Tant qu'ils existent, la VM ne peut pas être libérée, et deux routes de la gateway pointent encore vers des cibles floues (dont une IP en dur).
+- **Objectif** : pour chacun, une réponse parmi **migrer / garder sur la VM / supprimer**.
+
+| Service | Ce qu'on sait | Proposition DSO |
 |---|---|---|
-| 1 | Plan et calendrier validés ; un dev nommé par service P4/P5 | CTO, LEAD |
-| 2 | Bascule de `conseils` : quand, et sous quelles conditions SEO | PROD, LEAD |
-| 3 | Date de livraison de la migration Next 15 du formulaire | LEAD |
-| 4 | P9 : `api-gateway-service` (Python), `api-model`, `api-chatbot`, suppression de `graph-rag-api-recherche-service-debug`, cibles `SERVICE_CRAWLING` / `SERVICE_OPTIMOTEUR` | LEAD |
-| 5 | `dlq-manager-service` (auto-archivage Elasticsearch) : activer ou non ; sinon retirer `dlq.hellopro.eu` | métier, CTO |
-| 6 | Cloud Armor : critères pour passer en blocage réel | RSSI |
-| 7 | CD GKE prod (F-HP-IND-005) : calage en parallèle | CTO |
+| `api-gateway-service` (Python) | ancienne gateway, remplacée par `api-gateway-go-service` ; déclare le même port 8500, ne répond plus ; gardée « pour le rollback » | supprimer après V2-c (le repli est alors le jumeau Go) |
+| `api-model-service` | usage non documenté | le LEAD confirme l'usage ; sinon suppression |
+| `api-chatbot-service` | profil `disabled` | supprimer si aucun projet de réactivation |
+| `graph-rag-api-recherche-service-debug` | profil `disabled`, mais **1 318 lignes de logs en 7 jours** : quelque chose le lance | identifier l'appelant, puis supprimer |
+| route `SERVICE_CRAWLING` | cible non décidée (`reverse-proxy:8050/crawler`) | à trancher avec V2-e (crawler) |
+| route `SERVICE_OPTIMOTEUR` | **IP en dur** | donner un nom stable avant V2-c |
+
+- **Si on ne tranche pas** : ces services restent sur la VM par défaut ; la ConfigMap `.env.url` de V2-c reprend les routes telles quelles.
+
+### Décision 5 — `dlq-manager-service` et `dlq.hellopro.eu` · métier, CTO · ⚠️ faits corrigés le 30/09
+
+- **Fait nouveau (30/09)** : le service **tourne** sur la VM (`Up 2 months (healthy)`, port `8585`) — contrairement à la fiche L7 qui le croyait désactivé. Sa boucle d'auto-archivage s'applique donc déjà à l'Elasticsearch prod, et **`dlq.hellopro.eu` l'expose sur internet sans aucune authentification** (nginx sans contrôle d'accès, code sans authentification, CORS `*`) → **F-HP-SEC-028, CRITICAL**.
+- **Mesure immédiate (sans attendre la décision)** : lire le journal d'accès nginx de `dlq.hellopro.eu`, puis fermer l'accès public au niveau nginx (authentification HTTP ou liste d'IP). Réversible en une commande.
+- **Décision qui reste à prendre** : qui utilise cet outil, et doit-il migrer en vague 2 ? (A) garder, migrer sur GKE en V2-c derrière authentification (SSO ou jeton) et règle réseau, jumeau VM arrêté dans le même geste (sinon deux boucles d'auto-archivage) ; (B) retirer l'outil et l'adresse.
+- **Recommandation DSO** : A si l'outil est utilisé (le journal d'accès le dira), avec correction de F-HP-SEC-027 avant toute exposition.
+
+### Décision 6 — Cloud Armor : quand bloquer · RSSI · avant V2-d
+
+- **Pourquoi** : le load balancer rend les services joignables depuis internet. Cloud Armor filtre les attaques courantes (injections, scans, abus) ; en mode observation, il **journalise** sans bloquer.
+- **Objectif** : bloquer le trafic malveillant **sans** bloquer les appels légitimes (back-office PHP, partenaires, les 6 IP legacy qui appellent certains ports en direct).
+- **Options** : (A) observation pendant la vague, puis blocage **adresse par adresse** après 7 jours sans faux positif ; (B) blocage immédiat.
+- **Recommandation DSO** : **A**, plus une limite de débit sur `login.hellopro.eu` dès sa bascule.
+- **Si on ne tranche pas** : les services restent protégés seulement par leur propre authentification.
+
+### Décision 7 — CD GKE prod (F-HP-IND-005) · CTO · jeu 1/10
+
+- **Pourquoi** : sur les 34 consumers basculés, 2 seulement ont un déploiement automatique. Pour les autres, une livraison des devs passe par un déploiement manuel du DSO — l'équipe reste bloquée sur ses features si on tarde.
+- **Objectif** : que les devs livrent sur les services basculés par une PR vers `prod`, avec la gate et une approbation, sans intervention manuelle.
+- **Options** : (A) en parallèle de la vague 2 ; (B) juste après (semaine du 19/10).
+- **Recommandation DSO** : **cadrage cette semaine (1-2/10), branchement semaine du 19/10** : la vague 2 mobilise déjà le DSO à plein les semaines du 5 et du 12/10. Prérequis : rightsizing mémoire, environnement `production` avec relecteur, retrait des jumeaux VM consumers.
+- **Décision (30/09)** : ✅ GO, **de façon progressive** : un service branché par jour, testé et validé avant le suivant.
+- **Si on ne tranche pas** : les livraisons des devs sur ces services restent manuelles.
+
+### Décision 8 — Certificats par validation DNS · CTO, DSO · jeu 1/10
+
+- **Pourquoi** : le certificat « managé » actuel du module ne s'émet **qu'une fois le DNS basculé** vers le load balancer. Entre la bascule et l'émission (quelques minutes à quelques heures), les visiteurs verraient une **erreur de certificat**.
+- **Objectif** : aucune coupure TLS au moment de la bascule.
+- **Options** : (A) Certificate Manager avec validation DNS : un CNAME `_acme-challenge` par adresse chez Gandi, certificat émis **avant** la bascule ; (B) garder le module actuel et accepter la fenêtre d'erreur.
+- **Recommandation DSO** : **A**. Coût : une évolution du module Terraform et un CNAME par adresse.
+- **Si on ne tranche pas** : B, avec une fenêtre d'erreur à chaque bascule.
+
+### Décision 9 — Jeton API Gandi temporaire · CTO, DSO · jeu 1/10
+
+- **Pourquoi** : une modification DNS à la main (interface) est rapide mais sans trace ni relecture ; une erreur de saisie coupe une adresse publique.
+- **Objectif** : chaque modification DNS devient un script relu qui garde la valeur d'origine, écrit, relit, et laisse une ligne dans le journal Gandi du suivi.
+- **Risque** : un jeton volé permet de modifier la zone. **Parades** : `hellopro.eu` seul, droit DNS seul, expiration vers le 23/10, rangé dans Secret Manager, révoqué en fin de vague.
+- **Options** : (A) jeton temporaire + scripts ; (B) interface Gandi + journal rempli à la main.
+- **Recommandation DSO** : **A**.
+- **Si on ne tranche pas** : B.
 
 ---
 
