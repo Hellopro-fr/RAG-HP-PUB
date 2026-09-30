@@ -29,7 +29,7 @@ This is **service-level** access (who may reach the MCP server). It is independe
 | G1 | Which servers | **Neo4j template instances only**: a backend is *restricted* when `TemplateSlug != ""` and the template with that slug has `runner = "neo4j"` (so it also covers Neo4j templates created later from the "Créer" page). No new column, no generic per-server flag (explicitly not chosen). |
 | G2 | Rule | Allowed ⇔ the request carries an end-user email **and** (`gateway_users.role == "admin"` with `is_allowed = true` **or** `server_authorizations(server_id, email)` exists). An admin disabled on the Users page (`is_allowed = false`) is not an admin for this gate, so offboarding also closes access through still-valid OAuth2 tokens. `is_allowed` is **not** applied to the grant path (account-synced users are created with `is_allowed = false`). |
 | G3 | Callers without email | `mcp_…` scope tokens and `client_credentials` OAuth2 grants carry no end-user email → **always denied** on restricted servers. |
-| G4 | Failure mode | **Fail-closed**: template / user lookup errors and unwired repositories → denied. A missing template row for a non-empty `template_slug` (FK is RESTRICT, so only a corrupted DB) → treated as restricted and denied. |
+| G4 | Failure mode | **Fail-closed**: a template / server-slug lookup error, an unwired template lookup, or a missing template row for a non-empty `template_slug` (FK is RESTRICT, so only a corrupted DB; cached as restricted) makes the backend **restricted**: only admins and holders of a grant on it get through (human decision 2026-09-30: "Deny, but admins keep access"). A `gateway_users` lookup error means not-admin; a grant lookup error means no grant. |
 | G5 | Unrestricted servers | Behaviour unchanged, including the static `mcp-neo4j-service` (no `template_slug`), Google, Zoho, leexi, ringover, bdd, hellodata. |
 | G6 | Grants management | Existing `/server-authorizations` page and REST API (lists every `mcp_servers` row). A grant on instance A never opens instance B. A grant keeps its existing "unfiltered" meaning on filtered backends — Neo4j instances inject no filter headers, so there is no conflict. |
 | G7 | Base | Built directly on `features/poc` (not on #807). |
@@ -98,8 +98,9 @@ Viewer identity: `scopetoken.EndUserEmailFromContext(ctx)` in the scoped gateway
 |---|---|
 | No end-user email (scope token, client_credentials) | denied (omitted / error) |
 | Email unknown in `gateway_users` and no grant | denied |
-| DB error on template / user / grant lookup | denied, logged |
-| Template row missing for a non-empty `template_slug` | restricted and denied |
+| DB error on template / server-slug lookup | restricted: admin or grantee allowed, everyone else denied; logged |
+| DB error on user / grant lookup | not admin / no grant → denied on restricted backends, logged |
+| Template row missing for a non-empty `template_slug` | restricted (cached 60 s): admin or grantee allowed, everyone else denied |
 | Non-restricted backend | unchanged |
 
 ## Testing
