@@ -2,7 +2,9 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 
 from app.api.admin import router as admin_router
 from app.config import settings
@@ -42,6 +44,17 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="mcp-template-neo4j-service", lifespan=lifespan)
 app.include_router(admin_router)
+
+
+@app.exception_handler(RequestValidationError)
+async def _validation_error(request: Request, exc: RequestValidationError):
+    # FastAPI's default 422 echoes the request "input", which for a spawn is the
+    # whole body including credentials_json. Return field locations only.
+    fields = sorted({".".join(str(p) for p in e.get("loc", ())) for e in exc.errors()})
+    return JSONResponse(
+        status_code=422,
+        content={"detail": {"code": "invalid_request", "message": ", ".join(fields)}},
+    )
 
 
 @app.get("/admin/health")

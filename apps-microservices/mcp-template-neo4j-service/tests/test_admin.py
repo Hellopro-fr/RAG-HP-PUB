@@ -96,3 +96,15 @@ def test_reconcile_endpoint_skips_precheck(client, fake_sup, monkeypatch):
     assert r.status_code == 202
     assert r.json() == {"spawned": 1}
     check.assert_not_called()
+
+
+def test_validation_error_does_not_echo_input(client, fake_sup):
+    body = _body(creds=CREDS.replace("s3cret", "CANARY-PW"))
+    del body["credentials_hash"]
+    r = client.post("/admin/instances", json=body, headers=TOKEN)
+    assert r.status_code == 422
+    detail = r.json()["detail"]
+    assert detail["code"] == "invalid_request"
+    assert "body.credentials_hash" in detail["message"]
+    assert "CANARY-PW" not in r.text
+    fake_sup.spawn.assert_not_called()
