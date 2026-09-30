@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { templatesApi } from '@/api/templates'
 import type {
   Template,
+  TemplateExportRow,
   TemplateInstance,
   CreateInstanceParams,
   RotateNeo4jParams
@@ -21,6 +22,11 @@ export const useTemplatesStore = defineStore('templates', () => {
     } finally {
       isLoading.value = false
     }
+  }
+
+  // Creates one catalog template; the caller refreshes the list (fetchTemplates).
+  async function createTemplate(row: TemplateExportRow): Promise<Template> {
+    return await templatesApi.create(row)
   }
 
   async function fetchInstances(slug?: string): Promise<void> {
@@ -75,6 +81,7 @@ export const useTemplatesStore = defineStore('templates', () => {
     instances,
     isLoading,
     fetchTemplates,
+    createTemplate,
     fetchInstances,
     createInstance,
     deleteInstance,

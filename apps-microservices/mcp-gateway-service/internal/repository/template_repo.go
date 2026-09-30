@@ -2,7 +2,9 @@ package repository
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 
 	"mcp-gateway/internal/crypto"
 	"mcp-gateway/internal/db"
@@ -55,6 +57,45 @@ func (r *TemplateRepo) ListAll() ([]db.Template, error) {
 	var out []db.Template
 	err := r.db.Order("slug ASC").Find(&out).Error
 	return out, err
+}
+
+// ErrTemplateExists is returned by Create when the slug is already taken,
+// by an active or an inactive template.
+var ErrTemplateExists = errors.New("template slug already exists")
+
+// Create inserts ONE new template and never overwrites: a slug already in use
+// (active or inactive) yields ErrTemplateExists.
+//
+// GORM replaces a false IsActive by the `default:true` column default on
+// INSERT (even with Select("*") or an explicit column list), so an inactive
+// template is inserted and then flipped with UpdateColumn, in one transaction.
+func (r *TemplateRepo) Create(t *db.Template) error {
+	if _, err := r.GetBySlugAny(t.Slug); err == nil {
+		return ErrTemplateExists
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+	wantActive := t.IsActive
+	err := r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(t).Error; err != nil {
+			return err
+		}
+		if !wantActive {
+			return tx.Model(t).UpdateColumn("is_active", false).Error
+		}
+		return nil
+	})
+	t.IsActive = wantActive
+	if err != nil {
+		// Lost race between the pre-check and the insert: the primary key
+		// rejects the second writer (MySQL "Duplicate entry", SQLite "UNIQUE").
+		msg := err.Error()
+		if errors.Is(err, gorm.ErrDuplicatedKey) || strings.Contains(msg, "Duplicate entry") || strings.Contains(msg, "UNIQUE constraint failed") {
+			return ErrTemplateExists
+		}
+		return err
+	}
+	return nil
 }
 
 // Upsert creates each template by slug or overwrites the existing row.

@@ -36,6 +36,7 @@ src/
     bdd/BDDFieldBlock.vue         # single-field block (mirrors InstructionRow pattern)
     common/Paginator.vue          # generic page <-> page navigator
     ui/IconActionButton.vue           # icon-only action button (neutral/brand/danger)
+    templates/templateJson.ts     # pure helpers: parseTemplateJson (row | envelope | array), rowToForm / formToRow for TemplateCreateView
     templates/neo4jConnection.ts  # Neo4j field validation + FormData helpers (mirrors the gateway's ValidateNeo4jCredentials)
   router/       # Vue Router with auth guard
   stores/       # Pinia stores (auth, servers)
@@ -45,6 +46,7 @@ src/
     BDDTableFieldsView.vue        # fields-edit page (WYSIWYG + import/export + block builder)
     ZohoImportFormView.vue        # 3-step Zoho import form (admin or user scope)
     ZohoImportDetailView.vue        # per-row Zoho import detail (metadata + tools)
+    TemplateCreateView.vue        # "Créer" one catalog template (/admin/templates/new): form + "Importer JSON" prefill (single row, export envelope or array); POST /api/v1/templates, 409 shown on the slug field
     TemplateInstanceFormView.vue  # template instance wizard; Neo4j templates (runner=neo4j) get connection fields + "Lecture seule" instead of the SA JSON upload
 nginx.conf      # Production reverse proxy config
 Dockerfile      # Multi-stage: node build → nginx serve

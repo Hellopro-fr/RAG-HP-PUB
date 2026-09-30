@@ -329,12 +329,15 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	// gated to admin via isAdminOnly (see below). The handlers themselves
 	// return 503 when the templates feature is not wired (Task 13 deps unset).
 	apiMux.HandleFunc("/api/v1/templates", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			w.Header().Set("Allow", "GET")
+		switch r.Method {
+		case http.MethodGet:
+			h.handleListTemplates(w, r)
+		case http.MethodPost:
+			h.handleCreateTemplate(w, r)
+		default:
+			w.Header().Set("Allow", "GET, POST")
 			http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
-			return
 		}
-		h.handleListTemplates(w, r)
 	})
 	// /templates/export and /templates/import are registered with exact paths
 	// BEFORE the /templates/ slug catch-all below. net/http's ServeMux prefers
@@ -613,6 +616,10 @@ func isAdminOnly(path, method string) bool {
 	// GET routes on /api/v1/templates and /api/v1/template-instances stay open to all authenticated users.
 	if strings.HasPrefix(path, "/api/v1/template-instances") &&
 		(method == http.MethodPost || method == http.MethodDelete) {
+		return true
+	}
+	// Creating a catalog entry is a write on the catalog; GET stays open.
+	if path == "/api/v1/templates" && method == http.MethodPost {
 		return true
 	}
 	// Catalog import/export ship the whole seed definition, including inactive
