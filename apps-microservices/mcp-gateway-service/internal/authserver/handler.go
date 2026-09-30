@@ -30,6 +30,10 @@ type AuthServer struct {
 	// servers into "Configurés"/"Non configurés" using each backend's
 	// per-viewer ZohoServerState.Configured flag.
 	zohoFetcher ZohoStateForUser
+	// serverAccess (optional) hides servers the viewer may not reach (Neo4j
+	// template instances without admin role or grant) from both consent
+	// screens and drops them from consent submissions. nil shows everything.
+	serverAccess ServerAccessPolicy
 	// docsURL is the absolute URL surfaced in the "Non configurés"
 	// section so viewers know where to learn how to wire their Zoho
 	// import. Computed from GATEWAY_PUBLIC_URL + "/docs/zohocrm" at
