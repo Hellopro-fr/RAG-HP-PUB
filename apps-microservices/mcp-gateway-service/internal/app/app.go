@@ -402,6 +402,13 @@ func registerRESTAndOAuthServer(
 	gw.SetServerAuthorizer(serverAuthRepo)
 	log.Println("[main] server_authorizations wired into Gateway for full-access bypass")
 
+	// Service-level gate on Neo4j template instances: only gateway admins and
+	// holders of a server_authorizations grant on the instance may see or call
+	// it. Shared by the scoped gateway and the OAuth2 consent screens.
+	neo4jAccess := gateway.NewNeo4jAccess(templateRepo, dbs.repo, dbs.userRepo, serverAuthRepo)
+	gw.SetNeo4jAccess(neo4jAccess)
+	log.Println("[main] neo4j access gate wired (admin role or server authorization required on Neo4j template instances)")
+
 	apiHandler.SetEncryptor(dbs.encryptor)
 	zohoImportRepo := repository.NewZohoImportRepo(dbs.database)
 	apiHandler.SetZohoImportRepo(zohoImportRepo)
@@ -445,6 +452,7 @@ func registerRESTAndOAuthServer(
 		SecureCookie:   cfg.SecureCookie,
 		RefreshTTL:     cfg.OAuth2RefreshTokenTTL,
 	})
+	authSrv.SetServerAccess(neo4jAccess)
 	authSrv.Register(mux)
 	authSrv.RegisterAPI(mux)
 	log.Println("[main] OAuth2 Authorization Server mounted at /authorize, /token, /register, /.well-known/")
