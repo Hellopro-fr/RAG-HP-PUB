@@ -58,6 +58,8 @@ type Config struct {
 	// Google templates runner (mcp-google-templates-runner sidecar).
 	GoogleTemplatesRunnerURL        string // GOOGLE_TEMPLATES_RUNNER_URL
 	GoogleTemplatesRunnerAdminToken string // GOOGLE_TEMPLATES_RUNNER_ADMIN_TOKEN
+	Neo4jTemplatesRunnerURL         string // NEO4J_TEMPLATES_RUNNER_URL
+	Neo4jTemplatesRunnerAdminToken  string // NEO4J_TEMPLATES_RUNNER_ADMIN_TOKEN
 
 	// Slack notifications. Posts ServerDown/ServerUp/ToolsRegression/Unauthorized/
 	// Shutdown/Panic events to an incoming webhook. Disabled when SlackWebhookURL
@@ -185,6 +187,8 @@ func Load() *Config {
 
 		GoogleTemplatesRunnerURL:        os.Getenv("GOOGLE_TEMPLATES_RUNNER_URL"),
 		GoogleTemplatesRunnerAdminToken: os.Getenv("GOOGLE_TEMPLATES_RUNNER_ADMIN_TOKEN"),
+		Neo4jTemplatesRunnerURL:         os.Getenv("NEO4J_TEMPLATES_RUNNER_URL"),
+		Neo4jTemplatesRunnerAdminToken:  os.Getenv("NEO4J_TEMPLATES_RUNNER_ADMIN_TOKEN"),
 
 		SlackWebhookURL:        os.Getenv("SLACK_WEBHOOK_URL"),
 		SlackEnvLabel:          os.Getenv("SLACK_ENV_LABEL"),

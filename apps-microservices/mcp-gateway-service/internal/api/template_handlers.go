@@ -155,10 +155,10 @@ func (h *Handler) handleGetInstance(w http.ResponseWriter, r *http.Request) {
 			serverURL = u
 		}
 	}
-	// Best-effort: fetch live stderr tail from runner.
+	// Best-effort: fetch live stderr tail from the instance's runner.
 	tail := ""
-	if h.runner != nil {
-		if statuses, rerr := h.runner.List(r.Context()); rerr == nil {
+	if ep, rerr := h.runnerForInstance(inst); rerr == nil {
+		if statuses, lerr := ep.Client.List(r.Context()); lerr == nil {
 			for _, s := range statuses {
 				if s.ID == id {
 					tail = s.StderrTail
@@ -190,7 +190,7 @@ func toInstanceResponse(inst db.TemplateInstance, stderrTail, url string) Templa
 
 func (h *Handler) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 	// Dependencies must all be wired (done in Task 13) for this to work.
-	if h.templateRepo == nil || h.instanceRepo == nil || h.repo == nil || h.runner == nil || h.config == nil {
+	if h.templateRepo == nil || h.instanceRepo == nil || h.repo == nil || h.config == nil {
 		writeJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: "templates feature not configured"})
 		return
 	}
@@ -220,6 +220,10 @@ func (h *Handler) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, ErrorResponse{
 			Error: fmt.Sprintf("template %s does not support instance creation", tpl.Slug),
 		})
+		return
+	}
+	if _, err := h.runnerForTemplate(tpl); err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: err.Error()})
 		return
 	}
 
@@ -298,6 +302,8 @@ const (
 	createInstanceErrSpawn
 	createInstanceErrUnhealthy
 	createInstanceErrMCPServerInsert
+	createInstanceErrRunnerMissing
+	createInstanceErrPrecheck
 )
 
 // createInstanceError carries the failure stage + underlying cause so the
@@ -325,6 +331,11 @@ func classifyCreateInstanceError(err error) (int, string) {
 			return http.StatusBadGateway, "runner unavailable — see server logs"
 		case createInstanceErrUnhealthy:
 			return http.StatusBadGateway, "instance failed to become healthy"
+		case createInstanceErrRunnerMissing:
+			return http.StatusServiceUnavailable, cerr.Err.Error()
+		case createInstanceErrPrecheck:
+			msg, _ := runnerPrecheckMessage(cerr.Err)
+			return http.StatusUnprocessableEntity, msg
 		case createInstanceErrMCPServerInsert:
 			return http.StatusInternalServerError, "create mcp_server failed"
 		}
@@ -340,7 +351,7 @@ func classifyCreateInstanceError(err error) (int, string) {
 // returns, so callers do not need to clean up on failure.
 //
 // Preconditions (callers MUST validate): tpl non-nil, name non-empty,
-// credentialsJSON already passed validation.ValidateServiceAccountJSON,
+// credentialsJSON already validated for the template's runner (credentialsFromRequest),
 // extraEnv already passed validateExtraEnv against tpl.RequiredExtraEnv,
 // toolPrefixOverride already alphanumeric-validated.
 func (h *Handler) createInstanceFromSpec(
@@ -355,6 +366,10 @@ func (h *Handler) createInstanceFromSpec(
 	autoDiscover bool,
 	createdBy string,
 ) (*db.TemplateInstance, string, error) {
+	ep, err := h.runnerForTemplate(tpl)
+	if err != nil {
+		return nil, "", &createInstanceError{Kind: createInstanceErrRunnerMissing, Err: err}
+	}
 	// IDs and hash
 	instanceID := uuid.New().String()
 	mcpServerID := instanceID // reuse the same UUID per spec
@@ -395,7 +410,7 @@ func (h *Handler) createInstanceFromSpec(
 	}
 
 	// 2) Spawn via the runner.
-	resp, err := h.runner.Spawn(ctx, runnerclient.SpawnRequest{
+	resp, err := ep.Client.Spawn(ctx, runnerclient.SpawnRequest{
 		InstanceID:      instanceID,
 		TemplateSlug:    tpl.Slug,
 		StdioCommand:    tpl.StdioCommand,
@@ -409,14 +424,17 @@ func (h *Handler) createInstanceFromSpec(
 		if delErr := h.instanceRepo.DeleteWithMCPServer(instanceID); delErr != nil {
 			log.Printf("[templates][WARN] could not roll back instance row %s: %v", instanceID, delErr)
 		}
-		return nil, "", &createInstanceError{Kind: createInstanceErrSpawn, Err: err}
+		kind := createInstanceErrSpawn
+		if _, ok := runnerPrecheckMessage(err); ok {
+			kind = createInstanceErrPrecheck
+		}
+		return nil, "", &createInstanceError{Kind: kind, Err: err}
 	}
 
 	// Compute the in-cluster URL. The gateway and runner share a Docker network.
-	runnerHost := strings.TrimPrefix(strings.TrimPrefix(h.config.GoogleTemplatesRunnerURL, "http://"), "https://")
-	runnerHost = strings.SplitN(runnerHost, ":", 2)[0]
-	instanceURL := fmt.Sprintf("http://%s:%d", runnerHost, resp.Port)
-	hostPort := fmt.Sprintf("%s:%d", runnerHost, resp.Port)
+	host := runnerHost(ep.URL)
+	instanceURL := fmt.Sprintf("http://%s:%d", host, resp.Port)
+	hostPort := fmt.Sprintf("%s:%d", host, resp.Port)
 
 	// 3) Wait until mcp-proxy is accepting TCP connections on its port. The
 	// Spawn call returns as soon as the supervisor launches the child, but
@@ -424,7 +442,7 @@ func (h *Handler) createInstanceFromSpec(
 	// first client request both race the startup.
 	if err := waitForTCPReady(ctx, hostPort, 15*time.Second); err != nil {
 		log.Printf("[templates] instance %s never became TCP-ready at %s: %v", instanceID, hostPort, err)
-		if kerr := h.runner.Kill(ctx, instanceID); kerr != nil {
+		if kerr := ep.Client.Kill(ctx, instanceID); kerr != nil {
 			log.Printf("[templates][WARN] kill after unhealthy startup failed for %s: %v", instanceID, kerr)
 		}
 		if delErr := h.instanceRepo.DeleteWithMCPServer(instanceID); delErr != nil {
@@ -459,7 +477,7 @@ func (h *Handler) createInstanceFromSpec(
 	}
 	if err := h.repo.Create(&mcpSrv); err != nil {
 		log.Printf("[templates] create mcp_server failed for %s: %v", mcpServerID, err)
-		if kerr := h.runner.Kill(ctx, instanceID); kerr != nil {
+		if kerr := ep.Client.Kill(ctx, instanceID); kerr != nil {
 			log.Printf("[templates][WARN] kill after mcp_server insert failure for %s: %v", instanceID, kerr)
 		}
 		if delErr := h.instanceRepo.DeleteWithMCPServer(instanceID); delErr != nil {
@@ -584,7 +602,7 @@ func validateExtraEnv(schemaRaw json.RawMessage, extra map[string]string) error 
 }
 
 func (h *Handler) handleRestartInstance(w http.ResponseWriter, r *http.Request) {
-	if h.instanceRepo == nil || h.runner == nil {
+	if h.instanceRepo == nil {
 		writeJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: "templates feature not configured"})
 		return
 	}
@@ -593,7 +611,8 @@ func (h *Handler) handleRestartInstance(w http.ResponseWriter, r *http.Request) 
 		http.NotFound(w, r)
 		return
 	}
-	if _, err := h.instanceRepo.GetByID(id); err != nil {
+	inst, err := h.instanceRepo.GetByID(id)
+	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "instance not found"})
 			return
@@ -602,7 +621,12 @@ func (h *Handler) handleRestartInstance(w http.ResponseWriter, r *http.Request) 
 		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "instance lookup failed"})
 		return
 	}
-	if err := h.runner.Restart(r.Context(), id); err != nil {
+	ep, err := h.runnerForInstance(inst)
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: err.Error()})
+		return
+	}
+	if err := ep.Client.Restart(r.Context(), id); err != nil {
 		log.Printf("[templates] runner restart failed for instance %s: %v", id, err)
 		writeJSON(w, http.StatusBadGateway, ErrorResponse{Error: "runner unavailable — see server logs"})
 		return
@@ -614,7 +638,7 @@ func (h *Handler) handleRestartInstance(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *Handler) handleRotateCredentials(w http.ResponseWriter, r *http.Request) {
-	if h.templateRepo == nil || h.instanceRepo == nil || h.runner == nil {
+	if h.templateRepo == nil || h.instanceRepo == nil {
 		writeJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: "templates feature not configured"})
 		return
 	}
@@ -665,6 +689,11 @@ func (h *Handler) handleRotateCredentials(w http.ResponseWriter, r *http.Request
 		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "template lookup failed"})
 		return
 	}
+	ep, err := h.runnerForTemplate(tpl)
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: err.Error()})
+		return
+	}
 
 	// Update DB first (encrypted blob + hash) — the runner respawn below re-reads from us on reconcile.
 	if err := h.instanceRepo.UpdateCredentials(id, credBytes, hashHex); err != nil {
@@ -687,7 +716,7 @@ func (h *Handler) handleRotateCredentials(w http.ResponseWriter, r *http.Request
 		_ = json.Unmarshal(inst.ExtraEnv, &extraEnv)
 	}
 	env := renderEnv(tpl.DefaultEnv, extraEnv, id)
-	if _, err := h.runner.Spawn(r.Context(), runnerclient.SpawnRequest{
+	if _, err := ep.Client.Spawn(r.Context(), runnerclient.SpawnRequest{
 		InstanceID:      id,
 		TemplateSlug:    inst.TemplateSlug,
 		StdioCommand:    tpl.StdioCommand,
@@ -707,7 +736,7 @@ func (h *Handler) handleRotateCredentials(w http.ResponseWriter, r *http.Request
 }
 
 func (h *Handler) handleDeleteInstance(w http.ResponseWriter, r *http.Request) {
-	if h.instanceRepo == nil || h.runner == nil {
+	if h.instanceRepo == nil {
 		writeJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: "templates feature not configured"})
 		return
 	}
@@ -716,7 +745,8 @@ func (h *Handler) handleDeleteInstance(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if _, err := h.instanceRepo.GetByID(id); err != nil {
+	inst, err := h.instanceRepo.GetByID(id)
+	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "instance not found"})
 			return
@@ -725,9 +755,12 @@ func (h *Handler) handleDeleteInstance(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "instance lookup failed"})
 		return
 	}
-	// 1) Kill runner subprocess first (idempotent on runner side — a 404 from runner is OK;
-	//    the instance may have already been cleaned up or never spawned successfully).
-	if err := h.runner.Kill(r.Context(), id); err != nil {
+	// 1) Kill the runner subprocess first (idempotent on the runner side). An
+	//    unconfigured runner cannot be reached anyway; its reconcile loop drops
+	//    the instance once the row is gone.
+	if ep, rerr := h.runnerForInstance(inst); rerr != nil {
+		log.Printf("[templates][WARN] %v — skipping kill for %s (continuing with DB delete)", rerr, id)
+	} else if err := ep.Client.Kill(r.Context(), id); err != nil {
 		log.Printf("[templates][WARN] runner kill failed for %s: %v (continuing with DB delete)", id, err)
 	}
 	// 2) Transactional delete of template_instances + mcp_servers.
