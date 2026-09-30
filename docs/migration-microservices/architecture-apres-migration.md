@@ -123,7 +123,7 @@ Paris+1 / heure locale). `consumers=0` à ces heures est nominal ; les messages 
 
 ```mermaid
 flowchart LR
-  U[Utilisateur / BO PHP] -->|Imperva| AP[Apache ECRITEL] -->|DNS| NG[nginx VM] --> GW[api-gateway-go<br/>VM aujourd'hui · GKE en shadow]
+  U[Utilisateur / BO PHP] -->|DNS Gandi *.hellopro.eu| NG[nginx VM 35.245.31.1] --> GW[api-gateway-go<br/>VM aujourd'hui · GKE en shadow]
   GW -->|table .env.url<br/>SERVICE_*| S[api-recherche · api-classification<br/>optimize · api-rest-milvus …<br/>VM aujourd'hui · Cloud Run en shadow]
   S -->|gRPC via enabler 10.11.0.2:15051-15054| GPU[llm · embedding · reranking · database<br/>VM GPU]
   S --> MIL[(Milvus)]
@@ -314,7 +314,8 @@ instance. Signaler au DevSecOps **avant** de corriger les données ; le rollback
 | Infra, secrets, déploiement, rollback, accès | **DevSecOps** |
 | Comportement applicatif, idempotence, décision produit sur un flux | **LEAD** |
 | Vulnérabilité, VEX, exposition de secret | **RSSI** (via DevSecOps) |
-| Entrées publiques, DNS `hellopro.fr`, Apache, Imperva | ECRITEL — **via** le DevSecOps, sous contrat |
+| DNS `hellopro.fr` et `hellopro.eu` (Gandi) | **DevSecOps** (piloté en interne, confirmé le 30/09) |
+| Front Apache / Imperva de `hellopro.fr` (`www`, `conseils`) | ECRITEL — **via** le DevSecOps, sous contrat |
 
 ---
 
