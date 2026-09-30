@@ -43,6 +43,7 @@ func newTemplateTestDB(t *testing.T) *gorm.DB {
 			tags                TEXT,
 			is_active           INTEGER NOT NULL DEFAULT 1,
 			kind                TEXT NOT NULL DEFAULT 'stdio',
+			runner              TEXT NOT NULL DEFAULT 'google',
 			created_at          datetime,
 			updated_at          datetime
 		);
@@ -432,5 +433,89 @@ func TestInstanceRepo_DeleteWithMCPServer_MissingServer(t *testing.T) {
 	}
 	if _, err := repo.GetByID(instID); !errors.Is(err, gorm.ErrRecordNotFound) {
 		t.Errorf("instance should be gone, got err %v", err)
+	}
+}
+
+func TestTemplateRepo_UpsertPersistsRunner(t *testing.T) {
+	gdb := newTemplateTestDB(t)
+	repo := NewTemplateRepo(gdb)
+	if err := repo.Upsert([]db.Template{{Slug: "neo4j", Name: "Neo4j", StdioCommand: "mcp-neo4j-cypher", Runner: "neo4j", IsActive: true}}); err != nil {
+		t.Fatalf("upsert: %v", err)
+	}
+	got, err := repo.GetBySlug("neo4j")
+	if err != nil || got.Runner != "neo4j" {
+		t.Fatalf("runner = %v err=%v", got, err)
+	}
+	// The repository updates the column on re-import (DoUpdates list);
+	// handleImportTemplates refuses the change while instances exist (Task 7).
+	if err := repo.Upsert([]db.Template{{Slug: "neo4j", Name: "Neo4j", StdioCommand: "mcp-neo4j-cypher", Runner: "google", IsActive: true}}); err != nil {
+		t.Fatalf("re-upsert: %v", err)
+	}
+	got, _ = repo.GetBySlug("neo4j")
+	if got.Runner != "google" {
+		t.Fatalf("runner after re-upsert = %q, want google", got.Runner)
+	}
+}
+
+func TestInstanceRepo_UpdateExtraEnv(t *testing.T) {
+	gdb := newTemplateTestDB(t)
+	repo := NewInstanceRepo(gdb, newTestEncryptor(t))
+	inst := &db.TemplateInstance{ID: "i1", TemplateSlug: "neo4j", Name: "n", CredentialsHash: "h", MCPServerID: "s1", RunnerStatus: "running", ExtraEnv: []byte(`{"NEO4J_READ_ONLY":"true"}`)}
+	if err := repo.Create(inst, []byte(`{}`)); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if err := repo.UpdateExtraEnv("i1", []byte(`{"NEO4J_READ_ONLY":"false"}`)); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	got, err := repo.GetByID("i1")
+	if err != nil || string(got.ExtraEnv) != `{"NEO4J_READ_ONLY":"false"}` {
+		t.Fatalf("extra_env = %s err=%v", got.ExtraEnv, err)
+	}
+	// Writing the same value again must not error (MySQL reports 0 affected rows).
+	if err := repo.UpdateExtraEnv("i1", []byte(`{"NEO4J_READ_ONLY":"false"}`)); err != nil {
+		t.Fatalf("idempotent update: %v", err)
+	}
+}
+
+func TestTemplateRepo_GetBySlugAny_ReturnsInactive(t *testing.T) {
+	gdb := newTemplateTestDB(t)
+	repo := NewTemplateRepo(gdb)
+	if err := repo.Upsert([]db.Template{{Slug: "neo4j", Name: "Neo4j", StdioCommand: "mcp-neo4j-cypher", Runner: "neo4j", IsActive: true}}); err != nil {
+		t.Fatalf("upsert: %v", err)
+	}
+	if err := gdb.Model(&db.Template{}).Where("slug = ?", "neo4j").Update("is_active", false).Error; err != nil {
+		t.Fatalf("deactivate: %v", err)
+	}
+	if _, err := repo.GetBySlug("neo4j"); !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("GetBySlug on inactive: want ErrRecordNotFound, got %v", err)
+	}
+	got, err := repo.GetBySlugAny("neo4j")
+	if err != nil || got.Runner != "neo4j" {
+		t.Fatalf("GetBySlugAny = %v err=%v", got, err)
+	}
+	if _, err := repo.GetBySlugAny("nope"); !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("GetBySlugAny missing: want ErrRecordNotFound, got %v", err)
+	}
+}
+
+func TestInstanceRepo_UpdateCredentialsAndExtraEnv(t *testing.T) {
+	gdb := newTemplateTestDB(t)
+	repo := NewInstanceRepo(gdb, newTestEncryptor(t))
+	inst := &db.TemplateInstance{ID: "i1", TemplateSlug: "neo4j", Name: "n", CredentialsHash: "h", MCPServerID: "s1", RunnerStatus: "running", ExtraEnv: []byte(`{"NEO4J_READ_ONLY":"true"}`)}
+	if err := repo.Create(inst, []byte(`old`)); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if err := repo.UpdateCredentialsAndExtraEnv("i1", []byte(`new`), "h2", []byte(`{"NEO4J_READ_ONLY":"false"}`)); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	got, plain, err := repo.GetByIDWithCredentials("i1")
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if string(plain) != "new" || got.CredentialsHash != "h2" || string(got.ExtraEnv) != `{"NEO4J_READ_ONLY":"false"}` {
+		t.Fatalf("got plain=%s hash=%s env=%s", plain, got.CredentialsHash, got.ExtraEnv)
+	}
+	if err := repo.UpdateCredentialsAndExtraEnv("missing", []byte(`x`), "h", []byte(`{}`)); !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("missing row: want ErrRecordNotFound, got %v", err)
 	}
 }

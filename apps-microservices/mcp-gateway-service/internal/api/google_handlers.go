@@ -404,6 +404,14 @@ func (h *Handler) handleImportInstancesFromSheet(w http.ResponseWriter, r *http.
 		})
 		return
 	}
+	// Sheet rows carry a service-account JSON cell: only Google-runner
+	// templates can be imported this way.
+	if runner := templateRunnerName(tpl); runner != RunnerGoogle {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{
+			Error: fmt.Sprintf("template %s does not support Google Sheets import (runner=%s)", tpl.Slug, runner),
+		})
+		return
+	}
 
 	// Every required schema field MUST be mapped before any network work. We
 	// reuse the template_dto schema shape (key + required).

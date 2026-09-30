@@ -29,9 +29,11 @@ func (h *Handler) handleRunnerSync(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: "templates feature not configured"})
 		return
 	}
-	expected := h.config.GoogleTemplatesRunnerAdminToken
-	got := r.Header.Get("X-Admin-Token")
-	if expected == "" || subtle.ConstantTimeCompare([]byte(got), []byte(expected)) != 1 {
+	// Each runner authenticates with its own token, which also tells us which
+	// runner is asking: it must only receive its own instances, or its
+	// reconcile would spawn (and fail to run) the other runner's.
+	runnerName, ok := h.runnerNameForToken(r.Header.Get("X-Admin-Token"))
+	if !ok {
 		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 		return
 	}
@@ -44,14 +46,17 @@ func (h *Handler) handleRunnerSync(w http.ResponseWriter, r *http.Request) {
 	}
 	out := runnerSyncResponse{DesiredInstances: make([]runnerclient.SpawnRequest, 0, len(instances))}
 	for _, inst := range instances {
-		_, plain, err := h.instanceRepo.GetByIDWithCredentials(inst.ID)
-		if err != nil {
-			log.Printf("[templates][WARN] runner/sync: decrypt failed for %s: %v", inst.ID, err)
-			continue
-		}
 		tpl, err := h.templateRepo.GetBySlug(inst.TemplateSlug)
 		if err != nil {
 			log.Printf("[templates][WARN] runner/sync: template %s missing for instance %s", inst.TemplateSlug, inst.ID)
+			continue
+		}
+		if templateRunnerName(tpl) != runnerName {
+			continue
+		}
+		_, plain, err := h.instanceRepo.GetByIDWithCredentials(inst.ID)
+		if err != nil {
+			log.Printf("[templates][WARN] runner/sync: decrypt failed for %s: %v", inst.ID, err)
 			continue
 		}
 		// Always send an empty slice (not nil) — Pydantic's list[str] on the

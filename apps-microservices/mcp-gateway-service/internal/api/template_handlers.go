@@ -92,6 +92,7 @@ func toTemplateResponse(t db.Template, count int) TemplateResponse {
 		ToolPrefix:       t.ToolPrefix,
 		Tags:             t.Tags,
 		Kind:             t.Kind,
+		Runner:           templateRunnerName(&t),
 		InstanceCount:    count,
 	}
 }
@@ -154,10 +155,10 @@ func (h *Handler) handleGetInstance(w http.ResponseWriter, r *http.Request) {
 			serverURL = u
 		}
 	}
-	// Best-effort: fetch live stderr tail from runner.
+	// Best-effort: fetch live stderr tail from the instance's runner.
 	tail := ""
-	if h.runner != nil {
-		if statuses, rerr := h.runner.List(r.Context()); rerr == nil {
+	if ep, rerr := h.runnerForInstance(inst); rerr == nil {
+		if statuses, lerr := ep.Client.List(r.Context()); lerr == nil {
 			for _, s := range statuses {
 				if s.ID == id {
 					tail = s.StderrTail
@@ -189,12 +190,12 @@ func toInstanceResponse(inst db.TemplateInstance, stderrTail, url string) Templa
 
 func (h *Handler) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 	// Dependencies must all be wired (done in Task 13) for this to work.
-	if h.templateRepo == nil || h.instanceRepo == nil || h.repo == nil || h.runner == nil || h.config == nil {
+	if h.templateRepo == nil || h.instanceRepo == nil || h.repo == nil || h.config == nil {
 		writeJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: "templates feature not configured"})
 		return
 	}
 
-	// Multipart: fields "template_slug", "name", "extra_env" (JSON string), file "credentials"
+	// Multipart: "template_slug", "name", "extra_env" (JSON string), plus either file "credentials" (Google runner) or neo4j_* fields (Neo4j runner).
 	// 16KB SA JSON + 48KB for non-file fields (name, template_slug, extra_env).
 	if err := r.ParseMultipartForm(int64(validation.MaxSAJSONSize) + 48*1024); err != nil {
 		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "multipart parse: " + err.Error()})
@@ -221,6 +222,11 @@ func (h *Handler) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	runnerName := templateRunnerName(tpl)
+	if _, err := h.runnerEndpoint(runnerName); err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: err.Error()})
+		return
+	}
 
 	// Parse extra_env
 	var extraEnv map[string]string
@@ -231,6 +237,10 @@ func (h *Handler) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err := validateExtraEnv(tpl.RequiredExtraEnv, extraEnv); err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
+		return
+	}
+	if err := validateRunnerExtraEnv(runnerName, extraEnv); err != nil {
 		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 		return
 	}
@@ -253,24 +263,21 @@ func (h *Handler) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Read credentials file
-	file, hdr, err := r.FormFile("credentials")
+	// The static mcp-neo4j-service already owns the "neo4j" prefix and the
+	// gateway has no tool-name collision check: every Neo4j instance must
+	// carry its own prefix (the seed leaves the template prefix empty).
+	if runnerName == RunnerNeo4j {
+		if p := firstNonEmpty(toolPrefixOverride, tpl.ToolPrefix); p == "" || strings.EqualFold(p, "neo4j") {
+			writeJSON(w, http.StatusBadRequest, ErrorResponse{
+				Error: `tool_prefix is required for Neo4j instances and must not be "neo4j" (used by the static Neo4j server), e.g. neo4jprod`,
+			})
+			return
+		}
+	}
+
+	credBytes, err := credentialsFromRequest(r, runnerName)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "missing credentials file"})
-		return
-	}
-	defer file.Close()
-	if hdr.Size > int64(validation.MaxSAJSONSize) {
-		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "credentials file too large"})
-		return
-	}
-	credBytes, err := io.ReadAll(io.LimitReader(file, int64(validation.MaxSAJSONSize)+1))
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "read credentials: " + err.Error()})
-		return
-	}
-	if _, err := validation.ValidateServiceAccountJSON(credBytes); err != nil {
-		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid credentials: " + err.Error()})
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 		return
 	}
 
@@ -297,6 +304,8 @@ const (
 	createInstanceErrSpawn
 	createInstanceErrUnhealthy
 	createInstanceErrMCPServerInsert
+	createInstanceErrRunnerMissing
+	createInstanceErrPrecheck
 )
 
 // createInstanceError carries the failure stage + underlying cause so the
@@ -324,6 +333,11 @@ func classifyCreateInstanceError(err error) (int, string) {
 			return http.StatusBadGateway, "runner unavailable — see server logs"
 		case createInstanceErrUnhealthy:
 			return http.StatusBadGateway, "instance failed to become healthy"
+		case createInstanceErrRunnerMissing:
+			return http.StatusServiceUnavailable, cerr.Err.Error()
+		case createInstanceErrPrecheck:
+			msg, _ := runnerPrecheckMessage(cerr.Err)
+			return http.StatusUnprocessableEntity, msg
 		case createInstanceErrMCPServerInsert:
 			return http.StatusInternalServerError, "create mcp_server failed"
 		}
@@ -339,7 +353,7 @@ func classifyCreateInstanceError(err error) (int, string) {
 // returns, so callers do not need to clean up on failure.
 //
 // Preconditions (callers MUST validate): tpl non-nil, name non-empty,
-// credentialsJSON already passed validation.ValidateServiceAccountJSON,
+// credentialsJSON already validated for the template's runner (credentialsFromRequest),
 // extraEnv already passed validateExtraEnv against tpl.RequiredExtraEnv,
 // toolPrefixOverride already alphanumeric-validated.
 func (h *Handler) createInstanceFromSpec(
@@ -354,6 +368,10 @@ func (h *Handler) createInstanceFromSpec(
 	autoDiscover bool,
 	createdBy string,
 ) (*db.TemplateInstance, string, error) {
+	ep, err := h.runnerForTemplate(tpl)
+	if err != nil {
+		return nil, "", &createInstanceError{Kind: createInstanceErrRunnerMissing, Err: err}
+	}
 	// IDs and hash
 	instanceID := uuid.New().String()
 	mcpServerID := instanceID // reuse the same UUID per spec
@@ -394,7 +412,7 @@ func (h *Handler) createInstanceFromSpec(
 	}
 
 	// 2) Spawn via the runner.
-	resp, err := h.runner.Spawn(ctx, runnerclient.SpawnRequest{
+	resp, err := ep.Client.Spawn(ctx, runnerclient.SpawnRequest{
 		InstanceID:      instanceID,
 		TemplateSlug:    tpl.Slug,
 		StdioCommand:    tpl.StdioCommand,
@@ -404,18 +422,21 @@ func (h *Handler) createInstanceFromSpec(
 		CredentialsHash: hashHex,
 	})
 	if err != nil {
-		log.Printf("[templates] runner spawn failed for instance %s: %v", instanceID, err)
+		log.Printf("[templates] runner spawn failed for instance %s: %s", instanceID, runnerErrorSummary(err))
 		if delErr := h.instanceRepo.DeleteWithMCPServer(instanceID); delErr != nil {
 			log.Printf("[templates][WARN] could not roll back instance row %s: %v", instanceID, delErr)
 		}
-		return nil, "", &createInstanceError{Kind: createInstanceErrSpawn, Err: err}
+		kind := createInstanceErrSpawn
+		if _, ok := runnerPrecheckMessage(err); ok {
+			kind = createInstanceErrPrecheck
+		}
+		return nil, "", &createInstanceError{Kind: kind, Err: err}
 	}
 
 	// Compute the in-cluster URL. The gateway and runner share a Docker network.
-	runnerHost := strings.TrimPrefix(strings.TrimPrefix(h.config.GoogleTemplatesRunnerURL, "http://"), "https://")
-	runnerHost = strings.SplitN(runnerHost, ":", 2)[0]
-	instanceURL := fmt.Sprintf("http://%s:%d", runnerHost, resp.Port)
-	hostPort := fmt.Sprintf("%s:%d", runnerHost, resp.Port)
+	host := runnerHost(ep.URL)
+	instanceURL := fmt.Sprintf("http://%s:%d", host, resp.Port)
+	hostPort := fmt.Sprintf("%s:%d", host, resp.Port)
 
 	// 3) Wait until mcp-proxy is accepting TCP connections on its port. The
 	// Spawn call returns as soon as the supervisor launches the child, but
@@ -423,7 +444,7 @@ func (h *Handler) createInstanceFromSpec(
 	// first client request both race the startup.
 	if err := waitForTCPReady(ctx, hostPort, 15*time.Second); err != nil {
 		log.Printf("[templates] instance %s never became TCP-ready at %s: %v", instanceID, hostPort, err)
-		if kerr := h.runner.Kill(ctx, instanceID); kerr != nil {
+		if kerr := ep.Client.Kill(ctx, instanceID); kerr != nil {
 			log.Printf("[templates][WARN] kill after unhealthy startup failed for %s: %v", instanceID, kerr)
 		}
 		if delErr := h.instanceRepo.DeleteWithMCPServer(instanceID); delErr != nil {
@@ -458,7 +479,7 @@ func (h *Handler) createInstanceFromSpec(
 	}
 	if err := h.repo.Create(&mcpSrv); err != nil {
 		log.Printf("[templates] create mcp_server failed for %s: %v", mcpServerID, err)
-		if kerr := h.runner.Kill(ctx, instanceID); kerr != nil {
+		if kerr := ep.Client.Kill(ctx, instanceID); kerr != nil {
 			log.Printf("[templates][WARN] kill after mcp_server insert failure for %s: %v", instanceID, kerr)
 		}
 		if delErr := h.instanceRepo.DeleteWithMCPServer(instanceID); delErr != nil {
@@ -583,7 +604,7 @@ func validateExtraEnv(schemaRaw json.RawMessage, extra map[string]string) error 
 }
 
 func (h *Handler) handleRestartInstance(w http.ResponseWriter, r *http.Request) {
-	if h.instanceRepo == nil || h.runner == nil {
+	if h.instanceRepo == nil {
 		writeJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: "templates feature not configured"})
 		return
 	}
@@ -592,7 +613,8 @@ func (h *Handler) handleRestartInstance(w http.ResponseWriter, r *http.Request) 
 		http.NotFound(w, r)
 		return
 	}
-	if _, err := h.instanceRepo.GetByID(id); err != nil {
+	inst, err := h.instanceRepo.GetByID(id)
+	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "instance not found"})
 			return
@@ -601,7 +623,12 @@ func (h *Handler) handleRestartInstance(w http.ResponseWriter, r *http.Request) 
 		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "instance lookup failed"})
 		return
 	}
-	if err := h.runner.Restart(r.Context(), id); err != nil {
+	ep, err := h.runnerForInstance(inst)
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: err.Error()})
+		return
+	}
+	if err := ep.Client.Restart(r.Context(), id); err != nil {
 		log.Printf("[templates] runner restart failed for instance %s: %v", id, err)
 		writeJSON(w, http.StatusBadGateway, ErrorResponse{Error: "runner unavailable — see server logs"})
 		return
@@ -613,7 +640,7 @@ func (h *Handler) handleRestartInstance(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *Handler) handleRotateCredentials(w http.ResponseWriter, r *http.Request) {
-	if h.templateRepo == nil || h.instanceRepo == nil || h.runner == nil {
+	if h.templateRepo == nil || h.instanceRepo == nil {
 		writeJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: "templates feature not configured"})
 		return
 	}
@@ -626,27 +653,6 @@ func (h *Handler) handleRotateCredentials(w http.ResponseWriter, r *http.Request
 		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "multipart parse: " + err.Error()})
 		return
 	}
-	file, hdr, err := r.FormFile("credentials")
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "missing credentials file"})
-		return
-	}
-	defer file.Close()
-	if hdr.Size > int64(validation.MaxSAJSONSize) {
-		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "credentials file too large"})
-		return
-	}
-	credBytes, err := io.ReadAll(io.LimitReader(file, int64(validation.MaxSAJSONSize)+1))
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "read credentials: " + err.Error()})
-		return
-	}
-	if _, err := validation.ValidateServiceAccountJSON(credBytes); err != nil {
-		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid credentials: " + err.Error()})
-		return
-	}
-	hash := sha256.Sum256(credBytes)
-	hashHex := hex.EncodeToString(hash[:])
 
 	inst, err := h.instanceRepo.GetByID(id)
 	if err != nil {
@@ -664,12 +670,69 @@ func (h *Handler) handleRotateCredentials(w http.ResponseWriter, r *http.Request
 		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "template lookup failed"})
 		return
 	}
-
-	// Update DB first (encrypted blob + hash) — the runner respawn below re-reads from us on reconcile.
-	if err := h.instanceRepo.UpdateCredentials(id, credBytes, hashHex); err != nil {
-		log.Printf("[templates] rotate credentials DB update failed (id=%s): %v", id, err)
-		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "could not persist new credentials"})
+	runnerName := templateRunnerName(tpl)
+	ep, err := h.runnerEndpoint(runnerName)
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: err.Error()})
 		return
+	}
+	credBytes, err := credentialsFromRequest(r, runnerName)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
+		return
+	}
+	hash := sha256.Sum256(credBytes)
+	hashHex := hex.EncodeToString(hash[:])
+
+	var extraEnv map[string]string
+	if len(inst.ExtraEnv) > 0 {
+		_ = json.Unmarshal(inst.ExtraEnv, &extraEnv)
+	}
+	// A Neo4j rotate may also change NEO4J_READ_ONLY (the "Lecture seule"
+	// checkbox lives in the same dialog). A Google rotate keeps extra_env.
+	newExtraEnvJSON := inst.ExtraEnv
+	if runnerName == RunnerNeo4j {
+		if raw := multipartValue(r, "extra_env"); raw != "" {
+			var parsed map[string]string
+			if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+				writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "extra_env: invalid JSON"})
+				return
+			}
+			if err := validateExtraEnv(tpl.RequiredExtraEnv, parsed); err != nil {
+				writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
+				return
+			}
+			if err := validateRunnerExtraEnv(runnerName, parsed); err != nil {
+				writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
+				return
+			}
+			extraEnv = parsed
+			newExtraEnvJSON, _ = json.Marshal(parsed)
+		}
+	}
+	extraEnvChanged := string(newExtraEnvJSON) != string(inst.ExtraEnv)
+
+	// persist writes the new credentials (encrypted blob + hash) and settings.
+	persist := func() error {
+		if extraEnvChanged {
+			// One UPDATE: a half-failure would leave credentials and
+			// extra_env out of step, which reconcile never repairs.
+			return h.instanceRepo.UpdateCredentialsAndExtraEnv(id, credBytes, hashHex, newExtraEnvJSON)
+		}
+		return h.instanceRepo.UpdateCredentials(id, credBytes, hashHex)
+	}
+	// Google: DB first — the runner respawn below re-reads from us on reconcile.
+	// Neo4j: the runner pre-checks the new credentials, so they are persisted
+	// only once it accepted them. A rejected rotate never touches the DB, and a
+	// reconcile racing with the pre-check keeps using the stored (previous)
+	// credentials.
+	persistAfterSpawn := runnerName == RunnerNeo4j
+	if !persistAfterSpawn {
+		if err := persist(); err != nil {
+			log.Printf("[templates] rotate credentials DB update failed (id=%s): %v", id, err)
+			writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "could not persist new credentials"})
+			return
+		}
 	}
 
 	// Respawn with the new credentials. See handleCreateInstance for why the
@@ -681,12 +744,8 @@ func (h *Handler) handleRotateCredentials(w http.ResponseWriter, r *http.Request
 			stdioArgs = []string{}
 		}
 	}
-	var extraEnv map[string]string
-	if len(inst.ExtraEnv) > 0 {
-		_ = json.Unmarshal(inst.ExtraEnv, &extraEnv)
-	}
 	env := renderEnv(tpl.DefaultEnv, extraEnv, id)
-	if _, err := h.runner.Spawn(r.Context(), runnerclient.SpawnRequest{
+	if _, err := ep.Client.Spawn(r.Context(), runnerclient.SpawnRequest{
 		InstanceID:      id,
 		TemplateSlug:    inst.TemplateSlug,
 		StdioCommand:    tpl.StdioCommand,
@@ -694,19 +753,70 @@ func (h *Handler) handleRotateCredentials(w http.ResponseWriter, r *http.Request
 		Env:             env,
 		CredentialsJSON: string(credBytes),
 		CredentialsHash: hashHex,
+		RunnerPort:      inst.RunnerPort,
 	}); err != nil {
-		log.Printf("[templates] runner respawn after rotate failed (id=%s): %v", id, err)
-		if uErr := h.instanceRepo.UpdateStatus(id, "failed", "rotate: "+err.Error(), nil); uErr != nil {
+		if msg, ok := runnerPrecheckMessage(err); ok {
+			// Nothing was persisted and the runner left the running process alone.
+			writeJSON(w, http.StatusUnprocessableEntity, ErrorResponse{Error: msg})
+			return
+		}
+		summary := runnerErrorSummary(err)
+		log.Printf("[templates] runner respawn after rotate failed (id=%s): %s", id, summary)
+		if uErr := h.instanceRepo.UpdateStatus(id, "failed", "rotate: "+summary, nil); uErr != nil {
 			log.Printf("[templates][WARN] could not persist failed status after rotate (id=%s): %v", id, uErr)
 		}
 		writeJSON(w, http.StatusBadGateway, ErrorResponse{Error: "runner unavailable — see server logs"})
 		return
 	}
+	if persistAfterSpawn {
+		if err := persist(); err != nil {
+			// The runner already serves the new credentials; the next reconcile
+			// reverts it to the stored (previous) ones, the safe direction.
+			log.Printf("[templates] rotate credentials DB update failed after respawn (id=%s): %v", id, err)
+			writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "could not persist new credentials"})
+			return
+		}
+		h.rediscoverAfterRotate(r.Context(), inst, ep)
+	}
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "rotating"})
 }
 
+// rediscoverAfterRotate refreshes the tool list of a Neo4j instance after a
+// successful rotate: NEO4J_READ_ONLY may have flipped, which adds or removes
+// write_neo4j_cypher. Best-effort: a failure is logged and recorded as
+// unhealthy but never fails the rotate.
+// Known gap: template instances have no min_role field, so this path never
+// pushes SetMinRole (see the same note in createInstanceFromSpec).
+func (h *Handler) rediscoverAfterRotate(ctx context.Context, inst *db.TemplateInstance, ep RunnerEndpoint) {
+	if h.gw == nil || h.registry == nil {
+		return
+	}
+	if inst.RunnerPort == nil {
+		log.Printf("[templates] rotate: no runner port for %s, skipping rediscovery", inst.ID)
+		return
+	}
+	host := runnerHost(ep.URL)
+	hostPort := fmt.Sprintf("%s:%d", host, *inst.RunnerPort)
+	instanceURL := "http://" + hostPort
+	err := waitForTCPReady(ctx, hostPort, 15*time.Second)
+	if err == nil {
+		err = h.gw.DiscoverAndRegister(ctx, inst.MCPServerID, instanceURL, nil)
+	}
+	if err != nil {
+		log.Printf("[templates] rotate: rediscovery failed for %s: %v", inst.MCPServerID, err)
+		_ = h.repo.UpdateHealth(inst.MCPServerID, "unhealthy", err.Error())
+		return
+	}
+	if srv, gerr := h.repo.GetByID(inst.MCPServerID); gerr == nil && srv.ToolPrefix != "" {
+		h.registry.SetToolPrefix(inst.MCPServerID, srv.ToolPrefix)
+	}
+	if backend := h.registry.FindByID(inst.MCPServerID); backend != nil {
+		h.saveBackendCapabilities(inst.MCPServerID, backend)
+	}
+}
+
 func (h *Handler) handleDeleteInstance(w http.ResponseWriter, r *http.Request) {
-	if h.instanceRepo == nil || h.runner == nil {
+	if h.instanceRepo == nil {
 		writeJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: "templates feature not configured"})
 		return
 	}
@@ -715,7 +825,8 @@ func (h *Handler) handleDeleteInstance(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if _, err := h.instanceRepo.GetByID(id); err != nil {
+	inst, err := h.instanceRepo.GetByID(id)
+	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "instance not found"})
 			return
@@ -724,9 +835,12 @@ func (h *Handler) handleDeleteInstance(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "instance lookup failed"})
 		return
 	}
-	// 1) Kill runner subprocess first (idempotent on runner side — a 404 from runner is OK;
-	//    the instance may have already been cleaned up or never spawned successfully).
-	if err := h.runner.Kill(r.Context(), id); err != nil {
+	// 1) Kill the runner subprocess first (idempotent on the runner side). An
+	//    unconfigured runner cannot be reached anyway; its reconcile loop drops
+	//    the instance once the row is gone.
+	if ep, rerr := h.runnerForInstance(inst); rerr != nil {
+		log.Printf("[templates][WARN] %v — skipping kill for %s (continuing with DB delete)", rerr, id)
+	} else if err := ep.Client.Kill(r.Context(), id); err != nil {
 		log.Printf("[templates][WARN] runner kill failed for %s: %v (continuing with DB delete)", id, err)
 	}
 	// 2) Transactional delete of template_instances + mcp_servers.
@@ -803,6 +917,7 @@ func toTemplateExportRow(t db.Template) TemplateExportRow {
 		StdioCommand: t.StdioCommand,
 		ToolPrefix:   t.ToolPrefix,
 		Kind:         t.Kind,
+		Runner:       t.Runner,
 		IsActive:     t.IsActive,
 	}
 	if len(t.StdioArgs) > 0 {
@@ -887,6 +1002,42 @@ func (h *Handler) handleImportTemplates(w http.ResponseWriter, r *http.Request) 
 		rows = append(rows, tpl)
 	}
 
+	// Changing templates.runner while instances exist would hand their
+	// credentials to the other runner on its next sync (and kill them on the
+	// old one). The repository allows it; the import refuses it.
+	if h.instanceRepo != nil {
+		counts, err := h.instanceRepo.CountsByTemplate()
+		if err != nil {
+			log.Printf("[templates] import: count instances failed: %v", err)
+			writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "import failed"})
+			return
+		}
+		// ListAll, not GetBySlug: GetBySlug only returns active templates, and an
+		// inactive template can still have instances.
+		current, err := h.templateRepo.ListAll()
+		if err != nil {
+			log.Printf("[templates] import: list templates failed: %v", err)
+			writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "import failed"})
+			return
+		}
+		bySlug := make(map[string]db.Template, len(current))
+		for _, c := range current {
+			bySlug[c.Slug] = c
+		}
+		for _, t := range rows {
+			cur, ok := bySlug[t.Slug]
+			if !ok || counts[t.Slug] == 0 {
+				continue
+			}
+			if from, to := templateRunnerName(&cur), templateRunnerName(&t); from != to {
+				writeJSON(w, http.StatusConflict, ErrorResponse{
+					Error: fmt.Sprintf("template %s: cannot change runner %s -> %s while it has %d instance(s)", t.Slug, from, to, counts[t.Slug]),
+				})
+				return
+			}
+		}
+	}
+
 	if err := h.templateRepo.Upsert(rows); err != nil {
 		log.Printf("[templates] import upsert failed: %v", err)
 		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "import failed"})
@@ -905,6 +1056,15 @@ func fromTemplateExportRow(row TemplateExportRow) (db.Template, error) {
 	if kind == "" {
 		kind = "stdio"
 	}
+	// Dumps created before templates.runner existed carry no runner: they are
+	// Google templates.
+	runner := row.Runner
+	if runner == "" {
+		runner = RunnerGoogle
+	}
+	if !knownRunners[runner] {
+		return db.Template{}, fmt.Errorf("template %s: unknown runner %q", row.Slug, runner)
+	}
 	t := db.Template{
 		Slug:         row.Slug,
 		Name:         row.Name,
@@ -913,6 +1073,7 @@ func fromTemplateExportRow(row TemplateExportRow) (db.Template, error) {
 		StdioCommand: row.StdioCommand,
 		ToolPrefix:   row.ToolPrefix,
 		Kind:         kind,
+		Runner:       runner,
 		IsActive:     row.IsActive,
 	}
 	var err error
