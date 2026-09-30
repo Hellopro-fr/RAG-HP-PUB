@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -59,7 +60,7 @@ func newNeo4jGateFixture(t *testing.T, wireGate bool) *neo4jGateFixture {
 		gw.SetNeo4jAccess(NewNeo4jAccess(
 			&countingTemplates{rows: map[string]*db.Template{"neo4j": {Slug: "neo4j", Runner: "neo4j"}}},
 			&countingServerSlugs{slugs: map[string]string{"srv-neo4j": "neo4j"}},
-			&countingUsers{rows: map[string]*db.GatewayUser{"admin@hp.fr": {Email: "admin@hp.fr", Role: auth.RoleAdmin}}},
+			&countingUsers{rows: map[string]*db.GatewayUser{"admin@hp.fr": {Email: "admin@hp.fr", Role: auth.RoleAdmin, IsAllowed: true}}},
 			grants,
 		))
 	}
@@ -241,6 +242,55 @@ func TestScopedNeo4jGate_GrantRevocationAppliesOnNextRequest(t *testing.T) {
 	resp := f.call(t, ctx, "tools/call", mcp.CallToolParams{Name: "neo4jprod_read_neo4j_cypher"})
 	if resp.Error == nil || resp.Error.Message != Neo4jAccessDeniedMessage {
 		t.Fatalf("revoked grant must deny the call, got %+v", resp)
+	}
+}
+
+// initializeInstructions returns the composed `instructions` field of an
+// initialize response built over f's backends with the given instructions.
+func (f *neo4jGateFixture) initializeInstructions(t *testing.T, ctx context.Context, instructions []InstructionView) string {
+	t.Helper()
+	sg := NewScopedGateway(f.gw, map[string]bool{"srv-neo4j": true, "srv-plain": true}, nil, instructions)
+	resp := sg.Handle(ctx, &mcp.Request{JSONRPC: "2.0", ID: json.RawMessage(`1`), Method: "initialize"})
+	if resp == nil || resp.Error != nil {
+		t.Fatalf("initialize: unexpected error response: %+v", resp)
+	}
+	var out mcp.InitializeResult
+	if err := json.Unmarshal(resp.Result, &out); err != nil {
+		t.Fatalf("unmarshal initialize result: %v", err)
+	}
+	return out.Instructions
+}
+
+func TestScopedNeo4jGate_InitializeOmitsInstructionsOfHiddenInstance(t *testing.T) {
+	instructions := []InstructionView{
+		{ID: "i-general", Title: "General", Body: "<p>general rules</p>", Kind: db.LLMInstructionRowKindGeneral},
+		{ID: "i-neo4j", Title: "Neo4j schema", Body: "<p>graph schema secret</p>", Kind: db.LLMInstructionRowKindPerServer, ServerIDs: []string{"srv-neo4j"}},
+		{ID: "i-plain", Title: "Plain", Body: "<p>plain usage</p>", Kind: db.LLMInstructionRowKindPerServer, ServerIDs: []string{"srv-plain"}},
+		{ID: "i-both", Title: "Both", Body: "<p>shared usage</p>", Kind: db.LLMInstructionRowKindPerServer, ServerIDs: []string{"srv-neo4j", "srv-plain"}},
+	}
+	cases := []struct {
+		who        string
+		ctx        context.Context
+		wantHidden bool
+	}{
+		{"non-granted user", ctxWithEmail("bob@hp.fr"), true},
+		{"no email", context.Background(), true},
+		{"admin", ctxWithEmail("admin@hp.fr"), false},
+		{"grantee", ctxWithEmail("alice@hp.fr"), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.who, func(t *testing.T) {
+			f := newNeo4jGateFixture(t, true)
+			got := f.initializeInstructions(t, tc.ctx, instructions)
+			for _, always := range []string{"general rules", "plain usage", "shared usage"} {
+				if !strings.Contains(got, always) {
+					t.Fatalf("initialize for %s must keep %q, got %q", tc.who, always, got)
+				}
+			}
+			if hidden := !strings.Contains(got, "graph schema secret"); hidden != tc.wantHidden {
+				t.Fatalf("initialize for %s: per_server instruction of srv-neo4j hidden=%t, want %t (got %q)", tc.who, hidden, tc.wantHidden, got)
+			}
+		})
 	}
 }
 

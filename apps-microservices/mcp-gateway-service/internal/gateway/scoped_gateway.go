@@ -176,7 +176,8 @@ func (sg *ScopedGateway) Handle(ctx context.Context, req *mcp.Request) *mcp.Resp
 }
 
 func (sg *ScopedGateway) handleInitialize(ctx context.Context, req *mcp.Request) *mcp.Response {
-	caps := sg.registry.MergedCapabilitiesFiltered(sg.allowedIDs)
+	visible := sg.withoutDeniedNeo4j(ctx, sg.allowedIDs)
+	caps := sg.registry.MergedCapabilitiesFiltered(visible)
 	if caps.Tools == nil {
 		caps.Tools = &mcp.ToolsCapability{}
 	}
@@ -192,9 +193,38 @@ func (sg *ScopedGateway) handleInitialize(ctx context.Context, req *mcp.Request)
 	// Tool-description injection mode omits the initialize field entirely so
 	// hosts that honor both channels never receive the text twice.
 	if !sg.injectInstructionsIntoTools {
-		result.Instructions = ComposeInstructions(sg.instructions, name)
+		instructions := sg.instructions
+		if sg.neo4jAccess != nil {
+			instructions = instructionsForVisible(instructions, visible)
+		}
+		result.Instructions = ComposeInstructions(instructions, name)
 	}
 	return okResp(req.ID, result)
+}
+
+// instructionsForVisible drops every per_server instruction none of whose
+// linked servers is in visible, so an instruction bound to a hidden Neo4j
+// instance (typically its graph schema) never reaches a denied caller.
+// General rows (and rows with an empty Kind, treated as general) are kept.
+// Applied only when the gate is wired, so the unwired path is unchanged.
+func instructionsForVisible(instructions []InstructionView, visible map[string]bool) []InstructionView {
+	out := make([]InstructionView, 0, len(instructions))
+	for _, ins := range instructions {
+		if ins.Kind == db.LLMInstructionRowKindPerServer && !anyVisible(ins.ServerIDs, visible) {
+			continue
+		}
+		out = append(out, ins)
+	}
+	return out
+}
+
+func anyVisible(ids []string, visible map[string]bool) bool {
+	for _, id := range ids {
+		if visible[id] {
+			return true
+		}
+	}
+	return false
 }
 
 func (sg *ScopedGateway) handleToolsList(ctx context.Context, req *mcp.Request) *mcp.Response {

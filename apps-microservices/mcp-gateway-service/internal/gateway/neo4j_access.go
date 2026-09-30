@@ -2,9 +2,12 @@ package gateway
 
 import (
 	"context"
+	"errors"
 	"log"
 	"sync"
 	"time"
+
+	"gorm.io/gorm"
 
 	"mcp-gateway/internal/auth"
 	"mcp-gateway/internal/db"
@@ -107,16 +110,14 @@ func (a *Neo4jAccess) Allows(ctx context.Context, b *BackendServer) bool {
 // mcp_servers.template_slug when known; "" makes the policy resolve it from
 // serverID.
 //
-// Order matters: a gateway admin is allowed before any template lookup, so
-// an admin keeps access even while the slug / template lookup fails. Every
-// other caller then goes through the restriction check, where a failed
-// lookup counts as restricted: callers without email are denied, other
-// emails pass only with a grant on this exact server.
+// The result is "not restricted OR admin OR grant". The restriction check
+// runs first so an unrestricted backend (slug cached) costs no
+// gateway_users query. A failed slug / template lookup counts as
+// restricted, so an admin still gets through while it fails and every
+// other email passes only with a grant on this exact server; callers
+// without email are denied.
 func (a *Neo4jAccess) AllowsEmail(email, serverID, templateSlug string) bool {
 	if a == nil {
-		return true
-	}
-	if email != "" && a.isAdmin(email) {
 		return true
 	}
 	if !a.restricted(serverID, templateSlug) {
@@ -124,6 +125,9 @@ func (a *Neo4jAccess) AllowsEmail(email, serverID, templateSlug string) bool {
 	}
 	if email == "" {
 		return false
+	}
+	if a.isAdmin(email) {
+		return true
 	}
 	if a.grants == nil {
 		return false
@@ -184,7 +188,11 @@ func (a *Neo4jAccess) serverSlug(serverID string) (slug string, ok bool) {
 }
 
 // isNeo4jSlug reports whether the template with this slug runs on the Neo4j
-// runner. Unwired lookup, lookup error and missing row all return true.
+// runner. Unwired lookup, lookup error and missing row all return true. A
+// missing row (gorm.ErrRecordNotFound, an orphan template_slug) is a
+// definitive answer and is cached like a real one — it can only close
+// access — so it is queried and logged once per TTL; other errors are not
+// cached.
 func (a *Neo4jAccess) isNeo4jSlug(slug string) bool {
 	if a.templates == nil {
 		return true
@@ -198,6 +206,13 @@ func (a *Neo4jAccess) isNeo4jSlug(slug string) bool {
 	a.mu.Unlock()
 
 	tpl, err := a.templates.GetBySlugAny(slug)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		log.Printf("[neo4j-access] no template row for slug %q — treating as restricted (cached %s)", slug, neo4jAccessCacheTTL)
+		a.mu.Lock()
+		a.slugIsNeo4j[slug] = cachedBool{value: true, expires: now.Add(neo4jAccessCacheTTL)}
+		a.mu.Unlock()
+		return true
+	}
 	if err != nil || tpl == nil {
 		log.Printf("[neo4j-access] template lookup failed for slug %q: %v — treating as restricted", slug, err)
 		return true
@@ -209,6 +224,9 @@ func (a *Neo4jAccess) isNeo4jSlug(slug string) bool {
 	return isNeo4j
 }
 
+// isAdmin reports whether email is an enabled gateway admin. An admin
+// disabled on the Users page (is_allowed = false) is not an admin here, so
+// offboarding also closes Neo4j access through still-valid OAuth2 tokens.
 func (a *Neo4jAccess) isAdmin(email string) bool {
 	if a.users == nil {
 		return false
@@ -218,5 +236,5 @@ func (a *Neo4jAccess) isAdmin(email string) bool {
 		log.Printf("[neo4j-access] gateway_users lookup failed for %s: %v — not treated as admin", email, err)
 		return false
 	}
-	return user != nil && user.Role == auth.RoleAdmin
+	return user != nil && user.IsAllowed && user.Role == auth.RoleAdmin
 }

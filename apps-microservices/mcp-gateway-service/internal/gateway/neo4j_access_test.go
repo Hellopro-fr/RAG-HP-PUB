@@ -6,12 +6,14 @@ import (
 	"testing"
 	"time"
 
+	"gorm.io/gorm"
+
 	"mcp-gateway/internal/auth"
 	"mcp-gateway/internal/db"
 )
 
 // countingTemplates is an in-memory templateRunnerLookup. A slug absent from
-// rows returns an error, like gorm.ErrRecordNotFound from the real repo.
+// rows returns gorm.ErrRecordNotFound, like the real repo.
 type countingTemplates struct {
 	rows  map[string]*db.Template
 	err   error
@@ -26,7 +28,7 @@ func (f *countingTemplates) GetBySlugAny(slug string) (*db.Template, error) {
 	if t, ok := f.rows[slug]; ok {
 		return t, nil
 	}
-	return nil, errors.New("record not found")
+	return nil, gorm.ErrRecordNotFound
 }
 
 // countingServerSlugs is an in-memory serverTemplateSlugLookup. An id absent
@@ -82,7 +84,9 @@ type neo4jAccessFakes struct {
 // newNeo4jAccessFixture wires a policy where "srv-neo4j" is an instance of
 // the "neo4j" template (runner neo4j), "srv-ga" an instance of "ga" (runner
 // google) and "srv-plain" a regular server. admin@hp.fr is a gateway admin,
-// alice@hp.fr holds a grant on srv-neo4j, carol@hp.fr a grant on srv-other.
+// alice@hp.fr holds a grant on srv-neo4j, carol@hp.fr a grant on srv-other,
+// dis@hp.fr is an admin disabled on the Users page (is_allowed = false) and
+// dave@hp.fr a disabled account holding a grant on srv-neo4j.
 func newNeo4jAccessFixture() (*Neo4jAccess, *neo4jAccessFakes) {
 	f := &neo4jAccessFakes{
 		templates: &countingTemplates{rows: map[string]*db.Template{
@@ -94,11 +98,13 @@ func newNeo4jAccessFixture() (*Neo4jAccess, *neo4jAccessFakes) {
 			"srv-ga":    "ga",
 		}},
 		users: &countingUsers{rows: map[string]*db.GatewayUser{
-			"admin@hp.fr": {Email: "admin@hp.fr", Role: auth.RoleAdmin},
-			"bob@hp.fr":   {Email: "bob@hp.fr", Role: "config-only"},
+			"admin@hp.fr": {Email: "admin@hp.fr", Role: auth.RoleAdmin, IsAllowed: true},
+			"bob@hp.fr":   {Email: "bob@hp.fr", Role: "config-only", IsAllowed: true},
+			"dis@hp.fr":   {Email: "dis@hp.fr", Role: auth.RoleAdmin, IsAllowed: false},
+			"dave@hp.fr":  {Email: "dave@hp.fr", Role: "config-only", IsAllowed: false},
 		}},
 		grants: &countingGrants{grants: map[string]map[string]bool{
-			"srv-neo4j": {"alice@hp.fr": true},
+			"srv-neo4j": {"alice@hp.fr": true, "dave@hp.fr": true},
 			"srv-other": {"carol@hp.fr": true},
 		}},
 	}
@@ -196,8 +202,8 @@ func TestNeo4jAccess_AdminAllowedWhileLookupsFail(t *testing.T) {
 	if !a.AllowsEmail("admin@hp.fr", "srv-x", "ghost") {
 		t.Fatal("an admin must stay allowed on an orphan template_slug")
 	}
-	if f.servers.calls != 0 || f.templates.calls != 0 {
-		t.Fatalf("the admin check must run before any lookup, got servers=%d templates=%d", f.servers.calls, f.templates.calls)
+	if !a.AllowsEmail("admin@hp.fr", "srv-x", "ga") {
+		t.Fatal("a failed template lookup counts as restricted, and the admin term then allows")
 	}
 }
 
@@ -248,6 +254,50 @@ func TestNeo4jAccess_UnrestrictedBackendSkipsUserAndGrantLookups(t *testing.T) {
 	}
 	if f.users.calls != 0 || f.grants.calls != 0 {
 		t.Fatalf("unrestricted backends must not hit users/grants, got users=%d grants=%d", f.users.calls, f.grants.calls)
+	}
+}
+
+func TestNeo4jAccess_UnrestrictedBackendWithEmailSkipsUserLookup(t *testing.T) {
+	a, f := newNeo4jAccessFixture()
+	for _, email := range []string{"admin@hp.fr", "bob@hp.fr"} {
+		for _, b := range []*BackendServer{{ID: "srv-plain"}, {ID: "srv-ga", TemplateSlug: "ga"}} {
+			if !a.Allows(ctxWithEmail(email), b) {
+				t.Fatalf("unrestricted backend %s must be allowed for %s", b.ID, email)
+			}
+		}
+	}
+	if f.users.calls != 0 || f.grants.calls != 0 {
+		t.Fatalf("unrestricted backends must be decided before the admin check, got users=%d grants=%d", f.users.calls, f.grants.calls)
+	}
+}
+
+func TestNeo4jAccess_CachesOrphanTemplateSlugAsRestricted(t *testing.T) {
+	a, f := newNeo4jAccessFixture()
+	t0 := time.Date(2026, 9, 30, 12, 0, 0, 0, time.UTC)
+	a.now = func() time.Time { return t0 }
+	b := &BackendServer{ID: "srv-x", TemplateSlug: "ghost"}
+	if !a.Restricted(b) || !a.Restricted(b) {
+		t.Fatal("a template_slug with no template row must count as restricted")
+	}
+	if f.templates.calls != 1 {
+		t.Fatalf("gorm.ErrRecordNotFound is definitive and must be cached, got %d template lookups", f.templates.calls)
+	}
+	if a.Allows(ctxWithEmail("bob@hp.fr"), b) {
+		t.Fatal("the cached orphan slug must still deny a non-admin without a grant")
+	}
+	if f.templates.calls != 1 {
+		t.Fatalf("the cached orphan slug must not be re-queried, got %d template lookups", f.templates.calls)
+	}
+}
+
+func TestNeo4jAccess_DisabledAdminWithoutGrantDenied(t *testing.T) {
+	a, _ := newNeo4jAccessFixture()
+	b := &BackendServer{ID: "srv-neo4j"}
+	if a.Allows(ctxWithEmail("dis@hp.fr"), b) {
+		t.Fatal("an admin with is_allowed = false must not be treated as admin")
+	}
+	if !a.Allows(ctxWithEmail("dave@hp.fr"), b) {
+		t.Fatal("is_allowed must not apply to the grant path: a disabled account with a grant stays allowed")
 	}
 }
 

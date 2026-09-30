@@ -43,7 +43,7 @@ func newGatePolicy() *gateway.Neo4jAccess {
 			"ga":    {Slug: "ga", Runner: "google"},
 		}},
 		gateServers{slugs: map[string]string{"srv-neo4j": "neo4j", "srv-ga": "ga"}},
-		gateUsers{rows: map[string]*db.GatewayUser{"admin@hp.fr": {Email: "admin@hp.fr", Role: auth.RoleAdmin}}},
+		gateUsers{rows: map[string]*db.GatewayUser{"admin@hp.fr": {Email: "admin@hp.fr", Role: auth.RoleAdmin, IsAllowed: true}}},
 		gateGrants{grants: map[string]map[string]bool{"srv-neo4j": {"alice@hp.fr": true}}},
 	)
 }
