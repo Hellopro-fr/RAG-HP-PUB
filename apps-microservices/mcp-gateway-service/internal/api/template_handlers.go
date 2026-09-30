@@ -696,7 +696,7 @@ func (h *Handler) handleRotateCredentials(w http.ResponseWriter, r *http.Request
 	// checkbox lives in the same dialog). A Google rotate keeps extra_env.
 	newExtraEnvJSON := inst.ExtraEnv
 	if runnerName == RunnerNeo4j {
-		if raw := r.FormValue("extra_env"); raw != "" {
+		if raw := multipartValue(r, "extra_env"); raw != "" {
 			var parsed map[string]string
 			if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
 				writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "extra_env: invalid JSON"})
@@ -718,13 +718,12 @@ func (h *Handler) handleRotateCredentials(w http.ResponseWriter, r *http.Request
 
 	// persist writes the new credentials (encrypted blob + hash) and settings.
 	persist := func() error {
-		if err := h.instanceRepo.UpdateCredentials(id, credBytes, hashHex); err != nil {
-			return err
-		}
 		if extraEnvChanged {
-			return h.instanceRepo.UpdateExtraEnv(id, newExtraEnvJSON)
+			// One UPDATE: a half-failure would leave credentials and
+			// extra_env out of step, which reconcile never repairs.
+			return h.instanceRepo.UpdateCredentialsAndExtraEnv(id, credBytes, hashHex, newExtraEnvJSON)
 		}
-		return nil
+		return h.instanceRepo.UpdateCredentials(id, credBytes, hashHex)
 	}
 	// Google: DB first — the runner respawn below re-reads from us on reconcile.
 	// Neo4j: the runner pre-checks the new credentials, so they are persisted
@@ -781,8 +780,43 @@ func (h *Handler) handleRotateCredentials(w http.ResponseWriter, r *http.Request
 			writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "could not persist new credentials"})
 			return
 		}
+		h.rediscoverAfterRotate(r.Context(), inst, ep)
 	}
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "rotating"})
+}
+
+// rediscoverAfterRotate refreshes the tool list of a Neo4j instance after a
+// successful rotate: NEO4J_READ_ONLY may have flipped, which adds or removes
+// write_neo4j_cypher. Best-effort: a failure is logged and recorded as
+// unhealthy but never fails the rotate.
+// Known gap: template instances have no min_role field, so this path never
+// pushes SetMinRole (see the same note in createInstanceFromSpec).
+func (h *Handler) rediscoverAfterRotate(ctx context.Context, inst *db.TemplateInstance, ep RunnerEndpoint) {
+	if h.gw == nil || h.registry == nil {
+		return
+	}
+	if inst.RunnerPort == nil {
+		log.Printf("[templates] rotate: no runner port for %s, skipping rediscovery", inst.ID)
+		return
+	}
+	host := runnerHost(ep.URL)
+	hostPort := fmt.Sprintf("%s:%d", host, *inst.RunnerPort)
+	instanceURL := "http://" + hostPort
+	err := waitForTCPReady(ctx, hostPort, 15*time.Second)
+	if err == nil {
+		err = h.gw.DiscoverAndRegister(ctx, inst.MCPServerID, instanceURL, nil)
+	}
+	if err != nil {
+		log.Printf("[templates] rotate: rediscovery failed for %s: %v", inst.MCPServerID, err)
+		_ = h.repo.UpdateHealth(inst.MCPServerID, "unhealthy", err.Error())
+		return
+	}
+	if srv, gerr := h.repo.GetByID(inst.MCPServerID); gerr == nil && srv.ToolPrefix != "" {
+		h.registry.SetToolPrefix(inst.MCPServerID, srv.ToolPrefix)
+	}
+	if backend := h.registry.FindByID(inst.MCPServerID); backend != nil {
+		h.saveBackendCapabilities(inst.MCPServerID, backend)
+	}
 }
 
 func (h *Handler) handleDeleteInstance(w http.ResponseWriter, r *http.Request) {

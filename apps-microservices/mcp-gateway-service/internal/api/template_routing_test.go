@@ -254,3 +254,44 @@ func TestHandleImportTemplates_RunnerChangeInactiveTemplate_Returns409(t *testin
 		t.Fatalf("got %d body=%s, want 409", rec.Code, rec.Body.String())
 	}
 }
+
+// h.gw and h.registry are nil in the test handler: the post-rotate rediscovery
+// is skipped and must never fail the rotate.
+func TestHandleRotateCredentials_Neo4jSuccess_NoGateway_StillAccepted(t *testing.T) {
+	h, gdb := newTemplateAPITestHandler(t)
+	seedTemplate(t, gdb, "neo4j", RunnerNeo4j)
+	var captured map[string]any
+	withNeo4jRunner(h, capturingRunner(t, `{"port":15123,"pid":1}`, &captured).URL)
+	port := 15123
+	inst := &db.TemplateInstance{ID: "inst-1", TemplateSlug: "neo4j", Name: "prod", CredentialsHash: "h",
+		ExtraEnv: json.RawMessage(`{"NEO4J_READ_ONLY":"true"}`), RunnerStatus: "running", RunnerPort: &port, MCPServerID: "inst-1"}
+	if err := h.instanceRepo.Create(inst, []byte(`{}`)); err != nil {
+		t.Fatalf("seed instance: %v", err)
+	}
+	req := multipartRequest(t, "/api/v1/template-instances/inst-1/rotate-credentials", map[string]string{
+		"neo4j_uri": "bolt://neo4j:7687", "neo4j_username": "reader", "neo4j_password": "pw",
+		"extra_env": `{"NEO4J_READ_ONLY":"false"}`,
+	})
+	rec := httptest.NewRecorder()
+	h.handleRotateCredentials(rec, req)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("got %d body=%s, want 202", rec.Code, rec.Body.String())
+	}
+}
+
+func TestRunnerForInstance_InactiveNeo4jTemplateStillRoutesToNeo4j(t *testing.T) {
+	h, gdb := newTemplateAPITestHandler(t)
+	seedTemplate(t, gdb, "neo4j", RunnerNeo4j)
+	if err := gdb.Model(&db.Template{}).Where("slug = ?", "neo4j").Update("is_active", false).Error; err != nil {
+		t.Fatalf("deactivate: %v", err)
+	}
+	srv := fakeRunner(t, http.StatusOK, `{}`)
+	withNeo4jRunner(h, srv.URL)
+	ep, err := h.runnerForInstance(&db.TemplateInstance{TemplateSlug: "neo4j"})
+	if err != nil {
+		t.Fatalf("err = %v", err)
+	}
+	if ep.URL != srv.URL {
+		t.Errorf("ep.URL = %q, want neo4j runner %q", ep.URL, srv.URL)
+	}
+}
