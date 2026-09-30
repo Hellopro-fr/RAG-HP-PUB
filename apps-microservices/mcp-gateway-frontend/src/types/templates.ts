@@ -76,3 +76,21 @@ export interface RotateNeo4jParams {
   neo4j: Neo4jConnectionInput
   extra_env?: Record<string, string>
 }
+
+// One row of the catalog export/import payload (Go: TemplateExportRow). Also
+// the body of POST /api/v1/templates. JSON-encoded columns are decoded here.
+export interface TemplateExportRow {
+  slug: string
+  name: string
+  description: string
+  icon: string
+  stdio_command: string
+  stdio_args: string[]
+  default_env: Record<string, string>
+  required_extra_env: Array<Record<string, unknown>>
+  tool_prefix: string
+  tags: string[]
+  kind: 'stdio' | 'http_batch'
+  runner?: 'google' | 'neo4j'
+  is_active: boolean
+}

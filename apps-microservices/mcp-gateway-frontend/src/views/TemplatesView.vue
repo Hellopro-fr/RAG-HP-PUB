@@ -10,6 +10,13 @@
            so a round-trip restores exact catalog state; instances/credentials
            are never part of either payload. -->
       <div v-if="authStore.isAdmin" class="flex gap-2 shrink-0">
+        <router-link
+          :to="{ name: 'template-create' }"
+          class="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-white bg-brand-500 hover:bg-brand-600 rounded-md"
+        >
+          <i class="pi pi-plus text-[11px]" />
+          Créer
+        </router-link>
         <button
           type="button"
           class="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-white/5 disabled:opacity-50 disabled:cursor-not-allowed"

@@ -1,6 +1,7 @@
 import { api } from './client'
 import type {
   Template,
+  TemplateExportRow,
   TemplateInstance,
   TemplateListResponse,
   TemplateInstanceListResponse,
@@ -14,6 +15,11 @@ const BASE = '/api/v1'
 export const templatesApi = {
   list(): Promise<TemplateListResponse> {
     return api.get<TemplateListResponse>(`${BASE}/templates`)
+  },
+
+  // Creates ONE template (admin-only, insert-only). 409 when the slug exists.
+  create(row: TemplateExportRow): Promise<Template> {
+    return api.post<Template>(`${BASE}/templates`, row)
   },
 
   get(slug: string): Promise<Template> {
