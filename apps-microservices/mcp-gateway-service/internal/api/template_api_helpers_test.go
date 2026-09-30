@@ -145,6 +145,21 @@ func fakeRunner(t *testing.T, status int, body string) *httptest.Server {
 	return srv
 }
 
+// capturingRunner answers 200 with body and decodes every request body into
+// *captured (the last one wins).
+func capturingRunner(t *testing.T, body string, captured *map[string]any) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var got map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&got)
+		*captured = got
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
 func multipartRequest(t *testing.T, target string, fields map[string]string) *http.Request {
 	t.Helper()
 	var buf bytes.Buffer
