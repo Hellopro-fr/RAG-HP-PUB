@@ -15,7 +15,8 @@
 - Restricted backend ⇔ its `mcp_servers.template_slug` is non-empty **and** the template with that slug has `runner = "neo4j"` (inactive templates included — `TemplateRepo.GetBySlugAny`). No new column, no generic per-server flag.
 - Allowed ⇔ the request carries an end-user email **and** (`gateway_users.role == "admin"` (`auth.RoleAdmin`) **or** `server_authorizations(server_id, email)` exists for that exact server).
 - Callers without end-user email (`mcp_…` scope tokens, `client_credentials` grants) are **always denied** on restricted backends.
-- Fail-closed: template / server / user lookup errors, unwired template lookup and a non-empty `template_slug` with no template row → restricted and denied.
+- Evaluation order (human decision, 2026-09-30): **email present and `gateway_users.role == "admin"` → allowed, before any template / slug lookup** — an admin keeps access during a DB outage and on an orphan `template_slug`. Only then the restriction check runs (callers without email skip the admin check and go straight to it).
+- Fail-closed for non-admins: template / server-slug lookup errors, an unwired template lookup and a non-empty `template_slug` with no template row → the backend counts as restricted. A caller without email is then denied; a non-admin email is allowed only with a grant on that exact server (a grant is the defined key to a restricted server, so it still opens it); every other caller is denied. A `gateway_users` lookup error means "not admin".
 - Unrestricted backends: behaviour unchanged (static `mcp-neo4j-service`, Google, Zoho, leexi, ringover, bdd, hellodata).
 - A nil `*Neo4jAccess` allows everything; `app.go` always wires it when the DB is present.
 - Caches: server id → template slug and template slug → is-Neo4j, TTL **60 s**, positive results only. Grants and roles are **never** cached (a revoked grant applies on the next request).
@@ -42,7 +43,8 @@
 
 1. **Registry `TemplateSlug` is empty in production** — `Gateway.DiscoverAndRegister` only copies `TemplateSlug` from a previous registry entry, so a Neo4j instance discovered at boot (`loadServersFromDB`), right after creation (`template_handlers.go` auto-discover) or after a disable/enable has `BackendServer.TemplateSlug == ""`. A policy reading only that field fails **open**. Pinned by `TestNeo4jAccess_Restricted` case "empty registry slug resolved from mcp_servers (neo4j)" (Task 1) and by the Task 2 fixture, which registers `srv-neo4j` with an empty `TemplateSlug` (`TestScopedNeo4jGate_CallsDeniedAreNotForwarded`).
 2. **A denied call still reaches the backend** — the check must run after the registry lookup / Zoho fallback and before `requestHeadersFor` / `transport.NewBackendClientWithEndpoint`, on all three call verbs. Pinned by `TestScopedNeo4jGate_CallsDeniedAreNotForwarded` (upstream hit counter must stay 0) and `TestScopedNeo4jGate_CallsServedForAdminAndGrantee` (Task 2).
-3. **Caching the wrong things** — caching grants/roles would delay revocation; caching a failed lookup would pin a server as restricted (or a template as unknown) for 60 s. Pinned by `TestNeo4jAccess_GrantRevocationTakesEffectImmediately`, `TestNeo4jAccess_DoesNotCacheLookupErrors`, `TestNeo4jAccess_CachesLookupsWithinTTL` (Task 1) and `TestScopedNeo4jGate_GrantRevocationAppliesOnNextRequest` (Task 2).
+3. **Admin-first order vs. fail-closed** — the admin check must come before the slug/template lookups (admin keeps access while they fail, with zero lookups) while non-admins and identity-less callers stay denied when a lookup fails. Pinned by `TestNeo4jAccess_AdminAllowedWhileLookupsFail`, `TestNeo4jAccess_NonAdminDeniedWhileLookupsFail` (bob and no-email sub-assertions, both lookup kinds), `TestNeo4jAccess_GranteeAllowedWhileLookupsFail` and `TestNeo4jAccess_UnrestrictedBackendSkipsUserAndGrantLookups` (Task 1).
+   **Caching the wrong things** — caching grants/roles would delay revocation; caching a failed lookup would pin a server as restricted (or a template as unknown) for 60 s. Pinned by `TestNeo4jAccess_GrantRevocationTakesEffectImmediately`, `TestNeo4jAccess_DoesNotCacheLookupErrors`, `TestNeo4jAccess_CachesLookupsWithinTTL` (Task 1) and `TestScopedNeo4jGate_GrantRevocationAppliesOnNextRequest` (Task 2).
 4. **Identity-less callers slipping through** — scope tokens / `client_credentials` (no email on ctx) on the MCP side, and the JSON consent API's `anonymous@<client_id>` fallback on the consent side. Pinned by `TestScopedNeo4jGate_ListsHideInstanceFromDeniedCallers` / `TestScopedNeo4jGate_CallsDeniedAreNotForwarded` sub-cases "no email" (Task 2) and `TestConsentJSONPost_DropsHiddenServerAndTools/anonymous_fallback` (Task 3).
 5. **Hand-crafted consent submissions** — a POST naming a hidden server id (or a `tool_ids` entry `srv-neo4j:…`) must not be stored, on **both** submission endpoints (HTML form `POST /authorize` and JSON `POST /api/v1/oauth2/authorize/consent`). Pinned by `TestConsentHTMLPost_DropsHiddenServer`, `TestConsentHTMLPost_OnlyHiddenServersRejected` and `TestConsentJSONPost_DropsHiddenServerAndTools` (Task 3).
 
@@ -53,7 +55,8 @@
 - **`BackendServer.TemplateSlug` is not a reliable source** (see Review Focus 1). The policy therefore takes a fourth collaborator, `serverTemplateSlugLookup` (`TemplateSlugByID(id) (string, error)`, a new `ServerRepo` method), and resolves the slug by server id whenever the registry's field is empty. `NewNeo4jAccess` is `NewNeo4jAccess(t templateRunnerLookup, s serverTemplateSlugLookup, u gatewayUserFinder, g serverAuthorizer)` instead of the spec's 3-argument form.
 - **The consent screens work on `db.MCPServer` rows and a session email, not on `BackendServer` + ctx.** The policy gains `AllowsEmail(email, serverID, templateSlug string) bool` (the spec's `Allows(ctx, b)` delegates to it), and `internal/authserver` consumes it through a small `ServerAccessPolicy` interface set by `AuthServer.SetServerAccess`.
 - **There are two consent submissions, not one:** the HTML form (`handleConsent`, `POST /authorize` with `action=consent`) and the Vue JSON API (`handleAuthorizeConsent`, `POST /api/v1/oauth2/authorize/consent`, which falls back to `anonymous@<client_id>` without a session). Both are filtered. Neither ever writes the OAuth2 client's server list: MCP routing uses `oauth2_client_servers` (admin-assigned `client.Servers`, read by `oauth2.CombinedMiddleware`), not the stored consent scope — so the consent filter is hygiene, and the scoped gateway (Task 2) is the enforcing layer.
-- **`mcp_servers.template_slug` has no foreign key** (the `RESTRICT` FK is on `template_instances.template_slug`). A missing template row is therefore not limited to a corrupted DB: e.g. a Google-Sheets import row whose template was later removed from the catalog would become restricted (G4 applied as written).
+- **`mcp_servers.template_slug` has no foreign key** (the `RESTRICT` FK is on `template_instances.template_slug`). A missing template row is therefore not limited to a corrupted DB: e.g. a Google-Sheets import row whose template was later removed from the catalog becomes restricted — denied to non-admins, allowed to admins (confirmed by the human, 2026-09-30).
+- **Evaluation order amended by the human (2026-09-30):** the spec's `Allows` checks restriction first; the plan checks "email present → admin → allow" first so admins keep access while the template / slug lookup fails. Cost: one `gateway_users` lookup per (server, request) for callers with an email, uncached like the spec requires.
 - The spec gives the error message but no JSON-RPC code; this plan uses `-32600` (`mcp.ErrInvalidRequest`).
 - The unscoped `Gateway.Handle` (used by the transports only when no scope is on the context) is not gated; it is unreachable behind `oauth2.CombinedMiddleware`, which always sets the allowed-server set. Out of scope, as in the spec.
 
@@ -390,6 +393,52 @@ func TestNeo4jAccess_AllowsDeniesOnUserLookupError(t *testing.T) {
 	}
 }
 
+func TestNeo4jAccess_AdminAllowedWhileLookupsFail(t *testing.T) {
+	a, f := newNeo4jAccessFixture()
+	f.templates.err = errors.New("db down")
+	f.servers.err = errors.New("db down")
+	if !a.Allows(ctxWithEmail("admin@hp.fr"), &BackendServer{ID: "srv-neo4j"}) {
+		t.Fatal("an admin must stay allowed while the slug/template lookups fail")
+	}
+	if !a.AllowsEmail("admin@hp.fr", "srv-x", "ghost") {
+		t.Fatal("an admin must stay allowed on an orphan template_slug")
+	}
+	if f.servers.calls != 0 || f.templates.calls != 0 {
+		t.Fatalf("the admin check must run before any lookup, got servers=%d templates=%d", f.servers.calls, f.templates.calls)
+	}
+}
+
+func TestNeo4jAccess_NonAdminDeniedWhileLookupsFail(t *testing.T) {
+	cases := []struct {
+		name    string
+		breakDB func(f *neo4jAccessFakes)
+		backend *BackendServer // unrestricted whenever the DB answers
+	}{
+		{"template lookup fails", func(f *neo4jAccessFakes) { f.templates.err = errors.New("db down") }, &BackendServer{ID: "srv-ga", TemplateSlug: "ga"}},
+		{"server slug lookup fails", func(f *neo4jAccessFakes) { f.servers.err = errors.New("db down") }, &BackendServer{ID: "srv-plain"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			a, f := newNeo4jAccessFixture()
+			tc.breakDB(f)
+			if a.Allows(ctxWithEmail("bob@hp.fr"), tc.backend) {
+				t.Fatal("non-admin without grant must be denied while the lookup fails")
+			}
+			if a.Allows(context.Background(), tc.backend) {
+				t.Fatal("caller without email must be denied while the lookup fails")
+			}
+		})
+	}
+}
+
+func TestNeo4jAccess_GranteeAllowedWhileLookupsFail(t *testing.T) {
+	a, f := newNeo4jAccessFixture()
+	f.servers.err = errors.New("db down")
+	if !a.Allows(ctxWithEmail("alice@hp.fr"), &BackendServer{ID: "srv-neo4j"}) {
+		t.Fatal("a failed lookup counts as restricted, so a grant on this exact server still opens it")
+	}
+}
+
 func TestNeo4jAccess_AllowsDeniesWhenUsersAndGrantsUnwired(t *testing.T) {
 	a := NewNeo4jAccess(&countingTemplates{rows: map[string]*db.Template{"neo4j": {Slug: "neo4j", Runner: "neo4j"}}}, nil, nil, nil)
 	if a.Allows(ctxWithEmail("admin@hp.fr"), &BackendServer{ID: "srv-neo4j", TemplateSlug: "neo4j"}) {
@@ -628,8 +677,17 @@ func (a *Neo4jAccess) Allows(ctx context.Context, b *BackendServer) bool {
 // (the OAuth2 consent screens). templateSlug is the server's
 // mcp_servers.template_slug when known; "" makes the policy resolve it from
 // serverID.
+//
+// Order matters: a gateway admin is allowed before any template lookup, so
+// an admin keeps access even while the slug / template lookup fails. Every
+// other caller then goes through the restriction check, where a failed
+// lookup counts as restricted: callers without email are denied, other
+// emails pass only with a grant on this exact server.
 func (a *Neo4jAccess) AllowsEmail(email, serverID, templateSlug string) bool {
 	if a == nil {
+		return true
+	}
+	if email != "" && a.isAdmin(email) {
 		return true
 	}
 	if !a.restricted(serverID, templateSlug) {
@@ -637,9 +695,6 @@ func (a *Neo4jAccess) AllowsEmail(email, serverID, templateSlug string) bool {
 	}
 	if email == "" {
 		return false
-	}
-	if a.isAdmin(email) {
-		return true
 	}
 	if a.grants == nil {
 		return false
@@ -2124,7 +2179,7 @@ git -C /tmp/claude-1000/-home-hellopro-RAG-HP-PUB/b95a2012-f9f4-4dc3-8341-330b44
 | G1 restricted = template runner `neo4j` (covers future Neo4j templates), no new column | Task 1 `isNeo4jSlug`; `TestNeo4jAccess_Restricted` |
 | G2 admin OR grant on this server, email required | Task 1 `AllowsEmail`; `TestNeo4jAccess_Allows` |
 | G3 no email → denied | `TestNeo4jAccess_Allows/no_end-user_email…`, Task 2 "no email" sub-tests |
-| G4 fail-closed (lookup errors, unwired repos, missing template row) | `TestNeo4jAccess_RestrictedFailsClosedOnLookupErrors`, `…DeniesOnUserLookupError`, `…DeniesWhenUsersAndGrantsUnwired`, `Restricted/missing_template_row…` |
+| G4 fail-closed (lookup errors, unwired repos, missing template row) for non-admins; admins always allowed (human decision) | `TestNeo4jAccess_RestrictedFailsClosedOnLookupErrors`, `…DeniesOnUserLookupError`, `…DeniesWhenUsersAndGrantsUnwired`, `Restricted/missing_template_row…`, `…AdminAllowedWhileLookupsFail`, `…NonAdminDeniedWhileLookupsFail`, `…GranteeAllowedWhileLookupsFail` |
 | G5 unrestricted unchanged | `TestNeo4jAccess_UnrestrictedBackendSkipsUserAndGrantLookups`, `TestScopedNeo4jGate_UnrestrictedBackendUnaffected`, `TestScopedNeo4jGate_NilGateKeepsLegacyBehaviour`, baseline diff |
 | G6 grant on A never opens B | `TestNeo4jAccess_Allows/grant_on_another_server_only` |
 | nil `*Neo4jAccess` allows everything | `TestNeo4jAccess_NilPolicyAllowsEverything`, `TestScopedNeo4jGate_NilGateKeepsLegacyBehaviour`, `TestVisibleServers_NilPolicyKeepsEveryServer` |
