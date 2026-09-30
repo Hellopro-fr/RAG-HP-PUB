@@ -1,3 +1,5 @@
+import type { Neo4jConnectionInput } from '@/components/templates/neo4jConnection'
+
 // Google Templates types — mirror Go DTOs in
 // apps-microservices/mcp-gateway-service/internal/api/template_dto.go.
 // Field names use snake_case to match the JSON wire format.
@@ -24,6 +26,9 @@ export interface Template {
   //   'http_batch' — catalog shortcut that routes to the generic Google Sheets
   //                  server-import flow (no template instance / runner involvement)
   kind: 'stdio' | 'http_batch'
+  // Runner hosting the instances: 'google' (mcp-google-templates-runner) or
+  // 'neo4j' (mcp-template-neo4j-service). Absent on older gateways = 'google'.
+  runner?: 'google' | 'neo4j'
   instance_count: number
 }
 
@@ -57,9 +62,17 @@ export interface CreateInstanceParams {
   template_slug: string
   name: string
   extra_env?: Record<string, string>
-  credentials: File
+  // Google templates: service-account JSON file.
+  credentials?: File
+  // Neo4j templates: connection fields (sent instead of `credentials`).
+  neo4j?: Neo4jConnectionInput
   tags?: string[]
   icon?: string
   tool_prefix?: string
   auto_discover?: boolean
+}
+
+export interface RotateNeo4jParams {
+  neo4j: Neo4jConnectionInput
+  extra_env?: Record<string, string>
 }
