@@ -80,10 +80,15 @@ class Supervisor:
         creds = parse_credentials(spec.credentials_json)
         proc_env = build_process_env(os.environ, spec.env, creds)
         async with self._lock:
-            if spec.instance_id in self._instances:
-                # Spawn-on-existing = restart-with-possibly-new-spec
+            existing = self._instances.get(spec.instance_id)
+            if existing is not None:
+                # Spawn-on-existing = restart-with-possibly-new-spec. Keep the
+                # port: the gateway stored it in mcp_servers.url, and releasing
+                # then re-allocating could fail and leave no instance at all.
+                port = existing.port
                 await self._kill_locked(spec.instance_id, release_port=False)
-            port = self._pool.allocate(preferred=spec.runner_port)
+            else:
+                port = self._pool.allocate(preferred=spec.runner_port)
             inst = RunningInstance(
                 instance_id=spec.instance_id,
                 template_slug=spec.template_slug,
