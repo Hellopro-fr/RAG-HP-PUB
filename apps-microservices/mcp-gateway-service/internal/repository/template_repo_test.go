@@ -456,3 +456,23 @@ func TestTemplateRepo_UpsertPersistsRunner(t *testing.T) {
 		t.Fatalf("runner after re-upsert = %q, want google", got.Runner)
 	}
 }
+
+func TestInstanceRepo_UpdateExtraEnv(t *testing.T) {
+	gdb := newTemplateTestDB(t)
+	repo := NewInstanceRepo(gdb, newTestEncryptor(t))
+	inst := &db.TemplateInstance{ID: "i1", TemplateSlug: "neo4j", Name: "n", CredentialsHash: "h", MCPServerID: "s1", RunnerStatus: "running", ExtraEnv: []byte(`{"NEO4J_READ_ONLY":"true"}`)}
+	if err := repo.Create(inst, []byte(`{}`)); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if err := repo.UpdateExtraEnv("i1", []byte(`{"NEO4J_READ_ONLY":"false"}`)); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	got, err := repo.GetByID("i1")
+	if err != nil || string(got.ExtraEnv) != `{"NEO4J_READ_ONLY":"false"}` {
+		t.Fatalf("extra_env = %s err=%v", got.ExtraEnv, err)
+	}
+	// Writing the same value again must not error (MySQL reports 0 affected rows).
+	if err := repo.UpdateExtraEnv("i1", []byte(`{"NEO4J_READ_ONLY":"false"}`)); err != nil {
+		t.Fatalf("idempotent update: %v", err)
+	}
+}

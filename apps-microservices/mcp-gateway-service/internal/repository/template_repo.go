@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"mcp-gateway/internal/crypto"
@@ -227,6 +228,13 @@ func (r *InstanceRepo) UpdateCredentials(id string, credentialsPlain []byte, has
 		return gorm.ErrRecordNotFound
 	}
 	return nil
+}
+
+// UpdateExtraEnv replaces the admin-supplied extra_env JSON (non-secret,
+// stored in clear). No RowsAffected check: MySQL reports 0 affected rows when
+// the value is unchanged, which is not an error here.
+func (r *InstanceRepo) UpdateExtraEnv(id string, extraEnv json.RawMessage) error {
+	return r.db.Model(&db.TemplateInstance{}).Where("id = ?", id).Update("extra_env", extraEnv).Error
 }
 
 // DeleteWithMCPServer removes both the template_instances row and its linked

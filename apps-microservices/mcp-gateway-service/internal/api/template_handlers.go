@@ -195,7 +195,7 @@ func (h *Handler) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Multipart: fields "template_slug", "name", "extra_env" (JSON string), file "credentials"
+	// Multipart: "template_slug", "name", "extra_env" (JSON string), plus either file "credentials" (Google runner) or neo4j_* fields (Neo4j runner).
 	// 16KB SA JSON + 48KB for non-file fields (name, template_slug, extra_env).
 	if err := r.ParseMultipartForm(int64(validation.MaxSAJSONSize) + 48*1024); err != nil {
 		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "multipart parse: " + err.Error()})
@@ -222,7 +222,8 @@ func (h *Handler) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	if _, err := h.runnerForTemplate(tpl); err != nil {
+	runnerName := templateRunnerName(tpl)
+	if _, err := h.runnerEndpoint(runnerName); err != nil {
 		writeJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: err.Error()})
 		return
 	}
@@ -236,6 +237,10 @@ func (h *Handler) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err := validateExtraEnv(tpl.RequiredExtraEnv, extraEnv); err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
+		return
+	}
+	if err := validateRunnerExtraEnv(runnerName, extraEnv); err != nil {
 		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 		return
 	}
@@ -258,24 +263,21 @@ func (h *Handler) handleCreateInstance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Read credentials file
-	file, hdr, err := r.FormFile("credentials")
+	// The static mcp-neo4j-service already owns the "neo4j" prefix and the
+	// gateway has no tool-name collision check: every Neo4j instance must
+	// carry its own prefix (the seed leaves the template prefix empty).
+	if runnerName == RunnerNeo4j {
+		if p := firstNonEmpty(toolPrefixOverride, tpl.ToolPrefix); p == "" || strings.EqualFold(p, "neo4j") {
+			writeJSON(w, http.StatusBadRequest, ErrorResponse{
+				Error: `tool_prefix is required for Neo4j instances and must not be "neo4j" (used by the static Neo4j server), e.g. neo4jprod`,
+			})
+			return
+		}
+	}
+
+	credBytes, err := credentialsFromRequest(r, runnerName)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "missing credentials file"})
-		return
-	}
-	defer file.Close()
-	if hdr.Size > int64(validation.MaxSAJSONSize) {
-		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "credentials file too large"})
-		return
-	}
-	credBytes, err := io.ReadAll(io.LimitReader(file, int64(validation.MaxSAJSONSize)+1))
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "read credentials: " + err.Error()})
-		return
-	}
-	if _, err := validation.ValidateServiceAccountJSON(credBytes); err != nil {
-		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid credentials: " + err.Error()})
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 		return
 	}
 
@@ -655,27 +657,6 @@ func (h *Handler) handleRotateCredentials(w http.ResponseWriter, r *http.Request
 		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "multipart parse: " + err.Error()})
 		return
 	}
-	file, hdr, err := r.FormFile("credentials")
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "missing credentials file"})
-		return
-	}
-	defer file.Close()
-	if hdr.Size > int64(validation.MaxSAJSONSize) {
-		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "credentials file too large"})
-		return
-	}
-	credBytes, err := io.ReadAll(io.LimitReader(file, int64(validation.MaxSAJSONSize)+1))
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "read credentials: " + err.Error()})
-		return
-	}
-	if _, err := validation.ValidateServiceAccountJSON(credBytes); err != nil {
-		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "invalid credentials: " + err.Error()})
-		return
-	}
-	hash := sha256.Sum256(credBytes)
-	hashHex := hex.EncodeToString(hash[:])
 
 	inst, err := h.instanceRepo.GetByID(id)
 	if err != nil {
@@ -693,17 +674,70 @@ func (h *Handler) handleRotateCredentials(w http.ResponseWriter, r *http.Request
 		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "template lookup failed"})
 		return
 	}
-	ep, err := h.runnerForTemplate(tpl)
+	runnerName := templateRunnerName(tpl)
+	ep, err := h.runnerEndpoint(runnerName)
 	if err != nil {
 		writeJSON(w, http.StatusServiceUnavailable, ErrorResponse{Error: err.Error()})
 		return
 	}
-
-	// Update DB first (encrypted blob + hash) — the runner respawn below re-reads from us on reconcile.
-	if err := h.instanceRepo.UpdateCredentials(id, credBytes, hashHex); err != nil {
-		log.Printf("[templates] rotate credentials DB update failed (id=%s): %v", id, err)
-		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "could not persist new credentials"})
+	credBytes, err := credentialsFromRequest(r, runnerName)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 		return
+	}
+	hash := sha256.Sum256(credBytes)
+	hashHex := hex.EncodeToString(hash[:])
+
+	var extraEnv map[string]string
+	if len(inst.ExtraEnv) > 0 {
+		_ = json.Unmarshal(inst.ExtraEnv, &extraEnv)
+	}
+	// A Neo4j rotate may also change NEO4J_READ_ONLY (the "Lecture seule"
+	// checkbox lives in the same dialog). A Google rotate keeps extra_env.
+	newExtraEnvJSON := inst.ExtraEnv
+	if runnerName == RunnerNeo4j {
+		if raw := r.FormValue("extra_env"); raw != "" {
+			var parsed map[string]string
+			if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+				writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "extra_env: invalid JSON"})
+				return
+			}
+			if err := validateExtraEnv(tpl.RequiredExtraEnv, parsed); err != nil {
+				writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
+				return
+			}
+			if err := validateRunnerExtraEnv(runnerName, parsed); err != nil {
+				writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
+				return
+			}
+			extraEnv = parsed
+			newExtraEnvJSON, _ = json.Marshal(parsed)
+		}
+	}
+	extraEnvChanged := string(newExtraEnvJSON) != string(inst.ExtraEnv)
+
+	// persist writes the new credentials (encrypted blob + hash) and settings.
+	persist := func() error {
+		if err := h.instanceRepo.UpdateCredentials(id, credBytes, hashHex); err != nil {
+			return err
+		}
+		if extraEnvChanged {
+			return h.instanceRepo.UpdateExtraEnv(id, newExtraEnvJSON)
+		}
+		return nil
+	}
+	// Google: DB first — the runner respawn below re-reads from us on reconcile.
+	// Neo4j: the runner pre-checks the new credentials, so they are persisted
+	// only once it accepted them. A rejected rotate never touches the DB, and a
+	// reconcile racing with the pre-check keeps using the stored (previous)
+	// credentials.
+	persistAfterSpawn := runnerName == RunnerNeo4j
+	if !persistAfterSpawn {
+		if err := persist(); err != nil {
+			log.Printf("[templates] rotate credentials DB update failed (id=%s): %v", id, err)
+			writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "could not persist new credentials"})
+			return
+		}
 	}
 
 	// Respawn with the new credentials. See handleCreateInstance for why the
@@ -715,10 +749,6 @@ func (h *Handler) handleRotateCredentials(w http.ResponseWriter, r *http.Request
 			stdioArgs = []string{}
 		}
 	}
-	var extraEnv map[string]string
-	if len(inst.ExtraEnv) > 0 {
-		_ = json.Unmarshal(inst.ExtraEnv, &extraEnv)
-	}
 	env := renderEnv(tpl.DefaultEnv, extraEnv, id)
 	if _, err := ep.Client.Spawn(r.Context(), runnerclient.SpawnRequest{
 		InstanceID:      id,
@@ -728,13 +758,28 @@ func (h *Handler) handleRotateCredentials(w http.ResponseWriter, r *http.Request
 		Env:             env,
 		CredentialsJSON: string(credBytes),
 		CredentialsHash: hashHex,
+		RunnerPort:      inst.RunnerPort,
 	}); err != nil {
+		if msg, ok := runnerPrecheckMessage(err); ok {
+			// Nothing was persisted and the runner left the running process alone.
+			writeJSON(w, http.StatusUnprocessableEntity, ErrorResponse{Error: msg})
+			return
+		}
 		log.Printf("[templates] runner respawn after rotate failed (id=%s): %v", id, err)
 		if uErr := h.instanceRepo.UpdateStatus(id, "failed", "rotate: "+err.Error(), nil); uErr != nil {
 			log.Printf("[templates][WARN] could not persist failed status after rotate (id=%s): %v", id, uErr)
 		}
 		writeJSON(w, http.StatusBadGateway, ErrorResponse{Error: "runner unavailable — see server logs"})
 		return
+	}
+	if persistAfterSpawn {
+		if err := persist(); err != nil {
+			// The runner already serves the new credentials; the next reconcile
+			// reverts it to the stored (previous) ones, the safe direction.
+			log.Printf("[templates] rotate credentials DB update failed after respawn (id=%s): %v", id, err)
+			writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "could not persist new credentials"})
+			return
+		}
 	}
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "rotating"})
 }
@@ -924,6 +969,42 @@ func (h *Handler) handleImportTemplates(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		rows = append(rows, tpl)
+	}
+
+	// Changing templates.runner while instances exist would hand their
+	// credentials to the other runner on its next sync (and kill them on the
+	// old one). The repository allows it; the import refuses it.
+	if h.instanceRepo != nil {
+		counts, err := h.instanceRepo.CountsByTemplate()
+		if err != nil {
+			log.Printf("[templates] import: count instances failed: %v", err)
+			writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "import failed"})
+			return
+		}
+		// ListAll, not GetBySlug: GetBySlug only returns active templates, and an
+		// inactive template can still have instances.
+		current, err := h.templateRepo.ListAll()
+		if err != nil {
+			log.Printf("[templates] import: list templates failed: %v", err)
+			writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "import failed"})
+			return
+		}
+		bySlug := make(map[string]db.Template, len(current))
+		for _, c := range current {
+			bySlug[c.Slug] = c
+		}
+		for _, t := range rows {
+			cur, ok := bySlug[t.Slug]
+			if !ok || counts[t.Slug] == 0 {
+				continue
+			}
+			if from, to := templateRunnerName(&cur), templateRunnerName(&t); from != to {
+				writeJSON(w, http.StatusConflict, ErrorResponse{
+					Error: fmt.Sprintf("template %s: cannot change runner %s -> %s while it has %d instance(s)", t.Slug, from, to, counts[t.Slug]),
+				})
+				return
+			}
+		}
 	}
 
 	if err := h.templateRepo.Upsert(rows); err != nil {
