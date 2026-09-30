@@ -67,6 +67,7 @@ func (r *TemplateRepo) Upsert(tpls []db.Template) error {
 				"tags",
 				"is_active",
 				"kind",
+				"runner",
 				"updated_at",
 			}),
 		}).Create(&tpls).Error

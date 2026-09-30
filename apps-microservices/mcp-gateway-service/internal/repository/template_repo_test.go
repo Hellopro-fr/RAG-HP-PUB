@@ -43,6 +43,7 @@ func newTemplateTestDB(t *testing.T) *gorm.DB {
 			tags                TEXT,
 			is_active           INTEGER NOT NULL DEFAULT 1,
 			kind                TEXT NOT NULL DEFAULT 'stdio',
+			runner              TEXT NOT NULL DEFAULT 'google',
 			created_at          datetime,
 			updated_at          datetime
 		);
@@ -432,5 +433,26 @@ func TestInstanceRepo_DeleteWithMCPServer_MissingServer(t *testing.T) {
 	}
 	if _, err := repo.GetByID(instID); !errors.Is(err, gorm.ErrRecordNotFound) {
 		t.Errorf("instance should be gone, got err %v", err)
+	}
+}
+
+func TestTemplateRepo_UpsertPersistsRunner(t *testing.T) {
+	gdb := newTemplateTestDB(t)
+	repo := NewTemplateRepo(gdb)
+	if err := repo.Upsert([]db.Template{{Slug: "neo4j", Name: "Neo4j", StdioCommand: "mcp-neo4j-cypher", Runner: "neo4j", IsActive: true}}); err != nil {
+		t.Fatalf("upsert: %v", err)
+	}
+	got, err := repo.GetBySlug("neo4j")
+	if err != nil || got.Runner != "neo4j" {
+		t.Fatalf("runner = %v err=%v", got, err)
+	}
+	// The repository updates the column on re-import (DoUpdates list);
+	// handleImportTemplates refuses the change while instances exist (Task 7).
+	if err := repo.Upsert([]db.Template{{Slug: "neo4j", Name: "Neo4j", StdioCommand: "mcp-neo4j-cypher", Runner: "google", IsActive: true}}); err != nil {
+		t.Fatalf("re-upsert: %v", err)
+	}
+	got, _ = repo.GetBySlug("neo4j")
+	if got.Runner != "google" {
+		t.Fatalf("runner after re-upsert = %q, want google", got.Runner)
 	}
 }

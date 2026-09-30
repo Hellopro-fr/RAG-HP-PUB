@@ -92,6 +92,7 @@ func toTemplateResponse(t db.Template, count int) TemplateResponse {
 		ToolPrefix:       t.ToolPrefix,
 		Tags:             t.Tags,
 		Kind:             t.Kind,
+		Runner:           templateRunnerName(&t),
 		InstanceCount:    count,
 	}
 }
@@ -803,6 +804,7 @@ func toTemplateExportRow(t db.Template) TemplateExportRow {
 		StdioCommand: t.StdioCommand,
 		ToolPrefix:   t.ToolPrefix,
 		Kind:         t.Kind,
+		Runner:       t.Runner,
 		IsActive:     t.IsActive,
 	}
 	if len(t.StdioArgs) > 0 {
@@ -905,6 +907,15 @@ func fromTemplateExportRow(row TemplateExportRow) (db.Template, error) {
 	if kind == "" {
 		kind = "stdio"
 	}
+	// Dumps created before templates.runner existed carry no runner: they are
+	// Google templates.
+	runner := row.Runner
+	if runner == "" {
+		runner = RunnerGoogle
+	}
+	if !knownRunners[runner] {
+		return db.Template{}, fmt.Errorf("template %s: unknown runner %q", row.Slug, runner)
+	}
 	t := db.Template{
 		Slug:         row.Slug,
 		Name:         row.Name,
@@ -913,6 +924,7 @@ func fromTemplateExportRow(row TemplateExportRow) (db.Template, error) {
 		StdioCommand: row.StdioCommand,
 		ToolPrefix:   row.ToolPrefix,
 		Kind:         kind,
+		Runner:       runner,
 		IsActive:     row.IsActive,
 	}
 	var err error
