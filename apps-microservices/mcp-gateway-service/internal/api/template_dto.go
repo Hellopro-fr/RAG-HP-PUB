@@ -17,6 +17,7 @@ type TemplateResponse struct {
 	ToolPrefix       string          `json:"tool_prefix"`
 	Tags             json.RawMessage `json:"tags"`
 	Kind             string          `json:"kind"`
+	Runner           string          `json:"runner"`
 	InstanceCount    int             `json:"instance_count"`
 }
 
@@ -60,6 +61,7 @@ type TemplateExportRow struct {
 	ToolPrefix       string                   `json:"tool_prefix"`
 	Tags             []string                 `json:"tags"`
 	Kind             string                   `json:"kind"`
+	Runner           string                   `json:"runner"`
 	IsActive         bool                     `json:"is_active"`
 }
 

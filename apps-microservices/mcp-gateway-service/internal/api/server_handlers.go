@@ -97,7 +97,10 @@ type Handler struct {
 	templateRepo *repository.TemplateRepo
 	instanceRepo *repository.InstanceRepo
 	runner       *runnerclient.Client
-	config       *config.Config
+	// runners holds the non-Google template runners (see SetRunners); the
+	// Google runner is `runner` above.
+	runners map[string]RunnerEndpoint
+	config  *config.Config
 	// slack is the optional Slack notification client. nil disables all
 	// discovery-time notifications (ToolsRegression). Wired via SetSlack.
 	slack *slack.Client
@@ -609,10 +612,10 @@ func (h *Handler) handleDeleteServer(w http.ResponseWriter, r *http.Request) {
 	// mcp_server_id.
 	if h.instanceRepo != nil {
 		if inst, ferr := h.instanceRepo.FindByMCPServerID(id); ferr == nil && inst != nil {
-			if h.runner != nil {
-				if kerr := h.runner.Kill(r.Context(), inst.ID); kerr != nil {
-					log.Printf("[api] runner kill failed for template instance %s (continuing with DB delete): %v", inst.ID, kerr)
-				}
+			if ep, rerr := h.runnerForInstance(inst); rerr != nil {
+				log.Printf("[api][WARN] %v — skipping kill for template instance %s (continuing with DB delete)", rerr, inst.ID)
+			} else if kerr := ep.Client.Kill(r.Context(), inst.ID); kerr != nil {
+				log.Printf("[api] runner kill failed for template instance %s (continuing with DB delete): %v", inst.ID, kerr)
 			}
 			if derr := h.instanceRepo.DeleteWithMCPServer(inst.ID); derr != nil {
 				log.Printf("[api] template-aware delete failed for %s: %v", inst.ID, derr)

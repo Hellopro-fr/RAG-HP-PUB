@@ -359,6 +359,24 @@ func registerRESTAndOAuthServer(
 	}
 
 	apiHandler := api.NewHandler(dbs.repo, gw, registry, cfg.AllowInternalURLs, templateRepo, instanceRepo, runnerClient, cfg)
+	// Non-Google template runners. The runner token doubles as the runner's
+	// identity on /api/v1/internal/runner/sync, so it must differ from the
+	// Google one or the gateway could hand one runner the other's instances.
+	runners := map[string]api.RunnerEndpoint{}
+	switch {
+	case cfg.Neo4jTemplatesRunnerURL == "" || cfg.Neo4jTemplatesRunnerAdminToken == "":
+		log.Println("[main] neo4j-templates runner: DISABLED (env vars not set)")
+	case cfg.Neo4jTemplatesRunnerAdminToken == cfg.GoogleTemplatesRunnerAdminToken:
+		log.Println("[main][ERROR] neo4j-templates runner: DISABLED and runner sync refused for BOTH runners (NEO4J_TEMPLATES_RUNNER_ADMIN_TOKEN must differ from GOOGLE_TEMPLATES_RUNNER_ADMIN_TOKEN)")
+	default:
+		runners[api.RunnerNeo4j] = api.RunnerEndpoint{
+			Client:     runnerclient.New(cfg.Neo4jTemplatesRunnerURL, cfg.Neo4jTemplatesRunnerAdminToken),
+			URL:        cfg.Neo4jTemplatesRunnerURL,
+			AdminToken: cfg.Neo4jTemplatesRunnerAdminToken,
+		}
+		log.Printf("[main] neo4j-templates runner: %s", cfg.Neo4jTemplatesRunnerURL)
+	}
+	apiHandler.SetRunners(runners)
 	apiHandler.SetTokenRepo(tokenRepo, tokenCache)
 	apiHandler.SetOAuth2Repo(oauth2Repo, oauth2Cache)
 	apiHandler.SetUserRepo(dbs.userRepo)

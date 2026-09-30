@@ -80,3 +80,40 @@ ON DUPLICATE KEY UPDATE
   tags=VALUES(tags),
   kind=VALUES(kind),
   updated_at=NOW(3);
+
+-- Neo4j template (runner = mcp-template-neo4j-service). Separate statement
+-- because only this row sets `runner`; the rows above get 'google' from the
+-- column default. NEO4J_READ_ONLY defaults to "true" and is overridden per
+-- instance from the "Lecture seule" checkbox. tool_prefix is empty on purpose:
+-- each instance must choose its own (the static mcp-neo4j-service owns "neo4j"),
+-- which handleCreateInstance enforces.
+INSERT INTO templates
+  (slug, name, description, icon, stdio_command, stdio_args, default_env, required_extra_env, tool_prefix, tags, kind, runner, is_active, created_at, updated_at)
+VALUES
+  ('neo4j',
+   'Neo4j',
+   'MCP wrapper exposing Cypher queries and schema inspection on one Neo4j database (read-only by default).',
+   '/images/servers/neo4j.svg',
+   'mcp-neo4j-cypher',
+   '[]',
+   '{"NEO4J_READ_ONLY": "true"}',
+   '[{"key":"NEO4J_READ_ONLY","label":"Lecture seule","required":false}]',
+   '',
+   '["database","neo4j","graph"]',
+   'stdio',
+   'neo4j',
+   1,
+   NOW(3), NOW(3))
+ON DUPLICATE KEY UPDATE
+  name=VALUES(name),
+  description=VALUES(description),
+  icon=VALUES(icon),
+  stdio_command=VALUES(stdio_command),
+  stdio_args=VALUES(stdio_args),
+  default_env=VALUES(default_env),
+  required_extra_env=VALUES(required_extra_env),
+  tool_prefix=VALUES(tool_prefix),
+  tags=VALUES(tags),
+  kind=VALUES(kind),
+  runner=VALUES(runner),
+  updated_at=NOW(3);

@@ -1,7 +1,12 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { templatesApi } from '@/api/templates'
-import type { Template, TemplateInstance, CreateInstanceParams } from '@/types/templates'
+import type {
+  Template,
+  TemplateInstance,
+  CreateInstanceParams,
+  RotateNeo4jParams
+} from '@/types/templates'
 
 export const useTemplatesStore = defineStore('templates', () => {
   const templates = ref<Template[]>([])
@@ -46,8 +51,8 @@ export const useTemplatesStore = defineStore('templates', () => {
     await templatesApi.restart(id)
   }
 
-  async function rotateCredentials(id: string, credentials: File): Promise<void> {
-    await templatesApi.rotate(id, credentials)
+  async function rotateCredentials(id: string, payload: File | RotateNeo4jParams): Promise<void> {
+    await templatesApi.rotate(id, payload)
   }
 
   // exportCatalog delegates to the API module and returns the raw blob so

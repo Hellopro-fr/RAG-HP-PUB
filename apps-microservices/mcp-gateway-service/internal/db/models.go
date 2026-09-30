@@ -513,7 +513,12 @@ type Template struct {
 	//   "stdio"      — spawns a subprocess via mcp-google-templates-runner (ga, gsc, ...)
 	//   "http_batch" — batch-creates full HTTP mcp_servers via Google Sheets import
 	// Frontend uses this to route clicks differently on the templates catalog.
-	Kind      string    `gorm:"type:varchar(16);not null;default:'stdio';index:idx_template_kind" json:"kind"`
+	Kind string `gorm:"type:varchar(16);not null;default:'stdio';index:idx_template_kind" json:"kind"`
+	// Runner selects which template runner hosts this template's instances:
+	//   "google" — mcp-google-templates-runner (ga, gsc, ...)
+	//   "neo4j"  — mcp-template-neo4j-service
+	// Every pre-existing row gets "google" from the column default.
+	Runner    string    `gorm:"type:varchar(16);not null;default:'google'" json:"runner"`
 	CreatedAt time.Time `gorm:"type:datetime(3);autoCreateTime" json:"created_at"`
 	UpdatedAt time.Time `gorm:"type:datetime(3);autoUpdateTime" json:"updated_at"`
 }

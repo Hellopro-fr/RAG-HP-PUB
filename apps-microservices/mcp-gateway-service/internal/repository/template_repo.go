@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"mcp-gateway/internal/crypto"
@@ -31,6 +32,17 @@ func (r *TemplateRepo) ListActive() ([]db.Template, error) {
 func (r *TemplateRepo) GetBySlug(slug string) (*db.Template, error) {
 	var t db.Template
 	if err := r.db.First(&t, "slug = ? AND is_active = ?", slug, true).Error; err != nil {
+		return nil, err
+	}
+	return &t, nil
+}
+
+// GetBySlugAny returns a template by slug whether or not it is active. Used
+// to route an existing instance to its runner: deactivating a template must not
+// re-route its instances to another runner.
+func (r *TemplateRepo) GetBySlugAny(slug string) (*db.Template, error) {
+	var t db.Template
+	if err := r.db.First(&t, "slug = ?", slug).Error; err != nil {
 		return nil, err
 	}
 	return &t, nil
@@ -67,6 +79,7 @@ func (r *TemplateRepo) Upsert(tpls []db.Template) error {
 				"tags",
 				"is_active",
 				"kind",
+				"runner",
 				"updated_at",
 			}),
 		}).Create(&tpls).Error
@@ -226,6 +239,39 @@ func (r *InstanceRepo) UpdateCredentials(id string, credentialsPlain []byte, has
 		return gorm.ErrRecordNotFound
 	}
 	return nil
+}
+
+// UpdateCredentialsAndExtraEnv writes the encrypted credentials, their hash and
+// extra_env in ONE UPDATE, so a failure cannot leave the row half-rotated.
+// RowsAffected == 0 means the row is gone: the ciphertext always changes
+// (random nonce), so a matching row always reports one affected row.
+func (r *InstanceRepo) UpdateCredentialsAndExtraEnv(id string, credentialsPlain []byte, hashHex string, extraEnv json.RawMessage) error {
+	if r.encryptor == nil {
+		return fmt.Errorf("encryptor required for template instances")
+	}
+	ct, err := r.encryptor.Encrypt(credentialsPlain)
+	if err != nil {
+		return fmt.Errorf("encrypt: %w", err)
+	}
+	result := r.db.Model(&db.TemplateInstance{}).Where("id = ?", id).Updates(map[string]any{
+		"encrypted_credentials": ct,
+		"credentials_hash":      hashHex,
+		"extra_env":             extraEnv,
+	})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
+}
+
+// UpdateExtraEnv replaces the admin-supplied extra_env JSON (non-secret,
+// stored in clear). No RowsAffected check: MySQL reports 0 affected rows when
+// the value is unchanged, which is not an error here.
+func (r *InstanceRepo) UpdateExtraEnv(id string, extraEnv json.RawMessage) error {
+	return r.db.Model(&db.TemplateInstance{}).Where("id = ?", id).Update("extra_env", extraEnv).Error
 }
 
 // DeleteWithMCPServer removes both the template_instances row and its linked
