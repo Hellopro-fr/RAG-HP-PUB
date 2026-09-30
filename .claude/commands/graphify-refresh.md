@@ -43,15 +43,24 @@ merging a service":
   shrink it to that one path; a missing entry then reads as new and the next
   update re-extracts the monorepo.
 
-## Step 3 — Re-label once, at the end
+## Step 3 — Label once, at the end
 
-Every merge re-runs clustering and reassigns community IDs, so `labels.json`
-ends up pointing at the wrong topics. Re-label **after the last merge**, not
-between merges.
+A merge no longer re-clusters the graph: since `37247ad5` (2026-08-07) it goes
+through `_preserve_and_place` (`scripts/graphify_rebuild_scoped.py:173`), which
+keeps every prior node in its community and only places the new ones. Label
+**after the last merge**, not between merges:
 
-Name the ~20 largest communities by hand from their highest-degree members and
-dominant source area; derive the rest from content (dominant area + top member)
-so they survive the next re-clustering.
+1. **Assert 0 drift.** Every node present before the merge must keep its
+   community ID — 0.00 % drift is the expected result. Anything else means the
+   merge re-clustered: stop and report it.
+2. **Name only the NEW communities**, from their content (dominant source area +
+   top member).
+3. **Audit every community that RECEIVED nodes** this cycle: re-read its label
+   against its content and rename it if the label no longer describes it. A
+   placed node can land in a community whose label was already wrong.
+4. **No hand relabel of the ~20 largest communities** unless step 1 measured a
+   drift above 0 — with 0 drift their labels are still correct, and rewriting
+   them is the churn the fix removed.
 
 Then regenerate `GRAPH_REPORT.md` and commit `graphify-out/` with a message
 naming which areas moved and by how many nodes.
@@ -60,6 +69,14 @@ naming which areas moved and by how many nodes.
 
 ```bash
 python scripts/graphify_plan_update.py   # must now exit 0
+```
+
+Once the planner exits 0 after the commit, remove `graphify-out/.needs_update`.
+It is a gitignored marker set by the hook (`scripts/graphify_rebuild_scoped.py:261`)
+on any in-scope doc change, and the scoped merge never clears it — the planner is
+the authority on what is owed. Then:
+
+```bash
 bash scripts/graphify-status.sh          # must print "fresh"
 ```
 

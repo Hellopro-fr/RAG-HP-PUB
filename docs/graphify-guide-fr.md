@@ -252,7 +252,7 @@ Nous avons choisi de faire grandir **un seul graphe unifié** plutôt qu'un grap
     3. Dispatche un sous-agent sémantique pour ses docs (`CLAUDE.md`, `README.md`, `requirements.txt`). Peu de tokens LLM — compter moins de 0,10 $ par service.
     4. Fusionne les nouveaux nœuds/arêtes dans `graphify-out/graph.json` et ajoute les fichiers au manifeste.
 
-    Appliquer ensuite les deux pièges connus après la fin du sous-agent (IDs cross-link inventés + re-labellisation des communautés — recettes dans la section « Pièges lors de la fusion d'un service »).
+    Appliquer ensuite les deux pièges connus après la fin du sous-agent (IDs cross-link inventés + labels des communautés — vérifier une dérive nulle, nommer les communautés neuves, auditer celles qui ont reçu des nœuds ; recettes dans la section « Pièges lors de la fusion d'un service »).
 
 3. **Mettre à jour le workflow CI de rebuild.** Ajouter le path glob du nouveau service au filtre `paths:` de `.github/workflows/graphify-auto-rebuild.yml`. Oublier cette étape est silencieux : le service est dans `graph.json` mais ses commits ne déclencheront plus de rebuild CI, donc le graphe se périme peu à peu dès que quelqu'un édite ce service sur `main` / `features/poc`.
 
@@ -309,9 +309,13 @@ for e in sem['edges']:
 
 Tenir une liste de remap à jour dans ce document. Pré-amorcer le prompt du sous-agent avec une liste d'IDs de nœuds backbone connus pour réduire les inventions — le prompt utilisé pour `graph-rag-api-recherche-rust-service` les liste explicitement et a fait passer le taux d'invention de 10/10 à 6/16.
 
-**2. Le re-clustering mélange les labels.** Chaque fusion relance le clustering. La communauté `c0` peut devenir `c4`, `c7` peut devenir `c1`, etc. Les labels dans `graphify-out/labels.json` sont clés par ID de communauté — après une fusion, ils pointent vers la *nouvelle* communauté à cet ID, qui traite probablement d'un autre sujet.
+**2. Les labels des communautés après une fusion.** Les labels de `graphify-out/labels.json` sont clés par ID de communauté. Les fusions relançaient autrefois le clustering et rebattaient ces IDs (`c0` devenant `c4`, …), si bien que chaque label pointait vers un autre sujet. Depuis `37247ad5` (2026-08-07), une fusion passe par `_preserve_and_place` (`scripts/graphify_rebuild_scoped.py`) : les nœuds antérieurs gardent leur communauté, seuls les nœuds neufs sont placés. Le contrôle n'est donc plus « tout re-labelliser » mais :
 
-Contournement — après chaque fusion, régénérer un échantillon par communauté et re-labelliser :
+- **vérifier une dérive nulle** — chaque nœud présent avant la fusion garde son ID de communauté (0,00 % attendu ; tout autre résultat veut dire que la fusion a re-clusterisé : s'arrêter et le signaler) ;
+- **nommer seulement les communautés neuves**, d'après leur contenu ;
+- **auditer chaque communauté qui a reçu des nœuds**, d'après son contenu — un nœud placé peut tomber dans une communauté dont le label était déjà faux (mesuré le 2026-09-30 : deux labels de ce genre, c30 et c87).
+
+Pour inspecter les communautés, régénérer un échantillon par communauté :
 
 ```bash
 # dump les 4 premiers labels de nœud par communauté pour cross-check
@@ -321,9 +325,7 @@ python -c "import json, os; d=json.loads(open('graphify-out/graph.json').read())
   [print(f'c{k} ({len(v)}): {v[:4]}') for k,v in sorted(c.items(), key=lambda x:-len(x[1]))[:30]]"
 ```
 
-Comparer à `labels.json`, réécrire où faux, commiter la mise à jour des labels avec la mise à jour du graphe.
-
-À terme, les labels devraient être dérivés du contenu des communautés (top-N labels de nœuds) plutôt qu'assignés manuellement, pour survivre au re-clustering gratuitement. Pas rentable tant qu'on ne rencontre pas ce problème plusieurs fois de plus.
+Comparer les communautés neuves et receveuses à `labels.json`, réécrire où faux, commiter la mise à jour des labels avec la mise à jour du graphe. Ne pas re-labelliser à la main les plus grandes communautés quand la dérive est nulle : leurs labels sont toujours justes.
 
 ## Mettre à jour le graphe
 
