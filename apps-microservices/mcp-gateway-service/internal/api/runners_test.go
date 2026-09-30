@@ -155,3 +155,34 @@ func TestClassifyCreateInstanceError_NewKinds(t *testing.T) {
 		t.Errorf("precheck: %d %q", status, msg)
 	}
 }
+
+func TestRunnerErrorSummary_OmitsBody(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{
+			"validation 422 echoing the input",
+			&runnerclient.StatusError{Method: "POST", Path: "/admin/instances", StatusCode: 422,
+				Body: map[string]any{"detail": []any{map[string]any{"input": map[string]any{"credentials_json": "SECRET-CANARY"}}}}},
+			"runner POST /admin/instances: status 422",
+		},
+		{
+			"precheck 422",
+			&runnerclient.StatusError{Method: "POST", Path: "/admin/instances", StatusCode: 422,
+				Body: map[string]any{"detail": map[string]any{"code": "neo4j_auth_failed", "message": "Neo4j rejected the username or password"}}},
+			"runner POST /admin/instances: status 422: neo4j_auth_failed",
+		},
+		{"non-status error", errors.New("dial tcp: refused"), "dial tcp: refused"},
+	}
+	for _, c := range cases {
+		got := runnerErrorSummary(c.err)
+		if got != c.want {
+			t.Errorf("%s: got %q, want %q", c.name, got, c.want)
+		}
+		if strings.Contains(got, "SECRET-CANARY") {
+			t.Errorf("%s: summary leaks the body: %q", c.name, got)
+		}
+	}
+}

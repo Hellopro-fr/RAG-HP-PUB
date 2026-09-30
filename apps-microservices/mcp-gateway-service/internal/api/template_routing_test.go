@@ -185,3 +185,72 @@ func TestHandleRotateCredentials_Neo4jPrecheckFailure_KeepsOldCredentials(t *tes
 		t.Errorf("rejected extra_env was persisted: %s", got.ExtraEnv)
 	}
 }
+
+func TestHandleRotateCredentials_Neo4jSuccess_PersistsAfterSpawn(t *testing.T) {
+	h, gdb := newTemplateAPITestHandler(t)
+	seedTemplate(t, gdb, "neo4j", RunnerNeo4j)
+	var captured map[string]any
+	withNeo4jRunner(h, capturingRunner(t, `{"port":15123,"pid":1}`, &captured).URL)
+
+	oldCreds := []byte(`{"uri":"bolt://neo4j:7687","username":"reader","password":"good","database":"neo4j"}`)
+	oldSum := sha256.Sum256(oldCreds)
+	port := 15123
+	inst := &db.TemplateInstance{ID: "inst-1", TemplateSlug: "neo4j", Name: "prod", CredentialsHash: hex.EncodeToString(oldSum[:]),
+		ExtraEnv: json.RawMessage(`{"NEO4J_READ_ONLY":"true"}`), RunnerStatus: "running", RunnerPort: &port, MCPServerID: "inst-1"}
+	if err := h.instanceRepo.Create(inst, oldCreds); err != nil {
+		t.Fatalf("seed instance: %v", err)
+	}
+
+	req := multipartRequest(t, "/api/v1/template-instances/inst-1/rotate-credentials", map[string]string{
+		"neo4j_uri": "bolt://neo4j:7687", "neo4j_username": "reader", "neo4j_password": "newpw",
+		"extra_env": `{"NEO4J_READ_ONLY":"false"}`,
+	})
+	rec := httptest.NewRecorder()
+	h.handleRotateCredentials(rec, req)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("got %d body=%s, want 202", rec.Code, rec.Body.String())
+	}
+
+	newCreds := `{"uri":"bolt://neo4j:7687","username":"reader","password":"newpw","database":"neo4j"}`
+	newSum := sha256.Sum256([]byte(newCreds))
+	newHash := hex.EncodeToString(newSum[:])
+	got, plain, err := h.instanceRepo.GetByIDWithCredentials("inst-1")
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if string(plain) != newCreds || got.CredentialsHash != newHash {
+		t.Errorf("new credentials not persisted: %s / %s", plain, got.CredentialsHash)
+	}
+	if string(got.ExtraEnv) != `{"NEO4J_READ_ONLY":"false"}` {
+		t.Errorf("extra_env = %s, want NEO4J_READ_ONLY false", got.ExtraEnv)
+	}
+	if captured["credentials_hash"] != newHash {
+		t.Errorf("spawn credentials_hash = %v, want %s", captured["credentials_hash"], newHash)
+	}
+	if captured["credentials_json"] != newCreds {
+		t.Errorf("spawn credentials_json = %v", captured["credentials_json"])
+	}
+	if p, _ := captured["runner_port"].(float64); int(p) != 15123 {
+		t.Errorf("spawn runner_port = %v, want 15123", captured["runner_port"])
+	}
+}
+
+func TestHandleImportTemplates_RunnerChangeInactiveTemplate_Returns409(t *testing.T) {
+	h, gdb := newTemplateAPITestHandler(t)
+	seedTemplate(t, gdb, "neo4j", RunnerNeo4j)
+	if err := gdb.Exec("UPDATE templates SET is_active = 0 WHERE slug = ?", "neo4j").Error; err != nil {
+		t.Fatalf("deactivate: %v", err)
+	}
+	if err := h.instanceRepo.Create(&db.TemplateInstance{ID: "i1", TemplateSlug: "neo4j", Name: "n", CredentialsHash: "h", RunnerStatus: "running", MCPServerID: "i1"}, []byte(`{}`)); err != nil {
+		t.Fatalf("seed instance: %v", err)
+	}
+	body := `{"version":1,"templates":[{"slug":"neo4j","name":"Neo4j","stdio_command":"mcp-neo4j-cypher","kind":"stdio","is_active":true}]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/templates/import", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	h.handleImportTemplates(rec, req)
+	var errBody ErrorResponse
+	_ = json.Unmarshal(rec.Body.Bytes(), &errBody)
+	if rec.Code != http.StatusConflict || !strings.Contains(errBody.Error, "cannot change runner neo4j -> google") {
+		t.Fatalf("got %d body=%s, want 409", rec.Code, rec.Body.String())
+	}
+}

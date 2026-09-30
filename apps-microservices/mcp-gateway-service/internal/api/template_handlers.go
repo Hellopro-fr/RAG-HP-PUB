@@ -422,7 +422,7 @@ func (h *Handler) createInstanceFromSpec(
 		CredentialsHash: hashHex,
 	})
 	if err != nil {
-		log.Printf("[templates] runner spawn failed for instance %s: %v", instanceID, err)
+		log.Printf("[templates] runner spawn failed for instance %s: %s", instanceID, runnerErrorSummary(err))
 		if delErr := h.instanceRepo.DeleteWithMCPServer(instanceID); delErr != nil {
 			log.Printf("[templates][WARN] could not roll back instance row %s: %v", instanceID, delErr)
 		}
@@ -765,8 +765,9 @@ func (h *Handler) handleRotateCredentials(w http.ResponseWriter, r *http.Request
 			writeJSON(w, http.StatusUnprocessableEntity, ErrorResponse{Error: msg})
 			return
 		}
-		log.Printf("[templates] runner respawn after rotate failed (id=%s): %v", id, err)
-		if uErr := h.instanceRepo.UpdateStatus(id, "failed", "rotate: "+err.Error(), nil); uErr != nil {
+		summary := runnerErrorSummary(err)
+		log.Printf("[templates] runner respawn after rotate failed (id=%s): %s", id, summary)
+		if uErr := h.instanceRepo.UpdateStatus(id, "failed", "rotate: "+summary, nil); uErr != nil {
 			log.Printf("[templates][WARN] could not persist failed status after rotate (id=%s): %v", id, uErr)
 		}
 		writeJSON(w, http.StatusBadGateway, ErrorResponse{Error: "runner unavailable — see server logs"})

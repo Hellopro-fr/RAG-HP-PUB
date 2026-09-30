@@ -3,6 +3,7 @@ package api
 import (
 	"crypto/subtle"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -147,4 +148,20 @@ func runnerPrecheckMessage(err error) (string, bool) {
 		return code, true
 	}
 	return code + ": " + message, true
+}
+
+// runnerErrorSummary renders a runner error for logs and instance status
+// without the response body: a FastAPI request-validation 422 echoes the
+// request input, which for a Neo4j spawn includes credentials_json. Only the
+// method, path, status and (when present) detail.code are kept.
+func runnerErrorSummary(err error) string {
+	var se *runnerclient.StatusError
+	if !errors.As(err, &se) {
+		return err.Error()
+	}
+	s := fmt.Sprintf("runner %s %s: status %d", se.Method, se.Path, se.StatusCode)
+	if code, _ := se.Detail(); code != "" {
+		s += ": " + code
+	}
+	return s
 }
