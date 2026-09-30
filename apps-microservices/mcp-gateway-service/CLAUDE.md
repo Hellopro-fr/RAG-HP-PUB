@@ -195,14 +195,15 @@ Catalog routes return **503** when `BDD_CATALOG_BASE_URL` / `BDD_CATALOG_TOKEN` 
 Scope-token accepts and rejects log a `source=x-mcp-scope-token|bearer` tag; Slack `UnauthorizedEvent` reasons carry the same tag.
 
 ### Template Catalog (`/api/v1/`)
-- `GET /templates` — list available templates (seeded: GA4, GSC) with live instance counts
+- `GET /templates` — list available templates (seeded: GA4, GSC, Neo4j) with live instance counts
 - `GET /templates/{slug}` — template detail
 - `GET /templates/export` — download the full catalog as JSON (active + inactive)
 - `POST /templates/import` — upsert templates from JSON (slug-keyed, transactional, no instances)
-- `GET/POST /template-instances` — list / create instance (POST is multipart: template_slug, name, extra_env JSON, credentials file)
+- `GET/POST /template-instances` — list / create instance (POST is multipart: template_slug, name, extra_env JSON, plus a credentials file (Google runner) or neo4j_uri / neo4j_username / neo4j_password / neo4j_database fields (Neo4j runner))
 - `GET/DELETE /template-instances/{id}` — detail / remove (DELETE kills runner subprocess + removes mcp_servers row)
 - `POST /template-instances/{id}/restart` — respawn subprocess
-- `POST /template-instances/{id}/rotate-credentials` — upload replacement SA JSON + respawn
+- `POST /template-instances/{id}/rotate-credentials` — replacement credentials (SA JSON, or Neo4j fields + optional extra_env) + respawn; a Neo4j rotate is persisted only after the runner pre-check accepted it (422 otherwise, DB and running instance untouched)
+- Runner error bodies are never logged or stored verbatim: logs and `RunnerLastError` carry a summary only (status + error code, no body). The Neo4j runner's request-validation 422 does not echo request input.
 
 ### Zoho Imports Admin (`/api/v1/`)
 - `GET/POST/DELETE /api/v1/zoho-imports/admin` — manage the singleton admin Zoho row consumed by `mcp-zoho-service`. POST upserts (201 on create, 200 on update); GET returns the row with `auth_headers` keys redacted; DELETE clears.
@@ -215,7 +216,7 @@ Scope-token accepts and rejects log a `source=x-mcp-scope-token|bearer` tag; Sla
 - `GET /api/v1/zoho-imports/{id}/tools` — list the persisted tool catalog for one row. Body: `{tools: [{name, description, input_schema, updated_at}], total}`. Returns 200 (empty list when catalog empty), 404 when the row is missing. Read-only — refresh the catalog via `POST /api/v1/zoho-imports/{id}/discover`.
 
 ### Internal Sync (shared-secret auth via `X-Admin-Token`)
-- `POST /api/v1/internal/runner/sync` — runner's boot-time pull of desired instances (returns decrypted credentials)
+- `POST /api/v1/internal/runner/sync` — a runner's pull of its desired instances — the X-Admin-Token identifies the runner (Google or Neo4j) and only that runner's instances are returned (decrypted credentials)
 - `POST /api/v1/internal/users/sync` — account-service-backend pushes its users; gateway creates missing `gateway_users` (role `config-only`, `is_allowed=false`) and returns `{created, skipped}`. Token: `ACCOUNT_INTERNAL_TOKEN`.
 
 ### Other
@@ -248,8 +249,10 @@ Scope-token accepts and rejects log a `source=x-mcp-scope-token|bearer` tag; Sla
 | `RINGOVER_ADMIN_TOKEN` | — | Shared secret sent as `X-Admin-Token` to mcp-ringover-service `/admin/*`. Must match `MCP_RINGOVER_ADMIN_TOKEN` on the Ringover side. |
 | `BDD_CATALOG_BASE_URL` | — | Read-only upstream Hellopro BDD catalog URL (e.g. `https://test.hellopro.fr/admin/repertoire_test/moulinettes_interne/api_mcp`). Required for catalog proxy. |
 | `BDD_CATALOG_TOKEN`    | — | Shared secret sent as `X-Admin-Token` to the upstream catalog. Required alongside `BDD_CATALOG_BASE_URL`. |
-| `GOOGLE_TEMPLATES_RUNNER_URL` | — | In-cluster URL of mcp-google-templates-runner (e.g. `http://mcp-google-templates-runner:8595`). Required to spawn template instances. |
+| `GOOGLE_TEMPLATES_RUNNER_URL` | — | In-cluster URL of mcp-google-templates-runner (e.g. `http://mcp-google-templates-runner:8595`). Required to spawn Google-runner template instances (ga, gsc). |
 | `GOOGLE_TEMPLATES_RUNNER_ADMIN_TOKEN` | — | Shared secret for the runner admin API (sent as `X-Admin-Token`). The runner uses the SAME value when calling back via `/api/v1/internal/runner/sync`. |
+| `NEO4J_TEMPLATES_RUNNER_URL` | — | In-cluster URL of mcp-template-neo4j-service (e.g. `http://mcp-template-neo4j-service:8598`). Required to spawn Neo4j template instances. |
+| `NEO4J_TEMPLATES_RUNNER_ADMIN_TOKEN` | — | Shared secret for the Neo4j runner (both directions). **Must differ** from `GOOGLE_TEMPLATES_RUNNER_ADMIN_TOKEN` — the sync endpoint uses it to tell the runners apart; equal tokens disable the Neo4j runner at boot. |
 | `SLACK_WEBHOOK_URL` | — | Slack incoming-webhook URL (`https://hooks.slack.com/services/...`). Empty = notifications disabled. |
 | `SLACK_ENV_LABEL` | — | Optional prefix shown on every message (e.g. `prod`, `staging`). |
 | `SLACK_AUTH_ALERT_COOLDOWN` | `600` | Seconds between duplicate unauthorized alerts per (ip, endpoint). `0` disables the cooldown. |
@@ -264,8 +267,8 @@ Scope-token accepts and rejects log a `source=x-mcp-scope-token|bearer` tag; Sla
 | Table | Purpose |
 |---|---|
 | `mcp_servers` | Backend servers (name, URL, health, capabilities, `min_role` access gate) |
-| `templates` | Template catalog (seed: `ga` GA4, `gsc` GSC) — defines stdio_command, default_env with `{instance_id}` placeholder, and required_extra_env schema |
-| `template_instances` | One row per admin-uploaded SA JSON — encrypted credentials, credentials_hash, runner_port/status, FK to `mcp_servers.id` |
+| `templates` | Template catalog (seed: `ga` GA4, `gsc` GSC, `neo4j` Neo4j) — stdio_command, default_env with `{instance_id}` placeholder, required_extra_env schema, and runner (`google` | `neo4j`) |
+| `template_instances` | One row per template instance — encrypted credentials (SA JSON or Neo4j connection JSON), credentials_hash, runner_port/status, FK to `mcp_servers.id` |
 | `server_tools` | Tools per server (name, description, inputSchema, is_active) |
 | `server_resources` | Resources per server (URI, name, mimeType) |
 | `server_prompts` | Prompts per server |
