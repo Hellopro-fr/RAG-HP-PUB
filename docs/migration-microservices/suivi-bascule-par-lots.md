@@ -20,8 +20,8 @@
 | **L2** | lun 21/09 → 🔴 rollback (F-HP-MIG-009) · **rejeu mar 22/09 12h45 Paris ✅** | ✅ **basculé** — 9 files à `consumers=1`, 1er message réel `CAT-1002121` traité en 4 min (16 × 200, 0 × 400) | 21/09 : 2 min 39 / rollback 1 min 31 · 22/09 : **3 min 12** | ✅ nuit 22→23 : 223 × 200 sur qc-caracterisation, 0 × 400, 0 restart | ✅ **GO 23/09 ~7h30** (LEAD + dev, GO étendu à L3 prix) |
 | **L3** | **mer 23/09 9h28 Paris** (anticipé) | ✅ **basculé** — 5 prix sur GKE, 1re écriture Milvus prod (URI `milvus-prod`, identifiants SM `platform-zilliz-*`), borne `max id 467759069053297382` | **~4 min 10** | ✅ nuit 23→24 : 104 lignes Milvus, 0 doublon, 0 restart, 0 Traceback ; F-HP-MIG-011 bis (`prix-extraction-produits`) corrigé 24/09 | ✅ **GO 24/09 9h30** |
 | **L4** | **jeu 24/09 ~10h45 Paris** (avancé) | ✅ **basculé** — 9 services sur GKE, écritures Milvus prod à l'échelle (supprime/insère), Redis prod ; sauvegarde à la demande `daily_20260924_084629` | **~12 min 25** (dont 4 min 10 de sauvegarde) | ✅ nuit 24→25 : ≈ 33 000 produits, files/DLQ à 0, 0 restart ; seules erreurs = coupures `pika` préexistantes | ✅ **GO 25/09** |
-| **L5** | lun 28/09 | ⬜ à venir | | | |
-| **L6** | mar 29/09 | ⬜ à venir | | | |
+| **L5** | **lun 28/09 09h24 Paris** | ✅ **basculé** — 8 processors graph-rag, instantané Neo4j `neo4j-data-pre-l5-20260928` | **~7 min 23** | ✅ nuit 28→29 : 0 restart ; écarts de pic (timeouts embedding, DLQ LLM) → `llm-extractor` à 4 | ✅ **GO 29/09** |
+| **L6** | **mar 29/09 13h23 Paris** | ✅ **basculé** — embedding, template-llm, webhook sur GKE (broker prod, clé webhook réelle) ; premiers webhooks réels 29/09 12:20 UTC | **~4 min 30** | ⚠️ nuit 29→30 : backlog `embedding_queue` 11 662 (1 réplica au lieu de 4) → parité 4, file vidée à 05:29 ; webhook 256 × `2xx`, 0 refus | ✅ **GO 30/09** (embedding sous réserve de la nuit 30/09→01/10) — **série des consumers close** |
 | **L7** | ~~mer 30/09~~ | ⏭️ **remplacé le 25/09** : services gateway / admin / DLQ basculent **avec leur trafic** (vague 2) ; 30/09 = préparation de la vague 2 | | | |
 
 ## État des services
@@ -51,17 +51,17 @@
 | L4 | `echange-database-qdrant-service` | `echange-database-qdrant-service` | **STOPPED** ×4 | **PROD** | 2 | 2026-09-24 08:58 UTC | DSO 24/09 | ✅ trafic réel 24-25/09 | ✅ 25/09 | |
 | L4 | `document-database-qdrant-service` | `document-database-qdrant-service` | **STOPPED** ×4 | **PROD** | 2 | 2026-09-24 08:58 UTC | DSO 24/09 | ✅ trafic réel 24-25/09 | ✅ 25/09 | |
 | L4 | `di-database-qdrant-service` | `di-database-qdrant-service` | **STOPPED** ×4 | **PROD** | 2 | 2026-09-24 08:58 UTC | DSO 24/09 | ✅ trafic réel 24-25/09 | ✅ 25/09 | |
-| L5 | `graph-rag-produit-processor` | `graph-rag-produit-processor` | UP | shadow | 1 | | | | ⬜ | |
-| L5 | `graph-rag-etl-processor` | `graph-rag-etl-processor` | UP | shadow | 1 | | | | ⬜ | |
-| L5 | `graph-rag-fournisseur-processor` | `graph-rag-fournisseur-processor` | UP | shadow | 1 | | | | ⬜ | |
-| L5 | `graph-rag-categorie-processor` | `graph-rag-categorie-processor` | UP | shadow | 1 | | | | ⬜ | |
-| L5 | `graph-rag-llm-extractor-processor` | `graph-rag-llm-extractor-processor` | UP | shadow | 1 | | | | ⬜ | |
-| L5 | `graph-rag-normalize-unite-processor` | `graph-rag-normalize-unite-processor` | UP | shadow | 1 | | | | ⬜ | |
-| L5 | `graph-rag-normalize-unite-retry-processor` | `graph-rag-normalize-unite-retry-processor` | UP | shadow | 1 | | | | ⬜ | |
-| L5 | `graph-rag-semantique-vigil-processor` | `graph-rag-semantique-vigil-processor` | UP | shadow | 1 | | | | ⬜ | |
-| L6 | `embedding-service` | `embedding-service` | UP | shadow | 1 | | | | ⬜ | |
-| L6 | `template-llm-service` | `template-llm-service` | UP | shadow | 1 | | | | ⬜ | |
-| L6 | `webhook-service` | `webhook-service` | UP | shadow | 1 | | | | ⬜ | |
+| L5 | `graph-rag-produit-processor` | `graph-rag-produit-processor` | **STOPPED** ×5 | **PROD** | 2 | 2026-09-28 07:24 UTC | DSO 28/09 | ✅ trafic réel 28-29/09 + tests dev | ✅ 29/09 | |
+| L5 | `graph-rag-etl-processor` | `graph-rag-etl-processor` | **STOPPED** ×5 | **PROD** | 2 | 2026-09-28 07:24 UTC | DSO 28/09 | ✅ trafic réel 28-29/09 + tests dev | ✅ 29/09 | |
+| L5 | `graph-rag-fournisseur-processor` | `graph-rag-fournisseur-processor` | **STOPPED** ×3 | **PROD** | 1 | 2026-09-28 07:24 UTC | DSO 28/09 | ✅ trafic réel 28-29/09 + tests dev | ✅ 29/09 | |
+| L5 | `graph-rag-categorie-processor` | `graph-rag-categorie-processor` | **STOPPED** ×2 | **PROD** | 1 | 2026-09-28 07:24 UTC | DSO 28/09 | ✅ trafic réel 28-29/09 + tests dev | ✅ 29/09 | |
+| L5 | `graph-rag-llm-extractor-processor` | `graph-rag-llm-extractor-processor` | **STOPPED** ×5 | **PROD** | 4 | 2026-09-28 07:24 UTC | DSO 28/09 | ✅ trafic réel 28-29/09 + tests dev | ✅ 29/09 | |
+| L5 | `graph-rag-normalize-unite-processor` | `graph-rag-normalize-unite-processor` | **STOPPED** ×2 | **PROD** | 1 | 2026-09-28 07:24 UTC | DSO 28/09 | ✅ trafic réel 28-29/09 + tests dev | ✅ 29/09 | |
+| L5 | `graph-rag-normalize-unite-retry-processor` | `graph-rag-normalize-unite-retry-processor` | **STOPPED** ×5 | **PROD** | 2 | 2026-09-28 07:24 UTC | DSO 28/09 | ✅ trafic réel 28-29/09 + tests dev | ✅ 29/09 | |
+| L5 | `graph-rag-semantique-vigil-processor` | `graph-rag-semantique-vigil-processor` | **STOPPED** ×3 | **PROD** | 1 | 2026-09-28 07:24 UTC | DSO 28/09 | ✅ trafic réel 28-29/09 + tests dev | ✅ 29/09 | |
+| L6 | `embedding-service` | `embedding-service` | **STOPPED** ×4 | **PROD** | **4** | 2026-09-29 11:23 UTC | DSO 29/09 | ✅ GO 30/09 **sous réserve** (nuit 30/09→01/10) | ⚠️ 30/09 | 1 → 4 le 30/09 05:15 UTC (backlog nocturne) ; [rapport](rapports/embedding-service.md) |
+| L6 | `template-llm-service` | `template-llm-service` | **STOPPED** ×4 | **PROD** | 1 | 2026-09-29 11:23 UTC | DSO 29/09 | ✅ GO 30/09 (trafic réel de nuit) | ✅ 30/09 | file restée à 0 à 1 réplica ; [rapport](rapports/template-llm-service.md) |
+| L6 | `webhook-service` | `webhook-service` | **STOPPED** ×1 | **PROD** | 1 | 2026-09-29 11:23 UTC | DSO 29/09 | ✅ GO 30/09 (256 appels `2xx`, 0 refus) | ✅ 30/09 | `WEBHOOK_UPDATE_PRODUIT_URL` + `KEY_WEBHOOK` réelle ; [rapport](rapports/webhook-service.md) |
 | L7 | `api-gateway-go-service` | `api-gateway-go` | N/A | shadow | 1 | | | | ⬜ | |
 | L7 | `mcp-gateway-service` | `mcp-gateway-service` | N/A | shadow | 1 | | | | ⬜ | |
 | L7 | `mcp-zoho-service` | `mcp-zoho-service` | N/A | shadow | 1 | | | | ⬜ | |
