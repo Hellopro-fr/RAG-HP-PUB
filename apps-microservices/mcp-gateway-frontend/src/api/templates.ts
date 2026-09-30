@@ -4,8 +4,10 @@ import type {
   TemplateInstance,
   TemplateListResponse,
   TemplateInstanceListResponse,
-  CreateInstanceParams
+  CreateInstanceParams,
+  RotateNeo4jParams
 } from '@/types/templates'
+import { appendNeo4jFields } from '@/components/templates/neo4jConnection'
 
 const BASE = '/api/v1'
 
@@ -34,7 +36,11 @@ export const templatesApi = {
     if (params.extra_env) {
       formData.append('extra_env', JSON.stringify(params.extra_env))
     }
-    formData.append('credentials', params.credentials)
+    if (params.neo4j) {
+      appendNeo4jFields(formData, params.neo4j)
+    } else if (params.credentials) {
+      formData.append('credentials', params.credentials)
+    }
     if (params.tags && params.tags.length > 0) {
       formData.append('tags', JSON.stringify(params.tags))
     }
@@ -54,9 +60,16 @@ export const templatesApi = {
     return api.post<void>(`${BASE}/template-instances/${id}/restart`)
   },
 
-  rotate(id: string, credentials: File): Promise<void> {
+  rotate(id: string, payload: File | RotateNeo4jParams): Promise<void> {
     const formData = new FormData()
-    formData.append('credentials', credentials)
+    if (payload instanceof File) {
+      formData.append('credentials', payload)
+    } else {
+      appendNeo4jFields(formData, payload.neo4j)
+      if (payload.extra_env) {
+        formData.append('extra_env', JSON.stringify(payload.extra_env))
+      }
+    }
     return api.postMultipart<void>(`${BASE}/template-instances/${id}/rotate-credentials`, formData)
   },
 
@@ -80,7 +93,7 @@ export const templatesApi = {
     let payload: unknown
     try {
       payload = JSON.parse(text)
-    } catch (e) {
+    } catch {
       throw new Error('Fichier JSON invalide')
     }
     return api.post<{ imported: number }>(`${BASE}/templates/import`, payload)

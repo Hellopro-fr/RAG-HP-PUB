@@ -18,7 +18,7 @@ Les compteurs qui figuraient ici — 17 graph-rag, 7 qdrant, 6 processors, 8 QC,
 | Prix Services | `prix-*` | Python / FastAPI | Remote |
 | ML/LLM Services | `llm-service`, `embedding-*`, `reranking-*` | Python / FastAPI / Triton | Remote (GPU) |
 | Frontends | `api-chatbot-html-service`, `nextjs-formulaire-hp`, etc. | Next.js / React / Vite | Local OK |
-| MCP Template Runner | `mcp-google-templates-runner` | Python / FastAPI / asyncio | Local OK |
+| MCP Template Runners | `mcp-google-templates-runner`, `mcp-template-neo4j-service` | Python / FastAPI / asyncio | Local OK |
 | MCP Zoho Proxy | `mcp-zoho-service` | Go / net/http | Remote |
 | Crawlers | `crawler-service`, `crawler-monitor-*` | Node.js / Crawlee / Express | Local OK |
 | Image Services | `image-*` | Python / FastAPI | Remote |
