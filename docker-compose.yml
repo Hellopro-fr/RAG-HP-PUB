@@ -2367,6 +2367,29 @@ services:
     networks:
       - services-net
     logging: *logging_defaults
+    
+  # Agents IA (Dust maison) : fiches et journal via l'API v2 PHP, outils natifs des fournisseurs
+  agent-service:
+    build:
+      context: .
+      dockerfile: apps-microservices/agent-service/Dockerfile
+    profiles: ["agent-service"]
+    restart: unless-stopped
+    expose:
+      - "8596"
+    environment:
+      HELLOPRO_API_URL: ${HELLOPRO_API_URL}
+      HP_TOKEN: ${HP_TOKEN}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      MCP_GATEWAY_URL: ${MCP_GATEWAY_URL}
+      MCP_CLIENT_ID: ${MCP_CLIENT_ID}
+      MCP_CLIENT_SECRET: ${MCP_CLIENT_SECRET}
+    networks:
+      - services-net
+    logging: *logging_defaults
 
   mcp-api-recherche-service:
     build:
