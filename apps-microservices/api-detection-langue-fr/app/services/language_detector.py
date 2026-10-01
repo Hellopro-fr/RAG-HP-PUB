@@ -100,6 +100,50 @@ def detect_challenge_page(html: str) -> Optional[str]:
     if imperva_count >= 2:
         return 'Imperva'
 
+    # --- AWS WAF Challenge (script CAPTCHA/challenge « Goku ») ---
+    # window.gokuProps (nom de code interne du script de génération de token
+    # AWS WAF Captcha/Challenge) et window.awsWafCookieDomainList (portée du
+    # cookie de session WAF injectée par ce même script) sont chacun assez
+    # rares pour être de bons indices, mais pas prouvés exclusifs seuls
+    # (cf. la leçon Turnstile ci-dessus : un composant peut apparaître sur un
+    # vrai site) — les 2 sont requis, comme Imperva (`:100`), pas 1 comme
+    # PerimeterX. Le seul échantillon de production dont on dispose porte les
+    # deux (N2, 2026-08-13, 324automatismes.net : status 202, 2397 chars de
+    # HTML, 0 caractère de texte visible), donc ce seuil ne coûte rien sur la
+    # preuve qu'on a.
+    aws_waf_indicators = [
+        'awswafcookiedomainlist',
+        'gokuprops',
+    ]
+    if sum(1 for p in aws_waf_indicators if p in html_lower) >= 2:
+        return 'AWS_WAF'
+
+    # --- Rescaled WAF (interstitiel proof-of-work auto-résolvant) ---
+    # Page "Verifying your browser" servie en HTTP 403 ; un Web Worker résout
+    # le challenge PoW puis window.location.replace recharge la vraie page.
+    # Les 3 marqueurs sont exclusifs à l'interstitiel (chemin verify + préfixe
+    # d'événement + titre) — 2 sur 3 requis pour éviter une page qui les cite.
+    rescaled_indicators = [
+        '/.well-known/rescaled-waf/',
+        'rescaled-waf:challenge-',
+        '<title>rescaled waf',
+    ]
+    if sum(1 for p in rescaled_indicators if p in html_lower) >= 2:
+        return 'Rescaled_WAF'
+
+    # --- Bot check générique JS proof-of-work (auto-hébergé, style ALTCHA) ---
+    # Titre "Bot check" + une confirmation PoW. Vendor-neutral : ces gates
+    # sont auto-hébergés (crypto-js inline, endpoints ?create_challenge).
+    if '<title>bot check</title>' in html_lower:
+        pow_confirmations = [
+            '?create_challenge',
+            'your request is being verified',
+            'javascript is needed to access this site',
+            'brix/crypto-js',
+        ]
+        if sum(1 for p in pow_confirmations if p in html_lower) >= 1:
+            return 'JS_PoW_bot_check'
+
     # --- Squid Proxy Error Pages ---
     # Détecte les pages d'erreur Squid (proxy cache) retournées quand le site cible
     # est inaccessible (ERR_CONNECT_FAIL, ERR_DNS_FAIL, etc.). Ces pages sont souvent
@@ -289,7 +333,33 @@ class LanguageDetector:
         # Normaliser avec un multiplicateur réduit (×10 au lieu de ×20)
         # Si >10% de mots français pondérés → signal fort
         return min(1.0, french_ratio * 10)
-    
+
+    def _count_french_exclusive_distinct(self, text: str) -> int:
+        """Nombre de mots exclusivement français DISTINCTS présents dans le texte.
+
+        Discriminant délibérément séparé du score agrégé de
+        `_compute_french_signal`, qui SATURE et ne peut donc pas discriminer
+        les langues romanes : mesuré le 2026-08-10 sur les échantillons de
+        `tests/test_lexical_observation.py` (reproductible, contrairement aux
+        chiffres du §3 de la spec, mesurés sur des extraits non conservés —
+        ne pas les traiter comme reproductibles ici), il vaut FR 1.0, ES
+        0.833, PT 0.814, IT 0.417 — l'espagnol dépasse largement le plancher
+        0.3 que lit le Cas 8. Le compte de mots exclusifs distincts, sur les
+        mêmes échantillons, sépare nettement : FR 8, ES 0, IT 0, PT 1
+        (`mais`), EN 0, catalogue sans prose 0.
+
+        Distincts et non occurrences : un menu répétant « le » vingt fois n'est
+        pas plus français qu'une phrase le contenant une fois.
+
+        OBSERVATION uniquement — aucun verdict ne lit cette valeur pour décider.
+        """
+        words = re.findall(r'\b\w+\b', text.lower())
+        # Même plancher que _compute_french_signal (:300-301) : sous 10 mots,
+        # aucun compte n'est significatif.
+        if len(words) < 10:
+            return 0
+        return len({w for w in words if w in self.FRENCH_EXCLUSIVE_STOPWORDS})
+
     def _remove_cookie_consent_elements(self, soup: BeautifulSoup) -> None:
         """
         Supprime les éléments HTML liés aux bannières cookies/consentement/RGPD.
@@ -342,8 +412,26 @@ class LanguageDetector:
             '[class*="eupopup"]', '[id*="eupopup"]',
             '[class*="cookie-law"]', '[id*="cookie-law"]',
             '[class*="cookielaw"]', '[id*="cookielaw"]',
+            # data-nosnippet : directive standard « pas du contenu de page » que
+            # les CMP posent sur le bandeau ET la modale de réglages. Une seule
+            # règle agnostique du vendeur, au lieu d'un sélecteur par plugin.
+            # Cas pesage88.com : la modale WebToffee (cli-modal) échappait à
+            # tous les sélecteurs class/id et pesait 75% du texte de la page,
+            # basculant fastText sur `en`. Mesuré sur 3 pages : 0 faux positif
+            # (là où ce n'est pas du consentement, c'est un mount JS vide).
+            # NB : `aria-hidden="true"` a été ÉCARTÉ — les clones de carrousel
+            # (slick-slide) le portent et contiennent du vrai contenu.
+            '[data-nosnippet]',
+            # Filets si un vendeur n'expose pas data-nosnippet :
+            '[class*="cli-modal"]', '[id*="cliSettingsPopup"]',
+            # CookieYes : `cky-` en substring attraperait `sticky-header` /
+            # `sticky-nav` / `sticky-modal` (vrai contenu, souvent la nav
+            # française) — `sticky-` finit par `cky-`. L'id est un token unique
+            # -> préfixe exact ici ; les CLASSES sont traitées après la boucle,
+            # token par token (CSS ne sait pas préfixer un token de classe).
+            '[id^="cky-"]',
         ]
-        
+
         for selector in cookie_consent_selectors:
             try:
                 for el in soup.select(selector):
@@ -351,13 +439,31 @@ class LanguageDetector:
             except Exception:
                 # En cas de sélecteur invalide, on continue
                 pass
-    
+
+        # CookieYes, classes : un token de classe commençant par `cky-`.
+        # Test token par token — `[class*="cky-"]` attraperait `sticky-*`, et
+        # `[class^=...]` ne matcherait que si c'est la PREMIÈRE classe.
+        def _has_cky_class(css_class) -> bool:
+            if not css_class:
+                return False
+            tokens = css_class if isinstance(css_class, list) else css_class.split()
+            return any(t.startswith('cky-') for t in tokens)
+
+        for el in soup.find_all(class_=_has_cky_class):
+            el.decompose()
+
     # Éléments HTML non visibles à supprimer lors du nettoyage
     _NON_VISIBLE_ELEMENTS = [
         'head', 'script', 'style', 'meta', 'link', 'noscript',
         'img', 'svg', 'iframe', 'figure', 'video', 'audio',
         'source', 'track', 'canvas', 'embed', 'template'
     ]
+
+    # Taille HTML au-delà de laquelle un texte visible < NLP_MIN_TEXT_LENGTH
+    # trahit un <noscript> mal fermé qui avale le body (et non une vraie page
+    # mince) — déclenche le re-nettoyage avec noscript unwrap. Aligné sur
+    # _STUB_MAX_HTML_LEN (page_validator).
+    _NOSCRIPT_REPAIR_MIN_HTML_LEN = 20_000
 
     @staticmethod
     def _normalize_encoding(html: str) -> str:
@@ -431,6 +537,31 @@ class LanguageDetector:
 
         # Étape 5 : Post-traitement (équivalent PHP : preg_replace('/\s+/', ' ', ...) + trim)
         text = re.sub(r'\s+', ' ', text).strip()
+
+        # Étape 5bis : réparation noscript. Un <noscript> mal fermé (ex: LiteSpeed
+        # Cache enveloppant le <noscript> GTM dans un second <noscript> — cas
+        # outilbox.fr) fait avaler tout le body par le parseur : le decompose()
+        # de l'étape 2 supprime alors 99% du texte visible. Une vraie page ne
+        # peut pas avoir <100 chars visibles dans >20KB de HTML → re-nettoyage
+        # unique avec noscript DÉBALLÉ (unwrap) au lieu de supprimé. Ne se
+        # déclenche que sur des pages qui échoueraient de toute façon ; le seuil
+        # 20KB protège les pages réellement minces (leur boilerplate noscript
+        # "enable JavaScript" ne doit pas alimenter le NLP).
+        if len(text) < settings.NLP_MIN_TEXT_LENGTH and len(html) > self._NOSCRIPT_REPAIR_MIN_HTML_LEN:
+            soup = BeautifulSoup(html, 'lxml')
+            for element in soup([e for e in self._NON_VISIBLE_ELEMENTS if e != 'noscript']):
+                element.decompose()
+            for el in soup.find_all('noscript'):
+                el.unwrap()
+            self._remove_cookie_consent_elements(soup)
+            repaired = re.sub(r'\s+', ' ', soup.get_text(separator=' ', strip=True)).strip()
+            # Plancher d'acceptation : un vrai body avalé libère des milliers
+            # de chars (outilbox: 11k) ; un noscript boilerplate « enable
+            # JavaScript » bien formé en libère ~100-200. Sans ce plancher,
+            # une page mince >20KB verrait son boilerplate EN alimenter le NLP
+            # et transformer un échec transient en verdict définitif erroné.
+            if len(repaired) >= settings.NLP_MIN_TEXT_LENGTH * 5:
+                text = repaired
 
         # Vérifier longueur minimale
         if len(text) < settings.NLP_MIN_TEXT_LENGTH:
@@ -519,6 +650,7 @@ class LanguageDetector:
                 'langdetect': {'lang': langdetect_result, 'confidence': round(langdetect_confidence, 3)} if langdetect_result else None,
                 'langid': {'lang': langid_result, 'confidence': round(langid_confidence, 3)} if langid_result else None,
                 'french_signal': round(french_signal, 3),
+                'french_exclusive_distinct': self._count_french_exclusive_distinct(text),
                 'weighted_scores': {k: round(v, 3) for k, v in results.items()}
             }
             
@@ -559,12 +691,18 @@ class LanguageDetector:
                 os.path.dirname(__file__), '..', '..', 'models', 'lid.176.bin'
             )
             
-            # Charger le modèle (lazy loading)
+            # Charger le modèle (lazy loading, porté par la CLASSE et non par l'instance)
+            # Stocké sur `self`, le modèle était rechargé pour CHAQUE LanguageDetector :
+            # DomainFR en construit un par instance (domain_fr.py) et routes.py construit
+            # un DomainFR par item de batch, par variante du rattrapage et par repli
+            # homepage. Autant de copies simultanées du modèle en mémoire — et autant de
+            # lectures disque synchrones — que d'items analysés en parallèle.
+            # `hasattr(self, ...)` consulte la classe : aucun autre changement nécessaire.
             if not hasattr(self, '_fasttext_model'):
                 if not os.path.exists(model_path):
                     logger.warning(f"Modèle fastText non trouvé: {model_path}")
                     return None
-                self._fasttext_model = fasttext.load_model(model_path)
+                LanguageDetector._fasttext_model = fasttext.load_model(model_path)
             
             # Extraire le texte visible via le pipeline de nettoyage centralisé
             text = self.clean_html_to_text(html)
@@ -597,7 +735,11 @@ class LanguageDetector:
                         for l, s in zip(labels, scores)
                     ]
                 },
-                'french_signal': round(french_signal, 3)
+                'french_signal': round(french_signal, 3),
+                # Observation : discriminant non saturant, voir
+                # _count_french_exclusive_distinct. Additif — aucun lecteur
+                # existant de `details` n'en dépend.
+                'french_exclusive_distinct': self._count_french_exclusive_distinct(text),
             }
             
             # Confiance finale basée sur fastText uniquement

@@ -47,6 +47,7 @@ requirements.txt
 - `_send_to_dlq()` wrapped in try/except to prevent silent message loss
 - `_ensure_connected()` uses real RPC health check (`utility.list_collections`) instead of `has_connection()`
 - Milvus expression injection prevented: `fichier_source` sanitized, `id` type-validated
+- Invalid UTF-8 (lone surrogates in BO-uploaded filenames) stripped before every Milvus query/insert via `Utils.to_valid_utf8` (else Milvus rejects with code 65535); PJ inserts projected onto the `pjechanges` schema (`MilvusPjCrud._INSERT_FIELDS`) so stray upstream keys no longer `DataNotMatchException`
 - Docker: non-root user, `--no-cache-dir`, `.dockerignore`
 
 ## Dependencies on Other Services

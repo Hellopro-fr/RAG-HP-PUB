@@ -1,16 +1,20 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hellopro/mcp-gateway/internal/auth"
-	"github.com/hellopro/mcp-gateway/internal/db"
-	"github.com/hellopro/mcp-gateway/internal/scopetoken"
+	"mcp-gateway/internal/auth"
+	"mcp-gateway/internal/db"
+	"mcp-gateway/internal/repository"
+	"mcp-gateway/internal/scopetoken"
 )
 
 // ── Token CRUD handlers ──────────────────────────────────────────────────────
@@ -50,8 +54,9 @@ func (h *Handler) handleTokenByID(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) listTokens(w http.ResponseWriter, r *http.Request) {
-	userEmail := auth.UserEmailFromContext(r.Context())
-	tokens, err := h.tokenRepo.ListAll(userEmail)
+	// Admins (role == "admin") bypass the created_by filter and see every
+	// token across the workspace. Non-admins keep the per-creator scope.
+	tokens, err := h.tokenRepo.ListAll(effectiveCreatorFilter(r.Context()))
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -118,7 +123,7 @@ func (h *Handler) createToken(w http.ResponseWriter, r *http.Request) {
 
 	// Resolve and validate the optional Leexi ownership filter.
 	mode, userUUIDs, teamUUIDs, lerr := resolveLeexiFilterForCreate(
-		r.Context(), h.leexiAdmin, req.LeexiFilter, token.CreatedBy,
+		r.Context(), h.leexiAdmin, req.LeexiFilter, token.CreatedBy, false, /* scope-token path */
 	)
 	if lerr != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": lerr.Error()})
@@ -127,6 +132,34 @@ func (h *Handler) createToken(w http.ResponseWriter, r *http.Request) {
 	token.LeexiFilterMode = mode
 	token.LeexiAllowedUserUUIDs = userUUIDs
 	token.LeexiAllowedTeamUUIDs = teamUUIDs
+
+	// Resolve and validate the optional Ringover ownership filter.
+	rMode, rUserIDs, rTeamIDs, rerr := resolveRingoverFilterForCreate(
+		r.Context(), h.ringoverAdmin, req.RingoverFilter, token.CreatedBy, false, /* scope-token path */
+	)
+	if rerr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": rerr.Error()})
+		return
+	}
+	token.RingoverFilterMode = rMode
+	token.RingoverAllowedUserIDs = rUserIDs
+	token.RingoverAllowedTeamIDs = rTeamIDs
+
+	// Validate the optional BDD scope BEFORE we persist the token row, so a
+	// bad payload doesn't leave a half-written token behind.
+	if err := h.validateBDDFilter(r.Context(), req.BDDFilter); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	if err := applyZohoFilterToDBRow(
+		req.ZohoFilter,
+		func(m string) { token.ZohoFilterMode = m },
+		func(b json.RawMessage) { token.ZohoAllowedEmails = b },
+	); err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
+		return
+	}
 
 	// Build server associations
 	for _, sid := range req.ServerIDs {
@@ -166,6 +199,51 @@ func (h *Handler) createToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Persist selected LLM instructions. Server-side validation enforces that
+	// every picked instruction has at least one allowed server in common with
+	// the token — the UI pre-filters, but we must not trust the client.
+	if h.instructionRepo != nil && len(req.InstructionIDs) > 0 {
+		if msg := enforceSingleInstructionPick(req.InstructionIDs); msg != "" {
+			_ = h.tokenRepo.Delete(token.ID)
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": msg})
+			return
+		}
+		invalid, vErr := h.instructionRepo.ValidateForScope(req.InstructionIDs, req.ServerIDs)
+		if vErr != nil {
+			_ = h.tokenRepo.Delete(token.ID)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": vErr.Error()})
+			return
+		}
+		if len(invalid) > 0 {
+			_ = h.tokenRepo.Delete(token.ID)
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"error": "one or more instruction_ids are not linked to any of the token's allowed servers: " + strings.Join(invalid, ","),
+			})
+			return
+		}
+		if err := h.instructionRepo.ReplaceTokenInstructions(token.ID, req.InstructionIDs); err != nil {
+			_ = h.tokenRepo.Delete(token.ID)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+	}
+
+	// Persist the BDD scope after the token row exists so the FK on
+	// scope_token_bdd_tables.token_id is satisfied. Validation already
+	// happened above, so we only need to surface storage errors here.
+	var bddDTO *BDDFilterDTO
+	if req.BDDFilter != nil {
+		if err := h.tokenRepo.UpdateBDDTables(r.Context(), token.ID, req.BDDFilter.UsedTableIDs); err != nil {
+			_ = h.tokenRepo.Delete(token.ID)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		if len(req.BDDFilter.UsedTableIDs) > 0 {
+			ids := append([]string(nil), req.BDDFilter.UsedTableIDs...)
+			bddDTO = &BDDFilterDTO{UsedTableIDs: ids}
+		}
+	}
+
 	var expiresStr *string
 	if token.ExpiresAt != nil {
 		s := token.ExpiresAt.UTC().Format(time.RFC3339)
@@ -173,20 +251,24 @@ func (h *Handler) createToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusCreated, CreateTokenResponse{
-		ID:          token.ID,
-		Name:        token.Name,
-		Description: token.Description,
-		Token:       rawToken,
-		TokenPrefix: token.TokenPrefix,
-		ServerIDs:   req.ServerIDs,
-		ServerTools: buildServerToolsResponse(token.Tools),
-		MCPCommand:  token.MCPCommand,
-		ServerName:  token.ServerName,
-		AllowHTTP:   token.AllowHTTP,
-		IsActive:    token.IsActive,
-		CreatedAt:   token.CreatedAt.UTC().Format(time.RFC3339),
-		ExpiresAt:   expiresStr,
-		LeexiFilter: scopeTokenLeexiFilterToDTO(&token),
+		ID:             token.ID,
+		Name:           token.Name,
+		Description:    token.Description,
+		Token:          rawToken,
+		TokenPrefix:    token.TokenPrefix,
+		ServerIDs:      req.ServerIDs,
+		ServerTools:    buildServerToolsResponse(token.Tools),
+		InstructionIDs: req.InstructionIDs,
+		MCPCommand:     token.MCPCommand,
+		ServerName:     token.ServerName,
+		AllowHTTP:      token.AllowHTTP,
+		IsActive:       token.IsActive,
+		CreatedAt:      token.CreatedAt.UTC().Format(time.RFC3339),
+		ExpiresAt:      expiresStr,
+		LeexiFilter:    scopeTokenLeexiFilterToDTO(&token),
+		RingoverFilter: scopeTokenRingoverFilterToDTO(&token),
+		BDDFilter:      bddDTO,
+		ZohoFilter:     scopeTokenZohoFilterToDTO(&token),
 	})
 }
 
@@ -242,7 +324,7 @@ func (h *Handler) updateToken(w http.ResponseWriter, r *http.Request, id string)
 	// or relax the scope.
 	if req.LeexiFilter != nil {
 		mode, userUUIDs, teamUUIDs, lerr := resolveLeexiFilterForCreate(
-			r.Context(), h.leexiAdmin, req.LeexiFilter, existing.CreatedBy,
+			r.Context(), h.leexiAdmin, req.LeexiFilter, existing.CreatedBy, false, /* scope-token path */
 		)
 		if lerr != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": lerr.Error()})
@@ -251,6 +333,33 @@ func (h *Handler) updateToken(w http.ResponseWriter, r *http.Request, id string)
 		updates["leexi_filter_mode"] = mode
 		updates["leexi_allowed_user_uuids"] = userUUIDs
 		updates["leexi_allowed_team_uuids"] = teamUUIDs
+	}
+
+	// Symmetric handling for the Ringover filter.
+	if req.RingoverFilter != nil {
+		mode, userIDs, teamIDs, rerr := resolveRingoverFilterForCreate(
+			r.Context(), h.ringoverAdmin, req.RingoverFilter, existing.CreatedBy, false, /* scope-token path */
+		)
+		if rerr != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": rerr.Error()})
+			return
+		}
+		updates["ringover_filter_mode"] = mode
+		updates["ringover_allowed_user_ids"] = userIDs
+		updates["ringover_allowed_team_ids"] = teamIDs
+	}
+
+	if req.ZohoFilter != nil {
+		if err := applyZohoFilterToDBRow(
+			req.ZohoFilter,
+			func(m string) { existing.ZohoFilterMode = m },
+			func(b json.RawMessage) { existing.ZohoAllowedEmails = b },
+		); err != nil {
+			writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
+			return
+		}
+		updates["zoho_filter_mode"] = existing.ZohoFilterMode
+		updates["zoho_allowed_emails"] = existing.ZohoAllowedEmails
 	}
 
 	if len(updates) > 0 {
@@ -262,6 +371,51 @@ func (h *Handler) updateToken(w http.ResponseWriter, r *http.Request, id string)
 
 	if len(req.ServerIDs) > 0 {
 		if err := h.tokenRepo.UpdateServers(id, req.ServerIDs); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+	}
+
+	// Update instruction selections if provided. Re-validate against the
+	// token's effective allowed servers (either the incoming list or, if
+	// unchanged on this request, the existing set on the row).
+	if req.InstructionIDs != nil && h.instructionRepo != nil {
+		if msg := enforceSingleInstructionPick(req.InstructionIDs); msg != "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": msg})
+			return
+		}
+		allowed := req.ServerIDs
+		if len(allowed) == 0 {
+			allowed = make([]string, 0, len(existing.Servers))
+			for _, s := range existing.Servers {
+				allowed = append(allowed, s.ServerID)
+			}
+		}
+		invalid, vErr := h.instructionRepo.ValidateForScope(req.InstructionIDs, allowed)
+		if vErr != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": vErr.Error()})
+			return
+		}
+		if len(invalid) > 0 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"error": "one or more instruction_ids are not linked to any of the token's allowed servers: " + strings.Join(invalid, ","),
+			})
+			return
+		}
+		if err := h.instructionRepo.ReplaceTokenInstructions(id, req.InstructionIDs); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+	}
+
+	// Update BDD scope if the caller provided one. Same fail-fast contract
+	// as create: validate ID existence first, then persist.
+	if req.BDDFilter != nil {
+		if err := h.validateBDDFilter(r.Context(), req.BDDFilter); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		if err := h.tokenRepo.UpdateBDDTables(r.Context(), id, req.BDDFilter.UsedTableIDs); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
@@ -357,7 +511,13 @@ func (h *Handler) revokeToken(w http.ResponseWriter, r *http.Request, id string)
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 // isTokenOwner checks if the current user owns the token (or if the token has no owner).
+// Admins (role == "admin") bypass the ownership check and can mutate any
+// token — read, update, revoke, delete — so support flows can fix or remove
+// a token created by another user.
 func (h *Handler) isTokenOwner(r *http.Request, token *db.ScopeToken) bool {
+	if auth.UserRoleFromContext(r.Context()) == auth.RoleAdmin {
+		return true
+	}
 	if token.CreatedBy == "" {
 		return true // legacy tokens with no owner are accessible to everyone
 	}
@@ -418,6 +578,14 @@ func toTokenResponse(t db.ScopeToken, decryptedToken string) TokenResponse {
 		serverIDs[i] = s.ServerID
 	}
 
+	var instructionIDs []string
+	if len(t.Instructions) > 0 {
+		instructionIDs = make([]string, 0, len(t.Instructions))
+		for _, i := range t.Instructions {
+			instructionIDs = append(instructionIDs, i.InstructionID)
+		}
+	}
+
 	var expiresStr *string
 	if t.ExpiresAt != nil {
 		s := t.ExpiresAt.UTC().Format(time.RFC3339)
@@ -425,21 +593,121 @@ func toTokenResponse(t db.ScopeToken, decryptedToken string) TokenResponse {
 	}
 
 	return TokenResponse{
-		ID:          t.ID,
-		Name:        t.Name,
-		Description: t.Description,
-		Token:       decryptedToken,
-		TokenPrefix: t.TokenPrefix,
-		ServerIDs:   serverIDs,
-		ServerTools: buildServerToolsResponse(t.Tools),
-		MCPCommand:  t.MCPCommand,
-		ServerName:  t.ServerName,
-		AllowHTTP:   t.AllowHTTP,
-		IsActive:    t.IsActive,
-		CreatedBy:   t.CreatedBy,
-		CreatedAt:   t.CreatedAt.UTC().Format(time.RFC3339),
-		UpdatedAt:   t.UpdatedAt.UTC().Format(time.RFC3339),
-		ExpiresAt:   expiresStr,
-		LeexiFilter: scopeTokenLeexiFilterToDTO(&t),
+		ID:             t.ID,
+		Name:           t.Name,
+		Description:    t.Description,
+		Token:          decryptedToken,
+		TokenPrefix:    t.TokenPrefix,
+		ServerIDs:      serverIDs,
+		ServerTools:    buildServerToolsResponse(t.Tools),
+		InstructionIDs: instructionIDs,
+		MCPCommand:     t.MCPCommand,
+		ServerName:     t.ServerName,
+		AllowHTTP:      t.AllowHTTP,
+		IsActive:       t.IsActive,
+		CreatedBy:      t.CreatedBy,
+		CreatedAt:      t.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:      t.UpdatedAt.UTC().Format(time.RFC3339),
+		ExpiresAt:      expiresStr,
+		LeexiFilter:    scopeTokenLeexiFilterToDTO(&t),
+		RingoverFilter: scopeTokenRingoverFilterToDTO(&t),
+		BDDFilter:      scopeTokenBDDFilterToDTO(&t),
+		ZohoFilter:     scopeTokenZohoFilterToDTO(&t),
 	}
+}
+
+// applyZohoFilterToDBRow validates a *ZohoFilterDTO and writes it into the
+// caller-supplied setters. Returns a user-facing error on invalid input.
+func applyZohoFilterToDBRow(dto *ZohoFilterDTO, setMode func(string), setEmails func(json.RawMessage)) error {
+	if dto == nil || dto.Mode == "" || dto.Mode == ZohoFilterModeNone {
+		setMode(ZohoFilterModeNone)
+		setEmails(nil)
+		return nil
+	}
+	switch dto.Mode {
+	case ZohoFilterModeUsers:
+		emails := uniqueTrimmedEmails(dto.AllowedEmails)
+		if len(emails) == 0 {
+			return fmt.Errorf("zoho_filter.allowed_emails: must contain at least one non-empty email when mode is %q", ZohoFilterModeUsers)
+		}
+		raw, err := json.Marshal(emails)
+		if err != nil {
+			return fmt.Errorf("zoho_filter.allowed_emails: failed to encode: %w", err)
+		}
+		setMode(ZohoFilterModeUsers)
+		setEmails(raw)
+		return nil
+	case ZohoFilterModeCreator:
+		setMode(ZohoFilterModeCreator)
+		setEmails(nil)
+		return nil
+	default:
+		return fmt.Errorf("zoho_filter.mode: unknown value %q (expected: none | users | creator)", dto.Mode)
+	}
+}
+
+// uniqueTrimmedEmails strips whitespace, drops empty entries, and removes
+// duplicates while preserving first-seen order.
+func uniqueTrimmedEmails(in []string) []string {
+	seen := make(map[string]struct{}, len(in))
+	out := make([]string, 0, len(in))
+	for _, e := range in {
+		e = strings.TrimSpace(e)
+		if e == "" {
+			continue
+		}
+		if _, dup := seen[e]; dup {
+			continue
+		}
+		seen[e] = struct{}{}
+		out = append(out, e)
+	}
+	return out
+}
+
+// scopeTokenZohoFilterToDTO converts the persisted Zoho columns on a
+// ScopeToken row into the wire DTO. Returns nil when no filter is set
+// so the JSON serialisation omits the key (zoho_filter,omitempty).
+func scopeTokenZohoFilterToDTO(t *db.ScopeToken) *ZohoFilterDTO {
+	if t == nil || t.ZohoFilterMode == "" || t.ZohoFilterMode == ZohoFilterModeNone {
+		return nil
+	}
+	dto := &ZohoFilterDTO{Mode: t.ZohoFilterMode}
+	if t.ZohoFilterMode == ZohoFilterModeUsers && len(t.ZohoAllowedEmails) > 0 {
+		_ = json.Unmarshal(t.ZohoAllowedEmails, &dto.AllowedEmails)
+	}
+	if t.ZohoFilterMode == ZohoFilterModeCreator {
+		dto.CreatorEmail = t.CreatedBy
+	}
+	return dto
+}
+
+// validateBDDFilter verifies that every used-table ID referenced by a BDD
+// scope payload exists in the registry. Returns a 400-grade error message
+// for the caller to surface verbatim. Returns nil when the filter is empty
+// (no restriction).
+func (h *Handler) validateBDDFilter(ctx context.Context, filter *BDDFilterDTO) error {
+	if filter == nil {
+		return nil
+	}
+	if len(filter.UsedTableIDs) == 0 {
+		return nil
+	}
+	if h.bddUsedRepo == nil {
+		return errors.New("bdd registry not configured")
+	}
+	missing := make([]string, 0)
+	for _, id := range filter.UsedTableIDs {
+		if _, err := h.bddUsedRepo.GetTable(ctx, id); err != nil {
+			if errors.Is(err, repository.ErrBDDNotFound) {
+				missing = append(missing, id)
+				continue
+			}
+			return err
+		}
+	}
+	if len(missing) > 0 {
+		return errors.New("bdd_filter.used_table_ids: unknown id(s): " + strings.Join(missing, ", "))
+	}
+	return nil
 }

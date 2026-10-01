@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import type { ContactFormData, ProfileData, UserAnswers, Supplier } from '@/types';
 import type { CharacteristicsMap } from '@/types/characteristics';
 import type { PriceEstimationState } from '@/types/prix';
+import type { AbtestSlot } from '@/types/category-token';
 
 // =============================================================================
 // STORAGE WRAPPER - Gère le reset sur reload (F5) et changement manuel d'URL
@@ -195,6 +196,21 @@ export interface FlowState {
   // ID de la catégorie (depuis le token URL ou query param)
   categoryId: number | null;
 
+  // Version A/B test piloté par le token URL (champ abtest_UX_lead_version du payload décrypté)
+  abtestUxLeadVersion: number | null;
+
+  // Slots A/B test GTM HelloPro pilotés par le token URL (champs abtest1..abtest5
+  // du payload décrypté). Strings libres injectés dans tous les events GTM
+  // devis_funnel_formulaire (omis si absents).
+  abtests: Partial<Record<AbtestSlot, string>>;
+
+  // 3 champs additionnels piloté par le token URL, injectés dans tous les events
+  // GTM devis_funnel_formulaire (omis si absent). Naming côté token et GTM en
+  // snake_case ; côté store on suit le camelCase JS.
+  pageTemplateGtm: string | null;
+  funnelContextValue: string | null;
+  pageLocationUri: string | null;
+
   // Nom de la catégorie (depuis l'API questionnaire)
   categoryName: string | null;
 
@@ -203,6 +219,10 @@ export interface FlowState {
 
   // Vignette de la catégorie (depuis l'API vignette-categorie)
   categoryVignette: string | null;
+
+  // Aperçu produits de la catégorie (nom + image) — depuis l'API get_photos_categorie,
+  // sert de fond à l'étape transparence (image au format proxy /api/images).
+  categoryPreviewProducts: Array<{ nom: string; image: string }>;
 
   // Type de parcours (pour tracking GTM)
   flowType: FlowType;
@@ -214,6 +234,12 @@ export interface FlowState {
   // État du questionnaire dynamique
   dynamicAnswers: Record<string, string[]>;
   dynamicEquivalences: Record<string, any[]>;
+
+  // Réponse de l'utilisateur à la question budget (page /budget intercalée
+  // entre le loader matching et /selection). Contient le label de l'option
+  // choisie (les options viennent de /api/prix.budget_reponse), ou null si
+  // non répondu.
+  userBudgetRange: string | null;
 
   // État du profil
   profileData: ProfileData | null;
@@ -273,6 +299,10 @@ export interface FlowState {
   // Résultat de l'estimation de prix
   priceEstimation: PriceEstimationState | null;
 
+  // Indique si la page d'assurance (intercalée avant Q1/Q2) a déjà été vue
+  // dans cette session — pour ne l'afficher qu'une seule fois.
+  hasSeenAssurance: boolean;
+
   setMatchingResults: (results: { recommended: any[], others: any[] }) => void;
   setSupplierIdsToSubmit: (ids: string[] | null) => void;
   setMatchingTestParams: (params: MatchingTestParams | null) => void;
@@ -285,6 +315,7 @@ export interface FlowState {
   addUserQuestionAnswer: (answer: UserQuestionAnswer) => void;
   updateUserQuestionAnswer: (questionCode: string, updates: Partial<UserQuestionAnswer>) => void;
   clearUserQuestionAnswers: () => void;
+  truncateAnswersAfterIndex: (currentIndex: number) => void;
 
   setRemovedCritiqueCriteriaIds: (ids: number[]) => void;
   setRemovedSecondaireCriteriaIds: (ids: number[]) => void;
@@ -296,9 +327,15 @@ export interface FlowState {
 
   // Actions
   setCategoryId: (id: number) => void;
+  setAbtestUxLeadVersion: (value: number | null) => void;
+  setAbtest: (slot: AbtestSlot, value: string) => void;
+  setPageTemplateGtm: (value: string | null) => void;
+  setFunnelContextValue: (value: string | null) => void;
+  setPageLocationUri: (value: string | null) => void;
   setCategoryName: (name: string | null) => void;
   setCategoryStats: (stats: CategoryStats | null) => void;
   setCategoryVignette: (url: string | null) => void;
+  setCategoryPreviewProducts: (products: Array<{ nom: string; image: string }>) => void;
   setDdc: (ddc: string) => void;
   setUserAnswers: (answers: Record<number, string[]>) => void;
   setOtherTexts: (texts: Record<number, string>) => void;
@@ -307,10 +344,12 @@ export interface FlowState {
   // setDynamicAnswer: (questionCode: string, answerCodes: string[]) => void;
   // Dans votre flow-store.ts (aperçu conceptuel)
   setDynamicAnswer: (
-    questionCode: string, 
-    codes: string[], 
+    questionCode: string,
+    codes: string[],
     equivalences?: any[]
   ) => void;
+
+  setUserBudgetRange: (range: string | null) => void;
 
   setEquivalenceCaracteristique: (equivalences: any[]) => void;
 
@@ -322,6 +361,7 @@ export interface FlowState {
   toggleSupplier: (supplierId: string) => void;
   setStartTime: (time: number) => void;
   reset: () => void;
+  setHasSeenAssurance: (seen: boolean) => void;
   setEntryUrl: (url: string) => void;
   setFlowType: (flowType: FlowType) => void;
   setCaracteristiquesPrix: (data: any[]) => void;
@@ -330,14 +370,21 @@ export interface FlowState {
 
 const initialState = {
   categoryId: null,
+  abtestUxLeadVersion: null as number | null,
+  abtests: {} as Partial<Record<AbtestSlot, string>>,
+  pageTemplateGtm: null as string | null,
+  funnelContextValue: null as string | null,
+  pageLocationUri: null as string | null,
   categoryName: null,
   categoryStats: null,
   categoryVignette: null,
+  categoryPreviewProducts: [],
   flowType: null as FlowType,
   userAnswers: {},
   otherTexts: {},
   dynamicAnswers: {},
   dynamicEquivalences: {},
+  userBudgetRange: null,
   profileData: null,
   geoData: null,
   contactData: null,
@@ -359,6 +406,7 @@ const initialState = {
   supplierIdsToSubmit: null,
   caracteristiquesPrix: [],
   priceEstimation: null,
+  hasSeenAssurance: false,
 };
 
 export const useFlowStore = create<FlowState>()(
@@ -368,11 +416,22 @@ export const useFlowStore = create<FlowState>()(
 
       setCategoryId: (id) => set({ categoryId: id }),
 
+      setAbtestUxLeadVersion: (value) => set({ abtestUxLeadVersion: value }),
+
+      setAbtest: (slot, value) => set((state) => ({ abtests: { ...state.abtests, [slot]: value } })),
+
+      setPageTemplateGtm: (value) => set({ pageTemplateGtm: value }),
+
+      setFunnelContextValue: (value) => set({ funnelContextValue: value }),
+
+      setPageLocationUri: (value) => set({ pageLocationUri: value }),
+
       setCategoryName: (name) => set({ categoryName: name }),
 
       setCategoryStats: (stats) => set({ categoryStats: stats }),
 
       setCategoryVignette: (url) => set({ categoryVignette: url }),
+      setCategoryPreviewProducts: (products) => set({ categoryPreviewProducts: products }),
 
       setUserAnswers: (answers) => set({ userAnswers: answers }),
 
@@ -416,6 +475,8 @@ export const useFlowStore = create<FlowState>()(
             [questionCode]: equivalences,
           },
         })),
+
+      setUserBudgetRange: (range) => set({ userBudgetRange: range }),
 
       setEquivalenceCaracteristique: (data) => set({ equivalenceCaracteristique: data }),
 
@@ -461,6 +522,8 @@ export const useFlowStore = create<FlowState>()(
 
       reset: () => set(initialState),
 
+      setHasSeenAssurance: (seen) => set({ hasSeenAssurance: seen }),
+
       setEntryUrl: (url) => set({ entryUrl: url }),     
 
       setMatchingResults: (results) => set({ matchingResults: results }),
@@ -479,10 +542,21 @@ export const useFlowStore = create<FlowState>()(
 
       setUserQuestionAnswers: (answers) => set({ userQuestionAnswers: answers }),
 
+      // Upsert par questionCode : remplace l'entrée existante si elle existe,
+      // sinon ajoute. Aligne la sémantique sur dynamicAnswers/dynamicEquivalences
+      // (qui sont des Records indexés par questionCode).
       addUserQuestionAnswer: (answer) =>
-        set((state) => ({
-          userQuestionAnswers: [...state.userQuestionAnswers, answer],
-        })),
+        set((state) => {
+          const existing = state.userQuestionAnswers.findIndex(
+            (qa) => qa.questionCode === answer.questionCode
+          );
+          if (existing >= 0) {
+            const next = [...state.userQuestionAnswers];
+            next[existing] = answer;
+            return { userQuestionAnswers: next };
+          }
+          return { userQuestionAnswers: [...state.userQuestionAnswers, answer] };
+        }),
 
       updateUserQuestionAnswer: (questionCode, updates) =>
         set((state) => ({
@@ -492,6 +566,31 @@ export const useFlowStore = create<FlowState>()(
         })),
 
       clearUserQuestionAnswers: () => set({ userQuestionAnswers: [] }),
+
+      // Purge les réponses des questions postérieures à currentIndex (0-based).
+      // Appelé avant submitAnswer pour éviter les entrées orphelines après
+      // un retour-arrière + changement de réponse (ex: si Q1 change, le parcours Qn change).
+      truncateAnswersAfterIndex: (currentIndex) =>
+        set((state) => {
+          // questionCode "Qn" est 1-based ; on garde Q1..Q(currentIndex+1).
+          // Si code est absent ou non conforme : on garde par sécurité.
+          const keep = (code: string | undefined) => {
+            if (!code) return true;
+            const m = code.match(/^Q(\d+)$/);
+            return m ? parseInt(m[1], 10) <= currentIndex + 1 : true;
+          };
+          return {
+            userQuestionAnswers: state.userQuestionAnswers.filter((qa) =>
+              keep(qa.questionCode)
+            ),
+            dynamicAnswers: Object.fromEntries(
+              Object.entries(state.dynamicAnswers).filter(([code]) => keep(code))
+            ),
+            dynamicEquivalences: Object.fromEntries(
+              Object.entries(state.dynamicEquivalences).filter(([code]) => keep(code))
+            ),
+          };
+        }),
 
       setRemovedCritiqueCriteriaIds: (ids: number[]) => set({ removedCritiqueCriteriaIds: ids }),
 

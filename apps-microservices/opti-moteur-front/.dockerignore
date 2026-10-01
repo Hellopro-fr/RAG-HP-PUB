@@ -1,0 +1,11 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.log
+.env
+.git/
+.gitignore
+tests/
+reports/
+data/*.jsonl

@@ -1,0 +1,145 @@
+"""Prometheus metrics for api-detection-langue-fr.
+
+Exposed at /metrics. Used to drive the post-rollout decision on whether
+the Approach 3 refactor (browser pool + queue) is needed (see spec).
+"""
+from prometheus_client import Counter, Gauge, Histogram
+
+# End-to-end request duration distribution.
+REQUEST_DURATION = Histogram(
+    "detect_request_duration_seconds",
+    "End-to-end request duration in seconds",
+    labelnames=("endpoint", "status"),
+    buckets=(0.1, 0.5, 1, 2, 5, 10, 30, 60, 120, 300),
+)
+
+# Cost of browser cold-start. Drives the Approach 3 decision: if this
+# dominates request duration, a warm browser pool would be a direct win.
+BROWSER_LAUNCH_DURATION = Histogram(
+    "detect_browser_launch_duration_seconds",
+    "Time to launch a Camoufox or Chromium browser",
+    labelnames=("browser",),
+    buckets=(0.5, 1, 2, 5, 10, 20, 45),
+)
+
+# Count of 503s emitted by the admission middleware.
+ADMISSION_REJECTED = Counter(
+    "detect_admission_rejected_total",
+    "Requests rejected by the admission middleware",
+    labelnames=("endpoint",),
+)
+
+# Count of coalesced duplicate URL fetches.
+DEDUP_HITS = Counter(
+    "detect_dedup_hits_total",
+    "Concurrent requests for the same URL that were coalesced",
+)
+
+# Current number of admitted in-flight requests.
+INFLIGHT_REQUESTS = Gauge(
+    "detect_inflight_requests",
+    "Current concurrent admitted requests",
+)
+
+# Browser teardowns ABANDONED after TEARDOWN_TIMEOUT_S (`_close_or_abandon`,
+# app/services/scraper.py). `op` is the teardown operation family derived from
+# the call site's `what` string — unroute_all / context.close / browser.close /
+# playwright.stop — deliberately WITHOUT the URL, which would be unbounded
+# cardinality. Before this counter the only trace of an abandon was one WARNING
+# line, so its real frequency was unknowable.
+TEARDOWN_ABANDONED = Counter(
+    "detect_teardown_abandoned_total",
+    "Browser teardown coroutines abandoned after the teardown timeout",
+    labelnames=("op",),
+)
+
+# Browsers launched whose close() has not returned: in-flight scrapes, plus the
+# ones whose teardown was abandoned or skipped (browser.is_connected() already
+# false, so close() is never attempted). NOT a process count — this service has
+# no process bookkeeping at all, so "the browser exited" is only ever inferred
+# from close() returning. Sustained values above BROWSER_SEMAPHORE_SIZE mean
+# browsers are accumulating faster than their teardowns settle.
+BROWSERS_UNCLOSED = Gauge(
+    "detect_browsers_unclosed",
+    "Browsers launched whose close() has not returned (in-flight + abandoned/skipped teardowns)",
+)
+
+# Page-validation outcomes (after fetch, before DomainFR).
+VALIDATION_VERDICTS = Counter(
+    "detection_validation_verdicts_total",
+    "Page validation outcomes (valid, http_error, soft_404, redirected_to_home)",
+    labelnames=("verdict",),
+)
+
+# Homepage fallback triggers and outcomes.
+HOMEPAGE_FALLBACK_TRIGGERED = Counter(
+    "detection_homepage_fallback_triggered_total",
+    "Homepage fallback triggers and their outcomes",
+    labelnames=("outcome",),
+)
+
+# Times alternative-URL validation was skipped because validate_alternatives=false.
+VALIDATION_SKIPPED = Counter(
+    "detection_alt_validation_skipped_total",
+    "Times alternative-URL validation (httpx + browser + Case-6) was skipped because validate_alternatives=false",
+)
+
+# Async job API metrics.
+ASYNC_JOBS_SUBMITTED = Counter(
+    "detect_async_jobs_submitted_total",
+    "Async batch jobs accepted (202)",
+)
+ASYNC_JOBS_ACTIVE = Gauge(
+    "detect_async_jobs_active",
+    "Currently reserved/in-flight async jobs",
+)
+ASYNC_JOBS_QUEUED = Gauge(
+    "detect_async_jobs_queued",
+    "Async jobs waiting in the FIFO for a worker (subset of active)",
+)
+ASYNC_JOBS_TERMINAL = Counter(
+    "detect_async_jobs_terminal_total",
+    "Async jobs reaching a terminal status",
+    labelnames=("status",),
+)
+ASYNC_JOB_DURATION = Histogram(
+    "detect_async_job_duration_seconds",
+    "Async job wall-clock from running to terminal",
+    buckets=(1, 5, 15, 30, 60, 120, 300, 600, 1800),
+)
+ASYNC_JOB_CAPACITY_REJECTED = Counter(
+    "detect_async_job_capacity_rejected_total",
+    "Submits rejected because MAX_ACTIVE_JOBS was reached",
+)
+
+# Orphaned Playwright protocol callbacks silenced by main.py's loop exception
+# handler. A cancelled scrape leaves page.goto's callback pending-and-uncancelled;
+# Connection.cleanup() sets TargetClosedError on it and nobody can retrieve it.
+# Counted rather than merely suppressed, so the noise stays observable.
+ORPHANED_PROTOCOL_FUTURES = Counter(
+    "detection_orphaned_protocol_futures_total",
+    "Orphaned Playwright protocol callbacks drained by the loop exception handler",
+)
+
+# Issues du rattrapage par variante d'URL sur verdict inexploitable.
+# Valeurs de `outcome` : success, budget_exhausted, no_variant_french.
+# Sert notamment à réviser le défaut de VARIANT_RESCUE_BUDGET_S, qui est une
+# estimation non mesurée.
+VARIANT_RESCUE_OUTCOME = Counter(
+    "detection_variant_rescue_total",
+    "Outcomes of the URL-variant rescue attempted on an unusable verdict",
+    labelnames=("outcome",),
+)
+
+# Batch Pass 2 sequential retries skipped because the remaining async-job
+# budget (JOB_MAX_S, checked via _run_batch_core's deadline_monotonic) could
+# not fit a full _ITEM_WALL_CLOCK_S retry (2026-08-13 incident: Pass 2 blowing
+# past JOB_MAX_S made the worker watchdog discard the WHOLE chunk, including
+# already-succeeded Pass 1 items). Dedicated counter rather than a new
+# VARIANT_RESCUE_OUTCOME label: different mechanism (job-level budget vs.
+# per-item rescue probes) — without it an operator can't tell "nothing left
+# to retry" from "ran out of time to retry".
+PASS2_RETRY_SKIPPED_BUDGET = Counter(
+    "detection_batch_pass2_retry_skipped_total",
+    "Batch Pass 2 sequential retries skipped for lack of remaining job budget",
+)

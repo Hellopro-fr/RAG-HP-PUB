@@ -1,0 +1,81 @@
+"""
+Route POST /search/text : recherche hybride qui prend du TEXTE en entree
+(pas de vecteur), embed via api-embedding-service, puis lance le pipeline
+/search standard.
+
+Fichier independant - ne modifie pas /app/router/search.py ni ses schemas.
+"""
+import logging
+
+from fastapi import APIRouter, HTTPException
+
+from app.schemas.search_text import SearchTextRequest
+from app.schemas.search import SearchResponse  # re-use du schema de reponse existant
+from app.services.embedding_client import embed_text
+from app.services.search_service import search as do_search
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/search", tags=["Search Text"])
+
+
+@router.post(
+    "/text",
+    response_model=SearchResponse,
+    summary="Recherche hybride par texte (embed + search en un seul appel)",
+)
+def search_by_text(req: SearchTextRequest):
+    """
+    Endpoint simplifie pour les clients qui ne gerent pas les embeddings
+    (ex: PHP front www.hellopro.fr).
+
+    Pipeline :
+      1. Si `use_vector=True` (defaut) : appelle api-embedding-service pour
+         obtenir le vecteur CamemBERT 1024 et delegue au pipeline hybride.
+      2. Si `use_vector=False` : skip l'embedding, pipeline pur BM25 +
+         name_match + cat_match (plus rapide, utile pour A/B test).
+
+    Retourne la meme structure que /search (SearchResponse).
+    """
+    vector = None
+    embedding_fallback_reason = None
+    if req.use_vector:
+        # 1. Embed avec fallback automatique en BM25-only si le service
+        #    embedding est lent/down. Plutot que 503, on degrade gracefully :
+        #    le pipeline BM25 + name_match + cat_match + synonymes + brand
+        #    reste tres performant sans embedding (cf bench : 6/7 cas Elena
+        #    top-1 corrects sans embedding).
+        try:
+            vector = embed_text(req.query)
+        except Exception as e:
+            embedding_fallback_reason = str(e)[:200]
+            logger.warning(
+                "Embedding failed for query=%r, falling back to BM25-only: %s",
+                req.query, e,
+            )
+            vector = None  # = equivalent use_vector=False, do_search gere
+
+    # vector_only requires un vecteur valide ; sinon on tombe en BM25 par securite
+    effective_vector_only = req.vector_only and (vector is not None)
+    if req.vector_only and vector is None:
+        logger.warning(
+            "vector_only=True mais vecteur indisponible (use_vector=%s, "
+            "fallback=%s). Bascule en BM25.",
+            req.use_vector, embedding_fallback_reason,
+        )
+
+    # 2. Search (reutilise le service existant, vector=None si use_vector=False)
+    try:
+        return do_search(
+            query=req.query,
+            query_vector=vector,
+            collection=req.collection,
+            top_k=req.top_k,
+            candidates=req.candidates,
+            offset=req.offset or 0,
+            apply_filter_by_category=req.apply_filter_by_category,
+            vector_only=effective_vector_only,
+        )
+    except Exception as e:
+        logger.error("Search failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))

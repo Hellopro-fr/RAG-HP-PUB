@@ -49,7 +49,11 @@ const PhoneInput = ({
   }, [value, countryCode, touched]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const sanitized = sanitizePhoneInput(e.target.value);
+    let sanitized = sanitizePhoneInput(e.target.value);
+    // France : bloquer le(s) 0 initial(aux) car l'indicatif +33 remplace le préfixe national
+    if (countryCode === '+33') {
+      sanitized = sanitized.replace(/^\s*0+/, '');
+    }
     const formatted = formatPhoneNumber(sanitized, countryCode);
     onValueChange(formatted);
   };
@@ -74,7 +78,11 @@ const PhoneInput = ({
     const newConfig = getCountryConfig(newCode);
 
     if (value) {
-      const cleaned = value.replace(/\D/g, '');
+      let cleaned = value.replace(/\D/g, '');
+      // France : strip leading zero(s) si on bascule vers +33
+      if (newCode === '+33') {
+        cleaned = cleaned.replace(/^0+/, '');
+      }
       if (newConfig) {
         // Pays avec masque : reformater avec le nouveau masque
         const formatted = formatPhoneNumber(cleaned, newCode);

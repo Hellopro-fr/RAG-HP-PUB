@@ -12,13 +12,14 @@ const (
 	LeexiFilterModeUsers   = "users"
 	LeexiFilterModeTeams   = "teams"
 	LeexiFilterModeCreator = "creator"
+	LeexiFilterModeSelf    = "self"
 )
 
 // LeexiFilterDTO carries the per-token Leexi ownership scope from / to the
 // frontend. UserUUIDs and TeamUUIDs are mutually exclusive in practice and
 // are only meaningful for their corresponding Mode.
 type LeexiFilterDTO struct {
-	Mode      string   `json:"mode"`                  // none | users | teams | creator
+	Mode      string   `json:"mode"`                  // none | users | teams | creator | self
 	UserUUIDs []string `json:"user_uuids,omitempty"`  // Mode = users
 	TeamUUIDs []string `json:"team_uuids,omitempty"`  // Mode = teams
 	// CreatorUUID is set in responses only — it is the resolved UUID of the
@@ -26,67 +27,132 @@ type LeexiFilterDTO struct {
 	CreatorUUID string `json:"creator_uuid,omitempty"`
 }
 
+// RingoverFilterMode constants — same set as Leexi; reused so the frontend
+// shares the mode enum across providers.
+const (
+	RingoverFilterModeNone    = "none"
+	RingoverFilterModeUsers   = "users"
+	RingoverFilterModeTeams   = "teams"
+	RingoverFilterModeCreator = "creator"
+	RingoverFilterModeSelf    = "self"
+)
+
+// RingoverFilterDTO carries the per-token Ringover ownership scope from / to
+// the frontend. Ringover identifies users with numeric integer IDs, so the
+// user/team slices are int rather than UUID-strings.
+type RingoverFilterDTO struct {
+	Mode    string `json:"mode"`                // none | users | teams | creator | self
+	UserIDs []int  `json:"user_ids,omitempty"`  // Mode = users
+	TeamIDs []int  `json:"team_ids,omitempty"`  // Mode = teams
+	// CreatorUserID is set in responses only — the resolved user_id of the
+	// token creator's email when Mode = creator.
+	CreatorUserID int `json:"creator_user_id,omitempty"`
+}
+
+// BDDFilterDTO carries the per-token / per-client BDD used-table scope. An
+// empty UsedTableIDs slice means "no filter" (full BDD access). When the
+// slice is non-empty, only rows whose ID is in the set are surfaced through
+// the gateway, and the X-BDD-Allowed-Tables header is injected on every
+// outbound MCP request to BDD-tagged backends. The DTO intentionally omits
+// hydrated table metadata for v1 — callers needing names/database IDs can
+// resolve them via /api/v1/bdd/used/tables.
+type BDDFilterDTO struct {
+	UsedTableIDs []string `json:"used_table_ids"`
+}
+
+// ZohoFilterMode constants — accepted values for ZohoFilterDTO.Mode.
+const (
+	ZohoFilterModeNone    = "none"
+	ZohoFilterModeUsers   = "users"
+	ZohoFilterModeCreator = "creator"
+)
+
+// ZohoFilterDTO carries the per-token / per-client Zoho ownership scope.
+// AllowedEmails is meaningful only when Mode = "users". CreatorEmail is
+// response-only — set to the resolved CreatedBy when Mode = "creator".
+type ZohoFilterDTO struct {
+	Mode          string   `json:"mode"`                     // none | users | creator
+	AllowedEmails []string `json:"allowed_emails,omitempty"` // Mode = users
+	CreatorEmail  string   `json:"creator_email,omitempty"`  // response-only when Mode = creator
+}
+
 // CreateTokenRequest is the body for POST /api/v1/tokens.
 type CreateTokenRequest struct {
-	Name        string                `json:"name"`
-	Description string                `json:"description,omitempty"`
-	ServerIDs   []string              `json:"server_ids"`
-	ServerTools []ServerToolSelection `json:"server_tools,omitempty"` // optional per-server tool selection
-	MCPCommand  string                `json:"mcp_command"`            // npx, bunx, deno, uvx, docker, custom
-	ServerName  string                `json:"server_name,omitempty"`  // key used in the generated .mcp.json
-	AllowHTTP   bool                  `json:"allow_http,omitempty"`   // include --allow-http in generated mcp.json
-	ExpiresAt   *string               `json:"expires_at,omitempty"`   // RFC3339
-	LeexiFilter *LeexiFilterDTO       `json:"leexi_filter,omitempty"` // nil = unrestricted (mode=none)
+	Name           string                `json:"name"`
+	Description    string                `json:"description,omitempty"`
+	ServerIDs      []string              `json:"server_ids"`
+	ServerTools    []ServerToolSelection `json:"server_tools,omitempty"`    // optional per-server tool selection
+	InstructionIDs []string              `json:"instruction_ids,omitempty"` // LLM instructions injected at MCP initialize
+	MCPCommand     string                `json:"mcp_command"`               // npx, bunx, deno, uvx, docker, custom
+	ServerName     string                `json:"server_name,omitempty"`     // key used in the generated .mcp.json
+	AllowHTTP      bool                  `json:"allow_http,omitempty"`      // include --allow-http in generated mcp.json
+	ExpiresAt      *string               `json:"expires_at,omitempty"`      // RFC3339
+	LeexiFilter    *LeexiFilterDTO       `json:"leexi_filter,omitempty"`    // nil = unrestricted (mode=none)
+	RingoverFilter *RingoverFilterDTO    `json:"ringover_filter,omitempty"` // nil = unrestricted (mode=none)
+	BDDFilter      *BDDFilterDTO         `json:"bdd_filter,omitempty"`      // nil = unrestricted (full BDD access)
+	ZohoFilter     *ZohoFilterDTO        `json:"zoho_filter,omitempty"`
 }
 
 // CreateTokenResponse is returned once on creation (includes raw token).
 type CreateTokenResponse struct {
-	ID          string                `json:"id"`
-	Name        string                `json:"name"`
-	Description string                `json:"description,omitempty"`
-	Token       string                `json:"token"`        // raw token, shown ONCE
-	TokenPrefix string                `json:"token_prefix"`  // "mcp_xxxx..." for display
-	ServerIDs   []string              `json:"server_ids"`
-	ServerTools []ServerToolSelection `json:"server_tools,omitempty"`
-	MCPCommand  string                `json:"mcp_command"`
-	ServerName  string                `json:"server_name,omitempty"`
-	AllowHTTP   bool                  `json:"allow_http,omitempty"`
-	IsActive    bool                  `json:"is_active"`
-	CreatedAt   string                `json:"created_at"`
-	ExpiresAt   *string               `json:"expires_at,omitempty"`
-	LeexiFilter *LeexiFilterDTO       `json:"leexi_filter,omitempty"`
+	ID             string                `json:"id"`
+	Name           string                `json:"name"`
+	Description    string                `json:"description,omitempty"`
+	Token          string                `json:"token"`        // raw token, shown ONCE
+	TokenPrefix    string                `json:"token_prefix"` // "mcp_xxxx..." for display
+	ServerIDs      []string              `json:"server_ids"`
+	ServerTools    []ServerToolSelection `json:"server_tools,omitempty"`
+	InstructionIDs []string              `json:"instruction_ids,omitempty"`
+	MCPCommand     string                `json:"mcp_command"`
+	ServerName     string                `json:"server_name,omitempty"`
+	AllowHTTP      bool                  `json:"allow_http,omitempty"`
+	IsActive       bool                  `json:"is_active"`
+	CreatedAt      string                `json:"created_at"`
+	ExpiresAt      *string               `json:"expires_at,omitempty"`
+	LeexiFilter    *LeexiFilterDTO       `json:"leexi_filter,omitempty"`
+	RingoverFilter *RingoverFilterDTO    `json:"ringover_filter,omitempty"`
+	BDDFilter      *BDDFilterDTO         `json:"bdd_filter,omitempty"`
+	ZohoFilter     *ZohoFilterDTO        `json:"zoho_filter,omitempty"`
 }
 
 // TokenResponse is the standard token response (no raw token).
 type TokenResponse struct {
-	ID          string                `json:"id"`
-	Name        string                `json:"name"`
-	Description string                `json:"description,omitempty"`
-	Token       string                `json:"token,omitempty"` // decrypted token (if available)
-	TokenPrefix string                `json:"token_prefix"`
-	ServerIDs   []string              `json:"server_ids"`
-	ServerTools []ServerToolSelection `json:"server_tools,omitempty"`
-	MCPCommand  string                `json:"mcp_command"`
-	ServerName  string                `json:"server_name,omitempty"`
-	AllowHTTP   bool                  `json:"allow_http,omitempty"`
-	IsActive    bool                  `json:"is_active"`
-	CreatedBy   string                `json:"created_by,omitempty"`
-	CreatedAt   string                `json:"created_at"`
-	UpdatedAt   string                `json:"updated_at"`
-	ExpiresAt   *string               `json:"expires_at,omitempty"`
-	LeexiFilter *LeexiFilterDTO       `json:"leexi_filter,omitempty"`
+	ID             string                `json:"id"`
+	Name           string                `json:"name"`
+	Description    string                `json:"description,omitempty"`
+	Token          string                `json:"token,omitempty"` // decrypted token (if available)
+	TokenPrefix    string                `json:"token_prefix"`
+	ServerIDs      []string              `json:"server_ids"`
+	ServerTools    []ServerToolSelection `json:"server_tools,omitempty"`
+	InstructionIDs []string              `json:"instruction_ids,omitempty"`
+	MCPCommand     string                `json:"mcp_command"`
+	ServerName     string                `json:"server_name,omitempty"`
+	AllowHTTP      bool                  `json:"allow_http,omitempty"`
+	IsActive       bool                  `json:"is_active"`
+	CreatedBy      string                `json:"created_by,omitempty"`
+	CreatedAt      string                `json:"created_at"`
+	UpdatedAt      string                `json:"updated_at"`
+	ExpiresAt      *string               `json:"expires_at,omitempty"`
+	LeexiFilter    *LeexiFilterDTO       `json:"leexi_filter,omitempty"`
+	RingoverFilter *RingoverFilterDTO    `json:"ringover_filter,omitempty"`
+	BDDFilter      *BDDFilterDTO         `json:"bdd_filter,omitempty"`
+	ZohoFilter     *ZohoFilterDTO        `json:"zoho_filter,omitempty"`
 }
 
 // UpdateTokenRequest is the body for PUT /api/v1/tokens/{id}.
 type UpdateTokenRequest struct {
-	Name        *string               `json:"name,omitempty"`
-	Description *string               `json:"description,omitempty"`
-	ServerIDs   []string              `json:"server_ids,omitempty"`
-	ServerTools []ServerToolSelection `json:"server_tools,omitempty"`
-	MCPCommand  *string               `json:"mcp_command,omitempty"`
-	ServerName  *string               `json:"server_name,omitempty"`
-	AllowHTTP   *bool                 `json:"allow_http,omitempty"`
-	LeexiFilter *LeexiFilterDTO       `json:"leexi_filter,omitempty"`
+	Name           *string               `json:"name,omitempty"`
+	Description    *string               `json:"description,omitempty"`
+	ServerIDs      []string              `json:"server_ids,omitempty"`
+	ServerTools    []ServerToolSelection `json:"server_tools,omitempty"`
+	InstructionIDs []string              `json:"instruction_ids,omitempty"`
+	MCPCommand     *string               `json:"mcp_command,omitempty"`
+	ServerName     *string               `json:"server_name,omitempty"`
+	AllowHTTP      *bool                 `json:"allow_http,omitempty"`
+	LeexiFilter    *LeexiFilterDTO       `json:"leexi_filter,omitempty"`
+	RingoverFilter *RingoverFilterDTO    `json:"ringover_filter,omitempty"`
+	BDDFilter      *BDDFilterDTO         `json:"bdd_filter,omitempty"`
+	ZohoFilter     *ZohoFilterDTO        `json:"zoho_filter,omitempty"`
 }
 
 // CreateTokenResponse already declared above is extended via leexi_filter in

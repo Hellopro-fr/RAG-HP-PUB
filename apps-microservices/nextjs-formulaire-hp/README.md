@@ -6,9 +6,12 @@
    ↓
 3. /profile (Profil)
    ↓
-4. (Loader de matching)
+4. (Étape transparence — email obligatoire, in-page) ✨
+   │   matching + estimation prix lancés en arrière-plan dès son affichage
    ↓
-5. /choice (Nouveau choix) ✨
+5. (Loader de matching)
+   ↓
+6. /choice (Nouveau choix) ✨
    ├─→ /selection (Parcourir résultats)
    │   └─→ /confirmation
    └─→ /something-to-add (Besoin spécifique) ✨

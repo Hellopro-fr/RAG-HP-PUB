@@ -1,0 +1,8 @@
+node_modules
+logs
+tests/fixtures
+.env
+*.log
+Dockerfile.express
+docs/
+*.md

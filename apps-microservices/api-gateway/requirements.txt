@@ -1,4 +1,4 @@
-fastapi[all]
+fastapi[all]>=0.115,<0.130
 uvicorn
 aio-pika
 websockets==12.0

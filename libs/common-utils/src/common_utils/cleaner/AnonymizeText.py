@@ -14,6 +14,22 @@ def gen_email_uuid(prefix: str = PREFIX, domain: str = DOMAIN, truncate: int | N
     return f"{prefix}_{h.lower()}@{domain}"
 
 class AnonymizeText:
+    # Presidio engines load the spaCy NLP model (~1GB resident) on construction.
+    # Build them ONCE and reuse across every document instead of per-call — the
+    # previous per-document instantiation reloaded the model each time, churning
+    # ~1GB per doc and driving the batch worker toward OOM. Lazy so importing the
+    # module (and tests) does not force the model load; single event-loop thread
+    # in document-echange-processor-service, so no lock is needed.
+    _analyzer = None
+    _anonymizer = None
+
+    @classmethod
+    def _get_engines(cls):
+        if cls._analyzer is None:
+            cls._analyzer = AnalyzerEngine()
+            cls._anonymizer = AnonymizerEngine()
+        return cls._analyzer, cls._anonymizer
+
     def anonymize_text(self,text: str) -> str:
 
         random_email = gen_email_uuid(truncate=12)
@@ -26,8 +42,7 @@ class AnonymizeText:
         return processed_text
 
     def presidio_anonymizer(self,text: str,email: str) -> str:
-        analyzer   = AnalyzerEngine()
-        anonymizer = AnonymizerEngine()
+        analyzer, anonymizer = self._get_engines()
 
         results = analyzer.analyze(text=text, entities=["PHONE_NUMBER", "EMAIL_ADDRESS"], language="en")
 

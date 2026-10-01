@@ -41,6 +41,12 @@ export function decodeImagePath(encodedPath: string): string {
  */
 export function getProductImageUrl(imagePath: string): string {
   if (!imagePath) return '';
+  // Asset public local (ex: "/images/product-lift-1.jpg" des données mock) :
+  // servir directement — le proxy /api/images ne résout que des chemins CDN
+  // distants ("www.site.com/produit-.../file.jpg", jamais préfixés par "/images/").
+  if (imagePath.startsWith('/images/')) {
+    return `${basePath || ''}${imagePath}`;
+  }
   const encoded = encodeImagePath(imagePath);
   const apiBase = basePath || '';
   return `${apiBase}/api/images/${encoded}`;

@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -5,6 +6,10 @@ from functools import wraps
 from typing import Callable, Any, TypeVar, ParamSpec, Optional, Dict, List
 
 import redis.asyncio as redis
+from redis.asyncio.retry import Retry
+from redis.backoff import ExponentialBackoff
+from redis.exceptions import ConnectionError as RedisConnectionError
+from redis.exceptions import TimeoutError as RedisTimeoutError
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -17,33 +22,133 @@ R = TypeVar("R")
 # Global Redis client instance
 redis_client: redis.Redis | None = None
 
+DEFAULT_MAX_CONNECTIONS = 20
+DEFAULT_SOCKET_TIMEOUT_S = 10
+DEFAULT_SOCKET_CONNECT_TIMEOUT_S = 5
+DEFAULT_HEALTH_CHECK_INTERVAL_S = 30
+# Redis reaps idle connections server-side (CONFIG timeout=300). The pool keeps
+# handing the reaped sockets out; health_check_interval only turns the failure
+# into a failed PING, it does not heal it. Passing no retry leaves redis-py at
+# Retry(NoBackoff(), 0) with an empty retry_on_error (verified on 5.2.1), so the
+# first command on a reaped socket raises. One retry is enough to reconnect —
+# three costs ~0.35s worst case and covers a restart blip too.
+DEFAULT_RETRY_ATTEMPTS = 3
+DEFAULT_RETRY_BACKOFF_BASE_S = 0.05
+DEFAULT_RETRY_BACKOFF_CAP_S = 1.0
+
+
+def _replica_name() -> str:
+    # Container hostname is per-replica (docker compose --scale gives unique names).
+    return os.getenv("HOSTNAME") or f"pid-{os.getpid()}"
+
+
+def _client_name() -> str:
+    """
+    Build the Redis CLIENT SETNAME value used by init_redis_pool.
+
+    Reads SERVICE_NAME env var (the same convention used by
+    common_utils.sso.credentials for OAuth2 client identity) and prefixes
+    the per-replica hostname. Falls back to the literal 'crawler-py' when
+    SERVICE_NAME is unset, empty, or whitespace — preserves the pre-fix
+    naming so deploys that don't set the env var don't change behavior.
+
+    See docs/superpowers/specs/2026-05-21-cache-service-client-name-fix-design.md
+    """
+    service = (os.getenv("SERVICE_NAME") or "").strip() or "crawler-py"
+    return f"{service}-{_replica_name()}"
+
+
+async def _ping_safe(client: "redis.Redis") -> bool:
+    try:
+        return await client.ping()
+    except Exception:
+        return False
+
+
+def _read_positive_int_env(name: str, default: int) -> int:
+    """Reads env var as int, falls back to default on empty/missing/invalid. Clamped to >=1."""
+    raw = os.getenv(name)
+    if raw is None or raw.strip() == "":
+        return max(1, default)
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        return max(1, default)
+
+
+def _read_positive_float_env(name: str, default: float) -> float:
+    """Reads env var as float, falls back to default on empty/missing/invalid. Clamped to >=1.0."""
+    raw = os.getenv(name)
+    if raw is None or raw.strip() == "":
+        return max(1.0, default)
+    try:
+        return max(1.0, float(raw))
+    except ValueError:
+        return max(1.0, default)
+
+
 async def init_redis_pool():
     """
-    Initializes the Redis connection pool.
-    Connects to Redis using the URL from environment variables.
+    Initializes the Redis connection pool with a bounded client + proactive
+    health check. See spec docs/superpowers/specs/2026-05-21-redis-connection-leak-fix-design.md.
     """
     global redis_client
-    if redis_client and await redis_client.ping():
+    if redis_client and await _ping_safe(redis_client):
         logger.info("Redis pool already initialized and connected.")
         return
-        
+
     redis_url = os.getenv("REDIS_URL")
     if not redis_url:
         logger.critical("REDIS_URL environment variable not set. Caching and state management will be unavailable.")
         redis_client = None
         return
-        
+
+    max_conn = _read_positive_int_env("REDIS_MAX_CONNECTIONS", DEFAULT_MAX_CONNECTIONS)
+    sock_to = _read_positive_float_env("REDIS_SOCKET_TIMEOUT_S", DEFAULT_SOCKET_TIMEOUT_S)
+    sock_conn_to = _read_positive_float_env("REDIS_SOCKET_CONNECT_TIMEOUT_S", DEFAULT_SOCKET_CONNECT_TIMEOUT_S)
+    health_iv = _read_positive_int_env("REDIS_HEALTH_CHECK_INTERVAL_S", DEFAULT_HEALTH_CHECK_INTERVAL_S)
+    client_name = _client_name()
+
     try:
-        logging.info(f"Connecting to Redis at {redis_url.split('@')[-1]}...") # Avoid logging password
-        redis_client = redis.from_url(redis_url, encoding="utf-8", decode_responses=True)
+        logger.info(
+            f"Connecting to Redis at {redis_url.split('@')[-1]} "
+            f"(max_conn={max_conn}, name={client_name})"
+        )
+        redis_client = redis.from_url(
+            redis_url,
+            encoding="utf-8",
+            decode_responses=True,
+            max_connections=max_conn,
+            socket_keepalive=True,
+            socket_connect_timeout=sock_conn_to,
+            socket_timeout=sock_to,
+            health_check_interval=health_iv,
+            client_name=client_name,
+            retry=Retry(
+                ExponentialBackoff(
+                    cap=DEFAULT_RETRY_BACKOFF_CAP_S,
+                    base=DEFAULT_RETRY_BACKOFF_BASE_S,
+                ),
+                DEFAULT_RETRY_ATTEMPTS,
+            ),
+            # Required: without it _disconnect_raise re-raises before the retry
+            # loop gets a second attempt.
+            retry_on_error=[RedisConnectionError, RedisTimeoutError],
+        )
         await redis_client.ping()
         # Register Lua scripts for EVALSHA-based execution (avoids sending raw Lua on every call)
         global _safe_decr_script, _delete_if_terminal_script
         _safe_decr_script = redis_client.register_script(_SAFE_DECR_LUA)
         _delete_if_terminal_script = redis_client.register_script(_DELETE_IF_TERMINAL_LUA)
         logger.info("Successfully connected to Redis.")
-    except redis.RedisError as e:
+    except (redis.RedisError, OSError, asyncio.TimeoutError) as e:
         logger.warning(f"Could not connect to Redis: {e}. Caching will be unavailable.")
+        # Best-effort close on half-built client; ignore secondary failures.
+        if redis_client is not None:
+            try:
+                await redis_client.close()
+            except Exception:
+                pass
         redis_client = None
 
 async def close_redis_pool():
@@ -68,14 +173,18 @@ async def set_json(key: str, data: Dict[str, Any], ttl: Optional[int] = None):
     except Exception as e:
         logger.error(f"Failed to set JSON for key '{key}' in Redis: {e}", exc_info=True)
 
-async def set_json_nx(key: str, data: Dict[str, Any]) -> bool:
+async def set_json_nx(key: str, data: Dict[str, Any], ttl: Optional[int] = None) -> bool:
     """Atomically sets a key only if it does not already exist (SET NX).
-    Returns True if the key was set, False if it already existed."""
+    Returns True if the key was set, False if it already existed.
+
+    `ttl` (seconds) applies only to the key this call creates — SET NX with EX
+    is a single round trip, so an existing key keeps its own expiry untouched.
+    """
     if not redis_client:
         raise ConnectionError("Redis is not connected.")
     try:
         value = json.dumps(data, default=str)
-        result = await redis_client.set(key, value, nx=True)
+        result = await redis_client.set(key, value, nx=True, ex=ttl)
         return result is True
     except Exception as e:
         logger.error(f"Failed to SET NX for key '{key}' in Redis: {e}", exc_info=True)
@@ -123,12 +232,24 @@ async def delete_key(key: str) -> bool:
         logger.error(f"Failed to delete key '{key}' from Redis: {e}", exc_info=True)
         return False
 
+# SCAN examines COUNT keys per round-trip; it does NOT return COUNT matches.
+# redis-py's default is 10, which is why this helper was unusable on a shared
+# Redis: finding the 7,643 crawl_job:* keys meant walking the whole keyspace ten
+# at a time. Measured 2026-09-02 from the BO server, the crawler route built on
+# this helper (GET /status) returned http=000 after a 900s cap while a sibling
+# route answered in 0.54s and zero crawls were running -- so it could not answer
+# even with nothing to report. 500 matches the value already in production for
+# the same prefix (crawler-service admin.py, archived-status-repair dry-run).
+SCAN_COUNT = 500
+
+
 async def scan_keys_by_prefix(prefix: str) -> List[str]:
     """Gets all keys matching a given prefix using SCAN."""
     if not redis_client:
         raise ConnectionError("Redis is not connected.")
     try:
-        return [key async for key in redis_client.scan_iter(f"{prefix}*")]
+        return [key async for key in redis_client.scan_iter(f"{prefix}*",
+                                                            count=SCAN_COUNT)]
     except Exception as e:
         logger.error(f"Failed to scan keys with prefix '{prefix}' from Redis: {e}", exc_info=True)
         return []

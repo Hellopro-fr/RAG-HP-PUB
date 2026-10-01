@@ -5,13 +5,15 @@ import { generateCategoryToken, validateCategoryToken } from '@/lib/category-tok
  * POST /api/category-token
  * Génère un token sécurisé pour une catégorie
  *
- * Body: { categoryId: number }
+ * Body: { categoryId: number, data?: object }
+ *   data (optionnel) : bloc `data` du payload chiffré, même contrat que le PHP
+ *   (Q1 pré-remplie, slots abtest1..5, page_template_gtm, funnel_context…)
  * Response: { token: string, url: string }
  */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { categoryId } = body;
+    const { categoryId, data } = body;
 
     if (!categoryId || typeof categoryId !== 'number' || categoryId <= 0) {
       return NextResponse.json(
@@ -20,7 +22,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const token = generateCategoryToken(categoryId);
+    if (data !== undefined && (typeof data !== 'object' || data === null || Array.isArray(data))) {
+      return NextResponse.json(
+        { error: 'data doit être un objet si fourni' },
+        { status: 400 }
+      );
+    }
+
+    const token = generateCategoryToken(categoryId, data);
     const baseUrl = process.env.NEXT_PUBLIC_BASE_PATH || '';
 
     return NextResponse.json({

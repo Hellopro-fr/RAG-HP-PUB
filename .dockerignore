@@ -1,0 +1,6 @@
+**/node_modules
+**/.next
+.git
+**/__pycache__
+graphify-out
+*.stackdump

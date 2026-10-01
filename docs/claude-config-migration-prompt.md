@@ -4,7 +4,7 @@
 >
 > **Prerequisite:** The session must have file access to the RAG-HP-PUB repository.
 >
-> **Last updated:** 2026-04-04
+> **Last updated:** 2026-08-03 (rules trimmed from 14 to 8 — see the team guide)
 > **Source config:** 11 rules, 4 agents, 15 commands, 4 skills, 8 hooks, 2 settings, 1 plugin
 
 ---
@@ -24,14 +24,11 @@ SOURCE_PATH = "<path-to-RAG-HP-PUB>"
 **Root documentation:**
 - `$SOURCE_PATH/CLAUDE.md` — root project documentation (architecture, config reference)
 
-**Rules** (`$SOURCE_PATH/.claude/rules/` — 11 files):
+**Rules** (`$SOURCE_PATH/.claude/rules/` — 8 files):
 - `code-modification.md` — surgical edit protocol (read first, minimal diff, preserve formatting)
-- `commit-messages.md` — bilingual Conventional Commits (EN/FR)
-- `language.md` — response language follows user's current message
 - `security.md` — no hardcoded secrets/URLs, Pydantic BaseSettings, CORS (internal vs public), JWT, all infra connections
 - `impact-awareness.md` — trade-off analysis, bigger-picture context, blast radius on shared components
 - `docker-security.md` — pinned images, no root, healthchecks, no secrets in ENV, stack-specific build patterns
-- `config-freshness.md` — re-read `.claude/` files mid-conversation before using agents/commands
 - `formatting.md` — code style per stack (references stack-detection.md), unknown stack fallback
 - `refactoring.md` — when/how to refactor safely, scope rules, known duplication targets
 - `stack-detection.md` — single source of truth for detecting service stacks from file indicators
@@ -70,10 +67,8 @@ SOURCE_PATH = "<path-to-RAG-HP-PUB>"
 - `secret-scanner.py` — PreToolUse (Bash): block commits containing hardcoded secrets (60+ regex patterns)
 - `dangerous-command-blocker.py` — PreToolUse (Bash): block catastrophic commands, protect critical paths
 - `conventional-commits.py` — PreToolUse (Bash): validate commit messages follow Conventional Commits format
-- `tdd-gate.sh` — PreToolUse (Edit/Write): block production code edits if no corresponding test file exists
-- `scope-guard.sh` — Stop: warn if files modified outside declared spec scope
+- `tdd-gate.sh` — PreToolUse (Edit/Write): warn when production code is edited with no matching test (advisory; `TDD_GATE_STRICT=1` makes it blocking)
 - (inline) force-push-blocker — PreToolUse (Bash): block `git push --force` and `-f`
-- (inline) format-python — PostToolUse (Edit): auto-format Python files after edits (black/ruff)
 - (inline) auto-review — Stop (prompt): check CLAUDE.md freshness + self-review modified code
 
 **Settings** (`$SOURCE_PATH/.claude/settings.json`):
@@ -182,7 +177,6 @@ Present a final summary:
 
 These rules apply regardless of tech stack or project type:
 - `code-modification.md` — surgical editing protocol
-- `config-freshness.md` — mid-session config freshness
 - `critical-thinking.md` — anti-sycophancy and intellectual honesty
 - `impact-awareness.md` — trade-off and blast radius analysis
 - `stack-detection.md` — adaptive stack detection with unknown fallback

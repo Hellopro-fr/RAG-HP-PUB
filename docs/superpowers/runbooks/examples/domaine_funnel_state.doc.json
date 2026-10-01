@@ -1,0 +1,20 @@
+{
+  "domaine_funnel_state": {
+    "database_id": 10,
+    "description": "Snapshot de l'étape d'entonnoir (funnel) de chaque domaine : 1 ligne par domaine. Vue dérivée recalculée quotidiennement par script_sync_funnel_state.php (UPSERT) à partir des signaux DSPI (statut_dspi, est_archiver), ECI (statut_crawler_eci) et de l'historique de MAJ. Une des 4 tables d'observabilité crawling (HELLOPRO_IA), avec crawl_events, crawl_metrics, initial_crawl_history.",
+    "primary_key": "id_domaine",
+    "default_order_by": "reached_at DESC",
+    "rows": null,
+    "columns": {
+      "id_domaine": { "type": "int", "desc": "PK = id_domaine_scrapping_produit_ia (DSPI). FK logique 1:1 → domaine_scrapping_produit_ia. Une seule ligne d'état d'entonnoir par domaine." },
+      "stage": { "type": "enum", "desc": "Étape de l'entonnoir (défaut 'entered', indexé). Dérivée par compute_funnel_stage(), hiérarchie du + avancé au + précoce : maj_completed (≥1 MAJ FINISHED) · maj_triggered (≥1 MAJ enregistrée, tout statut) · maj_eligible (statut_crawler_eci=2 ET statut_dspi ∈ {6,13,14} ET est_archiver=1) · initial_crawled (statut_crawler_eci=2 sans autre condition) · entered (défaut). Distribution prod : maj_eligible 3816, initial_crawled 1689, entered 1258, maj_completed 64, maj_triggered 26." },
+      "reached_at": { "type": "datetime", "desc": "Date d'atteinte du stage COURANT (DEFAULT CURRENT_TIMESTAMP). Mis à jour uniquement quand le stage CHANGE (sinon conservé) — utile pour mesurer le temps passé à une étape. Indexé (idx_reached_at)." },
+      "dropped_reason": { "type": "varchar(100)", "desc": "Raison de sortie de l'entonnoir (NULLable). ⚠️ Jamais peuplé en prod actuellement (0 ligne) — colonne réservée/inactive à ce jour." },
+      "last_updated": { "type": "datetime", "desc": "Date de dernière synchronisation de la ligne (DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) — bouge à chaque passage du sync, même sans changement de stage. À distinguer de reached_at." }
+    },
+    "relations": [
+      { "column": "id_domaine", "references": "domaine_scrapping_produit_ia.id_domaine_scrapping_produit_ia", "cardinality": "1:1", "note": "Même identifiant de domaine que la file ECI (enqueue_crawling_ia) et le journal crawl_events." }
+    ],
+    "notes": "Vue dérivée (pas une source) recalculée par le cron script_sync_funnel_state.php (UPSERT keyé sur id_domaine ; reached_at màj seulement au changement de stage). Signaux d'entrée : statut_crawler_eci (file ECI), statut_dspi + est_archiver (DSPI), présence/finition de lignes update_crawling_history. États terminaux du funnel = maj_completed ; maj_eligible reflète la même règle que la MAJ-éligibilité DSPI. dropped_reason inactif à ce jour."
+  }
+}

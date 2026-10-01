@@ -1,0 +1,33 @@
+{
+  "planPath": "docs/superpowers/plans/2026-06-09-crawler-http-status-retry-policy.md",
+  "tasks": [
+    {
+      "id": 88,
+      "subject": "HTTP-Policy T1: httpStatusPolicy.ts module + unit tests",
+      "status": "completed",
+      "description": "**Goal:** Dependency-free module with all status/navigation/retry decision logic, fully unit-tested.\n\n**Files:** Create crawler/src/httpStatusPolicy.ts + crawler/src/tests/test_httpStatusPolicy.ts\n\n**Verify:** from crawler/: npx tsx src/tests/test_httpStatusPolicy.ts → 0 failed; npx tsc --noEmit clean\n\nFull code: plan Task 1.\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/crawler/src/httpStatusPolicy.ts\", \"apps-microservices/crawler-service/crawler/src/tests/test_httpStatusPolicy.ts\"], \"verifyCommand\": \"cd apps-microservices/crawler-service/crawler && npx tsx src/tests/test_httpStatusPolicy.ts && npx tsc --noEmit\", \"acceptanceCriteria\": [\"classifyHttpStatus maps all spec codes\", \"resolveNavigationWaitUntil defaults+case-insensitive\", \"resolveTimeoutMaxRetries defaults to 2\", \"shouldCapTimeoutRetry gated on timeout+cap\", \"no heavy imports\"], \"planTask\": 1}\n```"
+    },
+    {
+      "id": 89,
+      "subject": "HTTP-Policy T2: wire status policy into routes.ts handler",
+      "status": "completed",
+      "blockedBy": [88],
+      "description": "**Goal:** Default handler classifies HTTP status: permanent→noRetry+fail-once; block→session.retire()+retry; transient→retry. Replaces unreachable :320-340 block.\n\n**Files:** Modify crawler/src/routes.ts (import; :198 add session; :320-340 block)\n\n**Verify:** from crawler/: npx tsc --noEmit clean; npx tsx src/tests/test_routes.ts 0 failed; test_httpStatusPolicy green.\n\nFull code: plan Task 2.\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/crawler/src/routes.ts\"], \"verifyCommand\": \"cd apps-microservices/crawler-service/crawler && npx tsc --noEmit && npx tsx src/tests/test_routes.ts\", \"acceptanceCriteria\": [\"classifyHttpStatus imported\", \"session in destructure\", \"permanent noRetry / block retire / non-ok throw\", \"bookkeeping preserved\"], \"planTask\": 2}\n```"
+    },
+    {
+      "id": 90,
+      "subject": "HTTP-Policy T3: nav lever + empty blockedStatusCodes + timeout cap (functions.ts)",
+      "status": "completed",
+      "blockedBy": [88],
+      "description": "**Goal:** page.goto resolves on domcontentloaded; blockedStatusCodes:[]; navigation timeouts capped in failedRequestHandler.\n\n**Files:** Modify crawler/src/functions.ts (import; :538; :556-561; :667 preNavigationHooks)\n\n**Verify:** from crawler/: npx tsc --noEmit clean; npx tsx src/tests/test_functions.ts 0 failed; test_httpStatusPolicy green.\n\nFull code: plan Task 3.\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/crawler/src/functions.ts\"], \"verifyCommand\": \"cd apps-microservices/crawler-service/crawler && npx tsc --noEmit && npx tsx src/tests/test_functions.ts\", \"acceptanceCriteria\": [\"policy imports added\", \"waitUntil hook first in array\", \"blockedStatusCodes empty\", \"timeout cap wired in failedRequestHandler\"], \"planTask\": 3}\n```"
+    },
+    {
+      "id": 91,
+      "subject": "HTTP-Policy T4: document policy in crawler-service CLAUDE.md",
+      "status": "completed",
+      "blockedBy": [89, 90],
+      "description": "**Goal:** Document navigation lever, status classes, timeout cap, and 2 new env vars.\n\n**Files:** Modify apps-microservices/crawler-service/CLAUDE.md\n\n**Verify:** section present; git diff --stat shows only CLAUDE.md.\n\nFull content: plan Task 4. (.md — tdd-exempt.)\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/CLAUDE.md\"], \"verifyCommand\": \"git diff --stat\", \"acceptanceCriteria\": [\"policy section added\", \"env vars documented\", \"spec referenced\"], \"planTask\": 4}\n```"
+    }
+  ],
+  "lastUpdated": "2026-06-09T20:00:00Z"
+}

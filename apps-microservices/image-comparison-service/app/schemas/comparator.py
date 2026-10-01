@@ -45,6 +45,11 @@ class FailedImage(BaseModel):
     id: str
     url: Optional[HttpUrl] = None
 
+class JobInput(BaseModel):
+    id: str
+    url: Optional[HttpUrl] = None
+    source: str = Field("pending", description="Feature source: pending | cached | fresh | failed")
+
 class ComparisonResult(BaseModel):
     job_id: str
     status: str
@@ -54,12 +59,14 @@ class ComparisonResult(BaseModel):
     matches_found: int
     similar_pairs: List[SimilarityPair]
     failed_images: List[FailedImage] = Field(default_factory=list)
+    inputs: Optional[List[JobInput]] = None
 
 class JobStatus(BaseModel):
     job_id: str
     status: str = Field(..., description="queued, processing, finished, failed")
     progress: float = Field(0.0, description="0 to 100")
     error: Optional[str] = None
+    inputs: Optional[List[JobInput]] = None
 
 class JobListResponse(BaseModel):
     total_jobs: int

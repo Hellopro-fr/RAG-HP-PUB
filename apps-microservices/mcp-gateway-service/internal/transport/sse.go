@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/hellopro/mcp-gateway/internal/mcp"
+	"mcp-gateway/internal/mcp"
 )
 
 // Handler is the interface the SSE server uses to dispatch MCP requests.
@@ -67,11 +67,10 @@ func (s *SSEServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 
 	sessionID := newSessionID()
 	sessHandler := s.handler
-	// If a scope token was validated by middleware, use a scoped handler for this session
+	// If a scope was validated by middleware, use a scoped handler for this session.
 	if s.scopeFactory != nil {
-		if allowedIDs, ok := AllowedServersFromContext(r.Context()); ok {
-			allowedTools := AllowedToolsFromContext(r.Context())
-			sessHandler = s.scopeFactory(allowedIDs, allowedTools)
+		if scoped := s.scopeFactory(r.Context()); scoped != nil {
+			sessHandler = scoped
 		}
 	}
 	sess := &session{id: sessionID, ch: make(chan *mcp.Response, 16), handler: sessHandler}

@@ -7,7 +7,7 @@ func TestIssueAndValidateAccessToken(t *testing.T) {
 	clientID := "test-client-id-123"
 	ttl := 3600
 
-	tokenStr, expiresIn, err := IssueAccessToken(secret, clientID, ttl)
+	tokenStr, expiresIn, err := IssueAccessToken(secret, clientID, "", ttl)
 	if err != nil {
 		t.Fatalf("IssueAccessToken: %v", err)
 	}
@@ -18,7 +18,7 @@ func TestIssueAndValidateAccessToken(t *testing.T) {
 		t.Fatalf("expected expiresIn=%d, got %d", ttl, expiresIn)
 	}
 
-	gotClientID, err := ValidateAccessToken(tokenStr, secret)
+	gotClientID, _, err := ValidateAccessToken(tokenStr, secret)
 	if err != nil {
 		t.Fatalf("ValidateAccessToken: %v", err)
 	}
@@ -28,8 +28,8 @@ func TestIssueAndValidateAccessToken(t *testing.T) {
 }
 
 func TestValidateAccessToken_WrongSecret(t *testing.T) {
-	tokenStr, _, _ := IssueAccessToken("secret1", "client-1", 3600)
-	_, err := ValidateAccessToken(tokenStr, "secret2")
+	tokenStr, _, _ := IssueAccessToken("secret1", "client-1", "", 3600)
+	_, _, err := ValidateAccessToken(tokenStr, "secret2")
 	if err == nil {
 		t.Fatal("expected error for wrong secret")
 	}
@@ -49,5 +49,52 @@ func TestGenerateCredentials(t *testing.T) {
 	// Verify hash matches
 	if HashSecret(clientSecret) != hash {
 		t.Fatal("hash mismatch")
+	}
+}
+
+func TestIssueAndValidateAccessToken_WithEmail(t *testing.T) {
+	secret := "test-jwt-secret-for-oauth2"
+	clientID := "client-abc"
+	email := "alice@example.com"
+	ttl := 3600
+
+	tokenStr, expiresIn, err := IssueAccessToken(secret, clientID, email, ttl)
+	if err != nil {
+		t.Fatalf("IssueAccessToken: %v", err)
+	}
+	if expiresIn != ttl {
+		t.Fatalf("expected expiresIn=%d, got %d", ttl, expiresIn)
+	}
+
+	gotClientID, gotEmail, err := ValidateAccessToken(tokenStr, secret)
+	if err != nil {
+		t.Fatalf("ValidateAccessToken: %v", err)
+	}
+	if gotClientID != clientID {
+		t.Fatalf("expected clientID=%q, got %q", clientID, gotClientID)
+	}
+	if gotEmail != email {
+		t.Fatalf("expected email=%q, got %q", email, gotEmail)
+	}
+}
+
+func TestIssueAndValidateAccessToken_NoEmail(t *testing.T) {
+	secret := "test-jwt-secret-for-oauth2"
+	clientID := "client-cc"
+
+	tokenStr, _, err := IssueAccessToken(secret, clientID, "", 3600)
+	if err != nil {
+		t.Fatalf("IssueAccessToken: %v", err)
+	}
+
+	gotClientID, gotEmail, err := ValidateAccessToken(tokenStr, secret)
+	if err != nil {
+		t.Fatalf("ValidateAccessToken: %v", err)
+	}
+	if gotClientID != clientID {
+		t.Fatalf("expected clientID=%q, got %q", clientID, gotClientID)
+	}
+	if gotEmail != "" {
+		t.Fatalf("expected empty email for client_credentials grant, got %q", gotEmail)
 	}
 }

@@ -1,12 +1,14 @@
 'use client';
 
-import { ArrowRight, Paperclip, X, Mic, MicOff, ArrowLeft, Send, Shield, Clock, CheckCircle } from "lucide-react";
+import { ArrowRight, Paperclip, X, Mic, MicOff, ArrowLeft, Send, Shield, Clock, CheckCircle, CircleCheckBig, Sparkles } from "lucide-react";
 import { useState, useRef, useEffect, useMemo } from "react";
 import ProgressHeader from "./ProgressHeader";
 import CountryCodeSelect from "./CountryCodeSelect";
 import { useBuyerCheck } from "@/hooks/api";
 import { useFlowStore, FLOW_SUBMISSION_COMPLETED_KEY, FLOW_ORIGINAL_TOKEN_KEY } from "@/lib/stores/flow-store";
 import { buildPriceTrackingPayload } from "@/lib/utils/build-price-tracking-payload";
+import { extractChipsFromAnswers, isMeaningfulValue } from "@/lib/utils/exclude-chips";
+import { cn } from "@/lib/utils";
 import { ContactFormData } from "@/types";
 import PhoneInput from "./PhoneInput";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -16,14 +18,6 @@ import { useLeadSubmission } from "@/hooks/api/useLeadSubmission";
 import { validatePhoneNumber } from "@/lib/utils/phone-validation";
 import { toast } from "@/hooks/use-toast";
 import { useDbTracking } from "@/hooks/tracking/useDbTracking";
-
-// Mock list of existing buyers in database
-const EXISTING_BUYERS = [
-  "jean.dupont@entreprise.fr",
-  "marie.martin@societe.com",
-  "contact@hellopro.fr",
-  "acheteur@garage-martin.fr",
-];
 
 interface SomethingToAddFormProps {
   onBack: () => void;
@@ -37,7 +31,8 @@ const STEPS = [
 
 const SomethingToAddForm = ({ onBack, onContactComplete }: SomethingToAddFormProps) => {
 
-  const {    
+  const {
+    contactData,
     setContactData,
     files: filesStore,
     addFilesStore,
@@ -45,25 +40,33 @@ const SomethingToAddForm = ({ onBack, onContactComplete }: SomethingToAddFormPro
     setFlowType: setStoreFlowType,
     profileData,
     userAnswers,
+    userQuestionAnswers,
+    userBudgetRange,
     selectedSupplierIds,
     categoryId,
     priceEstimation
   } = useFlowStore();
+
+  // Chips récapitulatifs des réponses au questionnaire (refonte step 1 si flowType = pas_assez_produits)
+  const summaryChips = useMemo(() => extractChipsFromAnswers(userQuestionAnswers), [userQuestionAnswers]);
 
   const [currentStep, setCurrentStep] = useState(1);
   const [description, setDescription] = useState("");
   const [fileName, setFileName] = useState<string | null>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [isListening, setIsListening] = useState(false);
+  // Semé depuis contactData (renseigné à l'étape transparence ou lors d'une
+  // soumission précédente) pour pré-remplir email + identité.
   const [formData, setFormData] = useState<ContactFormData>({
-    email: "",
-    isKnown: false,
-    civility: "",
-    firstName: "",
-    lastName: "",
-    countryCode: "+33",
-    id_pays_tel: 1, // France par défaut
-    phone: "",
+    email: contactData?.email ?? "",
+    isKnown: contactData?.isKnown ?? false,
+    civility: contactData?.civility || "",
+    firstName: contactData?.firstName || "",
+    lastName: contactData?.lastName || "",
+    countryCode: contactData?.countryCode || "+33",
+    id_pays_tel: contactData?.id_pays_tel ?? 1, // France par défaut
+    phone: contactData?.phone || "",
+    id_acheteur: contactData?.id_acheteur,
   });
 
   const [errors, setErrors] = useState<Partial<Record<keyof ContactFormData, string>>>({});
@@ -115,11 +118,21 @@ const SomethingToAddForm = ({ onBack, onContactComplete }: SomethingToAddFormPro
   );
 
   const isExistingBuyer = buyerCheckResult?.isDuplicate || false;
-  const isKnownBuyer    = buyerCheckResult?.isKnown || false;
+  // Email déjà vérifié à l'étape transparence : tant que la re-vérification
+  // n'a pas répondu, se fier à la connaissance persistée dans le store.
+  const isSeededEmail = !!contactData?.email && formData.email === contactData.email;
+  const isKnownBuyer = buyerCheckResult !== undefined
+    ? (buyerCheckResult?.isKnown || false)
+    : (isSeededEmail && (contactData?.isKnown ?? false));
 
   useEffect(() => {
+      // Ne rien faire tant que la vérification n'a pas rendu de résultat :
+      // au montage (cache react-query froid) buyerCheckResult est undefined et
+      // la branche else écraserait les champs semés depuis contactData.
+      if (isCheckingBuyer || buyerCheckResult === undefined) return;
+
       let updatedData: ContactFormData | null = null;
-  
+
       // 1. On vérifie si l'acheteur est reconnu et si on a les données
       if (isKnownBuyer && buyerCheckResult?.infoBuyer) {
         const info = buyerCheckResult.infoBuyer as any;
@@ -155,11 +168,12 @@ const SomethingToAddForm = ({ onBack, onContactComplete }: SomethingToAddFormPro
       }
       
       // On ne déclenche cet effet que lorsque 'isKnownBuyer' ou 'infoBuyer' change
-    }, [isKnownBuyer, buyerCheckResult?.infoBuyer]);  
+    }, [isKnownBuyer, isCheckingBuyer, buyerCheckResult, buyerCheckResult?.infoBuyer]);
 
   // Show additional fields only if email is valid and not an existing buyer
   // AND we are not currently checking (to avoid flickering)
-  const showAdditionalFields = isEmailValid && !isKnownBuyer && !isCheckingBuyer;
+  // Exception : email semé (transparence) → statut déjà connu, pas de masquage
+  const showAdditionalFields = isEmailValid && !isKnownBuyer && (!isCheckingBuyer || isSeededEmail);
 
   // Form is valid only if civility is selected when additional fields are shown
   const isFormValid = !showAdditionalFields || !!formData.civility;
@@ -407,9 +421,108 @@ const SomethingToAddForm = ({ onBack, onContactComplete }: SomethingToAddFormPro
       <div className="flex-1 overflow-y-auto">
         <div className="p-6 lg:p-10">
           <div className="mx-auto max-w-2xl space-y-6">
-            {currentStep === 1 ? (
+            {currentStep === 1 && flowType === 'pas_assez_produits' ? (
               <>
-                {/* Step 1: Votre besoin */}
+                {/* ============== STEP 1 — REFONTE (flowType pas_assez_produits) ============== */}
+                {/* Title */}
+                <div className="text-center">
+                  <h2 className="text-2xl font-bold text-foreground">Précisez votre besoin</h2>
+                  <p className="mt-1 text-muted-foreground">
+                    Quelques mots sur vos contraintes ou attentes pour qu'on adapte la recherche.
+                  </p>
+                </div>
+
+                {/* Bloc résumé */}
+                <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-2.5">
+                  <div className="flex items-center gap-2">
+                    <CircleCheckBig className="h-4 w-4 text-success shrink-0" />
+                    <span className="text-sm font-semibold text-foreground">Voici ce que vous nous avez dit</span>
+                  </div>
+                  <ul className="space-y-1.5 list-disc list-inside marker:text-muted-foreground">
+                    {isMeaningfulValue(userBudgetRange) && (
+                      <li className="text-sm text-foreground">
+                        <span className="text-muted-foreground">Budget : </span>
+                        <span className="font-medium">{userBudgetRange}</span>
+                      </li>
+                    )}
+                    {summaryChips.map((chip, i) => (
+                      <li key={`${chip}-${i}`} className="text-sm text-foreground">{chip}</li>
+                    ))}
+                  </ul>
+                </div>
+
+                {/* Bloc message (mis en avant) */}
+                <div className="rounded-xl border-2 border-primary/40 bg-primary/5 p-4 sm:p-5 shadow-sm">
+                  <div className="flex items-center justify-between gap-3 mb-2">
+                    <label htmlFor="description-refonte" className="flex items-center gap-2 text-base font-semibold text-foreground">
+                      <Sparkles className="h-4 w-4 text-primary" />
+                      Vos précisions
+                    </label>
+                    <button
+                      type="button"
+                      onClick={toggleListening}
+                      className={cn(
+                        'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all shadow-sm',
+                        isListening
+                          ? 'bg-red-500 text-white animate-pulse shadow-red-200'
+                          : 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-primary/20'
+                      )}
+                    >
+                      <Mic className="h-3.5 w-3.5" />
+                      {isListening ? 'Arrêter' : 'Dicter'}
+                    </button>
+                  </div>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Contraintes, contexte, options recherchées, budget cible…
+                  </p>
+                  <textarea
+                    id="description-refonte"
+                    rows={5}
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    className={cn(
+                      'w-full rounded-lg border bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all resize-none',
+                      isListening ? 'border-red-400 ring-2 ring-red-100' : 'border-input'
+                    )}
+                    placeholder="Ex: Je cherche un modèle d'occasion ou reconditionné, possibilité de location longue durée…"
+                  />
+                </div>
+
+                {/* Upload fichier */}
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-1.5">
+                    Document complémentaire <span className="text-muted-foreground">(optionnel)</span>
+                  </label>
+                  <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed border-input bg-background px-4 py-5 text-muted-foreground hover:border-primary/50 hover:bg-secondary/50 transition-all">
+                    <Paperclip className="h-5 w-5" />
+                    <span className="text-sm">
+                      {files.length > 0
+                        ? files.map(f => f.name).join(", ")
+                        : "Ajouter un document (cahier des charges, photo...)"}
+                    </span>
+                    <input
+                      type="file"
+                      className="hidden"
+                      onChange={handleFileChange}
+                      accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                    />
+                  </label>
+                </div>
+
+                {/* Footer : Suivant uniquement */}
+                <div className="pt-4 flex justify-center">
+                  <button
+                    onClick={goToNextStep}
+                    className="w-full sm:w-auto rounded-lg bg-accent px-8 py-3 text-base font-semibold text-accent-foreground hover:bg-accent/90 shadow-lg shadow-accent/25 transition-all flex items-center justify-center gap-2"
+                  >
+                    Suivant
+                    <ArrowRight className="h-5 w-5" />
+                  </button>
+                </div>
+              </>
+            ) : currentStep === 1 ? (
+              <>
+                {/* ============== STEP 1 — UI ACTUELLE (autres flowType) ============== */}
                 {/* Header with back button */}
                 {/* <div className="flex items-center justify-between">
                   <button

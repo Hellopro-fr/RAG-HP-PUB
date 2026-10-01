@@ -3,7 +3,7 @@ Schemas for temporary migration endpoints.
 TODO: Remove this file after migration is complete.
 """
 from enum import Enum
-from typing import Optional
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 from pydantic import BaseModel, Field
 
@@ -47,3 +47,31 @@ class MigrationUploadResponse(BaseModel):
         None,
         description="Number of files extracted from the archive."
     )
+
+
+class MigrationPullRequest(BaseModel):
+    """Payload for the pull-from-Ecritel endpoint."""
+    domain_name: str = Field(..., description="Domain name (e.g. example.com), used for subdirectory structure.")
+    content_types: List[ArchiveContentType] = Field(..., description="List of content types to pull.")
+    source_url_base: str = Field(..., description="Base URL of the Ecritel serve endpoint (without query string).")
+    token: str = Field(..., description="Auth token shared with Ecritel.")
+    is_crawl_finished: bool = Field(True, description="Whether the crawl is complete (creates _completion_marker.json).")
+    end_date: Optional[str] = Field(None, description="Crawl end date (ISO format). Uses current time if empty.")
+
+
+class MigrationPullContentResult(BaseModel):
+    """Result for a single content_type pull."""
+    success: bool
+    extracted_files_count: int = 0
+    bytes_downloaded: int = 0
+    error: Optional[str] = None
+
+
+class MigrationPullResponse(BaseModel):
+    """Response model for the pull endpoint."""
+    success: bool
+    domain_id: str
+    domain_name: str
+    storage_path: str
+    completion_marker_created: bool = False
+    results: Dict[str, MigrationPullContentResult] = Field(default_factory=dict)

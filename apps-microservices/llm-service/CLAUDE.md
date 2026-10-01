@@ -43,6 +43,7 @@ llm-service/
 ## Conventions
 
 - LLM backend selected via `LLM_PROVIDER` env var (`deepseek` or `vllm`).
+- DeepSeek model via `DEEPSEEK_MODEL_NAME` (default `deepseek-v4-flash`). V4 API: `deepseek-chat`/`deepseek-reasoner` retired 2026-07-24; thinking is a request param (default ENABLED server-side) — the client sends `thinking: disabled` unless `enable_thinking=true`, which enables it on the same model (no more reasoner model swap). Streaming always disables thinking (delta parser doesn't read `reasoning_content`).
 - Clean Architecture: `app/` (entry), `application/` (use cases), `infrastructure/` (adapters).
 - Proto stubs generated at Docker build time from `protos/grpc_stubs/*.proto`.
 

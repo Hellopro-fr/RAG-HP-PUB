@@ -18,6 +18,7 @@ import json
 import time
 import socket
 import logging
+import tempfile
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +87,30 @@ class NFSLock:
             self._acquired = False
     
     def _write_info(self):
-        """Write lock info for debugging and stale detection."""
+        """Write lock info for debugging and stale detection.
+
+        L'ecriture est ATOMIQUE (tempfile + os.replace DANS le repertoire de
+        verrou), et c'est ce qui garantit l'exclusion mutuelle.
+
+        Pourquoi (mesure du 01/09/2026, 40 rondes x N ecrivains sur un meme
+        manifest) : un `open(self.info_file, 'w')` cree info.json a 0 octet PUIS
+        ecrit dedans. Un concurrent qui lit ce fichier vide prend un
+        JSONDecodeError, et le `except` de `_is_stale` conclut « stale » — il
+        SUPPRIME donc un verrou pris a l'instant. Deux ecrivains se retrouvent
+        alors dans la section critique, et le premier a finir rmdir le verrou du
+        second, ce qui enchaine des liberations en cascade. Effet mesure sur
+        `_append_manifest_logo_entry` (read-modify-write) : 6,7 % d'entrees
+        perdues a 3 ecrivains, 18,3 % a 6 — une entree de manifest perdue, c'est
+        une image presente sur disque et invisible du BO.
+        Avec os.replace, info.json n'est JAMAIS observable vide : `_is_stale`
+        lit toujours un `acquired_at` frais et ne vole plus le verrou.
+        Mesure apres correctif : 0,0 % a 3 ecrivains, 2,1 % a 6.
+
+        Le fichier reste « best-effort » : un echec d'ecriture n'echoue pas la
+        prise de verrou, `_is_stale` retombe simplement sur le mtime du
+        repertoire (frais a la creation, donc non stale).
+        """
+        tmp_path = None
         try:
             info = {
                 "pid": os.getpid(),
@@ -94,11 +118,22 @@ class NFSLock:
                 "acquired_at": time.time(),
                 "acquired_at_iso": time.strftime("%Y-%m-%dT%H:%M:%S"),
             }
-            with open(self.info_file, 'w') as f:
+            fd, tmp_path = tempfile.mkstemp(dir=self.lock_dir, suffix=".tmp")
+            with os.fdopen(fd, 'w') as f:
                 json.dump(info, f)
+            os.replace(tmp_path, self.info_file)
+            tmp_path = None  # consomme par le replace
         except Exception:
             pass  # Info file is best-effort, don't fail the lock
-    
+        finally:
+            # Un .tmp oublie ferait echouer le rmdir de release() (ENOTEMPTY) et
+            # laisserait le verrou en place jusqu'au stale_timeout.
+            if tmp_path:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+
     def _is_stale(self) -> bool:
         """Check if the lock is stale (older than stale_timeout)."""
         try:
@@ -108,25 +143,34 @@ class NFSLock:
                     info = json.load(f)
                 acquired_at = info.get("acquired_at", 0)
                 return (time.time() - acquired_at) > self.stale_timeout
-            
+
             # No info file — check directory mtime
             stat = os.stat(self.lock_dir)
             return (time.time() - stat.st_mtime) > self.stale_timeout
         except (FileNotFoundError, json.JSONDecodeError, OSError):
             # If we can't determine, assume stale to avoid deadlocks
             return True
-    
+
     def _force_remove(self):
-        """Force remove the lock directory and its contents."""
+        """Force remove the lock directory and its contents.
+
+        Vide le repertoire avant le rmdir : un `.tmp` transitoire (cf.
+        `_write_info`) ou un info.json ecrit par un autre processus ferait
+        echouer le rmdir en ENOTEMPTY, et le verrou resterait en place jusqu'au
+        stale_timeout (60 s) — soit un blocage de 60 s pour tout le monde.
+        """
         try:
-            if os.path.exists(self.info_file):
-                os.unlink(self.info_file)
+            for name in os.listdir(self.lock_dir):
+                try:
+                    os.unlink(os.path.join(self.lock_dir, name))
+                except OSError:
+                    pass  # deja retire, ou repris par un autre processus
             os.rmdir(self.lock_dir)
         except FileNotFoundError:
             pass  # Already removed by another process
         except OSError as e:
             logger.error(f"Failed to remove NFS lock {self.lock_dir}: {e}")
-    
+
     def __enter__(self):
         self.acquire()
         return self

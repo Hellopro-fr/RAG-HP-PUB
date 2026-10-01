@@ -10,9 +10,10 @@ import (
 	"github.com/hellopro/mcp-ringover/internal/ringover"
 )
 
-// Clients holds the Ringover API client.
+// Clients holds the Ringover API client and request-normalization config.
 type Clients struct {
-	Ringover *ringover.Client
+	Ringover           *ringover.Client
+	DefaultCountryCode string
 }
 
 // ToolHandler processes a tool call and returns the result.

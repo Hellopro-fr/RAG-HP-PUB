@@ -21,7 +21,7 @@
       ]"
     >
       <router-link to="/" class="flex items-center gap-2">
-        <i class="pi pi-box text-xl text-brand-500" />
+        <img src="/images/servers/hp-logo.svg" alt="Hellopro" class="w-6 h-6" />
         <span
           v-if="isExpanded || isHovered || isMobileOpen"
           class="text-lg font-bold tracking-wide text-gray-900 dark:text-white"
@@ -245,6 +245,11 @@ const menuGroups = computed<MenuGroup[]>(() => {
       path: '/servers',
     })
   }
+  gestionItems.push({
+    icon: 'pi pi-database',
+    name: 'Tables BDD',
+    path: '/bdd-tables',
+  })
   if (authStore.isAdmin) {
     gestionItems.push({
       icon: 'pi pi-book',
@@ -256,26 +261,44 @@ const menuGroups = computed<MenuGroup[]>(() => {
       name: "Guides d'installation",
       path: '/install-guides-admin',
     })
+    gestionItems.push({
+      icon: 'pi pi-clone',
+      name: 'Templates',
+      path: '/admin/templates',
+    })
   }
   gestionItems.push({
     icon: 'pi pi-key',
     name: 'Config MCP',
     path: '/tokens',
   })
+  gestionItems.push({
+    icon: 'pi pi-comment',
+    name: 'Instructions LLM',
+    path: '/llm-instructions',
+  })
   if (gestionItems.length > 0) {
     groups.push({ title: 'Gestion', items: gestionItems })
   }
 
-  // Securite group — OAuth2 always
+  // Securite group — OAuth2 always; Serveur Autorisation admin-only
+  const securiteItems: MenuItem[] = [
+    {
+      icon: 'pi pi-shield',
+      name: 'OAuth2',
+      path: '/oauth2',
+    },
+  ]
+  if (authStore.isAdmin) {
+    securiteItems.push({
+      icon: 'pi pi-user-plus',
+      name: 'Serveur Autorisation',
+      path: '/server-authorizations',
+    })
+  }
   groups.push({
     title: 'Securite',
-    items: [
-      {
-        icon: 'pi pi-shield',
-        name: 'OAuth2',
-        path: '/oauth2',
-      },
-    ],
+    items: securiteItems,
   })
 
   // Administration group — only for admins

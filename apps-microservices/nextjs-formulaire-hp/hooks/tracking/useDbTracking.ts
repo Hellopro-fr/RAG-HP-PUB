@@ -35,6 +35,7 @@ interface TrackingPayload {
       referrer: string;
       entry_url: string;
       token?: string;
+      abtest_ux_lead_version: number;
     };
   };
 }
@@ -63,14 +64,19 @@ export function useDbTracking() {
           token = sessionStorage.getItem(FLOW_ORIGINAL_TOKEN_KEY) || undefined;
         }
 
+        // Version A/B injectée dans le token URL (abtest_UX_lead_version).
+        // Normalisée à 0 par défaut pour faciliter les filtres SQL côté analytics.
+        const abtestVersion = useFlowStore.getState().abtestUxLeadVersion ?? 0;
+
         sessionMeta = {
           user_agent: navigator.userAgent,
           referrer: document.referrer || '', // 'direct' si vide (ex: accès direct ou favori)
           entry_url: window.location.pathname,
           token: token,
+          abtest_ux_lead_version: abtestVersion,
         };
         sessionStorage.setItem(metaKey, 'true');
-      }      
+      }
       // type_flow et type_dmd_categ (On ne les initialise plus à 0 par défaut pour éviter d'écraser la base)
       let typeFlow: number | null = null;
       let typeDmdCateg: number | null = null;

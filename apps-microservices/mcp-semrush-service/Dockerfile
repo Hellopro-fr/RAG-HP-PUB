@@ -3,7 +3,10 @@ FROM node:20-slim
 RUN apt-get update && apt-get install -y python3 python3-pip python3-venv && rm -rf /var/lib/apt/lists/*
 RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
-RUN pip install --no-cache-dir "mcp-proxy>=0.11.0"
+# mcp 2.x removed request_ctx from mcp.server.lowlevel.server, which
+# mcp-proxy 0.12.0 imports directly -> ImportError at startup.
+# Lift the <2 cap once mcp-proxy ships mcp 2.x support.
+RUN pip install --no-cache-dir "mcp-proxy>=0.11.0" "mcp>=1.17.0,<2"
 
 WORKDIR /app
 COPY apps-microservices/mcp-semrush-service/server.js .

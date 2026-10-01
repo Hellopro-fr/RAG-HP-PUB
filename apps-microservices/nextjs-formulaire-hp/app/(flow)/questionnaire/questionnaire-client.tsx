@@ -1,21 +1,19 @@
 "use client";
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import NeedsQuestionnaire from '@/components/flow/NeedsQuestionnaire';
-import MatchingLoader from '@/components/flow/MatchingLoader';
+import MatchingLoaderV2 from '@/components/flow/MatchingLoaderV2';
+import TransparencePage from '@/components/flow/TransparencePage';
+import { trackTransparenceReturn } from '@/lib/analytics';
 import { useFlowStore, useFlowStoreHydration, FLOW_ORIGINAL_TOKEN_KEY, type MatchingTestParams } from '@/lib/stores/flow-store';
 import { useFlowNavigation } from '@/hooks/useFlowNavigation';
 import { useDbTracking } from '@/hooks/tracking/useDbTracking';
 import { useProcessMatching } from '@/hooks/api/useProcessMatching';
 import { usePriceEstimation } from '@/hooks/api/usePriceEstimation';
-
-// Interface pour les données URL (réponse Q1 pré-remplie)
-interface UrlData {
-  id_question: number;
-  id_reponse: number;
-  equivalence: any[];
-}
+import { hasDisplayablePriceEstimation } from '@/types/prix';
+import { setFunnelContext } from '@/lib/analytics';
+import { ABTEST_SLOTS, type CategoryTokenUrlData as UrlData } from '@/types/category-token';
 
 interface QuestionnaireClientProps {
   initialCategoryId?: string;
@@ -31,8 +29,8 @@ export default function QuestionnaireClient({
   initialDdc
 }: QuestionnaireClientProps) {
   const searchParams = useSearchParams();
-  const { setCategoryId, setDynamicAnswer, dynamicAnswers, addUserQuestionAnswer, setDdc, setMatchingTestParams } = useFlowStore();
-  const { goToSelection, goToSomethingToAdd } = useFlowNavigation();
+  const { setCategoryId, setDynamicAnswer, dynamicAnswers, addUserQuestionAnswer, setDdc, setMatchingTestParams, setAbtestUxLeadVersion, abtestUxLeadVersion, setAbtest, setPageTemplateGtm, setFunnelContextValue, setPageLocationUri } = useFlowStore();
+  const { goToSelection, goToSomethingToAdd, goToBudget } = useFlowNavigation();
   const { processMatching } = useProcessMatching();
   const { fetchPriceEstimation } = usePriceEstimation();
   const hasProcessedUrlData = useRef(false);
@@ -42,10 +40,23 @@ export default function QuestionnaireClient({
   // On attend que les données URL soient traitées avant de rendre
   const [isReady, setIsReady] = useState(false);
 
-  // État pour le loader de matching et la destination après
-  const [showLoader, setShowLoader] = useState(false);
+  // Machine à phases : questionnaire → transparence (email, matching en
+  // arrière-plan) → loader → redirection
+  const [phase, setPhase] = useState<'questionnaire' | 'transparence' | 'loader'>('questionnaire');
   const [loaderProgress, setLoaderProgress] = useState(0);
-  const [redirectDestination, setRedirectDestination] = useState<'selection' | 'something-to-add' | null>(null);
+  const [redirectDestination, setRedirectDestination] = useState<'selection' | 'something-to-add' | 'budget' | null>(null);
+
+  // Run matching/prix en cours, démarré à l'entrée sur l'étape transparence.
+  // runIdRef invalide les runs périmés (retour + changement de réponse) ;
+  // l'état vit en refs (jamais persisté : une promesse ne survit pas à un reload).
+  const runIdRef = useRef(0);
+  const matchingRunRef = useRef<{
+    runId: number;
+    resultPromise: Promise<'selection' | 'something-to-add'>;
+  } | null>(null);
+  // Idempotence : NeedsQuestionnaire peut rappeler onComplete (StrictMode,
+  // re-renders pendant son démontage)
+  const completionHandledRef = useRef(false);
 
   // Récupérer et stocker le categoryId + sauvegarder le token original
   // Priorité : props du Server Component > searchParams client
@@ -81,7 +92,17 @@ export default function QuestionnaireClient({
       sessionStorage.setItem(FLOW_ORIGINAL_TOKEN_KEY, token);
       //console.log('[QuestionnaireClient] Token saved for redirect:', token.substring(0, 20) + '...');
     }
-  }, [initialCategoryId, initialToken, searchParams, setCategoryId, initialDdc]);
+
+    // TODO: SUPPRIMER AVANT MISE EN PROD - Bypass dev pour tester les variantes A/B
+    // En prod la version vient du payload token (urlData.abtest_UX_lead_version).
+    const devAbtest = searchParams.get('abtest_version');
+    if (devAbtest !== null) {
+      const v = parseInt(devAbtest, 10);
+      if (!isNaN(v)) {
+        setAbtestUxLeadVersion(v);
+      }
+    }
+  }, [initialCategoryId, initialToken, searchParams, setCategoryId, initialDdc, setAbtestUxLeadVersion]);
 
   // Lire les paramètres de test du matching depuis l'URL (pour tests uniquement)
   useEffect(() => {
@@ -168,6 +189,37 @@ export default function QuestionnaireClient({
       const urlDataJson = atob(base64);
       const urlData: UrlData = JSON.parse(urlDataJson);
 
+      // Stocker la version AB-test issue du token (disponible globalement via le store)
+      if (typeof urlData.abtest_UX_lead_version === 'number') {
+        setAbtestUxLeadVersion(urlData.abtest_UX_lead_version);
+      }
+
+      // Slots A/B test GTM HelloPro abtest1..abtest5 (token URL) : stocke dans le
+      // store + injecte dans le contexte GTM pour que tous les events
+      // devis_funnel_formulaire les portent (omis si absents du token).
+      for (const slot of ABTEST_SLOTS) {
+        const slotValue = urlData[slot];
+        if (typeof slotValue === 'string' && slotValue.length > 0) {
+          setAbtest(slot, slotValue);
+          setFunnelContext({ [slot]: slotValue });
+        }
+      }
+
+      // 3 champs additionnels depuis le token chiffré : injectés dans le contexte GTM
+      // pour que tous les events devis_funnel_formulaire les portent (omis si absent).
+      if (typeof urlData.page_template_gtm === 'string' && urlData.page_template_gtm.length > 0) {
+        setPageTemplateGtm(urlData.page_template_gtm);
+        setFunnelContext({ page_template_gtm: urlData.page_template_gtm });
+      }
+      if (typeof urlData.funnel_context === 'string' && urlData.funnel_context.length > 0) {
+        setFunnelContextValue(urlData.funnel_context);
+        setFunnelContext({ funnel_context: urlData.funnel_context });
+      }
+      if (typeof urlData.page_location_uri === 'string' && urlData.page_location_uri.length > 0) {
+        setPageLocationUri(urlData.page_location_uri);
+        setFunnelContext({ page_location_uri: urlData.page_location_uri });
+      }
+
       // Vérifier que les données sont valides
       if (urlData.id_reponse) {
         // Stocker la réponse Q1 et son équivalence dans le flow store
@@ -206,49 +258,155 @@ export default function QuestionnaireClient({
 
     hasProcessedUrlData.current = true;
     setIsReady(true);
-  }, [isHydrated, initialUrlData, searchParams, dynamicAnswers, setDynamicAnswer, trackDbEvent, initialCategoryId, addUserQuestionAnswer]);
+  }, [isHydrated, initialUrlData, searchParams, dynamicAnswers, setDynamicAnswer, trackDbEvent, initialCategoryId, addUserQuestionAnswer, setAbtestUxLeadVersion, setAbtest, setPageTemplateGtm, setFunnelContextValue, setPageLocationUri]);
 
-  const handleComplete = async () => {
-    // Afficher le loader et lancer matching + prix en parallèle
-    setShowLoader(true);
+  // Fin du questionnaire : lancer matching + prix en parallèle et afficher
+  // l'étape transparence (email) — le loader ne s'affiche qu'au CTA.
+  const handleComplete = () => {
+    // Idempotence : StrictMode / re-renders peuvent rappeler onComplete
+    if (completionHandledRef.current) return;
+    completionHandledRef.current = true;
 
-    // Wrapper monotone : le progress ne recule jamais (protection contre les réponses tardives)
-    const safeProgress = (value: number) => setLoaderProgress(prev => Math.max(prev, value));
+    // Invalider un éventuel run précédent (retour + changement de réponse)
+    const runId = ++runIdRef.current;
+    const isStale = () => runIdRef.current !== runId;
+    setLoaderProgress(0);
+    useFlowStore.getState().setPriceEstimation(null);
+
+    // Wrapper monotone : le progress ne recule jamais (protection contre les
+    // réponses tardives) — et ignore les runs périmés
+    const safeProgress = (value: number) => {
+      if (isStale()) return;
+      setLoaderProgress(prev => Math.max(prev, value));
+    };
+
+    // A/B test : variantes 1 & 2 sautent l'étape /budget et l'appel /api/prix (gain perf)
+    // Lu depuis le store (valeur issue du token, traitée dans un effet) pour
+    // éviter toute closure périmée.
+    const abVersion = useFlowStore.getState().abtestUxLeadVersion;
+    const skipBudget = abVersion === 1 || abVersion === 2;
 
     // Lancer prix et matching en parallèle
     // Le prix répond plus vite → met à jour le progress à 25%
     // Le matching prend le relais (50→65→75) via safeProgress
-    const prixPromise = fetchPriceEstimation()
-      .then(() => { safeProgress(25); })
-      .catch((err) => {
-        console.error('[Prix] Error (non-blocking):', err);
-        safeProgress(25); // Même en erreur, on avance
-      });
+    const prixPromise = skipBudget
+      ? Promise.resolve().then(() => { safeProgress(25); })
+      : fetchPriceEstimation(isStale)
+          .then(() => { safeProgress(25); })
+          .catch((err) => {
+            console.error('[Prix] Error (non-blocking):', err);
+            safeProgress(25); // Même en erreur, on avance
+          });
 
-    const matchingPromise = processMatching(safeProgress); // progress interne : 50→65→75
+    const matchingPromise = processMatching(safeProgress, isStale); // progress interne : 50→65→75
 
-    const [, destination] = await Promise.all([prixPromise, matchingPromise]);
+    matchingRunRef.current = {
+      runId,
+      resultPromise: Promise.all([prixPromise, matchingPromise]).then(([, destination]) => destination),
+    };
+
+    setPhase('transparence');
+  };
+
+  // CTA de l'étape transparence : afficher le loader jusqu'à la fin du run,
+  // puis router. Si le matching est déjà terminé, passage rapide (100% + 1.5s).
+  const handleTransparenceContinue = async () => {
+    const run = matchingRunRef.current;
+    if (!run) return;
+    setPhase('loader');
+
+    const destination = await run.resultPromise;
+    // Sécurité : run devenu périmé entre-temps
+    if (runIdRef.current !== run.runId) return;
 
     setLoaderProgress(100);
     // Attendre que la barre anime jusqu'à 100% avant de naviguer
     await new Promise(resolve => setTimeout(resolve, 1500));
-    setRedirectDestination(destination);
+
+    const abVersion = useFlowStore.getState().abtestUxLeadVersion;
+    const skipBudget = abVersion === 1 || abVersion === 2;
+
+    // Skip /budget si l'API prix n'a renvoyé aucune option calibrée (budget_reponse vide,
+    // absent ou erreur API), OU si l'estimation prix n'est pas affichable
+    // (card prix vide). Dans ces cas la page n'a rien à afficher → /selection direct.
+    const priceState = useFlowStore.getState().priceEstimation;
+    const hasBudgetOptions =
+      priceState?.data?.budget_reponse !== undefined &&
+      priceState.data.budget_reponse.length > 0 &&
+      !priceState.error;
+    const hasDisplayableEstimation = hasDisplayablePriceEstimation(priceState);
+    const shouldSkipBudget = skipBudget || !hasBudgetOptions || !hasDisplayableEstimation;
+
+    // Intercaler la page /budget avant /selection. Le flow alternatif
+    // 'something-to-add' reste tel quel (pas de budget si flow dégradé).
+    // Variantes A/B 1 & 2 + absence de budget_reponse + estimation non affichable :
+    // skip /budget → /selection direct.
+    const finalDestination =
+      destination === 'something-to-add' ? destination
+        : shouldSkipBudget ? 'selection'
+        : 'budget';
+    setRedirectDestination(finalDestination);
   };
+
+  // "Précédent" sur l'étape transparence : retour à la dernière question.
+  // Le remontage de NeedsQuestionnaire détecte le questionnaire complet et
+  // appelle goToLastQuestion() (même mécanisme que le retour depuis /budget).
+  // Le run en cours n'est pas invalidé ici : si la réponse ne change pas, le
+  // prochain handleComplete relance de toute façon un run frais.
+  const handleTransparenceBack = useCallback(() => {
+    trackTransparenceReturn();
+    completionHandledRef.current = false;
+    setPhase('questionnaire');
+  }, []);
+
+  // Back navigateur pendant l'étape transparence : le listener popstate de
+  // NeedsQuestionnaire est démonté — répliquer le comportement "Précédent".
+  // Délai de 50ms avant activation pour ignorer les popstate parasites au
+  // montage (même pattern que NeedsQuestionnaire).
+  useEffect(() => {
+    if (phase !== 'transparence') return;
+
+    let isActive = false;
+    const mountTimeout = setTimeout(() => { isActive = true; }, 50);
+
+    const handlePopState = () => {
+      if (!isActive) return;
+      handleTransparenceBack();
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      clearTimeout(mountTimeout);
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [phase, handleTransparenceBack]);
 
   // Navigation dès que les données sont prêtes (matching + prix terminés)
   useEffect(() => {
     if (redirectDestination) {
       if (redirectDestination === 'something-to-add') {
         goToSomethingToAdd();
+      } else if (redirectDestination === 'budget') {
+        goToBudget();
       } else {
         goToSelection();
       }
     }
-  }, [redirectDestination, goToSelection, goToSomethingToAdd]);
+  }, [redirectDestination, goToSelection, goToSomethingToAdd, goToBudget]);
 
   // Afficher le loader pendant le matching
-  if (showLoader) {
-    return <MatchingLoader externalProgress={loaderProgress} />;
+  if (phase === 'loader') {
+    return <MatchingLoaderV2 externalProgress={loaderProgress} />;
+  }
+
+  // Étape transparence : email obligatoire, matching + prix en arrière-plan
+  if (phase === 'transparence') {
+    return (
+      <TransparencePage
+        onBack={handleTransparenceBack}
+        onContinue={handleTransparenceContinue}
+      />
+    );
   }
 
   // Attendre que les données URL soient traitées avant de rendre le questionnaire

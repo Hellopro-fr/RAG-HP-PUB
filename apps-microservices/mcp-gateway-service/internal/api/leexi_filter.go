@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/hellopro/mcp-gateway/internal/db"
-	"github.com/hellopro/mcp-gateway/internal/leexiadmin"
+	"mcp-gateway/internal/db"
+	"mcp-gateway/internal/leexiadmin"
 )
 
 // validLeexiFilterModes lists the accepted Mode values. Anything else is
@@ -16,6 +16,7 @@ var validLeexiFilterModes = map[string]struct{}{
 	LeexiFilterModeUsers:   {},
 	LeexiFilterModeTeams:   {},
 	LeexiFilterModeCreator: {},
+	LeexiFilterModeSelf:    {},
 }
 
 // resolveLeexiFilterForCreate validates a LeexiFilterDTO and returns the
@@ -27,11 +28,18 @@ var validLeexiFilterModes = map[string]struct{}{
 // adminClient may be nil when no Leexi integration is configured: in that
 // case all modes other than "none" are rejected with an error to avoid
 // persisting unenforceable scopes.
+//
+// forOAuth2 must be true when invoked from the OAuth2-client API path and
+// false from the scope-token API path. The "self" mode resolves the end-user
+// email from the access-token JWT at request time, so it is meaningful only
+// for OAuth2 clients; scope tokens carry no end-user identity and would
+// deny-all at runtime, so we reject "self" up front for scope tokens.
 func resolveLeexiFilterForCreate(
 	ctx context.Context,
 	adminClient *leexiadmin.Client,
 	filter *LeexiFilterDTO,
 	callerEmail string,
+	forOAuth2 bool,
 ) (mode string, userUUIDs json.RawMessage, teamUUIDs json.RawMessage, err error) {
 	if filter == nil || filter.Mode == "" {
 		return LeexiFilterModeNone, nil, nil, nil
@@ -44,6 +52,19 @@ func resolveLeexiFilterForCreate(
 	switch filter.Mode {
 	case LeexiFilterModeNone:
 		return LeexiFilterModeNone, nil, nil, nil
+
+	case LeexiFilterModeSelf:
+		// "self" is OAuth2-only — it resolves the access-token email claim
+		// at request time. Scope tokens have no end-user identity, so reject
+		// at the API rather than persisting a row that will deny-all at runtime.
+		if !forOAuth2 {
+			return "", nil, nil, fmt.Errorf("leexi_filter.mode %q is only supported on OAuth2 clients", LeexiFilterModeSelf)
+		}
+		// "self" is a runtime-resolved mode — the email comes from the
+		// OAuth2 access-token JWT on every request, so no UUID is stored
+		// on the token/client row. The injector in ScopedGateway reads the
+		// email out of context and calls leexiadmin.FindUserByEmail.
+		return LeexiFilterModeSelf, nil, nil, nil
 
 	case LeexiFilterModeUsers:
 		if len(filter.UserUUIDs) == 0 {

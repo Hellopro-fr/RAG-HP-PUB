@@ -1,0 +1,26 @@
+{
+  "planPath": "docs/superpowers/plans/2026-06-17-statsmanager-redis-resilience.md",
+  "tasks": [
+    {
+      "id": 0,
+      "subject": "SR-T1: StatsManager injected-client constructor + lifecycle no-ops + tests",
+      "status": "completed",
+      "description": "**Goal:** StatsManager accepts RedisClientType | string; injected path makes connect/disconnect no-ops and cleanup skip disconnect; string path keeps legacy create-and-own. Extend StatsManager.test.ts with injected no-op lifecycle, cleanup del-not-disconnect, increment->hIncrBy delegation, getValue->hGet, error-path (reject->0) for increment and getValue, legacy construct-without-connect. increment/getValue/checkThreshold/saveStateToDisk/loadStateFromDisk/ensureTtl unchanged.\n\n**Files:** src/class/StatsManager.ts, src/class/StatsManager.test.ts\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/crawler/src/class/StatsManager.ts\", \"apps-microservices/crawler-service/crawler/src/class/StatsManager.test.ts\"], \"verifyCommand\": \"cd apps-microservices/crawler-service/crawler && npm run build && npm test\", \"acceptanceCriteria\": [\"ctor accepts RedisClientType | string\", \"injected connect/disconnect no-op\", \"cleanup del-not-disconnect on injected\", \"increment->hIncrBy delegation\", \"error-path reject->0\", \"legacy construct-without-connect\", \"existing tests stay green\"]}\n```"
+    },
+    {
+      "id": 1,
+      "subject": "SR-T2: wire sharedRedis into StatsManager at main.ts:545 + fix stale comment",
+      "status": "completed",
+      "blockedBy": [0],
+      "description": "**Goal:** main.ts:545 constructs new StatsManager(sharedRedis, id, storagePath || '.'); the comment at main.ts:564-565 no longer says StatsManager owns its own client. tsc clean, no other line changes.\n\n**Files:** src/main.ts\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/crawler/src/main.ts\"], \"verifyCommand\": \"cd apps-microservices/crawler-service/crawler && npm run build\", \"acceptanceCriteria\": [\"main.ts:545 passes sharedRedis\", \"stale 564-565 comment corrected\", \"tsc 0 errors\"]}\n```"
+    },
+    {
+      "id": 2,
+      "subject": "SR-T3: crawler-service CLAUDE.md docs (replace line 384 note)",
+      "status": "completed",
+      "blockedBy": [1],
+      "description": "**Goal:** Replace the false 'StatsManager still opens its own Redis client. Deferred follow-up' note (CLAUDE.md:384) with the migrated state: StatsManager now uses the injected shared client (ownsClient=false), conn count 1, legacy URL ctor retained, spec link.\n\n**Files:** apps-microservices/crawler-service/CLAUDE.md\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/CLAUDE.md\"], \"verifyCommand\": \"grep -n 'injected shared client' apps-microservices/crawler-service/CLAUDE.md\", \"acceptanceCriteria\": [\"deferred note replaced\", \"no 'still opens its own Redis client' text remains\", \"spec link present\"]}\n```"
+    }
+  ],
+  "lastUpdated": "2026-06-17T02:00:00Z"
+}

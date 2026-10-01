@@ -11,6 +11,10 @@ RUN apt-get update && apt-get install -y \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
+# Shared lib (Redis cache_service, etc.) — installed editable, like crawler-service
+COPY libs/common-utils /app/libs/common-utils
+RUN pip install -e /app/libs/common-utils
+
 # Install Python dependencies
 COPY apps-microservices/image-comparison-service/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

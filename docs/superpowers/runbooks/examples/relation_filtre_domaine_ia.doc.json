@@ -1,0 +1,19 @@
+{
+  "relation_filtre_domaine_ia": {
+    "database_id": 10,
+    "description": "Groupes de règles (« rule sets ») de qualification d'URL par domaine, pour la détection de fiches produit. Chaque ligne associe un domaine à un ensemble d'IDs de filtres (de filtre_qualification_domaine_ia) combinés ensemble. Rejouée par ProductDetector (stratégie 'saved'/historique, runSavedStrategy) pour décider si une URL crawlée est une fiche produit. Stockée dans HELLOPRO_IA.",
+    "primary_key": "id_relation_filtre_domaine_ia",
+    "default_order_by": "id_relation_filtre_domaine_ia DESC",
+    "rows": null,
+    "columns": {
+      "id_relation_filtre_domaine_ia": { "type": "int", "desc": "PK auto-increment de la ligne de relation (un rule set)." },
+      "id_domaine_rfdi": { "type": "int", "desc": "FK → domaine_scrapping_produit_ia.id_domaine_scrapping_produit_ia (DSPI) : domaine auquel s'applique ce groupe de filtres. NOT NULL. Pas d'index dédié (ProductDetector filtre par WHERE id_domaine_rfdi = ...). Un domaine peut avoir plusieurs lignes (plusieurs rule sets)." },
+      "relation_filtre_rfdi": { "type": "varchar(255)", "desc": "Liste CSV d'IDs de filtres (ex. '311,312') → FK (dénormalisée) vers filtre_qualification_domaine_ia.id_filtre_qualification_domaine_ia. Les filtres d'une même ligne forment UN rule set combiné (AND) ; chaque ligne du domaine est une alternative (OR entre lignes). NOT NULL. JOIN impossible directement → utiliser FIND_IN_SET() ou explode() applicatif." }
+    },
+    "relations": [
+      { "column": "id_domaine_rfdi", "references": "domaine_scrapping_produit_ia.id_domaine_scrapping_produit_ia", "note": "Domaine concerné (DSPI). 1 domaine → N rule sets." },
+      { "column": "relation_filtre_rfdi", "references": "filtre_qualification_domaine_ia.id_filtre_qualification_domaine_ia (CSV)", "note": "IDs de filtres groupés (FK dénormalisée en CSV). Filtres définis dans filtre_qualification_domaine_ia." }
+    ],
+    "notes": "Paire avec filtre_qualification_domaine_ia (FQDI = filtres individuels : type_filtre_fqdi 1=URL · 2=Regex URL · 3=Selector · 4=Content · 5=Sitemap · 6=GPT ; search_type_fqdi 1=Contains/2=Not Contains ; mode_qualification_fqdi 1=Inclus/2=Exclus — réf. ProductDetector.php). Sémantique : filtres d'une même ligne combinés (AND), lignes multiples = alternatives (OR). Consommée par ProductDetector::runSavedStrategy() (mode 'saved'). FK dénormalisée en CSV dans relation_filtre_rfdi (pas de table de jointure normalisée)."
+  }
+}

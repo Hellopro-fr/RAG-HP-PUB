@@ -2,3 +2,9 @@
 # Normally removed by teardownFixture(), but Windows EBUSY races during parallel
 # teardown can leave stragglers. Ignore wholesale so they never enter history.
 tests/fixtures/
+
+# Go build artifacts
+/server
+/cmb
+*.test
+*.out

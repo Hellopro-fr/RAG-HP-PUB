@@ -13,6 +13,17 @@
         </p>
         <GoogleConnectCard />
       </section>
+
+      <!-- Notifications -->
+      <section>
+        <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+          Notifications
+        </h2>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
+          Alertes envoyées lorsqu'un serveur tombe, perd ses outils, ou reçoit un accès non autorisé.
+        </p>
+        <SlackNotificationsCard />
+      </section>
     </div>
   </div>
 </template>
@@ -20,4 +31,5 @@
 <script setup lang="ts">
 import PageBreadcrumb from '@/components/common/PageBreadcrumb.vue'
 import GoogleConnectCard from '@/components/google/GoogleConnectCard.vue'
+import SlackNotificationsCard from '@/components/slack/SlackNotificationsCard.vue'
 </script>

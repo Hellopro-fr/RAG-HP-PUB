@@ -2,9 +2,23 @@ import { ApiError } from '@/types/api'
 import { router } from '@/router'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
+// SSO mode (account-service): identity travels in HttpOnly gw_session cookie.
+// In legacy mode we keep sending Authorization: Bearer from localStorage.
+const SSO_MODE = import.meta.env.VITE_SSO_MODE === 'true'
 
 function getAuthToken(): string | null {
+  if (SSO_MODE) return null
   return localStorage.getItem('auth_token')
+}
+
+function on401(): void {
+  if (SSO_MODE) {
+    const target = window.location.pathname + window.location.search
+    window.location.href = '/sso/login?return_to=' + encodeURIComponent(target)
+    return
+  }
+  localStorage.removeItem('auth_token')
+  router.push({ path: '/login', query: { redirect: window.location.pathname } })
 }
 
 async function request<T>(
@@ -33,12 +47,72 @@ async function request<T>(
   const response = await fetch(url, {
     method,
     headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+    credentials: SSO_MODE ? 'include' : 'same-origin',
   })
 
   if (response.status === 401) {
-    localStorage.removeItem('auth_token')
-    router.push({ path: '/login', query: { redirect: window.location.pathname } })
+    on401()
+    throw new ApiError(401, 'Unauthorized')
+  }
+
+  if (!response.ok) {
+    const errorBody = await response.json().catch(() => undefined)
+    throw new ApiError(response.status, response.statusText, errorBody)
+  }
+
+  if (response.status === 204) {
+    return undefined as T
+  }
+
+  return response.json() as Promise<T>
+}
+
+// blobRequest is a bearer-authenticated GET that returns the raw response
+// body as a Blob. Use this for file downloads where the caller wants to
+// trigger a browser save-as — JSON parsing would corrupt binary payloads
+// and defeat attachment Content-Disposition semantics.
+async function blobRequest(path: string): Promise<Blob> {
+  const url = `${BASE_URL}${path}`
+  const headers: Record<string, string> = {}
+  const token = getAuthToken()
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+  const response = await fetch(url, {
+    method: 'GET',
+    headers,
+    credentials: SSO_MODE ? 'include' : 'same-origin',
+  })
+  if (response.status === 401) {
+    on401()
+    throw new ApiError(401, 'Unauthorized')
+  }
+  if (!response.ok) {
+    const errorBody = await response.json().catch(() => undefined)
+    throw new ApiError(response.status, response.statusText, errorBody)
+  }
+  return response.blob()
+}
+
+async function multipartRequest<T>(method: string, path: string, formData: FormData): Promise<T> {
+  const url = `${BASE_URL}${path}`
+  const headers: Record<string, string> = {}
+  const token = getAuthToken()
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+  // Deliberately no Content-Type — the browser sets the multipart boundary.
+
+  const response = await fetch(url, {
+    method,
+    headers,
+    body: formData,
+    credentials: SSO_MODE ? 'include' : 'same-origin',
+  })
+
+  if (response.status === 401) {
+    on401()
     throw new ApiError(401, 'Unauthorized')
   }
 
@@ -64,7 +138,16 @@ export const api = {
   put<T>(path: string, body?: unknown): Promise<T> {
     return request<T>('PUT', path, body)
   },
-  del<T>(path: string): Promise<T> {
-    return request<T>('DELETE', path)
+  patch<T>(path: string, body?: unknown): Promise<T> {
+    return request<T>('PATCH', path, body)
+  },
+  del<T>(path: string, body?: unknown): Promise<T> {
+    return request<T>('DELETE', path, body)
+  },
+  postMultipart<T>(path: string, formData: FormData): Promise<T> {
+    return multipartRequest<T>('POST', path, formData)
+  },
+  getBlob(path: string): Promise<Blob> {
+    return blobRequest(path)
   }
 }

@@ -14,6 +14,7 @@ interface TokenPayload {
   c: number;    // id_categorie
   d: string;    // date (YYYY-MM-DD)
   t: number;    // timestamp (pour unicité supplémentaire)
+  data?: Record<string, unknown>; // bloc data optionnel (Q1 pré-remplie, abtest1..5, page_template_gtm…)
 }
 
 interface TokenValidationResult {
@@ -96,17 +97,22 @@ function isDateValid(dateStr: string): boolean {
  * Le token est différent à chaque génération grâce à l'IV aléatoire
  *
  * @param categoryId - L'ID de la catégorie à encoder
+ * @param data - Bloc `data` optionnel, même contrat que le PHP generateCategoryToken()
+ *               (fonctions_generales.php) : Q1 pré-remplie, slots abtest1..5,
+ *               page_template_gtm, funnel_context, page_location_uri…
  * @returns Le token URL-safe (complètement différent à chaque appel)
  *
  * @example
  * const token = generateCategoryToken(123);
+ * const tokenAb = generateCategoryToken(123, { abtest4: 'mon-bras-B' });
  * // → "xYz...différent à chaque appel"
  */
-export function generateCategoryToken(categoryId: number): string {
+export function generateCategoryToken(categoryId: number, data?: Record<string, unknown>): string {
   const payload: TokenPayload = {
     c: categoryId,
     d: getTodayDate(),
     t: Date.now(),
+    ...(data && Object.keys(data).length > 0 && { data }),
   };
 
   if (!TOKEN_SECRET) {

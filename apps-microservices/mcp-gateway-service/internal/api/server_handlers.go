@@ -11,14 +11,20 @@ import (
 	"unicode"
 
 	"github.com/google/uuid"
-	"github.com/hellopro/mcp-gateway/internal/auth"
-	"github.com/hellopro/mcp-gateway/internal/db"
-	"github.com/hellopro/mcp-gateway/internal/gateway"
-	goGoogle "github.com/hellopro/mcp-gateway/internal/google"
-	"github.com/hellopro/mcp-gateway/internal/leexiadmin"
-	oauth2pkg "github.com/hellopro/mcp-gateway/internal/oauth2"
-	"github.com/hellopro/mcp-gateway/internal/repository"
-	"github.com/hellopro/mcp-gateway/internal/urlvalidation"
+	"mcp-gateway/internal/auth"
+	"mcp-gateway/internal/bddcatalog"
+	"mcp-gateway/internal/config"
+	"mcp-gateway/internal/db"
+	"mcp-gateway/internal/gateway"
+	goGoogle "mcp-gateway/internal/google"
+	"mcp-gateway/internal/crypto"
+	"mcp-gateway/internal/leexiadmin"
+	"mcp-gateway/internal/ringoveradmin"
+	oauth2pkg "mcp-gateway/internal/oauth2"
+	"mcp-gateway/internal/repository"
+	"mcp-gateway/internal/runnerclient"
+	"mcp-gateway/internal/slack"
+	"mcp-gateway/internal/urlvalidation"
 )
 
 var alphanumericRe = regexp.MustCompile(`^[a-zA-Z0-9]+$`)
@@ -77,6 +83,8 @@ type Handler struct {
 	// per-token Leexi filter UI and the runtime header injection. nil when the
 	// integration is disabled (LEEXI_INTERNAL_URL or LEEXI_ADMIN_TOKEN unset).
 	leexiAdmin *leexiadmin.Client
+	// ringoverAdmin is the Ringover counterpart of leexiAdmin.
+	ringoverAdmin *ringoveradmin.Client
 	// uploadDir is the base directory for uploaded files (icons, etc.)
 	uploadDir string
 	// installGuideRepo is the repository for install guide CRUD (executors + configs).
@@ -84,6 +92,35 @@ type Handler struct {
 	// Google Sheets import
 	googleTokenRepo *repository.GoogleTokenRepo
 	googleOAuth     *goGoogle.OAuthClient
+	// Template instances (Google templates dynamic secrets feature).
+	// These stay zero-valued (nil) until Task 13 wires them in main.go.
+	templateRepo *repository.TemplateRepo
+	instanceRepo *repository.InstanceRepo
+	runner       *runnerclient.Client
+	// runners holds the non-Google template runners (see SetRunners); the
+	// Google runner is `runner` above.
+	runners map[string]RunnerEndpoint
+	config  *config.Config
+	// slack is the optional Slack notification client. nil disables all
+	// discovery-time notifications (ToolsRegression). Wired via SetSlack.
+	slack *slack.Client
+	// instructionRepo backs the /api/v1/llm-instructions CRUD. The same repo
+	// is shared with scopetoken/oauth2 middleware to resolve per-scope
+	// instructions at cache-miss time.
+	instructionRepo *repository.InstructionRepo
+	// BDD registry + upstream catalog client (Hellopro BDD tables onglet).
+	// bddUsedRepo writes to the gateway-owned bdd_used_tables/fields tables;
+	// bddCatalog is a read-only client to the upstream catalog HTTP API.
+	// Both are nil until wired by main.go.
+	bddUsedRepo *repository.BDDUsedRepo
+	bddCatalog  *bddcatalog.Client
+	// serverAuthRepo backs the /api/v1/server-authorizations admin CRUD.
+	serverAuthRepo *repository.ServerAuthorizationRepo
+	// zohoImportRepo backs the /api/v1/zoho-imports/admin REST endpoints.
+	zohoImportRepo *repository.ZohoImportRepo
+	// encryptor is used by handlers that encrypt/decrypt sensitive blobs (e.g.
+	// auth_headers on the admin Zoho import row). nil when ENCRYPTION_KEY is unset.
+	encryptor *crypto.Encryptor
 }
 
 // TokenCache is an interface for scope token cache operations.
@@ -92,8 +129,26 @@ type TokenCache interface {
 }
 
 // NewHandler creates a new API handler.
-func NewHandler(repo *repository.ServerRepo, gw *gateway.Gateway, registry *gateway.Registry, allowInternalURLs bool) *Handler {
-	return &Handler{repo: repo, gw: gw, registry: registry, allowInternalURLs: allowInternalURLs}
+func NewHandler(
+	repo *repository.ServerRepo,
+	gw *gateway.Gateway,
+	registry *gateway.Registry,
+	allowInternalURLs bool,
+	templateRepo *repository.TemplateRepo,
+	instanceRepo *repository.InstanceRepo,
+	runner *runnerclient.Client,
+	cfg *config.Config,
+) *Handler {
+	return &Handler{
+		repo:              repo,
+		gw:                gw,
+		registry:          registry,
+		allowInternalURLs: allowInternalURLs,
+		templateRepo:      templateRepo,
+		instanceRepo:      instanceRepo,
+		runner:            runner,
+		config:            cfg,
+	}
 }
 
 // SetTokenRepo sets the token repository for token CRUD operations.
@@ -124,6 +179,12 @@ func (h *Handler) SetLeexiAdmin(client *leexiadmin.Client) {
 	h.leexiAdmin = client
 }
 
+// SetRingoverAdmin wires the Ringover admin client used by the Ringover-scoped
+// token filter UI and the proxy at /api/v1/ringover/*. Pass nil to disable.
+func (h *Handler) SetRingoverAdmin(client *ringoveradmin.Client) {
+	h.ringoverAdmin = client
+}
+
 // SetUploadDir sets the base directory for uploaded files.
 func (h *Handler) SetUploadDir(dir string) {
 	h.uploadDir = dir
@@ -132,6 +193,34 @@ func (h *Handler) SetUploadDir(dir string) {
 // SetInstallGuideRepo sets the install guide repository.
 func (h *Handler) SetInstallGuideRepo(repo *repository.InstallGuideRepo) {
 	h.installGuideRepo = repo
+}
+
+// SetSlack wires the Slack notifications client. Pass nil to disable.
+func (h *Handler) SetSlack(client *slack.Client) {
+	h.slack = client
+}
+
+// SetInstructionRepo wires the LLM-instruction repository.
+func (h *Handler) SetInstructionRepo(repo *repository.InstructionRepo) {
+	h.instructionRepo = repo
+}
+
+// SetServerAuthorizationRepo wires the per-server full-access grants repo
+// used by /api/v1/server-authorizations admin endpoints.
+func (h *Handler) SetServerAuthorizationRepo(repo *repository.ServerAuthorizationRepo) {
+	h.serverAuthRepo = repo
+}
+
+// SetEncryptor wires the AES-256-GCM encryptor used by handlers that store or
+// read encrypted blobs (e.g. the admin Zoho import auth_headers).
+func (h *Handler) SetEncryptor(enc *crypto.Encryptor) {
+	h.encryptor = enc
+}
+
+// SetZohoImportRepo injects the ZohoImportRepo used by the admin REST handlers
+// and the sheet-import dispatch.
+func (h *Handler) SetZohoImportRepo(repo *repository.ZohoImportRepo) {
+	h.zohoImportRepo = repo
 }
 
 // ── Create Server ─────────────────────────────────────────────────────────────
@@ -238,6 +327,11 @@ func (h *Handler) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 			if req.ToolPrefix != "" {
 				h.registry.SetToolPrefix(id, req.ToolPrefix)
 			}
+			// Mirror tags into the registry so HasTag-driven dispatch
+			// (zoho injector) sees them on first registration.
+			if len(req.Tags) > 0 {
+				h.registry.SetTags(id, req.Tags)
+			}
 			// Récupère le serveur mis à jour pour sauvegarder les capabilities
 			if backend := h.registry.FindByID(id); backend != nil {
 				h.saveBackendCapabilities(id, backend)
@@ -265,11 +359,31 @@ func (h *Handler) handleListServers(w http.ResponseWriter, r *http.Request) {
 	}
 	tag := r.URL.Query().Get("tag")
 
-	servers, err := h.repo.ListAll(isActive, tag, "")
+	// Admins see every server; non-admins are scoped to rows they created.
+	// Scope-picker callers (token / OAuth2 creation forms) opt into the
+	// full active-server set with `?include_all=true` — see
+	// resolveListServersCreatorFilter for the rationale.
+	servers, err := h.repo.ListAll(isActive, tag, resolveListServersCreatorFilter(r))
 	if err != nil {
 		log.Printf("[api] list servers error: %v", err)
 		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to list servers"})
 		return
+	}
+
+	// Opt-in filter used by the docs-admin view: hide servers that originated
+	// from a template (stdio instance OR http_batch sheet import). Template
+	// catalogs manage their own docs flow, so exposing template-origin servers
+	// in the docs admin would be confusing. The filter reads the first-class
+	// template_slug column so both template paths are covered uniformly
+	// without a join against template_instances.
+	if r.URL.Query().Get("exclude_templates") == "true" {
+		filtered := servers[:0]
+		for _, s := range servers {
+			if s.TemplateSlug == "" {
+				filtered = append(filtered, s)
+			}
+		}
+		servers = filtered
 	}
 
 	resp := ListServersResponse{
@@ -408,6 +522,10 @@ func (h *Handler) handleUpdateServer(w http.ResponseWriter, r *http.Request) {
 		if err := h.repo.SaveTags(id, *req.Tags); err != nil {
 			log.Printf("[api] save tags error: %v", err)
 		}
+		// Mirror tags into the in-memory registry so downstream dispatch
+		// (HasTag-driven zoho injector) picks up the change without waiting
+		// for a re-discovery cycle.
+		h.registry.SetTags(id, *req.Tags)
 	}
 
 	// Update tool prefix on the in-memory registry if changed (even without re-discovery)
@@ -425,6 +543,14 @@ func (h *Handler) handleUpdateServer(w http.ResponseWriter, r *http.Request) {
 			_ = h.repo.UpdateHealth(id, "unhealthy", err.Error())
 		} else {
 			h.registry.SetToolPrefix(id, refreshed.ToolPrefix)
+			// Re-discovery rebuilds the registry entry from the upstream
+			// init result; tags only live in the DB so we have to push
+			// them back into the registry after every re-discover.
+			refreshedTags := make([]string, 0, len(refreshed.Tags))
+			for _, t := range refreshed.Tags {
+				refreshedTags = append(refreshedTags, t.Tag)
+			}
+			h.registry.SetTags(id, refreshedTags)
 			if backend := h.registry.FindByID(id); backend != nil {
 				h.saveBackendCapabilities(id, backend)
 			}
@@ -448,6 +574,30 @@ func (h *Handler) handleDeleteServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.registry.Unregister(id)
+
+	// If this server is backed by a template instance, route through the
+	// template-aware delete path: kill the runner subprocess + shred credentials
+	// first, then delete both rows in one transaction. Otherwise the runner
+	// would keep the subprocess alive forever and the SA JSON would persist on
+	// tmpfs, while the template_instances row would point at a now-deleted
+	// mcp_server_id.
+	if h.instanceRepo != nil {
+		if inst, ferr := h.instanceRepo.FindByMCPServerID(id); ferr == nil && inst != nil {
+			if ep, rerr := h.runnerForInstance(inst); rerr != nil {
+				log.Printf("[api][WARN] %v — skipping kill for template instance %s (continuing with DB delete)", rerr, inst.ID)
+			} else if kerr := ep.Client.Kill(r.Context(), inst.ID); kerr != nil {
+				log.Printf("[api] runner kill failed for template instance %s (continuing with DB delete): %v", inst.ID, kerr)
+			}
+			if derr := h.instanceRepo.DeleteWithMCPServer(inst.ID); derr != nil {
+				log.Printf("[api] template-aware delete failed for %s: %v", inst.ID, derr)
+				writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to delete server"})
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+	}
+
 	if err := h.repo.Delete(id); err != nil {
 		log.Printf("[api] delete server error: %v", err)
 		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "failed to delete server"})
@@ -651,9 +801,24 @@ func (h *Handler) saveBackendCapabilities(id string, backend *gateway.BackendSer
 		dbSrv.Prompts = append(dbSrv.Prompts, sp)
 	}
 
-	if err := h.repo.SaveDiscoveredCapabilities(dbSrv); err != nil {
+	prevToolCount, err := h.repo.SaveDiscoveredCapabilities(dbSrv)
+	if err != nil {
 		log.Printf("[api] save capabilities error for %s: %v", id, err)
 		return
+	}
+	// Regression: backend used to expose tools and now exposes none. Almost
+	// always a misconfigured backend — alert so an operator can investigate.
+	if prevToolCount > 0 && len(dbSrv.Tools) == 0 {
+		log.Printf("[api] tools regression on server %s: prev=%d, now=0", id, prevToolCount)
+		name := dbSrv.ServerName
+		if name == "" {
+			name = backend.Name
+		}
+		h.slack.Notify(slack.ToolsRegressionEvent{
+			ServerID:   id,
+			ServerName: name,
+			PrevCount:  prevToolCount,
+		})
 	}
 	// Sync tool active states from DB back to registry (SaveDiscoveredCapabilities
 	// preserves is_active for existing tools, but the registry has all tools as active)
@@ -666,8 +831,13 @@ func (h *Handler) saveBackendCapabilities(id string, backend *gateway.BackendSer
 
 // checkOwnership verifies the current user owns the server.
 // If auth is disabled (no user in context), access is allowed.
+// Admins (role == "admin") bypass the ownership check so they can fix or
+// remove a server created by another user.
 // Returns false and writes a 403 response if ownership check fails.
 func checkOwnership(r *http.Request, srv *db.MCPServer, w http.ResponseWriter) bool {
+	if auth.UserRoleFromContext(r.Context()) == auth.RoleAdmin {
+		return true
+	}
 	userEmail := auth.UserEmailFromContext(r.Context())
 	if userEmail == "" {
 		// Auth disabled — no ownership filtering
@@ -744,6 +914,7 @@ func toServerResponse(srv *db.MCPServer) ServerResponse {
 		DocSlug:             srv.DocSlug,
 		DocDescription:      srv.DocDescription,
 		DocConfigGuide:      srv.DocConfigGuide,
+		TemplateSlug:        srv.TemplateSlug,
 		CreatedBy:           srv.CreatedBy,
 		Tags:                tags,
 		CreatedAt:           srv.CreatedAt,

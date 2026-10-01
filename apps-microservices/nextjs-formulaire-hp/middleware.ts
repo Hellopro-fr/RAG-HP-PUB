@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import type { CategoryTokenUrlData as TokenUrlData } from '@/types/category-token';
 
 // =============================================================================
 // CONFIGURATION
@@ -66,13 +67,6 @@ function isDateValid(dateStr: string): boolean {
  * Déchiffre un token AES-256-CBC
  * Format du token: Base64URL(IV[16 bytes] + EncryptedData)
  */
-// Interface pour les données URL optionnelles (réponse Q1 pré-remplie)
-interface TokenUrlData {
-  id_question: number;
-  id_reponse: number;
-  equivalence: any[];
-}
-
 async function validateTokenInMiddleware(
   token: string,
   secret: string
@@ -131,8 +125,10 @@ async function validateTokenInMiddleware(
       return { valid: false, error: 'invalid_payload' };
     }
 
-    // 9. Extraire les données URL optionnelles (réponse Q1 pré-remplie)
-    const urlData = payload.data && payload.data.id_reponse ? payload.data : undefined;
+    // 9. Extraire les données URL optionnelles (réponse Q1 pré-remplie + version A/B)
+    // Avant: filtrait sur payload.data.id_reponse → masquait le cas A/B sans pré-remplissage Q1.
+    // const urlData = payload.data && payload.data.id_reponse ? payload.data : undefined;
+    const urlData = payload.data;
 
     return { valid: true, categoryId: payload.c, urlData, ddc: payload.ddc_is_v };
   } catch (error) {
@@ -203,7 +199,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(INVALID_TOKEN_REDIRECT);
   }
 
-  
+  console.log('[Middleware] 🔓 Données décryptées du token:', {
+    categoryId: result.categoryId,
+    ddc: result.ddc,
+    urlData: result.urlData,
+  });
 
   // Token valide - réécrire vers la route réelle
   const routePrefix = '/' + pathParts[0]; // ex: /questionnaire

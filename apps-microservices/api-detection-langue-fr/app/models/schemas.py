@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from enum import Enum
 from pydantic import BaseModel, Field, HttpUrl
 from typing import Optional
@@ -40,6 +41,14 @@ class DetectionRequest(BaseModel):
     include_full_content: bool = Field(
         default=False,
         description="(Debug uniquement) Inclure le contenu HTML complet et le texte nettoye complet dans la reponse debug"
+    )
+    homepage_fallback: bool = Field(
+        default=True,
+        description="Si la page demandée est invalide (404, soft-404, redirect-to-home), tenter une fois la page d'accueil du domaine. Désactiver pour avoir une réponse strictement URL-level."
+    )
+    validate_alternatives: bool = Field(
+        default=True,
+        description="Valider les URLs alternatives via HTTP/navigateur (httpx + fallback navigateur + confirmation NLP). false = parsing seul, aucune requête réseau sur les alternatives (réduit la charge navigateur/OOM). Les alternatives hreflang restent validated=true (déclaration de confiance)."
     )
 
     model_config = {
@@ -97,6 +106,16 @@ class DetectionResponse(BaseModel):
         default=None,
         description="Clé du groupe (first_match mode uniquement)"
     )
+    analyzed_url: Optional[str] = Field(
+        default=None,
+        description="URL réellement analysée si différente de l'URL demandée (cas: repli homepage, ou cache HIT cross-URL via la clé domain). None = analyse directe de l'URL demandée."
+    )
+    failure_detail: Optional[str] = Field(
+        default=None,
+        description="Cause brute observée d'un échec de fetch, au format '<stage>: <cause>'. "
+                    "Aucune classification : la chaîne est celle du moteur, tronquée. "
+                    "None quand aucune cause n'a été capturée."
+    )
 
 
 class BatchItem(BaseModel):
@@ -140,6 +159,14 @@ class BatchDetectionRequest(BaseModel):
         ge=1,
         le=50,
         description="Nombre de requêtes parallèles max"
+    )
+    homepage_fallback: bool = Field(
+        default=True,
+        description="Tenter un repli vers la page d'accueil si la page demandée est invalide (pour chaque item du lot)."
+    )
+    validate_alternatives: bool = Field(
+        default=True,
+        description="Valider les URLs alternatives via HTTP/navigateur (appliqué à chaque item). false = parsing seul, aucune requête réseau sur les alternatives."
     )
 
     model_config = {
@@ -193,6 +220,7 @@ class DebugFetchInfo(BaseModel):
     raw_html_full: Optional[str] = Field(default=None, description="Contenu HTML complet (uniquement si include_full_content=true)")
     redirected_from: Optional[str] = Field(default=None, description="URL d'origine avant redirection (null si pas de redirection)")
     challenge_detected: Optional[str] = Field(default=None, description="Service de protection anti-bot detecte (Cloudflare, DataDome, etc.) ou null si contenu reel")
+    status_code: Optional[int] = Field(default=None, description="Statut HTTP du fetch (normalise a 200 si un challenge anti-bot a ete resolu dans le navigateur ; null si html_content fourni dans la requete)")
 
 class DebugCleaningInfo(BaseModel):
     """Informations sur le nettoyage du contenu"""
@@ -244,3 +272,65 @@ class DebugDetectionResponse(BaseModel):
     """Reponse de detection avec informations de debug"""
     result: DetectionResponse
     debug: DebugInfo
+
+
+# ============================================================================
+# Async batch job models
+# ============================================================================
+
+@dataclass
+class BatchOpts:
+    """Per-call batch options, decoupled from the request model so the batch
+    core can be driven by both the sync route and the async worker."""
+    proxy_url: Optional[str] = None
+    use_nlp_detection: bool = True
+    force_refresh: bool = False
+    max_concurrency: int = 10
+    homepage_fallback: bool = True
+    validate_alternatives: bool = True
+
+
+@dataclass
+class BatchCounts:
+    """Authoritative tallies returned by the batch core (success/failed/error)."""
+    success_count: int
+    failed_count: int
+    error_count: int
+
+
+class AsyncBatchSubmitRequest(BaseModel):
+    """Submit body for POST /detect-batch-async. Mirrors BatchDetectionRequest
+    plus an optional client idempotency key. Items must contain no duplicate URLs."""
+    items: list[BatchItem] = Field(..., max_length=100)
+    mode: DetectionMode = Field(default=DetectionMode.COMPLETE)
+    proxy_url: Optional[str] = Field(default=None)
+    use_nlp_detection: bool = Field(default=True)
+    force_refresh: bool = Field(default=False)
+    max_concurrency: int = Field(default=10, ge=1, le=50)
+    homepage_fallback: bool = Field(default=True)
+    validate_alternatives: bool = Field(default=True)
+    client_job_id: Optional[str] = Field(
+        default=None,
+        description="Caller idempotency key. A re-submit with the same key returns the existing job."
+    )
+
+
+class AsyncBatchSubmitResponse(BaseModel):
+    job_id: str
+    status: str
+    total: int
+    poll_after_seconds: int
+
+
+class AsyncBatchStatusResponse(BaseModel):
+    job_id: str
+    status: str                                   # pending|running|completed|failed|stale
+    total: int
+    done: int
+    success_count: int
+    failed_count: int
+    error_count: int
+    results: Optional[list[DetectionResponse]] = None
+    processing_time_ms: Optional[float] = None
+    error: Optional[str] = None
+    poll_after_seconds: int

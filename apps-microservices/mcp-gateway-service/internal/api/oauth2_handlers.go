@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hellopro/mcp-gateway/internal/auth"
-	"github.com/hellopro/mcp-gateway/internal/db"
-	oauth2pkg "github.com/hellopro/mcp-gateway/internal/oauth2"
+	"mcp-gateway/internal/auth"
+	"mcp-gateway/internal/db"
+	oauth2pkg "mcp-gateway/internal/oauth2"
 )
 
 // ── OAuth2 Client CRUD handlers ─────────────────────────────────────────────
@@ -47,8 +47,9 @@ func (h *Handler) handleOAuth2ClientByID(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *Handler) listOAuth2Clients(w http.ResponseWriter, r *http.Request) {
-	userEmail := auth.UserEmailFromContext(r.Context())
-	clients, err := h.oauth2Repo.ListAll(userEmail)
+	// Admins (role == "admin") bypass the created_by filter and see every
+	// client across the workspace. Non-admins keep the per-creator scope.
+	clients, err := h.oauth2Repo.ListAll(effectiveCreatorFilter(r.Context()))
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -100,11 +101,13 @@ func (h *Handler) createOAuth2Client(w http.ResponseWriter, r *http.Request) {
 		AccessTokenTTL:  ttl,
 		IsActive:        true,
 		CreatedBy:       creatorEmail,
+
+		InjectInstructionsIntoTools: req.InjectInstructionsIntoTools,
 	}
 
 	// Resolve and validate the optional Leexi ownership filter.
 	mode, userUUIDs, teamUUIDs, lerr := resolveLeexiFilterForCreate(
-		r.Context(), h.leexiAdmin, req.LeexiFilter, creatorEmail,
+		r.Context(), h.leexiAdmin, req.LeexiFilter, creatorEmail, true, /* OAuth2 client path */
 	)
 	if lerr != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": lerr.Error()})
@@ -113,6 +116,33 @@ func (h *Handler) createOAuth2Client(w http.ResponseWriter, r *http.Request) {
 	client.LeexiFilterMode = mode
 	client.LeexiAllowedUserUUIDs = userUUIDs
 	client.LeexiAllowedTeamUUIDs = teamUUIDs
+
+	// Ringover filter.
+	rMode, rUserIDs, rTeamIDs, rerr := resolveRingoverFilterForCreate(
+		r.Context(), h.ringoverAdmin, req.RingoverFilter, creatorEmail, true, /* OAuth2 client path */
+	)
+	if rerr != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": rerr.Error()})
+		return
+	}
+	client.RingoverFilterMode = rMode
+	client.RingoverAllowedUserIDs = rUserIDs
+	client.RingoverAllowedTeamIDs = rTeamIDs
+
+	// Validate BDD scope before persisting to mirror the token-create flow.
+	if err := h.validateBDDFilter(r.Context(), req.BDDFilter); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	if err := applyZohoFilterToDBRow(
+		req.ZohoFilter,
+		func(m string) { client.ZohoFilterMode = m },
+		func(b json.RawMessage) { client.ZohoAllowedEmails = b },
+	); err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
+		return
+	}
 
 	if len(req.RedirectURIs) > 0 {
 		redirectJSON, _ := json.Marshal(req.RedirectURIs)
@@ -170,6 +200,46 @@ func (h *Handler) createOAuth2Client(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if h.instructionRepo != nil && len(req.InstructionIDs) > 0 {
+		if msg := enforceSingleInstructionPick(req.InstructionIDs); msg != "" {
+			_ = h.oauth2Repo.Delete(client.ID)
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": msg})
+			return
+		}
+		invalid, vErr := h.instructionRepo.ValidateForScope(req.InstructionIDs, req.ServerIDs)
+		if vErr != nil {
+			_ = h.oauth2Repo.Delete(client.ID)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": vErr.Error()})
+			return
+		}
+		if len(invalid) > 0 {
+			_ = h.oauth2Repo.Delete(client.ID)
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"error": "one or more instruction_ids are not linked to any of the client's allowed servers: " + strings.Join(invalid, ","),
+			})
+			return
+		}
+		if err := h.instructionRepo.ReplaceOAuth2ClientInstructions(client.ID, req.InstructionIDs); err != nil {
+			_ = h.oauth2Repo.Delete(client.ID)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+	}
+
+	// Persist the BDD scope after the client row exists so the FK is satisfied.
+	var bddDTO *BDDFilterDTO
+	if req.BDDFilter != nil {
+		if err := h.oauth2Repo.UpdateBDDTables(r.Context(), client.ID, req.BDDFilter.UsedTableIDs); err != nil {
+			_ = h.oauth2Repo.Delete(client.ID)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		if len(req.BDDFilter.UsedTableIDs) > 0 {
+			ids := append([]string(nil), req.BDDFilter.UsedTableIDs...)
+			bddDTO = &BDDFilterDTO{UsedTableIDs: ids}
+		}
+	}
+
 	var expiresStr *string
 	if client.ExpiresAt != nil {
 		s := client.ExpiresAt.UTC().Format(time.RFC3339)
@@ -193,6 +263,7 @@ func (h *Handler) createOAuth2Client(w http.ResponseWriter, r *http.Request) {
 		SecretPrefix:          client.SecretPrefix,
 		ServerIDs:             req.ServerIDs,
 		ServerTools:           buildOAuth2ServerToolsResponse(client.Tools),
+		InstructionIDs:        req.InstructionIDs,
 		AccessTokenTTL:        client.AccessTokenTTL,
 		IsActive:              client.IsActive,
 		CreatedAt:             client.CreatedAt.UTC().Format(time.RFC3339),
@@ -201,6 +272,11 @@ func (h *Handler) createOAuth2Client(w http.ResponseWriter, r *http.Request) {
 		GrantTypes:            createGrantTypes,
 		DynamicallyRegistered: client.DynamicallyRegistered,
 		LeexiFilter:           oauth2ClientLeexiFilterToDTO(&client),
+		RingoverFilter:        oauth2ClientRingoverFilterToDTO(&client),
+		BDDFilter:             bddDTO,
+		ZohoFilter:            oauth2ClientZohoFilterToDTO(&client),
+
+		InjectInstructionsIntoTools: client.InjectInstructionsIntoTools,
 	})
 }
 
@@ -241,6 +317,9 @@ func (h *Handler) updateOAuth2Client(w http.ResponseWriter, r *http.Request, id 
 	if req.Description != nil {
 		updates["description"] = *req.Description
 	}
+	if req.InjectInstructionsIntoTools != nil {
+		updates["inject_instructions_into_tools"] = *req.InjectInstructionsIntoTools
+	}
 
 	if len(req.RedirectURIs) > 0 {
 		redirectJSON, _ := json.Marshal(req.RedirectURIs)
@@ -255,7 +334,7 @@ func (h *Handler) updateOAuth2Client(w http.ResponseWriter, r *http.Request, id 
 
 	if req.LeexiFilter != nil {
 		mode, userUUIDs, teamUUIDs, lerr := resolveLeexiFilterForCreate(
-			r.Context(), h.leexiAdmin, req.LeexiFilter, existing.CreatedBy,
+			r.Context(), h.leexiAdmin, req.LeexiFilter, existing.CreatedBy, true, /* OAuth2 client path */
 		)
 		if lerr != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": lerr.Error()})
@@ -264,6 +343,32 @@ func (h *Handler) updateOAuth2Client(w http.ResponseWriter, r *http.Request, id 
 		updates["leexi_filter_mode"] = mode
 		updates["leexi_allowed_user_uuids"] = userUUIDs
 		updates["leexi_allowed_team_uuids"] = teamUUIDs
+	}
+
+	if req.RingoverFilter != nil {
+		mode, userIDs, teamIDs, rerr := resolveRingoverFilterForCreate(
+			r.Context(), h.ringoverAdmin, req.RingoverFilter, existing.CreatedBy, true, /* OAuth2 client path */
+		)
+		if rerr != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": rerr.Error()})
+			return
+		}
+		updates["ringover_filter_mode"] = mode
+		updates["ringover_allowed_user_ids"] = userIDs
+		updates["ringover_allowed_team_ids"] = teamIDs
+	}
+
+	if req.ZohoFilter != nil {
+		if err := applyZohoFilterToDBRow(
+			req.ZohoFilter,
+			func(m string) { existing.ZohoFilterMode = m },
+			func(b json.RawMessage) { existing.ZohoAllowedEmails = b },
+		); err != nil {
+			writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
+			return
+		}
+		updates["zoho_filter_mode"] = existing.ZohoFilterMode
+		updates["zoho_allowed_emails"] = existing.ZohoAllowedEmails
 	}
 
 	if len(updates) > 0 {
@@ -275,6 +380,46 @@ func (h *Handler) updateOAuth2Client(w http.ResponseWriter, r *http.Request, id 
 
 	if len(req.ServerIDs) > 0 {
 		if err := h.oauth2Repo.UpdateServers(id, req.ServerIDs); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+	}
+
+	if req.InstructionIDs != nil && h.instructionRepo != nil {
+		if msg := enforceSingleInstructionPick(req.InstructionIDs); msg != "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": msg})
+			return
+		}
+		allowed := req.ServerIDs
+		if len(allowed) == 0 {
+			allowed = make([]string, 0, len(existing.Servers))
+			for _, s := range existing.Servers {
+				allowed = append(allowed, s.ServerID)
+			}
+		}
+		invalid, vErr := h.instructionRepo.ValidateForScope(req.InstructionIDs, allowed)
+		if vErr != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": vErr.Error()})
+			return
+		}
+		if len(invalid) > 0 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"error": "one or more instruction_ids are not linked to any of the client's allowed servers: " + strings.Join(invalid, ","),
+			})
+			return
+		}
+		if err := h.instructionRepo.ReplaceOAuth2ClientInstructions(id, req.InstructionIDs); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+	}
+
+	if req.BDDFilter != nil {
+		if err := h.validateBDDFilter(r.Context(), req.BDDFilter); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		if err := h.oauth2Repo.UpdateBDDTables(r.Context(), id, req.BDDFilter.UsedTableIDs); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}
@@ -367,7 +512,27 @@ func (h *Handler) revokeOAuth2Client(w http.ResponseWriter, r *http.Request, id 
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
+func oauth2ClientZohoFilterToDTO(c *db.OAuth2Client) *ZohoFilterDTO {
+	if c == nil || c.ZohoFilterMode == "" || c.ZohoFilterMode == ZohoFilterModeNone {
+		return nil
+	}
+	dto := &ZohoFilterDTO{Mode: c.ZohoFilterMode}
+	if c.ZohoFilterMode == ZohoFilterModeUsers && len(c.ZohoAllowedEmails) > 0 {
+		_ = json.Unmarshal(c.ZohoAllowedEmails, &dto.AllowedEmails)
+	}
+	if c.ZohoFilterMode == ZohoFilterModeCreator {
+		dto.CreatorEmail = c.CreatedBy
+	}
+	return dto
+}
+
+// isOAuth2ClientOwner gates per-row mutations (read, update, revoke, delete).
+// Admins (role == "admin") bypass the ownership check so they can fix or remove
+// a client created by another user.
 func (h *Handler) isOAuth2ClientOwner(r *http.Request, client *db.OAuth2Client) bool {
+	if auth.UserRoleFromContext(r.Context()) == auth.RoleAdmin {
+		return true
+	}
 	if client.CreatedBy == "" {
 		return true
 	}
@@ -399,6 +564,14 @@ func toOAuth2ClientResponse(c db.OAuth2Client, decryptedSecret string) OAuth2Cli
 		serverIDs[i] = s.ServerID
 	}
 
+	var instructionIDs []string
+	if len(c.Instructions) > 0 {
+		instructionIDs = make([]string, 0, len(c.Instructions))
+		for _, i := range c.Instructions {
+			instructionIDs = append(instructionIDs, i.InstructionID)
+		}
+	}
+
 	var expiresStr *string
 	if c.ExpiresAt != nil {
 		s := c.ExpiresAt.UTC().Format(time.RFC3339)
@@ -422,6 +595,7 @@ func toOAuth2ClientResponse(c db.OAuth2Client, decryptedSecret string) OAuth2Cli
 		SecretPrefix:          c.SecretPrefix,
 		ServerIDs:             serverIDs,
 		ServerTools:           buildOAuth2ServerToolsResponse(c.Tools),
+		InstructionIDs:        instructionIDs,
 		AccessTokenTTL:        c.AccessTokenTTL,
 		IsActive:              c.IsActive,
 		CreatedBy:             c.CreatedBy,
@@ -432,5 +606,10 @@ func toOAuth2ClientResponse(c db.OAuth2Client, decryptedSecret string) OAuth2Cli
 		GrantTypes:            grantTypes,
 		DynamicallyRegistered: c.DynamicallyRegistered,
 		LeexiFilter:           oauth2ClientLeexiFilterToDTO(&c),
+		RingoverFilter:        oauth2ClientRingoverFilterToDTO(&c),
+		BDDFilter:             oauth2ClientBDDFilterToDTO(&c),
+		ZohoFilter:            oauth2ClientZohoFilterToDTO(&c),
+
+		InjectInstructionsIntoTools: c.InjectInstructionsIntoTools,
 	}
 }

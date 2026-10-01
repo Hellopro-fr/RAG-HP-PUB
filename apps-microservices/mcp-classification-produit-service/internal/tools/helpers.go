@@ -3,10 +3,13 @@ package tools
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/hellopro/mcp-classification-produit/internal/mcp"
 )
@@ -86,4 +89,16 @@ func doGet(ctx context.Context, clients *Clients, path string) ([]byte, error) {
 	}
 
 	return respBody, nil
+}
+
+// generateAutoID returns a synthetic id_produit for requests where the MCP
+// caller did not supply one. Format: "auto-" + 16 hex chars (64 bits of entropy).
+func generateAutoID() string {
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		// crypto/rand.Read failing is effectively fatal on Linux; fall back to
+		// a time-based nonce to avoid panicking a live tool call.
+		return fmt.Sprintf("auto-%016x", time.Now().UnixNano())
+	}
+	return "auto-" + hex.EncodeToString(b[:])
 }

@@ -133,8 +133,11 @@ func (s *SSEServer) handleMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Enrich context with the gateway-issued allowed-user-ids scope (if any).
+	scopedCtx := enrichRequestContext(r)
+
 	go func() {
-		resp := s.handler.Handle(context.WithoutCancel(r.Context()), &req)
+		resp := s.handler.Handle(context.WithoutCancel(scopedCtx), &req)
 		if resp == nil {
 			return
 		}

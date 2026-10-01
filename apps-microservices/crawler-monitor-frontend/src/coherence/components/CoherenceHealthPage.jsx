@@ -1,0 +1,310 @@
+import { useEffect, useState } from 'react';
+import { useLocation, Link } from 'react-router-dom';
+import { HeartPulse, AlertTriangle, AlertCircle, Info, CheckCircle, HelpCircle, ChevronDown, ChevronRight } from 'lucide-react';
+import { Button } from '../../components/ui/button';
+import { cn } from '../../lib/utils';
+import Pill from '../../components/ui/Pill';
+import StatTile from '../../components/ui/StatTile';
+import { useCoherenceSummary } from '../hooks';
+import { RULES } from '../rules';
+import {
+  useJobsQuery,
+  useCapacityQuery,
+  useCapacityPlanningQuery,
+} from '../../hooks/queries';
+
+const SEVERITY_ICON = {
+  info: Info,
+  warning: AlertTriangle,
+  critical: AlertCircle,
+};
+
+const SEVERITY_COLOR = {
+  info:     'text-info border-info/20 bg-info-soft',
+  warning:  'text-warn border-warn/20 bg-warn-soft',
+  critical: 'text-err border-err/20 bg-err-soft',
+};
+
+export default function CoherenceHealthPage({ token }) {
+  const { hash } = useLocation();
+  const { verdicts, ignoredRules, setIgnored, byStatus, total, lastEvaluatedAt, retryState, manualRetry } =
+    useCoherenceSummary();
+  const [showOk, setShowOk] = useState(false);
+
+  // Le CoherenceProvider ne fait que LIRE le cache (il est monté partout, il ne
+  // doit pas maintenir /api/jobs actif). /health est la page de diagnostic :
+  // c'est elle qui charge réellement les sources.
+  useJobsQuery(token);
+  useCapacityQuery(token);
+  useCapacityPlanningQuery(token, '1h');
+
+  // Hash scroll + 2s highlight ring
+  useEffect(() => {
+    if (!hash) return;
+    const id = hash.replace('#', '');
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    el.classList.add('ring-2', 'ring-accent');
+    const t = setTimeout(() => {
+      el.classList.remove('ring-2', 'ring-accent');
+    }, 2000);
+    return () => clearTimeout(t);
+  }, [hash]);
+
+  // Categorize rules: violated, ok, indéterminé, ignored.
+  // verdicts[id] === null ⇒ la règle n'a PAS pu être évaluée (source absente) :
+  // on ne la compte surtout pas comme « OK ».
+  const violated = [];
+  const ok = [];
+  const indeterminate = [];
+  const ignored = [];
+  for (const rule of RULES) {
+    const verdict = verdicts[rule.id];
+    if (ignoredRules.has(rule.id)) {
+      ignored.push(rule);
+    } else if (verdict === null || verdict === undefined) {
+      indeterminate.push(rule);
+    } else if (verdict.length > 0) {
+      violated.push(rule);
+    } else {
+      ok.push(rule);
+    }
+  }
+
+  const copyContext = (rule, rviolations) => {
+    const payload = {
+      ruleId: rule.id,
+      label: rule.label,
+      severity: rule.severity,
+      violations: rviolations,
+      timestamp: new Date().toISOString(),
+      url: window.location.href,
+      userAgent: navigator.userAgent,
+    };
+    navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+  };
+
+  return (
+    <div className="p-4 space-y-4">
+      <div className="flex items-start gap-3 mb-5">
+        <HeartPulse className="h-5 w-5 text-ink-2 mt-1 flex-shrink-0" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-3">
+            <h1 className="text-[26px] font-semibold tracking-[-0.025em] text-ink-0 font-display">
+              Cohérence des données
+            </h1>
+            {violated.length > 0 ? (
+              <span aria-label={`${violated.length} violation${violated.length > 1 ? 's' : ''} détectée${violated.length > 1 ? 's' : ''}`}>
+                <Pill tone="err" dot>{violated.length} violation{violated.length > 1 ? 's' : ''}</Pill>
+              </span>
+            ) : indeterminate.length > 0 ? (
+              <span aria-label={`${indeterminate.length} règle${indeterminate.length > 1 ? 's' : ''} non évaluable${indeterminate.length > 1 ? 's' : ''}`}>
+                <Pill tone="neutral" dot>indéterminé</Pill>
+              </span>
+            ) : (
+              <span aria-label="Aucune violation détectée"><Pill tone="ok">tout vert</Pill></span>
+            )}
+          </div>
+          <p className="text-[13px] text-ink-2 mt-1">Cohérence des données affichées · invariants applicatifs</p>
+        </div>
+        <span className="font-mono text-[11px] text-ink-3 whitespace-nowrap mt-1">
+          {total} règles · évalué il y a {lastEvaluatedAt > 0
+            ? `${Math.max(0, Math.round((Date.now() - lastEvaluatedAt) / 1000))}s`
+            : '—'}
+        </span>
+      </div>
+
+      {/* KPI Strip — StatTile */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+        <StatTile
+          label="Total règles"
+          value={total}
+          accent="var(--ink-1)"
+        />
+        <StatTile
+          label="Warnings"
+          value={byStatus.warning}
+          sub={total > 0 ? `${Math.round(byStatus.warning / total * 100)}%` : '0%'}
+          accent="var(--warn)"
+        />
+        <StatTile
+          label="Critique"
+          value={byStatus.critical}
+          sub={total > 0 ? `${Math.round(byStatus.critical / total * 100)}%` : '0%'}
+          accent="var(--err)"
+        />
+        <StatTile
+          label="OK"
+          value={ok.length}
+          sub={indeterminate.length > 0 ? `${indeterminate.length} indéterminé${indeterminate.length > 1 ? 's' : ''}` : (total > 0 ? `${Math.round(ok.length / total * 100)}%` : '0%')}
+          accent="var(--ok)"
+        />
+      </div>
+
+      {violated.length > 0 && (
+        <div className="space-y-3">
+          <h2 className="text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-3">
+            Violations ({violated.length})
+          </h2>
+          {violated.map((rule) => (
+            <RuleViolationCard
+              key={rule.id}
+              rule={rule}
+              violations={verdicts[rule.id] ?? []}
+              retryState={retryState[rule.id]}
+              onCopy={() => copyContext(rule, verdicts[rule.id] ?? [])}
+              onIgnore={() => setIgnored(rule.id, true)}
+              onManualRetry={() => manualRetry(rule.id)}
+            />
+          ))}
+        </div>
+      )}
+
+      {indeterminate.length > 0 && (
+        <div className="space-y-3">
+          <h2 className="text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-3">
+            Indéterminé ({indeterminate.length})
+          </h2>
+          <ul className="space-y-1 text-sm">
+            {indeterminate.map((rule) => (
+              <li key={rule.id} className="flex items-center gap-2 text-ink-3">
+                <HelpCircle className="h-3.5 w-3.5 text-ink-2 flex-shrink-0" />
+                <span className="font-mono">{rule.id}</span>
+                <span>— {rule.label}</span>
+                <span className="ml-auto flex-shrink-0 font-mono text-[10px] text-ink-3">
+                  source{(rule.sources ?? []).length > 1 ? 's' : ''} indisponible{(rule.sources ?? []).length > 1 ? 's' : ''} : {(rule.sources ?? []).join(', ')}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <div className="space-y-3">
+        <button
+          type="button"
+          onClick={() => setShowOk((s) => !s)}
+          aria-expanded={showOk}
+          aria-controls="ok-rules-list"
+          className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-3 hover:text-ink-1"
+        >
+          {showOk ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+          OK ({ok.length})
+        </button>
+        {showOk && (
+          <ul id="ok-rules-list" className="space-y-1 text-sm">
+            {ok.map((rule) => {
+              const relTime = rule.lastEvaluatedAt
+                ? `il y a ${Math.max(0, Math.round((Date.now() - rule.lastEvaluatedAt) / 1000))}s`
+                : null;
+              return (
+                <li key={rule.id} className="flex items-center gap-2 text-ink-3">
+                  <CheckCircle className="h-3.5 w-3.5 text-ok flex-shrink-0" />
+                  <span className="font-mono">{rule.id}</span>
+                  <span>— {rule.label}</span>
+                  <span className="ml-auto flex items-center gap-3 flex-shrink-0">
+                    <span className="font-mono text-[11px] text-ink-1">{rule.value ?? '—'}</span>
+                    {relTime && <span className="font-mono text-[10px] text-ink-3">{relTime}</span>}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+
+      {ignored.length > 0 && (
+        <div className="space-y-3">
+          <h2 className="text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-3">
+            Ignorées ({ignored.length})
+          </h2>
+          <ul className="space-y-2">
+            {ignored.map((rule) => (
+              <li key={rule.id} className="flex items-center justify-between rounded-md border border-hairline bg-bg-2 px-3 py-2 text-sm">
+                <span>
+                  <span className="font-mono">{rule.id}</span> — {rule.label}
+                </span>
+                <Button variant="outline" size="sm" onClick={() => setIgnored(rule.id, false)}>
+                  Réactiver
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RuleViolationCard({ rule, violations, retryState, onCopy, onIgnore, onManualRetry }) {
+  const Icon = SEVERITY_ICON[rule.severity] ?? AlertTriangle;
+  const color = SEVERITY_COLOR[rule.severity] ?? SEVERITY_COLOR.warning;
+  const rs = retryState ?? { attempts: 0, exhausted: false };
+  const canRefresh = !!rule.autoRetry;
+  const relTime = rule.lastEvaluatedAt
+    ? `il y a ${Math.max(0, Math.round((Date.now() - rule.lastEvaluatedAt) / 1000))}s`
+    : null;
+
+  return (
+    <div id={`rule-${rule.id}`} className={cn('p-4 border-2 transition-shadow rounded-lg', color)}>
+      <div className="flex items-start gap-3">
+        <Icon className="h-5 w-5 shrink-0 mt-0.5" />
+        <div className="flex-1 min-w-0 space-y-2">
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-mono text-sm">{rule.id}</span>
+              <span className="rounded bg-surface px-1.5 py-0.5 text-[10px] uppercase">
+                {rule.severity}
+              </span>
+              {rule.value != null && (
+                <span className="font-mono text-[11px] text-ink-1 ml-auto">{rule.value}</span>
+              )}
+              {relTime && (
+                <span className="font-mono text-[10px] text-ink-3">{relTime}</span>
+              )}
+              {rs.exhausted && (
+                <span className="rounded bg-surface px-1.5 py-0.5 text-[10px] font-mono">
+                  🔁 {rs.attempts}/{rule.autoRetry.maxAttempts} refetch sans effet
+                </span>
+              )}
+              {!rs.exhausted && rs.attempts > 0 && (
+                <span className="rounded bg-surface px-1.5 py-0.5 text-[10px] font-mono">
+                  🔁 retry {rs.attempts}/{rule.autoRetry.maxAttempts}
+                </span>
+              )}
+            </div>
+            <div className="mt-0.5 font-semibold text-ink-0">{rule.label}</div>
+            <div className="mt-1 text-xs text-ink-3">{rule.description}</div>
+          </div>
+
+          <div className="space-y-1">
+            {violations.map((v, i) => (
+              <div key={`${v.itemKey ?? 'global'}-${v.message ?? i}`} className="rounded bg-surface p-2 text-sm">
+                {v.itemKey && <span className="font-mono text-xs text-ink-3">[{v.itemKey}] </span>}
+                {v.message}
+              </div>
+            ))}
+          </div>
+
+          <div className="text-[11px] text-ink-3">
+            Sources : {(rule.sources ?? []).join(', ')}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            {canRefresh && (
+              <Button variant="outline" size="sm" onClick={onManualRetry}>🔄 Rafraîchir</Button>
+            )}
+            <Button variant="outline" size="sm" onClick={onCopy}>📋 Copier contexte</Button>
+            <Button variant="outline" size="sm" onClick={onIgnore}>🔕 Ignorer session</Button>
+            {rule.attachUiHint && (
+              <Button variant="outline" size="sm" asChild>
+                <Link to={rule.attachUiHint.path}>↗ {rule.attachUiHint.label}</Link>
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

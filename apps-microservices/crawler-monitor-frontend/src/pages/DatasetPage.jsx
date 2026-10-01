@@ -2,8 +2,10 @@ import { useParams, useNavigate } from 'react-router-dom';
 import DatasetAnalyzer from '../components/DatasetAnalyzer';
 
 /**
- * Full-screen page wrapping the DatasetAnalyzer.
- * Path: /jobs/:id/dataset — replaces the previous modal opened from JobDetails.
+ * Page autonome de l'analyseur de dataset — route `/jobs/:id/dataset`.
+ *
+ * DatasetAnalyzer porte son propre en-tete (titre + bouton « Retour au job »),
+ * qui ramene ici sur /jobs/:id.
  */
 const DatasetPage = ({ token }) => {
   const { id } = useParams();

@@ -9,6 +9,12 @@ type Config struct {
 
 	RingoverAPIKey     string
 	RingoverAPIBaseURL string
+	DefaultCountryCode string
+
+	// AdminToken is the shared secret required on the X-Admin-Token header to
+	// reach the non-MCP /admin/* endpoints. When empty, those endpoints are
+	// disabled entirely.
+	AdminToken string
 }
 
 func Load() *Config {
@@ -19,6 +25,9 @@ func Load() *Config {
 
 		RingoverAPIKey:     getEnv("RINGOVER_API_KEY", ""),
 		RingoverAPIBaseURL: getEnv("RINGOVER_API_BASE_URL", "https://public-api.ringover.com/v2"),
+		DefaultCountryCode: getEnv("RINGOVER_DEFAULT_COUNTRY_CODE", "33"),
+
+		AdminToken: getEnv("MCP_RINGOVER_ADMIN_TOKEN", ""),
 	}
 }
 

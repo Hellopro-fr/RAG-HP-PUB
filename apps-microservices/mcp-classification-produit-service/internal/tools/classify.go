@@ -8,13 +8,19 @@ import (
 )
 
 // handleClassifyProduct classifies a single product via the classification API.
+// id_produit is optional: if missing or empty, a synthetic "auto-<hex>" value
+// is generated at the MCP layer so the backend contract is preserved.
 func handleClassifyProduct(ctx context.Context, clients *Clients, args map[string]any) (*mcp.CallToolResult, error) {
 	idProduit, _ := args["id_produit"].(string)
 	nomProduit, _ := args["nom_produit"].(string)
 	description, _ := args["description"].(string)
 
-	if idProduit == "" || nomProduit == "" || description == "" {
-		return errorResult("id_produit, nom_produit, and description are required"), nil
+	if nomProduit == "" || description == "" {
+		return errorResult("nom_produit and description are required"), nil
+	}
+
+	if idProduit == "" {
+		idProduit = generateAutoID()
 	}
 
 	payload := map[string]any{
@@ -39,20 +45,33 @@ func handleClassifyProduct(ctx context.Context, clients *Clients, args map[strin
 }
 
 // handleClassifyProductsBatch classifies a batch of products via the classification API.
+// For each item that is a map, id_produit is optional: if missing or empty a synthetic
+// "auto-<hex>" value is injected so the backend always receives a non-empty string.
+// Non-map items are forwarded untouched; the backend returns structured per-item errors.
 func handleClassifyProductsBatch(ctx context.Context, clients *Clients, args map[string]any) (*mcp.CallToolResult, error) {
 	produits, ok := args["produits"]
 	if !ok {
 		return errorResult("produits is required"), nil
 	}
 
-	// Validate that produits is an array
 	produitsSlice, ok := produits.([]any)
 	if !ok || len(produitsSlice) == 0 {
 		return errorResult("produits must be a non-empty array"), nil
 	}
 
+	for _, item := range produitsSlice {
+		m, isMap := item.(map[string]any)
+		if !isMap {
+			continue
+		}
+		id, _ := m["id_produit"].(string)
+		if id == "" {
+			m["id_produit"] = generateAutoID()
+		}
+	}
+
 	payload := map[string]any{
-		"produits": produits,
+		"produits": produitsSlice,
 	}
 
 	body, err := doPost(ctx, clients, "/classification/classify/batch", payload)

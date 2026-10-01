@@ -30,9 +30,50 @@ class Settings(BaseSettings):
     # OOM restart configuration
     MAX_OOM_RESTARTS: int = 2
 
-    # GCS download daemon paths
-    DOWNLOAD_REQUESTS_PATH: str = "/app/gcs-requests"
-    DOWNLOAD_RESULTS_PATH: str = "/app/gcs-downloads"
+    # GCS download daemon paths (must match docker-compose.yml bind target for the
+    # crawler-service container; daemon reads the same env var names on the host)
+    DOWNLOAD_REQUESTS_PATH: str = "/app/download_requests"
+    DOWNLOAD_RESULTS_PATH: str = "/app/download_results"
+
+    # Stash flow paths (mirror download paths; bind targets must match docker-compose.yaml)
+    STASH_SHARED_PATH: str = "/app/stash"
+    STASH_DOWNLOAD_REQUESTS_PATH: str = "/app/gcs-stash-requests"
+    STASH_DOWNLOAD_RESULTS_PATH: str = "/app/gcs-stash-downloads"
+
+    # Stash->archive move flow (spec 2026-06-01 P3). Service writes .move-request;
+    # the move-flow daemon does `gcloud storage mv stash/{id} crawls/{id}`.
+    # Prefix names match the daemon's env vars (download_daemon.sh) so a single
+    # .env entry configures both layers; the daemon is the actual consumer.
+    MOVE_REQUESTS_PATH: str = "/app/gcs-move-requests"
+    MOVE_RESULTS_PATH: str = "/app/gcs-move-results"
+    MOVE_SOURCE_PREFIX: str = "stash"
+    MOVE_TARGET_PREFIX: str = "crawls"
+    # Server-side same-bucket rewrite is fast but not instant for very large
+    # objects; 600s keeps the inline /archive call from 504-ing on big crawls.
+    MOVE_TIMEOUT_SECONDS: int = 600
+
+    # Stash flow Redis lock TTLs and timeouts (seconds).
+    # STASH_LOCK_TTL is bumped to 1800s (was 600s) so it exceeds nginx
+    # proxy_read_timeout (600s on /crawler/ default location) and survives
+    # any single nginx retry window; the heartbeat below renews TTL
+    # mid-operation to handle larger crawls.
+    STASH_LOCK_TTL_SECONDS: int = 1800
+    UNSTASH_LOCK_TTL_SECONDS: int = 600
+    UNSTASH_TIMEOUT_SECONDS: int = 300
+    UNSTASH_CLEANUP_GRACE_SECONDS: int = 30
+
+    # Archive flow Redis lock TTL (seconds). Previously hardcoded in
+    # crawler_manager.archive_crawl; surfaced here for parity with stash
+    # and for tunability.
+    ARCHIVE_LOCK_TTL_SECONDS: int = 1800
+
+    # Long-running lock heartbeat (used by stash + archive).
+    # INTERVAL = TTL / 6 → up to 5 missed renewals before TTL expires
+    # (defense against transient Redis latency).
+    # MAX_DURATION = 4h hard cap; past this, heartbeat stops renewing so
+    # a truly hung op cannot indefinitely hold the lock.
+    LOCK_HEARTBEAT_INTERVAL_SECONDS: int = 300
+    LOCK_HEARTBEAT_MAX_DURATION_SECONDS: int = 14400
 
     # GCS download timeout in seconds
     GCS_DOWNLOAD_TIMEOUT_SECONDS: int = 300
@@ -43,6 +84,51 @@ class Settings(BaseSettings):
     # Stale job detection thresholds (seconds)
     STALE_JOB_THRESHOLD_LOCAL: int = 180   # Local jobs: PID check + 3 min heartbeat gap
     STALE_JOB_THRESHOLD_REMOTE: int = 600  # Remote jobs: 10 min grace period for owning replica
+
+    # Node-side monitor thresholds (informational; actual values passed via env to crawler subprocess)
+    REDIS_LOSS_THRESHOLD_MS: int = 60_000
+    PROGRESS_STALL_THRESHOLD_MS: int = 600_000
+
+    # --- Auto-stash workflow (spec 2026-06-01) ---
+    # Master gate for the auto-stash reconcile sweep (P2). Off by default.
+    AUTO_STASH_ENABLED: bool = False
+    # After a /results download, wait this long before stashing (happy path).
+    STASH_GRACE_SECONDS: int = 3600
+    # Stash a never-downloaded terminal crawl after this long (also the
+    # investigation window for failed crawls).
+    STASH_SAFETY_TIMEOUT_SECONDS: int = 172800
+    # Disk-pressure override: at/above this used-% the sweep stashes the
+    # largest terminal crawls early, regardless of grace.
+    STASH_DISK_HIGH_WATER_PCT: int = 85
+    # Cap on crawls stashed per sweep tick (bounds upload-daemon load).
+    STASH_MAX_PER_SWEEP: int = 5
+
+    # --- Archived-leftover reclean (reconcile sweep) ---
+    # Kill-switch for re-cleaning storage/ subtrees left under status='archived'
+    # crawls (crash window between mark and cleanup, idempotent-retry/GCS-fallback
+    # archive branches, /html re-extraction, update-mode restore).
+    ARCHIVED_RECLEAN_ENABLED: bool = True
+    # Grace before re-cleaning, so a fresh /html extraction stays browsable.
+    ARCHIVED_RECLEAN_MIN_AGE_SECONDS: int = 86400
+    # Cap on leftovers re-cleaned per reconcile tick (bounds rmtree I/O).
+    ARCHIVED_RECLEAN_MAX_PER_TICK: int = 3
+    # Host-generated allowlist of crawl_ids whose tar is PROVEN present in GCS
+    # (one id per line, written by tools/verify_archives_in_gcs.sh onto the
+    # archives shared volume — same volume as ARCHIVES_SHARED_PATH). The
+    # container has no GCS access, so this file is the only trusted evidence;
+    # missing/empty file => the sweep deletes NOTHING (fail-closed).
+    ARCHIVED_RECLEAN_VERIFIED_LIST: str = "/app/archives/verified_in_gcs.list"
+
+    # --- Archived-status repair (spec 2026-08-07) ---
+    # Flips 'finished' blobs whose tar is listed in the GCS allowlist back to
+    # 'archived', so GET /results stops 404-ing on them. Default off: deploy
+    # inert, read the dry-run, then flip.
+    ARCHIVED_STATUS_REPAIR_ENABLED: bool = False
+    # Redis writes per tick. Starts low: reconcile_leader_lock has a 600s TTL and
+    # NO heartbeat (crawler_manager.py:3363), so a tick that outlives it would let
+    # a second leader in. Raise only after watching the "Reconciliation complete"
+    # timing.
+    ARCHIVED_STATUS_REPAIR_MAX_PER_TICK: int = 10
 
     model_config = {
         "env_file": ".env",

@@ -2,9 +2,12 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/hellopro/mcp-ringover/internal/mcp"
+	"github.com/hellopro/mcp-ringover/internal/ringover"
+	"github.com/hellopro/mcp-ringover/internal/transport"
 )
 
 const getCallsDescription = "List recent calls from Ringover with optional limit"
@@ -25,6 +28,21 @@ func handleGetCalls(ctx context.Context, clients *Clients, args map[string]any) 
 		if f, ok := v.(float64); ok {
 			limit = int(f)
 		}
+	}
+
+	if allowed, restricted := transport.AllowedUserIDsFromContext(ctx); restricted {
+		if len(allowed) == 0 {
+			return errorResult("access denied: token scope grants access to no Ringover users"), nil
+		}
+		data, err := clients.Ringover.PostCalls(ctx, ringover.PostCallsRequest{
+			Filter:     "ADVANCED",
+			LimitCount: limit,
+			Advanced:   &ringover.AdvancedCallsFilter{Users: allowed},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("PostCalls: %w", err)
+		}
+		return rawJSONResult(data), nil
 	}
 
 	data, err := clients.Ringover.GetCalls(ctx, limit)
@@ -74,6 +92,25 @@ func handleListCallsByDate(ctx context.Context, clients *Clients, args map[strin
 		}
 	}
 
+	// When the gateway has declared a user scope, use POST /calls with
+	// advanced.users for server-side filtering. GET /calls has no user filter.
+	if allowed, restricted := transport.AllowedUserIDsFromContext(ctx); restricted {
+		if len(allowed) == 0 {
+			return errorResult("access denied: token scope grants access to no Ringover users"), nil
+		}
+		data, err := clients.Ringover.PostCalls(ctx, ringover.PostCallsRequest{
+			Filter:     "ADVANCED",
+			StartDate:  startDate,
+			EndDate:    endDate,
+			LimitCount: limit,
+			Advanced:   &ringover.AdvancedCallsFilter{Users: allowed},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("PostCalls: %w", err)
+		}
+		return rawJSONResult(data), nil
+	}
+
 	data, err := clients.Ringover.ListCallsByDate(ctx, startDate, endDate, limit)
 	if err != nil {
 		return nil, fmt.Errorf("ListCallsByDate: %w", err)
@@ -83,7 +120,7 @@ func handleListCallsByDate(ctx context.Context, clients *Clients, args map[strin
 
 // ── search_calls ─────────────────────────────────────────────────────────────
 
-const searchCallsDescription = "Search and filter calls by type, phone number, or user. All parameters are optional. Use call_type to filter by ANSWERED, MISSED, OUT (outbound), or VOICEMAIL."
+const searchCallsDescription = "Search and filter calls by type, phone number, or user. All parameters are optional. The phone number matches either party of the call (caller or callee) and is normalized automatically (national or international format accepted). Results default to the last 15 days unless start_date/end_date are given (max 15-day range per request)."
 const searchCallsInputSchema = `{
 	"type": "object",
 	"properties": {
@@ -94,11 +131,19 @@ const searchCallsInputSchema = `{
 		},
 		"phone_number": {
 			"type": "string",
-			"description": "Filter by phone number (caller or callee)"
+			"description": "Filter by phone number of either party (caller or callee). Accepts national or international format (e.g. 0611352493, +33 6 11 35 24 93); normalized automatically. An unrecognizable value is ignored."
 		},
 		"user_id": {
 			"type": "string",
 			"description": "Filter by Ringover user ID"
+		},
+		"start_date": {
+			"type": "string",
+			"description": "Start of the date range (ISO 8601 or YYYY-MM-DD). Defaults to the last 15 days. Max range 15 days per request."
+		},
+		"end_date": {
+			"type": "string",
+			"description": "End of the date range (ISO 8601 or YYYY-MM-DD). Max range 15 days per request."
 		},
 		"limit": {
 			"type": "integer",
@@ -112,6 +157,8 @@ func handleSearchCalls(ctx context.Context, clients *Clients, args map[string]an
 	callType, _ := args["call_type"].(string)
 	phoneNumber, _ := args["phone_number"].(string)
 	userID, _ := args["user_id"].(string)
+	startDate, _ := args["start_date"].(string)
+	endDate, _ := args["end_date"].(string)
 	limit := 20
 	if v, ok := args["limit"]; ok {
 		if f, ok := v.(float64); ok {
@@ -119,7 +166,46 @@ func handleSearchCalls(ctx context.Context, clients *Clients, args map[string]an
 		}
 	}
 
-	data, err := clients.Ringover.SearchCalls(ctx, callType, phoneNumber, userID, limit)
+	// Resolve the effective user-id filter: intersect caller filter with scope.
+	effectiveIDs, err := effectiveUserIDs(ctx, userID)
+	if err != nil {
+		return errorResult(err.Error()), nil
+	}
+
+	// Normalize the phone number to Ringover's E.164-without-'+' integer form.
+	// An unparseable/empty value yields ok=false and the phone filter is skipped.
+	var number int64
+	hasNumber := false
+	if phoneNumber != "" {
+		number, hasNumber = ringover.NormalizePhoneNumber(phoneNumber, clients.DefaultCountryCode)
+	}
+
+	// Phone-number filtering and user-scope both live in POST /calls' advanced
+	// object, so they combine in one request. GET /calls supports neither, so it
+	// is used only when no advanced criteria are present.
+	if hasNumber || len(effectiveIDs) > 0 {
+		advanced := &ringover.AdvancedCallsFilter{Users: effectiveIDs}
+		if hasNumber {
+			// Match either side of the call (external party or internal line).
+			advanced.ExtNumbers = []int64{number}
+			advanced.IntNumbers = []int64{number}
+		}
+		data, err := clients.Ringover.PostCalls(ctx, ringover.PostCallsRequest{
+			Filter:     "ADVANCED",
+			CallType:   callTypeForPostCalls(callType),
+			StartDate:  startDate,
+			EndDate:    endDate,
+			LimitCount: limit,
+			Advanced:   advanced,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("PostCalls: %w", err)
+		}
+		return rawJSONResult(data), nil
+	}
+
+	// No phone number and no user scope → lightweight GET /calls.
+	data, err := clients.Ringover.SearchCalls(ctx, callType, startDate, endDate, limit)
 	if err != nil {
 		return nil, fmt.Errorf("SearchCalls: %w", err)
 	}
@@ -159,7 +245,12 @@ func handleGetCallStatsByUser(ctx context.Context, clients *Clients, args map[st
 	}
 	userID, _ := args["user_id"].(string)
 
-	data, err := clients.Ringover.GetCallStatsByUser(ctx, startDate, endDate, userID)
+	effectiveID, err := effectiveStatsUserID(ctx, userID)
+	if err != nil {
+		return errorResult(err.Error()), nil
+	}
+
+	data, err := clients.Ringover.GetCallStatsByUser(ctx, startDate, endDate, effectiveID)
 	if err != nil {
 		return nil, fmt.Errorf("GetCallStatsByUser: %w", err)
 	}
@@ -168,7 +259,7 @@ func handleGetCallStatsByUser(ctx context.Context, clients *Clients, args map[st
 
 // ── get_call_details ─────────────────────────────────────────────────────────
 
-const getCallDetailsDescription = "Get detailed information about a specific call"
+const getCallDetailsDescription = "Get detailed information about a specific call, including its transcription. The transcription is fetched via GET /transcriptions/{call_id} and is returned when the team transcription feature is enabled."
 const getCallDetailsInputSchema = `{
 	"type": "object",
 	"properties": {
@@ -191,5 +282,40 @@ func handleGetCallDetails(ctx context.Context, clients *Clients, args map[string
 		return nil, fmt.Errorf("GetCallDetails: %w", err)
 	}
 
-	return rawJSONResult(data), nil
+	// Under a gateway-enforced scope, verify that the call belongs to an
+	// allowed user before returning it. /calls/{id} has no filter parameter,
+	// so ownership is checked post-fetch.
+	if err := checkCallOwnedByAllowed(ctx, extractCallUserID(data)); err != nil {
+		return errorResult(err.Error()), nil
+	}
+
+	// Enrich with the transcription. GET /transcriptions/{call_id} is gated by
+	// the team transcription feature (not by API-key permissions) and needs no
+	// channel/calluuid conversion. A failure (e.g. feature disabled = 401, or
+	// no transcription for the call = 404) is reported in the transcription
+	// field without failing the whole call.
+	combined := struct {
+		Call          json.RawMessage      `json:"call"`
+		Transcription *transcriptionResult `json:"transcription"`
+	}{Call: data, Transcription: fetchCallTranscription(ctx, clients, callID)}
+
+	return jsonResult(combined), nil
+}
+
+// transcriptionResult holds the outcome of the /transcriptions/{call_id} fetch:
+// the raw transcription payload on success, or an error string on failure.
+type transcriptionResult struct {
+	Data  json.RawMessage `json:"data,omitempty"`
+	Error string          `json:"error,omitempty"`
+}
+
+// fetchCallTranscription retrieves the transcription for callID. It never
+// returns an error: a failure is captured in the Error field so the caller
+// still receives the call details.
+func fetchCallTranscription(ctx context.Context, clients *Clients, callID string) *transcriptionResult {
+	data, err := clients.Ringover.GetTranscriptionByCallID(ctx, callID)
+	if err != nil {
+		return &transcriptionResult{Error: fmt.Sprintf("transcription fetch failed: %v", err)}
+	}
+	return &transcriptionResult{Data: data}
 }

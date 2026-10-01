@@ -4,6 +4,7 @@ import logging
 from typing import Optional
 from urllib.parse import urlparse
 from app.core.config import settings
+from app.services.scraper import ScrapeResult, scrape_html, build_proxy_url, FAILURE_CAUSE_MAX_LEN
 
 # Erreurs non-retryables pour la MÊME URL (inutile de réessayer la même URL)
 # mais qui DOIVENT déclencher Phase 2 (variantes http/https, www/sans-www).
@@ -25,7 +26,34 @@ _FATAL_ERRORS = (
 # Union des deux pour la fonction _is_retryable_error (rétrocompatibilité)
 _NON_RETRYABLE_ERRORS = _VARIANT_ELIGIBLE_ERRORS + _FATAL_ERRORS
 
+# Échecs qu'un changement de variante d'URL ne peut PAS réparer.
+# Basculer http/https ou www/sans-www ne rend pas un site lent plus rapide,
+# et ne remplit pas une page vide. Formulations stables sur les DEUX moteurs
+# (Camoufox/Firefox comme Chromium) — contrairement à _VARIANT_ELIGIBLE_ERRORS
+# ci-dessus qui ne contient que des codes Chromium et ne matche donc jamais
+# en production (CAMOUFOX_ENABLED=True par défaut).
+_VARIANT_POINTLESS_ERRORS = (
+    'Timeout',                     # « Timeout 30000ms exceeded » — Playwright, les 2 moteurs
+    'Contenu vide ou trop court',  # posé plus bas, branche contenu insuffisant
+)
+
 logger = logging.getLogger(__name__)
+
+
+def _publish_failure(sink: Optional[dict], failure: Optional[dict]) -> None:
+    """Recopie la cause agrégée dans le dict de l'appelant, si les deux existent."""
+    if sink is not None and failure:
+        sink.update(failure)
+
+
+def _derive_failure(sink: dict, fallback_cause: str) -> dict:
+    """Cause d'une tentative ratée sur exception : le sink d'attempt/variante s'il
+    porte une 'cause' (un des 4 points instrumentés de scrape_html a écrit),
+    sinon un stage 'browser' déduit de cette absence — jamais du texte de
+    l'erreur. Centralise aussi la troncature (même limite que scraper.py)."""
+    if sink.get('cause'):
+        return dict(sink)
+    return {'cause': fallback_cause[:FAILURE_CAUSE_MAX_LEN], 'stage': 'browser'}
 
 
 class RedirectTracker:
@@ -186,7 +214,11 @@ def _generate_url_variants(url: str) -> list[str]:
         return []
 
 
-async def fetch_html(url: str, proxy: Optional[str] = None) -> Optional[tuple[str, str]]:
+async def fetch_html(
+    url: str,
+    proxy: Optional[str] = None,
+    error_sink: Optional[dict] = None,
+) -> Optional[ScrapeResult]:
     """
     Récupère le contenu HTML d'une URL via Playwright avec proxy obligatoire.
 
@@ -202,19 +234,27 @@ async def fetch_html(url: str, proxy: Optional[str] = None) -> Optional[tuple[st
       Ex: https://www.example.com → http://www.example.com → https://example.com → http://example.com
 
     Returns:
-        Tuple (contenu_html, url_finale) ou None en cas d'erreur.
-        url_finale est l'URL après redirections (peut différer de l'URL d'entrée).
+        ScrapeResult (html, final_url, status_code, headers) ou None en cas d'erreur totale.
+        ScrapeResult.final_url est l'URL après redirections (peut différer de l'URL d'entrée).
     """
     effective_proxy = proxy or settings.APIFY_PROXY
     if not effective_proxy:
         logger.error(f"Proxy obligatoire pour fetch_html: {url}. "
                      f"Configurez APIFY_PROXY ou passez proxy_url.")
+        _publish_failure(error_sink, {'cause': 'Proxy obligatoire non fourni', 'stage': 'proxy'})
         return None
-
-    from app.services.scraper import scrape_html, build_proxy_url
 
     max_retries = settings.HTTP_MAX_RETRIES
     last_error = None
+    # Canal PARALLÈLE à last_error. Ne le remplace JAMAIS : last_error pilote la garde
+    # variant_pointless plus bas, et y injecter la vraie cause inverserait cette garde.
+    last_failure: Optional[dict] = None
+    # Vrai dès qu'une tentative échoue pour une raison qu'une variante d'URL
+    # POURRAIT réparer (DNS, SSL...). Nécessaire car le break de
+    # _VARIANT_ELIGIBLE_ERRORS (ligne plus bas) est mort sur Camoufox — un
+    # échec Gecko réparable peut donc brûler les 3 tentatives, et si la
+    # dernière tombe sur un Timeout, last_error ne reflèterait plus que ça.
+    saw_repairable = False
 
     for attempt in range(1, max_retries + 1):
         # Toutes les tentatives utilisent auto (rotation intelligente Apify, pool large)
@@ -224,19 +264,32 @@ async def fetch_html(url: str, proxy: Optional[str] = None) -> Optional[tuple[st
 
         logger.warning(f"[{attempt}/{max_retries}] Fetch {url} avec proxy auto (rotation intelligente)")
 
+        attempt_sink: dict = {}
         try:
-            result = await scrape_html(url, proxy=attempt_proxy)
+            result = await scrape_html(url, proxy=attempt_proxy, error_sink=attempt_sink)
             if result:
-                content, final_url = result
                 if attempt > 1:
                     logger.info(f"Récupération réussie pour {url} à la tentative {attempt}/{max_retries}")
-                return (content, final_url)
+                return result
 
             # Contenu vide/trop court — retryable
             last_error = "Contenu vide ou trop court"
+            if attempt_sink.get('cause'):
+                last_failure = dict(attempt_sink)
+            saw_repairable = saw_repairable or not any(
+                tok in last_error for tok in _VARIANT_POINTLESS_ERRORS
+            )
 
         except Exception as e:
-            last_error = str(e)
+            # asyncio.TimeoutError/TimeoutError levée sans argument (ex: le
+            # wait_for du fallback Chromium dans scraper.py) a str(e) == '' —
+            # sans le fallback sur le nom de classe, la garde ci-dessous
+            # (last_error and ...) serait faussement inactive.
+            last_error = str(e) or type(e).__name__
+            last_failure = _derive_failure(attempt_sink, last_error)
+            saw_repairable = saw_repairable or not any(
+                tok in last_error for tok in _VARIANT_POINTLESS_ERRORS
+            )
 
             # Erreur fatale (config proxy) → arrêt immédiat, Phase 2 inutile
             if any(fatal in last_error for fatal in _FATAL_ERRORS):
@@ -258,6 +311,30 @@ async def fetch_html(url: str, proxy: Optional[str] = None) -> Optional[tuple[st
 
     logger.warning(f"Échec de récupération HTML pour {url} après {max_retries} tentatives ({last_error})")
 
+    # Un domaine injoignable coûtait 3 tentatives (~140s) PUIS jusqu'à 3
+    # variantes (~135s) = ~275s, proche du plafond de 300s par item : l'item
+    # pouvait être annulé en vol, et cette annulation orphelinait les futures
+    # à l'origine du flood asyncio du 2026-08-03. Règle réelle du garde : on ne
+    # saute Phase 2 QUE si TOUTES les tentatives ont échoué de façon pointless
+    # (saw_repairable est resté False) — le dernier last_error seul ne suffit
+    # pas, car le break de _VARIANT_ELIGIBLE_ERRORS est mort sur Camoufox, et
+    # UNE SEULE tentative non-pointless suffit à réarmer les trois variantes,
+    # même du simple bruit d'infra (ex: un TargetClosedError de new_context
+    # sur un navigateur mort au lancement, qui ne contient ni 'Timeout' ni
+    # 'Contenu vide ou trop court'). C'est le prix assumé, côté sûr : mieux
+    # vaut tester des variantes pour rien que sauter un échec réparable.
+    variant_pointless = last_error and any(
+        tok in last_error for tok in _VARIANT_POINTLESS_ERRORS
+    )
+    if variant_pointless and not saw_repairable:
+        logger.warning(
+            f"[VARIANTES] ignorées pour {url} — "
+            f"échec non réparable par une variante: {last_error} "
+            f"(saw_repairable={saw_repairable})"
+        )
+        _publish_failure(error_sink, last_failure)
+        return None
+
     # Phase 2 : Fallback sur variantes d'URL (http/https, www/sans-www)
     # Couvre les cas de mauvaise configuration SSL ou DNS côté serveur.
     # Chaque variante est testée une seule fois avec proxy auto.
@@ -268,18 +345,21 @@ async def fetch_html(url: str, proxy: Optional[str] = None) -> Optional[tuple[st
             f"{len(variants)} variante(s) à tester: {', '.join(variants)}"
         )
         for variant in variants:
+            variant_sink: dict = {}
             try:
                 variant_proxy = build_proxy_url(effective_proxy, country=None)
                 logger.warning(f"[VARIANTE] Test {variant}")
-                result = await scrape_html(variant, proxy=variant_proxy)
+                result = await scrape_html(variant, proxy=variant_proxy, error_sink=variant_sink)
                 if result:
-                    content, final_url = result
                     logger.warning(
-                        f"[VARIANTE] Succès avec {variant} → {final_url} "
-                        f"({len(content)} caractères)"
+                        f"[VARIANTE] Succès avec {variant} → {result.final_url} "
+                        f"({len(result.html)} caractères)"
                     )
-                    return (content, final_url)
+                    return result
+                if variant_sink.get('cause'):
+                    last_failure = dict(variant_sink)
             except Exception as e:
+                last_failure = _derive_failure(variant_sink, str(e) or type(e).__name__)
                 if not _is_retryable_error(str(e)):
                     logger.warning(f"[VARIANTE] Erreur permanente pour {variant}: {e}")
                     continue
@@ -290,4 +370,5 @@ async def fetch_html(url: str, proxy: Optional[str] = None) -> Optional[tuple[st
     else:
         logger.error(f"Échec de récupération HTML pour {url} — aucune variante à tester")
 
+    _publish_failure(error_sink, last_failure)
     return None

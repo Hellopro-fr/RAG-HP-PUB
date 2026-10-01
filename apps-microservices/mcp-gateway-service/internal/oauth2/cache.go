@@ -5,12 +5,26 @@ import (
 	"time"
 )
 
+// CachedInstruction is a resolved snapshot of an LLM instruction carried by
+// this client — same shape and semantics as scopetoken.CachedInstruction.
+type CachedInstruction struct {
+	ID    string
+	Title string
+	Body  string
+	// Kind mirrors db.LLMInstructionRow.Kind ("general" | "per_server");
+	// empty is treated as "general". ServerIDs carries the per_server row's
+	// linked servers for tool-description routing.
+	Kind      string
+	ServerIDs []string
+}
+
 // CachedClient holds the resolved scope for an OAuth2 client.
 type CachedClient struct {
 	ID           string
 	Name         string                     // human-readable client name; surfaced as serverInfo.name
 	ServerIDs    map[string]bool            // set of allowed server IDs
 	AllowedTools map[string]map[string]bool // server_id -> tool_name -> true; nil = all tools
+	Instructions []CachedInstruction        // filtered + rendered into initialize.instructions
 	ExpiresAt    *time.Time
 	IsActive     bool
 	TTL          int // access token TTL in seconds
@@ -21,6 +35,26 @@ type CachedClient struct {
 	LeexiFilterMode       string
 	LeexiAllowedUserUUIDs []string
 	LeexiAllowedTeamUUIDs []string
+
+	// Ringover user scope (integer IDs; same semantics as Leexi fields).
+	RingoverFilterMode     string
+	RingoverAllowedUserIDs []int
+	RingoverAllowedTeamIDs []int
+
+	// BDDAllowedTableIDs mirrors scopetoken.CachedToken.BDDAllowedTableIDs:
+	// list of bdd_used_tables.id rows the OAuth2 client is restricted to.
+	// Empty slice = no BDD restriction.
+	BDDAllowedTableIDs []string
+
+	// Zoho ownership scope — mirrors scopetoken.CachedToken.
+	ZohoFilterMode    string
+	ZohoAllowedEmails []string
+	ZohoCreatorEmail  string
+
+	// InjectInstructionsIntoTools mirrors db.OAuth2Client — when true the
+	// gateway appends instructions to tool descriptions instead of the
+	// initialize `instructions` field.
+	InjectInstructionsIntoTools bool
 }
 
 // Cache provides an in-memory TTL cache for OAuth2 client scope lookups.

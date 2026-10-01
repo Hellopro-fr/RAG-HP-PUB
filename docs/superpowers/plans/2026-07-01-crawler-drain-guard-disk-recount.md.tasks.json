@@ -1,0 +1,19 @@
+{
+  "planPath": "docs/superpowers/plans/2026-07-01-crawler-drain-guard-disk-recount.md",
+  "tasks": [
+    {
+      "id": 167,
+      "subject": "DG-T1: isUnreconciledIdle predicate + DRAIN_DISK_RECOUNT flag (drainGuard.ts, TDD)",
+      "status": "completed",
+      "description": "**Goal:** Pure predicate detecting idle-but-unreconciled wedge + default-on kill-switch resolver, unit-tested.\n\n**Files:** Modify crawler/src/drainGuard.ts + crawler/src/drainGuard.test.ts\n\n**Verify:** cd apps-microservices/crawler-service/crawler && npx tsx@4 --test src/drainGuard.test.ts (local tsc unavailable: empty node_modules, VM build authoritative)\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/crawler/src/drainGuard.ts\", \"apps-microservices/crawler-service/crawler/src/drainGuard.test.ts\"], \"verifyCommand\": \"cd apps-microservices/crawler-service/crawler && npx tsx@4 --test src/drainGuard.test.ts\", \"acceptanceCriteria\": [\"isUnreconciledIdle correct for 0/0/1 and negatives\", \"resolveDrainDiskRecount default-on only 'false' disables\", \"tsx tests pass (tsx transpiles TS)\"]}\n```"
+    },
+    {
+      "id": 168,
+      "subject": "DG-T2: wire disk-confirm drain path into queue-stats interval (main.ts)",
+      "status": "completed",
+      "blockedBy": [167],
+      "description": "**Goal:** In the 30s interval, after the unchanged isDrainedSample fast-path, add the gated disk-confirm path: isUnreconciledIdle ~90s -> recountQueueFromDisk -> abort iff disk-drained.\n\n**Files:** Modify crawler/src/main.ts (imports ~52-53; interval 736-776)\n\n**Verify:** local tsc unavailable (empty node_modules); npx tsx@4 --test src/drainGuard.test.ts still green + diff review of in-scope symbols; VM Docker build = authoritative typecheck.\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/crawler/src/main.ts\"], \"verifyCommand\": \"cd apps-microservices/crawler-service/crawler && npx tsx@4 --test src/drainGuard.test.ts\", \"acceptanceCriteria\": [\"imports + wedgeSuspectCount added\", \"gated disk-confirm path aborts only on diskDrained, shares latch\", \"all referenced symbols in scope; drainGuard tests green\"]}\n```"
+    }
+  ],
+  "lastUpdated": "2026-07-01"
+}

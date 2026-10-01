@@ -446,9 +446,16 @@
             </div>
           </div>
           <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
-            <p class="text-xs font-medium text-gray-600 mb-1">.mcp.json — prêt à coller</p>
-            <pre id="token-mcp-json" class="text-xs font-mono text-gray-700 max-h-48 overflow-auto select-all"></pre>
-            <button onclick="copyToClipboard(_fullMcpJson,'Config copiée !')" class="mt-2 px-3 py-1.5 bg-brand-600 text-white text-xs font-medium rounded-lg hover:bg-brand-700">Copier .mcp.json</button>
+            <div class="flex items-center justify-between mb-2">
+              <p class="text-xs font-medium text-gray-600">.mcp.json — prêt à coller</p>
+              <div class="inline-flex rounded-md overflow-hidden border border-gray-200 text-xs">
+                <button type="button" data-variant="bearer" onclick="setSnippetVariant('token-mcp-json', 'bearer')" class="snippet-tab px-2.5 py-1 bg-brand-600 text-white font-medium">Bearer</button>
+                <button type="button" data-variant="scope" onclick="setSnippetVariant('token-mcp-json', 'scope')" class="snippet-tab px-2.5 py-1 bg-white text-gray-600 hover:bg-gray-50">X-MCP-Scope-Token</button>
+              </div>
+            </div>
+            <pre id="token-mcp-json" data-variant="bearer" class="text-xs font-mono text-gray-700 max-h-48 overflow-auto select-all"></pre>
+            <button onclick="copyPostCreateJSON()" class="mt-2 px-3 py-1.5 bg-brand-600 text-white text-xs font-medium rounded-lg hover:bg-brand-700">Copier .mcp.json</button>
+            <p class="text-[11px] text-gray-400 mt-1">Bearer : Claude.ai / Cursor — X-MCP-Scope-Token : intégrations sur mesure</p>
           </div>
         </div>
       </div>
@@ -1182,7 +1189,14 @@
                     <span>Commande : <code class="bg-brand-50 text-brand-700 px-1.5 py-0.5 rounded text-xs font-medium">${esc(t.mcp_command || 'npx')}</code></span>
                   </div>
                 </div>
-                <pre id="${jsonElId}" class="json-view px-5 py-3 text-xs font-mono text-gray-700 bg-gray-50 max-h-40 overflow-auto"></pre>
+                <div class="flex items-center justify-between px-5 pt-3 pb-1 border-t border-gray-100">
+                  <div class="inline-flex rounded-md overflow-hidden border border-gray-200 text-xs">
+                    <button type="button" data-variant="bearer" onclick="setSnippetVariant('${jsonElId}', 'bearer')" class="snippet-tab px-2.5 py-1 bg-brand-600 text-white font-medium">Bearer</button>
+                    <button type="button" data-variant="scope" onclick="setSnippetVariant('${jsonElId}', 'scope')" class="snippet-tab px-2.5 py-1 bg-white text-gray-600 hover:bg-gray-50">X-MCP-Scope-Token</button>
+                  </div>
+                  <span class="text-[11px] text-gray-400">Bearer : Claude.ai / Cursor &mdash; X-MCP-Scope-Token : intégrations sur mesure</span>
+                </div>
+                <pre id="${jsonElId}" data-variant="bearer" class="json-view px-5 py-3 text-xs font-mono text-gray-700 bg-gray-50 max-h-40 overflow-auto"></pre>
               </div>`;
           }).join('');
           // Initialize all token card JSONs with their persisted command and decrypted token
@@ -1623,23 +1637,35 @@
       const gatewayURL = window.location.origin + '/mcp';
       const isHttp = gatewayURL.startsWith('http://');
       const hasToken = token && token.length > 12;
-
-      // Full version for clipboard
-      const fullArgs = [...cfg.argsPrefix, gatewayURL];
-      if (isHttp) fullArgs.push("--allow-http");
-      fullArgs.push("--header", "X-MCP-Scope-Token: " + (token || '<YOUR_TOKEN>'));
-      const fullConfig = { mcpServers: { "hellopro-gateway": { command: cfg.command, args: fullArgs } } };
-      _tokenCardJsonMap[elId] = JSON.stringify(fullConfig, null, 2);
-
-      // Masked version for display
-      const maskedArgs = [...cfg.argsPrefix, gatewayURL];
-      if (isHttp) maskedArgs.push("--allow-http");
       const maskedToken = hasToken ? token.slice(0, 8) + '\u2022'.repeat(12) + token.slice(-4) : '<YOUR_TOKEN>';
-      maskedArgs.push("--header", "X-MCP-Scope-Token: " + maskedToken);
-      const maskedConfig = { mcpServers: { "hellopro-gateway": { command: cfg.command, args: maskedArgs } } };
+      const displayed = hasToken ? token : '<YOUR_TOKEN>';
+
+      function buildArgs(headerName, headerValue) {
+        const args = [...cfg.argsPrefix, gatewayURL];
+        if (isHttp) args.push('--allow-http');
+        args.push('--header', headerName + ': ' + headerValue);
+        return args;
+      }
+      function wrap(args) {
+        return { mcpServers: { 'hellopro-gateway': { command: cfg.command, args } } };
+      }
+
+      const fullBearer  = wrap(buildArgs('Authorization', 'Bearer ' + displayed));
+      const fullScope   = wrap(buildArgs('X-MCP-Scope-Token', displayed));
+      const maskedBearer = wrap(buildArgs('Authorization', 'Bearer ' + maskedToken));
+      const maskedScope  = wrap(buildArgs('X-MCP-Scope-Token', maskedToken));
+
+      _tokenCardJsonMap[elId] = {
+        bearer: JSON.stringify(fullBearer, null, 2),
+        scope:  JSON.stringify(fullScope, null, 2),
+        maskedBearer: JSON.stringify(maskedBearer, null, 2),
+        maskedScope:  JSON.stringify(maskedScope, null, 2),
+      };
 
       const el = document.getElementById(elId);
-      if (el) el.textContent = JSON.stringify(maskedConfig, null, 2);
+      if (!el) return;
+      if (!el.dataset.variant) el.dataset.variant = 'bearer';
+      el.textContent = el.dataset.variant === 'scope' ? _tokenCardJsonMap[elId].maskedScope : _tokenCardJsonMap[elId].maskedBearer;
     }
 
     async function createScopeToken() {
@@ -1708,29 +1734,33 @@
           const gatewayURL = window.location.origin + '/mcp';
           const allowHttp = document.getElementById('token-allow-http').checked;
           const cmdCfg = getMCPCommandConfig();
-          const mcpArgs = [...cmdCfg.argsPrefix, gatewayURL];
-          if (allowHttp) mcpArgs.push("--allow-http");
-          mcpArgs.push("--header", "X-MCP-Scope-Token: " + result.token);
           const serverName = document.getElementById('token-server-name').value.trim() || 'hellopro-gateway';
-          const mcpConfig = {
-            mcpServers: {
-              [serverName]: {
-                command: cmdCfg.command,
-                args: mcpArgs
-              }
-            }
+
+          function buildArgsCreate(headerName, headerValue) {
+            const args = [...cmdCfg.argsPrefix, gatewayURL];
+            if (allowHttp) args.push('--allow-http');
+            args.push('--header', headerName + ': ' + headerValue);
+            return args;
+          }
+          function wrapCreate(args) {
+            return { mcpServers: { [serverName]: { command: cmdCfg.command, args } } };
+          }
+
+          const fullBearer = wrapCreate(buildArgsCreate('Authorization', 'Bearer ' + result.token));
+          const fullScope  = wrapCreate(buildArgsCreate('X-MCP-Scope-Token', result.token));
+          const maskedBearer = wrapCreate(buildArgsCreate('Authorization', 'Bearer ' + maskedToken));
+          const maskedScope  = wrapCreate(buildArgsCreate('X-MCP-Scope-Token', maskedToken));
+
+          _fullMcpJson = {
+            bearer: JSON.stringify(fullBearer, null, 2),
+            scope:  JSON.stringify(fullScope, null, 2),
           };
-          _fullMcpJson = JSON.stringify(mcpConfig, null, 2);
-          const maskedArgs = mcpArgs.map(a => a.startsWith('X-MCP-Scope-Token: ') ? 'X-MCP-Scope-Token: ' + maskedToken : a);
-          const maskedConfig = {
-            mcpServers: {
-              [serverName]: {
-                command: cmdCfg.command,
-                args: maskedArgs
-              }
-            }
-          };
-          document.getElementById('token-mcp-json').textContent = JSON.stringify(maskedConfig, null, 2);
+
+          const preEl = document.getElementById('token-mcp-json');
+          preEl.dataset.variant = 'bearer';
+          preEl.textContent = JSON.stringify(maskedBearer, null, 2);
+          // Reset the toggle bar to show Bearer as active.
+          setSnippetVariant('token-mcp-json', 'bearer');
           document.getElementById('token-created-result').classList.remove('hidden');
           btn.classList.add('hidden');
 
@@ -1820,8 +1850,44 @@
       }
     }
 
+    function setSnippetVariant(elId, variant) {
+      const el = document.getElementById(elId);
+      if (!el) return;
+      el.dataset.variant = variant;
+      // Update the two tab buttons that sit in the toggle bar immediately above this <pre>.
+      const bar = el.previousElementSibling;
+      if (bar) {
+        bar.querySelectorAll('button[data-variant]').forEach(btn => {
+          const active = btn.dataset.variant === variant;
+          btn.classList.toggle('bg-brand-600', active);
+          btn.classList.toggle('text-white', active);
+          btn.classList.toggle('bg-white', !active);
+          btn.classList.toggle('text-gray-600', !active);
+        });
+      }
+      const entry = _tokenCardJsonMap[elId];
+      if (!entry) return;
+      el.textContent = variant === 'scope' ? entry.maskedScope : entry.maskedBearer;
+    }
+
+    function copyPostCreateJSON() {
+      const el = document.getElementById('token-mcp-json');
+      const variant = el && el.dataset.variant === 'scope' ? 'scope' : 'bearer';
+      if (_fullMcpJson && typeof _fullMcpJson === 'object' && _fullMcpJson[variant]) {
+        copyToClipboard(_fullMcpJson[variant], 'Config copiée !');
+      }
+    }
+
     function copyJSON(elId) {
-      const text = _tokenCardJsonMap[elId] || document.getElementById(elId).textContent;
+      const entry = _tokenCardJsonMap[elId];
+      if (entry && typeof entry === 'object' && entry.bearer) {
+        const el = document.getElementById(elId);
+        const variant = el && el.dataset.variant === 'scope' ? 'scope' : 'bearer';
+        copyToClipboard(entry[variant], 'Config copiée !');
+        return;
+      }
+      // Fallback for legacy callers (per-server cards) that still stash a plain string.
+      const text = (typeof entry === 'string' ? entry : '') || document.getElementById(elId)?.textContent || '';
       copyToClipboard(text);
     }
 

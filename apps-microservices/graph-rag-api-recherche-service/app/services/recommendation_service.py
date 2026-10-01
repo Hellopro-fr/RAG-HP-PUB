@@ -21,6 +21,7 @@ from app.domain.models import (
 from app.infrastructure.clients import clients
 from app.infrastructure.hellopro_api_client import hellopro_api_client, ETAT_SOCIETE_MAP
 from app.infrastructure.gemini_client import gemini_client
+from app.config import settings
 
 # from app.services.unit_normalizer import unit_normalizer
 
@@ -864,10 +865,11 @@ class RecommendationService:
             score: top_score,
             details: top_details
         }) AS top_p
-        
-        UNWIND all_products AS prod
-        WITH prod.node AS p_node, prod.details AS details, prod.global_score AS global_score, top_p
-        RETURN p_node PROJECTION_PLACEHOLDER AS product_data, details, global_score, top_p
+
+        // Apply deduplication: return only top_p products (one per fournisseur, max 4)
+        UNWIND top_p AS top_product
+        WITH top_product.product_data AS p_node, top_product.details AS details, top_product.score AS global_score
+        RETURN p_node PROJECTION_PLACEHOLDER AS product_data, details, global_score
         """
 
         # Determine projection
@@ -1179,6 +1181,7 @@ class RecommendationService:
             "max_per_supplier_extended": max_per_supplier_extended,
             "score_step": score_step,
             "diversity_lambda": diversity_lambda,
+            "debug": settings.DEBUG_SCORING,
         }
 
     def _build_cypher_query(
@@ -1737,18 +1740,19 @@ class RecommendationService:
                             carac_entry["unite"] = unite
                         filtered_caracs.append(carac_entry)
 
+            raw_desc = re.sub(
+                r"\s+",
+                " ",
+                re.sub(r"<[^>]+>", "", info.get("description_produit", "")).replace(
+                    "\xa0", " "
+                ),
+            ).strip()
             formatted_product = {
                 "id_produit": str(id_produit),
+                "description": raw_desc if raw_desc else "[AUCUN DESCRIPTIF DISPONIBLE]",
                 "titre": info.get(
                     "titre_produit", info.get("nom_produit", info.get("titre", ""))
                 ),
-                "description": re.sub(
-                    r"\s+",
-                    " ",
-                    re.sub(r"<[^>]+>", "", info.get("description_produit", "")).replace(
-                        "\xa0", " "
-                    ),
-                ).strip(),
                 "fournisseur": {
                     "nom": info_fournisseur.get("nom", ""),
                     "type": etat_societe_label,
@@ -1790,8 +1794,8 @@ class RecommendationService:
                 poids_c = carac.poids_caracteristique or "critique"
                 unite = carac.unite or ""
 
-                if poids_c != "critique":
-                    continue
+                # P8 (iter 7 PROD) — Expose secondaire (🟡) en plus de critique (🔴)
+                # au LLM reranker. Le system_prompt distingue déjà critique vs secondaire.
 
                 # Get the name from category definitions, fallback to id
                 cat_def = category_carac_map.get(cid, {})

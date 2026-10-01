@@ -1,0 +1,148 @@
+mot_cle,bucket,nb_recherches,avg_results,notes
+sofise,single_token_brand,59,120,marque
+ritmo,single_token_brand,57,112,marque cas Elena
+container,single_token_generic,37,134,
+distributeur,single_token_generic,37,123,
+autolaveuse,single_token_generic,36,127,
+nacelle,single_token_generic,33,124,
+ascenseur,single_token_generic,31,124,
+apreau,single_token_brand,31,109,marque cas Elena (Apreau)
+chaise,single_token_generic,30,128,
+vitrine,single_token_generic,25,120,
+domotique,single_token_generic,25,120,
+drone,single_token_generic,24,117,
+bureau,single_token_generic,24,133,
+conteneur,single_token_generic,23,130,
+lockeel,single_token_brand,23,116,marque
+fortest,single_token_brand,23,114,marque
+caisse,single_token_generic,22,122,
+rayonnage,single_token_generic,22,130,
+rotowash,single_token_brand,22,120,marque
+urbanext,single_token_brand,21,124,marque
+rational,single_token_brand,21,113,marque
+polyfuseur,single_token_generic,20,92,specifique soudure
+mezzanine,single_token_generic,20,116,
+remorque,single_token_generic,20,144,
+four,single_token_generic,20,131,
+autoclave,single_token_generic,19,128,
+laverie,single_token_generic,19,124,
+laser,single_token_generic,19,119,
+radiateur,single_token_generic,18,191,
+casier,single_token_generic,18,129,test synonyme manual-casier
+benne,single_token_generic,17,125,
+grue,single_token_generic,17,132,test synonyme manual-grue
+batterie,single_token_generic,17,125,
+logiciel,single_token_generic,17,154,
+robot,single_token_generic,16,129,
+balayeuse,single_token_generic,16,124,
+carton,single_token_generic,16,120,
+nettoyage,single_token_generic,16,140,
+vestiaire,single_token_generic,16,133,test synonyme manual-casier
+salamandre,single_token_generic,16,125,
+bungalow,single_token_generic,15,124,
+cuve,single_token_generic,15,119,
+chariot,single_token_generic,15,125,
+bodet,single_token_brand,15,120,marque
+foreuse,single_token_generic,15,130,
+bess,single_token_brand,14,57,marque
+potence,single_token_generic,14,120,
+convoyeur,single_token_generic,14,120,
+palan,single_token_generic,14,131,
+sennebogen,single_token_brand,12,60,marque cas instabilite
+distributeur automatique,bi_token,76,127,
+chambre froide,bi_token,38,120,
+container maritime,bi_token,34,132,
+vending machine,bi_token,26,100,anglicisme
+masse beton,bi_token,25,133,
+caisse enregistreuse,bi_token,23,136,
+monte charge,bi_token,23,126,
+big bag,bi_token,23,133,
+fiche technique,bi_token,21,135,recherche meta
+pont elevateur,bi_token,20,115,
+soudeuse pehd,bi_token,20,116,
+palonnier bigbag,bi_token,20,120,
+laverie automatique,bi_token,17,119,
+dog wash,bi_token,17,116,anglicisme niche
+grattoir turbo,bi_token,17,115,
+silo huile,bi_token,17,115,
+bloc beton,bi_token,16,120,
+camion frigorifique,bi_token,15,95,
+monte fut,bi_token,15,131,
+grille hachoirs,bi_token,15,168,
+nacelle ciseaux,bi_token,14,123,
+bigbag occasion,bi_token,14,119,
+climatiseur mobile,bi_token,14,120,
+mini pelle,bi_token,13,117,
+classe mobile,bi_token,13,119,
+four mixte,bi_token,12,127,
+nettoyeur vapeur,bi_token,12,136,
+tracteur agricole,bi_token,12,139,
+porte badge,bi_token,11,120,
+remorque plateau,bi_token,10,123,
+cuve inox,bi_token,10,108,
+pont roulant,bi_token,10,135,
+moteur 50 kw,multi_token,39,119,
+obturateur de canalisation,multi_token,32,114,
+helice de ventilateur en plastique,multi_token,32,128,
+mobilier de bureau,multi_token,23,127,
+difema inverter 100-50,multi_token,20,102,modele specifique
+prix bulldozer d7 neuf,multi_token,17,120,recherche prix
+fournisseur de carton,multi_token,16,120,meta recherche
+colonne acoustique 100,multi_token,16,118,
+ritmo elektra light,multi_token,14,120,cas Elena ritmo
+nez de cloison,multi_token,13,108,
+machine de thermolaquage,multi_token,13,117,
+cabine de peinture,multi_token,12,126,
+borne de commande,multi_token,12,124,
+netoyeur vapeur aspirateur,multi_token,12,100,faute orthographe
+location climatiseur mobile,multi_token,12,120,
+armoire eau glacee,multi_token,12,100,
+portes de garage,multi_token,11,114,
+couverture anti feu,multi_token,11,120,
+chariots de manutention,multi_token,11,142,
+chariot de manutention,multi_token,10,192,
+pont elevateur 2t,multi_token,10,104,specification technique
+cadre nez cloison,multi_token,10,120,
+aire de lavage,multi_token,9,112,
+sac a main femme,multi_token,9,102,B2C atypique
+big bag amiante,multi_token,9,109,
+logiciel de caisse,multi_token,8,118,
+pompe a chaleur,multi_token,8,123,
+boite aux lettres,multi_token,8,123,
+robot de nettoyage,multi_token,8,152,
+station de reparation,multi_token,8,120,
+matelas isolant thermique,multi_token,8,120,
+table de dessin industriel,multi_token,8,104,
+cellule de refroidissement,multi_token,8,120,
+filtre a sable,multi_token,8,157,
+armoire medicale,audit_history,68,135,cas Elena resolu A4 IDF
+soudure ritmo,audit_history,40,105,cas Elena resolu A4 IDF
+urinoir delabie,audit_history,30,90,cas Elena resolu A8 R2
+melangeur conique,audit_history,15,67,A4 IDF resolu
+e-crane,audit_history,12,140,A6 synonyme resolu
+lockers bagagerie,audit_history,12,110,A6 synonyme manual-casier
+barre laser a led,audit_history,8,80,A7 R3 coverage resolu
+defibrillateur,audit_history,15,180,
+fraiseuse,audit_history,15,176,
+perceuse colonne,audit_history,12,165,
+s601p3,zero_result,8,0,ref produit obscure
+mousse desinfectante pour vmc cmi,zero_result,7,0,produit niche
+volet roulant pour toiture de veranda motuer sanfy,zero_result,7,0,faute orthographe
+floteur separateur hydracabure,zero_result,6,0,faute orthographe
+cage de parage,zero_result,6,0,produit agricole niche
+balayeuse tp,zero_result,5,0,acronyme metier
+trimmy evo safi,zero_result,5,0,marque inconnue
+thorn,zero_result,5,0,marque inconnue
+bouteille en plastique 330ml,zero_result,5,0,specification volume
+machine concasser fruits secs,zero_result,4,0,
+berce amovible nus,zero_result,4,0,
+vitrine colonne noir,zero_result,4,0,
+armoire 3 colonnes cycladis,zero_result,4,0,modele specifique
+guide lame mkb752,zero_result,4,0,piece detachee
+boites au lettres compactes interieur bois 18,zero_result,4,0,specification longue
+pignon 6 dents betonniere,zero_result,4,0,piece detachee
+bd450,zero_result,4,0,reference courte
+armoire tockage apirateur,zero_result,4,0,faute orthographe
+meuble en bois,zero_result,3,0,
+unit portable dentaire,zero_result,3,0,specifique
+ritmo elektra light bis,edge_case,3,0,test rituel sans synonyme

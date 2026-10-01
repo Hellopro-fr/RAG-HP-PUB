@@ -1,3 +1,8 @@
+---
+description: Génère le CLAUDE.md d'un nouveau microservice et l'ajoute à la Service Map racine
+argument-hint: <nom du service> <chemin>
+allowed-tools: Read, Write, Edit, Grep, Glob
+---
 # /new-service-claude-md — Generate CLAUDE.md for a New Service
 
 A new microservice has been added to the project. Generate its CLAUDE.md and update the root.

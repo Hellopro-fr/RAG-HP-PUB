@@ -6,6 +6,7 @@ import Image from "next/image";
 // import ProgressHeader from "./ProgressHeader";
 import QuestionnaireProgressBar from "./QuestionnaireProgressBar";
 import QuestionScreen from "./QuestionScreen";
+import AssurancePage from "./AssurancePage";
 import { getAssetPath } from "@/lib/utils";
 
 const hpLogo = getAssetPath("/images/hp-logo.svg");
@@ -39,6 +40,10 @@ const NeedsQuestionnaire = ({ onComplete, rubriqueId }: NeedsQuestionnaireProps)
     setStartTime,
     startTime,
     categoryName,
+    categoryVignette,
+    hasSeenAssurance,
+    setHasSeenAssurance,
+    abtestUxLeadVersion,
   } = useFlowStore();
 
   // Hook pour le questionnaire dynamique
@@ -310,7 +315,7 @@ const NeedsQuestionnaire = ({ onComplete, rubriqueId }: NeedsQuestionnaireProps)
     const adaptedQuestion = {
       id: currentQuestion.id || currentIndex + 1,
       title: currentQuestion.title,
-      justification: currentQuestion.justification || '',
+      bulleAide: currentQuestion.bulleAide ?? null,
       multiSelect: currentQuestion.type === 'multi',
       answers: currentQuestion.answers?.map((a: { code: string; mainText: string; secondaryText?: string }) => ({
         id: a.code,
@@ -334,19 +339,29 @@ const NeedsQuestionnaire = ({ onComplete, rubriqueId }: NeedsQuestionnaireProps)
         />
 
         <div className="flex-1 overflow-y-auto">
-          <QuestionScreen
-            question={adaptedQuestion}
-            currentIndex={currentIndex}
-            totalQuestions={progress.total}
-            selectedAnswers={dynamicAnswers[questionCode] || []}
-            otherText=""
-            onSelectAnswer={handleDynamicSelectAnswer}
-            onOtherTextChange={() => {}}
-            onNext={handleDynamicNext}
-            onBack={goBack}
-            isFirst={!canGoBack}
-            isLast={currentIndex === progress.total - 1}
-          />
+          {/* A/B test : variante 2 skip l'AssurancePage et passe directement à Q1 */}
+          {!hasSeenAssurance && abtestUxLeadVersion !== 2 ? (
+            <AssurancePage
+              categoryName={categoryName || ""}
+              categoryVignette={categoryVignette}
+              totalQuestions={progress.total}
+              onContinue={() => setHasSeenAssurance(true)}
+            />
+          ) : (
+            <QuestionScreen
+              question={adaptedQuestion}
+              currentIndex={currentIndex}
+              totalQuestions={progress.total}
+              selectedAnswers={dynamicAnswers[questionCode] || []}
+              otherText=""
+              onSelectAnswer={handleDynamicSelectAnswer}
+              onOtherTextChange={() => {}}
+              onNext={handleDynamicNext}
+              onBack={goBack}
+              isFirst={!canGoBack}
+              isLast={currentIndex === progress.total - 1}
+            />
+          )}
         </div>
       </div>
     );

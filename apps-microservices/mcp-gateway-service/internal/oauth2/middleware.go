@@ -9,32 +9,87 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hellopro/mcp-gateway/internal/repository"
-	"github.com/hellopro/mcp-gateway/internal/scopetoken"
+	"mcp-gateway/internal/repository"
+	"mcp-gateway/internal/scopetoken"
+	"mcp-gateway/internal/slack"
 )
+
+// notifyUnauthorized fires a Slack alert for a rejected MCP request, gated by
+// the per-(ip,endpoint) cooldown so noisy scanners can't flood the channel.
+// Safe to call with a nil client (no-op).
+func notifyUnauthorized(slackClient *slack.Client, r *http.Request, reason string) {
+	if slackClient == nil {
+		return
+	}
+	ip := slack.ClientIP(r)
+	endpoint := r.URL.Path
+	if !slackClient.AllowAuthAlert(ip, endpoint) {
+		return
+	}
+	slackClient.Notify(slack.UnauthorizedEvent{
+		ClientIP:     ip,
+		Endpoint:     endpoint,
+		Reason:       reason,
+		MCPSessionID: r.Header.Get("Mcp-Session-Id"),
+		UserAgent:    r.Header.Get("User-Agent"),
+	})
+}
 
 // CombinedMiddleware validates either Bearer token or X-MCP-Scope-Token.
 // If neither is present, returns 401 with WWW-Authenticate header per MCP spec.
 // Both mechanisms inject the same context keys so the ScopedGateway works unchanged.
+//
+// slackClient is optional; when non-nil it fires an UnauthorizedEvent on every
+// 401/403 this middleware emits (with per-(ip,endpoint) cooldown inside the
+// client so noisy scanners don't flood Slack).
+// instructionRepo is optional — when provided, the Bearer and scope-token
+// branches resolve each credential's LLM instructions on cache-miss so the
+// MCP initialize response can inject them.
 func CombinedMiddleware(
 	oauth2Cache *Cache,
 	oauth2Repo *repository.OAuth2Repo,
 	tokenCache *scopetoken.Cache,
 	tokenRepo *repository.TokenRepo,
+	instructionRepo *repository.InstructionRepo,
 	jwtSecret string,
 	publicURL string,
+	slackClient *slack.Client,
 ) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// 1. Check for OAuth2 Bearer token
+			// 1. X-MCP-Scope-Token wins outright when present.
+			if scopeHeader := r.Header.Get("X-MCP-Scope-Token"); scopeHeader != "" {
+				ctx, ok := scopetoken.ValidateAndBuildContext(w, r, scopeHeader, "x-mcp-scope-token", tokenCache, tokenRepo, instructionRepo, slackClient)
+				if !ok {
+					return
+				}
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+
+			// 2. Authorization: Bearer — discriminate by prefix.
 			authHeader := r.Header.Get("Authorization")
 			if strings.HasPrefix(authHeader, "Bearer ") {
-				bearerToken := authHeader[7:]
-				clientID, err := ValidateAccessToken(bearerToken, jwtSecret)
+				bearer := authHeader[7:]
+
+				// 2a. Bearer carries a /tokens-issued scope token.
+				if strings.HasPrefix(bearer, scopetoken.TokenPrefix) {
+					ctx, ok := scopetoken.ValidateAndBuildContext(w, r, bearer, "bearer", tokenCache, tokenRepo, instructionRepo, slackClient)
+					if !ok {
+						return
+					}
+					next.ServeHTTP(w, r.WithContext(ctx))
+					return
+				}
+
+				// 2b. Existing OAuth2 JWT path — verbatim from the previous version.
+				bearerToken := bearer
+				clientID, userEmail, err := ValidateAccessToken(bearerToken, jwtSecret)
 				if err != nil {
 					log.Printf("[oauth2] invalid bearer token: %v", err)
 					w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer error="invalid_token", resource_metadata="%s/.well-known/oauth-authorization-server"`, publicURL))
 					http.Error(w, `{"error":"invalid_token","error_description":"invalid or expired access token"}`, http.StatusUnauthorized)
+					notifyUnauthorized(slackClient, r, "invalid bearer token: "+err.Error())
 					return
 				}
 
@@ -43,6 +98,7 @@ func CombinedMiddleware(
 					client, err := oauth2Repo.FindByID(clientID)
 					if err != nil {
 						http.Error(w, `{"error":"invalid_token","error_description":"client not found"}`, http.StatusUnauthorized)
+						notifyUnauthorized(slackClient, r, "bearer client_id not found")
 						return
 					}
 
@@ -63,16 +119,39 @@ func CombinedMiddleware(
 					}
 
 					cc = &CachedClient{
-						ID:           client.ID,
-						Name:         client.Name,
-						ServerIDs:    serverIDs,
-						AllowedTools: allowedTools,
-						ExpiresAt:    client.ExpiresAt,
-						IsActive:     client.IsActive,
-						TTL:          client.AccessTokenTTL,
+						ID:                          client.ID,
+						Name:                        client.Name,
+						ServerIDs:                   serverIDs,
+						AllowedTools:                allowedTools,
+						ExpiresAt:                   client.ExpiresAt,
+						IsActive:                    client.IsActive,
+						TTL:                         client.AccessTokenTTL,
+						InjectInstructionsIntoTools: client.InjectInstructionsIntoTools,
 					}
 
-					// Decode persisted Leexi filter for runtime header injection.
+					if instructionRepo != nil && len(client.Instructions) > 0 && len(serverIDs) > 0 {
+						allowedSlice := make([]string, 0, len(serverIDs))
+						for sid := range serverIDs {
+							allowedSlice = append(allowedSlice, sid)
+						}
+						rows, rerr := instructionRepo.ResolveForOAuth2Client(client.ID, allowedSlice)
+						if rerr == nil && len(rows) > 0 {
+							cc.Instructions = make([]CachedInstruction, 0, len(rows))
+							for _, row := range rows {
+								rowServerIDs := make([]string, 0, len(row.Servers))
+								for _, s := range row.Servers {
+									rowServerIDs = append(rowServerIDs, s.ServerID)
+								}
+								cc.Instructions = append(cc.Instructions, CachedInstruction{
+									ID: row.ID, Title: row.Title, Body: row.Body,
+									Kind: row.Kind, ServerIDs: rowServerIDs,
+								})
+							}
+						} else if rerr != nil {
+							log.Printf("[oauth2] resolve instructions for client %s: %v", client.ID, rerr)
+						}
+					}
+
 					cc.LeexiFilterMode = client.LeexiFilterMode
 					if len(client.LeexiAllowedUserUUIDs) > 0 {
 						_ = json.Unmarshal(client.LeexiAllowedUserUUIDs, &cc.LeexiAllowedUserUUIDs)
@@ -81,15 +160,40 @@ func CombinedMiddleware(
 						_ = json.Unmarshal(client.LeexiAllowedTeamUUIDs, &cc.LeexiAllowedTeamUUIDs)
 					}
 
+					cc.RingoverFilterMode = client.RingoverFilterMode
+					if len(client.RingoverAllowedUserIDs) > 0 {
+						_ = json.Unmarshal(client.RingoverAllowedUserIDs, &cc.RingoverAllowedUserIDs)
+					}
+					if len(client.RingoverAllowedTeamIDs) > 0 {
+						_ = json.Unmarshal(client.RingoverAllowedTeamIDs, &cc.RingoverAllowedTeamIDs)
+					}
+
+					cc.ZohoFilterMode = client.ZohoFilterMode
+					if len(client.ZohoAllowedEmails) > 0 {
+						_ = json.Unmarshal(client.ZohoAllowedEmails, &cc.ZohoAllowedEmails)
+					}
+					if cc.ZohoFilterMode == "creator" {
+						cc.ZohoCreatorEmail = client.CreatedBy
+					}
+
+					if len(client.BDDTables) > 0 {
+						cc.BDDAllowedTableIDs = make([]string, 0, len(client.BDDTables))
+						for _, b := range client.BDDTables {
+							cc.BDDAllowedTableIDs = append(cc.BDDAllowedTableIDs, b.UsedTableID)
+						}
+					}
+
 					oauth2Cache.Set(clientID, cc)
 				}
 
 				if !cc.IsActive {
 					http.Error(w, `{"error":"invalid_token","error_description":"client is revoked"}`, http.StatusForbidden)
+					notifyUnauthorized(slackClient, r, "revoked oauth2 client")
 					return
 				}
 				if cc.ExpiresAt != nil && cc.ExpiresAt.Before(time.Now()) {
 					http.Error(w, `{"error":"invalid_token","error_description":"client has expired"}`, http.StatusForbidden)
+					notifyUnauthorized(slackClient, r, "expired oauth2 client")
 					return
 				}
 
@@ -100,6 +204,19 @@ func CombinedMiddleware(
 				if cc.Name != "" {
 					ctx = context.WithValue(ctx, scopetoken.ScopeNameContextKey, cc.Name)
 				}
+				if len(cc.Instructions) > 0 {
+					resolved := make([]scopetoken.ResolvedInstruction, 0, len(cc.Instructions))
+					for _, ci := range cc.Instructions {
+						resolved = append(resolved, scopetoken.ResolvedInstruction{
+							ID: ci.ID, Title: ci.Title, Body: ci.Body,
+							Kind: ci.Kind, ServerIDs: ci.ServerIDs,
+						})
+					}
+					ctx = context.WithValue(ctx, scopetoken.AllowedInstructionsContextKey, resolved)
+					if cc.InjectInstructionsIntoTools {
+						ctx = context.WithValue(ctx, scopetoken.InjectInstructionsIntoToolsContextKey, true)
+					}
+				}
 				if cc.LeexiFilterMode != "" && cc.LeexiFilterMode != "none" {
 					ctx = context.WithValue(ctx, scopetoken.LeexiFilterContextKey, &scopetoken.LeexiFilterContext{
 						Mode:             cc.LeexiFilterMode,
@@ -107,20 +224,44 @@ func CombinedMiddleware(
 						AllowedTeamUUIDs: cc.LeexiAllowedTeamUUIDs,
 					})
 				}
+				if cc.RingoverFilterMode != "" && cc.RingoverFilterMode != "none" {
+					ctx = context.WithValue(ctx, scopetoken.RingoverFilterContextKey, &scopetoken.RingoverFilterContext{
+						Mode:           cc.RingoverFilterMode,
+						AllowedUserIDs: cc.RingoverAllowedUserIDs,
+						AllowedTeamIDs: cc.RingoverAllowedTeamIDs,
+					})
+				}
+				if cc.ZohoFilterMode != "" && cc.ZohoFilterMode != "none" {
+					ctx = context.WithValue(ctx, scopetoken.ZohoFilterContextKey, &scopetoken.ZohoFilterContext{
+						Mode:          cc.ZohoFilterMode,
+						AllowedEmails: cc.ZohoAllowedEmails,
+						CreatorEmail:  cc.ZohoCreatorEmail,
+					})
+				}
+				if len(cc.BDDAllowedTableIDs) > 0 {
+					ctx = context.WithValue(ctx, scopetoken.BDDFilterContextKey, cc.BDDAllowedTableIDs)
+				}
+				if userEmail != "" {
+					ctx = context.WithValue(ctx, scopetoken.EndUserEmailContextKey, userEmail)
+				}
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}
 
-			// 2. Check for X-MCP-Scope-Token (backward compat)
-			scopeTokenHeader := r.Header.Get("X-MCP-Scope-Token")
-			if scopeTokenHeader != "" {
-				// Delegate to scope token middleware (always required)
-				scopeMW := scopetoken.Middleware(tokenCache, tokenRepo, true)
-				scopeMW(next).ServeHTTP(w, r)
-				return
-			}
-
-			// 3. Neither present — return 401 with discovery URL per MCP spec
+			// 3. Neither header present.
+			log.Printf("[oauth2] 401 unauthorized: method=%s path=%s remote=%s peer=%s xff=%q xri=%q cf_ip=%q user_agent=%q mcp_session=%q origin=%q referer=%q",
+				r.Method,
+				r.URL.Path,
+				slack.ClientIP(r),
+				r.RemoteAddr,
+				r.Header.Get("X-Forwarded-For"),
+				r.Header.Get("X-Real-IP"),
+				r.Header.Get("Cf-Connecting-IP"),
+				r.Header.Get("User-Agent"),
+				r.Header.Get("Mcp-Session-Id"),
+				r.Header.Get("Origin"),
+				r.Header.Get("Referer"),
+			)
 			metadataURL := publicURL + "/.well-known/oauth-authorization-server"
 			if publicURL == "" {
 				metadataURL = "/.well-known/oauth-authorization-server"
@@ -129,6 +270,7 @@ func CombinedMiddleware(
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
 			w.Write([]byte(`{"error":"unauthorized","error_description":"authentication required"}`))
+			notifyUnauthorized(slackClient, r, "no Authorization header or X-MCP-Scope-Token")
 		})
 	}
 }

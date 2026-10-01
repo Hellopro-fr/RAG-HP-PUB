@@ -55,6 +55,11 @@ type InitializeResult struct {
 	ProtocolVersion string             `json:"protocolVersion"`
 	Capabilities    ServerCapabilities `json:"capabilities"`
 	ServerInfo      Implementation     `json:"serverInfo"`
+	// Instructions is the optional MCP spec `instructions` field — a free-form
+	// string hosts inject into the agent's system prompt at session start. The
+	// gateway populates it with the token's or OAuth2 client's selected LLM
+	// instructions (see internal/gateway/instructions.go).
+	Instructions string `json:"instructions,omitempty"`
 }
 
 type Implementation struct {

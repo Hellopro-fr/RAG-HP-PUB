@@ -1,0 +1,43 @@
+# Perimetre de graphify — a ne pas confondre avec .gitignore
+#
+# graphify N'A AUCUNE NOTION de .gitignore : un repertoire peut etre exclu de git
+# et indexe quand meme. C'est ce qui est arrive au depot voisin meps-app, ou
+# `public/assets/` — gitignore depuis toujours — representait 96 % d'un graphe de
+# 33 194 noeuds (trois builds haches du meme bundle Vite, ~8 557 noeuds chacun).
+# Le graphe repondait sans erreur, simplement a cote.
+#
+# Les repertoires de dependances conventionnels semblent sautes par defaut ; ce
+# qui passe, c'est la sortie de build au nom banal (dist/, assets/, build/).
+# Toute nouvelle sortie de build doit donc etre ajoutee ICI, pas seulement dans
+# .gitignore.
+#
+# Verifie le 2026-08-04 : aucun fichier SUIVI par git ne vit sous l'un de ces
+# motifs, donc aucune source reelle n'est perdue.
+
+# Dependances
+node_modules/
+.venv/
+site-packages/
+vendor/
+
+# Sorties de build — le piege de meps-app
+dist/
+build/
+target/
+.next/
+coverage/
+htmlcov/
+
+# Caches et artefacts
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.lock
+*.lock.json
+
+# Le graphe lui-meme
+graphify-out/
+
+# Scratch local
+temp/

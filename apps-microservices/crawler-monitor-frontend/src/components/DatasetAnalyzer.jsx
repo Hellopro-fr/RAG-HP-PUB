@@ -58,14 +58,14 @@ const DatasetAnalyzer = ({ jobId, onClose, token }) => {
   return (
     <div className="p-4">
       <Card className="overflow-hidden">
-        <div className="flex items-center justify-between border-b border-border p-4">
+        <div className="flex items-center justify-between border-b border-hairline p-4">
           <h3 className="flex items-center gap-2 text-base font-semibold">
-            <Server className="h-4 w-4 text-primary" />
+            <Server className="h-4 w-4 text-accent" />
             Analyse Dataset
-            <span className="font-mono text-xs font-normal text-muted-foreground">
+            <span className="font-mono text-xs font-normal text-ink-3">
               #{String(jobId).slice(0, 10)}
             </span>
-            {countsLoading && <RefreshCw className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+            {countsLoading && <RefreshCw className="h-3.5 w-3.5 animate-spin text-ink-3" />}
           </h3>
           {onClose && (
             <Button variant="outline" size="sm" onClick={onClose}>
@@ -76,7 +76,7 @@ const DatasetAnalyzer = ({ jobId, onClose, token }) => {
         </div>
 
         {countsError && (
-          <div className="flex items-center justify-between gap-3 border-b border-destructive/40 bg-destructive/10 px-4 py-2 text-sm text-destructive">
+          <div className="flex items-center justify-between gap-3 border-b border-err/40 bg-err-soft px-4 py-2 text-sm text-err">
             <span className="flex items-center gap-2">
               <AlertCircle className="h-4 w-4" />
               Impossible de charger les comptes. {countsError}

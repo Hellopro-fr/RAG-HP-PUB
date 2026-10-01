@@ -4,7 +4,9 @@ import { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useFlowStore } from '@/lib/stores/flow-store';
 import { basePath } from '@/lib/utils';
+import { getProductImageUrl } from '@/lib/utils/image-url';
 import type { CharacteristicDefinition, CharacteristicsMap } from '@/types/characteristics';
+import type { BulleAide } from '@/types';
 import { useDbTracking } from '@/hooks/tracking/useDbTracking';
 
 // Toujours utiliser le proxy Next.js pour éviter les problèmes CORS
@@ -44,6 +46,50 @@ async function prefetchCategoryVignette(
   } catch (error) {
     console.error('Prefetch category vignette error:', error);
     // En cas d'erreur, on garde null (fallback sur image placeholder)
+  }
+}
+
+/**
+ * Prefetch les photos produit de la catégorie (nom + image) via /api/pht.
+ * Appelé dès que rubriqueId est disponible (en parallèle de Q1) pour que le
+ * fond de l'étape transparence soit prêt bien avant son affichage.
+ */
+async function prefetchCategoryPhotos(
+  categoryId: number,
+  setCategoryPreviewProducts: (products: Array<{ nom: string; image: string }>) => void
+): Promise<void> {
+  try {
+    const apiBase = getApiBasePath();
+    const response = await fetch(`${apiBase}/api/pht`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id_categorie: categoryId, nb: 3 }),
+    });
+
+    if (!response.ok) return;
+
+    const data = await response.json();
+    // API retourne: {"id_categorie":"2007702","produits":[{"nom":"...","image":"domaine/produit-2/..."}]}
+    if (Array.isArray(data.produits)) {
+      setCategoryPreviewProducts(data.produits);
+
+      // Préchauffe le cache navigateur des images du fond PENDANT que
+      // l'utilisateur répond au questionnaire → affichage quasi instantané à
+      // l'étape transparence (sinon le LazyThumbnail ne les charge qu'au montage
+      // de l'écran, d'où la latence). Le proxy /api/images renvoie déjà un
+      // Cache-Control immutable, donc le LazyThumbnail retombe sur le cache.
+      if (typeof window !== 'undefined') {
+        data.produits.slice(0, 3).forEach((p: { image?: string }) => {
+          if (p && p.image) {
+            const img = new window.Image();
+            img.src = getProductImageUrl(p.image);
+          }
+        });
+      }
+    }
+  } catch (error) {
+    console.error('Prefetch category photos error:', error);
+    // En cas d'erreur, on garde [] (le fond retombe sur son fallback)
   }
 }
 
@@ -162,7 +208,7 @@ interface ApiQuestion {
   id_question: number;
   intitule: string;
   choix: string;              // "1" = multi, "2" = single
-  justification: string | null;
+  bulle_aide?: BulleAide | null;
   id_reponse_parent: number | null;
   id_question_parent: number | null;
   reponses: ApiAnswer[];
@@ -180,7 +226,7 @@ interface NormalizedQuestion {
   code: string;
   title: string;
   type: 'single' | 'multi';
-  justification: string | null;
+  bulleAide: BulleAide | null;
   answers: NormalizedAnswer[];
 }
 
@@ -204,8 +250,8 @@ function normalizeQuestion(apiQuestion: ApiQuestion, questionIndex: number): Nor
     code: `Q${questionIndex + 1}`,
     title: apiQuestion.intitule,
     type: apiQuestion.choix === '1' ? 'multi' : 'single',  // "1" = multi, "2" = single
-    justification: apiQuestion.justification,
-    answers: apiQuestion.reponses.map((r) => ({      
+    bulleAide: apiQuestion.bulle_aide ?? null,
+    answers: apiQuestion.reponses.map((r) => ({
       id: String(r.id_reponse),
       code: String(r.id_reponse),
       mainText: r.reponse,
@@ -232,7 +278,9 @@ export function useDynamicQuestionnaire(rubriqueId: string) {
     setCategoryName,
     setCategoryStats,
     setCategoryVignette,
+    setCategoryPreviewProducts,
     setCaracteristiquesPrix,
+    truncateAnswersAfterIndex,
   } = useFlowStore();
 
   const { trackDbEvent } = useDbTracking();
@@ -241,8 +289,9 @@ export function useDynamicQuestionnaire(rubriqueId: string) {
   useEffect(() => {
     if (rubriqueId) {
       prefetchCategoryVignette(Number(rubriqueId), setCategoryVignette);
+      prefetchCategoryPhotos(Number(rubriqueId), setCategoryPreviewProducts);
     }
-  }, [rubriqueId, setCategoryVignette]);
+  }, [rubriqueId, setCategoryVignette, setCategoryPreviewProducts]);
 
   // Restaurer l'index à partir des réponses déjà enregistrées dans le store.
   // Si l'utilisateur revient (ex: retour depuis /profile), on affiche la question suivante.
@@ -419,6 +468,9 @@ export function useDynamicQuestionnaire(rubriqueId: string) {
     // Extraire les équivalences de manière robuste
     const selectedEquivalences = matchedAnswers
       .flatMap((a) => Array.isArray(a.equivalence) ? a.equivalence : []);
+
+    // Purger les réponses des questions postérieures (cas retour-arrière + changement)
+    truncateAnswersAfterIndex(currentIndex);
 
     setDynamicAnswer(questionCode, answerCodes, selectedEquivalences);
 

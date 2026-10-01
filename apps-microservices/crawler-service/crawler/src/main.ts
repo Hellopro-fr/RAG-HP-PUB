@@ -2,11 +2,10 @@ import { RequestQueue, RobotsFile, Dataset, Configuration } from "crawlee";
 import path from "path";
 import fs from "fs";
 import fsPromises from "fs/promises";
-import { createClient } from 'redis';
 import os from 'os';
-import { exec } from "child_process";
-import { promisify } from "util";
 import { router } from "./routes.js";
+import { RECOVER_FAILED_ON_RESTART, shouldRunRecovery, resolveStallCountResolved } from "./httpStatusPolicy.js";
+import { matchesMainSite } from "./isMainSite.js";
 import {
     getPathAfterDomain,
     getScrapingData,
@@ -16,6 +15,7 @@ import {
     reclaimFailedRequest,
     stats as statsFromFunctions,
     dropDataset,
+    clearDecisionSidecars,
     isStoppedManualy,
     getUrlsCrawledStreaming,
     updateUrlsCrawledStreaming,
@@ -27,18 +27,51 @@ import {
     generateUpdateReport,
     processUrl,
     getApifyProxyUrl,
+    stopCrawler,
 } from "./functions.js";
 import { DedupManager } from "./class/DedupManager.js";
+import { PushedSet } from "./class/PushedSet.js";
+import { RedisHealthMonitor } from "./class/RedisHealthMonitor.js";
+import { ProgressMonitor } from "./class/ProgressMonitor.js";
 import { StatsManager } from "./class/StatsManager.js";
 import { UrlConsolidator } from "./class/UrlConsolidator.js";
 import { UpdateChecker } from "./class/UpdateChecker.js";
 import { JsonlWriter } from "./class/JsonlWriter.js";
 import { DetectionLangueClient } from "./class/DetectionLangueClient.js";
+import { ContentExtractorClient } from "./class/ContentExtractorClient.js";
+import { TimingRecorder } from "./class/TimingRecorder.js";
+import type { PoolSample, TimingSummary } from "./timing/types.js";
 import { context } from "./context.js";
+import { readPersistedDecision, applyCliFlagGuard, getDiezDecisionMode } from "./diezDecision.js";
+import { applyCliFlagGuard as applyQuestionMarkGuard, getQuestionMarkDecisionMode, persistObservations as persistQuestionMarkObservations, readQmPersistedDecision } from "./questionMarkDecision.js";
 import { isBlanketBlock } from "./robotsTxtGuard.js";
+import { perClassEnabled, stripActionAnchor, actionAnchorStripEnabled } from "./diezClassify.js";
+import { killBrowserProcesses } from "./browserKill.js";
+import { readUsableMemory } from "./cgroupMemory.js";
+import { createSharedRedisClient } from "./redisClient.js";
+import { buildHtmlIndex } from "./htmlIndex.js";
+import { ensureUnjudgedSidecar } from "./unjudgedUrls.js";
+import { repairQueueMetadata, recountQueueFromDisk } from "./queueRepair.js";
+import { isDrainedSample, isUnreconciledIdle, DRAIN_CONFIRM_SAMPLES, DRAIN_DISK_RECOUNT_ENABLED } from "./drainGuard.js";
+import { QUEUE_PURGE_ENABLED } from "./staleVariantSkip.js";
+import { flagStaleVariantsOnDisk } from "./queuePurge.js";
+import { baseKeyAbsent } from "./urlBase.js";
+import { QM_FACET_ENABLED } from "./facetCap.js";
+import { writeQmAudit, writeDiezAudit, writeCanonicalDedupAudit } from "./auditSidecars.js";
+import { writeCollapsedSeenBase } from "./collapsedSeenBase.js";
+import { canonicalDedupEnabled } from "./canonicalBase.js";
+import { isFilterParam } from "./filterOnSeen.js";
+import { facetParamsForCms } from "./cmsFacetLists.js";
+import { hasIgnoredExtensionForSeed } from "./seedExtensionFilter.js";
 
-const execAsync = promisify(exec);
 const now = new Date().toISOString().replace(/:/g, "-");
+
+// Crawl start timestamp (déclaré ici pour être accessible depuis le handler de fin de crawl
+// qui construit la payload — ligne ~985). Mais ASSIGNÉ plus tard, juste avant
+// `await startCrawler(...)` (ligne ~1294), pour exclure le temps de bootstrap
+// (init Crawlee, Playwright, consolidate URLs, seeding) du décompte.
+// Format MySQL DATETIME, alimente crawl_metrics.date_start côté PHP.
+let crawlStartTime = '';
 
 // --- V3 Feature: Standard CLI Argument Parsing ---
 const args: Record<string, string> = {};
@@ -61,7 +94,7 @@ const parseNumericArg = (key: string, npmKey: string, defaultValue: number): num
 export const domain = getArg('domain', 'npm_config_domain');
 export const site = getArg('site', 'npm_config_site') || process.argv[2];
 const id = getArg('id', 'npm_config_id');
-const storagePath = getArg('storagePath', 'npm_config_storagepath');
+export const storagePath = getArg('storagePath', 'npm_config_storagepath');
 const callbackUrl = getArg('callbackUrl', 'npm_config_callbackurl');
 const typeCrawling = getArg('typecrawling', 'npm_config_typecrawling');
 const method = getArg('method', 'npm_config_method');
@@ -74,6 +107,8 @@ const skipquestionmark = (getArg('skipquestionmark', 'npm_config_skipquestionmar
 const skipdiez = (getArg('skipdiez', 'npm_config_skipdiez') || 'false').toLowerCase() === 'true';
 const bypassQuestionMark = (getArg('bypassquestionmark', 'npm_config_bypassquestionmark') || 'false').toLowerCase() === 'true';
 const bypassDiez = (getArg('bypassdiez', 'npm_config_bypassdiez') || 'false').toLowerCase() === 'true';
+const bypassQueue = (getArg('bypassqueue', 'npm_config_bypassqueue') || 'false').toLowerCase() === 'true';
+const queueLimit = parseNumericArg('queuelimit', 'npm_config_queuelimit', 2000);
 
 let paramPerCrawl = parseNumericArg('percrawl', 'npm_config_percrawl', 0);
 let paramPerMinute = parseNumericArg('perminute', 'npm_config_perminute', 100);
@@ -83,6 +118,8 @@ const toRemove = (getArg('toremove', 'npm_config_toremove') || '').split(";").fi
 const crawlMode = getArg('crawlMode', 'npm_config_crawlmode') || 'standard';
 const camoufoxEnabled = (getArg('camoufox', 'npm_config_camoufox') || 'true').toLowerCase() !== 'false';
 const previousCrawlId = getArg('previousCrawlId', 'npm_config_previouscrawlid');
+// Queue-purge CMS denylist: coarse CMS label from BO (e.g. "WordPress"), '' if unset/unknown.
+const cms = getArg('cms', 'npm_config_cms') || '';
 const maxErrors = parseNumericArg('maxErrors', 'npm_config_maxerrors', 0);
 const maxRedirects = parseNumericArg('maxRedirects', 'npm_config_maxredirects', 0);
 const maxNewUrls = parseNumericArg('maxNewUrls', 'npm_config_maxnewurls', 0);
@@ -95,6 +132,11 @@ const maxGrowthRate = parseNumericArg('maxGrowthRate', 'npm_config_maxgrowthrate
 const maxAbsErrors = parseNumericArg('maxAbsErrors', 'npm_config_maxabserrors', 5);
 const maxAbsRedirects = parseNumericArg('maxAbsRedirects', 'npm_config_maxabsredirects', 10);
 const maxAbsNew = parseNumericArg('maxAbsNew', 'npm_config_maxabsnew', 20);
+
+// External-redirect breaker (update mode) — spec 2026-06-09
+const externalRedirectBreakerEnabled = (getArg('externalRedirectBreaker', 'npm_config_externalredirectbreaker') || 'true').toLowerCase() === 'true';
+const maxExternalRedirectRate = parseNumericArg('maxExternalRedirectRate', 'npm_config_maxexternalredirectrate', 0.90);
+const externalRedirectMinSample = parseNumericArg('externalRedirectMinSample', 'npm_config_externalredirectminsample', 10);
 
 // Setup Context immediately
 context.config = {
@@ -112,18 +154,23 @@ context.config = {
     bypassDiez: bypassDiez,
     toKeep: toKeep,
     toRemove: toRemove,
+    cms: cms,
     breakLimit: breakLimit,
     circuitBreaker: {
         enabled: false,
         isMicroMode: false,
         previousTotal: 0,
         minSample: minSample,
+        minCoverage: 0.8,
         maxErrorRate: maxErrorRate,
         maxRedirectRate: maxRedirectRate,
         maxGrowthRate: maxGrowthRate,
         maxAbsErrors: maxAbsErrors,
         maxAbsRedirects: maxAbsRedirects,
-        maxAbsNew: maxAbsNew
+        maxAbsNew: maxAbsNew,
+        externalRedirectBreakerEnabled: externalRedirectBreakerEnabled,
+        maxExternalRedirectRate: maxExternalRedirectRate,
+        externalRedirectMinSample: externalRedirectMinSample
     }
 };
 
@@ -145,6 +192,29 @@ if (storagePath) {
     }
 }
 
+// Clean restart (dropData): delete prior diez/QM decision sidecars from storagePath
+// root BEFORE the reads below. storagePath is reused per crawl_id and is NOT cleared
+// by the Python relaunch path, and Node's own dataset drop (~L560) runs AFTER these
+// reads — so without this, readPersistedDecision/readQmPersistedDecision would inherit
+// stale skip/bypass decisions on a "clean" restart. OOM_RELAUNCH (non-dropData) keeps them.
+if (storagePath && dropData) {
+    const cleared = clearDecisionSidecars(storagePath);
+    if (cleared.length) console.log(`[dropData] cleared stale decision sidecars: ${cleared.join(', ')}`);
+}
+
+// Tier-1 diez auto-decision bootstrap: load persisted decision (OOM_RELAUNCH) or
+// mark as committed if CLI already set skipDiez/bypassDiez (human choice wins, spec §10.1).
+if (storagePath) {
+    const loaded = readPersistedDecision(storagePath);
+    if (!loaded) applyCliFlagGuard();
+}
+
+// Tier-1 observer guard: disable observation if CLI already set skipQuestionMark / bypassQuestionMark.
+// Human choice wins — spec §9.3.
+applyQuestionMarkGuard();
+// Phase-2: restore previously committed toRemove params (OOM_RELAUNCH).
+if (storagePath) readQmPersistedDecision(storagePath);
+
 const nameLogs = `${domain}-logs-${now}.log`;
 attachFSLogger(nameLogs);
 
@@ -152,66 +222,39 @@ console.info("Crawler starting with arguments:");
 console.info(JSON.stringify(args, null, 2));
 
 // --- PRE-FLIGHT CHECKS ---
-// 1. Kill orphan processes from previous runs
+// 1. Kill orphan browser processes from previous runs
 console.log('🧹 Checking for orphan browser processes...');
-try {
-    // Kill Chrome/Chromium processes (ignore errors if no processes found)
-    await execAsync('pkill -9 -f "chrome|chromium" 2>/dev/null || true', { timeout: 5000 });
-    await execAsync('pkill -9 -f "playwright" 2>/dev/null || true', { timeout: 5000 });
-    console.log('✅ Orphan processes cleaned.');
-} catch (e: any) {
-    // Ignore expected errors (no processes found, timeout, SIGKILL)
-    if (e.code !== 'ETIMEDOUT' && e.signal !== 'SIGKILL') {
-        console.warn('⚠️  Could not clean orphan processes:', e.message);
-    } else {
-        console.log('✅ No orphan processes found.');
-    }
-}
+await killBrowserProcesses();
+// Reap delay: kernel reclaims anon pages from killed children asynchronously.
+// 2s is empirically sufficient on Linux 5.x+ to flush the post-kill cgroup
+// state before the threshold check below reads /sys/fs/cgroup/memory.current.
+await new Promise((r) => setTimeout(r, 2000));
 
 // 2. Check available memory (Docker container limits, not host VM)
+// Page cache is subtracted from used because Linux reclaims it on demand
+// before invoking the OOM-killer (Spec-B 2026-05-21).
+const gb = (n: number) => (n / 1024 / 1024 / 1024).toFixed(2);
 let totalMem: number;
-let freeMem: number;
 
-try {
-    // Try to read Docker container memory limit from cgroups v2
-    const cgroupMemMax = await fsPromises.readFile('/sys/fs/cgroup/memory.max', 'utf-8').catch(() => null);
-    const cgroupMemCurrent = await fsPromises.readFile('/sys/fs/cgroup/memory.current', 'utf-8').catch(() => null);
-
-    if (cgroupMemMax && cgroupMemCurrent && cgroupMemMax.trim() !== 'max') {
-        totalMem = parseInt(cgroupMemMax.trim());
-        const usedMem = parseInt(cgroupMemCurrent.trim());
-        freeMem = totalMem - usedMem;
-    } else {
-        // Try cgroups v1 (older Docker versions)
-        const cgroupMemLimitV1 = await fsPromises.readFile('/sys/fs/cgroup/memory/memory.limit_in_bytes', 'utf-8').catch(() => null);
-        const cgroupMemUsageV1 = await fsPromises.readFile('/sys/fs/cgroup/memory/memory.usage_in_bytes', 'utf-8').catch(() => null);
-
-        if (cgroupMemLimitV1 && cgroupMemUsageV1) {
-            totalMem = parseInt(cgroupMemLimitV1.trim());
-            const usedMem = parseInt(cgroupMemUsageV1.trim());
-            freeMem = totalMem - usedMem;
-        } else {
-            // Fallback to host memory (not in Docker or cgroups not available)
-            totalMem = os.totalmem();
-            freeMem = os.freemem();
-        }
-    }
-} catch (e) {
-    // Fallback to host memory if cgroup reading fails
+const mem = await readUsableMemory();
+if (!mem) {
+    // Cannot measure memory. Skip pre-flight — assume OK rather than block startup.
+    console.warn('⚠️  Pre-flight: readUsableMemory() returned null. Skipping threshold check.');
     totalMem = os.totalmem();
-    freeMem = os.freemem();
-}
-
-const usedMem = totalMem - freeMem;
-const memPercent = (usedMem / totalMem) * 100;
-
-console.log(`💾 Memory status: ${(usedMem / 1024 / 1024 / 1024).toFixed(2)}GB / ${(totalMem / 1024 / 1024 / 1024).toFixed(2)}GB (${memPercent.toFixed(1)}% used)`);
-
-if (memPercent > 80) {
-    console.error(`❌ Memory critically low: ${memPercent.toFixed(1)}% used. Aborting to prevent OOM.`);
-    console.error(`   Free memory: ${(freeMem / 1024 / 1024 / 1024).toFixed(2)}GB`);
-    console.error(`🔄 Pre-flight OOM: exiting with code 3 (OOM_RELAUNCH) to trigger Python-side auto-restart.`);
-    process.exit(3); // OOM_RELAUNCH: trigger Python-side auto-restart
+} else {
+    totalMem = mem.totalMem;
+    const usablePercent = (mem.usableUsed / mem.totalMem) * 100;
+    const rawPercent = (mem.rawCurrent / mem.totalMem) * 100;
+    console.log(
+        `💾 Memory status: ${gb(mem.usableUsed)}GB usable / ${gb(mem.rawCurrent)}GB raw / ` +
+        `${gb(mem.totalMem)}GB limit ` +
+        `(${usablePercent.toFixed(1)}% usable, ${rawPercent.toFixed(1)}% raw, ${gb(mem.pageCache)}GB page cache).`
+    );
+    if (usablePercent > 80) {
+        console.error(`❌ Memory critically low: ${usablePercent.toFixed(1)}% usable used. Aborting to prevent OOM.`);
+        console.error(`🔄 Pre-flight OOM: exiting with code 3 (OOM_RELAUNCH) to trigger Python-side auto-restart.`);
+        process.exit(3);
+    }
 }
 
 console.log('✅ Pre-flight checks passed. Starting crawler...');
@@ -222,50 +265,27 @@ console.log('✅ Pre-flight checks passed. Starting crawler...');
 // Does NOT stop the crawl — purely diagnostic to capture OOM evidence in log files.
 const containerMemoryMb = Math.floor(totalMem / 1024 / 1024);
 
+// Adapter over readUsableMemory(): preserves the {usedMem, totalMem} shape
+// expected by Tier 1/2 handlers while shifting `usedMem` semantics from raw
+// memory.current to usable used (= memory.current - page cache).
 const readContainerMemory = async (): Promise<{ usedMem: number; totalMem: number } | null> => {
-    try {
-        const cgroupMemMax = await fsPromises.readFile('/sys/fs/cgroup/memory.max', 'utf-8').catch(() => null);
-        const cgroupMemCurrent = await fsPromises.readFile('/sys/fs/cgroup/memory.current', 'utf-8').catch(() => null);
-
-        if (cgroupMemMax && cgroupMemCurrent && cgroupMemMax.trim() !== 'max') {
-            return {
-                totalMem: parseInt(cgroupMemMax.trim()),
-                usedMem: parseInt(cgroupMemCurrent.trim())
-            };
-        }
-
-        // Fallback to cgroups v1
-        const cgroupMemLimitV1 = await fsPromises.readFile('/sys/fs/cgroup/memory/memory.limit_in_bytes', 'utf-8').catch(() => null);
-        const cgroupMemUsageV1 = await fsPromises.readFile('/sys/fs/cgroup/memory/memory.usage_in_bytes', 'utf-8').catch(() => null);
-
-        if (cgroupMemLimitV1 && cgroupMemUsageV1) {
-            return {
-                totalMem: parseInt(cgroupMemLimitV1.trim()),
-                usedMem: parseInt(cgroupMemUsageV1.trim())
-            };
-        }
-
-        // Fallback to OS-level
-        return {
-            totalMem: os.totalmem(),
-            usedMem: os.totalmem() - os.freemem()
-        };
-    } catch (e) {
-        return null;
-    }
+    const mem = await readUsableMemory();
+    if (!mem) return null;
+    return { usedMem: mem.usableUsed, totalMem: mem.totalMem };
 };
 
 // --- Tier 1 Recovery Handler (85-92%) ---
 let lastWarningActionTime = 0;
 let lastMemPercent = 0; // Track global memory state for persistence guard
 let persistenceInterval: ReturnType<typeof setInterval> | undefined;
+let progressMonitor: ProgressMonitor | undefined;
 let isPersisting = false; // Mutex flag to prevent concurrent updateUrlsCrawledStreaming calls
 const handleWarningMemory = async (memPercent: number) => {
     const now = Date.now();
     if (now - lastWarningActionTime < 30000) return; // Debounce 30s
     lastWarningActionTime = now;
 
-    console.warn(`⚠️  [Tier 1] Memory Warning (${memPercent.toFixed(1)}%). executing proactive recovery...`);
+    console.warn(`⚠️  [Tier 1] Memory Warning (${memPercent.toFixed(1)}% usable). executing proactive recovery...`);
 
     // 1. Force GC
     if ((global as any).gc) {
@@ -302,14 +322,12 @@ let criticalRecoveryAttempted = false;
 const handleCriticalMemory = async (memPercent: number) => {
     if (!criticalRecoveryAttempted) {
         // Phase A: Aggressive Recovery
-        console.error(`❌ [Tier 2] Memory CRITICAL (${memPercent.toFixed(1)}%). Initiating Phase A Recovery...`);
+        console.error(`❌ [Tier 2] Memory CRITICAL (${memPercent.toFixed(1)}% usable). Initiating Phase A Recovery...`);
         criticalRecoveryAttempted = true;
 
-        // 1. Kill Chrome processes (Forcefully release external memory)
-        try {
-            console.log("   -> [Phase A] Killing all Chrome/Playwright processes");
-            await execAsync('pkill -9 -f "chrome|chromium" 2>/dev/null || true');
-        } catch (e) { /* ignore */ }
+        // 1. Kill all browser processes (forcefully release external memory)
+        console.log("   -> [Phase A] Killing all browser processes");
+        await killBrowserProcesses();
 
         // 2. Emergency Persist (Save data before potential crash)
         console.log("   -> [Phase A] Emergency state persistence");
@@ -336,7 +354,7 @@ const handleCriticalMemory = async (memPercent: number) => {
     }
 
     // Phase B: Graceful Shutdown (Recovery failed)
-    console.error(`❌ [Tier 2] Memory STILL CRITICAL (${memPercent.toFixed(1)}%) after recovery. Initiating Phase B: Auto-Relaunch...`);
+    console.error(`❌ [Tier 2] Memory STILL CRITICAL (${memPercent.toFixed(1)}% usable) after recovery. Initiating Phase B: Auto-Relaunch...`);
     await gracefulShutdown('OOM_RELAUNCH', 3); // Exit code 3 triggers auto-relaunch in Python
 };
 
@@ -355,7 +373,7 @@ setInterval(async () => {
     } else {
         // Reset Phase A flag if we dropped below critical
         if (criticalRecoveryAttempted) {
-             console.log(`✅ Memory recovered to ${memPercent.toFixed(1)}%. Resetting Tier 2 Phase A flag.`);
+             console.log(`✅ Memory recovered to ${memPercent.toFixed(1)}% usable. Resetting Tier 2 Phase A flag.`);
              criticalRecoveryAttempted = false;
         }
 
@@ -366,14 +384,32 @@ setInterval(async () => {
 }, 2000); // Poll every 2s (Optimized from 5s)
 // --- END MEMORY WATCHDOG ---
 
-// --- Heartbeat Mechanism ---
+// --- Redis Health + Progress Monitors ---
 const redisUrl = process.env.REDIS_URL || 'redis://redis:6379';
-const redisClient = createClient({ url: redisUrl });
-redisClient.on('error', (err) => console.error('Redis Heartbeat Error:', err));
+const parsedRedisLossMs = Number(process.env.REDIS_LOSS_THRESHOLD_MS);
+const redisLossThresholdMs = Number.isFinite(parsedRedisLossMs) && parsedRedisLossMs > 0
+    ? parsedRedisLossMs
+    : 60_000;
+const redisMonitor = new RedisHealthMonitor(
+    redisLossThresholdMs,
+    (reason) => {
+        console.error(`[fatal] redis_lost: ${reason}`);
+        console.error(JSON.stringify({ event: 'redis_lost', reason, snapshot: redisMonitor.snapshot() }));
+        // gracefulShutdown is declared later in the file; safe to forward-reference
+        // via the top-level `gracefulShutdown` const because we only call it at fire-time.
+        void gracefulShutdown('REDIS_LOST', 5);
+    },
+);
+// Single client identity — heartbeat + dedup multiplex on sharedRedis.
+redisMonitor.attach('shared');
+redisMonitor.start();
 
+// --- Shared Redis client (heartbeat + dedup multiplex) ---
+const sharedRedis = createSharedRedisClient(redisUrl, { crawlId: id, monitor: redisMonitor });
 try {
-    await redisClient.connect();
-    console.log('Connected to Redis for Heartbeat');
+    await sharedRedis.connect();
+    redisMonitor.onSuccess('shared');
+    console.log('Connected to Redis (shared client for heartbeat + dedup)');
 
     const hostname = os.hostname();
     const numCpus = os.cpus().length;
@@ -384,14 +420,13 @@ try {
     const getTopProcesses = async (): Promise<Array<{ name: string, ram: number }>> => {
         try {
             const { execSync } = await import('child_process');
-            // Get top 3 processes by RSS (Linux/Mac compatible)
             const output = execSync('ps aux --sort=-rss | head -n 4 | tail -n 3', { encoding: 'utf-8' });
             const lines = output.trim().split('\n');
             return lines.map(line => {
                 const parts = line.trim().split(/\s+/);
                 const ramKB = parseInt(parts[5]) || 0;
                 const command = parts.slice(10).join(' ').substring(0, 30);
-                return { name: command, ram: ramKB * 1024 }; // Convert to bytes
+                return { name: command, ram: ramKB * 1024 };
             });
         } catch (e) {
             return [];
@@ -401,36 +436,26 @@ try {
     // Helper to read container-level memory usage from cgroups
     const getContainerMemoryUsage = async (): Promise<number> => {
         try {
-            // cgroups v2
             const v2 = await fsPromises.readFile('/sys/fs/cgroup/memory.current', 'utf-8').catch(() => null);
             if (v2) return parseInt(v2.trim());
-
-            // cgroups v1
             const v1 = await fsPromises.readFile('/sys/fs/cgroup/memory/memory.usage_in_bytes', 'utf-8').catch(() => null);
             if (v1) return parseInt(v1.trim());
         } catch (e) { /* fallback below */ }
-
-        // Fallback: Node.js process RSS (inaccurate but better than 0)
         return process.memoryUsage().rss;
     };
 
     // Helper to read container-level CPU usage from cgroups
-    // Returns cumulative CPU microseconds used by the entire container
     const getContainerCpuUsec = async (): Promise<number | null> => {
         try {
-            // cgroups v2: cpu.stat has "usage_usec <value>" line
             const v2 = await fsPromises.readFile('/sys/fs/cgroup/cpu.stat', 'utf-8').catch(() => null);
             if (v2) {
                 const match = v2.match(/usage_usec\s+(\d+)/);
                 if (match) return parseInt(match[1]);
             }
-
-            // cgroups v1: cpuacct.usage is in nanoseconds
             const v1 = await fsPromises.readFile('/sys/fs/cgroup/cpuacct/cpuacct.usage', 'utf-8').catch(() => null);
-            if (v1) return parseInt(v1.trim()) / 1000; // Convert ns to us
+            if (v1) return parseInt(v1.trim()) / 1000;
         } catch (e) { /* fallback below */ }
-
-        return null; // No cgroup CPU available
+        return null;
     };
 
     let lastContainerCpuUsec = await getContainerCpuUsec();
@@ -438,7 +463,6 @@ try {
 
     setInterval(async () => {
         try {
-            // Container-level CPU from cgroups
             let cpuPercent: number;
             const currentContainerCpuUsec = await getContainerCpuUsec();
             const currentTime = Date.now();
@@ -450,7 +474,6 @@ try {
                 lastContainerCpuUsec = currentContainerCpuUsec;
                 lastContainerCpuTime = currentTime;
             } else {
-                // Fallback to process-level CPU
                 const currentCpuUsage = process.cpuUsage(lastCpuUsage);
                 const elapsedTime = (currentTime - lastTime) * 1000;
                 cpuPercent = ((currentCpuUsage.user + currentCpuUsage.system) / elapsedTime) / numCpus;
@@ -458,7 +481,6 @@ try {
                 lastTime = currentTime;
             }
 
-            // Container-level RAM from cgroups
             const containerRam = await getContainerMemoryUsage();
             const topProcesses = await getTopProcesses();
 
@@ -467,20 +489,29 @@ try {
                 replicaId: hostname,
                 jobId: id,
                 domain: domain,
-                cpu: Math.min(Math.max(cpuPercent, 0), 1), // Clamp 0-1
+                cpu: Math.min(Math.max(cpuPercent, 0), 1),
                 ram: containerRam,
                 totalRam: totalMem,
                 topProcesses: topProcesses,
                 timestamp: Date.now(),
                 status: 'running'
             };
-            await redisClient.publish('crawler:heartbeat', JSON.stringify(heartbeat));
+            try {
+                await sharedRedis.publish('crawler:heartbeat', JSON.stringify(heartbeat));
+                redisMonitor.onSuccess('shared');
+            } catch (e) {
+                redisMonitor.onError('shared', e);
+                console.error('Failed to send heartbeat:', e);
+            }
         } catch (e) {
-            console.error('Failed to send heartbeat:', e);
+            console.error('Heartbeat interval error:', e);
         }
     }, 2000);
 } catch (err) {
-    console.error('Failed to connect to Redis for Heartbeat:', err);
+    console.error('Failed to connect shared Redis client:', err);
+    redisMonitor.onError('shared', err);
+    redisMonitor.stop();
+    process.exit(5);
 }
 // ---------------------------
 
@@ -538,11 +569,18 @@ if (fs.existsSync(stopperFile)) {
     } catch (e) {}
 }
 
-// Init Managers
-context.dedupManager = new DedupManager(redisUrl, id);
-context.statsManager = new StatsManager(redisUrl, id, storagePath || ".");
-
-await context.dedupManager.connect();
+// Init Managers — DedupManager reuses the shared Redis client.
+context.dedupManager = new DedupManager(sharedRedis, id, undefined, redisMonitor);
+// PushedSet guards non-idempotent dataset writes against retry/restart
+// duplication. Shares the same Redis client + monitor.
+context.pushedSet = new PushedSet(sharedRedis, id, { monitor: redisMonitor });
+// Set de claim DÉDIÉ à UpdateChecker.checkUrl. Même client/monitor, mais clé
+// `checked:{id}` distincte de `pushed:{id}` : checkUrl ne consomme plus le jeton
+// d'écriture dataset, donc routerDefaultHandler peut de nouveau pousser les pages
+// « confirmed » en mode update (cf. régression PushedSet du 2026-05-24).
+context.checkedSet = new PushedSet(sharedRedis, id, { monitor: redisMonitor, keyPrefix: 'checked' });
+context.statsManager = new StatsManager(sharedRedis, id, storagePath || ".");
+// No dedupManager.connect() — shared client is already connected above.
 await context.statsManager.connect();
 
 let isHistorised = false;
@@ -554,12 +592,16 @@ if (dropData) {
     await dropDataset(domain);
     await dropDataset(`error-${domain}`);
     await dropDataset(`nfr-${domain}`);
-    
+
     // Also clean managers
     await context.dedupManager.cleanup();
+    if (context.pushedSet) await context.pushedSet.cleanup();
+    if (context.checkedSet) await context.checkedSet.cleanup();
     await context.statsManager.cleanup();
-    // Reconnect after cleanup
-    await context.dedupManager.connect();
+    // Shared client survives all manager cleanups (ownsClient=false on dedup,
+    // pushed, checked AND now stats), so no reconnect is needed. The
+    // statsManager.connect() below is a no-op on the injected path (kept for
+    // symmetry with the legacy URL constructor).
     await context.statsManager.connect();
 
     isHistorised = true;
@@ -567,6 +609,14 @@ if (dropData) {
     // Load stats if resuming
     await context.statsManager.loadStateFromDisk();
 }
+
+// Create `__unjudged_urls.json` as `[]` now — AFTER the dropData drop above, which
+// would otherwise delete it. Its mere presence tells the BO "this crawler records
+// pages detection could not judge", which an absent file cannot: absent means
+// "crawler predates the fix, you cannot tell", empty means "detection answered for
+// every page, the orphan subtraction is safe". Written at startup so the
+// distinction survives a SIGKILL. Never clobbers an OOM relaunch's entries.
+ensureUnjudgedSidecar(domain);
 
 // --- HYBRID RESUME STRATEGY ---
 // Check if Redis already has data (Hot Resume)
@@ -623,7 +673,7 @@ persistenceInterval = setInterval(async () => {
     try {
         // Guard: Skip persistence if memory is already high (>85%) to prevent OOM
         if (lastMemPercent > 85) {
-            console.warn(`⚠️ Skipping periodic persistence due to high memory (${lastMemPercent.toFixed(1)}%)`);
+            console.warn(`⚠️ Skipping periodic persistence due to high memory (${lastMemPercent.toFixed(1)}% usable)`);
             return;
         }
 
@@ -647,6 +697,64 @@ persistenceInterval = setInterval(async () => {
     }
 }, PERSIST_INTERVAL_MS);
 
+// --- QUEUE-PAUSE GATE (Machine-time protection) ---
+// Dedicated SHORT interval (30s) — NOT the 10-min persistence timer — so an
+// oversized site is stopped EARLY (~30-60s after crossing the cap) rather than
+// after ~1000 pages. Stop when totalRequestCount (cumulative URLs enqueued)
+// exceeds the cap — a hard size limit, NOT the live pending backlog. bypassqueue=1
+// is the operator "crawl fully" override; queuelimit<=0 disables the gate entirely.
+const QUEUE_PAUSE_INTERVAL_MS = 30 * 1000;
+const queuePauseInterval: ReturnType<typeof setInterval> | undefined =
+    (!bypassQueue && queueLimit > 0)
+        ? setInterval(async () => {
+            try {
+                const liveQueueInfo = await requestQueue.getInfo();
+                if (liveQueueInfo && liveQueueInfo.totalRequestCount > queueLimit) {
+                    console.warn(`⚠️ Queue-pause gate triggered: total=${liveQueueInfo.totalRequestCount} > limit=${queueLimit} (limitQueue).`);
+                    context.stopReason = "limitQueue";
+                    if (context.crawlerInstance) {
+                        await stopCrawler(context.crawlerInstance, `Total enqueued URLs (${liveQueueInfo.totalRequestCount}) exceeded limit ${queueLimit} (limitQueue).`);
+                    }
+                }
+            } catch (e) {
+                console.error("Queue-pause gate check failed:", e);
+            }
+        }, QUEUE_PAUSE_INTERVAL_MS)
+        : undefined;
+
+
+// Queue-purge #2: build the seen-base oracle BEFORE the D1 disk-flag pass below,
+// so a filtered-view variant already queued from a prior run can be retracted on
+// this resume/update. Dataset + live-added only (NEVER Redis — Redis is
+// update-mode-blind, see spec). Each call below opens a FRESH generator instance;
+// none of these are reused (the ~L864 consolidator call creates its own separate
+// instance for a different purpose).
+if (QM_FACET_ENABLED) {
+    const addSeen = async (gen: AsyncGenerator<string>) => {
+        try {
+            for await (const u of gen) context.seenBases.add(baseKeyAbsent(u));
+        } catch (e) {
+            console.warn(`[qm-facet] seenBases pass skipped: ${(e as Error).message}`);
+        }
+    };
+    // Update mode: the previous crawl's dataset is the "already crawled" oracle.
+    if (previousCrawlId) await addSeen(loadDatasetUrlsGenerator(previousCrawlId, domain));
+    // Initial/resume: the current crawl's own dataset-on-disk.
+    if (context.config.crawleeStorageName) await addSeen(rehydrateDedupFromDataset(context.config.crawleeStorageName));
+    if (context.seenBases.size > 0) {
+        console.log(`[qm-facet] seenBases: ${context.seenBases.size} bases loaded from dataset.`);
+    }
+
+    // Queue-purge CMS denylist (Layer A): merge the CMS's curated cosmetic facet params
+    // into toRemove so the existing toRemove machinery (processUrl) strips them at
+    // enqueue time. Empty/unknown cms -> facetParamsForCms returns [] -> no-op.
+    const cmsFacets = facetParamsForCms(context.config.cms);
+    if (cmsFacets.length > 0) {
+        const have = new Set(context.config.toRemove.map((s) => s.toLowerCase()));
+        for (const p of cmsFacets) if (!have.has(p.toLowerCase())) context.config.toRemove.push(p);
+        console.log(`[qm-facet] CMS '${context.config.cms}': merged ${cmsFacets.length} facet param(s) into toRemove.`);
+    }
+}
 
 if (skipquestionmark || skipdiez) {
     const requestQueueList = getAllRequestQueues(domain);
@@ -658,8 +766,129 @@ if (skipquestionmark || skipdiez) {
     }
 }
 
+// Queue-purge (D1): flag already-queued stale variants (already superseded by a
+// committed skip decision) with skipNavigation, so Crawlee drops them without a
+// fetch at dispatch (handler early-guard, routes.ts). Disk-only + loss-proof: the
+// canonical set is the already-handled files on disk. Never touches orderNo, so
+// pending/handled/total stay consistent for repairQueueMetadata below. Uses the
+// LIVE context.config (persisted-decision-aware) rather than the raw CLI locals.
+if (QUEUE_PURGE_ENABLED) {
+    try {
+        const purged = flagStaleVariantsOnDisk(
+            `storage/request_queues/${domain}`,
+            (u: string) => processUrl(
+                u,
+                context.config.skipQuestionMark,
+                context.config.skipDiez,
+                { toKeep: context.config.toKeep, toRemove: context.config.toRemove },
+            ),
+            // Queue-purge #2 decider: the #1 facet counter is empty at startup (in-memory,
+            // built only as live pages are handled), so D1 only needs the seen-base check.
+            (u: string) => QM_FACET_ENABLED && isFilterParam(u, context.seenBases),
+        );
+        if (purged.flagged > 0) {
+            console.warn(`[queue-purge] ${domain}: flagged ${purged.flagged} stale queued variants skipNavigation (kept ${purged.kept}).`);
+        }
+    } catch (e) {
+        console.warn(`[queue-purge] skipped for ${domain}: ${(e as Error).message}`);
+    }
+}
+
+// Repair stale request-queue metadata left by an interrupted / lost-flush prior run.
+// memory-storage loads counts from the debounced __metadata__.json but total from the
+// request files; a mismatch deadlocks Crawlee's isFinished() -> 1200s progress stall.
+// Recompute from the request files and rewrite the metadata BEFORE opening the queue.
+// No-op on healthy queues (counts already match) -> byte-identical. Best-effort.
+try {
+    const rqDir = `storage/request_queues/${domain}`;
+    const rep = repairQueueMetadata(rqDir);
+    if (rep.repaired) {
+        const b = rep.before;
+        console.warn(`[queue-repair] ${domain}: stale counts pending/handled ${b ? `${b.pending}/${b.handled}` : "(no metadata)"} -> ${rep.after.pending}/${rep.after.handled} (total ${rep.after.total})`);
+    }
+} catch (e) {
+    console.warn(`[queue-repair] skipped for ${domain}: ${(e as Error).message}`);
+}
+
 // Open requestQueue FIRST (before any operations)
 export const requestQueue = await RequestQueue.open(domain);
+
+// --- QUEUE STATS PUBLISHER (live observability) ---
+// Always-on (unlike the conditional queue-pause gate): every 30s, snapshot the
+// request-queue depth to {storagePath}/_queue_stats.json so the Python /status
+// handler can surface total/remaining URL counts to the BO live panel.
+const QUEUE_STATS_INTERVAL_MS = 30 * 1000;
+// Drain-completion guard state (see drainGuard.ts): consecutive idle+drained samples,
+// and a one-shot latch so we abort the pool at most once.
+let drainConfirmCount = 0;
+let wedgeSuspectCount = 0;
+let drainAbortInitiated = false;
+const queueStatsInterval = setInterval(async () => {
+    try {
+        const info = await requestQueue.getInfo();
+        if (!info) return;
+        const payload = JSON.stringify({
+            total_request_count: info.totalRequestCount,
+            pending_request_count: info.pendingRequestCount,
+            updated_at: new Date().toISOString(),
+        });
+        await fs.promises.writeFile(path.join(storagePath, '_queue_stats.json'), payload);
+        // Drain-completion guard: a genuinely-drained crawl whose Crawlee finish gate
+        // (isEmpty()/queueHeadIds) is wedged would otherwise idle until the progress-stall
+        // watchdog (exit 6). Detect it via the reliable in-memory getInfo() counters and
+        // abort the pool so crawler.run() resolves through the normal completion path (exit 0).
+        const drainPool = (context.crawlerInstance as any)?.autoscaledPool;
+        if (drainPool && !drainAbortInitiated) {
+            const sample = {
+                currentConcurrency: drainPool.currentConcurrency ?? 0,
+                pendingRequestCount: info.pendingRequestCount ?? 0,
+                handledRequestCount: info.handledRequestCount ?? 0,
+                totalRequestCount: info.totalRequestCount ?? 0,
+            };
+            // Fast-path: getInfo counters honest but isEmpty()/queueHeadIds wedged.
+            drainConfirmCount = isDrainedSample(sample) ? drainConfirmCount + 1 : 0;
+            if (drainConfirmCount >= DRAIN_CONFIRM_SAMPLES) {
+                drainAbortInitiated = true;
+                console.warn(`[drain-guard] queue drained but crawler not finished (idle ${drainConfirmCount}x, handled ${info.handledRequestCount}/${info.totalRequestCount}, pending ${info.pendingRequestCount}) — aborting pool to complete cleanly.`);
+                try {
+                    await drainPool.abort();
+                } catch (e) {
+                    console.warn(`[drain-guard] abort failed: ${(e as Error).message}`);
+                }
+            }
+            // Disk-confirm path: getInfo counters THEMSELVES wedged (handled+pending !== total
+            // while idle — the 0/0/N deadlock isDrainedSample can't see). Recount from the
+            // request files' orderNo (ground truth, same source as the startup repair) and abort
+            // only if genuinely drained; a real backlog shows pending>0 → leave to progress-stall.
+            if (!drainAbortInitiated && DRAIN_DISK_RECOUNT_ENABLED) {
+                wedgeSuspectCount = isUnreconciledIdle(sample) ? wedgeSuspectCount + 1 : 0;
+                if (wedgeSuspectCount >= DRAIN_CONFIRM_SAMPLES) {
+                    const rc = recountQueueFromDisk(`storage/request_queues/${domain}`);
+                    const diskDrained = isDrainedSample({
+                        currentConcurrency: 0,
+                        pendingRequestCount: rc.pending,
+                        handledRequestCount: rc.handled,
+                        totalRequestCount: rc.total,
+                    });
+                    if (diskDrained) {
+                        drainAbortInitiated = true;
+                        console.warn(`[drain-guard] disk-confirmed drain despite wedged counters (getInfo handled=${info.handledRequestCount}/${info.totalRequestCount}, disk handled=${rc.handled}/${rc.total}) — aborting pool to exit 0.`);
+                        try {
+                            await drainPool.abort();
+                        } catch (e) {
+                            console.warn(`[drain-guard] abort failed: ${(e as Error).message}`);
+                        }
+                    } else {
+                        console.warn(`[drain-guard] idle+unreconciled ${wedgeSuspectCount}x but disk shows pending=${rc.pending}/${rc.total} — genuine work, not aborting.`);
+                        wedgeSuspectCount = 0;
+                    }
+                }
+            }
+        }
+    } catch (e) {
+        console.error("Queue-stats publisher failed:", e);
+    }
+}, QUEUE_STATS_INTERVAL_MS);
 
 // --- SEEDING LOGIC (Update Mode Support) ---
 // Declared at outer scope so Phase 2 seeding (before startCrawler) can access it
@@ -679,8 +908,7 @@ if (crawlMode === 'update') {
     // --- URL CONSOLIDATION (Epic 1) ---
     // Load URLs from 3 sources and deduplicate with strict priority:
     // Dataset > Request_queue > Request_url
-    const redisUrl = process.env.REDIS_URL || 'redis://redis:6379';
-    const consolidator = new UrlConsolidator(redisUrl, id, previousCrawlId, domain);
+    const consolidator = new UrlConsolidator(sharedRedis, id, previousCrawlId, domain);
     await consolidator.connect();
     context.urlConsolidator = consolidator;
 
@@ -711,22 +939,36 @@ if (crawlMode === 'update') {
     context.homepageReady = { resolve: resolveHomepage!, promise: homepagePromise };
 
     // Phase 1: Seed only the homepage
+    let phase1SeedUrl = site;
+    if (actionAnchorStripEnabled()) {
+        const strippedAa = stripActionAnchor(phase1SeedUrl);
+        if (strippedAa !== phase1SeedUrl) {
+            phase1SeedUrl = strippedAa;
+            context.actionAnchorsStripped++;
+        }
+    }
     await requestQueue.addRequest({
-        url: site,
+        url: phase1SeedUrl,
+        uniqueKey: phase1SeedUrl,
         userData: { source: 'seed' }
     });
-    if (context.dedupManager) {
-        await context.dedupManager.addUrl(site);
-    }
+    // Do NOT pre-add the homepage to Redis dedup here (same rule as the standard
+    // seed below). The handler claims it on first processing; pre-adding makes the
+    // handler see it as a "Doublon" and skip extraction — which also skips homepage
+    // detection (regional-path exclusion) in update mode.
 
     // Collect remaining URLs for Phase 2 (all consolidated URLs except the homepage)
     for await (const { url: consolidatedUrl, source } of allUrls) {
-        if (consolidatedUrl === site) continue; // Already seeded as homepage
+        if (matchesMainSite(consolidatedUrl, site)) continue; // Already seeded as homepage
         remainingUrls.push({ url: consolidatedUrl, source });
     }
 
     const totalConsolidated = remainingUrls.length + 1; // +1 for homepage
     console.log(`Consolidated ${totalConsolidated} URLs from ${consolidationCounts.dataset} Dataset + ${consolidationCounts.requestQueue} RQ + ${consolidationCounts.requestUrl} RU.`);
+
+    if (context.statsManager && consolidationCounts.duplicatesRemoved > 0) {
+        await context.statsManager.increment("filtered_duplicate", consolidationCounts.duplicatesRemoved);
+    }
 
     // Safety net: update mode with 0 URLs means previous crawl data was unavailable
     if (totalConsolidated <= 1) {
@@ -739,7 +981,8 @@ if (crawlMode === 'update') {
     const previousTotal = consolidationCounts.dataset;
     context.config.circuitBreaker.enabled = true;
     context.config.circuitBreaker.previousTotal = previousTotal;
-    context.config.circuitBreaker.isMicroMode = previousTotal < 50;
+    // We will not basing the Circuit Breaker using the number of URL anymore
+    // context.config.circuitBreaker.isMicroMode = previousTotal < 50;
     
     console.log(`\n🛡️ Circuit Breaker Configured:`);
     console.log(`   - Previous Total (Dataset): ${previousTotal}`);
@@ -757,7 +1000,7 @@ if (crawlMode === 'update') {
         const updateDatasetPath = path.join(storagePath, 'storage', 'datasets', `update-${domain}`);
         const jsonlWriter = new JsonlWriter(updateDatasetPath);
         const { UpdateChecker: UC } = await import("./class/UpdateChecker.js");
-        context.updateChecker = new UC(context.urlConsolidator, context.statsManager, jsonlWriter);
+        context.updateChecker = new UC(context.urlConsolidator, context.statsManager, jsonlWriter, context.checkedSet ?? null);
         context.jsonlWriter = jsonlWriter;
         console.log(`✅ UpdateChecker + JsonlWriter initialized (output: storage/datasets/update-${domain}/).`);
     }
@@ -777,30 +1020,73 @@ if (crawlMode === 'update') {
     // The handler will add it when processing the page.
     // Pre-adding it causes the homepage to be treated as "Doublon" and skipped entirely.
 
-    await requestQueue.addRequest({ 
-        url: cleanSite, 
-        userData: { is_existing: false } 
+    let standardSeedUrl = cleanSite;
+    if (actionAnchorStripEnabled()) {
+        const strippedAa = stripActionAnchor(standardSeedUrl);
+        if (strippedAa !== standardSeedUrl) {
+            standardSeedUrl = strippedAa;
+            context.actionAnchorsStripped++;
+        }
+    }
+    await requestQueue.addRequest({
+        url: standardSeedUrl,
+        uniqueKey: standardSeedUrl,
+        userData: { is_existing: false }
     });
 } else {
     console.log("RequestQueueNotEmpty");
+}
+
+// Auto-recover recoverable (infra/transient) failures from a prior run BEFORE the
+// queue-health early-exit, so a same-id restart re-crawls proxy/network victims
+// instead of exiting "already completed". Default-on; RECOVER_FAILED_ON_RESTART=false
+// reverts to the prior behavior. Spec: 2026-06-16-crawler-failure-recovery-design.md
+if (shouldRunRecovery(RECOVER_FAILED_ON_RESTART, typeCrawling ?? "")) {
+    try {
+        await reclaimFailedRequest(domain);
+    } catch (e) {
+        console.warn(`⚠️ auto-recovery skipped for ${domain}: ${e}`);
+    }
 }
 
 // --- QUEUE HEALTH CHECK ---
 // Intelligent queue state detection using handled/pending/total counts
 const queueInfo = await requestQueue.getInfo();
 
+// The two early exits below bypass gracefulShutdown (a `const` declared later —
+// TDZ at this point of top-level execution), leaving _exit_reason.json stale from
+// a previous segment. Refresh it: the Python shutdown/crash-heal guards require
+// reason=COMPLETED with a timestamp FRESHER than the run's start_time.
+const writeCompletedExitReason = () => {
+    try {
+        const p = `${storagePath}/_exit_reason.json`;
+        fs.writeFileSync(p, JSON.stringify({ reason: "COMPLETED", timestamp: new Date().toISOString(), stats: null }, null, 2));
+        const fd = fs.openSync(p, 'r');
+        fs.fsyncSync(fd);
+        fs.closeSync(fd);
+    } catch (e) {
+        console.error("Failed to refresh _exit_reason.json on early exit", e);
+    }
+};
+
 // Case 1: Crawl completed successfully (all items handled)
 if (queueInfo && queueInfo.totalRequestCount > 0 && queueInfo.handledRequestCount === queueInfo.totalRequestCount && queueInfo.pendingRequestCount === 0) {
     console.log(`✅ Crawl already completed: ${queueInfo.handledRequestCount}/${queueInfo.totalRequestCount} items handled.`);
     console.log(`ℹ️  No pending items. Exiting gracefully.`);
+    writeCompletedExitReason();
     process.exit(0); // Success exit
 }
 
-// Case 2: Crash Recovery / In-Progress (Updated Logic)
+// Case 2: Crash Recovery / In-Progress — belt-and-braces.
+// The pre-open metadata repair (above) should have resolved this. If we STILL see the
+// 0/0/total>0 deadlock signature, the queue has no dispatchable work and would idle
+// until the 1200s progress-stall watchdog (then relaunch into the same state). Exit
+// cleanly (treat as complete) instead of proceeding into a guaranteed stall.
 if (queueInfo && queueInfo.handledRequestCount === 0 && queueInfo.pendingRequestCount === 0 && queueInfo.totalRequestCount > 0) {
     console.warn(`⚠️  WARNING: Detected ${queueInfo.totalRequestCount} in-progress items from a previous interrupted run.`);
-    console.warn(`ℹ️  Crawler will resume these requests (they will be reclaimed if timed out).`);
-    // We proceed instead of exiting
+    console.warn(`ℹ️  No dispatchable requests after repair — exiting 0 (treating as complete) to avoid a progress stall + relaunch loop.`);
+    writeCompletedExitReason();
+    process.exit(0);
 }
 
 // Case 3: Normal operation
@@ -808,6 +1094,40 @@ if (queueInfo) {
     console.log(`📊 Queue status: ${queueInfo.pendingRequestCount} pending, ${queueInfo.handledRequestCount} handled, ${queueInfo.totalRequestCount} total`);
 }
 // --------------------------
+
+/**
+ * Formats a TimingSummary snapshot as a human-readable console block.
+ * Phases are sorted by share-of-total descending so the dominant phase is first.
+ */
+function formatTimingSummary(s: TimingSummary): string {
+    const lines: string[] = [];
+    lines.push("=== Timing summary ===");
+    lines.push(`Pages: ${s.pages_total} in ${s.duration_s}s ` +
+        `(avg ${s.pages_per_min_avg} pages/min, max ${s.pages_per_min_max_sustained} sustained)`);
+    lines.push("Phase share of total handler time:");
+    const phases: Array<[string, keyof TimingSummary["phases"]]> = [
+        ["wait_ms", "wait_ms"],
+        ["nav_ms", "nav_ms"],
+        ["pre_detect_ms", "pre_detect_ms"],
+        ["detect_ms", "detect_ms"],
+        ["post_ms", "post_ms"],
+    ];
+    const sorted = phases.slice().sort((a: [string, keyof TimingSummary["phases"]], b: [string, keyof TimingSummary["phases"]]) =>
+        s.phases[b[1]].share_of_total_pct - s.phases[a[1]].share_of_total_pct);
+    for (const [label, key] of sorted) {
+        const ph = s.phases[key];
+        lines.push(`  ${label.padEnd(14)}${ph.share_of_total_pct.toFixed(1)}%  ` +
+            `(median ${ph.median}ms, p95 ${ph.p95}ms)`);
+    }
+    lines.push("Pool:");
+    lines.push(`  Crawlee avg concurrency: ${s.pool.crawlee_avg_concurrency} ` +
+        `/ max reached: ${s.pool.crawlee_max_concurrency_reached} ` +
+        `/ throttled ${s.pool.crawlee_throttle_pct}% of time`);
+    lines.push(`  Detect API saturated ${s.pool.detect_saturated_pct}% of time ` +
+        `(pending queue non-empty at concurrency cap)`);
+    lines.push(`  Memory: avg ratio ${s.pool.memory_avg_ratio}, max ${s.pool.memory_max_ratio}`);
+    return lines.join("\n");
+}
 
 /**
  * Maps internal stopReason/isError codes to human-readable French messages
@@ -827,6 +1147,10 @@ const mapStopReasonToMessage = (errorCode: string): string => {
         "insufficientData": "Données insuffisantes",
         "PAYLOAD_READ_ERROR": "Erreur lecture payload",
         "interruptedShutdown": "Crawl interrompu lors de l'arrêt du service",
+        "limitQueue": "File d'attente d'URLs trop volumineuse",
+        // Only reachable for the ok=true-but-empty-method homepage site (routes.ts:645):
+        // the other two set `context.crawlErrorMessage`, which wins at :1226.
+        "detectionUnavailable": "Service de détection de langue indisponible",
     };
 
     if (!errorCode) return "";
@@ -842,13 +1166,29 @@ const mapStopReasonToMessage = (errorCode: string): string => {
  * Handles persistence and cleanup on both Success and Signals (SIGTERM/SIGINT)
  */
 let isShuttingDown = false;
+// Hoisted to module scope so gracefulShutdown can flush timing before any
+// payload write / Redis cleanup / process.exit. Assigned only inside the
+// TIMING_ENABLED block below; remains null when timing is disabled.
+let finalizeTimingOnce: (() => Promise<void>) | null = null;
 const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
     if (isShuttingDown) return;
     isShuttingDown = true;
-    
-    // Stop periodic task
+
+    // Stop health monitors first so they cannot fire mid-shutdown.
+    try { redisMonitor?.stop(); } catch (e) { /* ignore */ }
+    try { progressMonitor?.stop(); } catch (e) { /* ignore */ }
+
+    // Timing instrumentation: stop sampler + flush JSONL/summary before exit.
+    // Synchronous-ish: finalize() is fast and fire-and-await before any exit.
+    if (typeof finalizeTimingOnce === 'function') {
+        await finalizeTimingOnce();
+    }
+
+    // Stop periodic tasks
     if (persistenceInterval) clearInterval(persistenceInterval);
-    
+    if (queuePauseInterval) clearInterval(queuePauseInterval);
+    clearInterval(queueStatsInterval);
+
     console.log(`\n🛑 Shutdown initiated: ${reason}`);
 
     // 1. Stop Crawler if running
@@ -905,18 +1245,65 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
     }
 
 
+    // Timestamp de fin de crawl — capté ici (juste avant le build de la payload) pour refléter
+    // la VRAIE fin du crawl côté crawler-service (et non l'heure où PHP reçoit le webhook,
+    // qui inclurait la latence Python + le retry du webhook). Format MySQL DATETIME.
+    const crawlEndTime = new Date().toISOString().slice(0, 19).replace('T', ' ');
+
+    // Read deperdition counters from StatsManager (defaults to 0 if unavailable)
+    async function readStat(metric: string): Promise<number> {
+        if (!context.statsManager) return 0;
+        try { return await context.statsManager.getValue(metric); } catch { return 0; }
+    }
+    const filtered_qm = await readStat("filtered_qm");
+    const filtered_hash = await readStat("filtered_hash");
+    const filtered_ext = await readStat("filtered_ext");
+    const filtered_nonfr = await readStat("filtered_nonfr");
+    // Detection outage made countable: pages that got NO linguistic verdict. Distinct from
+    // filtered_nonfr by construction (routes.ts increments them on mutually exclusive
+    // branches), and deliberately NOT folded into `errors`. Name must stay byte-identical to
+    // the increment in routes.ts — statNameParity.test.ts pins that.
+    const verdict_unavailable = await readStat("verdict_unavailable");
+    const filtered_duplicate = await readStat("filtered_duplicate");
+    const filtered_pdf = await readStat("filtered_pdf");
+    const dropped_cb = await readStat("dropped_cb");
+    const external_redirects = await readStat("external_redirects");
+    const timeout_individual = await readStat("timeout_individual");
+    const success_extracted = await readStat("success");
+    const purged_prenav = await readStat("purged_prenav");
+    const purged_skipnav = await readStat("purged_skipnav");
+    const filtered_stale_variant = purged_prenav + purged_skipnav;
+
     // 3. Write Payloads
     const payload = {
         id_domaine: id,
-        success: finalStats?.requestsFinished || 0,
-        failed: finalStats?.requestsFailed || 0,
+        success: Math.max(0, (finalStats?.requestsFinished || 0) - purged_skipnav),
+        failed: Math.max(0, (finalStats?.requestsFailed || 0) - purged_prenav),
         isFinished: isFinished,
         method: method,
         isError: isError,
         storagePath: storagePath,
         message_erreur_crawling: messageErreurCrawling || null,
         robots_txt_bypassed: context.robotsTxtBypassed,
-        camoufox_used: context.camoufoxEnabled
+        camoufox_used: context.camoufoxEnabled,
+        diezDecisionMode: getDiezDecisionMode(isError),
+        questionMarkDecisionMode: getQuestionMarkDecisionMode(isError),
+        // Observability — deperdition counters (StatsManager / Redis-backed)
+        filtered_qm,
+        filtered_hash,
+        filtered_ext,
+        filtered_nonfr,
+        verdict_unavailable,
+        filtered_duplicate,
+        filtered_pdf,
+        dropped_cb,
+        external_redirects,
+        timeout_individual,
+        success_extracted,
+        filtered_stale_variant,
+        // Observability — timestamps début/fin pour calculer duration_seconds côté PHP
+        date_start: crawlStartTime,
+        date_end: crawlEndTime,
     };
 
     const isOomRelaunch = (reason === 'OOM_RELAUNCH');
@@ -944,6 +1331,61 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         console.error("Failed to write output files", e);
     }
 
+    // Phase-1.5 sidecar — persist tier-1 observer Maps so offline audits can read
+    // per-param frequency without URL replay. Self-contained: own try/catch in the
+    // helper, never throws. See questionMarkDecision.ts persistObservations().
+    persistQuestionMarkObservations(storagePath);
+
+    // Audit sidecars EARLY (merge-on-write, auditSidecars.ts): they must land BEFORE
+    // the heavy steps below (html index / update report / dataset cleanup) — in prod
+    // a kill during those steps lost the audits of a 30k-request purge (tae.be
+    // 4296-362), and a restart segment's empty in-memory state must not clobber an
+    // earlier segment's file. The diez audit is re-written after
+    // cleanDatasetFragments fills content_collision.
+    if (storagePath) {
+        const qmPairStats: Record<string, { same: number; different: number; unusable: number }> = {};
+        for (const [p, s] of context.qmTier2.tally) qmPairStats[p] = s;
+        const qmAudit = writeQmAudit(storagePath, {
+            collapsed: context.qmCollapsed,
+            committed: context.qmTier2.addedToRemove,
+            pairStats: qmPairStats,
+        });
+        if (qmAudit.collapsedTotal > 0) {
+            console.warn(`[questionmark] route-loss candidates: ${qmAudit.collapsedTotal} ?param= page(s) collapsed onto an existing base — see _questionmark_audit.json (re-crawl to confirm).`);
+        }
+
+        // Le canal que le BO consomme. Distinct de _questionmark_audit.json, qui reste un
+        // audit exhaustif sans lecteur BO : celui-ci ne porte que les replis dont la base a
+        // été crawlée, et il vit dans storage/datasets/update-<domaine>/ parce que c'est là
+        // que le recepteur BO ouvre ses jsonl (script_process_update_crawling.php:589).
+        const seenBaseWritten = await writeCollapsedSeenBase(new Date().toISOString());
+        if (seenBaseWritten > 0 || context.qmCollapsedRejected > 0) {
+            console.warn(`[collapse] ${seenBaseWritten} seen-base collapse(s) declared to the BO`
+                + `${context.qmCollapsedRejected > 0 ? `, ${context.qmCollapsedRejected} refused by the cap` : ""}.`);
+        }
+
+        if (perClassEnabled()) {
+            const diezAudit = writeDiezAudit(storagePath, {
+                collapsed: context.diezCollapsed,
+                contentCollision: context.diezContentCollision ?? null,
+            });
+            if (diezAudit.collapsedTotal > 0) {
+                console.warn(`[diez] route-loss candidates: ${diezAudit.collapsedTotal} fragment page(s) collapsed onto an existing base — see _diez_audit.json (re-crawl to confirm).`);
+            }
+        }
+    }
+
+    // update_stats.json early too — cheap Redis reads only; previously written after
+    // the heavy steps + URL streaming, i.e. inside the same kill window as the audits.
+    try {
+        if (context.statsManager) {
+            await context.statsManager.saveStateToDisk();
+            console.log("Stats saved to update_stats.json");
+        }
+    } catch (e) {
+        console.error("Failed to save stats:", e);
+    }
+
     // Final Update Report for Update Mode
     if (crawlMode === 'update') {
         try {
@@ -960,6 +1402,60 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
             }
         }
     }
+
+    // Phase-2: shutdown dataset cleanup — legacy skipDiez blind strip, or content-collision
+    // when DIEZ_PERCLASS_ENABLED. Stats captured for the _diez_audit.json sidecar below.
+    if (reason === 'COMPLETED' && (context.config.skipDiez || perClassEnabled())) {
+        try {
+            const { cleanDatasetFragments } = await import("./functions.js");
+            context.diezContentCollision = cleanDatasetFragments([domain, `nfr-${domain}`, context.config.crawleeStorageName, `nfr-${context.config.crawleeStorageName}`]);
+        } catch (e) {
+            console.error("Dataset fragment cleanup failed:", e);
+        }
+    } else if (reason === 'COMPLETED' && canonicalDedupEnabled()) {
+        console.warn("[canonical-dedup] DATASET_CANONICAL_DEDUP_ENABLED=true but dataset cleanup did not run (needs DIEZ_PERCLASS_ENABLED=true).");
+    }
+
+    // Re-write the diez audit now that content_collision is populated (the early
+    // write above carried null; merge-on-write keeps the collapsed candidates).
+    if (storagePath && perClassEnabled() && context.diezContentCollision) {
+        writeDiezAudit(storagePath, {
+            collapsed: context.diezCollapsed,
+            contentCollision: context.diezContentCollision,
+        });
+    }
+
+    // Canonical ?param/# dedup route-loss audit (flag-gated). Local cast so we
+    // don't couple to context.diezContentCollision's declared type.
+    const cc = context.diezContentCollision as
+        | {
+            collapsedPairs?: { collapsed: string; base: string }[]; removed?: number; rewritten?: number;
+            refusedCells?: number; abortedDatasets?: string[];
+        }
+        | null | undefined;
+    // Refusals/aborts carry no collapsed pairs, so they must be part of the write
+    // condition — a guard that trips silently teaches the operator nothing.
+    if (storagePath && canonicalDedupEnabled()
+        && (cc?.collapsedPairs?.length || cc?.refusedCells || cc?.abortedDatasets?.length)) {
+        const a = writeCanonicalDedupAudit(storagePath, {
+            collapsed: cc.collapsedPairs ?? [],
+            removed: cc.removed ?? 0,
+            rewritten: cc.rewritten ?? 0,
+            refusedCells: cc.refusedCells ?? 0,
+            abortedDatasets: cc.abortedDatasets ?? [],
+        });
+        if (a.collapsedTotal > 0) {
+            console.warn(`[canonical-dedup] ${a.collapsedTotal} ?param/# route-loss candidate(s) collapsed onto a base — see _canonical_dedup_audit.json (re-crawl to confirm).`);
+        }
+        if (cc.refusedCells || cc.abortedDatasets?.length) {
+            console.warn(`[canonical-dedup] volume guards tripped: ${cc.refusedCells ?? 0} oversized cell(s) refused, dataset(s) aborted: ${(cc.abortedDatasets ?? []).join(", ") || "none"} — see _canonical_dedup_audit.json.`);
+        }
+    }
+
+    // Build the per-domain URL->filename index for the SFPI HTML store (hot tier). Fail-open.
+    // AFTER the dataset cleanup: indexing before it left dangling entries for every
+    // dedup-collapsed row file.
+    buildHtmlIndex(storagePath, domain);
 
     // 4. Persist Data (Critical Step)
     // 1. Persist URLs from Redis to disk (streaming)
@@ -980,15 +1476,7 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         console.error("Failed to persist URL history:", e);
     }
 
-    // 2. Save stats state
-    try {
-        if (context.statsManager) {
-            await context.statsManager.saveStateToDisk();
-            console.log("Stats saved to update_stats.json");
-        }
-    } catch (e) {
-        console.error("Failed to save stats:", e);
-    }
+    // (update_stats.json is saved earlier in this shutdown, before the heavy steps.)
 
     // 3. Close JSONL streams (flush to disk before Redis cleanup)
     if (context.jsonlWriter) {
@@ -1010,8 +1498,21 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
     // 4. Cleanup Redis connections
     if (context.urlConsolidator) await context.urlConsolidator.cleanup();
     if (context.dedupManager) await context.dedupManager.cleanup();
+    if (context.pushedSet) await context.pushedSet.cleanup();
+    if (context.checkedSet) await context.checkedSet.cleanup();
     if (context.statsManager) await context.statsManager.cleanup();
 
+    // Disconnect the shared Redis client (heartbeat + dedup multiplexed on it).
+    // Owner-managed — DedupManager.cleanup() left this open by design.
+    try {
+        if (sharedRedis && sharedRedis.isOpen) await sharedRedis.disconnect();
+    } catch (e) {
+        console.error('Shared Redis disconnect error:', e);
+    }
+
+    if (context.actionAnchorsStripped > 0) {
+        console.log(`[diez] stripped ${context.actionAnchorsStripped} action-anchor fragment(s)`);
+    }
     console.log(`✅ Graceful shutdown complete. Exiting with code ${exitCode}.`);
     process.exit(exitCode);
 };
@@ -1021,12 +1522,8 @@ if (typeCrawling == "sitemap") {
 } else if (typeCrawling == "generate_data") {
     // ... logic for generate data ...
 } else {
-    // Reclaim failed request
-    try {
-        await reclaimFailedRequest(domain);
-    } catch (error) {
-        console.warn(`⚠️ Warning: Failed to reclaim failed requests for ${domain}. The crawler will continue without them. Error: ${error}`);
-    }
+    // Failed-request recovery now runs earlier (before the queue-health check) so it
+    // is reachable for completed crawls — see the RECOVER_FAILED_ON_RESTART block above.
 
     // Pre-flight: Configure Global Crawlee Memory Limit
     // This ensures AutoscaledPool sees the REAL container limit, not host memory
@@ -1060,17 +1557,64 @@ if (typeCrawling == "sitemap") {
 
             let seedCount = 0;
             let skippedCount = 0;
+            let skippedExtCount = 0;
             for (const { url, source } of remainingUrls) {
                 if (excluded.length > 0 && DetectionLangueClient.isExcludedRegionalPath(url, excluded)) {
                     skippedCount++;
                     continue;
                 }
 
-                if (context.dedupManager) {
-                    await context.dedupManager.addUrl(url);
+                // Baseline URLs are inherited from the PREVIOUS crawl (dataset / request_queue
+                // / request_url) via direct addRequest below, which bypasses the ignoredExtensions
+                // filtering that enqueueLinks applies to freshly discovered links (routes.ts).
+                // Without this guard, an inherited image/pdf/doc URL gets re-seeded every UPDATE
+                // crawl forever (it's re-written into this crawl's request_queue, which the NEXT
+                // update's consolidation reads again) — the inherited-image infinite re-crawl loop.
+                if (hasIgnoredExtensionForSeed(url)) {
+                    skippedExtCount++;
+                    if (context.statsManager) {
+                        await context.statsManager.increment("filtered_ext");
+                    }
+                    continue;
                 }
+
+                // Do NOT pre-add to Redis dedup before queueing. The page handler
+                // claims each URL on first processing (routes.ts). Pre-adding here
+                // made every non-dataset seed (request_queue / request_url) self-mark
+                // as "Doublon" and get skipped before reaching UpdateChecker.
+                let seedUrl = url;
+                if (actionAnchorStripEnabled()) {
+                    const strippedAa = stripActionAnchor(seedUrl);
+                    if (strippedAa !== seedUrl) {
+                        seedUrl = strippedAa;
+                        context.actionAnchorsStripped++;
+                    }
+                }
+
+                // Queue-purge (D2): seedPhase2 seeds URLs cleaned with the config
+                // AS OF consolidation (crawl start). Re-clean from LIVE context.config
+                // so a mid-crawl tier-2 commit is honored at seed time, not left for
+                // the consumption/pre-nav skip to catch after enqueue.
+                if (QUEUE_PURGE_ENABLED) {
+                    seedUrl = processUrl(
+                        seedUrl,
+                        context.config.skipQuestionMark,
+                        context.config.skipDiez,
+                        { toKeep: context.config.toKeep, toRemove: context.config.toRemove },
+                    );
+                }
+                // Épinglage de l'identité de file, comme Phase 1 (:952) et l'amorce standard
+                // (:1033). Sans lui, Crawlee calcule un uniqueKey NORMALISÉ (il retire le /
+                // final) alors que routes.ts:1277 épingle les liens découverts sur l'URL BRUTE :
+                // la même page devient alors deux requêtes, et la copie dataset — celle qui
+                // porte source='dataset' — arrive seconde et sort en already_pushed sans
+                // créditer 'accounted'. Mesuré le 2026-08-27 sur atox.fr : 19 amorces sur 19
+                // dupliquées, contre 0 sur 1 pour la page d'accueil, qui épingle déjà.
+                // seedUrl et non url : c'est la chaîne réellement enfilée, après
+                // stripActionAnchor et le re-nettoyage processUrl de la purge de file.
                 await requestQueue.addRequest({
-                    url: url,
+                    url: seedUrl,
+                    uniqueKey: seedUrl,
                     userData: { source: source }
                 });
                 seedCount++;
@@ -1079,6 +1623,9 @@ if (typeCrawling == "sitemap") {
                 }
             }
             console.log(`[PHASE 2] Finished seeding ${seedCount} URLs (${skippedCount} excluded as regional variants).`);
+            if (skippedExtCount > 0) {
+                console.log(`[seed-filter] skipped ${skippedExtCount} ignored-extension baseline URL(s) (filtered_ext)`);
+            }
             context.phase2SeedingComplete = true;
         };
 
@@ -1097,6 +1644,135 @@ if (typeCrawling == "sitemap") {
             }
         }, 5 * 60 * 1000);
     }
+
+    // --- SHARED DETECTION CLIENT ---
+    // Constructed unconditionally so routes.ts and the (optional) timing
+    // sampler share the SAME p-limit queue. With a per-module instance in
+    // routes.ts, the sampler's `limiter.pendingCount/activeCount` would have
+    // observed an empty queue while the real workload ran on the routes
+    // instance — masking detect-API saturation.
+    context.detectionClient = new DetectionLangueClient();
+    // Phase-2 tier-2 content comparison. Constructed unconditionally; only used
+    // when DIEZ_TIER2_ENABLED and the diez engine activates.
+    context.contentExtractorClient = new ContentExtractorClient();
+
+    // --- TIMING INSTRUMENTATION ---
+    // When TIMING_ENABLED=false (the default), this entire block is a no-op:
+    // no recorder is constructed, no sampler is started, and no signal
+    // listeners are registered. Routes/hooks observe `context.timingRecorder`
+    // and short-circuit when it is undefined.
+    const TIMING_ENABLED = (process.env.TIMING_ENABLED ?? "false").toLowerCase() === "true";
+    const TIMING_SAMPLE_INTERVAL_MS = parseInt(process.env.TIMING_SAMPLE_INTERVAL_MS ?? "5000");
+
+    if (TIMING_ENABLED) {
+        console.log(`[TIMING] enabled — outputDir=${storagePath} sampleIntervalMs=${TIMING_SAMPLE_INTERVAL_MS}`);
+    } else {
+        console.log("[TIMING] disabled — set TIMING_ENABLED=true to write timing.jsonl + timing-summary.json to the crawl folder");
+    }
+
+    let timingSampler: NodeJS.Timeout | null = null;
+
+    if (TIMING_ENABLED) {
+        const detectionClient = context.detectionClient;
+
+        const recorder = new TimingRecorder({
+            crawlId: String(id),
+            outputDir: storagePath,
+            detectMaxConcurrency: detectionClient.maxConcurrency,
+        });
+        context.timingRecorder = recorder;
+
+        let lastSampleAt = Date.now();
+        let pagesAtLastSample = 0;
+
+        timingSampler = setInterval(() => {
+            try {
+                const crawlerInstance = context.crawlerInstance;
+                const pool = (crawlerInstance as any)?.autoscaledPool;
+                const memUsedBytes = process.memoryUsage().rss;
+                const budgetBytes = ((crawlerInstance as any)?.config?.memoryMbytes ?? 0) * 1024 * 1024;
+                const handled = (crawlerInstance as any)?.stats?.state?.requestsFinished ?? 0;
+                const elapsedMs = Date.now() - lastSampleAt;
+                const ppm = elapsedMs > 0 ? Math.round(((handled - pagesAtLastSample) / elapsedMs) * 60000) : 0;
+                lastSampleAt = Date.now();
+                pagesAtLastSample = handled;
+
+                const sample: PoolSample = {
+                    t: Date.now(),
+                    crawlee: {
+                        currentConcurrency: pool?.currentConcurrency ?? 0,
+                        desiredConcurrency: pool?.desiredConcurrency ?? 0,
+                        maxConcurrency: pool?.maxConcurrency ?? 0,
+                    },
+                    detect: {
+                        pendingCount: detectionClient.limiter.pendingCount,
+                        activeCount: detectionClient.limiter.activeCount,
+                    },
+                    memory: {
+                        used_mb: Math.round(memUsedBytes / (1024 * 1024)),
+                        budget_mb: Math.round(budgetBytes / (1024 * 1024)),
+                        ratio: budgetBytes > 0 ? memUsedBytes / budgetBytes : 0,
+                    },
+                    rolling: { pages_per_min: ppm },
+                };
+                recorder.recordPoolSample(sample);
+            } catch (err) {
+                console.error(`[TIMING] sampler error: ${(err as Error).message}`);
+            }
+        }, TIMING_SAMPLE_INTERVAL_MS);
+
+        finalizeTimingOnce = (() => {
+            let done = false;
+            return async () => {
+                if (done) return;
+                done = true;
+                if (timingSampler) {
+                    clearInterval(timingSampler);
+                    timingSampler = null;
+                }
+                await recorder.finalize();
+                console.log(formatTimingSummary(recorder.snapshot()));
+            };
+        })();
+
+        // SIGINT/SIGTERM are handled exclusively by gracefulShutdown (declared
+        // at module scope above), which now invokes finalizeTimingOnce as its
+        // first step. Registering duplicate listeners here would race with
+        // process.exit and lose the JSONL flush. Keep beforeExit for natural
+        // exit (loop empty → no signal fires → gracefulShutdown still runs
+        // via the COMPLETED path, but beforeExit acts as belt-and-braces).
+        process.on("beforeExit", () => { void finalizeTimingOnce!(); });
+    }
+    // --- END TIMING INSTRUMENTATION ---
+
+    // Capture du timestamp de démarrage RÉEL du crawl, juste avant l'invocation de
+    // startCrawler() qui appelle crawler.run() (cf functions.ts:755). Tout le setup
+    // précédent (bootstrap modules, init Crawlee, Playwright, consolidate URLs,
+    // two-phase seeding) est EXCLU du décompte de duration_seconds.
+    crawlStartTime = new Date().toISOString().slice(0, 19).replace('T', ' ');
+
+    // Progress stall monitor — fires gracefulShutdown(exit 6) if requestsFinished
+    // does not advance for PROGRESS_STALL_THRESHOLD_MS (default 10 min).
+    const parsedProgressStallMs = Number(process.env.PROGRESS_STALL_THRESHOLD_MS);
+    const progressStallThresholdMs = Number.isFinite(parsedProgressStallMs) && parsedProgressStallMs > 0
+        ? parsedProgressStallMs
+        : 600_000;
+    progressMonitor = new ProgressMonitor(
+        () => {
+            const st = (context.crawlerInstance as any)?.stats?.state;
+            const finished = st?.requestsFinished ?? 0;
+            if (!resolveStallCountResolved(process.env.STALL_COUNT_RESOLVED)) return finished;
+            return finished + (st?.requestsFailed ?? 0);
+        },
+        progressStallThresholdMs,
+        (reason) => {
+            console.error(`[fatal] progress_stalled: ${reason}`);
+            console.error(JSON.stringify({ event: 'progress_stalled', reason }));
+            void gracefulShutdown('PROGRESS_STALL', 6);
+        },
+        30_000,
+    );
+    progressMonitor.start();
 
     // Launch
     const crawler = await startCrawler(
@@ -1123,5 +1799,6 @@ if (typeCrawling == "sitemap") {
     });
 }
 
-// Normal completion
-await gracefulShutdown('COMPLETED', 2);
+// Normal completion. fatalExitCode is set by an in-handler fatal breaker
+// (e.g. domainChanged -> 7) so the run terminates as a failure; otherwise 2 (success).
+await gracefulShutdown('COMPLETED', context.fatalExitCode ?? 2);

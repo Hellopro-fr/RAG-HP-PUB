@@ -1,3 +1,8 @@
+---
+description: Cartographie les dépendances inter-services du monorepo : imports, gRPC, exchanges RabbitMQ, appels HTTP
+argument-hint: [service]
+allowed-tools: Read, Grep, Glob, Bash
+---
 # /dependency-mapper — Cross-Service Dependency Map
 
 Map all inter-service dependencies across the monorepo: imports, gRPC calls, RabbitMQ exchanges, HTTP calls, and shared library usage.

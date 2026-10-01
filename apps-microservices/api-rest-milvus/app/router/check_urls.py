@@ -75,6 +75,12 @@ class HeaderFooterReport(BaseModel):
     by_domain: Dict[str, HeaderFooterStatus]
 
 
+class FoundUrlEntry(BaseModel):
+    """Entrée d'URL trouvée avec son page_type."""
+    url: str
+    page_type: str
+
+
 class CheckUrlsResponse(BaseModel):
     """Modèle de réponse pour la vérification d'URLs."""
     status: str = "success"
@@ -90,27 +96,120 @@ class CheckUrlsResponse(BaseModel):
         default_factory=dict,
         description="Statistiques de la vérification"
     )
+    found_urls_by_domain: Optional[Dict[str, List[FoundUrlEntry]]] = Field(
+        default=None,
+        description="URLs trouvées par domaine avec leur page_type (hors header/footer)"
+    )
 
 
 # --- FONCTIONS UTILITAIRES ---
 
+def _generate_url_variants(url: str) -> List[str]:
+    """
+    Génère les variantes d'une URL pour une recherche tolérante dans Milvus.
+
+    Variantes générées (dédupliquées) :
+      - L'URL brute
+      - Avec/sans slash final
+
+    Nécessaire car Milvus stocke les URLs selon le format exact envoyé à
+    l'ingestion, mais les consommateurs (scripts BO, healing) peuvent envoyer
+    une forme normalisée (trailing slash retiré). Sans cette tolérance, des
+    URLs pourtant présentes dans Milvus sont déclarées "missing".
+
+    NOTE : la tolérance www/non-www a été retirée volontairement car elle
+    doublait le volume de variantes sans bénéfice réel (le crawler stocke
+    les URLs de façon cohérente sur www) et saturait le concurrency_guard
+    Milvus (MILVUS_GLOBAL_MAX_CONCURRENT=30). Si un mismatch www apparaît,
+    il se verra dans le reporting et on pourra réévaluer.
+    """
+    variants = {url}
+    if url.endswith('/'):
+        variants.add(url.rstrip('/'))
+    else:
+        variants.add(url + '/')
+    return list(variants)
+
+
+async def _check_domain_header_footer(guard, collection: Collection, domain: str) -> Dict[str, bool]:
+    """
+    Vérifie la présence d'un header et d'un footer POUR LE DOMAINE.
+
+    C'est une propriété du domaine, et elle doit être interrogée comme telle.
+    Auparavant `has_header`/`has_footer` sortaient en effet de bord de la requête
+    par URL de `_check_urls_batch` : ils n'étaient vrais que si l'URL exacte
+    portant l'enregistrement figurait dans la liste vérifiée. Or l'ingestion
+    attache le header/footer à une page quelconque du site — mesuré le
+    2026-08-10 : les deux enregistrements de `ld-packaging.fr` vivent sur
+    `/emballage-boites-carton-sur-mesure/`, celui de `cables-acier.fr` sur
+    `/conditions-generales-de-vente`. Un domaine dont cette page n'était pas
+    dans le lot était donc déclaré sans header/footer alors qu'il en avait,
+    ce qui bloquait son archivage indéfiniment côté BO.
+
+    `domaine` est un champ scalaire filtrable de `siteweb_2`, et le BO envoie un
+    domaine nu : mesuré sur les 4588 domaines `est_migre_rag = 1`, aucun ne porte
+    `www.`, ni schéma, ni slash — les deux formats concordent, aucune
+    normalisation n'est nécessaire.
+
+    Volontairement SANS filtre `chunk_number == 1` : il sert à dédupliquer un
+    comptage d'URLs, pas à tester une existence, et rien ne garantit que les
+    enregistrements header/footer le portent — l'ajouter risquerait de filtrer
+    précisément ce qu'on cherche, en silence.
+    """
+    domain_escaped = domain.replace("\\", "\\\\").replace("'", "\\'")
+    expr = (f"domaine == '{domain_escaped}' "
+            f"and {FILTER_FIELD_NAME} in ['header', 'footer']")
+
+    async with guard.slot():
+        results = await asyncio.to_thread(
+            collection.query,
+            expr=expr,
+            output_fields=[FILTER_FIELD_NAME],
+            consistency_level="Strong"
+        )
+
+    page_types = {entity.get(FILTER_FIELD_NAME, "") for entity in results}
+    return {
+        "has_header": 'header' in page_types,
+        "has_footer": 'footer' in page_types,
+    }
+
+
 async def _check_urls_batch(guard, collection: Collection, urls_to_check: List[str]) -> Dict:
     """
-    Vérifie une liste d'URLs dans Milvus.
+    Vérifie une liste d'URLs dans Milvus avec tolérance de normalisation.
+
+    Chaque URL est étendue en plusieurs variantes (slash/www) pour retrouver
+    les entrées présentes sous une forme légèrement différente.
+
+    Les entrées header/footer restent exclues du comptage des URLs trouvées,
+    mais cette fonction ne rapporte PLUS leur présence : c'est une propriété du
+    domaine, servie par `_check_domain_header_footer`. Rendre ici un booléen
+    calculé sur un périmètre d'URLs invitait à le lire comme un verdict sur le
+    domaine — c'était le bug.
 
     Retourne:
-    - found_urls: Set[str] - URLs trouvées (hors header/footer)
-    - has_header: bool
-    - has_footer: bool
+    - found_urls: Set[str] - URLs originales trouvées (hors header/footer)
+    - found_urls_page_type: Dict[str, str] - mapping URL originale → page_type
     """
     found_urls: Set[str] = set()
-    has_header = False
-    has_footer = False
+    found_urls_page_type: Dict[str, str] = {}
+    found_urls_exact: Dict[str, bool] = {}
 
-    total = len(urls_to_check)
+    # Mapping variante → URLs originales qui ont généré cette variante
+    variant_to_originals: Dict[str, Set[str]] = {}
+    all_variants: Set[str] = set()
+
+    for url in urls_to_check:
+        for variant in _generate_url_variants(url):
+            variant_to_originals.setdefault(variant, set()).add(url)
+            all_variants.add(variant)
+
+    all_variants_list = list(all_variants)
+    total = len(all_variants_list)
 
     for i in range(0, total, CHUNK_SIZE):
-        batch = urls_to_check[i:i + CHUNK_SIZE]
+        batch = all_variants_list[i:i + CHUNK_SIZE]
 
         # Echapper les backslashes PUIS les guillemets simples dans les URLs
         # Important: échapper \ d'abord, sinon on double-échappe les \' qu'on vient d'ajouter
@@ -130,17 +229,26 @@ async def _check_urls_batch(guard, collection: Collection, urls_to_check: List[s
                 )
 
             for entity in results:
-                url = entity[URL_FIELD_NAME]
+                url_found = entity[URL_FIELD_NAME]
                 page_type = entity.get(FILTER_FIELD_NAME, "")
 
-                if page_type == 'header':
-                    has_header = True
-                elif page_type == 'footer':
-                    has_footer = True
-
-                # On considère trouvé si ce n'est pas header/footer
+                # On considère trouvé si ce n'est pas header/footer.
+                # L'URL trouvée peut être une variante : on marque comme trouvées
+                # toutes les URLs originales qui ont généré cette variante.
                 if page_type not in ['header', 'footer']:
-                    found_urls.add(url)
+                    originals = variant_to_originals.get(url_found, set())
+                    found_urls.update(originals)
+                    for orig in originals:
+                        is_exact = (url_found == orig)
+                        current = found_urls_page_type.get(orig, "")
+                        current_exact = found_urls_exact.get(orig, False)
+                        # Priorite : le page_type d'un match EXACT (url_found == url demandee)
+                        # prime sur celui d'une variante (ex. /x/=fiche_produit doit gagner
+                        # sur /x=article). On (re)affecte si rien trouve, ou si on obtient un
+                        # match exact alors que la valeur courante venait d'une variante.
+                        if current == "" or (is_exact and not current_exact):
+                            found_urls_page_type[orig] = page_type
+                            found_urls_exact[orig] = is_exact
 
         except Exception as e:
             logger.error(f"Erreur lors de la requête Milvus: {e}")
@@ -148,8 +256,7 @@ async def _check_urls_batch(guard, collection: Collection, urls_to_check: List[s
 
     return {
         "found_urls": found_urls,
-        "has_header": has_header,
-        "has_footer": has_footer
+        "found_urls_page_type": found_urls_page_type,
     }
 
 
@@ -208,6 +315,7 @@ async def check_urls_existence(http_request: Request, request: CheckUrlsRequest)
 
     missing_urls_by_domain: Dict[str, List[str]] = {}
     header_footer_status: Dict[str, HeaderFooterStatus] = {}
+    found_urls_by_domain: Dict[str, List[FoundUrlEntry]] = {}
 
     total_urls_count = sum(len(urls) for urls in request.urls_by_domain.values())
     total_domains = len(request.urls_by_domain)
@@ -221,9 +329,13 @@ async def check_urls_existence(http_request: Request, request: CheckUrlsRequest)
         if not urls:
             missing_urls_by_domain[domain] = []
             if request.report_header_footer:
+                # Même sans URL à vérifier, la présence d'un header/footer reste
+                # une propriété du domaine : la renvoyer en dur à False était le
+                # même faux-négatif que celui corrigé plus bas.
+                hf = await _check_domain_header_footer(guard, collection, domain)
                 header_footer_status[domain] = HeaderFooterStatus(
-                    has_header=False,
-                    has_footer=False
+                    has_header=hf["has_header"],
+                    has_footer=hf["has_footer"]
                 )
             continue
 
@@ -244,10 +356,23 @@ async def check_urls_existence(http_request: Request, request: CheckUrlsRequest)
             total_found += len(found_urls)
 
             if request.report_header_footer:
+                # Requête distincte, scopée au domaine : le header/footer d'un
+                # site est attaché à une page arbitraire, donc il ne peut pas
+                # être déduit du lot d'URLs vérifié (voir
+                # _check_domain_header_footer). Une requête de plus par domaine,
+                # et seulement quand le rapport est demandé.
+                hf = await _check_domain_header_footer(guard, collection, domain)
                 header_footer_status[domain] = HeaderFooterStatus(
-                    has_header=result["has_header"],
-                    has_footer=result["has_footer"]
+                    has_header=hf["has_header"],
+                    has_footer=hf["has_footer"]
                 )
+
+            # Agréger found_urls_page_type par domaine
+            fpt = result["found_urls_page_type"]
+            if fpt:
+                found_urls_by_domain[domain] = [
+                    FoundUrlEntry(url=u, page_type=pt) for u, pt in fpt.items()
+                ]
 
             processed_urls += len(urls)
 
@@ -290,8 +415,12 @@ async def check_urls_existence(http_request: Request, request: CheckUrlsRequest)
             by_domain=header_footer_status
         )
     
+    # Ajouter found_urls_by_domain si des URLs ont été trouvées
+    if found_urls_by_domain:
+        response_data["found_urls_by_domain"] = found_urls_by_domain
+
     logger.info(f"Vérification terminée en {elapsed_time:.2f}s - {total_found} trouvées, {total_missing} manquantes")
-    
+
     return CheckUrlsResponse(**response_data)
 
 

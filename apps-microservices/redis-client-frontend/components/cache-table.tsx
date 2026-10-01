@@ -1,92 +1,89 @@
-// UI Component: Data table displaying cache entries
+// UI Component: paginated, consent-gated key browser.
 "use client"
 
-import { useState, useMemo } from "react"
-import type { CacheEntry } from "@/lib/domain/cache-entry"
+import { useState, useEffect, useRef } from "react"
+import type { KeyMeta } from "@/lib/domain/cache-entry"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Trash2, Copy, ChevronDown, ChevronUp } from "lucide-react"
+import { Trash2, Copy, Search } from "lucide-react"
 import { invalidateCacheEntry } from "@/app/actions/cache-actions"
 import { useToast } from "@/hooks/use-toast"
+import { ConfirmDialog } from "./confirm-dialog"
 import { formatBytes } from "@/lib/utils"
 
-type SortField = "key" | "size" | "ttl"
-type SortOrder = "asc" | "desc"
-
 interface CacheTableProps {
-  entries: CacheEntry[]
-  onDelete?: () => void
+  entries: KeyMeta[]
+  nextCursor: number
+  scanned: boolean
+  loading: boolean
+  onScan: () => void
+  onLoadMore: () => void
+  onSearch: (term: string) => void
+  onDeleted: () => void
 }
 
-export function CacheTable({ entries, onDelete }: CacheTableProps) {
+export function CacheTable({
+  entries,
+  nextCursor,
+  scanned,
+  loading,
+  onScan,
+  onLoadMore,
+  onSearch,
+  onDeleted,
+}: CacheTableProps) {
   const [searchTerm, setSearchTerm] = useState("")
-  const [sortField, setSortField] = useState<SortField>("key")
-  const [sortOrder, setSortOrder] = useState<SortOrder>("asc")
   const [deletingKey, setDeletingKey] = useState<string | null>(null)
   const { toast } = useToast()
+  const lastSearched = useRef(searchTerm)
 
-  const filteredAndSortedEntries = useMemo(() => {
-    const filtered = entries.filter((entry) => entry.key.toLowerCase().includes(searchTerm.toLowerCase()))
-
-    filtered.sort((a, b) => {
-      if (sortField === "key") {
-        return sortOrder === "asc" ? a.key.localeCompare(b.key) : b.key.localeCompare(a.key)
-      }
-
-      const aVal = a[sortField]
-      const bVal = b[sortField]
-
-      if (aVal === undefined || aVal === null) return 1
-      if (bVal === undefined || bVal === null) return -1
-
-      if (typeof aVal === "number" && typeof bVal === "number") {
-        return sortOrder === "asc" ? aVal - bVal : bVal - aVal
-      }
-
-      return 0
-    })
-
-    return filtered
-  }, [entries, searchTerm, sortField, sortOrder])
-
-  const handleSort = (field: SortField) => {
-    if (sortField === field) {
-      setSortOrder(sortOrder === "asc" ? "desc" : "asc")
-    } else {
-      setSortField(field)
-      setSortOrder("asc")
-    }
-  }
+  // Debounce search → server-side MATCH. A value-equality ref (not a one-shot boolean) skips
+  // both the mount pass AND React StrictMode's dev double-invoke, so opening the page never
+  // triggers an unconsented scan of the shared Redis.
+  useEffect(() => {
+    if (lastSearched.current === searchTerm) return
+    const id = setTimeout(() => {
+      lastSearched.current = searchTerm
+      onSearch(searchTerm)
+    }, 300)
+    return () => clearTimeout(id)
+  }, [searchTerm, onSearch])
 
   const handleDelete = async (key: string) => {
     setDeletingKey(key)
     try {
       const result = await invalidateCacheEntry(key)
       if (result.success) {
-        toast({
-          title: "Success",
-          description: `Cache entry "${key}" deleted`,
-        })
-        onDelete?.()
+        toast({ title: "Success", description: `Cache entry "${key}" deleted` })
+        onDeleted()
       } else {
-        toast({
-          title: "Error",
-          description: result.message,
-          variant: "destructive",
-        })
+        toast({ title: "Error", description: result.message, variant: "destructive" })
       }
     } finally {
       setDeletingKey(null)
     }
   }
 
-  const handleCopy = (key: string) => {
-    navigator.clipboard.writeText(key)
-    toast({
-      title: "Copied",
-      description: `Key copied to clipboard`,
-    })
+  const handleCopy = async (key: string) => {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(key)
+      } else {
+        // Fallback for insecure (HTTP) origins where navigator.clipboard is undefined.
+        const ta = document.createElement("textarea")
+        ta.value = key
+        ta.style.position = "fixed"
+        ta.style.opacity = "0"
+        document.body.appendChild(ta)
+        ta.select()
+        document.execCommand("copy")
+        document.body.removeChild(ta)
+      }
+      toast({ title: "Copied", description: "Key copied to clipboard" })
+    } catch {
+      toast({ title: "Error", description: "Could not copy key", variant: "destructive" })
+    }
   }
 
   const formatTTL = (ttl?: number) => {
@@ -97,13 +94,28 @@ export function CacheTable({ entries, onDelete }: CacheTableProps) {
     return `${Math.floor(ttl / 86400)}d`
   }
 
-  if (filteredAndSortedEntries.length === 0 && searchTerm === "") {
+  // Pre-scan gate — page open makes zero Redis contact until the user consents.
+  if (!scanned) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-center">
+      <div className="flex flex-col items-center justify-center py-16 text-center gap-4">
         <div className="text-muted-foreground">
-          <p className="text-lg font-medium">No cached data</p>
-          <p className="text-sm">Redis cache is empty</p>
+          <p className="text-lg font-medium">Cache not scanned</p>
+          <p className="text-sm max-w-md">
+            Scanning queries the shared production Redis (paginated SCAN plus per-key TTL/type/size — no
+            key values are read), which may still add latency for other services on the same instance.
+          </p>
         </div>
+        <ConfirmDialog
+          title="Scan the shared Redis?"
+          description="This queries the shared production Redis (paginated SCAN + per-key TTL/type/size). It may add latency for other services using the same instance. Continue?"
+          onConfirm={onScan}
+          isLoading={loading}
+        >
+          <Button>
+            <Search className="w-4 h-4 mr-2" />
+            Scan keys
+          </Button>
+        </ConfirmDialog>
       </div>
     )
   }
@@ -112,51 +124,35 @@ export function CacheTable({ entries, onDelete }: CacheTableProps) {
     <div className="space-y-4">
       <div className="flex items-center gap-2">
         <Input
-          placeholder="Search cache keys..."
+          placeholder="Filter keys (server-side glob, matches *term*)..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="flex-1"
         />
-        <span className="text-sm text-muted-foreground whitespace-nowrap">
-          {filteredAndSortedEntries.length} entries
-        </span>
+        <span className="text-sm text-muted-foreground whitespace-nowrap">{entries.length} loaded</span>
       </div>
 
-      {filteredAndSortedEntries.length === 0 ? (
-        <div className="py-8 text-center text-muted-foreground">No results matching &quot;{searchTerm}&quot;</div>
+      {entries.length === 0 ? (
+        <div className="py-8 text-center text-muted-foreground">
+          {nextCursor !== 0 ? "No matches on this page — Load more to keep scanning" : "No keys match this filter"}
+        </div>
       ) : (
         <div className="border rounded-lg overflow-hidden">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>
-                  <button onClick={() => handleSort("key")} className="flex items-center gap-1 hover:text-foreground">
-                    Key
-                    {sortField === "key" &&
-                      (sortOrder === "asc" ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />)}
-                  </button>
-                </TableHead>
-                <TableHead>
-                  <button onClick={() => handleSort("size")} className="flex items-center gap-1 hover:text-foreground">
-                    Size
-                    {sortField === "size" &&
-                      (sortOrder === "asc" ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />)}
-                  </button>
-                </TableHead>
-                <TableHead>
-                  <button onClick={() => handleSort("ttl")} className="flex items-center gap-1 hover:text-foreground">
-                    Expires
-                    {sortField === "ttl" &&
-                      (sortOrder === "asc" ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />)}
-                  </button>
-                </TableHead>
+                <TableHead>Key</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Size</TableHead>
+                <TableHead>Expires</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredAndSortedEntries.map((entry) => (
+              {entries.map((entry) => (
                 <TableRow key={entry.key}>
                   <TableCell className="font-mono text-sm max-w-xs truncate">{entry.key}</TableCell>
+                  <TableCell className="text-sm">{entry.type}</TableCell>
                   <TableCell>{formatBytes(entry.size)}</TableCell>
                   <TableCell>{formatTTL(entry.ttl)}</TableCell>
                   <TableCell className="text-right">
@@ -180,6 +176,14 @@ export function CacheTable({ entries, onDelete }: CacheTableProps) {
               ))}
             </TableBody>
           </Table>
+        </div>
+      )}
+
+      {nextCursor !== 0 && (
+        <div className="flex justify-center">
+          <Button variant="outline" onClick={onLoadMore} disabled={loading}>
+            {loading ? "Loading..." : "Load more"}
+          </Button>
         </div>
       )}
     </div>

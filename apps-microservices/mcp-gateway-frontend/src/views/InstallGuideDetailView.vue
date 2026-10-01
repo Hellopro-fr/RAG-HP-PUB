@@ -20,9 +20,25 @@
       link-label="Voir la documentation"
     />
 
-    <!-- Loading -->
-    <div v-if="loading" class="flex items-center justify-center py-20">
-      <i class="pi pi-spinner pi-spin text-2xl text-gray-400 dark:text-gray-500" />
+    <!-- Loading skeleton -->
+    <div v-if="loading" class="animate-pulse" aria-hidden="true">
+      <div class="mb-8">
+        <div class="flex items-center gap-4">
+          <div class="w-12 h-12 rounded-lg bg-gray-200 dark:bg-gray-800" />
+          <div class="flex-1">
+            <div class="h-7 w-1/3 rounded bg-gray-200 dark:bg-gray-800 mb-2" />
+            <div class="h-3 w-2/3 rounded bg-gray-100 dark:bg-gray-800" />
+          </div>
+        </div>
+        <div class="mt-4 space-y-2">
+          <div class="h-3 w-5/6 rounded bg-gray-100 dark:bg-gray-800" />
+          <div class="h-3 w-2/3 rounded bg-gray-100 dark:bg-gray-800" />
+        </div>
+      </div>
+      <div v-for="i in 2" :key="i" class="mb-8">
+        <div class="h-5 w-40 rounded bg-gray-200 dark:bg-gray-800 mb-4" />
+        <div class="h-24 w-full rounded-lg bg-gray-100 dark:bg-gray-800" />
+      </div>
     </div>
 
     <!-- Not found -->
@@ -57,7 +73,7 @@
             <p class="text-sm text-gray-500 dark:text-gray-400">{{ cmd.description }}</p>
           </div>
         </div>
-        <div class="mt-4 text-sm text-gray-600 dark:text-gray-400" v-html="cmd.intro" />
+        <div class="mt-4 text-sm text-gray-600 dark:text-gray-400" v-safe-html="cmd.intro" />
       </div>
 
       <!-- Dynamic content elements -->
@@ -91,7 +107,7 @@
                 </span>
                 <div class="pt-0.5 flex-1">
                   <p class="font-medium text-gray-900 dark:text-white text-sm">{{ option.label }}</p>
-                  <p v-if="option.note" class="text-sm text-gray-600 dark:text-gray-400 mt-0.5" v-html="option.note" />
+                  <p v-if="option.note" class="text-sm text-gray-600 dark:text-gray-400 mt-0.5" v-safe-html="option.note" />
                   <div v-if="option.code" class="mt-2">
                     <CodeBlock :code="option.code" @copy="handleCopy" />
                   </div>
@@ -131,14 +147,14 @@
           class="mb-8 rounded-lg p-3 text-sm"
           :class="el.props.cssClass || 'bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 text-amber-800 dark:text-amber-300'"
         >
-          <strong>{{ el.props.label }}</strong> <span v-html="el.props.text" />
+          <strong>{{ el.props.label }}</strong> <span v-safe-html="el.props.text" />
         </div>
 
         <!-- Text -->
         <div
           v-else-if="el.type === 'text'"
           class="mb-8 text-sm text-gray-700 dark:text-gray-300"
-          v-html="el.props.content"
+          v-safe-html="el.props.content"
         />
 
         <!-- Divider -->
@@ -160,7 +176,7 @@
                 </span>
                 <div class="pt-0.5 flex-1">
                   <p class="font-medium text-gray-900 dark:text-white text-sm">{{ option.label }}</p>
-                  <p v-if="option.note" class="text-sm text-gray-600 dark:text-gray-400 mt-0.5" v-html="option.note" />
+                  <p v-if="option.note" class="text-sm text-gray-600 dark:text-gray-400 mt-0.5" v-safe-html="option.note" />
                   <div v-if="option.code" class="mt-2"><CodeBlock :code="option.code" @copy="handleCopy" /></div>
                 </div>
               </div>
@@ -211,7 +227,7 @@ function installWithTerminal(osId: string): InstallOption[] {
   // Try content elements first (new format), fallback to legacy install field
   let base: InstallOption[] = []
   if (cmd.value?.content?.length) {
-    const osInstall = cmd.value.content.find((el: any) => el.type === 'os-install')
+    const osInstall = cmd.value.content.find((el) => el.type === 'os-install')
     if (osInstall) base = osInstall.props?.install?.[osId] || []
   } else {
     base = cmd.value?.install?.[osId] || []

@@ -49,19 +49,19 @@ const ConfirmDestructive = ({
     <Dialog open={open} onOpenChange={(next) => { if (!next && !busy) onCancel(); }}>
       <DialogContent className="max-w-lg border-destructive/40">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-destructive">
+          <DialogTitle className="flex items-center gap-2 text-err">
             <AlertTriangle className="h-5 w-5" /> {title}
           </DialogTitle>
           <DialogDescription asChild>
-            <div className="pt-1 text-sm text-foreground">{description}</div>
+            <div className="pt-1 text-sm text-ink-0">{description}</div>
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
           <div className="space-y-1.5">
-            <Label htmlFor="confirm-id" className="text-xs text-muted-foreground">
+            <Label htmlFor="confirm-id" className="text-xs text-ink-3">
               Tape l&apos;identifiant{' '}
-              <code className="rounded bg-muted px-1 py-0.5 text-warning">{shortId}</code> :
+              <code className="rounded bg-bg-2 px-1 py-0.5 text-warn">{shortId}</code> :
             </Label>
             <Input
               id="confirm-id"
@@ -76,8 +76,8 @@ const ConfirmDestructive = ({
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="confirm-word" className="text-xs text-muted-foreground">
-              Tape <code className="rounded bg-muted px-1 py-0.5 text-warning">{confirmWord}</code> en majuscules :
+            <Label htmlFor="confirm-word" className="text-xs text-ink-3">
+              Tape <code className="rounded bg-bg-2 px-1 py-0.5 text-warn">{confirmWord}</code> en majuscules :
             </Label>
             <Input
               id="confirm-word"
@@ -90,7 +90,7 @@ const ConfirmDestructive = ({
               className="font-mono"
             />
           </div>
-          <div className="text-[11px] italic text-muted-foreground">
+          <div className="text-[11px] italic text-ink-3">
             Cette action est tracée dans l&apos;audit log.
           </div>
         </div>

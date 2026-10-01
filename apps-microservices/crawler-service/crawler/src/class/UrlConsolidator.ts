@@ -39,34 +39,46 @@ export class UrlConsolidator {
     private requestUrlKey: string;
     private ttl: number;
     private ttlSet: boolean = false;
+    private ownsClient: boolean;
 
     private previousCrawlId: string;
     private domain: string;
 
     constructor(
-        redisUrl: string,
+        clientOrUrl: RedisClientType | string,
         crawlId: string,
         previousCrawlId: string,
         domain: string,
         ttlSeconds: number = 7 * 24 * 3600
     ) {
-        this.redis = createClient({ url: redisUrl });
-        this.redis.on('error', (err: Error) => console.error('Redis UrlConsolidator Error:', err));
         this.datasetKey = `update_dataset:${crawlId}`;
         this.requestQueueKey = `update_rq:${crawlId}`;
         this.requestUrlKey = `update_ru:${crawlId}`;
         this.previousCrawlId = previousCrawlId;
         this.domain = domain;
         this.ttl = ttlSeconds;
+
+        if (typeof clientOrUrl === 'string') {
+            // Backward-compatible URL form — UrlConsolidator creates + owns the client.
+            this.redis = createClient({ url: clientOrUrl });
+            this.ownsClient = true;
+            this.redis.on('error', (err: Error) => console.error('Redis UrlConsolidator Error:', err));
+        } else {
+            // Injected shared client — owner manages connect/disconnect + the 'error' listener.
+            this.redis = clientOrUrl;
+            this.ownsClient = false;
+        }
     }
 
     async connect(): Promise<void> {
+        if (!this.ownsClient) return;   // shared client connected by owner
         if (!this.redis.isOpen) {
             await this.redis.connect();
         }
     }
 
     async disconnect(): Promise<void> {
+        if (!this.ownsClient) return;   // shared client closed by owner
         if (this.redis.isOpen) {
             await this.redis.disconnect();
         }

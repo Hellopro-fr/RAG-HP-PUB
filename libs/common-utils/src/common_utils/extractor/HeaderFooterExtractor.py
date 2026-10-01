@@ -26,6 +26,19 @@ class HeaderFooterExtractor:
         re.compile(r"cookies.*?(?:necessary|nécessaires).*?(?:functioning|bon fonctionnement)", re.IGNORECASE)
     ]
 
+    # Header/footer selection priority, the ONE table read by both
+    # extract_with_fallback (production) and extract_all_debug, so the debug
+    # payload always reports the pick production makes. Per part, the first
+    # strategy yielding non-empty text wins. Row: (strategy, method label when it
+    # wins one part, method label when it wins both parts). Order and labels are
+    # production's since 85084bd9; debug used to keep the older
+    # Original -> Class -> Structural order with its own labels (R10 a).
+    SELECTION_PRIORITY = (
+        ("structural", "Fallback (Structural)", "Fallback (boilerpy3 Structural Intersection)"),
+        ("class", "Fallback (Class)", "Fallback (Class)"),
+        ("original", "Original (Semantic/CSS Pattern)", "Original (Semantic/CSS Pattern)"),
+    )
+
     def __init__(self, html_content: str):
         self.raw_html = html_content # Store raw HTML for boilerpy3 fallback
         try:
@@ -334,6 +347,33 @@ class HeaderFooterExtractor:
         index = len(siblings) + 1
         return f"{el.name}:nth-of-type({index})"
 
+    def _build_structural_sig_map(self, root) -> dict:
+        """O(N) batch equivalent of calling _get_signature_structural on every
+        descendant Tag. One pre-order DFS: each parent keeps a running per-tag-name
+        counter, so a child's nth-of-type index is assigned in O(1) instead of the
+        O(position) find_previous_siblings(name) scan that made the per-element path
+        O(N^2) over a large/repetitive DOM. Returns {id(el): "tag:nth-of-type(i) > ..."},
+        byte-identical to _get_signature_structural(el) for every Tag.
+
+        Valid only for the tree as it stands at call time (rebuild after any decompose);
+        used for the read-only intersection scan (steps 3-4). The few post-purge re-signs
+        (step 9) keep calling _get_signature_structural on the mutated tree."""
+        sig_map = {}
+
+        def walk(node, prefix):
+            counts = {}  # per-parent same-tag-name running index
+            for child in node.children:
+                if not isinstance(child, Tag):
+                    continue
+                counts[child.name] = counts.get(child.name, 0) + 1
+                segment = f"{child.name}:nth-of-type({counts[child.name]})"
+                path = f"{prefix} > {segment}" if prefix else segment
+                sig_map[id(child)] = path
+                walk(child, path)
+
+        walk(root, "")
+        return sig_map
+
     def _is_cookie_banner(self, text: str) -> bool:
         """
         Detects if a text block is likely a cookie/consent banner using robust regex patterns.
@@ -410,11 +450,12 @@ class HeaderFooterExtractor:
         target_tags = ['div', 'header', 'footer', 'nav', 'ul', 'ol', 'dl', 'dt', 'dd', 'section', 'aside', 'main', 'article', 'table', 'thead', 'tbody', 'tfoot', 'tr', 'td']
 
         for ref_soup in clean_refs:
+            struct_map = self._build_structural_sig_map(ref_soup) if strategy == "structural" else None
             sig_map = {}
             for el in ref_soup.find_all(target_tags):
                 if strategy == "class" and not el.get('class') and el.name not in ['header', 'footer', 'nav', 'main', 'article']:
                     continue
-                s = get_sig(el)
+                s = struct_map[id(el)] if struct_map is not None else get_sig(el)
                 # Store the text. If multiple elements have the same signature, we store the first one found.
                 # In most boilerplate scenarios, structural signatures are unique enough or repetition is acceptable.
                 if s not in sig_map:
@@ -424,10 +465,11 @@ class HeaderFooterExtractor:
         # 4. Find matching nodes in the Main HTML (The Intersection)
         potential_candidates = []
         all_main_elements = main_soup.find_all(target_tags)
-        
+        main_struct_map = self._build_structural_sig_map(main_soup) if strategy == "structural" else None
+
         for index, el in enumerate(all_main_elements):
-            sig = get_sig(el)
-            
+            sig = main_struct_map[id(el)] if main_struct_map is not None else get_sig(el)
+
             if strategy == "class" and not el.get('class') and el.name not in ['header', 'footer', 'nav', 'main', 'article']:
                 continue
             
@@ -599,47 +641,52 @@ class HeaderFooterExtractor:
 
         return header_result, footer_result, detailed_intersections, cleaned_htmls, gap_details
 
+    def _select_by_priority(self, text_of) -> dict:
+        """Pick header and footer along SELECTION_PRIORITY.
+
+        text_of(strategy, part) returns that strategy's text for "header" or
+        "footer". It is only called until the part is won, so a lazy text_of
+        keeps production's short-circuit.
+        """
+        texts, winners = {}, {}
+        for part in ("header", "footer"):
+            texts[part], winners[part] = "", None
+            for rank, (strategy, _, _) in enumerate(self.SELECTION_PRIORITY):
+                texts[part] = text_of(strategy, part)
+                if texts[part]:
+                    winners[part] = rank
+                    break
+
+        same_winner = winners["header"] is not None and winners["header"] == winners["footer"]
+        selected = {}
+        for part in ("header", "footer"):
+            method = "None"
+            if winners[part] is not None:
+                _, one_part_label, both_parts_label = self.SELECTION_PRIORITY[winners[part]]
+                method = both_parts_label if same_winner else one_part_label
+            selected[part] = texts[part]
+            selected[f"{part}_method"] = method
+        return selected
+
     def extract_with_fallback(self, reference_htmls: list[str]) -> dict:
-        """Production Logic: Structural -> Class -> Original"""
+        """Production Logic: Structural -> Class -> Original (SELECTION_PRIORITY)"""
         if not self.soup:
             return {"header": "", "header_method": "None", "footer": "", "footer_method": "None"}
 
-        # Order: 1. Structural, 2. Class, 3. Original
-        
-        # 1. Structural Strategy
-        fallback_h, fallback_f, _, _, _ = self.run_intersection_logic(reference_htmls, strategy="structural")
-        
-        if fallback_h and fallback_f:
-            return {
-                "header": fallback_h, "header_method": "Fallback (boilerpy3 Structural Intersection)",
-                "footer": fallback_f, "footer_method": "Fallback (boilerpy3 Structural Intersection)"
-            }
-            
-        # 2. Class Strategy
-        fallback_h_class, fallback_f_class, _, _, _ = self.run_intersection_logic(reference_htmls, strategy="class")
-        
-        # Partial Merge or Fallback
-        header = fallback_h if fallback_h else fallback_h_class
-        footer = fallback_f if fallback_f else fallback_f_class
-        
-        header_method = "Fallback (Structural)" if fallback_h else ("Fallback (Class)" if fallback_h_class else "None")
-        footer_method = "Fallback (Structural)" if fallback_f else ("Fallback (Class)" if fallback_f_class else "None")
+        # Lazy: an intersection runs once, and only while a part is still unwon;
+        # the original method runs only for a part no intersection found.
+        intersections = {}
+        original = {"header": self.extract_header, "footer": self.extract_footer}
 
-        # 3. Original Method (Last Resort if completely empty)
-        if not header:
-            header = self.extract_header(self.soup)
-            if header: header_method = "Original (Semantic/CSS Pattern)"
-            
-        if not footer:
-            footer = self.extract_footer(self.soup)
-            if footer: footer_method = "Original (Semantic/CSS Pattern)"
+        def text_of(strategy: str, part: str) -> str:
+            if strategy == "original":
+                return original[part](self.soup)
+            if strategy not in intersections:
+                h, f, _, _, _ = self.run_intersection_logic(reference_htmls, strategy=strategy)
+                intersections[strategy] = {"header": h, "footer": f}
+            return intersections[strategy][part]
 
-        return {
-            "header": header,
-            "header_method": header_method,
-            "footer": footer,
-            "footer_method": footer_method
-        }
+        return self._select_by_priority(text_of)
 
     def extract_all_debug(self, reference_htmls: list[str], gap_config: dict = None) -> dict:
         """Debug Logic"""
@@ -657,31 +704,15 @@ class HeaderFooterExtractor:
             reference_htmls, strategy="structural", gap_config=gap_config
         )
 
-        if old_header:
-            selected_header = old_header
-            header_method_used = "Original (Semantic/CSS Pattern)"
-        elif class_h:
-            selected_header = class_h
-            header_method_used = "Fallback (boilerpy3 Class Intersection)"
-        elif struct_h:
-             selected_header = struct_h
-             header_method_used = "Fallback (boilerpy3 Structural Intersection)"
-        else:
-            selected_header = ""
-            header_method_used = "None"
-
-        if old_footer:
-            selected_footer = old_footer
-            footer_method_used = "Original (Semantic/CSS Pattern)"
-        elif class_f:
-            selected_footer = class_f
-            footer_method_used = "Fallback (boilerpy3 Class Intersection)"
-        elif struct_f:
-            selected_footer = struct_f
-            footer_method_used = "Fallback (boilerpy3 Structural Intersection)"
-        else:
-            selected_footer = ""
-            footer_method_used = "None"
+        # Same pick as production (SELECTION_PRIORITY), over the texts computed above.
+        candidates = {
+            "original": {"header": old_header, "footer": old_footer},
+            "class": {"header": class_h, "footer": class_f},
+            "structural": {"header": struct_h, "footer": struct_f},
+        }
+        selected = self._select_by_priority(lambda strategy, part: candidates[strategy][part])
+        selected_header, header_method_used = selected["header"], selected["header_method"]
+        selected_footer, footer_method_used = selected["footer"], selected["footer_method"]
 
         return {
             "header_old": old_header,

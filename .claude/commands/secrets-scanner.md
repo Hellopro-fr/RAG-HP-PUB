@@ -1,3 +1,7 @@
+---
+description: Audit du dépôt au repos à la recherche de secrets en dur (clés API, credentials, chaînes de connexion)
+allowed-tools: Read, Grep, Glob, Bash
+---
 # /secrets-scanner — Full Codebase Secrets Audit
 
 Scan the entire codebase for hardcoded secrets, API keys, passwords, and connection strings.
@@ -40,8 +44,10 @@ For each finding, classify:
 ### Step 4 — Cross-reference with security.md
 
 Check each finding against `.claude/rules/security.md`:
-- Is it in the "Known violations to fix" list? Mark as **KNOWN**.
-- Is it new? Mark as **NEW**.
+- Is the secret stored the way that rule prescribes (env var / Pydantic `BaseSettings`, never in source)? Mark as **COMPLIANT**.
+- Is it hardcoded in source? Mark as **VIOLATION**.
+
+(There is no "Known violations to fix" list — `security.md` has never contained one.)
 
 ### Step 5 — Report
 
@@ -64,8 +70,6 @@ Check each finding against `.claude/rules/security.md`:
 | # | File:Line | Type | Status |
 |---|-----------|------|--------|
 
-### Known Violations (from security.md)
-- [status: fixed/still present] path/to/file.py — description
 ```
 
 ## Rules

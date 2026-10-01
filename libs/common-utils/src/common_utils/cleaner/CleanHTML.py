@@ -71,9 +71,18 @@ class CleanHTML:
             logging.warning("Le contenu de la page est vide après le stripping des tags.")
             return result
         
-        # Convert to markdown
+        # Convert to markdown. Guard against RecursionError: markdownify recurses
+        # per DOM level, so a pathologically nested document (e.g. hundreds of
+        # nested table tags) overflows the recursion limit — return empty rather
+        # than crash the caller.
         def md(soup: BeautifulSoup, **options):
-            return MarkdownConverter(**options).convert_soup(soup)
+            try:
+                return MarkdownConverter(**options).convert_soup(soup)
+            except RecursionError:
+                logging.warning(
+                    "markdownify a dépassé la limite de récursion — contenu ignoré."
+                )
+                return ""
         
         markdown_text = md(soup, convert=self.TABLE_RELATED_TAGS)
         if not markdown_text:

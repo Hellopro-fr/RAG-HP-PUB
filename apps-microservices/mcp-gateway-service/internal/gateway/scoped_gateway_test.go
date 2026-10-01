@@ -3,17 +3,20 @@ package gateway
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"sort"
 	"testing"
 
-	"github.com/hellopro/mcp-gateway/internal/mcp"
-	"github.com/hellopro/mcp-gateway/internal/scopetoken"
+	"mcp-gateway/internal/db"
+	"mcp-gateway/internal/mcp"
+	"mcp-gateway/internal/scopetoken"
 )
 
 func newScopedGatewayForTest(t *testing.T) *ScopedGateway {
 	t.Helper()
 	reg := NewRegistry()
 	gw := New("hellopro-mcp-gateway", "0.1.0", reg)
-	return NewScopedGateway(gw, map[string]bool{}, nil)
+	return NewScopedGateway(gw, map[string]bool{}, nil, nil)
 }
 
 func initializeName(t *testing.T, resp *mcp.Response) string {
@@ -63,4 +66,317 @@ func TestHandleInitializeIgnoresEmptyScopeName(t *testing.T) {
 	if got := initializeName(t, resp); got != "hellopro-mcp-gateway" {
 		t.Errorf("expected static name when ctx value empty, got %q", got)
 	}
+}
+
+// initializeInstructions extracts the `instructions` field for easy assertion.
+func initializeInstructions(t *testing.T, resp *mcp.Response) string {
+	t.Helper()
+	raw, _ := json.Marshal(resp.Result)
+	var out mcp.InitializeResult
+	_ = json.Unmarshal(raw, &out)
+	return out.Instructions
+}
+
+func TestHandleInitializeEmitsComposedInstructions(t *testing.T) {
+	reg := NewRegistry()
+	gw := New("gw", "1.0", reg)
+	sg := NewScopedGateway(gw, map[string]bool{}, nil, []InstructionView{
+		{ID: "1", Title: "Prefer search", Body: "Use search_* before list_*."},
+		{ID: "2", Title: "Batch", Body: "Batch in groups of 5."},
+	})
+
+	req := &mcp.Request{ID: json.RawMessage(`1`), Method: "initialize"}
+	resp := sg.Handle(context.Background(), req)
+
+	got := initializeInstructions(t, resp)
+	want := "## Prefer search\nUse search_* before list_*.\n\n## Batch\nBatch in groups of 5."
+	if got != want {
+		t.Errorf("instructions mismatch\n got=%q\nwant=%q", got, want)
+	}
+}
+
+func TestHandleInitializeEmptyInstructionsOmitsField(t *testing.T) {
+	sg := newScopedGatewayForTest(t)
+	req := &mcp.Request{ID: json.RawMessage(`1`), Method: "initialize"}
+	resp := sg.Handle(context.Background(), req)
+
+	// When no instructions are attached, the JSON should omit the field
+	// entirely thanks to `omitempty`.
+	raw, _ := json.Marshal(resp.Result)
+	if got := string(raw); got == "" || contains(got, `"instructions"`) {
+		t.Errorf("instructions field should be omitted when empty, got %s", got)
+	}
+}
+
+func contains(s, sub string) bool {
+	for i := 0; i+len(sub) <= len(s); i++ {
+		if s[i:i+len(sub)] == sub {
+			return true
+		}
+	}
+	return false
+}
+
+// ── BDD header injection tests ──────────────────────────────────────────
+
+// stubBDDResolver lets a test enumerate which IDs to honour and which to
+// pretend are gone. Anything not present in `tables` triggers a not-found.
+type stubBDDResolver struct {
+	tables map[string]*db.BDDUsedTable
+}
+
+func (s *stubBDDResolver) GetTable(_ context.Context, id string) (*db.BDDUsedTable, error) {
+	t, ok := s.tables[id]
+	if !ok {
+		return nil, errors.New("not found")
+	}
+	return t, nil
+}
+
+// scopedGWWithResolver wires a ScopedGateway with a registry-backed BDD
+// backend (ToolPrefix=bdd) plus a resolver. ToolPrefix-only path: the
+// header injection logic doesn't touch tools/list, only outbound headers.
+func scopedGWWithResolver(t *testing.T, resolver BDDTableResolver) (*ScopedGateway, *BackendServer) {
+	t.Helper()
+	reg := NewRegistry()
+	gw := New("hellopro-mcp-gateway", "0.1.0", reg)
+	gw.SetBDDResolver(resolver)
+	backend := &BackendServer{ID: "bdd-srv", ToolPrefix: bddToolPrefix}
+	return NewScopedGateway(gw, map[string]bool{"bdd-srv": true}, nil, nil), backend
+}
+
+func parseBDDHeader(t *testing.T, header string) []bddTablePair {
+	t.Helper()
+	var got []bddTablePair
+	if err := json.Unmarshal([]byte(header), &got); err != nil {
+		t.Fatalf("unmarshal bdd header %q: %v", header, err)
+	}
+	return got
+}
+
+func TestRequestHeadersFor_BDDFilterAbsent(t *testing.T) {
+	sg, backend := scopedGWWithResolver(t, &stubBDDResolver{})
+	headers := sg.requestHeadersFor(context.Background(), backend)
+	if _, ok := headers[BDDAllowedTablesHeader]; ok {
+		t.Errorf("expected no BDD header when filter absent, got %q", headers[BDDAllowedTablesHeader])
+	}
+}
+
+func TestRequestHeadersFor_BDDFilterTwoIDsResolveCleanly(t *testing.T) {
+	resolver := &stubBDDResolver{tables: map[string]*db.BDDUsedTable{
+		"id-1": {DatabaseID: 1, Name: "products"},
+		"id-2": {DatabaseID: 5, Name: "leads"},
+	}}
+	sg, backend := scopedGWWithResolver(t, resolver)
+	ctx := context.WithValue(context.Background(), scopetoken.BDDFilterContextKey, []string{"id-1", "id-2"})
+
+	headers := sg.requestHeadersFor(ctx, backend)
+	raw, ok := headers[BDDAllowedTablesHeader]
+	if !ok {
+		t.Fatalf("expected BDD header to be present")
+	}
+	got := parseBDDHeader(t, raw)
+	sort.Slice(got, func(i, j int) bool { return got[i].DatabaseID < got[j].DatabaseID })
+	if len(got) != 2 {
+		t.Fatalf("expected 2 entries, got %d (%+v)", len(got), got)
+	}
+	if got[0].DatabaseID != 1 || got[0].TableName != "products" {
+		t.Errorf("unexpected entry[0]: %+v", got[0])
+	}
+	if got[1].DatabaseID != 5 || got[1].TableName != "leads" {
+		t.Errorf("unexpected entry[1]: %+v", got[1])
+	}
+}
+
+func TestRequestHeadersFor_BDDFilterAllRowsDeletedFailsClosed(t *testing.T) {
+	// Resolver returns not-found for every requested ID — simulates the
+	// case where the registry rows were deleted between cache load and
+	// the request. Header MUST be set to "[]" so the backend denies all.
+	resolver := &stubBDDResolver{tables: map[string]*db.BDDUsedTable{}}
+	sg, backend := scopedGWWithResolver(t, resolver)
+	ctx := context.WithValue(context.Background(), scopetoken.BDDFilterContextKey, []string{"ghost-1", "ghost-2"})
+
+	headers := sg.requestHeadersFor(ctx, backend)
+	raw, ok := headers[BDDAllowedTablesHeader]
+	if !ok {
+		t.Fatalf("expected BDD header even when all IDs are gone (fail-closed)")
+	}
+	if raw != "[]" {
+		t.Errorf("expected empty JSON array, got %q", raw)
+	}
+}
+
+func TestRequestHeadersFor_BDDFilterIgnoredForNonBDDBackend(t *testing.T) {
+	resolver := &stubBDDResolver{tables: map[string]*db.BDDUsedTable{
+		"id-1": {DatabaseID: 1, Name: "products"},
+	}}
+	sg, _ := scopedGWWithResolver(t, resolver)
+	// Override the backend's prefix to something else — the injector must
+	// skip every backend that isn't BDD-tagged.
+	other := &BackendServer{ID: "other", ToolPrefix: "ringover"}
+	ctx := context.WithValue(context.Background(), scopetoken.BDDFilterContextKey, []string{"id-1"})
+
+	headers := sg.requestHeadersFor(ctx, other)
+	if _, ok := headers[BDDAllowedTablesHeader]; ok {
+		t.Errorf("expected no BDD header on non-BDD backend, got %q", headers[BDDAllowedTablesHeader])
+	}
+}
+
+// TestRequestHeadersFor_Zoho verifies the per-server auto-filter (Step 1)
+// and the admin-configured filter (Step 2) for Zoho backends.
+func TestRequestHeadersFor_Zoho(t *testing.T) {
+	const header = "X-Zoho-Allowed-User"
+	const denySentinel = "deny-all@hellopro.fr.deny"
+
+	t.Run("imported zoho server with created_by → step 1 wins", func(t *testing.T) {
+		sg := newScopedGatewayForTest(t)
+		backend := &BackendServer{
+			ID:           "srv-1",
+			ToolPrefix:   "zoho",
+			TemplateSlug: "ga",
+			CreatedBy:    "alice@hellopro.fr",
+		}
+		headers := sg.requestHeadersFor(context.Background(), backend)
+		if got := headers[header]; got != "alice@hellopro.fr" {
+			t.Fatalf("got %q, want %q", got, "alice@hellopro.fr")
+		}
+	})
+
+	t.Run("imported zoho server with empty created_by → falls back to admin", func(t *testing.T) {
+		sg := newScopedGatewayForTest(t)
+		backend := &BackendServer{
+			ID:           "srv-2",
+			ToolPrefix:   "zoho",
+			TemplateSlug: "ga",
+			CreatedBy:    "",
+		}
+		ctx := context.WithValue(context.Background(), scopetoken.ZohoFilterContextKey, &scopetoken.ZohoFilterContext{
+			Mode:          "users",
+			AllowedEmails: []string{"bob@hp.fr", "carol@hp.fr"},
+		})
+		headers := sg.requestHeadersFor(ctx, backend)
+		if got := headers[header]; got != "bob@hp.fr,carol@hp.fr" {
+			t.Fatalf("got %q, want %q", got, "bob@hp.fr,carol@hp.fr")
+		}
+	})
+
+	t.Run("manual zoho server + users mode → step 2 csv", func(t *testing.T) {
+		sg := newScopedGatewayForTest(t)
+		backend := &BackendServer{
+			ID:         "srv-3",
+			ToolPrefix: "zoho",
+		}
+		ctx := context.WithValue(context.Background(), scopetoken.ZohoFilterContextKey, &scopetoken.ZohoFilterContext{
+			Mode:          "users",
+			AllowedEmails: []string{"bob@hp.fr"},
+		})
+		headers := sg.requestHeadersFor(ctx, backend)
+		if got := headers[header]; got != "bob@hp.fr" {
+			t.Fatalf("got %q, want %q", got, "bob@hp.fr")
+		}
+	})
+
+	t.Run("manual zoho server + mode none → no header", func(t *testing.T) {
+		sg := newScopedGatewayForTest(t)
+		backend := &BackendServer{ID: "srv-4", ToolPrefix: "zoho"}
+		ctx := context.WithValue(context.Background(), scopetoken.ZohoFilterContextKey, &scopetoken.ZohoFilterContext{Mode: "none"})
+		headers := sg.requestHeadersFor(ctx, backend)
+		if _, ok := headers[header]; ok {
+			t.Fatalf("expected no %s header, got %q", header, headers[header])
+		}
+	})
+
+	t.Run("users mode + empty list → deny sentinel", func(t *testing.T) {
+		sg := newScopedGatewayForTest(t)
+		backend := &BackendServer{ID: "srv-5", ToolPrefix: "zoho"}
+		ctx := context.WithValue(context.Background(), scopetoken.ZohoFilterContextKey, &scopetoken.ZohoFilterContext{
+			Mode:          "users",
+			AllowedEmails: nil,
+		})
+		headers := sg.requestHeadersFor(ctx, backend)
+		if got := headers[header]; got != denySentinel {
+			t.Fatalf("got %q, want %q", got, denySentinel)
+		}
+	})
+
+	t.Run("creator mode → single email", func(t *testing.T) {
+		sg := newScopedGatewayForTest(t)
+		backend := &BackendServer{ID: "srv-6", ToolPrefix: "zoho"}
+		ctx := context.WithValue(context.Background(), scopetoken.ZohoFilterContextKey, &scopetoken.ZohoFilterContext{
+			Mode:         "creator",
+			CreatorEmail: "dave@hp.fr",
+		})
+		headers := sg.requestHeadersFor(ctx, backend)
+		if got := headers[header]; got != "dave@hp.fr" {
+			t.Fatalf("got %q, want %q", got, "dave@hp.fr")
+		}
+	})
+
+	t.Run("creator mode + empty creator → deny sentinel", func(t *testing.T) {
+		sg := newScopedGatewayForTest(t)
+		backend := &BackendServer{ID: "srv-7", ToolPrefix: "zoho"}
+		ctx := context.WithValue(context.Background(), scopetoken.ZohoFilterContextKey, &scopetoken.ZohoFilterContext{
+			Mode:         "creator",
+			CreatorEmail: "",
+		})
+		headers := sg.requestHeadersFor(ctx, backend)
+		if got := headers[header]; got != denySentinel {
+			t.Fatalf("got %q, want %q", got, denySentinel)
+		}
+	})
+
+	t.Run("non-zoho backend ignores zoho filter", func(t *testing.T) {
+		sg := newScopedGatewayForTest(t)
+		backend := &BackendServer{ID: "srv-8", ToolPrefix: "leexi"}
+		ctx := context.WithValue(context.Background(), scopetoken.ZohoFilterContextKey, &scopetoken.ZohoFilterContext{
+			Mode:          "users",
+			AllowedEmails: []string{"bob@hp.fr"},
+		})
+		headers := sg.requestHeadersFor(ctx, backend)
+		if _, ok := headers[header]; ok {
+			t.Fatalf("expected no %s header for non-zoho backend, got %q", header, headers[header])
+		}
+	})
+}
+
+// TestRequestHeadersFor_Zoho_Identity covers the X-End-User-Email +
+// X-End-User-Login injection added for mcp-zoho-service.
+func TestRequestHeadersFor_Zoho_Identity(t *testing.T) {
+	const emailHeader = "X-End-User-Email"
+	const loginHeader = "X-End-User-Login"
+
+	t.Run("zoho backend + end-user in ctx → both headers", func(t *testing.T) {
+		sg := newScopedGatewayForTest(t)
+		backend := &BackendServer{ID: "srv-a", ToolPrefix: "zoho"}
+		ctx := context.WithValue(context.Background(), scopetoken.EndUserEmailContextKey, "alice@hp.fr")
+		headers := sg.requestHeadersFor(ctx, backend)
+		if got := headers[emailHeader]; got != "alice@hp.fr" {
+			t.Fatalf("%s = %q, want alice@hp.fr", emailHeader, got)
+		}
+		if got := headers[loginHeader]; got != "alice" {
+			t.Fatalf("%s = %q, want alice", loginHeader, got)
+		}
+	})
+
+	t.Run("zoho backend + no end-user → neither header", func(t *testing.T) {
+		sg := newScopedGatewayForTest(t)
+		backend := &BackendServer{ID: "srv-a", ToolPrefix: "zoho"}
+		headers := sg.requestHeadersFor(context.Background(), backend)
+		if _, ok := headers[emailHeader]; ok {
+			t.Fatalf("unexpected %s header", emailHeader)
+		}
+		if _, ok := headers[loginHeader]; ok {
+			t.Fatalf("unexpected %s header", loginHeader)
+		}
+	})
+
+	t.Run("non-zoho backend ignores identity injection", func(t *testing.T) {
+		sg := newScopedGatewayForTest(t)
+		backend := &BackendServer{ID: "srv-l", ToolPrefix: "leexi"}
+		ctx := context.WithValue(context.Background(), scopetoken.EndUserEmailContextKey, "alice@hp.fr")
+		headers := sg.requestHeadersFor(ctx, backend)
+		if _, ok := headers[emailHeader]; ok {
+			t.Fatalf("unexpected %s on non-zoho", emailHeader)
+		}
+	})
 }

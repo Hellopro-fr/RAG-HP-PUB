@@ -25,6 +25,45 @@ const PLACEHOLDER_IMAGE = '/images/product-placeholder.jpg';
 /** Placeholder pour le nom du fournisseur */
 const PLACEHOLDER_SUPPLIER = 'Fournisseur';
 
+/**
+ * Fabrique un Supplier "d'affichage" avec des valeurs neutres par défaut.
+ * Centralise la forme du type Supplier pour les usages hors matching
+ * (ex. fond d'aperçu TransparenceTableBackground) sans dupliquer tous les
+ * champs à la main.
+ */
+export function makeDisplaySupplier(opts: {
+  id: string;
+  productName: string;
+  image: string;
+  specs?: ProductSpec[];
+  supplierName?: string;
+  isCertified?: boolean;
+}): Supplier {
+  const supplierName = opts.supplierName ?? PLACEHOLDER_SUPPLIER;
+  const image = opts.image || PLACEHOLDER_IMAGE;
+  return {
+    id: opts.id,
+    productName: opts.productName,
+    supplierName,
+    rating: 0,
+    distance: 0,
+    matchScore: 0,
+    image,
+    images: [image],
+    isRecommended: true,
+    isCertified: opts.isCertified ?? false,
+    matchGaps: [],
+    description: '',
+    specs: opts.specs ?? [],
+    supplier: {
+      name: supplierName,
+      description: '',
+      location: '',
+      responseTime: '',
+    },
+  };
+}
+
 // =============================================================================
 // HELPERS
 // =============================================================================
@@ -44,6 +83,16 @@ function getCharacteristicLabel(
  * Récupère les labels des valeurs pour une caractéristique
  * Gère les types numériques (valeur exacte ou plage min/max + unite) et textuels (id_valeur[])
  */
+function formatNumeric(v: number | string | null | undefined): string {
+  if (v === null || v === undefined) return '';
+  if (typeof v === 'number') return Number.isFinite(v) ? String(v) : '';
+  // Cas string : tenter une normalisation (`"4.0"` → `"4"`, `"4,5"` → `"4.5"`)
+  const trimmed = v.trim();
+  if (!trimmed) return '';
+  const num = Number(trimmed.replace(',', '.'));
+  return Number.isFinite(num) ? String(num) : v;
+}
+
 function getValueLabels(
   characteristicsMap: CharacteristicsMap,
   characteristic: MatchingCharacteristic
@@ -56,7 +105,7 @@ function getValueLabels(
 
     // Cas 1: Valeur exacte
     if (valeur !== null && valeur !== undefined) {
-      return `${valeur}${uniteStr}`;
+      return `${formatNumeric(valeur)}${uniteStr}`;
     }
 
     // Cas 2: Plage min/max
@@ -64,13 +113,13 @@ function getValueLabels(
     const hasMax = valeur_max !== null && valeur_max !== undefined;
 
     if (hasMin && hasMax) {
-      return `${valeur_min} - ${valeur_max}${uniteStr}`;
+      return `${formatNumeric(valeur_min)} - ${formatNumeric(valeur_max)}${uniteStr}`;
     }
     if (hasMin) {
-      return `>= ${valeur_min}${uniteStr}`;
+      return `>= ${formatNumeric(valeur_min)}${uniteStr}`;
     }
     if (hasMax) {
-      return `<= ${valeur_max}${uniteStr}`;
+      return `<= ${formatNumeric(valeur_max)}${uniteStr}`;
     }
 
     return '-';
@@ -123,16 +172,16 @@ function getExpectedValue(
     if (cibles && !Array.isArray(cibles)) {
       const unite = userCriteria.unite || char?.unite || '';
       if (cibles.exact !== undefined) {
-        return `${cibles.exact}${unite}`;
+        return `${formatNumeric(cibles.exact)}${unite}`;
       }
       if (cibles.min !== undefined && cibles.max !== undefined) {
-        return `${cibles.min} - ${cibles.max}${unite}`;
+        return `${formatNumeric(cibles.min)} - ${formatNumeric(cibles.max)}${unite}`;
       }
       if (cibles.min !== undefined) {
-        return `>= ${cibles.min}${unite}`;
+        return `>= ${formatNumeric(cibles.min)}${unite}`;
       }
       if (cibles.max !== undefined) {
-        return `<= ${cibles.max}${unite}`;
+        return `<= ${formatNumeric(cibles.max)}${unite}`;
       }
     }
   }
@@ -144,7 +193,7 @@ function getExpectedValue(
  * Construit les specs d'un produit à partir des critères utilisateur
  * Affiche TOUS les critères demandés, qu'ils soient présents ou non sur le produit
  */
-function buildProductSpecs(
+export function buildProductSpecs(
   matchingCharacteristics: MatchingCharacteristic[],
   characteristicsMap: CharacteristicsMap,
   equivalences: ConsolidatedCharacteristic[]
@@ -407,6 +456,8 @@ export function enrichSuppliersWithProductInfo(
       image: mainImage,
       images: images,
       logo: vendeur.logo || undefined,
+      // Vendeur "certifié" = vendeur dont l'affichage est complet (donnée fournisseur vérifiée)
+      isCertified: vendeur.affichage_complet === true,
       supplier: {
         id: vendeur.id,
         name: supplierName,

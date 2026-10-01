@@ -1,0 +1,13 @@
+{
+  "planPath": "docs/superpowers/plans/2026-04-30-fr-implicit-winner-when-homepage-at-root.md",
+  "tasks": [
+    {
+      "id": 1,
+      "subject": "Task 1: Implicit winner branch in computeExcludedRegionalPaths",
+      "status": "completed",
+      "commit": "ede2194a",
+      "description": "**Goal:** When winnerPrefix and seedPrefix are both null, find the FR-shaped alt with the lowest region_priority (undefined treated as worst), treat it as the implicit winner, and exclude only the other alternates.\n\n**Files:**\n- Modify: apps-microservices/crawler-service/crawler/src/class/DetectionLangueClient.ts:270-293\n- Test: apps-microservices/crawler-service/crawler/src/tests/test_DetectionLangueClient.ts (append cases A-G)\n\n**Verify:** cd apps-microservices/crawler-service/crawler && npm run build && npx tsx src/tests/test_DetectionLangueClient.ts\n\n```json:metadata\n{\"files\":[\"apps-microservices/crawler-service/crawler/src/class/DetectionLangueClient.ts\",\"apps-microservices/crawler-service/crawler/src/tests/test_DetectionLangueClient.ts\"],\"verifyCommand\":\"cd apps-microservices/crawler-service/crawler && npm run build && npx tsx src/tests/test_DetectionLangueClient.ts\",\"acceptanceCriteria\":[\"Existing 9 cases pass\",\"Case A excluded=[]\",\"Case B excluded=[/de,/en]\",\"Case C /fr-FR wins\",\"Case D first-FR wins\",\"Case E /de,/en excluded\",\"Case F regression\",\"Case G empty\",\"Build clean\"]}\n```"
+    }
+  ],
+  "lastUpdated": "2026-04-30T00:00:00Z"
+}

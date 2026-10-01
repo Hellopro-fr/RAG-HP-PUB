@@ -1,0 +1,40 @@
+{
+  "produit_scrapping_bo_correspondance": {
+    "database_id": 1,
+    "description": "Table de jonction produit scrapé IA ↔ produit du catalogue BO : 1 ligne = 1 produit scrapé (produit_scrapping_ia, HELLOPRO_IA) publié/rapatrié dans le BO (produit, ANNUAIRE_BO). La ligne naît à l'étape de publication BO (pas au crawl/matching), quand un produit scrapé source SITEWEB est jugé pertinent par le LLM et inséré dans produit. Sert à : (1) dédup — sauter les produits scrapés déjà publiés ; (2) propager les éditions scraping (titre/desc/prix/url) sur le bon produit BO ; (3) rollback (supprimer le produit BO créé + nettoyer les données scraping). Stockée dans ANNUAIRE_BO (edgb2b). Suffixe colonnes _psbc.",
+    "primary_key": "id_psbc",
+    "default_order_by": "date_insertion_psbc DESC",
+    "rows": null,
+    "columns": {
+      "id_psbc": { "type": "int", "desc": "Identifiant unique de la correspondance (PK, auto-increment). Sert de handle au rollback de reclassification." },
+      "id_produit_scrapping_psbc": { "type": "int", "desc": "FK logique (cross-DB) → produit_scrapping_ia.id_produit_scrapping_psi (HELLOPRO_IA). Produit scrapé IA source. Indexé (idx_scrapping). PAS scrapping_fiche_produit_ia." },
+      "id_produit_bo_psbc": { "type": "int", "desc": "FK logique → produit.id_produit (ANNUAIRE_BO). Produit BO créé à la publication (= mysqli_insert_id après INSERT INTO produit). Indexé (idx_bo). Ex. 19483355." },
+      "date_insertion_psbc": { "type": "datetime", "desc": "Date de première création de la correspondance (DEFAULT CURRENT_TIMESTAMP / NOW()). Fuseau Europe/Paris." }
+    },
+    "relations": [
+      { "column": "id_produit_scrapping_psbc", "references": "produit_scrapping_ia.id_produit_scrapping_psi (HELLOPRO_IA)", "cardinality": "1:1 logique (non contraint)", "note": "Cross-DB : le produit scrapé vit sur db10, la table sur db1 → jointures applicatives N+1, pas de JOIN SQL direct." },
+      { "column": "id_produit_bo_psbc", "references": "produit.id_produit (ANNUAIRE_BO)", "cardinality": "1:1 logique (non contraint)", "note": "Produit du catalogue BO créé à la publication." }
+    ],
+    "notes": "1:1 logique NON contraint en base (index non uniques) : le writer garde l'unicité par SELECT-puis-UPDATE (une 2e publication du même produit scrapé met à jour la ligne au lieu d'en créer une). Writer : RechercheProduitPertinent.php (appliquer_produit_siteweb, depuis reclassification_produit.php ; sous-classes RapatriementProduitScraping / ScrapingUpload). Lecteurs : script_maj_produit_scraping_BO.php (re-push des éditions), filtres de dédup avant publication, ajax_rollback_reclassification.php (rollback par id_psbc / id_produit_bo_psbc + nettoyage scraping), script_recap_reclassification_produit.php. Pas de DDL versionné. DB = LINK_MYSQLI_ANNUAIRE_BO."
+  },
+  "assoc_societe_hp": {
+    "database_id": 10,
+    "description": "Table-pont cross-base entre la société côté IA (scraping) et la société correspondante côté BO/Hellopro : 1 ligne = 1 correspondance IA→BO (id_societe_ash → id_societe_hp_ash) + un snapshot de l'état/contrat BO. Peuplée par matching d'un domaine crawlé (URLs/SIRET) contre les fournisseurs BO (est_deja_existe_bo). Jointure canonique aval : assoc_societe_hp ASH ON ASH.id_societe_ash = domaine_scrapping_produit_ia.id_societe_dspi, puis lire ASH.id_societe_hp_ash comme id fournisseur BO. Table de jonction pure (aucune PK, aucun timestamp). Stockée dans HELLOPRO_IA. Suffixe colonnes _ash.",
+    "primary_key": null,
+    "default_order_by": null,
+    "rows": null,
+    "columns": {
+      "id_societe_ash": { "type": "int", "desc": "Société côté IA (scraping). FK logique → societe.id_societe (HELLOPRO_IA) ; égale domaine_scrapping_produit_ia.id_societe_dspi. Indexé (non unique). 0 = domaine dont id_societe_dspi est 0/non lié. NOT NULL." },
+      "id_societe_hp_ash": { "type": "int", "desc": "Société côté BO/Hellopro ('hp' = Hellopro/BO). FK logique → societe.id_societe (ANNUAIRE_BO), = l'id fournisseur BO. Indexé (non unique). C'est la sortie utile du pont. NOT NULL." },
+      "etat_societe_ash": { "type": "int", "desc": "Snapshot de l'état du fournisseur BO (societe.etat_societe) figé au moment de la correspondance : 1=Client · 2=Pause · 3=Prospect · 0=indéfini/aucun. Sert à pré-filtrer sans re-taper le BO. NOT NULL." },
+      "id_type_contrat_ash": { "type": "int", "desc": "Snapshot du type de contrat du fournisseur BO (societe.id_type_societe_contrat) : 1=Complet · 3=Restreint · 4=Non visible · 5=Découverte · 6=Membre gratuit · 7=Restreint DI · 8=Restreint DD. NOT NULL." }
+    },
+    "relations": [
+      { "column": "id_societe_ash", "references": "societe.id_societe (HELLOPRO_IA) = domaine_scrapping_produit_ia.id_societe_dspi", "cardinality": "N:N (aucune contrainte)", "note": "Espace d'ID société côté IA." },
+      { "column": "id_societe_hp_ash", "references": "societe.id_societe (ANNUAIRE_BO)", "cardinality": "N:N (aucune contrainte)", "note": "Fournisseur BO. Un match ambigu insère 1 ligne par candidat BO (1 IA → N BO) ; plusieurs IA peuvent pointer le même BO (N IA → 1 BO)." },
+      { "column": "etat_societe_ash", "references": "valeurs de societe.etat_societe (BO)", "note": "Snapshot, pas une FK." },
+      { "column": "id_type_contrat_ash", "references": "valeurs de societe.id_type_societe_contrat (BO)", "note": "Snapshot, pas une FK." }
+    ],
+    "notes": "Pas de PK ni d'unicité : 1 IA→N BO (match ambigu = 1 ligne par candidat BO, pour traçabilité) et N IA→1 BO possibles — invariant volontairement NON contraint (décision 2026-04-20, self-heal par cron). 3 writers : (1) cron autoritaire script_correspondance_societe_ia_bo.php (domaines statut_dspi IN (13,14) ET est_traite_correspondance=0 ; Phases A single/ambigu, A' cleanup, B substitution si BO soft-deleted, C dérive TTL observabilité ; seul à poser est_traite_correspondance=1 ; TRUNCATE sur ?delete) ; (2) ponctuel pct_correspondance_societe_bo.php ; (3) launcher prospect script_lancer_identification_prospect_ia.php (à la création d'une société IA). Lecteurs (tous via le même pont IA→BO) : classification fournisseur, build_jsonl site_web (+ header_footer), FicheProduitScrapping, profil/brief, exports produits scrapping. Pas de DDL versionné. DB = LINK_MYSQLI_HELLOPRO_IA."
+  }
+}

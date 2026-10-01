@@ -180,15 +180,17 @@ const BudgetEstimate = ({
           </div>
         </div>
 
-        {/* Ligne 3 : lien budget ne correspond pas */}
-        <div className="pl-0 sm:pl-[3.375rem]">
-          <button
-            onClick={handleClickNeCorrespondPas}
-            className="text-xs text-muted-foreground hover:text-primary transition-colors underline underline-offset-2"
-          >
-            Ce budget ne correspond pas à mon projet →
-          </button>
-        </div>
+        {/* Ligne 3 : lien budget ne correspond pas — MASQUÉ TEMPORAIREMENT */}
+        {false && (
+          <div className="pl-0 sm:pl-[3.375rem]">
+            <button
+              onClick={handleClickNeCorrespondPas}
+              className="text-xs text-muted-foreground hover:text-primary transition-colors underline underline-offset-2"
+            >
+              Ce budget ne correspond pas à mon projet →
+            </button>
+          </div>
+        )}
       </div>
 
       {/* ------------------------------------------------------------------ */}

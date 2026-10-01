@@ -175,11 +175,13 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useServersStore } from '@/stores/servers'
 import { useToast } from '@/composables/useToast'
+import { toErrorMessage } from '@/utils/error'
 import { serversApi } from '@/api/servers'
 import DocBuilder from '@/components/docs/DocBuilder.vue'
 import WysiwygEditor from '@/components/shared/WysiwygEditor.vue'
 import { useSidebar } from '@/composables/useSidebar'
 import type { DocElement } from '@/components/docs/DocBuilder.vue'
+import type { DocConfigGuide, DocConfigGuideStep } from '@/types/server'
 import { encodeHtmlEntities, encodeTextEntities } from '@/utils/htmlEntities'
 
 const route = useRoute()
@@ -232,8 +234,8 @@ function encodeAllEntities() {
 }
 
 // Convert builder elements → backend config guide
-function elementsToConfigGuide(): { authType: string; steps: Record<string, string>[] } | undefined {
-  const allEntries = builderElements.value
+function elementsToConfigGuide(): DocConfigGuide {
+  const allEntries: DocConfigGuideStep[] = builderElements.value
     .filter(el => {
       if (el.type === 'step') return el.props.title || el.props.description
       if (el.type === 'text') return !!el.props.content
@@ -271,7 +273,7 @@ function elementsToConfigGuide(): { authType: string; steps: Record<string, stri
 }
 
 // Convert backend steps back to builder elements (supports mixed types)
-function stepsToElements(steps: Record<string, string>[]): DocElement[] {
+function stepsToElements(steps: DocConfigGuideStep[]): DocElement[] {
   return steps.map((step, i): DocElement => {
     const id = Date.now().toString(36) + i + Math.random().toString(36).slice(2, 5)
     const type = (step.type || 'step') as DocElement['type']
@@ -371,13 +373,12 @@ async function handleSave() {
     await serversStore.updateServer(serverId, {
       doc_slug: form.doc_slug || '',
       doc_description: form.doc_description || '',
-      doc_config_guide: elementsToConfigGuide() as any
+      doc_config_guide: elementsToConfigGuide()
     })
     toast.success('Documentation enregistree')
     router.push('/docs-admin')
-  } catch (err: any) {
-    const msg = err?.body?.error || (err instanceof Error ? err.message : 'Erreur lors de l\'enregistrement')
-    toast.error(msg)
+  } catch (err: unknown) {
+    toast.error(toErrorMessage(err, 'Erreur lors de l\'enregistrement'))
   } finally {
     submitting.value = false
   }
@@ -389,7 +390,7 @@ async function handleDelete() {
     await serversStore.updateServer(serverId, {
       doc_slug: '',
       doc_description: '',
-      doc_config_guide: { authType: '', steps: [] } as any
+      doc_config_guide: { authType: '', steps: [] }
     })
     toast.success('Documentation retiree')
     router.push('/docs-admin')

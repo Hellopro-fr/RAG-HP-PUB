@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertTriangle, AlertCircle, ChevronDown, ChevronUp, X, Bell, BellOff } from 'lucide-react';
 import { useAlertsQuery } from '../hooks/queries';
@@ -18,13 +18,13 @@ import { cn } from '../lib/utils';
 
 const SEVERITY_STYLES = {
   critical: {
-    surface: 'border-destructive/40 bg-destructive/10 text-destructive',
-    chip:    'bg-destructive/20 text-destructive',
+    surface: 'border-err/40 bg-err-soft text-err',
+    chip:    'bg-err-soft text-err',
     Icon:    AlertCircle,
   },
   warn: {
-    surface: 'border-warning/40 bg-warning/10 text-warning',
-    chip:    'bg-warning/20 text-warning',
+    surface: 'border-warn/40 bg-warn-soft text-warn',
+    chip:    'bg-warn-soft text-warn',
     Icon:    AlertTriangle,
   },
   info: {
@@ -37,12 +37,27 @@ const SEVERITY_STYLES = {
 // Surface dominante quand il y a au moins une alerte critique : fond plein
 // destructive, lisible d'un coup d'œil en pleine nuit.
 const CRITICAL_DOMINANT_SURFACE =
-  'bg-destructive text-destructive-foreground border-destructive';
+  'bg-err text-err-foreground border-err';
 
 const SEVERITY_LABELS = {
   critical: 'Critique',
   warn:     'Avertissement',
   info:     'Info',
+};
+
+/* Les alertes masquées survivent au rechargement : sans persistance, chaque
+   refresh de l'onglet ramenait le bandeau que l'opérateur venait d'écarter. */
+const DISMISSED_STORAGE_KEY = 'crawler-monitor:alerts:dismissed';
+
+const loadDismissedIds = () => {
+  try {
+    const raw = window.localStorage.getItem(DISMISSED_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(parsed) ? parsed : []);
+  } catch {
+    // Mode privé / stockage bloqué : on dégrade en mémoire seulement.
+    return new Set();
+  }
 };
 
 const fmtSince = (ts) => {
@@ -57,13 +72,35 @@ const fmtSince = (ts) => {
 
 const AlertsBanner = ({ token }) => {
   const [expanded, setExpanded] = useState(false);
-  const [dismissedIds, setDismissedIds] = useState(() => new Set());
+  const [dismissedIds, setDismissedIds] = useState(loadDismissedIds);
   const notif = useBrowserNotifications();
   const notifiedIdsRef = useRef(new Set());
 
   const query = useAlertsQuery(token);
-  const allAlerts = query.data?.alerts || [];
+  const allAlerts = useMemo(() => query.data?.alerts || [], [query.data]);
   const visible = allAlerts.filter(a => !dismissedIds.has(a.id));
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        DISMISSED_STORAGE_KEY,
+        JSON.stringify([...dismissedIds]),
+      );
+    } catch {
+      // Stockage indisponible : on garde l'état en mémoire pour la session.
+    }
+  }, [dismissedIds]);
+
+  /* Purge des ids d'alertes disparues : sinon la liste masquée grossit
+     indéfiniment et une alerte qui revient reste invisible pour toujours. */
+  useEffect(() => {
+    if (allAlerts.length === 0) return;
+    const live = new Set(allAlerts.map(a => a.id));
+    setDismissedIds(prev => {
+      const next = new Set([...prev].filter(id => live.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [allAlerts]);
 
   useEffect(() => {
     const currentCriticalIds = new Set(allAlerts.filter(a => a.severity === 'critical').map(a => a.id));

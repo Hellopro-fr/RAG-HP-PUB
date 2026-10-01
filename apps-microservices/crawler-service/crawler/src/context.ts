@@ -1,17 +1,35 @@
 import { DedupManager } from "./class/DedupManager.js";
+import { PushedSet } from "./class/PushedSet.js";
 import { StatsManager } from "./class/StatsManager.js";
 import { UrlConsolidator } from "./class/UrlConsolidator.js";
 import { UpdateChecker } from "./class/UpdateChecker.js";
 import { JsonlWriter } from "./class/JsonlWriter.js";
+import { TimingRecorder } from "./class/TimingRecorder.js";
+import { DetectionLangueClient } from "./class/DetectionLangueClient.js";
+import { ContentExtractorClient } from "./class/ContentExtractorClient.js";
 import { PlaywrightCrawler } from "crawlee";
+// Type-only: qmConsumptionSkip.ts imports `context` at the value level, so a value-level
+// import here would be circular. `import type` is erased at compile time — no cycle.
+import type { CollapseOrigin, CollapseGate } from "./qmConsumptionSkip.js";
 
 export const context = {
     dedupManager: null as DedupManager | null,
+    pushedSet: undefined as PushedSet | undefined,
+    // Set de claim dédié à UpdateChecker.checkUrl (clé `checked:{id}`), distinct de
+    // `pushedSet` (clé `pushed:{id}`). Empêche checkUrl d'affamer les écritures dataset.
+    checkedSet: undefined as PushedSet | undefined,
     statsManager: null as StatsManager | null,
     urlConsolidator: null as UrlConsolidator | null,
     updateChecker: null as UpdateChecker | null,
     jsonlWriter: null as JsonlWriter | null,
     crawlerInstance: null as PlaywrightCrawler | null,
+    timingRecorder: undefined as TimingRecorder | undefined,
+    // Shared DetectionLangueClient instance. Constructed once in main.ts so
+    // routes.ts and the timing sampler observe the SAME p-limit queue (live
+    // pendingCount/activeCount). Module-level instantiation in routes.ts
+    // would have given the sampler a separate, idle queue.
+    detectionClient: null as DetectionLangueClient | null,
+    contentExtractorClient: null as ContentExtractorClient | null,
     // Store detected method in memory to avoid race conditions/disk IO
     frenchDetectionMethod: null as string | null,
     config: {
@@ -29,6 +47,9 @@ export const context = {
         bypassDiez: false,
         toKeep: [] as string[],
         toRemove: [] as string[],
+        // Queue-purge CMS denylist: coarse CMS label from BO (e.g. "WordPress"), used
+        // at startup to merge curated cosmetic facet params into toRemove (cmsFacetLists.ts).
+        cms: "",
         breakLimit: true,
         
         // V1 Update Logic: Dual-Mode Circuit Breaker
@@ -39,6 +60,7 @@ export const context = {
             
             // Standard Mode Settings (> 50 URLs)
             minSample: 50,
+            minCoverage: 0.8,
             maxErrorRate: 0.15,     // 15%
             maxRedirectRate: 0.30,  // 30%
             maxGrowthRate: 0.50,    // 50%
@@ -46,10 +68,25 @@ export const context = {
             // Micro Mode Settings (<= 50 URLs)
             maxAbsErrors: 5,
             maxAbsRedirects: 10,
-            maxAbsNew: 20
+            maxAbsNew: 20,
+
+            // External-redirect breaker (update mode): abort + fail when all/most
+            // seeded URLs redirect off-domain (relocated site). See spec 2026-06-09.
+            externalRedirectBreakerEnabled: true,
+            maxExternalRedirectRate: 0.90,
+            externalRedirectMinSample: 10
         }
     },
     stopReason: "",
+    // Exit code to use at natural completion instead of the default 2 (success).
+    // Set by a fatal in-handler breaker (e.g. domainChanged -> 7) so the crawl
+    // terminates as a failure. Null = normal success path. See spec 2026-06-09.
+    fatalExitCode: null as number | null,
+    // Count of "block"-classified HTTP responses (403/anti-bot wall) seen this crawl.
+    // In-memory only. Read by the proxy-wall breaker (terminalFailure.ts) when
+    // TERMINAL_FAILURE_DETECT_ENABLED=true; harmless to increment unconditionally
+    // since nothing reads it with the flag off. See Task RD-T11 (spec 2026-07-06).
+    blockedCount: 0 as number,
     robotsTxtBypassed: false,
     camoufoxEnabled: true,
     crawlErrorMessage: "",
@@ -57,6 +94,93 @@ export const context = {
     // Used by postNavigationHooks to avoid O(n²) full-dataset scans.
     countQuestionMark: 0,
     countDiez: 0,
+    // Tier-1 auto-decision for limitDiez (see diezDecision.ts + spec 2026-04-17).
+    // Counters are in-memory only (not persisted across restarts — §10.2 of spec).
+    diezClassification: {
+        anchor: 0,
+        spa: 0,
+        ambiguous: 0,
+        total: 0,
+        samplesForTier2: [] as string[],  // URLs classified as ambiguous; capped at 50
+    },
+    // Set to true once a tier-1 commit has happened OR a persisted decision was loaded at startup.
+    // When true, recordClassification is a no-op — we already decided.
+    diezDecisionCommitted: false,
+    // Phase-2 tier-2 content-comparison engine state (see diezTier2.ts + spec §5).
+    // In-memory only (lost on OOM relaunch, like diezClassification). buffer holds
+    // ONE {frag, content} per fragment-stripped base until its 2nd '#'-variant
+    // arrives and adjudicates (then the entry is freed).
+    diezTier2: {
+        active: false,
+        buffer: new Map<string, { frag: string; content: string }>(),
+        compared: 0,
+        matches: 0,
+        mismatches: 0,
+        unusable: 0,
+    },
+    // Phase-2 content-collision audit (see spec 2026-06-26). In-memory, per-crawl.
+    diezContentCollision: { rewritten: 0, removed: 0, collisionsKept: 0 },
+    diezCollapsed: [] as Array<{ collapsed: string; base: string }>,
+    // Count of action-anchor fragments stripped at enqueue/seed (observability only).
+    actionAnchorsStripped: 0,
+    // Tier-1 observer for limitQuestionMark (see questionMarkDecision.ts + spec 2026-04-17).
+    // Records the domain-specific params that survived Tier-0 stripping. No decisions yet.
+    questionMarkObservations: {
+        // param name → running count of occurrences across URLs pushed to dataset (post-Tier-0)
+        paramFrequency: new Map<string, number>(),
+        // param name → list of full URLs carrying that param, capped at 50 samples per param
+        samplesByParam: new Map<string, string[]>(),
+        // total count of URLs pushed to dataset that STILL contain '?' after Tier-0 processing
+        // (differs from context.countQuestionMark which also counts URLs whose '?' survived)
+        domainSpecificCount: 0,
+    },
+    // Becomes false when the human's skipQuestionMark or bypassQuestionMark is set at crawl start.
+    // When false, recordQuestionMarkObservation is a no-op (human choice wins).
+    questionMarkObservationEnabled: true,
+    // Phase-2 tier-2 per-param engine state (see questionMarkTier2.ts + spec §5).
+    // In-memory only (lost on OOM relaunch, like the Tier-1 observer counters).
+    // contentByUrl stores page content ONCE per URL (capped); groups reference it.
+    qmTier2: {
+        active: false,
+        contentByUrl: new Map<string, string>(),
+        groups: new Map<string, Map<string, Array<{ pval: string | null; url: string }>>>(),
+        tally: new Map<string, { same: number; different: number; unusable: number }>(),
+        decided: new Set<string>(),
+        addedToRemove: [] as string[],
+        contentShaping: [] as string[],
+        defaulted: false,
+    },
+    // Phase-2 QM collapsed-param audit (spec 2026-06-29). In-memory, per-crawl.
+    // Populated by the consumption skip (Part C): a queued ?param= variant that
+    // collapsed onto an already-seen base = a route-loss candidate to re-crawl-audit.
+    qmCollapsed: [] as Array<{ collapsed: string; base: string; param: string; origin: CollapseOrigin; gate: CollapseGate }>,
+    // Entrées `filter_on_seen` refusées par SEEN_BASE_COLLAPSED_CAP — SEUL l'origine admise
+    // est comptée ici (qmConsumptionSkip.ts) : c'est ce compteur qui alimente
+    // `truncated_by_cap` dans collapsed_seen_base.jsonl, et un plafond muet sur CE canal se
+    // lirait comme « il n'y avait rien de plus » à retirer côté BO. Les refus facet_cap/
+    // qm_strip (cap QM_COLLAPSED_CAP, partagé) ne sont pas comptés ici : ils ne nourrissent
+    // jamais ce fichier.
+    qmCollapsedRejected: 0,
+    // Clés (collapsed, base) DÉJÀ enregistrées, une carte par classe de plafond. Elles
+    // existent pour que `qmCollapsedRejected` compte une POPULATION et non des ÉVÉNEMENTS.
+    //
+    // MESURÉ le 2026-09-02 sur les 4 domaines que la troncature a bloqués : `filter_on_seen`
+    // est enregistré depuis TROIS points (functions.ts prenav, routes.ts dequeue, routes.ts
+    // enqueue) et le dernier est dans la boucle d'enqueue — un lien paramétré présent dans un
+    // menu est donc ré-enregistré une fois par page crawlée. Sur tools-trails.com : 45 662
+    // enregistrements pour **4** paires distinctes ; sur maneko.fr, 5 389 pour **1**. Le
+    // budget de 4 000 partait en répétitions, puis chaque enregistrement suivant déclarait une
+    // troncature, et le BO fermait toute la phase destructive du run sur ce signal faux.
+    //
+    // Deux ensembles et non un : les deux classes ont des plafonds distincts (4000 contre 200),
+    // donc `size` doit être lisible par classe en O(1). C'est aussi ce qui remplace le
+    // `.filter().length` recalculé à chaque appel — O(n²) sur le nombre d'appels.
+    qmCollapsedSeenKeys: new Set<string>(),
+    qmCollapsedOtherKeys: new Set<string>(),
+    // Queue-purge #1: per-base distinct query-signature counter (facet cap). In-memory.
+    facetVariantCount: new Map<string, Set<string>>(),
+    // Queue-purge #2: normalized bases (baseKeyAbsent) already crawled — the seen oracle.
+    seenBases: new Set<string>(),
     // Stored language query param for session-based i18n sites (e.g., ?lang=fr)
     // Populated when homepage detection method is pattern_match_query
     languageQueryParam: null as { key: string; value: string } | null,

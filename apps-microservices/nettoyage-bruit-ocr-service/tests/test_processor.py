@@ -1,11 +1,34 @@
-import re
+"""JSON escape sanitization — now testing the REAL implementation.
+
+Until 20-08-2026 this file carried its own copy of the regex, with the comment
+"Reproduces the sanitization logic from processor.py". Two copies that could drift apart
+without any of these 15 tests going red — the sanitization could have been fixed in
+production and these tests would still have vouched for the old behaviour.
+
+The regex now lives in a single named function, `processor.sanitize_json_escapes`, which
+`_process_single_message` calls. This file imports it.
+"""
+import inspect
 import json
+
 import pytest
 
+from app.core.processor import parse_llm_json, sanitize_json_escapes
 
-def sanitize_json_escapes(json_string: str) -> str:
-    """Reproduces the sanitization logic from processor.py"""
-    return re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', json_string)
+
+def test_the_tested_functions_are_the_real_ones():
+    """Anti-false-green guard: if `app` were stubbed, these would be MagicMocks.
+
+    A MagicMock returns a MagicMock, which is truthy — every assertion below would pass
+    on nothing at all.
+    """
+    for fn, nom in ((sanitize_json_escapes, "sanitize_json_escapes"),
+                    (parse_llm_json, "parse_llm_json")):
+        assert inspect.isfunction(fn), (
+            "%s is not a real function (%r): the service package is stubbed. "
+            "Run with PYTHONPATH=. from the service root." % (nom, type(fn))
+        )
+        assert fn.__module__.endswith("processor")
 
 
 class TestJsonEscapeSanitization:
@@ -62,16 +85,6 @@ class TestJsonEscapeSanitization:
         raw = '{"contenu": ""}'
         result = json.loads(sanitize_json_escapes(raw))
         assert result["contenu"] == ""
-
-
-def parse_llm_json(json_string: str) -> dict:
-    """Reproduces the full parse logic from processor.py"""
-    import logging
-    json_string = re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', json_string)
-    try:
-        return json.loads(json_string)
-    except json.JSONDecodeError:
-        return {"contenu": "ok"}
 
 
 class TestJsonParseFallback:

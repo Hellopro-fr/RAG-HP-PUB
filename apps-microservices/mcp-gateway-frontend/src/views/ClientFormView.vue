@@ -186,6 +186,31 @@
           />
         </div>
 
+        <!-- Section: Instructions LLM — dedicated tab, always shows every
+             page with its server tags (renderability indicated inline). -->
+        <div v-show="isEdit || currentStep === instructionsStepIndex" :class="isEdit ? 'mt-6 pt-6 border-t border-gray-100 dark:border-gray-800' : ''">
+          <h3 v-if="isEdit" class="text-sm font-semibold text-gray-900 dark:text-white mb-3">Instructions LLM</h3>
+          <InstructionsPicker
+            v-model="form.instruction_ids"
+            :server-ids="selectedServerIdsForPicker"
+          />
+          <label class="mt-4 flex items-start gap-2 cursor-pointer select-none">
+            <input
+              v-model="form.inject_instructions_into_tools"
+              type="checkbox"
+              class="mt-0.5 h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-primary-600 focus:ring-primary-500"
+            />
+            <span class="text-sm text-gray-700 dark:text-gray-300">
+              Injecter les instructions dans les descriptions d'outils
+              <span class="block text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                Pour les clients MCP qui ignorent le champ <code>instructions</code> du handshake
+                (ex&nbsp;: claude.ai web). Les instructions sont ajoutées aux descriptions des outils
+                concernés et retirées de la réponse <code>initialize</code> pour éviter le doublon.
+              </span>
+            </span>
+          </label>
+        </div>
+
         <!-- Section 3: Acc\u00e8s Leexi (only when a Leexi server is selected) -->
         <div
           v-if="hasLeexiServer"
@@ -193,7 +218,41 @@
           :class="isEdit ? 'mt-6 pt-6 border-t border-gray-100 dark:border-gray-800' : ''"
         >
           <h3 v-if="isEdit" class="text-sm font-semibold text-gray-900 dark:text-white mb-3">Acc&egrave;s Leexi</h3>
-          <LeexiFilterPanel v-model="form.leexi_filter" />
+          <LeexiFilterPanel v-model="form.leexi_filter" :allow-self="true" />
+        </div>
+
+        <!-- Section 3b: Accès Ringover (only when a Ringover server is selected) -->
+        <div
+          v-if="hasRingoverServer"
+          v-show="isEdit || currentStep === ringoverStepIndex"
+          :class="isEdit ? 'mt-6 pt-6 border-t border-gray-100 dark:border-gray-800' : ''"
+        >
+          <h3 v-if="isEdit" class="text-sm font-semibold text-gray-900 dark:text-white mb-3">Acc&egrave;s Ringover</h3>
+          <RingoverFilterPanel v-model="form.ringover_filter" :allow-self="true" />
+        </div>
+
+        <!-- Section 3c: Accès BDD (only when a BDD server is selected) -->
+        <div
+          v-if="hasBddServer"
+          v-show="isEdit || currentStep === bddStepIndex"
+          :class="isEdit ? 'mt-6 pt-6 border-t border-gray-100 dark:border-gray-800' : ''"
+        >
+          <h3 v-if="isEdit" class="text-sm font-semibold text-gray-900 dark:text-white mb-3">Acc&egrave;s BDD</h3>
+          <BDDFilterPanel
+            v-model="form.bdd_filter"
+            :server-ids="bddDragDropServerIds"
+            :servers="serversStore.servers"
+          />
+        </div>
+
+        <!-- Section 3d: Accès Zoho (only when a Zoho server is selected) -->
+        <div
+          v-if="hasZohoServer"
+          v-show="isEdit || currentStep === zohoStepIndex"
+          :class="isEdit ? 'mt-6 pt-6 border-t border-gray-100 dark:border-gray-800' : ''"
+        >
+          <h3 v-if="isEdit" class="text-sm font-semibold text-gray-900 dark:text-white mb-3">Acc&egrave;s Zoho</h3>
+          <ZohoFilterPanel v-model="form.zoho_filter" />
         </div>
 
         <!-- Section 4: TTL, expiration et vérification -->
@@ -284,6 +343,18 @@
                 <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Acc&egrave;s Leexi</dt>
                 <dd class="text-sm text-gray-900 dark:text-white col-span-2">{{ leexiFilterSummary }}</dd>
               </div>
+              <div v-if="hasRingoverServer" class="py-2 grid grid-cols-3 gap-4">
+                <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Acc&egrave;s Ringover</dt>
+                <dd class="text-sm text-gray-900 dark:text-white col-span-2">{{ ringoverFilterSummary }}</dd>
+              </div>
+              <div v-if="hasBddServer" class="py-2 grid grid-cols-3 gap-4">
+                <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Acc&egrave;s BDD</dt>
+                <dd class="text-sm text-gray-900 dark:text-white col-span-2">{{ bddFilterSummary }}</dd>
+              </div>
+              <div v-if="hasZohoServer" class="py-2 grid grid-cols-3 gap-4">
+                <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Acc&egrave;s Zoho</dt>
+                <dd class="text-sm text-gray-900 dark:text-white col-span-2">{{ zohoFilterSummary }}</dd>
+              </div>
             </dl>
           </div>
         </div>
@@ -327,8 +398,14 @@ import { useDragDrop } from '@/composables/useDragDrop'
 import StepTabs from '@/components/shared/StepTabs.vue'
 import DragDropPanel from '@/components/shared/DragDropPanel.vue'
 import LeexiFilterPanel from '@/components/tokens/LeexiFilterPanel.vue'
+import RingoverFilterPanel from '@/components/tokens/RingoverFilterPanel.vue'
+import BDDFilterPanel from '@/components/tokens/BDDFilterPanel.vue'
+import ZohoFilterPanel from '@/components/tokens/ZohoFilterPanel.vue'
+import InstructionsPicker from '@/components/llm-instructions/InstructionsPicker.vue'
 import type { OAuth2Client, CreateOAuth2ClientRequest } from '@/types/oauth2'
-import type { LeexiFilter } from '@/types/leexi'
+import type { LeexiFilter, ZohoFilter } from '@/types/leexi'
+import type { RingoverFilter } from '@/types/ringover'
+import type { BDDFilter } from '@/types/bdd'
 
 const route = useRoute()
 const router = useRouter()
@@ -341,13 +418,43 @@ const dragDropReady = ref(false)
 // Step labels are dynamic: the "Acc\u00e8s Leexi" step is only shown when the
 // selected servers include the Leexi backend (tool_prefix === 'leexi').
 const stepLabels = computed(() => {
-  const labels = ['Informations de base', 'Serveurs et outils']
+  const labels = ['Informations de base', 'Serveurs et outils', 'Instructions LLM']
   if (hasLeexiServer.value) labels.push('Acc\u00e8s Leexi')
+  if (hasRingoverServer.value) labels.push('Acc\u00e8s Ringover')
+  if (hasBddServer.value) labels.push('Acc\u00e8s BDD')
+  if (hasZohoServer.value) labels.push('Acc\u00e8s Zoho')
   labels.push('TTL, expiration et vérification')
   return labels
 })
-const leexiStepIndex = computed(() => (hasLeexiServer.value ? 2 : -1))
-const expirationStepIndex = computed(() => (hasLeexiServer.value ? 3 : 2))
+const instructionsStepIndex = 2
+const leexiStepIndex = computed(() => (hasLeexiServer.value ? 3 : -1))
+const ringoverStepIndex = computed(() => {
+  if (!hasRingoverServer.value) return -1
+  return hasLeexiServer.value ? 4 : 3
+})
+const bddStepIndex = computed(() => {
+  if (!hasBddServer.value) return -1
+  let idx = 3
+  if (hasLeexiServer.value) idx++
+  if (hasRingoverServer.value) idx++
+  return idx
+})
+const zohoStepIndex = computed(() => {
+  if (!hasZohoServer.value) return -1
+  let idx = 3
+  if (hasLeexiServer.value) idx++
+  if (hasRingoverServer.value) idx++
+  if (hasBddServer.value) idx++
+  return idx
+})
+const expirationStepIndex = computed(() => {
+  let idx = 3
+  if (hasLeexiServer.value) idx++
+  if (hasRingoverServer.value) idx++
+  if (hasBddServer.value) idx++
+  if (hasZohoServer.value) idx++
+  return idx
+})
 const lastStepIndex = computed(() => stepLabels.value.length - 1)
 const currentStep = ref(0)
 const loading = ref(false)
@@ -366,14 +473,49 @@ const hasLeexiServer = computed(() => {
   })
 })
 
+const hasRingoverServer = computed(() => {
+  return dragDrop.selected.value.some(s => {
+    const srv = serversStore.servers.find(x => x.id === s.id)
+    return srv?.tool_prefix === 'ringover'
+  })
+})
+
+// hasBddServer mirrors hasLeexiServer for the BDD backend (tool_prefix === 'bdd').
+const hasBddServer = computed(() => {
+  return dragDrop.selected.value.some(s => {
+    const srv = serversStore.servers.find(x => x.id === s.id)
+    return srv?.tool_prefix === 'bdd'
+  })
+})
+
+// hasZohoServer mirrors hasBddServer for the Zoho backend (tool_prefix === 'zoho').
+const hasZohoServer = computed(() => {
+  return dragDrop.selected.value.some(s => {
+    const srv = serversStore.servers.find(x => x.id === s.id)
+    return srv?.tool_prefix === 'zoho'
+  })
+})
+
+// Reactive list of currently-picked server ids — passed to BDDFilterPanel so
+// it can decide whether to render and which servers count as BDD backends.
+const bddDragDropServerIds = computed(() => dragDrop.selected.value.map(s => s.id))
+
+
 const form = reactive({
   name: '',
   description: '',
   redirect_uri: 'https://claude.ai/api/mcp/auth_callback',
   access_token_ttl: 86400,
   expires_at: '',
-  leexi_filter: { mode: 'none' } as LeexiFilter
+  leexi_filter: { mode: 'none' } as LeexiFilter,
+  ringover_filter: { mode: 'none' } as RingoverFilter,
+  bdd_filter: { used_table_ids: [] } as BDDFilter,
+  zoho_filter: { mode: 'none' } as ZohoFilter,
+  instruction_ids: [] as string[],
+  inject_instructions_into_tools: false
 })
+
+const selectedServerIdsForPicker = computed(() => dragDrop.getServerIds())
 
 const gatewayMcpUrl = computed(() => window.location.origin + '/mcp')
 const tokenEndpointUrl = computed(() => window.location.origin + '/token')
@@ -397,6 +539,24 @@ const leexiFilterSummary = computed(() => {
       return `${(f.team_uuids || []).length} \u00e9quipe(s)`
     case 'creator':
       return 'Cr\u00e9ateur du jeton uniquement'
+    case 'self':
+      return 'Utilisateur connect\u00e9 (self)'
+    default:
+      return 'Aucune restriction'
+  }
+})
+
+const ringoverFilterSummary = computed(() => {
+  const f = form.ringover_filter
+  switch (f.mode) {
+    case 'users':
+      return `${(f.user_ids || []).length} utilisateur(s)`
+    case 'teams':
+      return `${(f.team_ids || []).length} \u00e9quipe(s)`
+    case 'creator':
+      return 'Cr\u00e9ateur du jeton uniquement'
+    case 'self':
+      return 'Utilisateur connect\u00e9 (self)'
     default:
       return 'Aucune restriction'
   }
@@ -414,17 +574,39 @@ const canGoNext = computed(() => {
   return currentStep.value < lastStepIndex.value
 })
 
-// Snap back if the user removes the Leexi server while sitting on the
-// (now-gone) Leexi step.
-watch(hasLeexiServer, (has) => {
-  if (!has && currentStep.value > lastStepIndex.value) {
+// Snap back if the user removes the Leexi/Ringover/BDD/Zoho server while sitting on a
+// (now-gone) optional step.
+watch([hasLeexiServer, hasRingoverServer, hasBddServer, hasZohoServer], () => {
+  if (currentStep.value > lastStepIndex.value) {
     currentStep.value = lastStepIndex.value
+  }
+})
+
+const bddFilterSummary = computed(() => {
+  const ids = form.bdd_filter.used_table_ids || []
+  return ids.length === 0
+    ? 'Accès complet (aucune restriction)'
+    : `${ids.length} table(s) autorisée(s)`
+})
+
+const zohoFilterSummary = computed(() => {
+  const f = form.zoho_filter
+  switch (f.mode) {
+    case 'users':
+      return `${(f.allowed_emails || []).length} email(s) autorisé(s)`
+    case 'creator':
+      return 'Créateur du jeton uniquement'
+    default:
+      return 'Aucune restriction'
   }
 })
 
 onMounted(async () => {
   try {
-    await serversStore.fetchServers()
+    // include_all=true: non-admins must see every active server in the
+    // scope picker, otherwise they cannot grant an OAuth2 client access
+    // to a server they did not personally create.
+    await serversStore.fetchServers({ include_all: true })
   } catch (err) {
     console.error('[ClientFormView] Failed to fetch servers:', err)
   }
@@ -444,6 +626,21 @@ onMounted(async () => {
       if (client.leexi_filter) {
         form.leexi_filter = { ...client.leexi_filter }
       }
+      if (client.ringover_filter) {
+        form.ringover_filter = { ...client.ringover_filter }
+      }
+      if (client.bdd_filter) {
+        form.bdd_filter = {
+          used_table_ids: [...(client.bdd_filter.used_table_ids || [])],
+        }
+      }
+      if (client.zoho_filter) {
+        form.zoho_filter = { ...client.zoho_filter }
+      }
+      if (client.instruction_ids) {
+        form.instruction_ids = [...client.instruction_ids]
+      }
+      form.inject_instructions_into_tools = client.inject_instructions_into_tools === true
       dragDrop.initWithSelection(
         serversStore.servers,
         client.server_ids,
@@ -492,6 +689,8 @@ async function handleSubmit() {
       redirect_uris: form.redirect_uri ? [form.redirect_uri] : undefined,
       server_ids: serverIds,
       server_tools: serverTools.length ? serverTools : undefined,
+      instruction_ids: form.instruction_ids.length ? [...form.instruction_ids] : undefined,
+      inject_instructions_into_tools: form.inject_instructions_into_tools,
       access_token_ttl: form.access_token_ttl,
       expires_at: expirationType.value === 'custom' && form.expires_at
         ? new Date(form.expires_at).toISOString()
@@ -499,7 +698,20 @@ async function handleSubmit() {
       // Only send the filter when the Leexi server is in scope.
       leexi_filter: hasLeexiServer.value
         ? (form.leexi_filter.mode === 'none' ? { mode: 'none' } : form.leexi_filter)
-        : { mode: 'none' }
+        : { mode: 'none' },
+      ringover_filter: hasRingoverServer.value
+        ? (form.ringover_filter.mode === 'none' ? { mode: 'none' } : form.ringover_filter)
+        : { mode: 'none' },
+      // Only attach the BDD filter when a BDD server is in scope. An empty
+      // used_table_ids array means full access — included so the backend can
+      // distinguish "explicitly cleared" from "never set".
+      bdd_filter: hasBddServer.value
+        ? { used_table_ids: form.bdd_filter.used_table_ids || [] }
+        : undefined,
+      // Only send the Zoho filter when a Zoho server is in scope.
+      zoho_filter: hasZohoServer.value
+        ? (form.zoho_filter.mode === 'none' ? { mode: 'none' } : form.zoho_filter)
+        : { mode: 'none' },
     }
 
     if (isEdit.value) {

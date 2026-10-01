@@ -2,10 +2,24 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/hellopro/mcp-ringover/internal/mcp"
 )
+
+// extractEmpowerCallUserID reads the user_id (owning agent) from an Empower
+// call-detail response. The Empower endpoints expose user_id at the top level
+// alongside call_uuid, transcription, summary, etc. Returns 0 when missing.
+func extractEmpowerCallUserID(body json.RawMessage) int {
+	var bare struct {
+		UserID int `json:"user_id"`
+	}
+	if err := json.Unmarshal(body, &bare); err == nil {
+		return bare.UserID
+	}
+	return 0
+}
 
 // getEmpowerCallUUID ─────────────────────────────────────────────────────────
 
@@ -68,6 +82,10 @@ func handleGetCallTranscription(ctx context.Context, clients *Clients, args map[
 		return nil, fmt.Errorf("GetCallTranscription: %w", err)
 	}
 
+	if err := checkCallOwnedByAllowed(ctx, extractEmpowerCallUserID(data)); err != nil {
+		return errorResult(err.Error()), nil
+	}
+
 	return rawJSONResult(data), nil
 }
 
@@ -94,6 +112,10 @@ func handleGetCallSummary(ctx context.Context, clients *Clients, args map[string
 		return nil, fmt.Errorf("GetCallSummary: %w", err)
 	}
 
+	if err := checkCallOwnedByAllowed(ctx, extractEmpowerCallUserID(data)); err != nil {
+		return errorResult(err.Error()), nil
+	}
+
 	return rawJSONResult(data), nil
 }
 
@@ -118,6 +140,10 @@ func handleGetCallMoments(ctx context.Context, clients *Clients, args map[string
 	data, err := clients.Ringover.GetCallMoments(ctx, callUUID)
 	if err != nil {
 		return nil, fmt.Errorf("GetCallMoments: %w", err)
+	}
+
+	if err := checkCallOwnedByAllowed(ctx, extractEmpowerCallUserID(data)); err != nil {
+		return errorResult(err.Error()), nil
 	}
 
 	return rawJSONResult(data), nil

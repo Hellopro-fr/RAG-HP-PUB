@@ -1,0 +1,7 @@
+# Le dossier `app/data/` heberge des fichiers de donnees generes offline,
+# trop volumineux ou trop dependants du catalogue live pour etre commit.
+#
+# Fichiers attendus a runtime (genres a part puis copies/montes ici) :
+#   - idf_nom_produit.json  (genere par `python scripts/compute_idf.py`)
+#
+# Ce fichier .gitkeep n'a d'autre role que de conserver le dossier en git.

@@ -14,8 +14,17 @@ import anyio
 from datetime import datetime, timezone
 from typing import Optional
 
+import httpx
+
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, status
-from app.schemas.migration import ArchiveContentType, FileFormat, MigrationUploadResponse
+from app.schemas.migration import (
+    ArchiveContentType,
+    FileFormat,
+    MigrationUploadResponse,
+    MigrationPullRequest,
+    MigrationPullResponse,
+    MigrationPullContentResult,
+)
 
 from app.core.config import settings
 
@@ -442,3 +451,196 @@ async def upload_migration_archive(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to process migration archive: {str(e)}"
         )
+
+
+async def _download_and_extract_one(
+    client: httpx.AsyncClient,
+    source_url_base: str,
+    token: str,
+    domain_id: str,
+    eff_domain_name: str,
+    content_type: ArchiveContentType,
+    base_storage_path: str,
+) -> MigrationPullContentResult:
+    """
+    Télécharge UN content_type depuis Ecritel via streaming HTTP, puis extrait
+    dans le bon sous-dossier du storage du conteneur.
+
+    Idempotent : si appelé plusieurs fois, écrase le contenu précédent
+    (extract_and_fix_nesting overwrite la destination).
+    """
+    tmp_path = None
+    try:
+        params = {
+            "id_domaine": domain_id,
+            "content_type": content_type.value,
+            "token": token,
+        }
+
+        # Sauvegarde dans un tempfile via streaming pour gérer les gros fichiers
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".tar.gz") as tmp:
+            tmp_path = tmp.name
+
+        bytes_downloaded = 0
+        async with client.stream("GET", source_url_base, params=params) as resp:
+            if resp.status_code == 404:
+                # Fichier absent côté Ecritel : on le note mais ce n'est pas forcément fatal
+                # (par ex. dataset_error peut ne pas exister)
+                logger.info(f"[pull] {content_type.value} not found on Ecritel for domain_id={domain_id} (HTTP 404)")
+                return MigrationPullContentResult(
+                    success=False,
+                    error=f"HTTP 404: file not found on Ecritel for content_type={content_type.value}"
+                )
+            if resp.status_code != 200:
+                body = await resp.aread()
+                return MigrationPullContentResult(
+                    success=False,
+                    error=f"HTTP {resp.status_code}: {body[:500].decode('utf-8', errors='ignore')}"
+                )
+
+            with open(tmp_path, "wb") as f:
+                async for chunk in resp.aiter_bytes(chunk_size=8 * 1024 * 1024):
+                    f.write(chunk)
+                    bytes_downloaded += len(chunk)
+
+        logger.info(f"[pull] {content_type.value} downloaded ({bytes_downloaded} bytes) for domain_id={domain_id}")
+
+        # Extraction dans le bon sous-dossier
+        subpath = get_storage_subpath(content_type, eff_domain_name)
+        target_dir = os.path.join(base_storage_path, subpath)
+
+        extracted_count = await anyio.to_thread.run_sync(
+            extract_and_fix_nesting, tmp_path, FileFormat.TAR_GZ, target_dir
+        )
+
+        return MigrationPullContentResult(
+            success=True,
+            extracted_files_count=extracted_count,
+            bytes_downloaded=bytes_downloaded,
+        )
+
+    except Exception as e:
+        logger.error(f"[pull] Error for content_type={content_type.value}, domain_id={domain_id}: {e}", exc_info=True)
+        return MigrationPullContentResult(success=False, error=str(e))
+
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+
+
+@router.post("/pull/{domain_id}", response_model=MigrationPullResponse)
+async def pull_migration_archives(
+    domain_id: str,
+    payload: MigrationPullRequest,
+):
+    """
+    Endpoint inverse de /upload : le service GCP télécharge les .tar.gz directement
+    depuis Ecritel, évitant la limite de l'api-gateway et le chunking côté client.
+
+    Pour chaque content_type, fait un GET streaming sur source_url_base avec
+    auth token, puis extrait dans le storage volume.
+
+    Crée _completion_marker.json + _status_snapshot.json si is_crawl_finished=true
+    et qu'au moins un download a réussi.
+    """
+    # Sanitize
+    domain_id = sanitize_path_component(domain_id, "domain_id")
+    eff_domain_name = sanitize_path_component(payload.domain_name, "domain_name")
+
+    if not payload.content_types:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="content_types must not be empty",
+        )
+
+    base_storage_path = os.path.join(settings.CRAWLER_STORAGE_PATH, domain_id)
+    storage_path = os.path.join(base_storage_path, "storage")
+    os.makedirs(base_storage_path, exist_ok=True)
+
+    logger.info(
+        f"[pull] domain_id={domain_id}, domain_name={eff_domain_name}, "
+        f"content_types={[c.value for c in payload.content_types]}"
+    )
+
+    # === Téléchargement de chaque content_type ===
+    results: Dict[str, MigrationPullContentResult] = {}
+
+    # Timeout généreux pour les gros fichiers (10 min total)
+    timeout = httpx.Timeout(connect=30.0, read=600.0, write=60.0, pool=30.0)
+
+    async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+        for content_type in payload.content_types:
+            result = await _download_and_extract_one(
+                client=client,
+                source_url_base=payload.source_url_base,
+                token=payload.token,
+                domain_id=domain_id,
+                eff_domain_name=eff_domain_name,
+                content_type=content_type,
+                base_storage_path=base_storage_path,
+            )
+            results[content_type.value] = result
+
+    # === Completion marker + status snapshot (si au moins un succès) ===
+    any_success = any(r.success for r in results.values())
+    completion_marker_created = False
+
+    if payload.is_crawl_finished and any_success:
+        marker_path = os.path.join(base_storage_path, "_completion_marker.json")
+        if not os.path.exists(marker_path):
+            if payload.end_date:
+                try:
+                    parsed_end_date = datetime.fromisoformat(payload.end_date.replace("Z", "+00:00"))
+                except ValueError:
+                    parsed_end_date = datetime.now(timezone.utc)
+            else:
+                parsed_end_date = datetime.now(timezone.utc)
+
+            marker_data = {
+                "final_status": "finished",
+                "exit_code": 2,
+                "end_timestamp": parsed_end_date.isoformat(),
+            }
+            with open(marker_path, "w") as f:
+                json.dump(marker_data, f, indent=2)
+            completion_marker_created = True
+            logger.info(f"[pull] Completion marker created at {marker_path}")
+
+            # Status snapshot
+            snapshot_path = os.path.join(base_storage_path, "_status_snapshot.json")
+            if not os.path.exists(snapshot_path):
+                datasets_base = os.path.join(base_storage_path, "storage", "datasets")
+                dataset_dir = os.path.join(datasets_base, eff_domain_name)
+                nfr_dir = os.path.join(datasets_base, f"nfr-{eff_domain_name}")
+                error_dir = os.path.join(datasets_base, f"error-{eff_domain_name}")
+
+                snapshot_data = {
+                    "crawl_id": domain_id,
+                    "id_domaine": domain_id,
+                    "status": "finished",
+                    "domain": eff_domain_name,
+                    "start_url": f"https://www.{eff_domain_name}/",
+                    "start_time": parsed_end_date.isoformat(),
+                    "urls_crawled": count_files_in_directory(dataset_dir) if os.path.isdir(dataset_dir) else 0,
+                    "error_urls_crawled": count_files_in_directory(error_dir) if os.path.isdir(error_dir) else 0,
+                    "nfr_urls_crawled": count_files_in_directory(nfr_dir) if os.path.isdir(nfr_dir) else 0,
+                    "last_activity": parsed_end_date.isoformat(),
+                    "last_heartbeat": None,
+                }
+                with open(snapshot_path, "w") as f:
+                    json.dump(snapshot_data, f, indent=2)
+                logger.info(f"[pull] Status snapshot created at {snapshot_path}")
+
+    overall_success = all(r.success for r in results.values())
+
+    return MigrationPullResponse(
+        success=overall_success,
+        domain_id=domain_id,
+        domain_name=eff_domain_name,
+        storage_path=storage_path,
+        completion_marker_created=completion_marker_created,
+        results=results,
+    )

@@ -8,4 +8,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY apps-microservices/api-comparaison-texte .
 
 EXPOSE 8998
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8998", "--proxy-headers"]
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port 8998 --proxy-headers --workers ${UVICORN_WORKERS:-2}"]

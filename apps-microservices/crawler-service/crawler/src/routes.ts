@@ -5,6 +5,7 @@ import {
     requestQueue,
     robots,
     site,
+    storagePath,
 } from "./main.js";
 import {
     manageFrenchDetectionMethod,
@@ -19,8 +20,73 @@ import {
 } from "./functions.js";
 import { DetectionLangueClient } from "./class/DetectionLangueClient.js";
 import { context } from "./context.js";
+import { recordClassification, maybeCommitDecision, commitSkipDiez, commitBypassDiez } from "./diezDecision.js";
+import { fragmentAwareUniqueKey, stripEmptyFragment } from "./diezKeepFragment.js";
+import { matchesMainSite } from "./isMainSite.js";
+import { applyPerClassStrip, perClassEnabled, stripActionAnchor, actionAnchorStripEnabled } from "./diezClassify.js";
+import { qmConsumptionStrip, shouldSkipDequeued, recordQmCollapsed, skipnavCollapseTarget } from "./qmConsumptionSkip.js";
+import { recordVariant, isOverCap, QM_FACET_ENABLED, QM_FACET_CAP_K } from "./facetCap.js";
+import { filterParamCollapseTarget } from "./filterOnSeen.js";
+import { baseKeyAbsent } from "./urlBase.js";
+import { recordTier2Sample, maybeCommitTier2, tier2Evidence, maybeDefaultAtCeiling as maybeDefaultDiezAtCeiling } from "./diezTier2.js";
+import { routeDiezOutcome } from "./diezHookGate.js";
+import { shouldTripExternalRedirectBreaker } from "./externalRedirectBreaker.js";
+import { shouldTripErrorRateBreaker } from "./errorRateBreaker.js";
+import { recordQuestionMarkObservation } from "./questionMarkDecision.js";
+import { recordQmTier2Sample, maybeCommitParam, commitToRemoveParam, maybeDefaultAtCeiling, QM_TIER2_TRIGGER } from "./questionMarkTier2.js";
+import { trackQmHashStatsForUrl } from "./qmHashTracker.js";
+import { classifyHttpStatus, pdfDatasetName, isPageClosedError } from "./httpStatusPolicy.js";
+import { shouldTripProxyWall, proxyWallConfig, terminalFailureDetectEnabled } from "./terminalFailure.js";
+import { recordUnjudgedUrls } from "./unjudgedUrls.js";
+import type { PageTimingEntry } from "./timing/types.js";
 
 export const router = createPlaywrightRouter();
+
+/**
+ * Per-request timing markers. `handlerStartAt` is captured at handler entry;
+ * the rest are populated lazily by Crawlee preNav/postNav hooks (T3) and
+ * inline detect-call wrappers below. Missing markers fall back to nearby
+ * markers in `buildTimingEntry` so every page produces a well-formed entry,
+ * even on abnormal exits before navigation completes.
+ */
+interface RequestTiming {
+    handlerStartAt: number;
+    dequeueAt?: number;     // populated by preNavigationHook (T3)
+    postNavAt?: number;     // populated by postNavigationHook (T3)
+    detectStartAt?: number; // populated inline before detect()
+    detectEndAt?: number;   // populated inline after detect()
+}
+
+/**
+ * Build a PageTimingEntry from accumulated markers. Tolerates missing markers
+ * (abnormal exits before postNav, or pages that never called detect) by
+ * folding the missing phase into zero — total_ms still reflects real
+ * handler wall-clock time.
+ */
+function buildTimingEntry(
+    timing: RequestTiming,
+    url: string,
+    detectMethod: string | undefined,
+    detectOk: boolean | undefined,
+): PageTimingEntry {
+    const handlerEndAt = Date.now();
+    const dequeueAt = timing.dequeueAt ?? timing.handlerStartAt;
+    const postNavAt = timing.postNavAt ?? dequeueAt;
+    const detectStartAt = timing.detectStartAt ?? postNavAt;
+    const detectEndAt = timing.detectEndAt ?? detectStartAt;
+    return {
+        url,
+        t: dequeueAt,
+        wait_ms: Math.max(0, dequeueAt - timing.handlerStartAt),
+        nav_ms: Math.max(0, postNavAt - dequeueAt),
+        pre_detect_ms: Math.max(0, detectStartAt - postNavAt),
+        detect_ms: Math.max(0, detectEndAt - detectStartAt),
+        post_ms: Math.max(0, handlerEndAt - detectEndAt),
+        total_ms: Math.max(0, handlerEndAt - dequeueAt),
+        detect_method: detectMethod,
+        detect_ok: detectOk,
+    };
+}
 
 // --- Blocked URL Log Deduplication ---
 // Logs each blocked URL only ONCE per crawl launch to reduce log pollution.
@@ -142,11 +208,73 @@ const ALWAYS_REMOVE_PARAMS = [
     "timestamp", "random", "nocache",
 ];
 
-const detectionClient = new DetectionLangueClient();
+const DIEZ_TIER2_ENABLED = (process.env.DIEZ_TIER2_ENABLED ?? "false").toLowerCase() === "true";
+const QM_TIER2_ENABLED = (process.env.QM_TIER2_ENABLED ?? "false").toLowerCase() === "true";
 
 router.addDefaultHandler(
-    async ({ request, page, enqueueLinks, log, proxyInfo, crawler, response }) => {
+    async ({ request, page, enqueueLinks, log, proxyInfo, crawler, response, session }) => {
+        // Shared detect client (Part B). Constructed once in main.ts so the
+        // timing sampler observes the SAME p-limit queue (live pendingCount /
+        // activeCount). Fail fast if main.ts has not initialised it — a silent
+        // fallback would re-introduce the dual-client p-limit split that T4 fixes.
+        const detectionClient = context.detectionClient;
+        if (!detectionClient) {
+            throw new Error("context.detectionClient not initialised — main.ts must construct it before the router runs");
+        }
+
+        // Per-request timing markers. dequeueAt and postNavAt may already be
+        // present on request.userData when TIMING_ENABLED=true (written by the
+        // Crawlee pre/postNavigationHooks installed in functions.ts). Read from
+        // the SAME location the hooks write to (`request.userData._timing`),
+        // not `crawlingContext.userData._timing`.
+        const _timing: RequestTiming = {
+            handlerStartAt: Date.now(),
+            dequeueAt: (request.userData as any)?._timing?.dequeueAt,
+            postNavAt: (request.userData as any)?._timing?.postNavAt,
+        };
+        let _detectMethod: string | undefined;
+        let _detectOk: boolean | undefined;
+
         const proxyUrl = proxyInfo?.url || null;
+
+        // Queue-purge (D1): a request flagged skipNavigation on disk had its
+        // page.goto skipped by Crawlee; loadedUrl is undefined. Count it and return
+        // before the loadedUrl use below. Clean handled path (no error machinery).
+        if (request.skipNavigation) {
+            if (context.statsManager) await context.statsManager.increment("purged_skipnav");
+            const _skipnav = skipnavCollapseTarget(request.url, context.seenBases);
+            // via === 'none' : aucun décideur n'a tranché, le target est l'URL elle-même.
+            // Rien à enregistrer — recordQmCollapsed le refuserait de toute façon, mais
+            // l'écrire ici dit POURQUOI il n'y a rien à dire.
+            if (_skipnav.via !== 'none') {
+                recordQmCollapsed(request.url, _skipnav.target, _skipnav.via, 'dequeue');
+            }
+            return;
+        }
+
+        // loadedUrl is the stored + counted identity; drop a cosmetic empty '#'
+        // (JS/browser may keep a bare hash) so it can't inflate diez or pollute the dataset.
+        let url = request.loadedUrl;
+        // Per-class: strip cosmetic anchors from the stored+counted identity; keep spa
+        // routes. Flag off -> unchanged empty-'#' strip only (stripEmptyFragment).
+        if (url) url = perClassEnabled() ? applyPerClassStrip(url) : stripEmptyFragment(url);
+        const diezStripped = !!url && url !== request.loadedUrl; // a '#' was per-class-stripped from the loaded URL
+        try {
+
+        // Part C (C2, spec 2026-06-29): re-apply the LIVE query/diez strip to this dequeued
+        // page. If it collapses onto an already-seen base, this queued variant is a duplicate
+        // that the commit-time queue rewrite didn't catch — skip processing (no store, no link
+        // enqueue). The page was fetched once (bounded); Crawlee marks it handled on this return.
+        // Placed INSIDE the try so the early return still runs the L1087 finally (timing
+        // record + per-attempt marker cleanup that must run for EVERY request path).
+        const qmStripped = qmConsumptionStrip(url);
+        if (qmStripped !== url && context.dedupManager) {
+            const known = (await context.dedupManager.isKnownBatch([qmStripped])).has(qmStripped);
+            if (shouldSkipDequeued(url, qmStripped, known)) {
+                recordQmCollapsed(url, qmStripped, 'qm_strip', 'dequeue');
+                return;
+            }
+        }
 
         // Resource Blocking (Images, Fonts, Media, Binaries, etc.)
         // Uses ignoredExtensions as single source of truth for blocked file types
@@ -171,8 +299,6 @@ router.addDefaultHandler(
             return route.continue();
         });
 
-        let url = request.loadedUrl;
-
         // If we don't check this, the crawler might start crawling the external site.
         const urlObj = new URL(url);
         const targetDomain = context.config.domain;
@@ -192,9 +318,41 @@ router.addDefaultHandler(
             || (siteHostname && hostname.includes(siteHostname));
         if (!isInternal) {
             log.warning(`Blocked external redirect: ${url} (Target: ${targetDomain})`);
+            const isHomepageRedirect = matchesMainSite(request.url, site);
             // Set structured error message for "1 seul URL crawlé" case: domain change
-            if (request.url === site) {
+            if (isHomepageRedirect) {
                 context.crawlErrorMessage = "L'URL après la page d'accueil change de domaine";
+            }
+
+            // --- External-Redirect Breaker (update mode only) ---
+            // Off-domain redirects return here BEFORE the circuit-breaker block and
+            // before UpdateChecker, so this guard is the only place that can detect a
+            // relocated domain. Abort + fail (exit 7) instead of wasting a full
+            // re-crawl and reporting a misleading success. See spec 2026-06-09.
+            const cb = context.config?.circuitBreaker;
+            if (context.updateChecker && context.statsManager && cb?.externalRedirectBreakerEnabled) {
+                const external = await context.statsManager.increment("external_redirects");
+
+                // Homepage fast-path: homepage off-domain ⇒ whole site moved.
+                // Abort BEFORE Phase 2 seeds the previous dataset (saves the re-crawl).
+                if (isHomepageRedirect) {
+                    context.stopReason = "domainChanged";
+                    context.fatalExitCode = 7;
+                    await stopCrawler(crawler, "Domain changed: homepage redirects off-domain");
+                    return;
+                }
+
+                // Ratio breaker: most seeded URLs redirect off-domain.
+                const processed = await context.statsManager.getValue("processed");
+                const decision = shouldTripExternalRedirectBreaker(external, processed, cb);
+                if (decision.trip) {
+                    log.warning(`🛑 External-redirect breaker: ${decision.reason}`);
+                    context.stopReason = "domainChanged";
+                    context.crawlErrorMessage = "Toutes les URLs redirigent vers un autre domaine (domaine changé)";
+                    context.fatalExitCode = 7;
+                    await stopCrawler(crawler, `Domain changed: ${decision.reason}`);
+                    return;
+                }
             }
             return;
         }
@@ -208,30 +366,81 @@ router.addDefaultHandler(
         if (response) {
             const contentType = (response.headers()['content-type'] || '').toLowerCase();
             if (contentType && !contentType.includes('text/html') && !contentType.includes('text/plain') && !contentType.includes('application/xhtml')) {
+                // Unified PDF/download accounting (mirrors functions.ts failedRequestHandler):
+                // count under filtered_pdf + record in the pdf-{domain} dataset so inline
+                // (rendered) PDFs are tracked the same as download-triggering ones. This guard
+                // already skips inline non-HTML today, so accounting is independent of SKIP_DOWNLOADS.
+                if (context.statsManager) {
+                    await context.statsManager.increment("filtered_pdf");
+                }
+                const pdfDataset = await Dataset.open(
+                    pdfDatasetName(context.config.crawleeStorageName, targetDomain),
+                );
+                await pdfDataset.pushData({
+                    url,
+                    source: request.userData.source ?? "",
+                    status: response.status(),
+                    content_type: contentType,
+                    timestamp: new Date().toISOString(),
+                });
                 log.warning(`Skipping non-HTML response: ${url} (Content-Type: ${contentType})`);
                 return;
             }
         }
 
-        // Blocked Status Check
+        // HTTP Status Policy — single source of truth.
+        // Reachable for every non-ok status because blockedStatusCodes is now empty
+        // (Crawlee no longer pre-throws) and navigation resolves on 'domcontentloaded'
+        // so response.status() is available even on heavy/slow pages.
+        // Spec: docs/superpowers/specs/2026-06-09-crawler-http-status-retry-policy-design.md
         if (response) {
             const status = response.status();
-            if ([401, 403, 429, 404, 410, 423, 502, 500, 503].includes(status)) {
-                log.error(`🚫 BLOCKED: HTTP ${status} on ${url}`);
-                // Set structured error message for "1 seul URL crawlé" case: HTTP error on homepage
-                if (request.url === site) {
+            const statusClass = classifyHttpStatus(status);
+            if (statusClass !== "ok") {
+                // Preserve existing bookkeeping: homepage error message + error tracking.
+                if (matchesMainSite(request.url, site)) {
                     context.crawlErrorMessage = `Erreur HTTP ${status}`;
                 }
-                // Delegate error tracking to UpdateChecker in update mode
+                // Update-mode classification ONLY for permanent failures here. Transient/
+                // block statuses used to classify (and PushedSet-claim) the URL on the
+                // FIRST failed attempt — a later successful retry then hit 'already_pushed'
+                // and its redirect/confirmed evidence was lost forever (incident 1079-327:
+                // 503 → retry → 301 never recorded). Exhausted transients are classified
+                // once in failedRequestHandler instead.
                 const source = request.userData.source || '';
-                if (context.updateChecker && source) {
-                    await context.updateChecker.checkUrl(request.url, request.loadedUrl, source, status, false);
-                } else if (context.statsManager && request.userData.is_existing) {
-                    // Legacy fallback for non-update mode
-                    await context.statsManager.increment("errors");
+                if (statusClass === "permanent") {
+                    if (context.updateChecker && source) {
+                        await context.updateChecker.checkUrl(request.url, request.loadedUrl, source, status, false);
+                    } else if (context.statsManager && request.userData.is_existing) {
+                        await context.statsManager.increment("errors");
+                    }
                 }
-                // Don't process, let failedRequestHandler handle it
-                throw new Error(`BLOCKED: HTTP ${status}`);
+
+                if (statusClass === "permanent") {
+                    request.noRetry = true;
+                    log.error(`⛔ PERMANENT HTTP ${status} on ${url} — no retry`);
+                } else if (statusClass === "block") {
+                    session?.retire();
+                    log.warning(`🚫 BLOCKED HTTP ${status} on ${url} — retire session, retry`);
+                    context.blockedCount = (context.blockedCount ?? 0) + 1;
+                    if (terminalFailureDetectEnabled() && context.statsManager) {
+                        const processedOk = await context.statsManager.getValue("processed");
+                        // processed counts only requests that passed the status check (blocked ones
+                        // throw before increment("processed") at ~L431), so the ratio denominator is
+                        // total attempts = blocked + processed-ok, matching shouldTripProxyWall's contract.
+                        const wall = shouldTripProxyWall(context.blockedCount, context.blockedCount + processedOk, proxyWallConfig());
+                        if (wall.trip) {
+                            context.stopReason = "proxyBlocked";
+                            context.fatalExitCode = 8;
+                            log.error(`⛔ PROXY WALL — ${wall.reason} — terminating (exit 8)`);
+                            await stopCrawler(crawler, `Proxy wall: ${wall.reason}`);
+                        }
+                    }
+                } else {
+                    log.warning(`↻ TRANSIENT HTTP ${status} on ${url} — retry`);
+                }
+                // Hand off to failedRequestHandler (records the rich error row).
+                throw new Error(`HTTP ${status}`);
             }
         }
 
@@ -248,7 +457,8 @@ router.addDefaultHandler(
                 const redirects = await context.statsManager.getValue("redirects");
                 const newUrls = await context.statsManager.getValue("new_urls");
                 const processed = await context.statsManager.getValue("processed");
-                
+                const errorsUnprocessed = await context.statsManager.getValue("errors_unprocessed");
+
                 let abortReason = "";
 
                 if (cb.isMicroMode) {
@@ -258,15 +468,29 @@ router.addDefaultHandler(
                     else if (cb.maxAbsNew > 0 && newUrls >= cb.maxAbsNew) abortReason = `Too many new URLs for small site (${newUrls} >= ${cb.maxAbsNew})`;
                 } else {
                     // --- STANDARD MODE (Rate Limits) ---
+                    // Keep this wrapper: it is the ONLY minSample gate for the redirect and
+                    // growth branches below — neither re-checks it. shouldTripErrorRateBreaker
+                    // re-checks the gate for itself only, so deleting this as "redundant" would
+                    // let those two branches fire below the sample size, i.e. ADD stops.
                     if (processed >= cb.minSample) {
-                        const errorRate = errors / processed;
+                        // The error rate lives in a pure, tested module because its
+                        // denominator is not `processed`: an HTTP error never reaches
+                        // that counter. See errorRateBreaker.ts — 12 of 69 stopped runs
+                        // in the 2026-08-10 batch reported a rate above 100%.
+                        const errorBreaker = shouldTripErrorRateBreaker(
+                            { errors, processed, errorsUnprocessed },
+                            cb,
+                        );
+                        // Left inline on purpose: this branch is disabled in production
+                        // (the BO launcher sends max_redirect_rate = 0) and the spec puts
+                        // it out of scope. Do not "harmonise" it with the line above.
                         const redirectRate = redirects / processed;
-                        
-                        if (errorRate > cb.maxErrorRate) abortReason = `Error rate too high (${(errorRate*100).toFixed(1)}% > ${(cb.maxErrorRate*100)}%)`;
-                        else if (redirectRate > cb.maxRedirectRate) abortReason = `Redirect rate too high (${(redirectRate*100).toFixed(1)}% > ${(cb.maxRedirectRate*100)}%)`;
-                        
+
+                        if (errorBreaker.trip) abortReason = errorBreaker.reason;
+                        else if (cb.maxRedirectRate > 0 && redirectRate > cb.maxRedirectRate) abortReason = `Redirect rate too high (${(redirectRate*100).toFixed(1)}% > ${(cb.maxRedirectRate*100)}%)`;
+
                         // Check growth relative to previous total
-                        if (cb.previousTotal > 0 && (newUrls / cb.previousTotal) > cb.maxGrowthRate) {
+                        if (cb.maxGrowthRate > 0 && cb.previousTotal > 0 && (newUrls / cb.previousTotal) > cb.maxGrowthRate) {
                             abortReason = `Site growth too fast (> ${(cb.maxGrowthRate*100)}% of previous size)`;
                         }
                     }
@@ -274,7 +498,10 @@ router.addDefaultHandler(
 
                 if (abortReason) {
                     log.warning(`🛑 Circuit breaker triggered: ${abortReason}`);
-                    context.stopReason = "circuitBreaker"; 
+                    context.stopReason = "circuitBreaker";
+                    if (context.statsManager) {
+                        await context.statsManager.increment("dropped_cb");
+                    }
                     await stopCrawler(crawler, `Circuit breaker: ${abortReason}`);
                     return;
                 }
@@ -307,18 +534,30 @@ router.addDefaultHandler(
             const isNew = await context.dedupManager.addUrl(url);
             isDoublon = !isNew;
         }
-        
+
+        // Phase-2 audit: a per-class-stripped fragment page that collapsed onto an
+        // already-seen base — a route-loss candidate (its content is never crawled).
+        if (isDoublon && diezStripped && perClassEnabled() && context.diezCollapsed.length < 200) {
+            context.diezCollapsed.push({ collapsed: request.loadedUrl as string, base: url });
+        }
+
         // Removed early increment of "new_urls" here.
         // It is now handled inside the success block (isEnqueuingLinks) to ensure validity.
 
-        if (!isDoublon) {
+        // Option A retry-bypass: if Crawlee is retrying this request, run the
+        // full extraction logic again regardless of dedup state. DedupManager
+        // marked the URL as seen on the first (failed) attempt; without this
+        // bypass the retry would short-circuit via the doublon guard and the
+        // seed page would yield zero discovered URLs. PushedSet prevents
+        // duplicate dataset rows across the retry.
+        if (!isDoublon || request.retryCount > 0) {
             // Redis update handled in dedupManager
             // Local file update is heavy, skipped in V3 logic, keeping minimal or periodic in main.ts
 
             // Cookie consent is now injected pre-navigation in preNavigationHooks (functions.ts)
 
             // --- REDIRECT LOOP CLOSURE (Important Fix) ---
-            // If we ended up at a different URL than requested (redirect), make sure the 
+            // If we ended up at a different URL than requested (redirect), make sure the
             // final URL is also marked as known in Redis to prevent future re-crawling.
             if (context.dedupManager && request.url !== request.loadedUrl) {
                 await context.dedupManager.addUrl(request.loadedUrl);
@@ -336,9 +575,21 @@ router.addDefaultHandler(
                 }
             }
 
-            const isMainSite = request.url === site;
+            const isMainSite = matchesMainSite(request.url, site);
             let frenchDetectionMethod: string | Error;
             let isEnqueuingLinks = false;
+            // No technical failure may increment `filtered_nonfr`, write to `nfr-{domain}`,
+            // or call `updateChecker.checkUrl`.
+            //
+            // That is the invariant this flag exists to enforce. "The detection did not
+            // answer" — API error, unresolved anti-bot challenge, page with no readable
+            // content — is the ABSENCE of a verdict, a third state distinct from both
+            // "French" (`isEnqueuingLinks`) and "not French" (the terminal `else`). Left
+            // to converge on the "not French" branch it becomes a business verdict: the
+            // BO reads `filtered_nonfr` as `isError='not_french'`, and in update mode
+            // `checkUrl(..., false)` answers `isEligible=false`, which claims
+            // `action:'deleted'` on a live French fiche.
+            let verdictUnavailable = false;
             let content = "";
             let title = "";
 
@@ -370,15 +621,23 @@ router.addDefaultHandler(
                         log.error(`Challenge ${challengeService} not resolved for main site ${url}. Aborting crawl.`);
                         let datasetName = context.config.crawleeStorageName ? `error-${context.config.crawleeStorageName}` : `error-${targetDomain}`;
                         let errorDataset = await Dataset.open(datasetName);
-                        await errorDataset.pushData({
-                            id: request.id,
-                            url: request.url,
-                            errors: [`Challenge page ${challengeService} not resolved after 45s`],
-                            proxy_used: maskProxyUrl(proxyUrl ?? undefined),
-                            status_code: response?.status() || 0,
-                            captcha: challengeService,
-                            timestamp: new Date().toISOString()
-                        });
+                        // PushedSet guard (fail-open). Truth-table equivalent to functions.ts:1635 inverted form.
+                        if (!context.pushedSet || (await context.pushedSet.tryClaim(request.url))) {
+                            await errorDataset.pushData({
+                                id: request.id,
+                                url: request.url,
+                                errors: [`Challenge page ${challengeService} not resolved after 45s`],
+                                proxy_used: maskProxyUrl(proxyUrl ?? undefined),
+                                status_code: response?.status() || 0,
+                                captcha: challengeService,
+                                // Anti-bot challenge = retryable (fresh session/proxy may pass),
+                                // consistent with the non-permanent-challenge "will retry" path in
+                                // functions.ts. Explicit so a same-id restart re-attempts the homepage
+                                // instead of falling into the legacy missing-class default.
+                                failure_class: "transient",
+                                timestamp: new Date().toISOString()
+                            });
+                        }
                         context.crawlErrorMessage = `Site protégé par ${challengeService} (challenge non résolu)`;
                         await stopCrawler(crawler, `Challenge ${challengeService} not resolved for main site`);
                         return;
@@ -386,15 +645,26 @@ router.addDefaultHandler(
                 }
 
                 try {
+                    _timing.detectStartAt = Date.now();
                     const detectResult = await detectionClient.detect(url, content, {
                         mode: "complete",
                         proxyUrl: proxyUrl ?? undefined,
+                        validateAlternatives: false,
                     });
+                    _timing.detectEndAt = Date.now();
+                    _detectMethod = detectResult.method;
+                    _detectOk = detectResult.ok;
 
                     if (detectResult.ok) {
                         const primaryMethod = DetectionLangueClient.extractPrimaryMethod(detectResult.method);
                         if (!primaryMethod) {
                             log.error(`API returned ok=true but empty method for ${url}. Cannot store detection method.`);
+                            // ok=true is a FRENCH verdict; an empty method just makes it
+                            // unusable (nothing to store as forced_method). Falling through
+                            // with both flags false would send a page the service called
+                            // French into the "not French" branch — the laundering above,
+                            // with the verdict inverted.
+                            verdictUnavailable = true;
                         } else {
                             frenchDetectionMethod = manageFrenchDetectionMethod(targetDomain as string, primaryMethod);
                             if (frenchDetectionMethod instanceof Error) {
@@ -403,28 +673,39 @@ router.addDefaultHandler(
                                 return;
                             }
                             // For session-based i18n: extract ?lang=fr from start URL
-                            // so we can propagate it to discovered internal URLs
-                            if (primaryMethod === "pattern_match_query") {
-                                context.languageQueryParam = DetectionLangueClient.extractLanguageQueryParam(site);
-                                if (context.languageQueryParam) {
-                                    log.info(`Stored language query param: ${context.languageQueryParam.key}=${context.languageQueryParam.value} (will propagate to discovered URLs)`);
-                                }
+                            // so we can propagate it to discovered internal URLs.
+                            // Unconditional on purpose: gating this on
+                            // `primaryMethod === "pattern_match_query"` was dead code, because
+                            // extractPrimaryMethod prefers any HTML method found ANYWHERE in
+                            // the `+`-split, so `pattern_match_query+langHtml+nlp_confirmed`
+                            // reduces to `langHtml` and the test was never true. The helper
+                            // self-guards: it returns null unless the seed carries a
+                            // lang|locale|language|hl whose value matches /^fr/i.
+                            const languageQueryParam = DetectionLangueClient.extractLanguageQueryParam(site);
+                            if (languageQueryParam) {
+                                context.languageQueryParam = languageQueryParam;
+                                log.info(`Stored language query param: ${languageQueryParam.key}=${languageQueryParam.value} (will propagate to discovered URLs)`);
                             }
                             isEnqueuingLinks = true;
 
                             // Regional path exclusion: extract alternative paths to exclude
                             if (detectResult.alternative_urls && detectResult.alternative_urls.length > 0) {
+                                // Belt-and-braces gate inside computeExcludedRegionalPaths: only
+                                // accept locale-shaped prefixes (e.g. /fr-FR, /en, /de-DE). Rejects
+                                // content paths like /nos-realisations that a malformed hreflang
+                                // could surface, which would otherwise blanket-block a content
+                                // section. Complements the API-side gate in alternative_urls
+                                // assembly.
                                 const winnerPrefix = DetectionLangueClient.extractPathPrefix(detectResult.url || url);
                                 const seedPrefix = DetectionLangueClient.extractPathPrefix(site);
+                                const { excluded, rejected } = DetectionLangueClient.computeExcludedRegionalPaths(
+                                    detectResult.alternative_urls,
+                                    winnerPrefix,
+                                    seedPrefix,
+                                );
 
-                                const excluded: string[] = [];
-                                for (const alt of detectResult.alternative_urls) {
-                                    const altPrefix = DetectionLangueClient.extractPathPrefix(alt.url);
-                                    if (altPrefix && altPrefix !== winnerPrefix && altPrefix !== seedPrefix) {
-                                        if (!excluded.includes(altPrefix)) {
-                                            excluded.push(altPrefix);
-                                        }
-                                    }
+                                for (const r of rejected) {
+                                    log.info(`[REGIONAL_EXCLUSION] Rejected non-locale alt prefix: ${r.prefix} (from ${r.sourceUrl})`);
                                 }
 
                                 if (excluded.length > 0) {
@@ -445,11 +726,34 @@ router.addDefaultHandler(
                             context.crawlErrorMessage = `Homepage non détectée en Français mais une alternative en Français a été trouvée : ${best.url} (fiabilité: ${best.reliability})`;
                         }
 
+                        // ok=false can also mean "the service could not judge this page"
+                        // (challenge interstitial, internal error, no visible text). That is
+                        // not a linguistic verdict, and it must not reach the URL-only
+                        // fallback below: checkUrl accepts ANY .fr host with zero network
+                        // work, so a technical failure on a .fr domain would be resurrected
+                        // as a French verdict on no evidence at all. Decided BEFORE the
+                        // default message below, which now branches on it.
+                        if (DetectionLangueClient.isTechnicalFailureMethod(detectResult.method)) {
+                            verdictUnavailable = true;
+                            log.warning(`[VERDICT_UNAVAILABLE] Detection returned no linguistic verdict for ${url} (method: ${detectResult.method}). Skipping the URL fallback.`);
+                        }
+
                         // Default error message when no alternative found.
                         // Cleared below if the URL-only fallback (checkUrl) succeeds.
                         if (!context.crawlErrorMessage) {
-                            log.error(`[NOT_FRENCH] Homepage ${url} is NOT French and no French alternative was found.`);
-                            context.crawlErrorMessage = "Page non détectée en Français";
+                            if (verdictUnavailable) {
+                                // The second laundering channel, and the one the BO acts on:
+                                // `not_french_signal.php` believes "Page non détectée en
+                                // Français" unconditionally, before any counter test. On a
+                                // technical failure that string is a permanent business
+                                // verdict about a page nobody managed to read, so name the
+                                // cause instead — same shape as `Erreur HTTP …` (:394) and
+                                // `Site protégé par … (challenge non résolu)` (:618).
+                                context.crawlErrorMessage = `Détection indisponible : aucun verdict linguistique (méthode : ${detectResult.method})`;
+                            } else {
+                                log.error(`[NOT_FRENCH] Homepage ${url} is NOT French and no French alternative was found.`);
+                                context.crawlErrorMessage = "Page non détectée en Français";
+                            }
                         }
 
                         // Only fall back to URL check if NLP didn't explicitly reject.
@@ -458,7 +762,7 @@ router.addDefaultHandler(
                         const nlpRejected = detectResult.method.includes("nlp_not_confirmed")
                             || detectResult.method.includes("nlp_override");
 
-                        if (!nlpRejected) {
+                        if (!verdictUnavailable && !nlpRejected) {
                             const checkUrlResult = await detectionClient.checkUrl(url);
                             if (checkUrlResult.ok) {
                                 frenchDetectionMethod = manageFrenchDetectionMethod(targetDomain as string, checkUrlResult.method);
@@ -483,6 +787,42 @@ router.addDefaultHandler(
                 } catch (apiError: any) {
                     log.error(`Detection API error for main site ${url}: ${apiError.message}`);
                     context.crawlErrorMessage = `Erreur API de détection pour le site principal ${url}: ${apiError.message}`;
+                    verdictUnavailable = true;
+                }
+
+                // An unjudged homepage is a detection OUTAGE, not a result: `isEnqueuingLinks`
+                // stays false, so an initial crawl enqueues nothing and stores nothing. Shipping
+                // the default exit 2 for that made `_classify_exit_code(2)` answer (None, None)
+                // and the run report `finished` — a SUCCESS webhook for a run that produced no
+                // data. Exit 10 is the honest verdict.
+                //
+                // Placed after the try/catch so it converges the THREE homepage sites (:645 empty
+                // method, :715 technical method, :768 API error) without touching what each of
+                // them already writes — notably the reserved-string-avoiding `crawlErrorMessage`
+                // of :730. Being inside `if (isMainSite)` is also what makes exit 10 unreachable
+                // from the seven internal-page sites in the `else` below: killing a crawl because
+                // one internal page out of hundreds got no verdict would destroy the successful
+                // ones, so those keep counting-not-tuning.
+                //
+                // UPDATE MODE IS EXEMPT, deliberately. `context.homepageReady` is non-null only in
+                // update mode (main.ts:937, inside `if (crawlMode === 'update')`) and is exactly
+                // the guard on Phase-2 seeding (main.ts:1517), which seeds the previous crawl's
+                // URLs on a 120s timeout whether or not the homepage was judged — and those
+                // internal pages run their own detection (the `else` branch below). Stopping here
+                // would discard that work to punish a failure we cannot even scope: nothing in
+                // `DetectionLangueClient` tracks consecutive failures or service health, so the
+                // crawler cannot tell a GLOBAL outage from one bad URL. Initial-only is the half
+                // that the code we have can justify.
+                if (verdictUnavailable && !context.homepageReady) {
+                    context.stopReason = "detectionUnavailable";
+                    context.fatalExitCode = 10;
+                    log.error(`⛔ DETECTION UNAVAILABLE on homepage ${url} — no linguistic verdict, nothing to crawl — terminating (exit 10)`);
+                    await stopCrawler(crawler, "Detection unavailable: no linguistic verdict for the homepage");
+                    // No `return` — unlike :621/:651/:750, and like the proxy-wall breaker at
+                    // :426-430 (the other `fatalExitCode` setter in this handler). The
+                    // fall-through is what still reaches `recordUnjudgedUrls` (:1260), which the
+                    // previous chantier added for the homepage case on purpose; returning would
+                    // silently undo it.
                 }
 
             } else {
@@ -504,14 +844,19 @@ router.addDefaultHandler(
                         } else {
                             log.warning(`Challenge ${internalChallenge1} not resolved for internal page ${url}. Skipping.`);
                             isEnqueuingLinks = false;
+                            verdictUnavailable = true;
                         }
                     }
 
                     try {
+                        _timing.detectStartAt = Date.now();
                         const autoCheck = await detectionClient.detect(url, content, {
                             mode: "simple",
                             proxyUrl: proxyUrl ?? undefined,
                         });
+                        _timing.detectEndAt = Date.now();
+                        _detectMethod = autoCheck.method;
+                        _detectOk = autoCheck.ok;
 
                         if (autoCheck.ok) {
                             const primaryMethod = DetectionLangueClient.extractPrimaryMethod(autoCheck.method);
@@ -519,6 +864,20 @@ router.addDefaultHandler(
                                 methodOrError = manageFrenchDetectionMethod(targetDomain as string, primaryMethod);
                                 log.info(`Auto-detected and saved method: ${primaryMethod}`);
                             }
+                            if (methodOrError instanceof Error) {
+                                // ok=true is a FRENCH verdict; we merely failed to make it
+                                // usable (empty method, or the storage write failed). Without
+                                // this the page falls to the `Could not determine` branch
+                                // below and is filtered as non-French.
+                                verdictUnavailable = true;
+                            }
+                        } else if (DetectionLangueClient.isTechnicalFailureMethod(autoCheck.method)) {
+                            // Same invariant as the homepage gate, and the same reason not to
+                            // run the URL fallback below: checkUrl accepts any .fr host with
+                            // zero network work, so it would resurrect a technical failure as
+                            // a stored domain-wide method.
+                            verdictUnavailable = true;
+                            log.warning(`[VERDICT_UNAVAILABLE] Auto-detection returned no linguistic verdict for ${url} (method: ${autoCheck.method}). Skipping the URL fallback.`);
                         } else {
                             // Try URL check fallback
                             const checkUrlResult = await detectionClient.checkUrl(url);
@@ -529,6 +888,7 @@ router.addDefaultHandler(
                         }
                     } catch (apiError: any) {
                         log.error(`Detection API error during auto-detection for ${url}: ${apiError.message}`);
+                        verdictUnavailable = true;
                     }
                 }
 
@@ -549,35 +909,52 @@ router.addDefaultHandler(
                         } else {
                             log.warning(`Challenge ${internalChallenge2} not resolved for internal page ${url}. Skipping.`);
                             isEnqueuingLinks = false;
+                            verdictUnavailable = true;
                         }
                     }
 
-                    try {
-                        const needsNlp = DetectionLangueClient.requiresNlpValidation(frenchDetectionMethod);
+                    // Nothing readable to judge (unresolved challenge above, or a failed
+                    // auto-detection further up) ⇒ do not ask detection. Sending the
+                    // interstitial markup anyway is how `isEnqueuingLinks` was flipped back
+                    // to true on an ok=true answer about the challenge page itself.
+                    if (verdictUnavailable) {
+                        log.warning(`[VERDICT_UNAVAILABLE] Skipping detection for internal page ${url}: no verdict is obtainable from an unresolved challenge.`);
+                    } else {
+                        try {
+                            const needsNlp = DetectionLangueClient.requiresNlpValidation(frenchDetectionMethod);
 
-                        // When stored method is URL-based or NLP-only, forced_method cannot
-                        // validate HTML tags → use NLP to verify actual content instead.
-                        // When stored method is HTML-based, use forced_method for fast validation.
-                        const detectResult = await detectionClient.detect(url, content, {
-                            forcedMethod: needsNlp ? undefined : frenchDetectionMethod,
-                            mode: "simple",
-                            useNlpDetection: needsNlp,
-                            proxyUrl: proxyUrl ?? undefined,
-                        });
+                            // When stored method is URL-based or NLP-only, forced_method cannot
+                            // validate HTML tags → use NLP to verify actual content instead.
+                            // When stored method is HTML-based, use forced_method for fast validation.
+                            _timing.detectStartAt = Date.now();
+                            const detectResult = await detectionClient.detect(url, content, {
+                                forcedMethod: needsNlp ? undefined : frenchDetectionMethod,
+                                mode: "simple",
+                                useNlpDetection: needsNlp,
+                                proxyUrl: proxyUrl ?? undefined,
+                            });
+                            _timing.detectEndAt = Date.now();
+                            _detectMethod = detectResult.method;
+                            _detectOk = detectResult.ok;
 
-                        if (detectResult.ok) {
-                            isEnqueuingLinks = true;
-                        } else if (!needsNlp) {
-                            // Fallback: URL-only check (no method match required).
-                            // The stored method describes how the *homepage* was detected,
-                            // not which URL patterns are valid for internal pages.
-                            const checkUrlResult = await detectionClient.checkUrl(url);
-                            if (checkUrlResult.ok) {
+                            if (detectResult.ok) {
                                 isEnqueuingLinks = true;
+                            } else if (DetectionLangueClient.isTechnicalFailureMethod(detectResult.method)) {
+                                // Same invariant as the homepage gate: an internal page whose
+                                // detect failed technically has no verdict either. Internal
+                                // pages are the volume, and in update mode each one laundered
+                                // here is an `action:'deleted'` claim.
+                                verdictUnavailable = true;
+                                log.warning(`[VERDICT_UNAVAILABLE] Detection returned no linguistic verdict for internal page ${url} (method: ${detectResult.method}).`);
                             }
+                            // No URL fallback after a clean rejection. The forced HTML detect
+                            // already analyzed the lang attribute; URL TLD/path signals cannot
+                            // override that verdict (aera-sa.fr/de/... leak case). API technical
+                            // failures are handled by the surrounding try/catch.
+                        } catch (apiError: any) {
+                            log.error(`Detection API error for internal page ${url}: ${apiError.message}`);
+                            verdictUnavailable = true;
                         }
-                    } catch (apiError: any) {
-                        log.error(`Detection API error for internal page ${url}: ${apiError.message}`);
                     }
                 }
             }
@@ -611,9 +988,83 @@ router.addDefaultHandler(
                     }
                 }
 
+                // The facet-relevant view of this URL: the same URL minus the language
+                // query param WE injected (transformRequestFunction, :1116). Every
+                // consumer below measures parameter-space explosion — a facet trap the
+                // SITE generates — so letting them see our own injection is a category
+                // error: they would be counting the crawler's behaviour as the site's.
+                // Not cosmetic — `shouldStopForQuestionMark` (functions.ts:907) ends the
+                // crawl with isError=limitQuestionMark at 100, and `bypassQuestionMark`
+                // AND `skipQuestionMark` both default to false (context.ts:41-43,
+                // main.ts:104-106), so that stop is live in the default configuration:
+                // on a session-i18n site the injection would stop the very crawl it was
+                // added to rescue. Derived once; the rest of the handler keeps `url`,
+                // which stays the stored + counted page identity.
+                const facetUrl = DetectionLangueClient.stripInjectedLanguageParam(url, context.languageQueryParam);
+
+                // Mirror `?` / `#` counters into StatsManager so they appear in the
+                // webhook payload (`filtered_qm` / `filtered_hash`). See qmHashTracker.ts.
+                trackQmHashStatsForUrl(facetUrl, context.statsManager);
+
                 // Track URLs with '?' and '#' for postNavigationHook limit checks
-                if (url.includes('?')) context.countQuestionMark++;
-                if (url.includes('#')) context.countDiez++;
+                if (facetUrl.includes('?')) {
+                    context.countQuestionMark++;
+                    if (QM_FACET_ENABLED) recordVariant(context.facetVariantCount, facetUrl);
+                    // Tier-1 observer (spec 2026-04-17). No-op when observation disabled.
+                    recordQuestionMarkObservation(facetUrl);
+
+                    // Phase-2 tier-2 per-param engine (spec 2026-06-16). Off unless QM_TIER2_ENABLED.
+                    if (QM_TIER2_ENABLED && context.questionMarkObservationEnabled && storagePath) {
+                        if (!context.qmTier2.active && context.questionMarkObservations.domainSpecificCount >= QM_TIER2_TRIGGER) {
+                            context.qmTier2.active = true;
+                            console.log(`[questionmark] Tier 2 activated at ${context.questionMarkObservations.domainSpecificCount} domain-specific ? URLs.`);
+                        }
+                        if (context.qmTier2.active && content) {
+                            await recordQmTier2Sample(facetUrl, content, context.contentExtractorClient);
+                            for (const p of Array.from(context.qmTier2.tally.keys())) {
+                                if (!context.qmTier2.decided.has(p) && maybeCommitParam(p)) {
+                                    commitToRemoveParam(p, storagePath);
+                                }
+                            }
+                        }
+                        maybeDefaultAtCeiling(storagePath);
+                    }
+                }
+                if (url.includes('#')) {
+                    context.countDiez++;
+                    // Tier-1 auto-decision (spec 2026-04-17). No-op once committed.
+                    recordClassification(url);
+                    const outcome = maybeCommitDecision();
+                    const route = routeDiezOutcome(outcome, DIEZ_TIER2_ENABLED);
+
+                    if (route.action === "commit" && storagePath) {
+                        const meta = { source: route.source } as const;
+                        if (route.decision === "skipDiez") commitSkipDiez(storagePath, meta);
+                        else commitBypassDiez(storagePath, meta);
+                    } else if (route.action === "activate") {
+                        if (!context.diezTier2.active) {
+                            context.diezTier2.active = true;
+                            console.log(`[diez] Tier 2 engine activated (tier-1 outcome=${outcome}).`);
+                        }
+                    }
+
+                    // Tier-2 verification (engine active, not yet committed).
+                    if (DIEZ_TIER2_ENABLED && context.diezTier2.active && !context.diezDecisionCommitted && content) {
+                        await recordTier2Sample(url, content, context.contentExtractorClient);
+                        const t2 = maybeCommitTier2();
+                        if (t2 && storagePath) {
+                            const meta = { tier: 2 as const, source: "tier2" as const, evidence: tier2Evidence() };
+                            if (t2 === "skipDiez") commitSkipDiez(storagePath, meta);
+                            else commitBypassDiez(storagePath, meta);
+                        }
+                    }
+
+                    // Zero-touch floor (mirrors questionMark maybeDefaultAtCeiling): near the
+                    // ceiling with no decision yet, default to bypassDiez + arm the 5000-item
+                    // backstop so the crawl never dies at limitDiez. Runs in BOTH flag modes,
+                    // whatever blocked a decision (tier-2 no comparable pairs, ambiguous-heavy…).
+                    if (storagePath) maybeDefaultDiezAtCeiling(storagePath);
+                }
 
                 await routerDefaultHandler(
                     request,
@@ -624,13 +1075,19 @@ router.addDefaultHandler(
                     title
                 );
 
+                // Queue-purge #2: live-add this page's normalized base to the seen oracle —
+                // `url` is the final stored+counted identity for every page pushed to the
+                // dataset (just above), so the very next discovered link naming the same
+                // base with an extra param is caught even within the same crawl.
+                if (QM_FACET_ENABLED) context.seenBases.add(baseKeyAbsent(url));
+
                 // --- PRE-BATCH DEDUP: Extract links, batch-check Redis, build local Set ---
                 // CRITICAL: transformRequestFunction MUST be synchronous (Crawlee API contract).
                 // An async version causes minimatch to receive a Promise instead of a Request,
                 // crashing with "Cannot read properties of undefined (reading 'split')".
                 let knownUrlsOnPage = new Set<string>();
 
-                if (context.dedupManager) {
+                if (context.dedupManager && !page.isClosed()) {
                     try {
                         // 1. Extract all <a href> links from the page
                         const rawLinks = await page.$$eval('a[href]', (anchors: HTMLAnchorElement[]) =>
@@ -642,9 +1099,15 @@ router.addDefaultHandler(
                             knownUrlsOnPage = await context.dedupManager.isKnownBatch(rawLinks);
                         }
                     } catch (e) {
-                        // Non-fatal: if link extraction fails, we proceed without pre-filtering
-                        // The handler-level dedup (line ~176) will still catch duplicates
-                        console.warn(`Pre-batch link extraction failed: ${e}`);
+                        // Non-fatal: proceed without pre-filtering; the handler-level dedup
+                        // (line ~176) still catches duplicates. A torn-down page (a concurrent
+                        // /stop or shutdown closed the pool mid-handler) is benign — log it
+                        // quietly, not as a warning that surfaces in Python as "Erreur crawling".
+                        if (isPageClosedError(String(e))) {
+                            log.debug(`Pre-batch link extraction skipped (page closed): ${e}`);
+                        } else {
+                            console.warn(`Pre-batch link extraction failed: ${e}`);
+                        }
                     }
                 }
 
@@ -658,6 +1121,17 @@ router.addDefaultHandler(
                             return false;
                         }
 
+                        // Action-anchor strip (root fix for the #elementor-action
+                        // duplicate-fetch overload). Runs before skip/remove so the
+                        // '#' is gone and fragmentAwareUniqueKey collapses variants.
+                        if (actionAnchorStripEnabled()) {
+                            const strippedAa = stripActionAnchor(request.url);
+                            if (strippedAa !== request.url) {
+                                request.url = strippedAa;
+                                context.actionAnchorsStripped++;
+                            }
+                        }
+
                         // 2. Initial CLEANING of the URL (Moved to TOP)
                         // This ensures we strip parameters BEFORE checking forbidden list
                         const { skipQuestionMark, skipDiez, toKeep, toRemove } = context.config;
@@ -666,12 +1140,18 @@ router.addDefaultHandler(
                         // re-instantiation on every discovered link.
 
                         // Strip empty fragment (#) — "page#" and "page" are identical content
-                        if (request.url.endsWith('#')) {
-                            request.url = request.url.slice(0, -1);
-                        }
+                        request.url = stripEmptyFragment(request.url);
 
                         // Always strip the "Always Remove" list first (skipQuestionMark=false: only remove alwaysRemove params)
                         request.url = processUrl(request.url, false, false, { toRemove: ALWAYS_REMOVE_PARAMS });
+
+                        // Per-domain toRemove (tier-2 commits + human --toremove) must apply to EVERY
+                        // discovered link, not only under the skip sledgehammers. Without this a tier-2
+                        // commit ('q' -> toRemove) never strips newly-discovered ?q= links (gate bug,
+                        // spec 2026-06-29 Part A). Mirrors the unconditional ALWAYS_REMOVE_PARAMS call above.
+                        if (toRemove && toRemove.length > 0) {
+                            request.url = processUrl(request.url, false, false, { toRemove });
+                        }
 
                         // Now apply the dynamic config (skipQuestionMark, etc)
                         if (skipQuestionMark || skipDiez) {
@@ -760,6 +1240,29 @@ router.addDefaultHandler(
                             return false;
                         }
 
+                        // Queue-purge #1: facet cap — drop discovered variants once the base is saturated.
+                        if (QM_FACET_ENABLED && isOverCap(context.facetVariantCount, request.url, QM_FACET_CAP_K)) {
+                            logBlocked('facet-cap', request.url);
+                            return false;
+                        }
+
+                        // Queue-purge #2: filter-on-seen-base — drop a discovered variant whose
+                        // param removal yields a base already crawled (structural, no content
+                        // comparison; R1 allowlist protects lang/currency/etc.).
+                        // The target is RECORDED, not just logged: a queue rejection that leaves
+                        // a fiche active in the BO must be a declared event, not a log line.
+                        // recordQmCollapsed is synchronous (an array push), so the Crawlee
+                        // contract at :1063-1065 — transformRequestFunction MUST be synchronous
+                        // — is not in play here.
+                        if (QM_FACET_ENABLED) {
+                            const _fosTarget = filterParamCollapseTarget(request.url, context.seenBases);
+                            if (_fosTarget !== null) {
+                                recordQmCollapsed(request.url, _fosTarget, 'filter_on_seen', 'enqueue');
+                                logBlocked('filter-on-seen', request.url);
+                                return false;
+                            }
+                        }
+
                         // 4. Pre-Crawl Deduplication (SYNCHRONOUS via pre-built Set)
                         // The Set was populated before enqueueLinks by batch-checking Redis.
                         // This avoids the async trap while still leveraging Redis dedup.
@@ -768,6 +1271,10 @@ router.addDefaultHandler(
                         }
 
                         request.userData = { source: 'discovered' };
+                        // Phase-2: pin the dedup identity to the fragment-bearing URL so
+                        // base#a / base#b do not collapse to base. No-op once skipDiez
+                        // has stripped '#' from request.url.
+                        request.uniqueKey = fragmentAwareUniqueKey(request.url);
                         return request;
                     },
                 });
@@ -790,8 +1297,61 @@ router.addDefaultHandler(
                          console.warn("Failed to log blocked URLs via Redis:", e);
                      }
                 }
+            } else if (verdictUnavailable) {
+                // No verdict was obtained, so there is nothing to CONCLUDE — but the
+                // occurrence itself must be counted. Still forbidden here: `filtered_nonfr`
+                // (the BO reads it as isError='not_french'), the `nfr-{domain}` write, and
+                // `updateChecker.checkUrl` (it would answer isEligible=false and claim
+                // action:'deleted' on a page we never managed to read).
+                log.warning(`[VERDICT_UNAVAILABLE] No linguistic verdict for ${url} — not counted as non-French, not stored in nfr-, no eligibility claim.`);
+
+                // The PARTIAL outage is the dangerous band: enough pages judged that the
+                // dataset is non-empty and coverage stays above the BO's thresholds, the rest
+                // silently protected, on a run labelled healthy. Before this counter the only
+                // trace was the log line above — no counter, no message, no field — so nobody
+                // could count the class, which is how it survived. One increment here covers
+                // ALL TEN `verdictUnavailable` sites (:645 :715 :768 homepage, :825 :850 :857
+                // :869 :890 :925 :934 internal), because they all converge on this branch:
+                // every one of them leaves `isEnqueuingLinks` false, and the homepage exit-10
+                // guard at :794 deliberately falls through instead of returning.
+                //
+                // NOT `errors`: that counter fed the BO health guard and the two deletion
+                // caps, so incrementing it here would re-arm brakes that block ALL destructive
+                // processing — a different decision, out of scope (spec §7).
+                //
+                // No `crawlErrorMessage` either: it is ONE per-crawl slot (context.ts:88)
+                // that wins over everything at main.ts:1229 and is truncated to 250 chars, and
+                // most writers are unconditional — a per-page write from here would let the
+                // last unjudged internal page overwrite a graver, actionable cause (`Erreur
+                // HTTP …`, `Site protégé par … (challenge non résolu)`, or the homepage's own
+                // `Détection indisponible : …`). A per-crawl count is the right shape for a
+                // per-crawl field; the message stays owned by the homepage sites.
+                if (context.statsManager) await context.statsManager.increment("verdict_unavailable");
+                // ...but writing nothing is not enough: the BO's second pass subtracts
+                // "URLs Milvus holds" minus "URLs in the new dataset" and deactivates the
+                // remainder, so a page with no verdict is an orphan BY CONSTRUCTION.
+                // Record it so the BO can put it back on the recrawled side, exactly as
+                // it already does with `__collapsed_urls.json`.
+                //
+                // BOTH identities, because they can be two different rows in Milvus and
+                // only coincide when there was no redirect: `request.url` is the seeded
+                // identity Milvus holds (what UpdateChecker calls `originalUrl` when it
+                // emits deleted/redirected), `url` is the loaded identity a dataset row
+                // would have carried — and :540 marks the loaded URL as known, so the
+                // redirect destination may never be crawled on its own either. The
+                // sidecar dedupes, so the common case stores one entry.
+                //
+                // All ten `verdictUnavailable` sites converge here, homepage included: an
+                // unjudged homepage enqueues no links, so the crawl stores nothing and the
+                // BO stops at `insufficientData` (`stored_files_count <= 1`) long before
+                // the orphan pass — this sidecar is `__`-prefixed precisely so it cannot
+                // disturb that count.
+                recordUnjudgedUrls(targetDomain, [request.url, url]);
             } else {
                 log.warning(`Le site ${url} n'est pas en Français.`);
+                // Revive the (previously dead) filtered_nonfr counter → the terminal webhook
+                // carries a machine-readable non-French signal that the BO turns into isError='not_french'.
+                if (context.statsManager) await context.statsManager.increment("filtered_nonfr");
 
                 // --- UPDATE MODE: Non-French page = not eligible ---
                 if (context.updateChecker && source) {
@@ -808,7 +1368,10 @@ router.addDefaultHandler(
 
                 if (!content) content = await processPage(page, request.loadedUrl, log);
                 let dataset = await Dataset.open("nfr-" + targetDomain);
-                await dataset.pushData({ url, content });
+                // PushedSet guard (fail-open). Truth-table equivalent to functions.ts:1635 inverted form.
+                if (!context.pushedSet || (await context.pushedSet.tryClaim(url))) {
+                    await dataset.pushData({ url, content });
+                }
             }
         } else {
             console.log(`Doublon url : ${url}`);
@@ -817,8 +1380,20 @@ router.addDefaultHandler(
         // Signal that homepage detection is complete (for update mode two-phase seeding).
         // Must be OUTSIDE the isDoublon check — homepage may be marked as Doublon
         // in update mode (pre-added to DedupManager during Phase 1 seeding).
-        if (request.url === site && context.homepageReady) {
+        if (matchesMainSite(request.url, site) && context.homepageReady) {
             context.homepageReady.resolve();
+        }
+        } finally {
+            // Single exit hook for ALL paths (return, throw, early break). When
+            // TIMING_ENABLED=false, context.timingRecorder is undefined and the
+            // optional chain is a no-op — zero overhead.
+            context.timingRecorder?.recordPage(
+                buildTimingEntry(_timing, url, _detectMethod, _detectOk),
+            );
+            // Drop the per-attempt marker so a Crawlee retry on the same Request
+            // does not reuse stale dequeueAt/postNavAt from the previous attempt
+            // (T3 review note N-4). preNavigationHook will repopulate.
+            try { delete (request.userData as any)._timing; } catch { /* best-effort */ }
         }
     }
 );

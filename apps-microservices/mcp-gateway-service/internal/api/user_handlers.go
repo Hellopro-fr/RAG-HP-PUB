@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/hellopro/mcp-gateway/internal/auth"
-	"github.com/hellopro/mcp-gateway/internal/db"
+	"mcp-gateway/internal/auth"
+	"mcp-gateway/internal/db"
 )
 
 // handleUsers handles GET /api/v1/users with optional ?role= query param.

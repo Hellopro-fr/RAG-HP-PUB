@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Pre-commit hook: scan staged files for hardcoded secrets.
+"""PreToolUse hook: scan for hardcoded secrets before a command commits them.
+
+It runs BEFORE the command, so it cannot rely on the index alone: on
+`git add . && git commit` nothing is staged yet at that point. See
+get_files_to_scan().
+
 Adapted from claude-code-templates/secret-scanner for RAG-HP-PUB.
 """
 import json
@@ -52,21 +57,114 @@ PATTERNS = [
 EXCLUDE_FILES = {
     'package-lock.json', 'yarn.lock', 'pnpm-lock.yaml', 'Cargo.lock',
     'poetry.lock', 'requirements.lock', '.env.example', '.env.template',
+    # This scanner's own test fixtures contain patterns by construction —
+    # without this entry the scanner blocks every commit that touches its test.
+    'test_secret_scanner.py',
 }
 
 EXCLUDE_DIRS = {'.git', 'node_modules', '.venv', '__pycache__', '.claude'}
 
+# Internal-only hostnames common in Docker Compose / container environments.
+# When a connection-string finding targets one of these AND the line is an
+# env-var fallback (process.env.X || '...', os.environ.get('X', '...')), it
+# is the documented internal default — not an exfilable secret.
+INTERNAL_HOSTS = {
+    'localhost', '127.0.0.1', '0.0.0.0', '::1',
+    'redis', 'rabbitmq', 'postgres', 'postgresql', 'mongo', 'mongodb',
+    'mysql', 'elasticsearch', 'milvus', 'qdrant', 'neo4j',
+}
 
-def get_staged_files():
-    """Get list of staged files."""
+# Indicators that the URL on the line is an env-var fallback default.
+ENV_FALLBACK_INDICATORS = (
+    re.compile(r'process\.env\.'),
+    re.compile(r'os\.environ\.get'),
+    re.compile(r'os\.getenv'),
+    re.compile(r'\bgetenv\s*\('),
+    re.compile(r'\bSettings\b'),  # Pydantic BaseSettings field defaults
+)
+
+# Extract the host portion of a connection string to validate it is internal.
+_CONN_HOST_RE = re.compile(
+    r'(?:mongodb(?:\+srv)?|postgres(?:ql)?|mysql|redis|amqp)://'
+    r'(?:[^@/\s"\']+@)?'  # optional userinfo
+    r'([^:/?\s"\']+)'      # host
+)
+
+
+# Case-insensitive: some generated artefacts carry a lowercased copy of a line
+# (e.g. graphify's norm_label), turning ${REDIS_SECRET} into ${redis_secret}.
+# Still requires an actual ${VAR} placeholder, so no literal credential passes.
+_TEMPLATE_PLACEHOLDER_RE = re.compile(r'\$\{[A-Za-z_][A-Za-z0-9_]*\}')
+
+
+def is_benign_default(line, finding_name):
+    """Skip findings on env-var fallback lines targeting internal hosts,
+    OR on connection strings that are fully templated (docker-compose
+    style ${VAR} placeholders — no literal credentials at rest).
+
+    Narrow allowlist: only applies to *Connection String findings.
+    """
+    if 'Connection String' not in finding_name:
+        return False
+    # docker-compose: fully templated URL like redis://:${REDIS_SECRET}@${REDIS_HOST}:${REDIS_PORT}
+    if _TEMPLATE_PLACEHOLDER_RE.search(line):
+        return True
+    if not any(p.search(line) for p in ENV_FALLBACK_INDICATORS):
+        return False
+    m = _CONN_HOST_RE.search(line)
+    if not m:
+        return False
+    return m.group(1).lower() in INTERNAL_HOSTS
+
+
+def _run_git(args):
     try:
-        result = subprocess.run(
-            ['git', 'diff', '--cached', '--name-only', '--diff-filter=ACMR'],
-            capture_output=True, text=True, timeout=10
-        )
-        return [f for f in result.stdout.strip().split('\n') if f]
+        result = subprocess.run(args, capture_output=True, text=True, timeout=10)
+        return result.stdout
     except Exception:
-        return []
+        return ''
+
+
+def porcelain_paths(out):
+    """Extract paths from `git status --porcelain` output."""
+    paths = []
+    for line in out.splitlines():
+        if len(line) < 4:
+            continue
+        path = line[3:]
+        if ' -> ' in path:          # rename: keep the destination
+            path = path.split(' -> ', 1)[1]
+        path = path.strip().strip('"')
+        if path:
+            paths.append(path)
+    return paths
+
+
+def stages_new_content(command):
+    """True when the command will put working-tree content into the index."""
+    return bool(re.search(r'\bgit\s+add\b', command)
+                or re.search(r'\bgit\s+commit\b[^;|&]*\s-(a|am|-all)\b', command))
+
+
+def get_files_to_scan(command):
+    """Files this command could put into the repository.
+
+    This hook runs BEFORE the command. On `git add . && git commit -m ...` --
+    the dominant idiom -- nothing is staged yet at hook time, so looking only at
+    the index returned an empty list and the secret went in completely unscanned.
+
+    When the command stages new content, scan the working tree as well. A
+    superset is the safe direction here: an extra finding on an unrelated dirty
+    file costs a second of attention, a miss costs a leaked credential.
+    """
+    files = [f for f in _run_git(
+        ['git', 'diff', '--cached', '--name-only', '--diff-filter=ACMR']
+    ).strip().split('\n') if f]
+    if stages_new_content(command):
+        files += porcelain_paths(
+            _run_git(['git', 'status', '--porcelain', '--untracked-files=all'])
+        )
+    return sorted(set(files))
 
 
 def scan_file(filepath):
@@ -82,6 +180,8 @@ def scan_file(filepath):
             for i, line in enumerate(f, 1):
                 for pattern, name, severity in PATTERNS:
                     if re.search(pattern, line):
+                        if is_benign_default(line, name):
+                            continue
                         findings.append((filepath, i, name, severity))
     except (FileNotFoundError, PermissionError):
         pass
@@ -97,7 +197,7 @@ def main():
     if 'git commit' not in command and 'git add' not in command:
         sys.exit(0)
 
-    files = get_staged_files()
+    files = get_files_to_scan(command)
     if not files:
         sys.exit(0)
 
@@ -111,7 +211,7 @@ def main():
     # Block on critical/high findings
     critical = [f for f in all_findings if f[3] in ('critical', 'high')]
     if critical:
-        msg = "🔴 BLOCKED: Potential secrets detected in staged files:\n"
+        msg = "🔴 BLOCKED: Potential secrets detected in files about to be committed:\n"
         for filepath, line, name, severity in critical:
             msg += f"  [{severity.upper()}] {filepath}:{line} — {name}\n"
         msg += "\nUse environment variables instead. See .claude/rules/security.md"

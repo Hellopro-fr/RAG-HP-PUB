@@ -1,0 +1,188 @@
+"""
+Unit tests for the batch operations of NodeService.
+
+These tests cover only the new batch_get_nodes / batch_update_nodes methods.
+They mock the underlying gRPC `clients.execute_cypher` call so they can be
+run locally without access to Neo4j / RabbitMQ / the rest of the platform.
+"""
+
+import sys
+from pathlib import Path
+from unittest.mock import AsyncMock, patch
+
+import pytest
+
+# Make `app.*` importable when pytest is invoked from this service dir
+SERVICE_ROOT = Path(__file__).resolve().parents[1]
+if str(SERVICE_ROOT) not in sys.path:
+    sys.path.insert(0, str(SERVICE_ROOT))
+
+from app.domain.models import BatchUpdateItem  # noqa: E402
+from app.services.node_service import node_service  # noqa: E402
+
+
+# ---------- batch_get_nodes ----------
+
+
+@pytest.mark.asyncio
+async def test_batch_get_nodes_returns_found_and_missing():
+    # Cypher now returns `props` as a list of [key, value] pairs (DB-side projection)
+    fake_results = [
+        {
+            "id": "id_produit_1",
+            "props": [["id", "id_produit_1"], ["id_produit", "1"]],
+        },
+    ]
+    with patch(
+        "app.services.node_service.clients.execute_cypher",
+        new=AsyncMock(return_value=fake_results),
+    ) as mock_exec:
+        out = await node_service.batch_get_nodes("Produit", [1, 2])
+
+    assert out["found"] == [
+        {"id": 1, "node": {"id": "id_produit_1", "id_produit": "1"}}
+    ]
+    assert out["missing"] == [2]
+
+    # Verify single batch query + DB-side field projection
+    assert mock_exec.await_count == 1
+    args, kwargs = mock_exec.await_args
+    query = args[0]
+    params = args[1]
+    assert "WHERE n.id IN $ids" in query
+    assert "k IN keys(n) WHERE k IN $fields" in query
+    assert params["fields"] == ["id_produit", "id"]  # default
+    assert kwargs.get("read_only") is True
+
+
+@pytest.mark.asyncio
+async def test_batch_get_nodes_custom_fields_passed_to_cypher():
+    fake_results = [
+        {
+            "id": "id_produit_1",
+            "props": [["nom_produit", "Widget"], ["prix_ttc", 9.99]],
+        },
+    ]
+    with patch(
+        "app.services.node_service.clients.execute_cypher",
+        new=AsyncMock(return_value=fake_results),
+    ) as mock_exec:
+        out = await node_service.batch_get_nodes(
+            "Produit", [1], fields=["nom_produit", "prix_ttc"]
+        )
+
+    assert out["found"] == [
+        {"id": 1, "node": {"nom_produit": "Widget", "prix_ttc": 9.99}}
+    ]
+    args, _ = mock_exec.await_args
+    params = args[1]
+    assert params["fields"] == ["nom_produit", "prix_ttc"]
+
+
+@pytest.mark.asyncio
+async def test_batch_get_nodes_invalid_label_raises():
+    with pytest.raises(ValueError):
+        await node_service.batch_get_nodes("Bad;Label", [1])
+
+
+@pytest.mark.asyncio
+async def test_batch_get_nodes_empty_input():
+    out = await node_service.batch_get_nodes("Produit", [])
+    assert out == {"found": [], "missing": []}
+
+
+# ---------- batch_update_nodes ----------
+
+
+@pytest.mark.asyncio
+async def test_batch_update_nodes_returns_found_and_missing():
+    fake_results = [
+        {"id": "id_produit_1", "n": {"id": "id_produit_1", "nom": "X"}},
+    ]
+    items = [
+        BatchUpdateItem(id="1", properties={"nom": "X"}),
+        BatchUpdateItem(id="2", properties={"nom": "Y"}),
+    ]
+    with patch(
+        "app.services.node_service.clients.execute_cypher",
+        new=AsyncMock(return_value=fake_results),
+    ) as mock_exec:
+        out = await node_service.batch_update_nodes("Produit", items)
+
+    assert out["found"] == [
+        {"id": "1", "node": {"id": "id_produit_1", "nom": "X"}}
+    ]
+    assert out["missing"] == ["2"]
+
+    assert mock_exec.await_count == 1
+    args, kwargs = mock_exec.await_args
+    query = args[0]
+    assert "UNWIND $updates AS u" in query
+    assert "SET n += u.props" in query
+    assert kwargs.get("read_only") is False
+
+
+@pytest.mark.asyncio
+async def test_batch_update_nodes_invalid_label_raises():
+    with pytest.raises(ValueError):
+        await node_service.batch_update_nodes(
+            "Bad;Label", [BatchUpdateItem(id="1", properties={})]
+        )
+
+
+@pytest.mark.asyncio
+async def test_batch_update_nodes_empty_items():
+    out = await node_service.batch_update_nodes("Produit", [])
+    assert out == {"found": [], "missing": []}
+
+
+# ---------- batch_upsert_nodes (uniform props applied to many ids) ----------
+
+
+@pytest.mark.asyncio
+async def test_batch_upsert_nodes_returns_found_and_missing():
+    # Cypher now returns only the keys that were changed (= keys($props))
+    fake_results = [
+        {"id": "id_produit_1", "changed": [["statut", "active"]]},
+    ]
+    with patch(
+        "app.services.node_service.clients.execute_cypher",
+        new=AsyncMock(return_value=fake_results),
+    ) as mock_exec:
+        out = await node_service.batch_upsert_nodes(
+            "Produit", [1, 2], {"statut": "active"}
+        )
+
+    # Only the changed field is echoed back, not the full node
+    assert out["found"] == [
+        {"id": 1, "node": {"statut": "active"}}
+    ]
+    assert out["missing"] == [2]
+
+    # Single Cypher call — same $props applied to every matched id,
+    # response projects keys($props) with post-SET values
+    assert mock_exec.await_count == 1
+    args, kwargs = mock_exec.await_args
+    query = args[0]
+    assert "WHERE n.id IN $ids" in query
+    assert "SET n += $props" in query
+    assert "keys(props)" in query
+    assert kwargs.get("read_only") is False
+
+
+@pytest.mark.asyncio
+async def test_batch_upsert_nodes_invalid_label_raises():
+    with pytest.raises(ValueError):
+        await node_service.batch_upsert_nodes("Bad;Label", [1], {"x": 1})
+
+
+@pytest.mark.asyncio
+async def test_batch_upsert_nodes_empty_ids():
+    out = await node_service.batch_upsert_nodes("Produit", [], {"x": 1})
+    assert out == {"found": [], "missing": []}
+
+
+@pytest.mark.asyncio
+async def test_batch_upsert_nodes_empty_properties_is_noop():
+    out = await node_service.batch_upsert_nodes("Produit", [1, 2], {})
+    assert out == {"found": [], "missing": [1, 2]}

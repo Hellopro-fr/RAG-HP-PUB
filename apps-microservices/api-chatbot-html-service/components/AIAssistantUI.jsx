@@ -82,8 +82,8 @@ export default function AIAssistantUI() {
 
   const [isThinking, setIsThinking] = useState(false)
   const [thinkingConvId, setThinkingConvId] = useState(null)
-  const [selectedBot, setSelectedBot] = useState('deepseek-chat')
-  const [selectedBotName, setSelectedBotName] = useState('DeepSeek-V3.2-Exp')
+  const [selectedBot, setSelectedBot] = useState('deepseek-v4-flash')
+  const [selectedBotName, setSelectedBotName] = useState('DeepSeek-V4-Flash')
   const [selectedProvider, setSelectedProvider] = useState("deepseek") // Rename selectedBot to selectedProvider
   const [temperature, setTemperature] = useState(0.1)
 

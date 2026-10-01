@@ -61,6 +61,17 @@ api-gateway/
 - Sensitive headers are redacted before persisting to `ApiCallHistory`.
 - Admin endpoints require `X-Admin-Key` header matching `GATEWAY_ADMIN_KEY` env var.
 
+## Per-Service Downstream Timeouts
+
+The gateway applies per-service HTTP timeouts via `Configuration.DOWNSTREAM_TIMEOUTS_S` in `app/core/settings.py`. Services NOT in the map use `timeout=None` (current behavior preserved — zero blast radius on unlisted services).
+
+Currently configured:
+- `api-detection-langue-fr-service`: 180s total, 10s connect
+
+Add a service to the map only after understanding its request-duration profile. On timeout, the gateway returns `504` to the caller. Downstream `503` responses (typically from admission middleware load-shedding) are logged at WARNING and passed through with `Retry-After` intact.
+
+Spec: `docs/superpowers/specs/2026-04-20-detection-langue-fr-concurrency-defense-design.md`.
+
 ## Dependencies on Other Services
 
 - All registered microservices (fetches their `/openapi.json` for spec aggregation)

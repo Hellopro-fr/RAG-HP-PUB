@@ -1,0 +1,33 @@
+{
+  "planPath": "docs/superpowers/plans/2026-06-17-crawler-skip-pdf.md",
+  "tasks": [
+    {
+      "id": 1,
+      "subject": "Task 1: Download-skip predicates in httpStatusPolicy.ts",
+      "status": "completed",
+      "description": "**Goal:** Add pure testable building blocks consumed by Tasks 2-3.\n\n**Files:**\n- Modify: src/httpStatusPolicy.ts (append section)\n- Test: src/tests/httpStatusPolicy.download.test.ts (create)\n\n**Verify:** node --import tsx --test src/tests/httpStatusPolicy.download.test.ts\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/crawler/src/httpStatusPolicy.ts\", \"apps-microservices/crawler-service/crawler/src/tests/httpStatusPolicy.download.test.ts\"], \"verifyCommand\": \"node --import tsx --test src/tests/httpStatusPolicy.download.test.ts\", \"acceptanceCriteria\": [\"isDownloadError matches only Download is starting\", \"resolveSkipDownloads default true only false disables\", \"shouldSkipAsDownload = flag && isDownloadError\", \"pdfDatasetName prefers crawleeStorageName else domain\"]}\n```"
+    },
+    {
+      "id": 2,
+      "subject": "Task 2: Wire fast-fail skip into crawler (functions.ts)",
+      "status": "completed",
+      "blockedBy": [1],
+      "description": "**Goal:** errorHandler noRetry on download trigger, download-cancel preNav hook, failedRequestHandler records filtered_pdf + pdf-{domain} and returns early.\n\n**Files:**\n- Modify: src/functions.ts (import 28-36; errorHandler before 554; download branch after 561; preNav hook after 701)\n- Test: src/tests/skipDownload.handler.test.ts (create)\n\n**Verify:** npm run build && node --import tsx --test src/tests/skipDownload.handler.test.ts\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/crawler/src/functions.ts\", \"apps-microservices/crawler-service/crawler/src/tests/skipDownload.handler.test.ts\"], \"verifyCommand\": \"npm run build && node --import tsx --test src/tests/skipDownload.handler.test.ts\", \"acceptanceCriteria\": [\"errorHandler noRetry on download trigger\", \"preNav download cancel hook gated by SKIP_DOWNLOADS\", \"failedRequestHandler filtered_pdf + pdf-domain early return\", \"SKIP_DOWNLOADS=false falls through\"]}\n```"
+    },
+    {
+      "id": 3,
+      "subject": "Task 3: Unify inline-PDF accounting in routes.ts",
+      "status": "completed",
+      "blockedBy": [1],
+      "description": "**Goal:** Content-Type guard increments filtered_pdf + writes pdf-{domain} before returning (inline PDFs tracked same as downloads).\n\n**Files:**\n- Modify: src/routes.ts:27 (import pdfDatasetName); src/routes.ts:313-319 (guard accounting)\n\n**Verify:** npm run build && npm test\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/crawler/src/routes.ts\"], \"verifyCommand\": \"npm run build && npm test\", \"acceptanceCriteria\": [\"guard increments filtered_pdf + pdf-domain row\", \"independent of SKIP_DOWNLOADS\", \"build clean + suite green\"]}\n```"
+    },
+    {
+      "id": 4,
+      "subject": "Task 4: Surface filtered_pdf in webhook payload (main.ts)",
+      "status": "completed",
+      "blockedBy": [2],
+      "description": "**Goal:** Expose filtered_pdf in the crawl-complete webhook payload.\n\n**Files:**\n- Modify: src/main.ts (readStat after 991; payload field after 1016)\n\n**Verify:** npm run build && npm test ; grep -n filtered_pdf src/main.ts\n\n```json:metadata\n{\"files\": [\"apps-microservices/crawler-service/crawler/src/main.ts\"], \"verifyCommand\": \"npm run build && npm test\", \"acceptanceCriteria\": [\"filtered_pdf in readStat + payload\", \"build clean + suite green\"]}\n```"
+    }
+  ],
+  "lastUpdated": "2026-06-17T12:00:00Z"
+}

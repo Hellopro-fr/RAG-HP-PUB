@@ -1,61 +1,29 @@
-# Stage 1: Install dependencies
-FROM node:20-alpine AS deps
-WORKDIR /app
-
-# Install pnpm
-RUN npm install -g pnpm
-
-# Copy dependency manifests
-COPY package.json pnpm-lock.yaml ./
-
-# Fetch all dependencies into a shared cache
-# This layer is cached and will only be re-run if manifests change
-RUN pnpm fetch
-
-# Stage 2: Build the application
+# Build context = repo root. Preserves libs/auth/node at ../../ relative to the service.
 FROM node:20-alpine AS builder
 WORKDIR /app
-
-# Install pnpm
 RUN npm install -g pnpm
 
-# Copy dependency manifests and the pnpm store cache from the previous stage
-COPY package.json pnpm-lock.yaml ./
-COPY --from=deps /root/.local/share/pnpm/store /root/.local/share/pnpm/store
+# Shared lib (the file: dependency target) + the service, keeping their relative tree.
+COPY libs/auth/node ./libs/auth/node
+COPY apps-microservices/redis-client-frontend ./apps-microservices/redis-client-frontend
 
-# Install dependencies using the cache
+WORKDIR /app/apps-microservices/redis-client-frontend
 RUN pnpm install
-
-# Copy the rest of the application source code
-COPY . .
-
-# Build the Next.js application
 RUN pnpm build
 
-# Stage 3: Production runner
+# Production runner
 FROM node:20-alpine AS runner
 WORKDIR /app
-
-# S5: combine addgroup and adduser into a single RUN to reduce image layers
 RUN addgroup --system --gid 1001 nextjs && \
     adduser --system --uid 1001 nextjs
 
-# Copy production artifacts from the builder stage
-# The `standalone` output mode bundles only what's necessary to run
-COPY --from=builder --chown=nextjs:nextjs /app/public ./public
-COPY --from=builder --chown=nextjs:nextjs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nextjs /app/.next/static ./.next/static
+ENV SVC=/app/apps-microservices/redis-client-frontend
+COPY --from=builder --chown=nextjs:nextjs $SVC/public ./public
+COPY --from=builder --chown=nextjs:nextjs $SVC/.next/standalone ./
+COPY --from=builder --chown=nextjs:nextjs $SVC/.next/static ./.next/static
 
-# Set the user to the non-root user
 USER nextjs
-
-# Expose the port the app runs on
 EXPOSE 3000
-
-# Set the default port for Next.js
 ENV PORT 3000
-# Set NODE_ENV to production
 ENV NODE_ENV production
-
-# Command to start the application
 CMD ["node", "server.js"]

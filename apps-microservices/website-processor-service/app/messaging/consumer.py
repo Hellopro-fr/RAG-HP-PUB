@@ -117,8 +117,10 @@ class Consumer:
             await self._send_to_dlq(message, e.original_error or e, 0)
             await message.ack()
 
-        except (json.JSONDecodeError, ValueError) as e:
+        except (json.JSONDecodeError, ValueError, RecursionError) as e:
             # Erreur permanente: le message ne sera jamais valide.
+            # (RecursionError: DOM pathologiquement imbriqué — déterministe,
+            # inutile de brûler les 3 retries transitoires.)
             logger.error(f"❌ Website-Processor: Erreur permanente pour URL: {url}. Message envoyé à la DLQ finale. Erreur: {e}")
             await self._send_to_dlq(message, e, 0)
             await message.ack()

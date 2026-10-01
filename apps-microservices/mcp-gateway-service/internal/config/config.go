@@ -50,6 +50,58 @@ type Config struct {
 	// /api/v1/leexi/* proxy and the Leexi-scoped token filters.
 	LeexiInternalURL string // LEEXI_INTERNAL_URL
 	LeexiAdminToken  string // LEEXI_ADMIN_TOKEN
+
+	// Ringover admin integration — symmetric to the Leexi fields above.
+	RingoverInternalURL string // RINGOVER_INTERNAL_URL
+	RingoverAdminToken  string // RINGOVER_ADMIN_TOKEN
+
+	// Google templates runner (mcp-google-templates-runner sidecar).
+	GoogleTemplatesRunnerURL        string // GOOGLE_TEMPLATES_RUNNER_URL
+	GoogleTemplatesRunnerAdminToken string // GOOGLE_TEMPLATES_RUNNER_ADMIN_TOKEN
+	Neo4jTemplatesRunnerURL         string // NEO4J_TEMPLATES_RUNNER_URL
+	Neo4jTemplatesRunnerAdminToken  string // NEO4J_TEMPLATES_RUNNER_ADMIN_TOKEN
+
+	// Slack notifications. Posts ServerDown/ServerUp/ToolsRegression/Unauthorized/
+	// Shutdown/Panic events to an incoming webhook. Disabled when SlackWebhookURL
+	// is empty — keeps local dev and existing deployments unchanged.
+	SlackWebhookURL        string // SLACK_WEBHOOK_URL — empty disables all notifications
+	SlackEnvLabel          string // SLACK_ENV_LABEL — prefix like "prod" shown in every message
+	SlackAuthAlertCooldown int    // SLACK_AUTH_ALERT_COOLDOWN — seconds between duplicate unauthorized alerts per (ip, endpoint); default 600
+
+	// Hellopro BDD catalog integration. BDDCatalogBaseURL points to the
+	// upstream catalog HTTP API. BDDCatalogToken is the shared secret sent
+	// as X-Admin-Token. Both must be set to enable the "Hellopro BDD
+	// tables" admin onglet — otherwise the catalog client is disabled and
+	// the related endpoints return 503.
+	BDDCatalogBaseURL string // BDD_CATALOG_BASE_URL
+	BDDCatalogToken   string // BDD_CATALOG_TOKEN
+
+	// BDDPublicAPIToken is the shared secret required on the public BDD
+	// metadata endpoints (/api/public/bdd/*). External servers (e.g. the
+	// PHP MCP runner that pulls schema_doc.json + config.php) send it as
+	// X-Admin-Token. Empty = endpoints return 503 (disabled).
+	BDDPublicAPIToken string // BDD_PUBLIC_API_TOKEN
+
+	// SSO (account-service OAuth2 client). When SSOEnabled, the gateway acts
+	// as a confidential OAuth2 client of account-service: redirects unauthenticated
+	// admin users to /sso/login → ${ACCOUNT_PUBLIC_URL}/authorize, exchanges the
+	// authorization code at the token endpoint, and stores the resulting
+	// access+refresh tokens in the sso_sessions table (encrypted with ENCRYPTION_KEY).
+	// The MCP /authorize endpoint in internal/authserver is unaffected.
+	SSOEnabled           bool   // SSO_ENABLED — enable SSO client mode (default false)
+	AccountPublicURL     string // ACCOUNT_PUBLIC_URL — browser-facing URL of account-service-frontend (e.g. https://account.hellopro.fr)
+	AccountInternalURL   string // ACCOUNT_INTERNAL_URL — in-cluster URL of account-service-backend (default = AccountPublicURL)
+	AccountInternalToken string // ACCOUNT_INTERNAL_TOKEN — shared secret for /internal/credentials/{name}
+	SSOClientName        string // SSO_CLIENT_NAME — service name registered in account-service (default "mcp-gateway")
+	SSOClientID          string // SSO_CLIENT_ID — static override; when empty, auto-fetched via /internal/credentials
+	SSOClientSecret      string // SSO_CLIENT_SECRET — static override; when empty, auto-fetched
+	SSORedirectURI       string // SSO_REDIRECT_URI — defaults to ${GATEWAY_PUBLIC_URL}/sso/callback
+	// LoginSlackURL is a dedicated Slack incoming webhook for SSO error
+	// events (state mismatch, refresh failure, token exchange errors, denied
+	// users, tampered logout webhooks). Independent of SLACK_WEBHOOK_URL so
+	// login alerts can land in a different channel than the operational
+	// gateway alerts. Empty = SSO Slack notifications disabled.
+	LoginSlackURL string // LOGIN_SLACK_URL
 }
 
 func Load() *Config {
@@ -88,6 +140,13 @@ func Load() *Config {
 		}
 	}
 
+	slackAuthCooldown := 600
+	if v := os.Getenv("SLACK_AUTH_ALERT_COOLDOWN"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			slackAuthCooldown = n
+		}
+	}
+
 	// Auth is enabled by default — set AUTH_ENABLED=false to disable
 	authEnabled := !strings.EqualFold(os.Getenv("AUTH_ENABLED"), "false")
 
@@ -122,6 +181,33 @@ func Load() *Config {
 
 		LeexiInternalURL: os.Getenv("LEEXI_INTERNAL_URL"),
 		LeexiAdminToken:  os.Getenv("LEEXI_ADMIN_TOKEN"),
+
+		RingoverInternalURL: os.Getenv("RINGOVER_INTERNAL_URL"),
+		RingoverAdminToken:  os.Getenv("RINGOVER_ADMIN_TOKEN"),
+
+		GoogleTemplatesRunnerURL:        os.Getenv("GOOGLE_TEMPLATES_RUNNER_URL"),
+		GoogleTemplatesRunnerAdminToken: os.Getenv("GOOGLE_TEMPLATES_RUNNER_ADMIN_TOKEN"),
+		Neo4jTemplatesRunnerURL:         os.Getenv("NEO4J_TEMPLATES_RUNNER_URL"),
+		Neo4jTemplatesRunnerAdminToken:  os.Getenv("NEO4J_TEMPLATES_RUNNER_ADMIN_TOKEN"),
+
+		SlackWebhookURL:        os.Getenv("SLACK_WEBHOOK_URL"),
+		SlackEnvLabel:          os.Getenv("SLACK_ENV_LABEL"),
+		SlackAuthAlertCooldown: slackAuthCooldown,
+
+		BDDCatalogBaseURL: os.Getenv("BDD_CATALOG_BASE_URL"),
+		BDDCatalogToken:   os.Getenv("BDD_CATALOG_TOKEN"),
+
+		BDDPublicAPIToken: os.Getenv("BDD_PUBLIC_API_TOKEN"),
+
+		SSOEnabled:           strings.EqualFold(os.Getenv("SSO_ENABLED"), "true"),
+		AccountPublicURL:     strings.TrimRight(os.Getenv("ACCOUNT_PUBLIC_URL"), "/"),
+		AccountInternalURL:   strings.TrimRight(getEnv("ACCOUNT_INTERNAL_URL", os.Getenv("ACCOUNT_PUBLIC_URL")), "/"),
+		AccountInternalToken: os.Getenv("ACCOUNT_INTERNAL_TOKEN"),
+		SSOClientName:        getEnv("SSO_CLIENT_NAME", "mcp-gateway"),
+		SSOClientID:          os.Getenv("SSO_CLIENT_ID"),
+		SSOClientSecret:      os.Getenv("SSO_CLIENT_SECRET"),
+		SSORedirectURI:       os.Getenv("SSO_REDIRECT_URI"),
+		LoginSlackURL:        os.Getenv("LOGIN_SLACK_URL"),
 	}
 }
 

@@ -51,8 +51,8 @@ mcp-classification-produit-service/
 
 | Tool | Description |
 |------|-------------|
-| `classify_product` | Classify a single product (name, description) into a category |
-| `classify_products_batch` | Classify a batch of products (up to 1200) |
+| `classify_product` | Classify a single product (name, description) into a category. `id_produit` is optional — auto-generated as `auto-<hex>` if absent. |
+| `classify_products_batch` | Classify a batch of products (up to 1200). Per-item `id_produit` is optional — auto-generated per item when absent. |
 | `list_cached_categories` | List all cached category summaries from Redis |
 | `get_cached_category` | Get cached summary for a specific category |
 

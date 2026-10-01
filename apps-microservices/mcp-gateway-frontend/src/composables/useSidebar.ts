@@ -14,7 +14,7 @@ interface SidebarContextType {
   toggleSubmenu: (item: string) => void;
 }
 
-const SidebarSymbol = Symbol();
+const SidebarSymbol = Symbol('Sidebar');
 
 export function useSidebarProvider() {
   const isExpanded = ref(true);

@@ -1,16 +1,22 @@
 // Global types are declared in types/global.d.ts
 
+import { ABTEST_SLOTS, type AbtestSlot } from '@/types/category-token';
+import { useFlowStore } from '@/lib/stores/flow-store';
+
 // =============================================================================
 // TYPES
 // =============================================================================
 
-type StepType = 'init' | 'question' | 'localisation' | 'choix-propart' | 'selection' | 'contact' | 'conversion';
+type StepType = 'init' | 'question' | 'localisation' | 'choix-propart' | 'selection' | 'contact' | 'conversion' | 'prix';
 
 type FlowType = 'principal' | 'pas_assez_produits' | 'pas_trouve_recherchez' | 'budget_ne_correspond_pas' | null;
 
-interface FunnelContext {
+interface FunnelContext extends Partial<Record<AbtestSlot, string>> {
   rubrique_id?: number;
   'product.category5'?: string;
+  page_template_gtm?: string;
+  funnel_context?: string;
+  page_location_uri?: string;
 }
 
 
@@ -48,17 +54,22 @@ function getUserId(): string {
 /**
  * Obtenir ou créer un ID de session (temporaire)
  */
-/**
- * Obtenir ou créer un ID de session (temporaire)
- */
+const SESSION_INACTIVITY_MS = 30 * 60 * 1000; // 30 min d'inactivité avant renouvellement
+
 export function getSessionId(): string {
   if (typeof window === 'undefined') return 'unknown';
 
+  const now = Date.now();
   let sessionId = sessionStorage.getItem('hp_session_id');
-  if (!sessionId) {
-    sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const lastActivity = parseInt(sessionStorage.getItem('hp_session_last_activity') || '', 10);
+
+  // Garde-fou d'inactivité de 30 min (fenêtre glissante) : on ne régénère qu'au-delà.
+  if (!sessionId || isNaN(lastActivity) || now - lastActivity > SESSION_INACTIVITY_MS) {
+    sessionId = `session_${now}_${Math.random().toString(36).substr(2, 9)}`;
     sessionStorage.setItem('hp_session_id', sessionId);
   }
+
+  sessionStorage.setItem('hp_session_last_activity', String(now));
   return sessionId;
 }
 
@@ -80,7 +91,7 @@ function isFirstView(key: string): boolean {
 
 /**
  * Réinitialiser tous les états de tracking (appelé lors d'un F5/reload)
- * Nettoie les flags de déduplication et le session_id
+ * Nettoie les flags de déduplication (le session_id est conservé : voir getSessionId)
  */
 export function resetTrackingState(): void {
   if (typeof window === 'undefined') return;
@@ -95,13 +106,14 @@ export function resetTrackingState(): void {
   }
   keysToRemove.forEach((key) => sessionStorage.removeItem(key));
 
-  // Supprimer le session_id pour en générer un nouveau
-  sessionStorage.removeItem('hp_session_id');
+  // Le session_id N'EST PLUS supprimé au reload : il est gouverné par le
+  // garde-fou d'inactivité de 30 min dans getSessionId() (hp_session_last_activity).
 
   // Réinitialiser le contexte funnel, le step index et le flow type
   funnelContext = {};
   currentStepIndex = 0;
   currentFlowType = null;
+  contextHydratedFromStore = false;
 }
 
 /**
@@ -144,11 +156,45 @@ function getDeviceInfo() {
 let funnelContext: FunnelContext = {};
 let currentFlowType: FlowType = null;
 
+// Garde one-shot de la réhydratation du contexte depuis le store persisté
+let contextHydratedFromStore = false;
+
 /**
  * Initialiser le contexte du funnel (à appeler au début)
  */
 export function setFunnelContext(context: FunnelContext) {
   funnelContext = { ...funnelContext, ...context };
+}
+
+/**
+ * Réhydrate le contexte funnel depuis le store Zustand persisté (sessionStorage).
+ * funnelContext est une variable de module : tout full page load la vide. Le cas
+ * réel est le back/forward navigateur (le store est conservé mais le re-parse du
+ * token est sauté quand Q1 est déjà répondue) — le F5, lui, vide le store et
+ * redirige vers le token d'origine (cf. flow-store). Appelé en lazy au premier
+ * event pour couvrir tous les points d'entrée — les valeurs déjà posées (token
+ * frais) priment sur celles du store.
+ */
+function ensureFunnelContextFromStore(): void {
+  if (contextHydratedFromStore || typeof window === 'undefined') return;
+  contextHydratedFromStore = true;
+
+  try {
+    const { abtests, pageTemplateGtm, funnelContextValue, pageLocationUri, categoryId, categoryName } =
+      useFlowStore.getState();
+
+    funnelContext = {
+      ...abtests,
+      ...(pageTemplateGtm && { page_template_gtm: pageTemplateGtm }),
+      ...(funnelContextValue && { funnel_context: funnelContextValue }),
+      ...(pageLocationUri && { page_location_uri: pageLocationUri }),
+      ...(categoryId && { rubrique_id: categoryId }),
+      ...(categoryName && { 'product.category5': categoryName }),
+      ...funnelContext,
+    };
+  } catch {
+    // Store indisponible : contexte inchangé
+  }
 }
 
 /**
@@ -186,6 +232,8 @@ export function trackQuoteFunnel(
   stepType: StepType,
   additionalData?: Record<string, unknown>
 ) {
+  ensureFunnelContextFromStore();
+
   const userId = getUserId();
   const sessionId = getSessionId();
 
@@ -198,6 +246,17 @@ export function trackQuoteFunnel(
     // Contexte funnel
     rubrique_id: funnelContext.rubrique_id,
     'product.category5': funnelContext['product.category5'],
+
+    // Slots A/B test GTM HelloPro abtest1..abtest5 (token URL) — omis si absents
+    ...Object.fromEntries(
+      ABTEST_SLOTS.filter((slot) => funnelContext[slot]).map((slot) => [slot, funnelContext[slot]])
+    ),
+
+    // Champs additionnels token URL — omis si absent.
+    // Note : `page_template_gtm` du token est pousse sous la cle `page_template` dans le dataLayer.
+    ...(funnelContext.page_template_gtm && { page_template: funnelContext.page_template_gtm }),
+    ...(funnelContext.funnel_context && { funnel_context: funnelContext.funnel_context }),
+    ...(funnelContext.page_location_uri && { page_location_uri: funnelContext.page_location_uri }),
 
     // Type de parcours (seulement si défini)
     ...(currentFlowType && { flow_type: currentFlowType }),
@@ -222,11 +281,38 @@ let currentStepIndex = 0;
  * Track le début du funnel
  */
 export function trackFunnelStart(context?: FunnelContext) {
-  currentStepIndex = 0;
   if (context) {
-    setFunnelContext(context);
+    setFunnelContext(context); // le contexte reste mis à jour même en cas de dédup
   }
+  // Dédup par session : le remontage de NeedsQuestionnaire (retour depuis
+  // l'étape transparence ou /budget) ne doit ni re-pousser funnel-start ni
+  // remettre le step index à zéro. resetTrackingState() (F5 / nouveau funnel,
+  // via FlowStorageReset) efface la clé hp_viewed_* et ré-arme l'événement.
+  if (!isFirstView('funnel_start')) return;
+  currentStepIndex = 0;
   trackQuoteFunnel(currentStepIndex, 'funnel-start', 'init');
+}
+
+// =============================================================================
+// ÉTAPE ASSURANCE (page avant Q1)
+// =============================================================================
+
+/**
+ * Track l'affichage de la page Assurance (avant Q1).
+ * Rendue uniquement au premier passage (`hasSeenAssurance` flag) et hors
+ * variante A/B 2 — donc l'event ne fire que pour les cohortes 0/1/null.
+ */
+export function trackAssuranceView() {
+  currentStepIndex++;
+  trackQuoteFunnel(currentStepIndex, 'assurance', 'init');
+}
+
+/**
+ * Track la validation de la page Assurance (clic "Continuer").
+ */
+export function trackAssuranceComplete() {
+  currentStepIndex++;
+  trackQuoteFunnel(currentStepIndex, 'assurance-complete', 'init');
 }
 
 /**
@@ -291,10 +377,9 @@ export function trackProfileComplete(profileType: string) {
 /**
  * Track l'affichage de la page de sélection produits
  */
-export function trackSelectionPageView(recommendedCount: number, totalCount: number, hasPriceEstimation?: boolean) {
+export function trackSelectionPageView(recommendedCount: number, totalCount: number) {
   currentStepIndex++;
-  const stepName = hasPriceEstimation ? 'selection-produits-prix' : 'selection-produits';
-  trackQuoteFunnel(currentStepIndex, stepName, 'selection', {
+  trackQuoteFunnel(currentStepIndex, 'selection-produits', 'selection', {
     recommended_count: recommendedCount,
     total_count: totalCount,
   });
@@ -306,15 +391,13 @@ export function trackSelectionPageView(recommendedCount: number, totalCount: num
 export function trackProductSelectionChange(
   productId: string,
   action: 'ajouter' | 'retirer',
-  totalSelected: number,
-  hasPriceEstimation?: boolean
+  totalSelected: number
 ) {
   // Vérifier si c'est la première action de ce type pour cet utilisateur dans la session
   const isFirstAdd = action === 'ajouter' && isFirstView('product_selection_ajouter');
   const isFirstRemove = action === 'retirer' && isFirstView('product_selection_retirer');
 
-  const stepName = hasPriceEstimation ? 'product-selection-prix' : 'product-selection';
-  trackQuoteFunnel(currentStepIndex, stepName, 'selection', {
+  trackQuoteFunnel(currentStepIndex, 'product-selection', 'selection', {
     product_id: productId,
     action,
     total_selected: totalSelected,
@@ -323,6 +406,78 @@ export function trackProductSelectionChange(
     // Envoyer is_first_remove uniquement si true (premier retrait)
     ...(isFirstRemove && { is_first_remove: true }),
   });
+}
+
+// =============================================================================
+// ÉTAPE PRIX (page /budget)
+// =============================================================================
+
+/**
+ * Track l'affichage de la page /budget.
+ * Émis au mount uniquement quand la card BudgetEstimate est rendue
+ * (fourchette valide + > 2 exemples produits) — la page elle-même est
+ * skippée sinon par la logique de routage dans questionnaire-client.tsx.
+ */
+export function trackBudgetView() {
+  currentStepIndex++;
+  trackQuoteFunnel(currentStepIndex, 'budget', 'prix');
+}
+
+/**
+ * Track la validation de l'étape budget (clic "Voir ma sélection").
+ * Le bouton est désactivé tant qu'aucune fourchette n'est choisie,
+ * donc budgetRange est toujours défini ici.
+ */
+export function trackBudgetComplete(budgetRange: string) {
+  currentStepIndex++;
+  trackQuoteFunnel(currentStepIndex, 'budget-complete', 'prix', {
+    budget_range: budgetRange,
+  });
+}
+
+/**
+ * Track le retour au questionnaire depuis /budget (clic "Précédent").
+ * budgetRange peut être null si l'utilisateur n'avait rien choisi.
+ * Pas d'incrément de step_index : recul dans le funnel.
+ */
+export function trackBudgetReturn(budgetRange: string | null) {
+  trackQuoteFunnel(currentStepIndex, 'budget-retour', 'prix', {
+    budget_range: budgetRange,
+  });
+}
+
+// =============================================================================
+// ÉTAPE TRANSPARENCE (email avant le loader de matching)
+// =============================================================================
+
+/**
+ * Track l'affichage de l'étape transparence (fond tableau produits flouté +
+ * champ email). Affichée pour toutes les variantes A/B, entre la dernière
+ * question et le loader de matching.
+ */
+export function trackTransparenceView() {
+  currentStepIndex++;
+  trackQuoteFunnel(currentStepIndex, 'transparence', 'contact');
+}
+
+/**
+ * Track la validation de l'étape transparence (clic CTA avec email valide).
+ * @param isKnownBuyer - true si l'email saisi correspond à un acheteur connu
+ */
+export function trackTransparenceComplete(isKnownBuyer: boolean) {
+  currentStepIndex++;
+  trackQuoteFunnel(currentStepIndex, 'transparence-complete', 'contact', {
+    is_known_buyer: isKnownBuyer,
+  });
+}
+
+/**
+ * Track le retour à la dernière question depuis l'étape transparence
+ * (clic "Précédent" ou back navigateur).
+ * Pas d'incrément de step_index : recul dans le funnel.
+ */
+export function trackTransparenceReturn() {
+  trackQuoteFunnel(currentStepIndex, 'transparence-retour', 'contact');
 }
 
 /**
@@ -363,10 +518,9 @@ export function trackFormValidationErrors(
 /**
  * Track la soumission réussie du lead
  */
-export function trackLeadSubmitted(suppliersCount: number, profileType: string, userKnownStatus: 'known' | 'unknown', hasPriceEstimation?: boolean) {
+export function trackLeadSubmitted(suppliersCount: number, profileType: string, userKnownStatus: 'known' | 'unknown') {
   currentStepIndex++;
-  const stepName = hasPriceEstimation ? 'submit-success-prix' : 'submit-success';
-  trackQuoteFunnel(currentStepIndex, stepName, 'conversion', {
+  trackQuoteFunnel(currentStepIndex, 'submit-success', 'conversion', {
     nombre_fournisseur: suppliersCount,
     profile_type: profileType,
     user_known_status: userKnownStatus,

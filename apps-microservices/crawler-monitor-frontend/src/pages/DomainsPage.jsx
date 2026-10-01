@@ -1,38 +1,34 @@
-import { useState, useCallback } from 'react';
+﻿import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Globe, RefreshCw, AlertCircle, Search,
-} from 'lucide-react';
+import { Globe, RefreshCw, AlertCircle, Search } from 'lucide-react';
 import { useDomainsQuery } from '../hooks/queries';
-import { Card } from '../components/ui/card';
-import { Input } from '../components/ui/input';
-import { Button } from '../components/ui/button';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '../components/ui/table';
 import {
   Tooltip, TooltipTrigger, TooltipContent,
 } from '../components/ui/tooltip';
+import StatTile from '../components/ui/StatTile';
+import { windowLabel } from '../lib/constants';
+import { formatApiDate } from '../lib/dates';
 import { cn } from '../lib/utils';
 
 const WINDOW_OPTIONS = ['24h', '7d', '30d'];
 
-// Fix 3b : libellés explicites pour les entêtes cryptiques
 const HEAD_TOOLTIPS = {
-  oom:    'Out Of Memory — nombre de redémarrages suite à un dépassement mémoire',
-  ok:     'Succès (jobs finished/archived)',
-  ko:     'Échec (failed)',
-  run:    'En cours (running/stopping/restarting_oom)',
-  update: 'Pourcentage de jobs lancés en mode update (crawl incrémental)',
-  succ:   'Taux de succès sur les jobs terminés (finished+archived) / (finished+archived+failed)',
+  jobs:    'Nombre total de jobs sur la période',
+  ok:      'Succès (jobs finished/archived)',
+  ko:      'Échec (failed)',
+  oom:     'Out Of Memory — nombre de redémarrages suite à un dépassement mémoire',
+  succ:    'Taux de succès sur les jobs terminés : (finished+archived) / (finished+archived+failed)',
+  lastrun: 'Date et heure du dernier job démarré',
 };
 
-// Wrapper pour des <TableHead> annotés d'un tooltip explicatif
 const HeadWithTip = ({ tip, className, children }) => (
-  <TableHead className={className}>
+  <TableHead className={cn('text-[10px] font-semibold uppercase tracking-[0.06em] text-ink-3 h-8 border-b border-hairline', className)}>
     <Tooltip>
       <TooltipTrigger asChild>
-        <span className="cursor-help border-b border-dotted border-muted-foreground/40">
+        <span className="cursor-help border-b border-dotted border-ink-3/40">
           {children}
         </span>
       </TooltipTrigger>
@@ -41,28 +37,51 @@ const HeadWithTip = ({ tip, className, children }) => (
   </TableHead>
 );
 
+const PAGE_SIZE = 50;
+
 const DomainsPage = ({ token }) => {
   const navigate = useNavigate();
-  const [window, setWindow] = useState('7d');
+  const [period, setPeriod] = useState('7d');
   const [search, setSearch] = useState('');
-  const query = useDomainsQuery(token, window);
+  const [page, setPage] = useState(0);
+  const query = useDomainsQuery(token, period);
 
   const all = query.data?.domains || [];
   const filtered = search
     ? all.filter(d => d.domain.toLowerCase().includes(search.toLowerCase()))
     : all;
 
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages - 1);
+  const pageStart = currentPage * PAGE_SIZE;
+  const pageEnd = pageStart + PAGE_SIZE;
+  const paginated = filtered.slice(pageStart, pageEnd);
+
   const fmtPct = (v) => v == null ? '—' : `${(v * 100).toFixed(1)}%`;
-  const fmtDate = (s) => s ? new Date(s).toLocaleString('fr-FR') : '—';
 
   const successColor = (rate) => {
-    if (rate == null) return 'text-muted-foreground';
-    if (rate >= 0.9) return 'text-success';
-    if (rate >= 0.7) return 'text-warning';
-    return 'text-destructive';
+    if (rate == null) return 'text-ink-3';
+    if (rate >= 0.9) return 'text-ok';
+    if (rate >= 0.7) return 'text-warn';
+    return 'text-err';
   };
 
-  // Fix 3a : handler unifié (click + clavier) pour l'a11y des lignes cliquables
+  const totalSuccess = all.reduce((s, d) => s + (d.success || 0), 0);
+  const totalFailed  = all.reduce((s, d) => s + (d.failure || 0), 0);
+  // `total_jobs` global si l'API le fournit, sinon somme des lignes.
+  const totalJobs    = query.data?.total_jobs
+    ?? all.reduce((s, d) => s + (d.total_jobs || 0), 0);
+  const totalOom     = all.reduce((s, d) => s + (d.oom_total || 0), 0);
+
+  const totalFinished = totalSuccess + totalFailed;
+  const aggSuccessRate = totalFinished > 0 ? totalSuccess / totalFinished : null;
+  const aggErrorRate = totalFinished > 0 ? totalFailed / totalFinished : null;
+  const errorRateDisplay = aggErrorRate != null ? `${(aggErrorRate * 100).toFixed(1)}%` : '—';
+
+  const heroSub = aggSuccessRate != null
+    ? `${all.length} domaine${all.length !== 1 ? 's' : ''} actif${all.length !== 1 ? 's' : ''} · taux de succès agrégé ${(aggSuccessRate * 100).toFixed(1)}%`
+    : `${all.length} domaine${all.length !== 1 ? 's' : ''} actif${all.length !== 1 ? 's' : ''}`;
+
   const goToDomain = useCallback((d) => {
     navigate(`/domains/${encodeURIComponent(d.domain)}`);
   }, [navigate]);
@@ -76,111 +95,142 @@ const DomainsPage = ({ token }) => {
 
   return (
     <div className="p-4">
-      <Card className="overflow-hidden">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border p-4">
-          <h2 className="flex items-center gap-2 text-base font-semibold">
-            <Globe className="h-4 w-4 text-primary" />
-            Domains
-            <span className="font-mono text-xs font-normal text-muted-foreground">
-              ({filtered.length}{filtered.length !== all.length ? ` / ${all.length}` : ''})
-            </span>
-          </h2>
-          <div className="flex items-center gap-2">
-            <div className="relative">
-              <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
+      <div className="rounded-lg border border-hairline bg-surface overflow-hidden">
+
+        {/* Hero */}
+        <div className="px-5 pt-5 pb-0">
+          <div className="flex items-start gap-3 mb-5">
+            <Globe className="h-5 w-5 text-ink-2 mt-1 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-3">
+                <h1 className="text-[26px] font-semibold tracking-[-0.025em] text-ink-0 font-display">Domaines</h1>
+                <span className="font-mono text-[12px] text-ink-3">
+                  ({filtered.length}{filtered.length !== all.length ? ` / ${all.length}` : ''})
+                </span>
+              </div>
+              <p className="text-[13px] text-ink-2 mt-1">{heroSub}</p>
+            </div>
+            <div className="flex items-center gap-2 ml-auto flex-shrink-0">
+              <button
+                onClick={() => query.refetch()}
+                disabled={query.isFetching}
+                className="p-1.5 rounded-md hover:bg-bg-2 text-ink-2"
+                title="Rafraîchir"
+                aria-label="Rafraîchir"
+              >
+                <RefreshCw className={cn('h-4 w-4', query.isFetching && 'animate-spin')} />
+              </button>
+            </div>
+          </div>
+
+          {/* KPI Strip — StatTile */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+            <StatTile
+              label="Domaines suivis"
+              value={all.length}
+              accent="var(--ink-1)"
+            />
+            <StatTile
+              label="Jobs cumulés"
+              value={totalJobs || '—'}
+              accent="var(--accent)"
+            />
+            <StatTile
+              label="Taux d'erreur"
+              value={errorRateDisplay}
+              accent="var(--err)"
+            />
+            <StatTile
+              label="OOM events"
+              value={totalOom || '—'}
+              accent="var(--warn)"
+            />
+          </div>
+
+          {/* Toolbar */}
+          <div className="flex items-center gap-3 mb-4">
+            <div className="relative flex-1 max-w-[280px]">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-ink-3" />
+              <input
                 type="text"
-                placeholder="Filtrer…"
+                placeholder="Filtrer les domaines…"
                 value={search}
-                onChange={e => setSearch(e.target.value)}
-                className="h-8 w-[200px] pl-8"
+                onChange={e => { setSearch(e.target.value); setPage(0); }}
+                className="w-full h-8 pl-8 pr-3 rounded-md border border-hairline bg-bg-1 text-[12px] text-ink-0 placeholder:text-ink-3 focus:outline-none focus:border-accent"
               />
             </div>
-            <div className="flex gap-0.5 rounded-md border border-border bg-muted p-0.5">
+            <div className="flex gap-0.5 rounded-md border border-hairline bg-bg-2 p-0.5">
               {WINDOW_OPTIONS.map(w => (
                 <button
                   key={w}
-                  onClick={() => setWindow(w)}
+                  onClick={() => setPeriod(w)}
                   className={cn(
-                    'rounded px-2 py-0.5 text-xs transition-colors',
-                    w === window
-                      ? 'bg-primary text-primary-foreground'
-                      : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                    'rounded px-2.5 py-1 text-[11px] font-medium transition-colors',
+                    w === period ? 'bg-surface text-ink-0 shadow-sm' : 'text-ink-2 hover:text-ink-1'
                   )}
                 >
-                  {w}
+                  {windowLabel(w)}
                 </button>
               ))}
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => query.refetch()}
-              disabled={query.isFetching}
-              title="Rafraîchir"
-            >
-              <RefreshCw className={cn('h-4 w-4', query.isFetching && 'animate-spin')} />
-            </Button>
           </div>
         </div>
 
+        {/* Error banner */}
         {query.isError && (
-          <div className="flex items-center gap-2 border-b border-destructive/40 bg-destructive/10 px-4 py-2 text-sm text-destructive">
+          <div className="flex items-center gap-2 px-4 py-2 text-[12px] text-err border-b border-err/20 bg-err-soft">
             <AlertCircle className="h-4 w-4" /> {query.error?.message || 'Erreur de chargement'}
           </div>
         )}
 
-        <div className="max-h-[75vh] overflow-auto">
+        {/* Table */}
+        <div className="max-h-[65vh] overflow-y-auto overflow-x-auto">
           {query.isLoading && all.length === 0 ? (
             <div className="flex items-center justify-center py-16">
-              <RefreshCw className="h-6 w-6 animate-spin text-primary" />
+              <RefreshCw className="h-6 w-6 animate-spin text-ink-3" />
             </div>
           ) : filtered.length === 0 ? (
-            <div className="py-16 text-center text-muted-foreground">
-              <Globe className="mx-auto mb-3 h-10 w-10 opacity-40" />
-              <p className="text-sm">
-                {search ? `Aucun domaine ne correspond à "${search}".` : 'Aucun domaine sur la période.'}
+            <div className="py-16 text-center">
+              <Globe className="mx-auto mb-3 h-10 w-10 text-ink-3 opacity-40" />
+              <p className="text-[13px] text-ink-2">
+                {search
+                  ? `Aucun domaine ne correspond à « ${search} ».`
+                  : 'Aucun domaine sur la période.'}
               </p>
             </div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Domain</TableHead>
-                  <TableHead className="text-right">Jobs</TableHead>
-                  <HeadWithTip tip={HEAD_TOOLTIPS.ok}     className="text-right">✓</HeadWithTip>
-                  <HeadWithTip tip={HEAD_TOOLTIPS.ko}     className="text-right">✗</HeadWithTip>
-                  <HeadWithTip tip={HEAD_TOOLTIPS.run}    className="text-right">▶</HeadWithTip>
-                  <HeadWithTip tip={HEAD_TOOLTIPS.oom}    className="text-right">OOM</HeadWithTip>
-                  <HeadWithTip tip={HEAD_TOOLTIPS.succ}   className="text-right">Success rate</HeadWithTip>
-                  <HeadWithTip tip={HEAD_TOOLTIPS.update} className="text-right">Update %</HeadWithTip>
-                  <TableHead>Last run</TableHead>
+                  <TableHead className="text-[10px] font-semibold uppercase tracking-[0.06em] text-ink-3 h-8 border-b border-hairline">Domaine</TableHead>
+                  <HeadWithTip tip={HEAD_TOOLTIPS.jobs}    className="text-right">Jobs</HeadWithTip>
+                  <HeadWithTip tip={HEAD_TOOLTIPS.ok}      className="text-right">OK</HeadWithTip>
+                  <HeadWithTip tip={HEAD_TOOLTIPS.ko}      className="text-right">KO</HeadWithTip>
+                  <HeadWithTip tip={HEAD_TOOLTIPS.oom}     className="text-right">OOM</HeadWithTip>
+                  <HeadWithTip tip={HEAD_TOOLTIPS.succ}    className="text-right">%</HeadWithTip>
+                  <HeadWithTip tip={HEAD_TOOLTIPS.lastrun}>Dernier run</HeadWithTip>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map(d => (
+                {paginated.map(d => (
                   <TableRow
                     key={d.domain}
                     onClick={() => goToDomain(d)}
                     onKeyDown={(e) => onRowKeyDown(e, d)}
                     role="button"
                     tabIndex={0}
-                    className="cursor-pointer focus:outline-none focus-visible:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+                    className="hover:bg-bg-2 cursor-pointer border-b border-hairline focus:outline-none focus-visible:bg-bg-2"
                   >
-                    <TableCell className="font-mono text-foreground">{d.domain}</TableCell>
-                    <TableCell className="text-right font-mono text-muted-foreground">{d.total_jobs}</TableCell>
-                    <TableCell className="text-right font-mono text-success">{d.success || ''}</TableCell>
-                    <TableCell className="text-right font-mono text-destructive">{d.failure || ''}</TableCell>
-                    <TableCell className="text-right font-mono text-info">{d.running || ''}</TableCell>
-                    <TableCell className="text-right font-mono text-warning">{d.oom_total || ''}</TableCell>
-                    <TableCell className={cn('text-right font-mono font-semibold', successColor(d.success_rate))}>
+                    <TableCell className="text-[12px] py-2 font-mono text-ink-0">{d.domain}</TableCell>
+                    <TableCell className="text-[12px] py-2 text-right font-mono text-ink-2">{d.total_jobs ?? '—'}</TableCell>
+                    <TableCell className="text-[12px] py-2 text-right font-mono text-ok">{d.success || ''}</TableCell>
+                    <TableCell className="text-[12px] py-2 text-right font-mono text-err">{d.failure || ''}</TableCell>
+                    <TableCell className="text-[12px] py-2 text-right font-mono text-warn">{d.oom_total || ''}</TableCell>
+                    <TableCell className={cn('text-[12px] py-2 text-right font-mono font-semibold', successColor(d.success_rate))}>
                       {fmtPct(d.success_rate)}
                     </TableCell>
-                    <TableCell className="text-right font-mono text-primary">
-                      {d.update_share > 0 ? `${(d.update_share * 100).toFixed(0)}%` : ''}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap font-mono text-xs text-muted-foreground">
-                      {fmtDate(d.last_run_at)}
+                    <TableCell className="text-[12px] py-2 font-mono text-[11px] text-ink-3 whitespace-nowrap">
+                      {formatApiDate(d.last_run_at, { dateStyle: 'short', timeStyle: 'medium' })}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -188,7 +238,36 @@ const DomainsPage = ({ token }) => {
             </Table>
           )}
         </div>
-      </Card>
+
+        {/* Footer with pagination */}
+        <div className="border-t border-hairline px-4 py-2.5 flex items-center justify-between">
+          <span className="font-mono text-[11px] text-ink-3">
+            {filtered.length > PAGE_SIZE
+              ? `${pageStart + 1}–${Math.min(pageEnd, filtered.length)} sur ${filtered.length} domaine${filtered.length !== 1 ? 's' : ''}`
+              : `${filtered.length} domaine${filtered.length !== 1 ? 's' : ''}${filtered.length !== all.length ? ` sur ${all.length}` : ''}`
+            }
+          </span>
+          {totalPages > 1 && (
+            <div className="flex gap-2">
+              <button
+                onClick={() => setPage(p => Math.max(0, p - 1))}
+                disabled={currentPage === 0}
+                className="px-3 py-1 text-[11px] rounded-md border border-hairline text-ink-2 hover:bg-bg-2 disabled:opacity-40"
+              >
+                Précédent
+              </button>
+              <button
+                onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+                disabled={currentPage >= totalPages - 1}
+                className="px-3 py-1 text-[11px] rounded-md border border-hairline text-ink-2 hover:bg-bg-2 disabled:opacity-40"
+              >
+                Suivant
+              </button>
+            </div>
+          )}
+        </div>
+
+      </div>
     </div>
   );
 };

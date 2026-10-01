@@ -45,7 +45,7 @@ async def optimizeQwen(payload: BatchOptimRequest):
             try:
                 prompt = instancetraitement.generate_prompt(product)
 
-                chat_request = ChatRequest(prompt=prompt)
+                chat_request = ChatRequest(prompt=prompt, temperature=0.4)
 
                 response = await llm_client.get_llm_chat_response(chat_request)
 

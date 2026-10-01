@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hellopro/mcp-gateway/internal/db"
-	oauth2pkg "github.com/hellopro/mcp-gateway/internal/oauth2"
+	"mcp-gateway/internal/db"
+	oauth2pkg "mcp-gateway/internal/oauth2"
 )
 
 // TokenResponse is the OAuth2 token response (RFC 6749 Section 5.1).
@@ -98,7 +98,7 @@ func (s *AuthServer) handleAuthCodeExchange(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	accessToken, expiresIn, err := oauth2pkg.IssueAccessToken(s.jwtSecret, clientID, client.AccessTokenTTL)
+	accessToken, expiresIn, err := oauth2pkg.IssueAccessToken(s.jwtSecret, clientID, authCode.UserEmail, client.AccessTokenTTL)
 	if err != nil {
 		writeOAuth2Error(w, http.StatusInternalServerError, "server_error", "failed to issue access token")
 		return
@@ -161,7 +161,9 @@ func (s *AuthServer) handleClientCredentials(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	accessToken, expiresIn, err := oauth2pkg.IssueAccessToken(s.jwtSecret, client.ID, client.AccessTokenTTL)
+	// client_credentials carries no end-user identity — pass "" so downstream
+	// "self"-mode filters fail closed instead of leaking another user's data.
+	accessToken, expiresIn, err := oauth2pkg.IssueAccessToken(s.jwtSecret, client.ID, "", client.AccessTokenTTL)
 	if err != nil {
 		writeOAuth2Error(w, http.StatusInternalServerError, "server_error", "failed to issue access token")
 		return
@@ -213,7 +215,7 @@ func (s *AuthServer) handleRefreshToken(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	accessToken, expiresIn, err := oauth2pkg.IssueAccessToken(s.jwtSecret, clientID, client.AccessTokenTTL)
+	accessToken, expiresIn, err := oauth2pkg.IssueAccessToken(s.jwtSecret, clientID, stored.UserEmail, client.AccessTokenTTL)
 	if err != nil {
 		writeOAuth2Error(w, http.StatusInternalServerError, "server_error", "failed to issue access token")
 		return

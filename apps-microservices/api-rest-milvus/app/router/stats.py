@@ -4,6 +4,7 @@ from typing import List, Optional, Dict, Set
 from pymilvus import Collection, utility
 from app.core.api_rest_milvus import get_loaded_collection
 import asyncio
+import json
 import time
 import logging
 from urllib.parse import urlparse
@@ -12,6 +13,14 @@ from urllib.parse import urlparse
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# --- CACHE CONFIGURATION (Stale-While-Revalidate) ---
+CACHE_KEY = "milvus:global_stats:v1"
+CACHE_LOCK_KEY = "milvus:global_stats:lock"
+CACHE_FRESH_TTL = 600      # 10 min : en-dessous, on sert sans rafraîchir
+CACHE_STALE_TTL = 3600     # 1h : au-delà, on refait un scan synchrone
+CACHE_LOCK_TTL = 300       # 5 min : empêche les scans parallèles
+CACHE_REDIS_TTL = 7200     # 2h : TTL physique Redis (> CACHE_STALE_TTL pour sécurité)
 
 # --- CONFIGURATION (Adaptée du script) ---
 # Note: Les infos de connexion (Host/Port) sont gérées par la config globale de l'app ou la connexion existante
@@ -167,6 +176,108 @@ async def _run_global_analysis(guard, domains_filter: Optional[List[str]]) -> Di
         "unique_content_urls": len(unique_content_urls)
     }
 
+# --- CACHE LAYER (Stale-While-Revalidate) ---
+
+async def _background_refresh(guard, redis_client) -> None:
+    """
+    Recalcule les stats en arrière-plan et met à jour le cache Redis.
+    Protégé par un lock Redis pour empêcher les scans parallèles.
+    """
+    lock_acquired = await redis_client.set(
+        CACHE_LOCK_KEY, "1", nx=True, ex=CACHE_LOCK_TTL
+    )
+    if not lock_acquired:
+        logger.debug("global-stats refresh already in progress, skipping")
+        return
+
+    try:
+        logger.info("global-stats background refresh started")
+        result = await _run_global_analysis(guard=guard, domains_filter=None)
+        result["computed_at"] = time.time()
+        await redis_client.set(CACHE_KEY, json.dumps(result), ex=CACHE_REDIS_TTL)
+        logger.info(
+            "global-stats background refresh done in %.1fs",
+            result.get("execution_time_seconds", 0)
+        )
+    except Exception as e:
+        logger.error("global-stats background refresh failed: %s", e)
+    finally:
+        await redis_client.delete(CACHE_LOCK_KEY)
+
+
+async def _get_cached_or_scan(guard, redis_client) -> Dict:
+    """
+    Retourne les stats cachées (fresh ou stale) ou relance un scan si nécessaire.
+
+    Cas :
+      - Fresh (<600s)            → retour immédiat
+      - Stale (600-3600s)        → retour immédiat + refresh async
+      - Missing ou trop vieux    → scan synchrone (avec lock pour éviter concurrents)
+    """
+    raw = await redis_client.get(CACHE_KEY)
+    if raw:
+        try:
+            cached = json.loads(raw)
+            age = time.time() - cached.get("computed_at", 0)
+
+            if age < CACHE_FRESH_TTL:
+                logger.debug("global-stats cache hit (fresh, age=%.0fs)", age)
+                return cached
+
+            if age < CACHE_STALE_TTL:
+                logger.info("global-stats cache hit (stale, age=%.0fs) — triggering async refresh", age)
+                asyncio.create_task(_background_refresh(guard, redis_client))
+                return cached
+
+            logger.info("global-stats cache too old (age=%.0fs) — forcing sync rescan", age)
+        except (json.JSONDecodeError, TypeError, KeyError) as e:
+            logger.warning("global-stats cache parse error: %s — forcing rescan", e)
+
+    # Cache absent ou périmé : scan synchrone, protégé par lock
+    lock_acquired = await redis_client.set(
+        CACHE_LOCK_KEY, "1", nx=True, ex=CACHE_LOCK_TTL
+    )
+
+    if not lock_acquired:
+        # Un autre process scanne déjà : on attend sa valeur (polling 2s, max 200s)
+        logger.info("global-stats scan in progress elsewhere — waiting for result")
+        for _ in range(100):
+            await asyncio.sleep(2)
+            raw = await redis_client.get(CACHE_KEY)
+            if raw:
+                try:
+                    cached = json.loads(raw)
+                    return cached
+                except json.JSONDecodeError:
+                    pass
+        # Timeout : on retente tout de même le scan nous-même (lock probablement stale)
+        logger.warning("global-stats lock wait timed out — forcing rescan")
+
+    try:
+        result = await _run_global_analysis(guard=guard, domains_filter=None)
+        result["computed_at"] = time.time()
+        await redis_client.set(CACHE_KEY, json.dumps(result), ex=CACHE_REDIS_TTL)
+        return result
+    finally:
+        await redis_client.delete(CACHE_LOCK_KEY)
+
+
+async def prewarm_cache(guard, redis_client) -> None:
+    """
+    Déclenche un scan initial au démarrage du microservice si le cache est vide.
+    Appelé depuis main.py lifespan. Fire-and-forget.
+    """
+    try:
+        existing = await redis_client.get(CACHE_KEY)
+        if existing:
+            logger.info("global-stats cache already warm, skipping prewarm")
+            return
+        logger.info("global-stats prewarm starting (background)")
+        await _background_refresh(guard, redis_client)
+    except Exception as e:
+        logger.warning("global-stats prewarm failed: %s", e)
+
+
 # --- ENDPOINT ---
 
 @router.post(
@@ -179,13 +290,22 @@ async def _run_global_analysis(guard, domains_filter: Optional[List[str]]) -> Di
     - Domaines avec Header / Footer détectés
     - Domaines sans structure détectée
     - Nombre d'URLs de contenu unique
-    
-    ATTENTION : Cette opération scanne toute la collection (chunk_number=1). Elle peut prendre du temps sur de gros volumes.
+
+    Cache Stale-While-Revalidate (Redis) : réponse <500ms en conditions normales, scan
+    complet uniquement toutes les 10 min en arrière-plan. Le filtre `domains` (non vide)
+    bypass le cache et déclenche un scan synchrone.
     """
 )
 async def get_global_stats(http_request: Request, request: StatsRequest):
     """
     Endpoint async that wraps each Milvus batch query with the concurrency guard.
+    Sert depuis le cache Redis (SWR) si `domains` est vide, sinon scan direct.
     """
     guard = http_request.app.state.concurrency_guard
-    return await _run_global_analysis(guard=guard, domains_filter=request.domains)
+    redis_client = getattr(http_request.app.state, "redis_client", None)
+
+    # Cas "filtre par domaines" ou Redis indisponible → comportement historique (scan direct)
+    if request.domains or redis_client is None:
+        return await _run_global_analysis(guard=guard, domains_filter=request.domains)
+
+    return await _get_cached_or_scan(guard=guard, redis_client=redis_client)

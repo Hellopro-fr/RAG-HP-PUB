@@ -1,3 +1,8 @@
+---
+description: Met à jour le CLAUDE.md d'un service existant après l'ajout d'une fonctionnalité significative
+argument-hint: <service>
+allowed-tools: Read, Edit, Grep, Glob
+---
 # /new-feature-claude-md — Update CLAUDE.md After a New Feature
 
 A significant new feature or module has been added to an existing service. Update its CLAUDE.md.

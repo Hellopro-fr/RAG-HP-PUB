@@ -1,16 +1,63 @@
-# React + Vite
+# crawler-monitor-frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Interface web de supervision du crawler : suivi temps réel des jobs, capacité
+des replicas, queues de requêtes, datasets, callbacks, journal d'audit et
+albums d'images produits.
 
-Currently, two official plugins are available:
+SPA React 19 / Vite 7, servie en production par nginx sur le port **8099**.
+Elle consomme l'API REST et le WebSocket de **crawler-monitor-backend**
+(service Go, port 3001).
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Prérequis
 
-## React Compiler
+- Node 20+
+- Yarn 4 (via `corepack enable` — la version est épinglée dans `package.json`)
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Développement
 
-## Expanding the ESLint configuration
+```bash
+yarn install
+yarn dev
+```
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Le serveur de dev proxifie `/api` vers `http://localhost:3001` et
+`/cdn-images` vers `http://localhost:8580` : il faut donc que
+`crawler-monitor-backend` (et, pour les albums, `image-cdn-service`) tournent
+en local.
+
+## Scripts
+
+| Commande | Effet |
+|----------|-------|
+| `yarn dev` | serveur de développement avec HMR |
+| `yarn build` | build de production dans `dist/` |
+| `yarn preview` | sert le build de production localement |
+| `yarn lint` | ESLint sur tout le projet |
+| `yarn test` | suite de tests vitest (une passe) |
+| `yarn test:watch` | vitest en mode watch |
+
+## Docker
+
+```bash
+docker build -t crawler-monitor-frontend .
+docker run -p 8099:8099 crawler-monitor-frontend
+```
+
+Le build est multi-stage (Node pour compiler, nginx pour servir). En
+conteneur, nginx résout les upstreams par leur nom de service Docker :
+`crawler-monitor-backend:3001` et `image-cdn-service:8580`.
+
+## Configuration
+
+Aucune variable d'environnement au build : les URLs backend ne sont pas
+compilées dans le bundle, tout passe par des chemins relatifs (`/api`,
+`/cdn-images`) résolus par le proxy — Vite en développement, nginx en
+production (voir `vite.config.js` et `nginx.conf`).
+
+L'authentification se fait à l'exécution : l'utilisateur se connecte, le JWT
+retourné est conservé côté navigateur et joint à chaque appel.
+
+## Documentation
+
+`CLAUDE.md` détaille la stack, l'arborescence, les routes et les conventions
+de code.

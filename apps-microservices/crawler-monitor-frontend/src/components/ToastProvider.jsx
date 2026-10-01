@@ -19,9 +19,9 @@ import { cn } from '../lib/utils';
 const ToastContext = createContext(null);
 
 const TYPE_STYLES = {
-  success: { surface: 'border-success/50 bg-success/15 text-success',         Icon: CheckCircle },
-  error:   { surface: 'border-destructive/50 bg-destructive/15 text-destructive', Icon: XCircle },
-  warn:    { surface: 'border-warning/50 bg-warning/15 text-warning',         Icon: AlertTriangle },
+  success: { surface: 'border-ok/50 bg-ok-soft text-ok',         Icon: CheckCircle },
+  error:   { surface: 'border-err/50 bg-err-soft text-err', Icon: XCircle },
+  warn:    { surface: 'border-warn/50 bg-warn-soft text-warn',         Icon: AlertTriangle },
   info:    { surface: 'border-info/50 bg-info/15 text-info',                  Icon: Info },
 };
 

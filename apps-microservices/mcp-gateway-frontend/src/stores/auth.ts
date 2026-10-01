@@ -9,12 +9,20 @@ const ROLE_LEVELS: Record<UserRole, number> = {
   'config-only': 1,
 }
 
+// SSO mode: identity is held server-side in the gw_session HttpOnly cookie.
+// JS never sees the access token. checkSession + logout drop their token
+// arguments and rely on credentials:'include' to attach the cookie.
+const SSO_MODE = import.meta.env.VITE_SSO_MODE === 'true'
+
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<{ email: string; display_name?: string; role?: UserRole } | null>(null)
-  const token = ref<string | null>(localStorage.getItem('auth_token'))
+  const token = ref<string | null>(SSO_MODE ? null : localStorage.getItem('auth_token'))
   const isLoading = ref(false)
 
-  const isAuthenticated = computed(() => user.value !== null && token.value !== null)
+  const isAuthenticated = computed(() => {
+    if (SSO_MODE) return user.value !== null
+    return user.value !== null && token.value !== null
+  })
 
   const userRole = computed<UserRole>(() => user.value?.role ?? 'config-only')
   const isAdmin = computed(() => userRole.value === 'admin')
@@ -35,14 +43,20 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function checkSession(): Promise<boolean> {
-    if (!token.value) return false
     try {
       isLoading.value = true
+      const headers: Record<string, string> = {}
+      if (!SSO_MODE && token.value) {
+        headers['Authorization'] = `Bearer ${token.value}`
+      } else if (!SSO_MODE && !token.value) {
+        return false
+      }
       const response = await fetch('/api/v1/me', {
-        headers: { 'Authorization': `Bearer ${token.value}` }
+        headers,
+        credentials: SSO_MODE ? 'include' : 'same-origin',
       })
       if (!response.ok) {
-        clearToken()
+        if (!SSO_MODE) clearToken()
         user.value = null
         return false
       }
@@ -50,7 +64,7 @@ export const useAuthStore = defineStore('auth', () => {
       user.value = { email: data.email, display_name: data.display_name, role: data.role as UserRole | undefined }
       return true
     } catch {
-      clearToken()
+      if (!SSO_MODE) clearToken()
       user.value = null
       return false
     } finally {
@@ -58,7 +72,12 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  // Legacy direct login. In SSO mode the SPA redirects to /sso/login and never
+  // calls this function — keep the implementation for SSO_MODE=false fallback.
   async function login(username: string, password: string): Promise<void> {
+    if (SSO_MODE) {
+      throw new Error('Direct login disabled in SSO mode — redirect to /sso/login')
+    }
     isLoading.value = true
     try {
       const response = await fetch('/login', {
@@ -80,19 +99,57 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  function redirectToLogin(returnTo?: string) {
+    const target = returnTo && returnTo !== '/' ? returnTo : window.location.pathname + window.location.search
+    window.location.href = '/sso/login?return_to=' + encodeURIComponent(target)
+  }
+
   async function logout(): Promise<void> {
+    let nextURL = '/sso/login'
     try {
-      if (token.value) {
+      if (SSO_MODE) {
+        const res = await fetch('/logout', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { Accept: 'application/json' },
+        })
+        if (res.ok) {
+          const data = await res.json().catch(() => null) as { logout_url?: string } | null
+          if (data?.logout_url) {
+            // Backend returns the account-service /logout URL so the portal
+            // session cookie is also cleared (single-sign-out).
+            nextURL = data.logout_url
+          }
+        }
+      } else if (token.value) {
         await fetch('/logout', {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${token.value}` }
         })
       }
     } finally {
-      clearToken()
+      if (!SSO_MODE) clearToken()
       user.value = null
+      if (SSO_MODE) {
+        window.location.href = nextURL
+      }
     }
   }
 
-  return { user, token, isLoading, isAuthenticated, userRole, isAdmin, isReadOnly, hasRole, checkSession, login, logout }
+  // Header helper for legacy (non-SSO) callers that still need to attach
+  // Authorization manually (e.g. multipart fetches outside api/client.ts).
+  // Returns an empty object in SSO mode where the cookie carries identity.
+  function authHeader(): Record<string, string> {
+    if (SSO_MODE || !token.value) return {}
+    return { Authorization: `Bearer ${token.value}` }
+  }
+
+  // Note: `token` is intentionally NOT returned. Components must not read
+  // the raw bearer; use authHeader() or rely on api/client.ts which reads
+  // localStorage directly in legacy mode.
+  return {
+    user, isLoading, isAuthenticated, userRole, isAdmin, isReadOnly,
+    hasRole, checkSession, login, logout, redirectToLogin, authHeader,
+    ssoMode: SSO_MODE,
+  }
 })

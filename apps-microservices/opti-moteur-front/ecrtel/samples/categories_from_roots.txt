@@ -1,0 +1,384 @@
+# Categories leaves (type=0) sous rubriques racines
+# Racines : 1000006, 2000405
+# Date    : 2026-04-21 15:46:33
+
+Aspirateurs industriels
+Accessoires de marquage
+Perforateur & burineur
+Meuleuse à angle
+Rampe pour PMR
+Fraise à plaquette
+Perceuses à colonne
+Chariot de soin hospitalier
+Nettoyeur ultrason
+Carotteuses
+Filières d'usinage
+Presse à injection
+Presses plieuses industrielles
+Rouleuses industrielles
+Masque FFP2
+Fraiseuses
+Extracteurs de gaz et de fumée
+Centres d'usinage
+Cintreuses manuelles
+Sableuses
+Tours d'établi
+Cintreuses industrielles
+Coupe câble
+Gels hydroalcooliques
+Affûteuses
+Chariots à linge
+Tronçonneuse à fraise-scie
+Automates programmables industriels
+Réacteur industriel
+Armoire médicale
+Cisaille industrielle
+Aspirateur industriel huile et copeaux
+Marquages à jet d'encre
+Mélangeur industriel
+Doseur industriel
+Marquages laser
+Raboteuse-dégauchisseuse
+Masque lavable
+Marquages et découpes à laser
+Machine a coudre industrielle
+Piqueuse plate 
+Tours cnc  horizontaux
+Cabines de sablage
+Coupe industrielle
+Machines de séchage industriel
+Perceuses fraiseuses
+Élévateur PMR
+Centrifugeuse industrielle
+Compresseur pour sablage
+Rectifieuse plane
+Toupies à bois
+Lampe médicale
+Fauteuils monte-escaliers
+Fontaines de dégraissage
+Masque FFP3
+Accessoires de prévention Covid
+Masque chirurgical 
+Machine de découpe laser 
+Sur-chaussures
+Perceuses d'établis
+Lampe UV pour désinfection
+Sable pour sableuse et abrasifs de sablage
+Mortaiseuse
+Découpeuse à lame portative
+Tronçonneuse à double tête
+Aérogommage
+Défibrillateurs
+Poinçonneuse
+Systèmes de nettoyage industriel
+Presses plieuses manuelles
+Armoires à pharmacie
+Pinces de préhension
+Logiciels métiers
+Outils de dénudage de câbles
+Rectifieuse cylindrique
+Purificateurs d'air anti covid
+Robots articulés industriels
+Raboteuses industrielles
+Interfaces homme machine
+Moulins de broyage
+Plateformes monte-escaliers
+Stations de lavage industrielles
+Découpage plasma
+Lèves-personnes
+Logiciels de cao
+Machines d'aspiration automatisée
+Bâches chauffantes
+Imprimantes textile
+Buses de sablage
+Marquages par micropercussions
+Cobot
+Station de lavage par ultrasons
+Meuleuse pneumatique
+Table à langer pour handicapé
+Outils de dégainage de câbles
+Boucles magnétiques pour malentendants
+Combinés à bois
+Fours verticaux
+Tribofinition
+Bras aspirants
+Fours à convoyeur
+Draps d'examen
+Pupitre de commande
+Lits médicalisés
+Machines d'épuration et d'aspiration
+Machine à dupliquer les clés 
+Équipements pour personnes à mobilité réduite
+Sous-traitance de découpe
+Accessoires pour sableuses
+Tables aspirantes
+Equipements dentaires
+Unités de perçage
+Scooters électriques pour mobilité réduite
+Rainureuses industrielles
+Vélos pour handicapé
+Mélangeurs pour liquides alimentaires
+Accessoires pour systèmes de commande industrielle
+Souffleuse de bouteilles PET
+Fours de trempage
+Tours conventionnel
+Hydrogommeuses
+Maintenance et réparation en fabrication
+Déambulateur, rollator et canne
+Chauffe-fût
+Ébavureuses
+Étuve industrielle
+Bacs de nettoyage par aspersion
+Cellule robotisée
+Tronçonneuses mono tête
+Lavabos médicaux
+Chaise et tabouret médical
+Fer à marquer électrique
+Machines pour thermoformage
+Polisseuses industrielles
+Joysticks industriels
+Contrôleurs de processus
+Machine pneumatique de marquage à chaud
+Balances médicales
+Dessiccateurs
+Perceuse radiale
+Brodeuse industrielle
+Aspirateur centralisé industriel
+Fauteuils roulants manuels
+Sécheurs infrarouges
+Profileuses
+Agitateurs  industriels
+Plaque aluminium anodisé
+Entraîneurs automatiques
+Machines spéciales
+Logiciels de fao
+Chanfreineuses industrielles
+Machines à broder
+Alimentateurs automatiques
+Extrudeuses pour plastique
+Encocheuses à angle variable
+Chanfreineuses portatives
+Mélangeurs pour industrie plastique
+Abris médicaux mobiles
+Sous-traitance d'usinage
+Aléseuses
+Machines d'oxycoupage
+Perceuse magnétique
+Protection pour robot industriel
+Perceuse taraudeuse d'établi
+Plaqueuse de chant
+Pistolet de sablage
+Matériels dermatologiques
+Tensiomètre
+Découpeuses et dénudeuses de câbles
+Degauchisseuse
+Pack défibrillateur
+Tenonneuses
+Régulateurs de processus industriels
+Tours cnc verticaux
+Monte-escalier mobile
+Télégestion de processus industriels
+Robot palettiseur
+Confort de la personne
+Robots cartésiens
+Matelas médicalisé
+Machines pour industries cosmétiques
+Matériels et produits de désinfectants sanitaires
+Terminaux opérateurs industriels
+Véhicules pour handicapés
+Appareils de marquage portatifs
+Logiciels de plannings
+ Robots de dosage
+ERP
+Découpeuses à fil
+Tuyau de sablage
+Presses de découpe industrielles
+Soudeuses portatives pour plastique
+Grenaillage
+Découpeuses à jet d'eau
+Fours horizontaux
+Logiciels de gpao
+Pantalon d'infirmière
+Test rapide coronavirus
+Autres robots
+Centres de fraisage
+Broyeurs à percussion
+Machines pour soudure plastique
+Gabarit de perçage
+Fauteuils roulants électriques
+Banc de frettage
+Bras de taraudage 
+Matériel d'ophtalmologie
+Aspirateur de brouillard d'huile
+Logiciels et systèmes de réservation de salles
+Gaz de soudage
+Chauffages à induction
+Mélangeur de gaz
+Compresse
+Fauteuil de mise à l'eau
+Stérilisateur UV
+Epurateur de brouillard d'huile industriel
+Postes de découpe et de dénudage de câbles
+Tamis pour sableuse
+Découpeuses à lames
+Sécheur à air pulsé
+Nébuliseur
+Broyeurs giratoires
+Machines d'usinage
+Divan d'examen
+Tests de drogue
+Appels infirmières
+Chaise de pesée
+Installation de traitement d'air industriel 
+Four de thermoformage
+Équipements de traitement au plasma
+Tours semi-automatiques horizontaux
+Surjeteuse industrielle
+Stands et bacs de dégraissage
+Robot mobile autonome
+Distributeurs de surchaussures
+Fileteuses industrielles
+Mélangeurs pour autres produits solides
+Matériel pour le transfert de corps
+Système d'impression DTF
+Séparateur balistique
+Robot pick and place
+Localisation et traçabilité des patients
+Modules logiques 
+Fours de refusions
+Accessoires pour robotique
+Débitmètre d'oxygène
+Gaz inorganiques
+Produits pour moulage de plastique
+Chaises de transfert pour PMR
+Sous-traitance de découpe au jet d'eau
+Holter tensionnel - MAPA
+Tables de découpe
+Moules pour plasturgie et caoutchouc
+Lignes d'extrusion
+Cabines de nettoyage
+Autotest
+Corroyeuses
+Four de revenu
+Habitacles et boîtiers pour défibrillateurs
+Guidage à bille
+Marquage par roulement
+Marquages électro-chimiques
+Matériels de fonderie
+Mètreuses -visiteuses
+Machines pour recyclage de plastique
+Logiciels combinés cfao
+Tailleuses d'engrenages
+Machine de granulation plastique
+Paravent médical
+Cadreuses visseuses
+Presse à compression
+Lecteurs de carte vitale
+Montre infirmière
+Essoreuse industrielle
+Chaises de douche pour PMR
+Générateur d'ultrasons pour nettoyage
+Dosseret aspirant
+Défonceuses industrielles
+Rodeuses
+Equipements pour anesthésie
+Marquage à chaud manuel
+Machine de métallisation
+Buses et injecteurs pour plasturgie
+Marquages par grattage
+Bordeuses et moulureuses électriques
+Rétrofit de rectifieuse
+Lignes de cuisson
+Consommables DTF
+Appareil técarthérapie
+Lignes de séchage industriel
+Tunnel de désinfection
+Matériel orthopédique
+Bladder scanner
+Équipements pour douche au lit
+Unité de Lavage
+Tables de lit
+Ligne de lavage plastique
+Bouteille d'hélium
+Plieuse baguetteuse
+Table de moule
+Nettoyage industriel
+Logiciels de contrôle
+Aspirateur de mucosité
+Dispositifs de ventilation et d'aération
+Robot Delta
+Fours de crémation
+Machines à ultrason pour coupe soudante
+Taraudeuses industrielles
+Gant pour sableuse
+Calculateurs industriels
+Piluliers médicaux
+Armoire de stérilisation COVID
+Cabine de soufflage
+Autres machines pour plastique
+Machines découpeuses de câble
+Machines de prototypage
+Sous-traitance de marquage 
+Machines à l'électro-érosion par fil
+Prothèses médicales
+Civière
+Traitements de l'eau et de l'air
+Moniteur de surveillance
+Oxymètre de pouls
+Echographes
+Dresseuses industrielles
+Crèmes bactéricides liquides
+Fauteuil hippocampe
+Photothérapie
+Brocheuses
+Accessoires de traitement thermique
+Accessoires de séchage
+gaz standards
+Supports pour défibrillateurs
+Machines à électro-érosion par enfonçage
+Découpeuses à ultrason
+Abatteuses
+Table gynécologique
+Acides organiques
+Borne de détection de température
+Machine pour fabrication de masque chirurgicaux
+Machines pour découpe de plastique
+Procédés de fabrication industrielle
+Planeuses
+Imprimantes de bracelets
+Concentrateur d'oxygène
+Tunnel de traitement thermique
+Embarreurs pour tours
+Récupérateurs de fils
+Tables d'opération
+Guichets hospitaliers
+Traitements de trouble musculo-squelettique
+Matériel pour échographie
+Tube à rayons X
+Marqueurs rotatifs
+Accessoires de dosage
+Respirateur portable
+Borne musicale
+Mélangeur industriel de poudre
+Colliers pour extrudeuses
+Barres chauffantes
+Postes de découpe à laser
+Stations de traitement thermique
+Mélangeur industriel pour produits pâteux
+Unité modulaire de marquage à chaud
+Machine de nettoyage solvant
+Machines d'enduction
+Insufflateur
+Accessoires de préhension 
+Mélangeur de poudre et de liquide
+Lecteur pour bandelette urinaire
+Débitmètre urinaire
+Gaz médicaux
+Azote industriel
+Planche de transfert
+ECG
+Gaz organiques
+Machines à tricoter
+Tours semi-automatiques verticaux
+Machine d'impression sur sac plastique
+Cardiofréquencemètre et pulsomètre

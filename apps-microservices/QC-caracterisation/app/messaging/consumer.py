@@ -6,6 +6,7 @@ import aio_pika
 from aio_pika.abc import AbstractIncomingMessage
 
 from common_utils.autres.DLQPropertiesAsync import DLQPropertiesAsync as DLQProperties
+from common_utils.autres.fenetre_tarifaire import est_heure_pleine, libelle_fenetre
 from app.core.credentials import settings
 from app.messaging.publisher import Publisher
 from app.core.caracterisation_produit import CaracterisationProduitGenerator
@@ -17,6 +18,10 @@ logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 3
 RETRY_TTL_MS = 30000
+# Pas de la boucle d'attente pendant une fenêtre pleine. 60 s suffisent : la reprise
+# n'a pas besoin d'être à la seconde près, et une attente courte évite de tenir la
+# boucle éveillée pour rien pendant 3 à 4 h.
+ATTENTE_FENETRE_PLEINE_S = 60
 
 
 class Consumer:
@@ -163,10 +168,71 @@ class Consumer:
         await self.connect()
         logger.info(f"👂 QC-Caracterisation: En attente sur {self.queue_name} (streaming)")
         logger.info(f"🚀 Configuration: max_concurrency={settings.MAX_CONCURRENCY}")
-        async with self.queue.iterator() as queue_iter:
-            async for message in queue_iter:
-                asyncio.create_task(self._process_with_semaphore(message))
-                logger.info(f"📨 Message reçu - Tâches: {len(self._active_tasks)}/{settings.MAX_CONCURRENCY}")
+        logger.info(f"💰 Fenêtre tarifaire DeepSeek au démarrage : {libelle_fenetre()}")
+        await self.consommer_avec_garde(self.queue, self._lancer_traitement)
+
+    def _lancer_traitement(self, message: AbstractIncomingMessage) -> None:
+        """Confie un message au pool de traitement. Appelé par la boucle de garde."""
+        asyncio.create_task(self._process_with_semaphore(message))
+        logger.info(f"📨 Message reçu - Tâches: {len(self._active_tasks)}/{settings.MAX_CONCURRENCY}")
+
+    async def consommer_avec_garde(self, queue, sur_message):
+        """Consomme `queue`, en se DÉTACHANT pendant les fenêtres chères de DeepSeek.
+
+        Extraite de `start_consuming()` le 20-08-2026 pour une raison de test :
+        `tests/test_integration_garde_broker.py` en gardait une **copie** (« COPIE FIDELE
+        de la boucle posee dans consumer.py »), donc il pouvait rester vert alors que le
+        code livré avait changé. Il appelle désormais cette méthode.
+
+        Pendant les heures pleines, on se détache de la file au lieu de refuser les
+        messages. Les deux autres approches sont mortelles ici :
+          - un nack les enverrait en DLQ en 90 s (RETRY_TTL_MS 30 s x MAX_RETRIES 3) ;
+          - les garder non-ackés heurterait x-consumer-timeout (7 200 000 ms = 2 h),
+            alors qu'une fenêtre pleine dure 3 à 4 h.
+        Détaché, le consumer laisse les messages en READY. Vérifié le 18-08-2026 sur
+        rbmq2 : aucune policy (ni user ni operator) sur le broker, et la file porte
+        auto_delete=false / durable=true — donc rien n'expire et rien ne disparaît.
+        ⚠️ Si une policy `message-ttl` ou `expires` était ajoutée un jour sur ces files,
+        cette garde deviendrait destructrice : le vérifier avant.
+
+        Le `while True` est indispensable : sans lui, le test serait évalué une seule
+        fois au démarrage du conteneur et plus jamais ensuite.
+
+        :param queue: la file à consommer (injectée pour que le test fournisse la sienne)
+        :param sur_message: appelable synchrone qui prend en charge un message accepté
+        """
+        while True:
+            if est_heure_pleine():
+                logger.info(
+                    f"⏸️  DeepSeek en {libelle_fenetre()} : consommation suspendue, "
+                    f"les messages restent en file"
+                )
+                while est_heure_pleine():
+                    await asyncio.sleep(ATTENTE_FENETRE_PLEINE_S)
+                logger.info(f"▶️  Retour en {libelle_fenetre()} : reprise de la consommation")
+
+            async with queue.iterator() as queue_iter:
+                async for message in queue_iter:
+                    if est_heure_pleine():
+                        # Ce message-ci est déjà sorti de l'itérateur, donc unacked : on le
+                        # remet en file EXPLICITEMENT. Le faire ici plutôt que de compter
+                        # sur le requeue automatique du broker à l'annulation du consumer
+                        # (comportement AMQP correct, mais implicite) ; requeue=True ne
+                        # passe pas par le dead-letter-exchange, donc pas de DLQ, et le
+                        # requeue direct ne crée pas de x-death : le compteur de retry
+                        # n'est pas touché.
+                        # Les messages encore dans le buffer de prefetch sont eux repris
+                        # par la sortie du `async with`, qui fait basic_cancel puis
+                        # nack(requeue=True) sur tout le buffer — lu dans le source de
+                        # QueueIterator._on_close en aio_pika 9.6.2, la version
+                        # réellement déployée (relevée sur la VM le 18-08-2026 ;
+                        # requirements.txt ne dit que « >=9.0.0 »).
+                        await message.nack(requeue=True)
+                        logger.info(
+                            f"⏸️  Bascule en {libelle_fenetre()} : détachement de la file"
+                        )
+                        break
+                    sur_message(message)
 
     async def close(self):
         if self._active_tasks:

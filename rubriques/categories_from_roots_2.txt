@@ -1,0 +1,1438 @@
+# Categories leaves (type=0) sous rubriques racines
+# Racines : 1000005, 1000003, 1000012, 1000013, 1000011, 9000312, 1000014
+# Date    : 2026-04-22 13:32:09
+
+Chaussures de sécurité basses
+Vêtement réfléchissant
+Table basse
+Autres raccords hydrauliques
+Chaussures de sécurité montantes
+Vêtements de sécurité basique
+Canapés lits
+Verres de table
+Fauteuil de bureau
+Canapés
+Embrayages
+Vestes de travail
+Tee-shirts et polos de travail
+Fauteuils
+Bottes de sécurité
+Raccord droit
+Armoire anti-feu
+Chaises empilables
+Rayonnage mi-lourd et lourd
+Bureau droit
+Pull et sweat de travail
+Batterie de démarrage
+Blousons de travail
+Abrasifs de ponçage
+Amortisseurs de choc
+Pompes centrifuges horizontales
+Gants de manutention
+Freins à disque
+Compresseurs
+Tasses et mugs
+Chambre froide
+Servantes d'atelier
+Panneau routier
+Tables de réunions
+Gants de protection
+Appliques, spots et lampes murales
+Gilets sans manche
+Gants anti-coupures
+Cuves à carburants
+Ampoules à led
+Armoire d'atelier
+Pompes de relevage d'eaux et liquides
+Ventilateur centrifuge industriel
+Câbles chauffants
+Ventilateur hélicoïde industriel
+Groupe électrogène industriel
+Pile lithium
+Caisses et boîtes à outils
+Batterie industrielle
+Planches à découper
+Sièges d'accueil
+Coupleurs
+Moteurs à courant alternatif
+Tabliers et chasubles de travail
+Radiants à infrarouge électriques
+Cadenas
+Bermuda et short de travail
+Panneaux de signalisation
+Lit
+Palan
+Bureau d'angle
+Accessoires pour rayonnages
+Diable de manutention
+Groupe électrogène portable
+Banques d'accueil
+Crics
+Déshumidificateurs à condensation
+Pompes immergées
+Bac de rétention en plastique rigide
+Établis
+Colliers de fixation
+Chaise pliante
+Matelas
+Signalisations pour véhicules
+Lunette de chantier
+Scies à ruban
+Onduleurs électriques autonomes
+Étagères de salon
+Roues et roulettes industrielles
+Chariot élévateur
+Tables pliantes
+Cottes de travail
+Table élévatrice
+Cuves à usages divers
+Bureau pour ordinateur
+Coffre-fort de sécurité
+Bureaux de direction
+Poteau de signalisation
+Mobiliers scolaires
+Blouses de travail
+Batteries solaires
+Rayonnage léger
+Plafonniers led
+Gerbeur électrique
+Chaussures de sécurité
+Moteurs de ventilateurs
+Établi avec rangement
+Porte affiche
+Vêtements de sécurité haut risque
+Aérotherme
+Générateurs d'air chaud à fioul
+Raccords tournants
+Plancher chauffant
+Huile moteur
+Bouchon de tuyau
+Armoires à portes battantes
+Scies circulaires
+Socles rouleurs
+Vannes et robinets à  papillon
+Blocs-tiroirs
+Cartouche filtrante
+Bureau open space
+Clapets anti-retours hydrauliques
+Pinces de levage
+Chaussures de sécurité pour femmes
+Mange-debout
+Vestiaires multicases
+Serrure à encastrer
+Sangle d'arrimage
+Lits escamotables
+Gants protection thermique
+Treuil
+Lampe torche à led
+Sièges sur poutres
+Spot pour led
+Gants de protection chimique
+Multimètres
+Accessoires pour cuves
+Poste à souder professionnel
+Cuves à eau
+Caméras de surveillance
+Siège et chaise d'atelier
+Palette en plastique
+Armoire de sécurité pour produits dangereux
+Caisse-palette en plastique
+Kits panneaux photovoltaïques
+Générateurs d'air chaud à gaz
+Cordon d'alimentation électrique
+Panneaux solaires photovoltaïques
+Poêles à bois
+Transpalette électrique
+Rideaux d'air chaud électriques
+Transpalette manuel
+Casques de chantier
+Vannes et robinetteries à boisseaux
+Pompe électrique
+Joint pour chambre froide
+Ventilateur mobile
+Tabouret de bureau
+Potelets fixes
+Chariots manuels à étagères
+Cuves de transport 
+Pompes hydrauliques auto-amorçantes
+Douchette code-barres
+Visseuses
+Générateurs d'air chaud électriques
+Tuyau d'aspiration
+Meuble armoire bas
+Signalisations sécurité travail
+Canapés d'angle
+Batterie pour onduleur
+Lame de scie à ruban
+Connecteur électronique
+Rayonnages et armoires à bacs
+Tampons de bureau
+Accessoire de lampes
+Alimentation à découpage
+Adhésifs de collage
+Chargeurs de batteries industrielles
+Convertisseur de tension
+Chemise de travail
+Scellés de sécurité
+Vannes et robinetteries à boule
+Vérins hydrauliques simple effet
+Matériels antichutes
+Chauffe-eau électriques
+Banquettes de salon
+Tendeur d'arrimage
+Groupe froid
+Sets de tables
+Générateurs de signaux
+Graisses lubrifiantes
+Résistances chauffantes
+Flexibles métalliques
+Ventouses pneumatiques
+Chaudières à gaz
+Scie de table
+Pompe de graissage
+Container aménagé
+Câbles multiconducteurs
+Accessoires de mesures électriques
+Accessoires de masque de protection
+Passe-câbles
+Coffrets de distribution
+Casier
+Torches de soudage
+Equipements pour panneaux solaires
+Cuve Adblue
+Joints plats
+Bac de rétention pour fût
+Chaîne de levage
+Brides de fixation
+Presses à métaux hydrauliques
+Groupes motopompes
+Casque soudure
+Accessoires pour chaudières
+Surpresseur
+Autres types de colle
+Élingues de levage
+Cuves à gasoil rouge (GNR)
+Groupe électrogène pour maison
+Pompes centrifuges verticales
+Climatiseur mobile
+Gaines
+Signalisation lumineuse
+Équipements et accessoires pour fibres optiques
+Potence de levage
+Convoyeur à rouleaux
+Ventilo-convecteurs
+Vestiaires industrie propre
+Destructeur de papier
+Cloisons de bureaux
+Flexible hydraulique
+Citerne souple
+Cloisons amovibles
+Accessoires pompes hydrauliques
+Colliers serre-câbles
+Container maritime
+Alimentation stabilisée
+Grille de ventilation
+Palette en bois
+Canapés d'accueil
+Balances industrielles
+Roll-containers vertical
+Pompes pneumatiques à membranes
+Cordes de levage
+Armoires à portes coulissantes
+Anneau de levage
+Griffe et crochet de levage
+Projecteur LED portable
+Gobelets en plastique
+Barrière de parking
+Roue à lamelle
+Pupitres de conférence
+Eclairage industriel
+Enrouleurs pour tuyaux hydrauliques
+Caisson de ventilation
+Etaux mécaniques
+Gaines flexibles
+Signalisations temporaires
+Pompes à chaleur aérothermiques
+Transformateurs basse tension
+Caisson à roulettes
+Ventilateur Atex
+Convoyeur à bande
+Refroidisseurs
+Électrovanne
+Cloison acoustique
+Conteneur de stockage
+Régulateur solaire
+Rubans à led
+Chariots manuels conventionnels
+VMC - Ventilation mécanique contrôlée
+Pistolet à colle
+Rampes de chargement pour engins lourds
+Courroie trapézoïdale
+Miroirs de surveillance
+Chariots manuels grillagés
+Rayonnage archive
+Protection d'angle
+Pompes à vide
+Onduleurs photovoltaïques
+Chalumeau & brûleur
+Réglette à led
+Climatiseur professionnel
+Tapis d'accueil
+Fibre optique
+Vanne de régulation
+Bouchons d'oreilles
+Gerbeur manuel
+Marquage au sol pour entrepôt
+Poêles à granulés
+Condensateur
+Sièges assis-debouts
+Kit extracteur de roulement
+Vestiaires et porte-manteaux
+Rayonnage de rétention
+Bac de rétention métallique
+Dessertes d'atelier
+Préparateurs d'ecs
+Pistolets à peinture industriels
+Casquette de protection
+Fontaine à eau réseau
+Combinaisons jetables
+Rideaux d'air à eau chaude
+Panneau de chantier
+Charnière
+Tuyau de gaz
+Gilets de sécurité
+Destratificateurs d'air
+Palonnier
+Climatiseur inverter
+Machine à café de bureau
+Equipement pour armoire
+Tapis d'entrée
+Armoire à rideau pour bureau
+Carte RFID
+Motoréducteur
+Vestiaires industrie salissante
+Treuil compact léger
+Destructeur de papier professionnel
+Élingue câble
+Vérins hydrauliques double effet
+Ponceuse à bande
+Thermostats électroniques
+Poignée pour chambre froide
+Dômes de surveillance
+Accessoires pour chariots élévateurs
+Gaines de ventilation
+Terminaux portables
+Scie industrielle
+Générateurs de soudage
+Monte-charge
+Autres joints statiques hydrauliques
+Rack à palette
+Extincteur portatif
+Pompes hydrauliques manuelles
+Aimants permanents
+Housse pour roll, chariot, container ou palette
+Chariot porte bac
+Lecteurs RFID
+Radiateurs électriques convecteurs
+Rayonnage cantilever
+Enrouleurs - dérouleurs
+Détendeur de gaz
+Parafoudres - parasurtenseurs
+Projecteur d'extérieur
+Coffres et armoires anti-feu
+Cuve engrais liquide
+Pinces ampèremétriques
+Enrouleur electrique
+Groupes de climatisation & unités extérieures
+Vannes à opercule
+Charnière pour chambre froide
+Accessoires pour passage de câbles
+Meuble classeur
+Caisse-palette métallique
+Lecteurs de badges
+Échangeurs thermiques tubulaires
+Kits d'alarmes
+Turbines de ventilateurs
+Tuyau flexible industriel
+Manille
+Pompe atex
+Panneau directionnel
+Rafraîchisseur
+Bureau assis debout
+Séparateur d'espace
+Plafond chauffant
+Avertisseur sonore industriel
+Réservoir à vessie
+Siège d'amphithéâtre
+Chaudières à fioul
+Corps de filtre
+Maison connectée 
+Accessoires pour led
+Barrières de sécurité intérieure
+Chariots électriques
+Thermostat d'ambiance
+Lève-palette
+Autres chariots
+Équipement du chauffe-eau
+Pied de calage
+Scies à sol
+Chaudière à bois
+Pompes hydrauliques à engrenages
+Armoires de sécurité
+Armoires ouvertes
+Rivets aveugles
+Pièce de tuyauterie
+Boîtier de dérivation
+Bande transporteuse
+Lecteur code-barres fixe
+Entrepôts modulaires de stockage
+Bracelet RFID
+Bac de rétention en plastique souple
+Porte clés et Badge RFID
+Détecteur de tension
+Pompes solaires
+Thermoplongeurs
+Palonnier à ventouse
+Ventilateur industriel plafond 
+Plates-formes et bascules de pesage
+Filtres d'eau potable
+Mezzanine industrielle
+Galets de guidage
+Scie à format
+Rafraîchisseur d'air adiabatique
+Aimant de levage
+Chauffage infrarouge à fioul
+Chariots modulables
+Transformateurs de puissance
+Climatiseur multisplit réversible
+Détecteur - capteur de présence
+Radiants à gaz
+Bancs vestiaires
+Cuve IBC
+Harnais
+Silo de stockage
+Inserts pour cheminées
+Coffrets de protection
+Interphonie ip
+Alimentation secourue
+Chemin de table
+Cuves à huiles et lubrifiants
+Ballons tampons
+Palettiseurs et dépalettiseurs
+Sécheurs air frigorifiques
+Rayonnages fixes 
+Transpalette peseur
+Chandelle de levage et de calage
+Grue d'atelier
+Émetteurs-récepteurs radio
+Huile hydraulique
+Chauffe-eau solaires
+Télécommande radio industrielle
+Prises d'air - extracteurs d'intérieurs
+Conteneurs de stockage pour produits dangereux
+Barrières mobiles de sécurité
+Rangements pour crèches
+Fauteuil salle de conférence
+Armoires et cages pour bouteilles de gaz
+Chariot porte-palan
+Tourelles de ventilation
+Plaques chauffantes industrielles
+Filtres à tamis
+Trémie de stockage
+Ballons thermodynamiques
+Tableau de planning
+Armoire à outils
+Groupe électrogène en container
+Moteur courant continu
+Radiateur seche-serviettes
+Postes de travail
+Composant de filtre à eau
+Machine à boisson chaude
+Ponceuses industrielles
+Armoire à clé simple 
+Brumisateurs
+Matériel de secourisme
+Chariots manuels porte-panneaux
+Compresseur frigorifique
+Tracteur logistique
+Patins rouleurs
+Soupapes de sécurité
+Radiateur électrique à inertie
+Armoires électriques de chantier
+Médias de filtration d'eau
+Réservoir de stockage industriel
+Pompe de transvasement
+Pompe à membrane électrique
+Cloisons mobiles
+Ventouses électro-magnétiques
+Box de rétention
+Tapis antidérapants
+Climatiseurs monoblocs réversibles
+Pompe à piston
+Caillebotis antidérapants
+Convertisseurs dc-dc
+Cordons et lacets pour badges
+Rideaux d'air froid électriques
+Rampe de chargement pliable
+Enregistreur NVR
+Transpalette haute levée
+Régulateurs de tension
+Autres racks de stockage
+Brûleurs pour chaudières
+Positionneur de soudure
+Échangeurs thermiques à plaques
+Filtres à sable
+Armoire électronique de gestion des clefs
+Rayonnages tubulaires
+Robot éducatif
+Radiateurs soufflants
+Équilibreurs de charges
+Portique de levage
+Détecteurs de fumée
+Chariots manuels 2 dossiers
+Lecteurs à claviers
+Inserts mécaniques
+Rehausse palette
+Barrières anti-inondation
+Accessoire pour alarme
+Filtre anti-calcaire
+Terminaux de contrôle d'accès
+Humidificateurs à évaporation
+Ohmmètres
+Pompes à lobes
+Groupe d'eau glacée
+Profilé pour chambre froide
+Robot de service
+Accessoires de manipulation
+Plateforme de rétention
+Colles cyanoacrylates
+Hangars de stockage
+Kit camera de surveillance
+Compteur d'eau
+Panneau pour chambre froide
+Pompes doseuses péristaltiques
+Chariots pour charges lourdes
+Batterie pour chariot élévateur
+Électro-aimants
+Raccord pour air comprimé
+Potelet à mémoire de forme
+Climatiseurs monoblocs
+Machines pour palettes
+Bracelet d'évènementiel
+Valises de transport matériel et outillage
+Raccords pneumatiques en ligne
+Compteurs électriques
+Autres accessoires pour convoyeur
+Armoire de stockage batterie lithium
+Tracteur pousseur
+Climatiseur split simple
+Bloc autonome d'éclairage de sécurité
+Masque à gaz
+Chaussette de travail
+Chapeau de cheminée
+Outil de graissage
+Tentes et chapiteaux de stockage
+Pont roulant
+Fauteuil de cinéma
+Barrière levante
+Bornes anti-intrusion
+Rampe de quai
+Diffuseur et vaporisateur de parfum professionnel
+Bornes amovibles
+Cloueurs pneumatiques
+Pointeuses - badgeuses
+Vanne hydraulique
+Chaîne de convoyage
+Équipements du radiateur
+Meubles de change
+Buse et aiguille d'application de colle
+Hélices de ventilateurs
+Rayonnages à pneus
+Tourniquets d'accès piétons
+Sécheurs par adsorption
+Écarteurs et ajusteurs de fourche
+Chaudières à granulés
+Combinaisons de protection chimique
+Filtres d'eau de pluie
+Bornes escamotables automatiques
+Basculeurs / retourneurs de bacs et caisses
+Chariots manuels à caisse et bac
+Pompes hydropneumatiques
+Barrière pivotante
+Analyseurs d'énergie et puissance
+Panneau consignes de sécurité
+Transformateurs d'isolement
+Poche filtrante
+Vérins mécaniques
+Logiciels gestion d'accès
+Récepteurs radios
+Équipement de barrière de sécurité
+Niveleur de quai
+Réservoirs d'air comprimé
+Masque à ventilation assistée 
+Pompes doseuses électromagnétiques
+Pompes à peinture
+Brasseur d'air
+Postes informatiques
+Panneau d'information d'entreprise et publicitaire
+Sertisseuses hydrauliques
+Doseur proportionnel
+Sertisseuses électriques
+Élévateur de charge
+Accouplements flexibles
+Manette logistique
+Distributeurs hydrauliques
+Urinoirs
+Cartes et badges plastiques pour impression
+Lecteurs biométriques
+Portes coupe-feu
+Toque et charlotte à cheveux
+Déshumidificateurs à adsorption
+Chariots manuels pour bidons et fûts
+Rails de guidage
+Telluromètres
+Foyers pour cheminées
+Cardans
+Barres anti-panique
+Système de conférence
+Revêtements de sol antidérapants
+Cartes géographiques
+Appareil Respiratoire Isolant 
+Pompes vide-fûts
+Vannes guillotines
+Manchon électrique
+Panneaux rayonnants
+Plénums
+Barrière Vauban
+Accessoires et pièces pour chariot de manutention
+Station de désinfection des mains
+Rayonnage polyvalent
+Dégrippant
+Mesures de fréquence
+Rayonnages dynamiques
+Engrenages à denture droite
+Scieries mobiles
+Convoyeur aérien
+Poêles-cheminées
+Structure métallo-textile
+Lampes à ultra-violets
+Tunnels de stockage
+Portique limiteur de hauteur
+Pompes à vis
+Accessoires pour pompes à chaleur
+Basculeurs / retourneurs de fûts
+Autres pompes hydraulique
+Caillebotis métal
+Filtres pour ventilation
+Transformateurs de courant
+Caisse-palette en bois
+ Générateurs de vide
+Crépines
+Poulies à corde
+Testeurs de batteries
+Chaudières électriques
+Point d'ancrage
+Butoir de quai
+Présentoirs porte-outils
+Borne de distribution de gel intelligente
+Ventilateur tangentiel
+Sirène d'alarme
+Intercalaire pour palettes et caisse-palettes
+Thermorégulateurs
+Capteur de courant
+Cloisons grillagées
+Soudeuses fibres optiques
+Presses à métaux manuelles
+Évaporateur
+Buses de pulvérisation
+Imprimantes mobiles de reçus
+Table d'atelier
+Autotransformateurs
+Chariots pour charges longues
+Serrures électroniques
+Systèmes de mise à la terre
+Convoyeurs / transporteurs à chaînes
+Système de guidage linéaire
+Soufflante d'air
+Combinaisons imperméables
+Tapis anti fatigue
+Climatiseur de cave à vin
+Armoires électriques industrielles
+Rayonnages mobiles
+Borne avec pédale mécanique
+Stations de peinture et de revêtement
+Vérins électriques
+Systèmes d'inspection rayon x pour bagages
+Journal lumineux
+Pompes à entraînement magnétique
+Vannes murales
+Fermeture auto-agrippante
+Cuves à produits chimiques
+Dressings
+Éolienne
+Armoire phytosanitaire
+Moteurs diesel
+Autres convoyeurs / transporteurs
+Purgeur automatique temporisé
+Porte blindée professionnelle
+Palette en métal
+Ventilateur d'aspiration
+Lève plaque
+Conteneur spécifique
+Chaîne d'arrimage
+Déclencheurs manuels d'alarme
+Colle anaérobie
+Station électrique portable
+Machines de soudure automatique
+Scies à panneaux
+Porte de chambre froide coulissante
+Servomoteurs
+Extracteurs pour gaines et conduits
+Paliers
+Filtres pour cabines de peinture
+Tambours moteurs 
+Aérateurs d'intérieur
+Grille de reprise
+Thermostats à bulbe
+Manipulateurs pour panneaux et vitres
+Climatiseur split réversible
+Générateurs d'air chaud à bois
+Potelet rabattable
+Abris de stockage
+Centrales de conditionnement d'air
+Pompes doseuses électroniques
+Accessoires d'identification
+Derouleur de cables pour touret
+Pompes de relevage de condensat
+Vérin de fosse
+Tapis antistatique
+Manipulateurs pour fûts
+Lits pour crèches
+Capteur de débit d'air comprimé
+Système de pesage embarqué
+Élévateur à godets
+Pompes hydrauliques péristaltiques
+Téléphones mobiles pti
+Accessoires coupe-feu
+Armoires industrielles de stockage
+Projecteur LED solaire
+Ouvre-lettres
+Rallonges de fourche
+Multiplicateur de pression pneumatique
+Serrure connectée
+Enregistreurs paramètres électriques
+Systèmes de filtrations
+Grille de soufflage
+Véhicules à guidage automatique (AGV)
+Ressorts de compression
+Rideau métallique
+Gaz frigorigène et fluide
+Autres pompes pneumatiques
+Afficheurs numériques
+Téflon
+Miroir d'inspection
+Cartouches chauffantes
+Pistolet à huile
+Trépied pour palan et tripode de levage
+Déshuileurs
+Filtres auto-nettoyants
+Ponceuse de chants
+Pupitre
+Pignons et crémaillères
+Fond bombé de cuve
+Chariot de manutention
+Chariots pour tables
+Climatiseurs solaires
+Postes de soutirage
+Chaise et fauteuil pour enfant
+Plinthe pour chambre froide
+Accessoires pour bornes
+Afficheurs lumineux industriels
+Equipement pour rack de stockage
+Housses de chaises
+Logiciels de gestion d'étiquetage
+Vérins pneumatiques double effet
+Butoirs en caoutchouc
+Table de soudure
+Réserves d'eau anti incendie
+Aspirateurs de fumées de soudage
+Ligne d'assemblage
+Agitateurs pour peinture
+Conteneur Frigorifique
+Rampe d'accès pour conteneur
+Générateur de brouillard
+Mannequin de secourisme
+Renvoi d'angle
+Radiateur et chauffage infrarouge lointain
+Rouleau antidérapant
+avertisseur sonore et lumineux
+Mise sous plis
+Additif à essence
+Barrière à chaîne
+Générateur de vapeur
+Rouleaux motorisés
+Barrières infrarouges périmétriques
+Attache pour badges
+Autres moteurs électriques
+Décapeur laser
+Grilles de protection d'entrée
+Potentiomètre
+Sas pour quai
+Tubes radiants à gaz
+Butoirs divers
+Citerne à gaz
+Base roulante
+Barrières de rétention d'eaux d'incendie
+Colles époxydes
+Moniteurs de vidéosurveillance
+Filtres à poches
+Coffrets de régulation de température
+Projecteur gobo
+Protège sol
+Autres manipulateurs
+Électroaimant de levage
+Climatiseurs de véhicules
+Stockeur rotatif
+Accessoires pour le stockage de produits dangereux
+Chevalets de manutention
+Engrenage conique
+Bloc béton anti-intrusion
+Convoyeurs / transporteurs élévateurs
+Bornes escamotables manuelles
+Postes de découpe à plasma
+Programmateur de clé voiture
+Plots anti-vibratiles
+Pompes à épreuves
+Armoires pour armes
+Sacs et enveloppes pour transport de fonds
+Spreader pour conteneur
+Poulies dentées ou crantées
+Distributeur d'huile
+Pompes hautes pressions
+Bâches et housses pour palettes
+Disques de rupture
+Barrière de protection piéton
+Accessoire de groupe électrogène
+Vis d'archimède de convoyage
+Chariot pour courrier
+Coin roulant
+Semelle pour chaussure de sécurité
+Station de soudage
+Circulateurs de chauffage
+Pompes à palettes
+Bombe de galvanisation à froid
+Générateur air chaud industriel 
+Trieuses et contrôleuses pondérales
+Citernes plastique fioul
+Machines agrafeuses
+Badge pour événement
+Colliers chauffants
+Carters de sécurité
+Armoires d'entretien
+Rampe électrique
+Presses à métaux pneumatiques
+Bureau d'école
+Pompes doseuses électromécaniques
+Bande antidérapante
+Vestiaires sportifs
+Location de matériels génie climatique
+Porte de chambre froide
+Radiateurs électriques à pierre réfractaire
+Chariot isotherme
+Pont de chargement de quai
+Consigne automatique
+Registres de ventilation
+Soufflets de protection
+Portillon d'accès
+Régulateurs numériques pour chauffage
+Chariots à fond mobile
+Malette de rangement pour drone
+Exutoire de fumée 
+Cogénération
+Tableau électrique
+Rangements pour badges
+Boitier électronique
+Chauffe bain
+Cloisons pour sanitaires et vestiaires
+Climatiseur multisplit
+Couloir de passage
+Déshumidificateurs à absorption
+Siège ballon ergonomique de bureau
+Bras de manipulation
+Compteur de jour sans accident
+Chariot porte outil
+Convertisseurs de signaux
+Mallettes d'étude mécanique
+Tables avec guidage
+Mobiliers de call-centers
+Pompes à chaleur géothermiques
+Humidificateurs à vapeur
+Pompes à chaleur réversibles
+Ponts bascules
+Chaudières à vapeur
+Machines enrouleuses et dérouleuses
+Fontaine à eau bonbonne
+Panneaux solaires thermiques à fluide
+Ballons solaires
+Systèmes de transport pneumatique
+Rack mobile
+Pieuvres électriques
+Désemboueurs
+Diffuseurs d'air linéaires
+Presses à métaux électriques
+Potelets amovibles
+Automatisme marche-arrêt pour pompe
+Tour de refroidissement
+Purgeurs à flotteur
+Purgeurs thermostatiques
+Modules de motricité
+Machines pour la fabrication de badges pin's
+Serrures électriques
+Autre matériel pour chauffage
+Afficheurs à led
+Réservoir de stockage d'eau
+Convoyeurs / transporteurs à vis
+Climatiseurs drv ou vrv
+Amplificateurs haute-fréquences
+Roulements
+Canon à chaleur diesel
+Générateurs de courant
+Rayonnages pour bobines
+Réchauffeurs de liquide
+Rouleaux pour vrac
+Support panneau photovoltaïque
+Table pour enfant
+Pèse-essieux et pèse-roues
+Imprimantes d'adresses
+Collecteurs de gobelets
+Systèmes et installations sur mesure
+Peseuses multitêtes
+Cabines de poudrage
+Accessoires machine de nettoyage climatisation
+Manuracks
+Chariots pour chaises
+Moteur atex
+Collecteurs tournants électriques
+Butoirs  en acier
+Groupes hydrauliques
+Pompes d'épuisement
+Distributeur pneumatique
+Contrôleur de ronde
+Protection auditive
+Sabot de denver
+Équipements et accessoires de grues de levage
+Manivelles de manoeuvre
+Pèse palette
+Logiciels de vidéosurveillance
+Dispositif DATI
+Plaque de chargement de quai
+Filtres magnétiques
+Logiciels de gestion des temps et horaires
+Lecteurs de plaques
+Colonnes de classement rotatives
+Tapis sensible de sécurité
+Table d'accumulation
+Distributeurs automatiques EPI
+Aérateur pour fenêtre
+Actionneurs pour vannes
+Alarme PPMS
+Riveteuses pneumatiques
+Réducteurs à roue et vis
+Fontaines à eau atmosphériques
+Colle pour carrosserie
+Positionneurs pneumatiques
+Armoire de précision
+Cloisonnettes
+Logiciels de gestion de stock
+Talkie walkie pti
+Silencieux à baffles
+Postes de soudure par ultrasons
+Filtres d'eaux usées
+Puits canadiens
+Détecteur de fuite d'air comprimé
+Autres basculeurs / retourneurs
+Ressorts de traction
+Postes de soudure laser
+Racleur pour bande transporteuse
+Hangar photovoltaïque agricole
+Pompe pour cuve ibc
+Graissage centralisé
+Afficheurs et enregistreurs de bruit
+Station de charge et de récupération
+Protecteurs télescopiques
+Régulateurs multifonctions
+Climatiseurs par évaporation ou rae
+Pupitres de conférence amplifiés
+Groupe frigorifique pour utilitaire
+Pelles pour chariots élévateurs
+Butées d'arrêt pour convoyeurs / transporteurs
+Matériels de bureau antistatique 
+Peseuses linéaire 
+Banc pour enfant
+Manipulateurs pour bobines et rouleaux
+Tours de stockage
+Afficheurs lumineux de comptage de parking
+Séparateurs centrifuges
+Cartes de fidélité
+Machines de décapage
+Vernis de tropicalisation
+Herse anti-intrusion
+Bornes escamotables semi-automatiques
+Purgeurs capacitifs à détection de niveau 
+Centrales de détection incendie
+Lecteurs de documents d'identité
+Ballons à gaz
+Applicateurs de revêtement
+Application PTI
+Masque d'évacuation
+Butées de positionnement
+Systèmes de tri pour convoyeurs/transporteurs
+Transformateurs haute tension
+Pré-filtres d'eau
+Télécommandes pour alarmes
+Récupérateurs de chaleur
+Groupe électrogène solaire
+Sécheurs à membrane
+Sac de lestage
+Plateforme élévatrice
+Bille porteuse
+Horodateurs
+Systèmes d'inspection rayons x pour cargos
+Réservoirs d'alimentation sous pression
+Rayonnage textile
+Riveteuses électriques
+Câbles chauffants pour planchers
+Pompes à boues
+Bornes de défense
+Traçabilité et géolocalisation par rfid
+Masse beton
+Mesures diélectriques
+Mandrin magnétique à aimant permanent
+Pistolets de poudrage
+Machines à affranchir
+Pompes volumétriques
+Cartes et badges cartonnés pour impression
+Coiffe palette
+Centrales hydroélectriques
+Robot de nettoyage professionnel
+Distributeur de masque
+Climatiseur de fenêtre
+Poste de soudage par flamme
+Balais et brosses pour chariots
+Plastobloc
+Rampe pour transpalette
+Tables à dessin
+Refroidisseurs adiabatiques
+Barrière sélective
+Echomètres
+Chaudières à eau chaude
+Système d'extinction automatique d'incendie
+Service de création de site internet
+Équipements pour transformateurs
+Drones de surveillance
+Barrière anti-voiture bélier
+Galet de roulement
+Lecteur de carte magnétique
+Sas de sécurité
+Barre de levage
+Afficheurs lcd
+Accessoires de caillebotis
+Système de réservation de salle de réunion
+Séparateurs huile/eau
+Tuyauterie modulaire
+Lampes pour colles photosensibles
+Convoyeurs / transporteurs à galets
+Têtes de soudage automatique
+Transstockeurs
+Plan d'évacuation
+Racks de stockage grillagés
+Lances incendie
+Armoires de stockage et de distribution
+Systèmes de stockage par accumulation
+Borne de satisfaction
+Manipulateurs pour cartons
+Racks de stockage pour produits longs
+Batteries de chauffage
+Externalisation de la gestion de paie
+Régulateurs analogiques pour refroidissement
+Analyseur d'antenne
+Concentrateur de données
+Palette en carton
+Télégestion de systèmes solaires
+Tourets, bobines et rouleaux de stockage
+Système de stockage d'énergie par batterie
+Échangeurs thermiques électriques
+Tente militaire
+Poêles polycombustibles
+Panneaux radiants à gaz
+Affichage de production
+Courbes pour convoyeurs / transporteurs
+Convoyeurs / transporteurs magnétiques
+Aménagement de bureau professionnel
+Jambière anti-coupure
+Banquette coworking
+Machines de nettoyage de climatisation
+Installations de filtration d'eau
+Détecteurs de chaleur
+Afficheurs lumineux commerciaux
+Station d'étamage
+Afficheur file d'attente
+Robot d'assistance à la personne
+Appareils d'assèchement de mur
+Sertisseuses pneumatiques
+Émerillons de levage
+Robot de nettoyage de panneaux solaires
+Hublot de visualisation
+Accumulateurs de palettes
+Système automatique de stockage et de déstockage (AS/RS)
+Kits d'identification d'accès
+Sac anti-inondation	
+Services de contrôle d'accès
+Robots de surveillance
+Turbocompresseurs
+Borne de gestion de file d'attente
+Alarme radio sans fil
+Accessoires pour pompes pneumatiques
+Parcs pour enfants
+Chargeurs pour transport pneumatique
+Laveur pistolet peinture
+Testeur de borne de recharge
+Lève roue
+Coque pour chaussure
+Bandes modulaires
+Bornes arrêt-minute
+Générateurs de tension
+Ressorts de torsion
+Capteur de vapeur d'huile d'air comprimé
+Bornes incendie
+Portillon de sécurité
+Poste de contrôle
+Pochette anti-téléphone pour la pause numérique
+Cabine de soudage laser
+Accessoires véhicules incendie
+Maintien en pression
+Basculeurs / retourneurs de conteneurs
+Ampèremètres numériques
+Colonne levage telescopique
+Basculeurs / retourneurs de bobines
+Logiciels de gestion et traitements de pesées
+Garnitures mécaniques
+Table de montage
+Salles de bains préfabriquées
+Démagnétiseurs
+Robot de pose de vitrage
+Postes de transformation de signaux électriques
+Masque pare-visage
+Robot de peinture 
+Joints tournants haute vitesse
+Tiroir à palette
+Cloison d'atelier
+Barrière écluse
+Turbines hydro-électrique
+Manipulateurs pour sacs
+Pistolet station peinture
+Capteur de pression d'air comprimé
+Chauffe roulement
+Service de désenfumage
+Purgeurs thermodynamique
+Convoyeur à accumulation
+Bornes hydrauliques
+Ioniseur d'air
+Régulateurs analogiques pour chauffage
+Convoyeurs à copeaux
+Pupitres informatiques
+Grille de transfert
+Table de sciage
+Recuperateur de chaleur sur eaux usees
+Afficheurs lumineux de sécurité
+Armoire et casier RFID
+Borne pour pont bascule
+Casier d'école
+Dés de palette
+Voltmètre
+Caillebotis en caoutchouc
+Panneaux coupe-feu
+Systèmes de pompage de lentilles d'eau
+Matelas isolant	
+Boîte à coins pour câbles de levage
+Système de dimensionnement et de pesée automatique
+Pico-ampèremètres
+Écran de cantonnement
+Pesages sur convoyeurs / transporteurs
+Régulateur pour éolienne
+Relais thermique
+Compresseur haute pression 
+Appareil à adduction d'air
+Embouts et galets pour convoyeurs
+Alarmes incendie électroniques
+Pompes pneumatiques manuelles
+Dalles de plafonds
+Détecteurs de faux documents
+Logiciels de gardiennage
+Chariot de séchage
+Repose-pied
+Casier électronique
+Contrôleurs pour engins de manutention
+Guide-roue
+Manche de chargement télescopique
+Toile filtrante
+Plates-formes de manutention
+Portes blindées de maisons 
+Cloisons fixes
+Compresseur de segment
+Machines à signer
+Analyseur d'air comprimé
+Machines de brasage
+Armoires à portes pliantes
+Filtre à gaz
+Barrière coulissante
+Roll-containers horizontal
+Tracker solaire
+Lampe de quai
+Fauteuil pour salle de spectacle
+Pied de cloison
+Caillebotis bois
+ Machine pour fabrication de porte clés personnalisés
+Mousses coupe-feu
+Centrales de chauffage
+Couronnes d'orientation
+Poulie variable
+Crash barrière
+Pochette de clés transportable
+Courroies pour convoyage
+Coffrets de sécurité
+Tresse métallique
+Robot humanoïde
+Protecteurs enrouleurs
+Millivoltmètre
+Enregistreur HDCVI
+Convoyeur de carrière
+Pellets ou granulés de bois
+Signalisations de détresse
+Chariot à ventouses
+Nettoyant de matériel de pulvérisation de peinture
+Portes blindées de chambres fortes
+Système de dosage d'émulseur
+Logiciels d'étude et de calcul électriques
+Détecteurs de chocs et vibrations
+Chariot pour grille d'exposition
+Tables / plateaux de transport à billes
+Convoyeurs / transporteurs au sol
+Feu tricolore intelligent
+Vestiaire pompier
+Convoyeurs / transporteurs à raclettes
+Caillebotis
+Convoyeurs hélicoïdaux
+Chargeurs, déchargeurs de manutention
+colonne lumineuse
+Entreprise de thermolaquage
+Générateurs d'eau chaude
+Shelter militaire
+Kit éolienne
+Onduleur pour soudure
+Raccord câble
+Basculeurs / retourneurs de palettes
+Cloisons translucides
+Endosseuses de chèques
+Sous-stations de chauffage
+Caisse de remuage
+Bornes à tickets
+Pince à border
+Contrôleurs de pesage
+Table vibrante
+Logiciels de gestion de la supply chain
+Tableaux d'alarmes incendie
+Cabines fumeurs
+Matériels de téléassistance
+Vanne à clapet
+Interverrouillage
+Obstacles escamotables
+Palette alimentaire
+Cuves pour pulvérulents et granules
+Colonnes de chauffage
+Débiteuses
+Gazomètres & réservoirs à gaz
+Distributeur automatique de vêtements ou D.A.V.
+Pince à rétreindre
+Robinets d'incendie armés
+Détecteurs de flammes
+Enduits coupe-feu
+Thermorégulateurs pid
+Solution de détection de faux documents
+Jeux d'imitation
+Trottinette industrielle
+Traverse de levage
+Mesures d'électricité statique
+Cage à drone filet et gonflable
+Bras de chargement
+Logiciels de schématique électrique
+Coffret électrique pour pompe
+Murs filtrant pour cabines de peinture
+Montre PTI
+ Cloisons et rideaux souples
+Simulateur de soudage
+Machines à hologrammes
+Filtre conique
+Plaque filtrante
+Colonne à taquet
+Mortiers coupe-feu
+Tube pneumatique
+Portes blindées d'appartement
+Murs et plinthes chauffants
+Canons incendie
+Totem pour bornes escamotables
+Amplificateur de puissance CEM
+Équipements de revêtement de surface
+Sirènes d'alerte à la population
+Chariot à peinture
+Panneaux solaires thermiques à air
+Établis électrifiés
+Pompes pneumatiques à palettes
+Couronneuses de câbles
+Sécheur d'air par absorption
+Poutres froides
+Applications mobiles de gardiennage
+Copieur de badge
+Interphone de sécurité
+Détecteurs d'explosifs et narcotiques
+Solutions automatisées
+Rives de guidage convoyeurs / transporteurs
+Coffres de transfert de fond
+Peintures coupe-feu
+Logiciels de câblage électrique
+climatiseur sans unité extérieure
+Passerelles de quais
+Portes tournantes de sécurité
+Bac à feu
+Porte anti-squat
+Pompes pneumatiques vide-conteneurs
+Chevalet de peinture
+Interfaces de commande pour soudage
+Véhicules anti incendie
+Navettes de stockage automatiques
+Bacs de rétention anti-feu 
+ chaufferie en container
+Régulateurs numériques pour refroidissement
+Convoyeurs / transporteurs à courroies
+Unités de traitement des condensats
+Sécheur de maillot de bain
+Autres matériels antistatiques 
+Extincteur automatique 
+Distributeurs d'air chaud pour cheminées
+Tabliers et fourches peseurs
+Barres de pesage
+Bac à livres
+Gaz combustible
+Filet pour palette
+Ballons électriques
+Plateforme de travail sur mât
+Doublure de conteneur
+Guichets pare-balles
+Détecteurs pour la sécurité routière
+Chariot porte-container
+Couverture anti-feu
+Autres climatiseurs
+ Grilles acoustiques de ventilation
+Climatiseurs militaires
+Housse de siège
+Protections individuelles antistatiques
+Kit mixte éolien-solaire
+Protections antistatiques des produits
+Scanners de sûreté
+Basculeur de GRV IBC
+Transpalette thermique
+Scies à câble
+Chauffe-eau aérothermiques
+Pompes hydrauliques vide-conteneurs
+Tunnels de peinture
+Moteur de désenfumage
+Parois et cloisons blindées
+Convoyeur à godet
+Trémie à fond ouvrant
+Jeux de barres
+SIRH
+Dématérialisation des documents
+Gicleurs pour chaudières
+Espaces de travail modulables
+Ascenseur à palette
+Tables techniques
+Masque auto sauveteur
+Bras anti-couple de vissage
+ Portes blindées de caves
+Matériels de clinchage
+Drones de mesures de radioactivité
+Magasins de stockage pour produits dangereux
+Chambres fortes
+Aerosols pour extincteurs
+Gradin modulable
+Pesages aéronautiques portables
+filtration membranaire
+Twist-lock
+Levage de container
+Pieds de support convoyeurs / transporteurs
+Chauffage de surface hydronique - Dégeleuse de sol
+Chariot d'air respirable
+Générateurs d'air froid
+Tabliers de recouvrement
+Contacteur sur barreaux
+Produit d'enduction
+Papiers sécurisés
+Chariot preparateur de commande
+Neutraliseurs pour chaudières
+Robot de livraison
+Test d'intégrité des filtres
+Conseil en financement public
+Rideaux d'air à gaz
+Table rotative de vernissage 
+Radiateur hydraulique eau chaude
+Cartes et badges réinscriptibles
+Drones voilure tournante
+Porte conteneur à déchets
+Robot d'accueil
+Pompe à membrane
+Télécommande BAES
+Cloisons extensibles accordéon
+Lève-conteneur
+Tresses de masse
+Entreprise de demenagement
+Désenfumage mécanique
+Convoyeurs / transporteurs à taquets
+Portillons relevables pour convoyeurs
+ Rideaux de scène 
+Groupes électrogènes d'éclairage
+Tours de vidéosurveillance mobile
+Chariot porte-bobine
+Mini chambres fortes
+Chaudière à miscanthus
+Container solaire
+Éolienne de pompage
+Sécheurs hybrides
+Modification d'entreprise en ligne
+Machines de soudure par impulsion
+Réparation de flexible hydraulique
+Facturation électronique
+Systèmes antivol pour engins de travaux publics
+Centrales hydropneumatiques
+Ampèremètres analogiques
+Pochette FOD
+fournisseur de gaz et d'électricité
+Création d'entreprise en ligne
+Vestiaire automatique
+Chauffe-eau géothermiques
+Bornes à jetons
+Chariot présentoir pour posters
+Basculeurs pour chariot
+Systèmes de gestion manuel d'entrepôts
+Postes de peinture
+Bureau d'étude d'éclairage
+Logiciels de création de devis en électricité
+Tableau d'affichage
+Chaudière mixte
+Machines de soudure par haute fréquence
+Bascule de circuit
+Plates-formes de survie en zone inondable
+Fauteuil d'allaitement
+Enrubanneuses de câbles
+Entreprise VPG
+Racks de stockage pour bateaux
+Véhicules électriques

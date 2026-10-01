@@ -7,10 +7,7 @@ from typing import Optional
 from urllib.parse import urlparse, urljoin
 from bs4 import BeautifulSoup
 
-try:
-    import redis.asyncio as aioredis
-except ImportError:
-    aioredis = None
+from common_utils.redis import cache_service
 
 from app.models.schemas import (
     DetectionMode, DetectionResponse, AlternativeUrl,
@@ -18,7 +15,13 @@ from app.models.schemas import (
     DebugUrlCheckInfo, DebugHtmlTagsInfo, DebugNlpInfo, DebugAlternativesInfo
 )
 from app.services.language_detector import LanguageDetector
+# fetch_html is no longer called from this module (Case 6 now probes with
+# scrape_html). It stays imported because three test files monkeypatch
+# app.core.domain_fr.fetch_html and would AttributeError without it.
+# Do not remove on an F401 sweep.
 from app.services.redirect_tracker import RedirectTracker, fetch_html
+from app.services.scraper import scrape_html
+from app.core.metrics import VALIDATION_SKIPPED
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -36,40 +39,27 @@ class DomainCache:
     - Échecs transitoires (challenge_page, fetch_empty_content, etc.) → 6 heures
     - Erreurs critiques (fetch_failed, error) → jamais cachées
     - En cas d'indisponibilité Redis, dégrade silencieusement (pas d'exception)
+
+    Client Redis : pool partagé common_utils.redis.cache_service, initialisé
+    par init_redis_pool() dans le lifespan de main.py (lu à chaque appel —
+    None si Redis indisponible au démarrage → cache invisible).
     """
 
     TTL_OK = 30 * 24 * 3600          # 30 jours — résultats définitifs positifs
     TTL_NOK = 7 * 24 * 3600          # 7 jours — résultats définitifs négatifs
     TTL_TRANSIENT = 6 * 3600          # 6 heures — échecs transitoires (retry automatique)
 
-    # Méthodes qui ne doivent JAMAIS être cachées (erreurs critiques)
-    _NEVER_CACHE_METHODS = frozenset({'error', 'fetch_failed'})
+    # Méthodes qui ne doivent JAMAIS être cachées (erreurs critiques + saturation)
+    _NEVER_CACHE_METHODS = frozenset({'error', 'fetch_failed', 'admission_rejected'})
 
     # Méthodes transitoires : cachées avec TTL court (le site était peut-être temporairement down)
     _TRANSIENT_METHODS = frozenset({
         'challenge_page',               # Cloudflare/WAF — peut se résoudre
         'fetch_empty_content',           # Contenu vide — proxy ou site down
+        'http_error_transient',          # 401/403/408/429/5xx sans corps challenge — conditions de fetch
         'all_redirections_failed',       # Redirections échouées
         'info_vide',                     # URL ou contenu absent
     })
-
-    def __init__(self) -> None:
-        self._client = None
-        self._initialized = False
-        self._init_lock = asyncio.Lock()
-
-    async def _get_client(self):
-        async with self._init_lock:
-            if not self._initialized:
-                self._initialized = True
-                redis_url = settings.REDIS_URL
-                if redis_url and aioredis:
-                    try:
-                        self._client = aioredis.from_url(redis_url, decode_responses=True)
-                        logger.info("Redis cache client créé (connexion au premier appel)")
-                    except Exception as e:
-                        logger.warning(f"Redis cache indisponible : {e}")
-        return self._client
 
     @staticmethod
     def _normalize_domain(url: str) -> Optional[str]:
@@ -85,7 +75,7 @@ class DomainCache:
         return f"fr_detect:{domain}"
 
     async def get(self, url: str) -> Optional[dict]:
-        client = await self._get_client()
+        client = cache_service.redis_client
         if not client:
             return None
         try:
@@ -99,9 +89,24 @@ class DomainCache:
             logger.debug(f"Cache get error ({url}): {e}")
         return None
 
-    async def set(self, input_url: str, result_url: str, result: dict) -> None:
-        """Stocke le résultat pour input_url ET result_url (si redirection)."""
-        client = await self._get_client()
+    async def set(
+        self,
+        input_url: str,
+        result_url: str,
+        result: dict,
+        ttl_override: Optional[int] = None,
+    ) -> None:
+        """Stocke le résultat pour input_url ET result_url (si redirection).
+
+        ttl_override: bypass the method-based TTL logic when provided. Used by
+        the page validator orchestration to set per-verdict TTLs (7d for
+        http_error / redirected_to_home, 6h for soft_404).
+
+        The persisted payload always carries `requested_url = input_url`
+        so cross-URL cache HITs (different path on the same domain) can
+        surface the originating URL via DetectionResponse.analyzed_url.
+        """
+        client = cache_service.redis_client
         if not client:
             return
         method = result.get('method', '')
@@ -112,8 +117,13 @@ class DomainCache:
             if not input_domain:
                 return
 
-            # TTL basé sur la qualité du résultat
-            if method in self._TRANSIENT_METHODS or any(
+            # Persist requested_url for cross-URL HIT awareness.
+            result["requested_url"] = input_url
+
+            # TTL: override > method-based logic.
+            if ttl_override is not None:
+                ttl = ttl_override
+            elif method in self._TRANSIENT_METHODS or any(
                 method.startswith(prefix) for prefix in ('HTTP_',)
             ):
                 ttl = self.TTL_TRANSIENT
@@ -149,12 +159,14 @@ class DomainFR:
         homepage: str,
         forced_method: Optional[str] = None,
         use_nlp_detection: bool = True,
-        original_homepage: Optional[str] = None
+        original_homepage: Optional[str] = None,
+        validate_alternatives: bool = True,
     ):
         self.homepage = homepage
         self.original_homepage = original_homepage or homepage
         self.forced_method = forced_method
         self.use_nlp_detection = use_nlp_detection
+        self.validate_alternatives = validate_alternatives
         self.tracker = RedirectTracker()
         self.language_detector = LanguageDetector()
     
@@ -337,8 +349,54 @@ class DomainFR:
         actual_norm = actual_domain.lower().replace('-', '').replace('_', '')
 
         return base_norm in actual_norm or actual_norm in base_norm
-    
+
+    @staticmethod
+    def _is_valid_language_alternative(homepage_host: str, candidate_url: str) -> bool:
+        """Return True only if candidate_url is plausibly a language variant of homepage.
+
+        Cross-host candidates (different hostname): trusted unconditionally — webmasters
+        legitimately declare external alternates via hreflang.
+
+        Same-host candidates: must have a language-shaped first path segment matching
+        ^[a-z]{2}([-_][a-z]{2,4})?$ (case-insensitive). Examples accepted:
+          /fr, /fr/page, /fr-FR, /fr_FR/page, /en, /en-GB, /de, /de-DE, /pt-BR
+
+        Same-host content paths (/, /nos-realisations, /produits, /a-propos,
+        /l-entreprise, etc.) are rejected — these are jaunin.com-style webmaster
+        errors where hreflang points at a content section instead of a language root.
+
+        Malformed URLs return False.
+        """
+        if not candidate_url:
+            return False
+        try:
+            parsed = urlparse(candidate_url)
+        except Exception:
+            return False
+
+        if not parsed.scheme or not parsed.hostname:
+            return False
+
+        def _strip_www(h: str) -> str:
+            return h.removeprefix('www.')
+
+        candidate_host = _strip_www(parsed.hostname.lower())
+        if candidate_host != _strip_www((homepage_host or '').lower()):
+            # Cross-host: trusted (explicit webmaster declaration).
+            return True
+
+        segments = [s for s in (parsed.path or '').split('/') if s]
+        if not segments:
+            return False
+
+        first_segment = segments[0]
+        return bool(re.match(r'^[a-z]{2}([-_][a-z]{2,4})?$', first_segment, re.IGNORECASE))
+
     async def _validate_single_url(self, url: str) -> bool:
+        """Validates that a URL is reachable and serves HTML content."""
+        return await self._validate_single_url_status(url) == 'valid'
+
+    async def _validate_single_url_status(self, url: str) -> str:
         """
         Validates that a URL is reachable and serves HTML content.
 
@@ -346,6 +404,11 @@ class DomainFR:
         1. httpx (rapide, léger) — suffisant pour la plupart des sites
         2. Playwright (fallback) — pour les sites avec protection anti-bot
            qui bloquent les requêtes httpx mais acceptent les navigateurs
+
+        Returns:
+            'valid' | 'self_redirect' (la candidate redirige vers la page
+            analysée — switcher mort, cause distinguée pour permettre le
+            sauvetage sitemap) | 'invalid'
         """
         # Phase 1 : validation rapide via httpx
         try:
@@ -356,10 +419,14 @@ class DomainFR:
                 proxy=settings.APIFY_PROXY
             ) as client:
                 response = await client.get(url)
+                if self._redirects_to_analyzed_page(url, str(response.url)):
+                    # Définitif (la racine renvoie ailleurs) — inutile de
+                    # retenter au navigateur, même redirection serveur.
+                    return 'self_redirect'
                 if response.status_code == 200:
                     content_type = response.headers.get('content-type', '')
                     if 'text/html' in content_type or 'application/xhtml' in content_type:
-                        return True
+                        return 'valid'
         except Exception:
             pass
 
@@ -370,12 +437,126 @@ class DomainFR:
             if effective_proxy:
                 result = await scrape_html(url, proxy=effective_proxy)
                 if result:
-                    content, _ = result
+                    if self._redirects_to_analyzed_page(url, result.final_url):
+                        return 'self_redirect'
+                    content = result.html
                     if content and len(content) > 100:
-                        return True
+                        return 'valid'
         except Exception:
             pass
 
+        return 'invalid'
+
+    _SITEMAP_PATHS = ('/sitemap_index.xml', '/wp-sitemap.xml')  # Yoast puis WP core
+
+    async def _sitemap_rescue_url(self, candidate_url: str) -> Optional[str]:
+        """
+        Sauvetage « switcher mort » : quand la RACINE d'une candidate redirige
+        vers la page analysée, le site peut quand même servir son contenu sur
+        les paths internes (metaga.fr : / → 301 metaga.es, mais /contact/ →
+        200 lang=fr — redirection apex mal configurée, contenu FR bien réel).
+        On lit le sitemap de la candidate et on retourne la première page
+        interne même hôte — la validation HTTP + la confirmation NLP Case 6
+        jugent ensuite son contenu.
+        """
+        parsed = urlparse(candidate_url)
+        host = (parsed.hostname or '').lower().removeprefix('www.')
+        if not host:
+            return None
+        origin = f"{parsed.scheme or 'https'}://{parsed.netloc}"
+
+        loc_re = re.compile(r'<loc>\s*([^<\s]+)\s*</loc>')
+
+        def _first_inner_page(locs: list[str]) -> Optional[str]:
+            for loc in locs:
+                p = urlparse(loc)
+                # Tolérance www : le sitemap de metaga.fr pourrait lister
+                # www.metaga.fr — même site.
+                if (p.hostname or '').lower().removeprefix('www.') != host:
+                    continue
+                if (p.path or '/').rstrip('/') in ('', '/'):
+                    continue  # la racine est précisément ce qui redirige
+                if 'trashed' in p.path:
+                    continue
+                return loc
+            return None
+
+        try:
+            async with httpx.AsyncClient(
+                timeout=10,
+                follow_redirects=True,
+                verify=False,
+                proxy=settings.APIFY_PROXY
+            ) as client:
+                for path in self._SITEMAP_PATHS:
+                    try:
+                        response = await client.get(origin + path)
+                    except Exception:
+                        continue
+                    if response.status_code != 200:
+                        continue
+                    # Borne mémoire : 2MB de XML ≈ dizaines de milliers de
+                    # <loc> — largement assez pour trouver UNE page interne.
+                    body = response.text[:2_000_000]
+                    locs = loc_re.findall(body)
+                    if not locs:
+                        continue
+                    # Index de sitemaps ? Descendre d'UN niveau (préférer le
+                    # sitemap des pages, plus textuel que posts/produits).
+                    if '<sitemapindex' in body:
+                        children = sorted(locs, key=lambda u: 'page' not in u)
+                        try:
+                            child_resp = await client.get(children[0])
+                        except Exception:
+                            continue
+                        if child_resp.status_code != 200:
+                            continue
+                        locs = loc_re.findall(child_resp.text[:2_000_000])
+                    rescue = _first_inner_page(locs)
+                    if rescue:
+                        logger.info(
+                            f"Sauvetage sitemap: {candidate_url} (racine morte) "
+                            f"→ {rescue}"
+                        )
+                        return rescue
+        except Exception:
+            pass
+        return None
+
+    def _redirects_to_analyzed_page(self, candidate_url: str, final_url: Optional[str]) -> bool:
+        """
+        Vrai si une candidate alternative redirige vers la page en cours
+        d'analyse (lien switcher mort — ex: WPML metaga.fr → 301 → metaga.es,
+        la page analysée). La valider déclencherait un fetch navigateur Case 6
+        de 120s garanti inutile : le contenu est celui déjà jugé non français.
+        """
+        if not final_url or self._compare_without_scheme(candidate_url, final_url):
+            return False  # pas de redirection — l'URL se juge sur son contenu
+        # Switcher à cookie : /?lang=fr → Set-Cookie + 302 vers / (la query
+        # tombe mais la session porte le cookie). Même hôte + même path que la
+        # cible finale = même emplacement, pas un renvoi ailleurs — le fetch
+        # Case 6 (qui rejoue le cookie) doit juger le contenu.
+        cand = urlparse(candidate_url)
+        fin = urlparse(final_url)
+        if (
+            (cand.hostname or '').lower() == (fin.hostname or '').lower()
+            and (cand.path or '/').rstrip('/') == (fin.path or '/').rstrip('/')
+        ):
+            return False
+        if self._compare_without_scheme(final_url, self.homepage):
+            logger.debug(
+                f"Alternative rejetée (redirige vers la page analysée): "
+                f"{candidate_url} → {final_url}"
+            )
+            return True
+        if self.original_homepage and self._compare_without_scheme(
+            final_url, self.original_homepage
+        ):
+            logger.debug(
+                f"Alternative rejetée (redirige vers la homepage d'origine): "
+                f"{candidate_url} → {final_url}"
+            )
+            return True
         return False
 
     async def _validate_alternative_urls(
@@ -410,7 +591,8 @@ class DomainFR:
 
             async with semaphore:
                 # First attempt: validate the resolved URL
-                if await self._validate_single_url(resolved_url):
+                status = await self._validate_single_url_status(resolved_url)
+                if status == 'valid':
                     return AlternativeUrl(
                         url=resolved_url,
                         method=candidate['method'],
@@ -418,6 +600,23 @@ class DomainFR:
                         validated=True,
                         region_priority=priority
                     )
+
+                # Switcher mort (racine redirigeant vers la page analysée) :
+                # le contenu peut vivre sur les paths internes (metaga.fr).
+                # Une page interne trouvée via sitemap REMPLACE la candidate —
+                # c'est elle que la boucle Case 6 fetchera et confirmera NLP.
+                if status == 'self_redirect':
+                    rescue_url = await self._sitemap_rescue_url(resolved_url)
+                    if rescue_url and await self._validate_single_url(rescue_url):
+                        return AlternativeUrl(
+                            url=rescue_url,
+                            method=candidate['method'] + '_sitemap',
+                            reliability='medium',
+                            validated=True,
+                            region_priority=self._french_region_priority(
+                                rescue_url, hreflang_val
+                            )
+                        )
 
                 # Retry with / prepended (PHP needEditUrl behavior)
                 if (
@@ -581,6 +780,75 @@ class DomainFR:
         # Defaut : generique
         return 1
 
+    def _synthesize_lang_substitution_urls(self, content: str) -> list[str]:
+        """
+        Dernier recours quand la page ne référence aucune URL française :
+        substitue le code langue déclaré (<html lang>, hreflang) par 'fr' dans
+        les URLs auto-référentes (canonical, hreflang) dont le path contient ce
+        code en token isolé. Ex: /home-page-it -> /home-page-fr.
+
+        Retourne au plus 2 URLs même hôte. Aucune validation ici : les
+        candidates passent par la validation HTTP puis la confirmation NLP de
+        la boucle Case 6 — une mauvaise supposition ne peut pas rendre ok=true.
+        """
+        try:
+            soup = BeautifulSoup(content, 'lxml')
+        except Exception:
+            return []
+
+        homepage_host = (urlparse(self.homepage).hostname or '').lower()
+
+        # Codes langue déclarés (hors fr) : <html lang> + hreflang des <link>
+        lang_codes: set[str] = set()
+        html_tag = soup.find('html')
+        if html_tag:
+            lang_attr = (html_tag.get('lang') or '').strip().lower()
+            if lang_attr:
+                lang_codes.add(re.split(r'[-_]', lang_attr)[0])
+
+        # URLs auto-référentes (canonical + alternate, même hôte)
+        self_urls: list[str] = []
+        for link in soup.find_all('link'):
+            rels = [r.lower() for r in (link.get('rel') or [])]
+            href = link.get('href')
+            if not href or ('canonical' not in rels and 'alternate' not in rels):
+                continue
+            hreflang_val = (link.get('hreflang') or '').strip().lower()
+            if hreflang_val:
+                lang_codes.add(re.split(r'[-_]', hreflang_val)[0])
+            resolved = self.resolve_url(self.homepage, href)
+            if resolved and (urlparse(resolved).hostname or '').lower() == homepage_host:
+                if resolved not in self_urls:
+                    self_urls.append(resolved)
+
+        lang_codes.discard('fr')
+        lang_codes = {c for c in lang_codes if re.fullmatch(r'[a-z]{2}', c)}
+        if not lang_codes or not self_urls:
+            return []
+
+        synthesized: list[str] = []
+        for self_url in self_urls:
+            parsed = urlparse(self_url)
+            path = parsed.path or '/'
+            for code in lang_codes:
+                # Token isolé : 'it' matche /home-page-it ou /it/ mais pas /item.
+                # Une candidate PAR occurrence (pas de sub global : /it/it-support
+                # doit donner /fr/it-support et /it/fr-support, jamais
+                # /fr/fr-support). Casse du token respectée (/IT/ → /FR/).
+                token = re.compile(
+                    rf'(?<![a-z]){re.escape(code)}(?![a-z])', re.IGNORECASE
+                )
+                for m in token.finditer(path):
+                    repl = 'FR' if m.group().isupper() else 'fr'
+                    new_path = path[:m.start()] + repl + path[m.end():]
+                    synth = parsed._replace(path=new_path).geturl()
+                    if synth not in synthesized and not self._is_self_url(synth):
+                        synthesized.append(synth)
+            if len(synthesized) >= 2:
+                break
+
+        return synthesized[:2]
+
     async def detect_alternative_languages(self, content: str) -> list[AlternativeUrl]:
         """
         Recherche des liens vers une version française, les valide et les tague.
@@ -682,6 +950,11 @@ class DomainFR:
                     if href and href != '#':
                         resolved = self.resolve_url(self.homepage, href)
                         if resolved and not self._is_self_url(resolved):
+                            if not self._is_valid_language_alternative(homepage_host, resolved):
+                                logger.debug(
+                                    f"hreflang rejected (non-language-shaped target): {resolved}"
+                                )
+                                continue
                             _add_trusted(resolved, 'hreflang', hreflang_value=hreflang_val)
 
             # 2. data-lang et data-gt-lang (need validation, medium reliability)
@@ -694,6 +967,11 @@ class DomainFR:
                         if href and href != '#':
                             resolved = _resolve_and_check(href)
                             if resolved:
+                                if not self._is_valid_language_alternative(homepage_host, resolved):
+                                    logger.debug(
+                                        f"{attr_name} rejected (non-language-shaped target): {resolved}"
+                                    )
+                                    continue
                                 _queue_candidate(resolved, href, method_name, hreflang_value=lang_val)
 
             # 3. Liens <a> avec /fr/ ou lang=fr (need validation, medium reliability)
@@ -809,8 +1087,34 @@ class DomainFR:
         except Exception:
             pass
 
-        # Validate candidates via HTTP (parallel, max 3 concurrent)
-        validated_results = await self._validate_alternative_urls(candidates_to_validate)
+        # 7. Sonde par substitution de code langue (dernier recours, zéro candidat).
+        # Certains sites ont une version FR réelle jamais référencée par la page
+        # (hreflang cassé, pas de switcher — ex: siderosengineering.com déclare
+        # uniquement hreflang="it" auto-référent alors que /home-page-fr existe).
+        # On substitue le code langue déclaré par 'fr' dans les URLs auto-référentes
+        # (canonical/hreflang) ; la validation HTTP ci-dessous + la confirmation NLP
+        # de la boucle Case 6 rejettent les mauvaises suppositions.
+        if not all_alternatives and not candidates_to_validate:
+            for synth_url in self._synthesize_lang_substitution_urls(content):
+                _queue_candidate(synth_url, synth_url, 'lang_substitution')
+
+        # Validate candidates via HTTP (parallel, max 3 concurrent) — only when enabled.
+        if self.validate_alternatives:
+            validated_results = await self._validate_alternative_urls(candidates_to_validate)
+        else:
+            # Skip-all: no httpx, no browser. Return medium candidates unvalidated.
+            validated_results = [
+                AlternativeUrl(
+                    url=c['url'],
+                    method=c['method'],
+                    reliability='low',
+                    validated=False,
+                    region_priority=self._french_region_priority(c['url'], c.get('hreflang_value', '')),
+                )
+                for c in candidates_to_validate
+            ]
+            if candidates_to_validate:
+                VALIDATION_SKIPPED.inc()
         all_alternatives.extend(validated_results)
 
         # Sort by: 1) reliability (high > medium > low), 2) region priority (France > generic > other)
@@ -822,6 +1126,25 @@ class DomainFR:
 
         return all_alternatives[:10]
     
+    @staticmethod
+    def _extract_visible_text_coarse(html: str) -> str:
+        """
+        Texte visible via un décapage volontairement GROSSIER (script, style,
+        meta, link, noscript retirés puis get_text) — plus grossier que
+        `LanguageDetector.clean_html_to_text` (qui retire en plus head/img/
+        svg/iframe/... et les bannières cookies). C'est ce décapage-ci, pas le
+        fin, qui sert d'oracle pour juger « page vide » : précédent Cas 2b
+        (TLD .fr, ci-dessous), généralisé aux Cas 2a/7/9 (N1, 2026-08-13,
+        sonde production automatismes.net — cf. CLAUDE.md).
+        """
+        try:
+            soup_check = BeautifulSoup(html, 'lxml')
+            for el in soup_check(['script', 'style', 'meta', 'link', 'noscript']):
+                el.decompose()
+            return soup_check.get_text(separator=' ', strip=True)
+        except Exception:
+            return ''
+
     async def check_page_if_french(
         self,
         content: str,
@@ -940,7 +1263,16 @@ class DomainFR:
                 url=url,
                 method='Check_nok_forced'
             )
-        
+
+        # N1 : texte visible calculé UNE fois — sert d'oracle aux trois
+        # verdicts négatifs (Cas 2a, 7, 9 plus bas) qui ne peuvent pas
+        # conclure « pas français » sur une page qu'on n'a pas pu lire.
+        # Un verdict POSITIF sans texte reste légitime (nlp_skipped) : ce
+        # garde ne s'applique volontairement qu'aux rejets. Calculé après le
+        # bloc forced_method (qui retourne toujours avant d'y arriver) pour
+        # ne pas payer le parse lxml sur ce chemin.
+        visible_text = self._extract_visible_text_coarse(content)
+
         # Étape 3 : Détection langue HTML (balises <html lang>, meta, etc.)
         lang_result = self.language_detector.detect_combined(content, use_nlp=False)
         html_indicates_french = lang_result.get('detected') and lang_result.get('is_french')
@@ -988,7 +1320,12 @@ class DomainFR:
         alternatives = []
         if mode == DetectionMode.COMPLETE:
             alternatives = await self.detect_alternative_languages(content)
-        
+
+        # Filtre pur (aucune I/O) remonté ici : le cas 2a en a besoin pour
+        # savoir s'il existe une alternative à examiner avant de rejeter.
+        # Le cas 6 (plus bas) réutilise la même variable.
+        reliable_alternatives = [a for a in alternatives if a.validated]
+
         # ====================================================================
         # LOGIQUE DE DÉCISION FINALE
         # ====================================================================
@@ -1015,67 +1352,81 @@ class DomainFR:
             # Sous-cas 2a : NLP contredit fortement (>0.9 confiance dans une autre langue)
             # → Rare mais possible (ex: site .fr en anglais)
             if nlp_strongly_contradicts:
-                logger.info(
-                    f"TLD .fr mais NLP détecte {nlp_lang} avec confiance {nlp_confidence:.3f} — rejet"
-                )
-                return DetectionResponse(
-                    ok=False,
-                    url=url,
-                    method='nlp_override_tld_fr',
-                    confidence=nlp_confidence,
-                    alternative_urls=alternatives,
-                    error=f"TLD .fr mais contenu détecté comme {nlp_lang} ({nlp_confidence:.0%})"
-                )
-            
-            # Sous-cas 2b : NLP soft-confirme, ou NLP indisponible, ou NLP faiblement contredit
-            # → Le TLD .fr est un signal suffisamment fort pour valider
-
-            # Guard : si NLP est indisponible PARCE QUE le contenu est vide/trop court,
-            # c'est un signe que le site est inaccessible (502, erreur proxy, etc.).
-            # Ne PAS faire confiance au TLD dans ce cas.
-            if not nlp_available:
-                try:
-                    soup_check = BeautifulSoup(content, 'lxml')
-                    for el in soup_check(['script', 'style', 'meta', 'link', 'noscript']):
-                        el.decompose()
-                    visible_text = soup_check.get_text(separator=' ', strip=True)
-                except Exception:
-                    visible_text = ''
-
-                if len(visible_text) < settings.NLP_MIN_TEXT_LENGTH:
+                # …mais si la page DÉCLARE une version française validée, ne pas
+                # trancher ici : laisser le cas 6 (plus bas) récupérer cette
+                # alternative et décider sur SON contenu. Sans ce garde-fou, un
+                # site .fr à accueil anglais + /fr/ validé était rejeté alors
+                # qu'il a bien une version française (cas réel sumca.fr).
+                # Si validate_alternatives est off, le cas 6 est sauté : on garde
+                # le rejet immédiat et son message plus clair.
+                if not (self.validate_alternatives and reliable_alternatives):
+                    # N1 : pas de verdict négatif sur une page qu'on n'a pas
+                    # pu lire — même garde que le Cas 2b juste au-dessus.
+                    if len(visible_text) < settings.NLP_MIN_TEXT_LENGTH:
+                        return DetectionResponse(
+                            ok=False,
+                            url=url,
+                            method='fetch_empty_content',
+                            alternative_urls=alternatives,
+                            error=f"TLD .fr mais contenu insuffisant ({len(visible_text)} caractères) — verdict non fiable sur texte vide"
+                        )
+                    logger.info(
+                        f"TLD .fr mais NLP détecte {nlp_lang} avec confiance {nlp_confidence:.3f} — rejet"
+                    )
                     return DetectionResponse(
                         ok=False,
                         url=url,
-                        method='fetch_empty_content',
+                        method='nlp_override_tld_fr',
+                        confidence=nlp_confidence,
                         alternative_urls=alternatives,
-                        error=f"TLD .fr mais contenu insuffisant ({len(visible_text)} caractères) — site probablement inaccessible"
+                        error=f"TLD .fr mais contenu détecté comme {nlp_lang} ({nlp_confidence:.0%})"
                     )
-
-            methods = [url_method]
-            if html_indicates_french:
-                methods.append(html_method)
-
-            if nlp_soft_french:
-                methods.append('nlp_soft_confirmed')
-                confidence = nlp_confidence
-            elif not nlp_available:
-                methods.append('nlp_skipped')
-                confidence = 0.7
-            elif nlp_contradicts_french:
-                methods.append(f'nlp_weak_disagree_{nlp_lang}')
-                confidence = 0.6
+                logger.info(
+                    f"TLD .fr mais NLP détecte {nlp_lang} ({nlp_confidence:.3f}) — "
+                    f"{len(reliable_alternatives)} alternative(s) validée(s) à vérifier (cas 6)"
+                )
             else:
-                methods.append('tld_trusted')
-                confidence = 0.8
-            
-            return DetectionResponse(
-                ok=True,
-                url=url,
-                method='+'.join(methods),
-                confidence=confidence,
-                alternative_urls=alternatives
-            )
-        
+                # Sous-cas 2b : NLP soft-confirme, ou NLP indisponible, ou NLP faiblement contredit
+                # → Le TLD .fr est un signal suffisamment fort pour valider
+
+                # Guard : si NLP est indisponible PARCE QUE le contenu est vide/trop court,
+                # c'est un signe que le site est inaccessible (502, erreur proxy, etc.).
+                # Ne PAS faire confiance au TLD dans ce cas.
+                if not nlp_available:
+                    if len(visible_text) < settings.NLP_MIN_TEXT_LENGTH:
+                        return DetectionResponse(
+                            ok=False,
+                            url=url,
+                            method='fetch_empty_content',
+                            alternative_urls=alternatives,
+                            error=f"TLD .fr mais contenu insuffisant ({len(visible_text)} caractères) — site probablement inaccessible"
+                        )
+
+                methods = [url_method]
+                if html_indicates_french:
+                    methods.append(html_method)
+
+                if nlp_soft_french:
+                    methods.append('nlp_soft_confirmed')
+                    confidence = nlp_confidence
+                elif not nlp_available:
+                    methods.append('nlp_skipped')
+                    confidence = 0.7
+                elif nlp_contradicts_french:
+                    methods.append(f'nlp_weak_disagree_{nlp_lang}')
+                    confidence = 0.6
+                else:
+                    methods.append('tld_trusted')
+                    confidence = 0.8
+
+                return DetectionResponse(
+                    ok=True,
+                    url=url,
+                    method='+'.join(methods),
+                    confidence=confidence,
+                    alternative_urls=alternatives
+                )
+
         # Cas 3 : Signal URL modéré (/fr/, lang=fr, sous-domaine) + NLP soft FR
         if url_indicates_french and nlp_soft_french:
             methods = [url_method, 'nlp_soft_confirmed']
@@ -1120,23 +1471,33 @@ class DomainFR:
         # Cas 6 : Liens alternatifs français validés/trusted trouvés
         # Exécute la détection complète (fetch + NLP) sur les meilleures alternatives
         # pour confirmer qu'elles sont réellement en français, pas juste accessibles.
-        reliable_alternatives = [a for a in alternatives if a.validated]
-        if reliable_alternatives:
+        if self.validate_alternatives and reliable_alternatives:
             challenge_blocked_count = 0
             challenge_blocked_service = None
             fetch_failed_count = 0
 
             for alt_candidate in reliable_alternatives:
                 try:
+                    # Une alternative est une SONDE de confirmation, pas une cible
+                    # primaire : les reprises et les permutations http/https+www
+                    # existent pour l'URL demandée par l'appelant. Envelopper la
+                    # cascade complète de fetch_html (3 tentatives × ~85s) dans un
+                    # wait_for de 120s garantissait l'annulation en pleine
+                    # navigation, ce qui orphelinait le callback protocolaire du
+                    # goto et produisait le flood « Future exception was never
+                    # retrieved ». settings.APIFY_PROXY est déjà l'URL complète
+                    # (config.py:57-64), comme aux appels :414/:484.
                     alt_content_result = await asyncio.wait_for(
-                        fetch_html(alt_candidate.url), timeout=120
+                        scrape_html(alt_candidate.url, proxy=settings.APIFY_PROXY),
+                        timeout=120,
                     )
                     if not alt_content_result:
                         logger.warning(f"Impossible de récupérer le contenu de l'alternative {alt_candidate.url}")
                         fetch_failed_count += 1
                         continue
 
-                    alt_content, alt_final_url = alt_content_result
+                    alt_content = alt_content_result.html
+                    alt_final_url = alt_content_result.final_url
 
                     # Vérifier que ce n'est pas une page de challenge
                     from app.services.language_detector import detect_challenge_page
@@ -1238,6 +1599,15 @@ class DomainFR:
 
         # Cas 7 : NLP disponible mais ne confirme pas, malgré indicateurs HTML/URL
         if nlp_available and (html_indicates_french or url_indicates_french):
+            # N1 : pas de verdict négatif sur une page qu'on n'a pas pu lire.
+            if len(visible_text) < settings.NLP_MIN_TEXT_LENGTH:
+                return DetectionResponse(
+                    ok=False,
+                    url=url,
+                    method='fetch_empty_content',
+                    alternative_urls=alternatives,
+                    error=f"Indicateurs trouvés ({html_method or url_method}) mais contenu insuffisant ({len(visible_text)} caractères) — verdict non fiable sur texte vide"
+                )
             return DetectionResponse(
                 ok=False,
                 url=url,
@@ -1246,38 +1616,137 @@ class DomainFR:
                 error=f"Indicateurs trouvés ({html_method or url_method}) mais NLP détecte: {nlp_lang or 'N/A'}"
             )
         
-        # Cas 8 : Dernier recours — signal lexical français
-        # Uniquement si NLP n'est pas disponible (texte trop court, modèle absent).
-        # Si NLP a détecté une autre langue, le signal lexical ne doit JAMAIS
-        # outrepasser le NLP — sinon des sites allemands/espagnols/etc. avec
-        # quelques mots français (navigation, footer) seraient faussement détectés.
-        if not nlp_available:
+        # Cas 8 : Dernier recours — signal lexical français. Deux situations :
+        #   - NLP indisponible (texte trop court, modèle absent) ;
+        #   - NLP dit `fr` mais SOUS le seuil (soft) et aucun indicateur URL/HTML
+        #     n'a pu le corroborer (cas amt-lavage.com : .com donc pas de signal
+        #     URL, lang="en-US" erroné donc pas de signal HTML, fastText fr 0.723
+        #     < 0.75, signal lexical 0.577 → tombait en cas 9).
+        # Le signal lexical CORROBORE, il n'outrepasse JAMAIS le NLP — mais
+        # `nlp_soft_french` seul ne le garantit PAS : si le NLP a détecté une
+        # AUTRE langue avec une faible confiance, le cross-check :1257-1272
+        # remplace `nlp_result` par le verdict langdetect+langid, dont
+        # l'élection `fr` peut avoir été DÉCIDÉE par le signal lexical
+        # lui-même (language_detector.py:589-592 ajoute french_signal * 0.3
+        # au panier `fr` dès que le signal > 0.5) — lire ensuite ce même
+        # nombre comme corroboration serait circulaire. Et le seuil lexical
+        # 0.3 ne filtre pas les langues romanes : prose espagnole mesurée à
+        # 0.990 sans un seul mot exclusivement français, contre 0.000 pour
+        # l'anglais. Le rattrapage soft-FR exige donc DEUX garde-fous
+        # (revue finale 2026-07-29), calculés dans `soft_from_fasttext` :
+        #  1. la décision `fr` doit venir de fastText (jamais du substitut
+        #     langdetect+langid) — fastText ne laisse jamais le signal
+        #     lexical changer le label (language_detector.py:693-698 :
+        #     bonus de confiance uniquement, jamais de changement de langue) ;
+        #  2. la confiance doit atteindre NLP_SOFT_MIN_CONFIDENCE, sinon un
+        #     simple argmax `fr` à 0.18 serait rattrapé.
+        # Ce cas est le DERNIER de la matrice : l'élargir ne peut préempter aucun
+        # autre cas.
+        soft_from_fasttext = (
+            nlp_soft_french
+            and (nlp_result or {}).get('method') == 'nlp_detection_fasttext'
+            and nlp_confidence >= settings.NLP_SOFT_MIN_CONFIDENCE
+        )
+        if not nlp_available or soft_from_fasttext:
             try:
-                soup_check = BeautifulSoup(content, 'lxml')
-                for el in soup_check(['script', 'style', 'meta', 'link', 'noscript']):
-                    el.decompose()
-                visible_text = soup_check.get_text(separator=' ', strip=True)
+                # Réutiliser le signal déjà calculé par le NLP : il porte sur le
+                # texte nettoyé (bannières de consentement retirées) que fastText
+                # a réellement analysé, alors que le recalcul ci-dessous utilise
+                # un décapage plus grossier. Repli uniquement si absent.
+                french_signal = None
+                if nlp_result:
+                    french_signal = (nlp_result.get('details') or {}).get('french_signal')
 
-                if len(visible_text) >= 50:
-                    french_signal = self.language_detector._compute_french_signal(visible_text)
+                if french_signal is None:
+                    if len(visible_text) >= 50:
+                        french_signal = self.language_detector._compute_french_signal(visible_text)
+
+                if french_signal is not None:
                     logger.debug(f"Lexical French signal (last resort): {french_signal:.3f}")
 
                     if french_signal > 0.3:
+                        if nlp_soft_french:
+                            method = 'nlp_soft_confirmed+french_lexical_signal'
+                            confidence = nlp_confidence
+                        else:
+                            method = 'french_lexical_signal'
+                            confidence = round(min(0.7, french_signal), 3)
+
+                        logger.info(
+                            f"Signal lexical français {french_signal:.3f} retenu "
+                            f"({method})"
+                        )
                         return DetectionResponse(
                             ok=True,
                             url=url,
-                            method='french_lexical_signal',
-                            confidence=round(min(0.7, french_signal), 3),
+                            method=method,
+                            confidence=confidence,
                             alternative_urls=alternatives
                         )
             except Exception as e:
                 logger.warning(f"Erreur signal lexical: {e}")
         
-        # Cas 9 : Aucun indicateur français trouvé
+        # Cas 9 : Aucun indicateur français trouvé.
+        # NB: alternative_urls reste volontairement vide ici — le crawler
+        # (routes.ts) et le BO (not_french_signal.php) traitent « ok=false +
+        # alternatives non vides » comme un signal distinct de not_french ;
+        # exposer les candidates trouvées-puis-rejetées casserait cette chaîne.
+        # Le diagnostic passe par /detect-debug (debug.alternatives).
+        #
+        # OBSERVATION du signal lexical (aucune décision). Un faux négatif
+        # mesuré le 2026-08-10 — automatismes.net, 3500 caractères de français
+        # limpide, ni `html lang` ni hreflang ni TLD — n'atteint jamais le
+        # Cas 8, dont le garde `soft_from_fasttext` (:1606-1611) exige que
+        # fastText ait dit `fr`. Le compte de mots exclusifs distincts est donc
+        # publié ICI, en clair, pour qu'un run réel dise combien de domaines
+        # seraient rattrapables et à quel seuil. Le champ `error` est libre au
+        # Cas 9 (aucune autre écriture) et déjà affiché par le rapport BO :
+        # zéro changement de contrat. Le VERDICT, lui, ne change pas.
+        # Dénominateur du recensement : la clé vient de `nlp_result['details']`,
+        # donc absente si `nlp_result` est `None` (NLP indisponible). Les
+        # comptes publiés ici couvrent « Cas 9 atteint AVEC un verdict NLP »,
+        # pas tout le Cas 9 — sans conséquence pour la classe motivante
+        # (fastText répond avec assurance), mais une session future ne doit
+        # pas les lire comme une couverture complète.
+        lexical_note = None
+        threshold = settings.LEXICAL_OBSERVATION_MIN_DISTINCT
+        exclusive_distinct = (
+            ((nlp_result or {}).get('details') or {}).get('french_exclusive_distinct')
+        )
+        if (
+            threshold > 0
+            and isinstance(exclusive_distinct, int)
+            and exclusive_distinct >= threshold
+        ):
+            lexical_note = (
+                f"lexical: {exclusive_distinct} mots exclusifs distincts — "
+                f"rattrapage candidat"
+            )
+            logger.info(f"[LEXICAL-OBS] {url} : {lexical_note}")
+
+        # N1 : pas de verdict négatif sur une page qu'on n'a pas pu lire —
+        # cas motivant de ce garde (sonde production 2026-08-13,
+        # automatismes.net-like : 0 caractère visible, Cas 9 sans texte).
+        # PAS de alternative_urls ici (contrairement aux Cas 2a/7) : le
+        # contrat documenté juste au-dessus (Cas 9) garde ce champ vide à
+        # dessein — crawler routes.ts + BO not_french_signal.php lisent
+        # « ok=false + alternatives non vides » comme un signal distinct de
+        # not_french. Les candidates viennent de <link>, que le décapage
+        # grossier retire du TEXTE mais pas du DOM : les exposer ici ferait
+        # publier « alternative FR trouvée » pour une page illisible.
+        if len(visible_text) < settings.NLP_MIN_TEXT_LENGTH:
+            return DetectionResponse(
+                ok=False,
+                url=url,
+                method='fetch_empty_content',
+                error=f"Aucun indicateur trouvé et contenu insuffisant ({len(visible_text)} caractères) — verdict non fiable sur texte vide"
+            )
+
         return DetectionResponse(
             ok=False,
             url=url,
-            method='Check_nok_v2'
+            method='Check_nok_v2',
+            error=lexical_note,
         )
 
     async def check_page_if_french_debug(
@@ -1287,7 +1756,8 @@ class DomainFR:
         fetched_by: str = 'api',
         include_full_content: bool = False,
         redirected_from: Optional[str] = None,
-        challenge_detected: Optional[str] = None
+        challenge_detected: Optional[str] = None,
+        http_status: Optional[int] = None
     ) -> DebugDetectionResponse:
         """
         Version debug de check_page_if_french qui collecte les informations
@@ -1313,7 +1783,8 @@ class DomainFR:
             raw_html_preview=(content[:500] if content else ''),
             raw_html_full=content if (include_full_content and content) else None,
             redirected_from=redirected_from,
-            challenge_detected=challenge_detected
+            challenge_detected=challenge_detected,
+            status_code=http_status
         )
 
         # --- Debug: Cleaning info ---
@@ -1444,13 +1915,29 @@ class DomainFR:
         """Identifie le cas de decision applique pour le debug."""
         method = result.method
 
+        # Garde N1 (2026-08-13) : Cas 2a, 7 et 9 peuvent tous rendre
+        # `fetch_empty_content` au lieu de leur verdict habituel — sans ce
+        # court-circuit, `debug.decision` nommerait un cas (et un verdict
+        # NLP) que le code a justement refusé de trancher.
+        if method == 'fetch_empty_content':
+            return "No verdict: page fetched but visible text is below NLP_MIN_TEXT_LENGTH (N1 guard)"
+
         if nlp_confirms_french:
             return "Case 1: NLP confirms French"
 
         if is_strong_url:
             if nlp_strongly_contradicts:
-                return "Case 2a: TLD .fr but NLP strongly contradicts"
-            return "Case 2b: TLD .fr trusted (NLP soft/skipped/weak disagree)"
+                # Le cas 2a ne tranche plus systématiquement : s'il a laissé
+                # passer vers le cas 6 (alternative validée), c'est ce cas-là
+                # qu'il faut annoncer — sinon `debug.decision` contredirait
+                # `result.ok`. Même classe de bug que le garde-fou Check_nok_v2
+                # plus bas dans cette fonction.
+                if method == 'nlp_override_tld_fr':
+                    return "Case 2a: TLD .fr but NLP strongly contradicts"
+                # sinon : ne rien renvoyer ici — l'identification du cas 6/7
+                # plus bas (déjà en place) décrit correctement l'issue réelle.
+            else:
+                return "Case 2b: TLD .fr trusted (NLP soft/skipped/weak disagree)"
 
         if url_indicates_french and nlp_soft_french:
             return "Case 3: Moderate URL signal + NLP soft French"
@@ -1463,12 +1950,38 @@ class DomainFR:
 
         reliable_alts = [a for a in alternatives if a.validated]
         if reliable_alts:
-            return f"Case 6: Alternative French URL found ({reliable_alts[0].method})"
+            # « found » seulement si la boucle Case 6 a réellement confirmé une
+            # alternative (method='alternative_...'). Sinon la détection a
+            # tenté puis rejeté chaque candidate (ex: metaga.fr → contenu ES)
+            # et le résultat est un Case 9 — le dire, au lieu d'afficher un
+            # Case 6 « trouvé » contredisant result.ok=false.
+            if method.startswith('alternative_'):
+                return f"Case 6: Alternative French URL found ({reliable_alts[0].method})"
+            if method == 'Check_nok_v2':
+                return (
+                    f"Case 6 attempted: {len(reliable_alts)} validated "
+                    "alternative(s), none confirmed French → Case 9"
+                )
+            return (
+                f"Case 6 attempted: {len(reliable_alts)} validated "
+                f"alternative(s), none confirmed French (result: {method})"
+            )
 
         if nlp_available and (html_indicates_french or url_indicates_french):
             return "Case 7: NLP does not confirm despite HTML/URL indicators"
 
-        if not nlp_available and 'french_lexical_signal' in method:
+        if 'french_lexical_signal' in method:
+            # Le cas 8 accepte désormais aussi un NLP `fr` sous le seuil corroboré
+            # par le signal lexical : sans ce branchement, ce résultat ok=true
+            # serait étiqueté « Case 9: No French indicators found ».
+            if nlp_soft_french:
+                return "Case 8b: NLP soft French corroborated by lexical signal"
             return "Case 8: Last resort — French lexical signal (NLP unavailable)"
+
+        if nlp_soft_french:
+            return (
+                "Case 9: NLP soft French but no corroboration "
+                "(no URL/HTML signal, no lexical corroboration)"
+            )
 
         return "Case 9: No French indicators found"

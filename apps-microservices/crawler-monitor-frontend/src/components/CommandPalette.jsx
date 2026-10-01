@@ -57,7 +57,7 @@ export function CommandPalette({ open, onOpenChange, onLogout, onRefresh }) {
                 {Icon && <Icon className="h-4 w-4" />}
                 <span>{item.label}</span>
                 {item.description && (
-                  <span className="ml-2 truncate text-xs text-muted-foreground">
+                  <span className="ml-2 truncate text-xs text-ink-3">
                     {item.description}
                   </span>
                 )}

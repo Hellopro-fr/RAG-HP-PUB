@@ -1,7 +1,9 @@
 import { UrlConsolidator } from './UrlConsolidator.js';
 import { StatsManager } from './StatsManager.js';
 import { JsonlWriter } from './JsonlWriter.js';
+import { PushedSet } from './PushedSet.js';
 import { rightTrimSlash, processUrl } from '../functions.js';
+import { hasIgnoredExtensionForSeed } from '../seedExtensionFilter.js';
 
 /**
  * Result returned by checkUrl for each processed page.
@@ -15,24 +17,10 @@ export interface CheckUrlResult {
 }
 
 /**
- * ignoredExtensions and FORBIDDEN_PARAMS — duplicated from routes.ts
- * to avoid circular imports. These are used for eligibility checks.
+ * FORBIDDEN_PARAMS — duplicated from routes.ts to avoid circular imports.
+ * Used for eligibility checks. Ignored-extension knowledge instead lives in
+ * seedExtensionFilter.ts (single source of truth, imported below).
  */
-const IGNORED_EXTENSIONS_SET = new Set([
-    // archives
-    "7z", "7zip", "bz2", "rar", "tar", "tar.gz", "xz", "zip",
-    // images
-    "mng", "pct", "bmp", "gif", "jpg", "jpeg", "png", "pst", "psp", "tif", "tiff",
-    "ai", "drw", "dxf", "eps", "ps", "svg", "cdr", "ico", "webp",
-    // audio
-    "mp3", "wma", "ogg", "wav", "ra", "aac", "mid", "au", "aiff",
-    // video
-    "3gp", "asf", "asx", "avi", "mov", "mp4", "mpg", "qt", "rm", "swf", "wmv", "m4a", "m4v", "flv", "webm",
-    // office suites
-    "xls", "xlsx", "ppt", "pptx", "pps", "doc", "docx", "odt", "ods", "odg", "odp",
-    // other
-    "css", "pdf", "exe", "bin", "rss", "dmg", "iso", "apk", "xml",
-]);
 
 // IMPORTANT: Keep in sync with FORBIDDEN_PARAMS in routes.ts
 const FORBIDDEN_PARAMS = [
@@ -87,6 +75,7 @@ export class UpdateChecker {
     private consolidator: UrlConsolidator;
     private statsManager: StatsManager;
     private jsonlWriter: JsonlWriter | null;
+    private pushedSet: PushedSet | null;
 
     // JSONL filenames
     static readonly DELETED_FILE = 'deleted_urls.jsonl';
@@ -97,30 +86,20 @@ export class UpdateChecker {
         consolidator: UrlConsolidator,
         statsManager: StatsManager,
         jsonlWriter: JsonlWriter | null = null,
+        pushedSet: PushedSet | null = null,
     ) {
         this.consolidator = consolidator;
         this.statsManager = statsManager;
         this.jsonlWriter = jsonlWriter;
-    }
-
-    /**
-     * Check if a URL has a forbidden file extension.
-     */
-    private hasIgnoredExtension(url: string): boolean {
-        try {
-            const urlObj = new URL(url);
-            const pathname = urlObj.pathname;
-            const lastDot = pathname.lastIndexOf('.');
-            if (lastDot === -1) return false;
-            const ext = pathname.substring(lastDot + 1).toLowerCase();
-            return IGNORED_EXTENSIONS_SET.has(ext);
-        } catch {
-            return false;
-        }
+        this.pushedSet = pushedSet;
     }
 
     /**
      * Check if a URL contains any forbidden query parameter.
+     *
+     * Pure check — no side effects. The `filtered_qm` stat is now incremented
+     * centrally in routes.ts for every URL containing '?', which already covers
+     * URLs with a forbidden param. Double-counting here would inflate the counter.
      */
     private hasForbiddenParams(url: string): boolean {
         try {
@@ -149,7 +128,7 @@ export class UpdateChecker {
      */
     isEligible(url: string, isFrenchContent: boolean): boolean {
         // Check 1: Extension
-        if (this.hasIgnoredExtension(url)) {
+        if (hasIgnoredExtensionForSeed(url)) {
             return false;
         }
 
@@ -160,6 +139,44 @@ export class UpdateChecker {
 
         // Check 3: French content
         return isFrenchContent;
+    }
+
+    /**
+     * Comment cette URL correspond-elle au dataset précédent : exacte, repliée au / final
+     * près, ou aucune ?
+     *
+     * Le repli est nécessaire parce que l'URL stockée vient du dataset précédent tandis que
+     * l'URL présentée vient du lien tel qu'écrit dans la page : rien ne garantit la même
+     * orthographe. C'est déjà la convention de tout l'aval — `isRedirect` compare en
+     * `rightTrimSlash` quelques lignes plus bas, et la soustraction d'orphelins du BO fait
+     * `trim($url, "/")` sur ses deux côtés.
+     *
+     * ⚠ Le repli vit ICI, en lecture, et JAMAIS dans le set `update_dataset:<crawlId>` : ce set
+     * est aussi SCANNÉ (UrlConsolidator.ts:214) pour produire la liste d'amorçage, et il arbitre
+     * le dédoublonnage des phases 2 et 3. Y stocker des URLs sans leur / final ferait amorcer
+     * des URLs modifiées.
+     *
+     * ⚠ Le helper est privé plutôt qu'une méthode du consolidateur parce que cinq suites de
+     * test simulent celui-ci par un objet littéral ne portant que `isInDataset` : élargir son
+     * API les casserait toutes en « not a function », pour un seul appelant.
+     *
+     * ⚠ `isInDataset` échoue OUVERT (catch → false, UrlConsolidator.ts:107-109). Un incident
+     * Redis fait donc sous-compter `accounted` — même sens qu'avant ce correctif, aucune
+     * régression, mais ce n'est pas une garantie.
+     *
+     * ⚠⚠ Le retour distingue 'exact' de 'folded' — et non un simple booléen — parce que CASE 1
+     * (revue finale de branche) ne peut pas traiter les deux pareil : un statut HTTP recueilli
+     * sur une orthographe n'établit rien sur l'autre. Voir le commentaire à l'appel dans CASE 1.
+     */
+    private async datasetMatch(url: string): Promise<'exact' | 'folded' | 'none'> {
+        if (await this.consolidator.isInDataset(url)) {
+            return 'exact';
+        }
+        const alt = url.endsWith('/') ? url.slice(0, -1) : url + '/';
+        if (await this.consolidator.isInDataset(alt)) {
+            return 'folded';
+        }
+        return 'none';
     }
 
     /**
@@ -178,7 +195,25 @@ export class UpdateChecker {
         httpStatus: number,
         isFrenchContent: boolean,
     ): Promise<CheckUrlResult> {
-        const isFromDataset = source === 'dataset';
+        // PushedSet guard — if a prior attempt already emitted for this URL,
+        // skip all side effects (writeJsonl + statsManager.increment).
+        if (this.pushedSet && !(await this.pushedSet.tryClaim(originalUrl))) {
+            return { action: 'ignored', url: originalUrl, source, reason: 'already_pushed' };
+        }
+
+        // La provenance ne peut PAS reposer sur userData.source : la copie DÉCOUVERTE d'une
+        // URL du dataset est enfilée ~65 ms avant l'amorce Phase 2 (mesuré sur atox.fr :
+        // enqueueLinks à 16:00:51.018, [PHASE 2] à 16:00:51.083), et c'est structurel — Phase 2
+        // attend que la page d'accueil soit traitée pour connaître les chemins régionaux. La
+        // requête survivante porte donc source='discovered'. On demande au consolidateur, qui
+        // sait. Le ternaire court-circuite : aucun aller-retour Redis ajouté quand source suffit —
+        // mais l'épinglage du uniqueKey (Tâche 0) supprime justement la requête qui portait
+        // source='dataset' : Crawlee garde le userData du PREMIER inserant, et c'est la copie
+        // DÉCOUVERTE, enfilée 65 ms plus tôt, qui survit. Pour la population que ce lot vise,
+        // le court-circuit ne tire donc plus JAMAIS — `datasetMatch()` est le SEUL chemin qui
+        // crédite ces pages, et le retirer réintroduirait tout le défaut, épinglage ou pas.
+        const match = source === 'dataset' ? 'exact' : await this.datasetMatch(originalUrl);
+        const isFromDataset = match !== 'none';
         const isHttpError = httpStatus >= 400 || httpStatus === 0;
         const isRedirect = rightTrimSlash(originalUrl) !== rightTrimSlash(loadedUrl);
 
@@ -186,17 +221,47 @@ export class UpdateChecker {
         //  CASE 1: HTTP Error (non 2xx/3xx)
         // ═══════════════════════════════════════════
         if (isHttpError) {
-            if (isFromDataset) {
-                // Dataset URL returned an error → it should be removed
+            // CASE 1 asks "has this resource disappeared?" — a 'folded' match only proves
+            // some spelling of this URL was in the dataset, never that THIS spelling shares
+            // the OTHER spelling's HTTP status. Gate on 'exact', not `isFromDataset`: dataset
+            // has /a, a page links /a/ (never in the dataset), a strict-routing server 404s
+            // on /a/ while /a is alive — folding here would emit `deleted` for /a/ AND
+            // `confirmed` for /a in the SAME run, two contradictory verdicts for one page.
+            // A folded match falls through to the non-dataset branch below (`ignored /
+            // non_dataset_error`) — no errors/errors_unprocessed either: those feed the
+            // errorRate numerator this same wave is already trying not to inflate further.
+            // CASE 2/3 keep the fold — a 200 or a redirect on the folded spelling DOES teach
+            // us something about the page; only "this resource is GONE" does not survive it.
+            // ⛔ Do not widen this back to `isFromDataset`: CASE 1 was deliberately narrowed to
+            // 404/410 after incident 1320-402 (63 anti-bot 403s → 59 false fiche deletions) —
+            // this gate is the same principle applied to URL identity instead of HTTP status.
+            if (match === 'exact') {
                 await this.statsManager.increment("errors");
-                const result: CheckUrlResult = {
-                    action: 'deleted',
-                    url: originalUrl,
-                    source,
-                    reason: `http_error_${httpStatus}`,
-                };
-                await this.writeJsonl(UpdateChecker.DELETED_FILE, result);
-                return result;
+                // Off-book half of `errors`: this URL threw on the HTTP status policy
+                // (routes.ts) or exhausted its retries (failedRequestHandler), so it
+                // never reached increment("processed"). The error-rate breaker needs it
+                // in its denominator, or the ratio is not a proportion — see
+                // errorRateBreaker.ts. CASE 3 below is NOT counted here: a 2xx
+                // not_eligible URL is already inside `processed`.
+                await this.statsManager.increment("errors_unprocessed");
+                // A deletion claim requires a server verdict that the resource is
+                // GONE: 404/410 only. 401/403/407/429/5xx/status-0 are blocks or
+                // outages — the page may be alive (incident 1320-402: 63 anti-bot
+                // 403s became 59 false fiche deletions BO-side). Those still count
+                // as errors (health/circuit-breaker unchanged) but emit NO deleted
+                // event; a truly dead URL will 404 on a later MAJ.
+                if (httpStatus === 404 || httpStatus === 410) {
+                    const result: CheckUrlResult = {
+                        action: 'deleted',
+                        url: originalUrl,
+                        source,
+                        reason: `http_error_${httpStatus}`,
+                    };
+                    await this.writeJsonl(UpdateChecker.DELETED_FILE, result);
+                    await this.statsManager.increment("accounted");
+                    return result;
+                }
+                return { action: 'ignored', url: originalUrl, source, reason: `unverified_http_error_${httpStatus}` };
             } else {
                 // Non-dataset URL error → just ignore, don't track
                 return { action: 'ignored', url: originalUrl, source, reason: 'non_dataset_error' };
@@ -211,8 +276,25 @@ export class UpdateChecker {
 
             if (isFromDataset) {
                 if (destInDataset) {
-                    // Redirect to another Dataset URL → the source URL becomes redundant
-                    // No action needed, the destination is already tracked
+                    // Redirect to another Dataset URL → destination already tracked.
+                    // Still RECORD the mapping: the BO needs old→new to retire the old
+                    // fiche, and the signal must be repeatable across MAJs (a missed
+                    // one-shot delivery = permanent divergence, incident 1079-327).
+                    // No 'redirects' increment — that counter feeds the circuit breaker.
+                    await this.writeJsonl(UpdateChecker.REDIRECTED_FILE, {
+                        action: 'redirected',
+                        url: originalUrl,
+                        source,
+                        destination: loadedUrl,
+                        reason: 'redirect_to_existing',
+                    });
+                    // Crédit conditionnel à l'orthographe exacte : l'exacte est de toute façon
+                    // seedée et comptée pour son propre compte (Tâche 0) — créditer aussi la
+                    // repliée doublerait la même entrée du dataset précédent et pourrait porter
+                    // `coverage` au-dessus de 1. Voir le docblock de `datasetMatch()` ci-dessus.
+                    if (match === 'exact') {
+                        await this.statsManager.increment("accounted");
+                    }
                     return { action: 'confirmed', url: originalUrl, source, reason: 'redirect_to_existing' };
                 } else {
                     // Redirect to a URL NOT in Dataset → track the redirection
@@ -224,12 +306,25 @@ export class UpdateChecker {
                         destination: loadedUrl,
                     };
                     await this.writeJsonl(UpdateChecker.REDIRECTED_FILE, result);
+                    // Même garde que ci-dessus : crédit réservé à l'orthographe exacte.
+                    if (match === 'exact') {
+                        await this.statsManager.increment("accounted");
+                    }
                     return result;
                 }
             } else {
                 // Non-dataset URL redirected
                 if (destInDataset) {
-                    // Redirects to an existing Dataset URL → ignore
+                    // Redirects to an existing Dataset URL → ignored for counters, but
+                    // RECORD the mapping (repeatable signal — request_queue re-seeds the
+                    // old URL every MAJ; this lets the BO retire a leftover old fiche).
+                    await this.writeJsonl(UpdateChecker.REDIRECTED_FILE, {
+                        action: 'redirected',
+                        url: originalUrl,
+                        source,
+                        destination: loadedUrl,
+                        reason: 'redirect_to_existing_dataset',
+                    });
                     return { action: 'ignored', url: originalUrl, source, reason: 'redirect_to_existing_dataset' };
                 } else {
                     // Redirects to a new URL — check eligibility of the DESTINATION
@@ -256,6 +351,12 @@ export class UpdateChecker {
             // Dataset URL, 2xx, same URL → check if still eligible
             if (this.isEligible(loadedUrl, isFrenchContent)) {
                 // Confirmed: URL is still valid in Dataset
+                // Crédit conditionnel à l'orthographe exacte (même garde que CASE 2) : la
+                // repliée n'écrit aucun JSONL ici, donc sans le crédit c'est un no-op — exactement
+                // ce qu'on veut, l'exacte étant déjà seedée et comptée pour son propre compte.
+                if (match === 'exact') {
+                    await this.statsManager.increment("accounted");
+                }
                 return { action: 'confirmed', url: originalUrl, source };
             } else {
                 // No longer eligible → mark as deleted
@@ -267,6 +368,12 @@ export class UpdateChecker {
                     reason: 'not_eligible',
                 };
                 await this.writeJsonl(UpdateChecker.DELETED_FILE, result);
+                // L'événement `deleted` s'écrit pour les deux orthographes — l'inéligibilité est
+                // un jugement sur le CONTENU, valable pour l'une comme pour l'autre, contrairement
+                // au statut HTTP de CASE 1. Seul le crédit reste réservé à l'orthographe exacte.
+                if (match === 'exact') {
+                    await this.statsManager.increment("accounted");
+                }
                 return result;
             }
         } else {

@@ -1,3 +1,7 @@
+---
+description: Recense les tests par service (Go, Python, vitest, node:test) et classe chacun bien testé / minimal / sans test
+allowed-tools: Read, Grep, Glob, Bash
+---
 # /test-coverage — Test Coverage Report Across Services
 
 Report the current state of test coverage across all services in the monorepo.
@@ -8,9 +12,9 @@ Report the current state of test coverage across all services in the monorepo.
 
 For each directory in `apps-microservices/`:
 1. Detect the stack per `.claude/rules/stack-detection.md`.
-2. Check if a `tests/` or `test/` or `__tests__/` directory exists.
-3. Count test files and test functions (grep for `def test_`, `it(`, `#[test]`, `fn test_`).
-4. Check if `conftest.py` or test config exists.
+2. Look for tests in BOTH layouts: a `tests/` directory (Python), and `*_test.go` files **beside the code** (Go — this is the largest test population in the repo, 243 files, and a directory-only check misses all of them).
+3. Count test functions: `func Test` (Go), `def test_` (Python), `it(`/`test(` (vitest and node:test), `#[test]` (Rust).
+4. Check the runner actually configured: `conftest.py`/`pytest.ini` (Python), `go.mod` (Go), the `test` script of `package.json` — `vitest run` for the frontends and libs, `node --import tsx --test` for crawler-service. There is no Jest in this repo.
 
 ### Step 2 — Categorize services
 

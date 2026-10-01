@@ -1,0 +1,60 @@
+{
+  "crawl_metrics": {
+    "database_id": 10,
+    "description": "Ligne agrégée de métriques par crawl (initial ou MAJ) : 1 ligne par crawl. UPSERT idempotent via enregistrer_crawl_metrics() sur la clé UNIQUE (crawl_type, id_crawl_source). Stocke durée, statut, code/classe d'erreur et les compteurs d'URLs (crawlées, succès, erreurs, filtres, drops). Une des 4 tables d'observabilité crawling (HELLOPRO_IA), avec crawl_events, initial_crawl_history, domaine_funnel_state.",
+    "primary_key": "id_crawl_metric",
+    "default_order_by": "date_enregistrement DESC",
+    "rows": null,
+    "columns": {
+      "id_crawl_metric": { "type": "int", "desc": "PK auto-increment de la ligne de métriques." },
+      "crawl_type": { "type": "enum", "desc": "Type de crawl : 'initial' (crawl initial) ou 'maj' (mise à jour). Indexé. Partie de la clé UNIQUE (crawl_type, id_crawl_source)." },
+      "id_crawl_source": { "type": "int", "desc": "ID du crawl source. Selon crawl_type : MAJ → update_crawling_history.id_history (1 ligne par MAJ) ; initial → initial_crawl_history.id_history_initial. Forme la clé UNIQUE avec crawl_type (1 métrique par crawl)." },
+      "id_domaine": { "type": "int", "desc": "FK → domaine_scrapping_produit_ia.id_domaine_scrapping_produit_ia (DSPI). Indexé (idx_domaine_date)." },
+      "date_start": { "type": "datetime", "desc": "Début du crawl. NULLable (souvent NULL si non capturé ; préférer date_enregistrement pour le tri)." },
+      "date_end": { "type": "datetime", "desc": "Fin du crawl. NULLable." },
+      "duration_seconds": { "type": "int", "desc": "Durée du crawl en secondes (date_end - date_start). NULLable." },
+      "status": { "type": "enum", "desc": "Statut du crawl : RUNNING, FINISHED, FAILED, STOPPED. NULLable. Indexé." },
+      "error_code": { "type": "varchar(50)", "desc": "Code d'erreur du crawl (ex. 'insufficientData', 'no_product_detected_auto'). NULLable (NULL si succès)." },
+      "error_classification": { "type": "varchar(20)", "desc": "Classification courte de l'erreur (bucket). NULLable — souvent NULL." },
+      "urls_crawled": { "type": "int", "desc": "Nombre d'URLs crawlées. Défaut 0." },
+      "urls_success": { "type": "int", "desc": "Nombre d'URLs crawlées avec succès. Défaut 0." },
+      "urls_error": { "type": "int", "desc": "Nombre d'URLs en erreur. Défaut 0." },
+      "urls_filtered_qm": { "type": "int", "desc": "URLs filtrées pour cause de question mark (paramètres '?', mécanisme limitQuestionMark). Défaut 0." },
+      "urls_filtered_hash": { "type": "int", "desc": "URLs filtrées pour cause de diez '#' (mécanisme limitDiez). Défaut 0." },
+      "urls_filtered_ext": { "type": "int", "desc": "URLs filtrées par extension de fichier (non-HTML). Défaut 0." },
+      "urls_filtered_nonfr": { "type": "int", "desc": "URLs filtrées car non françaises. Défaut 0." },
+      "urls_filtered_duplicate": { "type": "int", "desc": "URLs filtrées comme doublons. Défaut 0." },
+      "urls_dropped_cb": { "type": "int", "desc": "URLs droppées par le circuit-breaker (cb) du crawler. Défaut 0." },
+      "urls_timeout_individual": { "type": "int", "desc": "URLs en timeout individuel (par URL). Défaut 0." },
+      "urls_new": { "type": "int", "desc": "Nombre d'URLs nouvelles (delta MAJ). NULLable (renseigné surtout pour crawl_type='maj')." },
+      "urls_deleted": { "type": "int", "desc": "Nombre d'URLs supprimées (delta MAJ). NULLable." },
+      "urls_redirected": { "type": "int", "desc": "Nombre d'URLs redirigées (delta MAJ). NULLable." },
+      "taux_changement": { "type": "decimal(5,2)", "desc": "Taux de changement du contenu lors d'une MAJ (pourcentage). NULLable (MAJ uniquement)." },
+      "date_enregistrement": { "type": "datetime", "desc": "Date d'enregistrement de la ligne (DEFAULT CURRENT_TIMESTAMP, NOT NULL). Champ de tri fiable (date_start souvent NULL)." }
+    },
+    "relations": [
+      { "column": "id_domaine", "references": "domaine_scrapping_produit_ia.id_domaine_scrapping_produit_ia", "note": "Domaine concerné (DSPI)." },
+      { "column": "id_crawl_source", "references": "update_crawling_history.id_history (si crawl_type=maj) | initial_crawl_history.id_history_initial (si crawl_type=initial)", "note": "Crawl source ; cible dépend de crawl_type." }
+    ],
+    "notes": "UPSERT idempotent via enregistrer_crawl_metrics() sur UNIQUE (crawl_type, id_crawl_source) — re-lancer ne duplique pas. Les compteurs urls_filtered_* / urls_dropped_cb sont les raisons d'exclusion d'URL côté crawler. Table sœur d'observabilité (HELLOPRO_IA) : crawl_events, initial_crawl_history, domaine_funnel_state."
+  },
+  "historique_action_utilisateur_scrapping_ia": {
+    "database_id": 10,
+    "description": "Journal d'audit append-only des actions opérateur dans l'outil BO scrapping_produit_ia : 1 ligne par action (qui, quel domaine, quand, quelle action). Écrit par fonctions_scrapping.php ; lu par l'écran Historique des Actions. Stockée dans HELLOPRO_IA.",
+    "primary_key": "id_historique_hausi",
+    "default_order_by": "date_action_hausi DESC",
+    "rows": null,
+    "columns": {
+      "id_historique_hausi": { "type": "bigint", "desc": "PK auto-increment de la ligne d'historique." },
+      "id_admin_hausi": { "type": "int", "desc": "ID de l'administrateur BO (user_bo) ayant effectué l'action. NULLable. Résolu via info_admin()." },
+      "id_domaine_hausi": { "type": "int", "desc": "FK → domaine_scrapping_produit_ia.id_domaine_scrapping_produit_ia (DSPI) : domaine concerné par l'action. NULLable." },
+      "date_action_hausi": { "type": "datetime", "desc": "Date/heure de l'action (NOW() à l'insertion). NULLable." },
+      "id_action_hausi": { "type": "int", "desc": "Code du type d'action (légende dans historique/libelle_historique_action.php). NULLable. Valeurs : 1=relancer le crawl · 2=renseigner 5 URLs fiche/non-fiche produit · 3=récupérer top fiches · 4=qualification URLs · 5=disqualification URLs · 6=relance récup top fiches · 7=récup infos de toutes les fiches · 8=relance récup infos après modif sélecteurs · 9=domaine sans fiche produit · 10=contrôle fait/terminé · 11=modif sélecteur titre · 12=titre négatif · 13=modif sélecteur description · 14=description négatif · 15=modif sélecteur image · 16=image négatif · 17=prix · 18=prix négatif · 19=livraison · 20=livraison négatif · 21=catégorie · 22=catégorie négatif · 23=stock · 24=stock négatif · 25=rechercher sélecteurs sur top fiches · 26=qualification manuelle URLs fiche produit · 27=modif top fiche titre · 28=desc · 29=image · 30=prix · 31=livraison · 32=catégorie · 33=stock · 34=rescrapping du contenu produits · 35=sauvegarde filtre de qualification." }
+    },
+    "relations": [
+      { "column": "id_domaine_hausi", "references": "domaine_scrapping_produit_ia.id_domaine_scrapping_produit_ia", "note": "Domaine concerné (DSPI ; INNER JOIN à l'affichage)." },
+      { "column": "id_admin_hausi", "references": "administrateur BO (user_bo)", "note": "Opérateur ; libellé via info_admin()." }
+    ],
+    "notes": "Journal append-only des actions manuelles de l'opérateur dans l'outil scrapping_produit_ia (qualification d'URLs, modification de sélecteurs, relances, etc.). Écrit par INSERT dans fonctions_scrapping.php. Légende des codes id_action_hausi maintenue dans historique/libelle_historique_action.php (35 codes au 2026-06)."
+  }
+}

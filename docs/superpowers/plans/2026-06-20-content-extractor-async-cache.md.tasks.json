@@ -1,0 +1,86 @@
+{
+  "planPath": "docs/superpowers/plans/2026-06-20-content-extractor-async-cache.md",
+  "tasks": [
+    {
+      "id": 0,
+      "subject": "Task 0: Extend config.py with all new settings",
+      "status": "pending",
+      "description": "**Goal:** Add all new env-driven settings (workers, Redis, cache, admission, async).\n\n```json:metadata\n{\"files\": [\"apps-microservices/content-extractor-api-service/app/core/config.py\", \"apps-microservices/content-extractor-api-service/tests/test_config.py\"], \"verifyCommand\": \"cd apps-microservices/content-extractor-api-service && python -m pytest tests/test_config.py -v\", \"acceptanceCriteria\": [\"new fields with spec defaults\", \"existing unchanged\", \"MAX_ACTIVE_JOBS=8\"]}\n```"
+    },
+    {
+      "id": 1,
+      "subject": "Task 1: extractor_core.py pure synchronous cores",
+      "status": "pending",
+      "description": "**Goal:** Pure sync clean_core + header_footer_core producing exact body dicts.\n\n```json:metadata\n{\"files\": [\"apps-microservices/content-extractor-api-service/app/core/extractor_core.py\", \"apps-microservices/content-extractor-api-service/tests/test_extractor_core.py\"], \"verifyCommand\": \"cd apps-microservices/content-extractor-api-service && python -m pytest tests/test_extractor_core.py -v\", \"acceptanceCriteria\": [\"clean_core matches boilerpy3\", \"header_footer_core non-debug + debug keys\"]}\n```"
+    },
+    {
+      "id": 2,
+      "subject": "Task 2: extractor_service offload + router refactor + Dockerfile workers",
+      "status": "pending",
+      "blockedBy": [0, 1],
+      "description": "**Goal:** to_thread offload (no cache yet) + routers call service + uvicorn workers. Removes 0-bytes/30s timeout.\n\n```json:metadata\n{\"files\": [\"apps-microservices/content-extractor-api-service/app/core/extractor_service.py\", \"apps-microservices/content-extractor-api-service/app/routers/clean.py\", \"apps-microservices/content-extractor-api-service/app/routers/extract.py\", \"apps-microservices/content-extractor-api-service/Dockerfile\", \"apps-microservices/content-extractor-api-service/tests/test_extractor_service.py\"], \"verifyCommand\": \"cd apps-microservices/content-extractor-api-service && python -m pytest tests/test_extractor_service.py tests/test_clean.py tests/test_extract.py -v\", \"acceptanceCriteria\": [\"identical responses\", \"handlers call extractor_service\", \"to_thread offload\", \"Dockerfile --workers\"]}\n```"
+    },
+    {
+      "id": 3,
+      "subject": "Task 3: admission.py sync inflight guard",
+      "status": "pending",
+      "blockedBy": [2],
+      "description": "**Goal:** 503+Retry-After on overload, disabled by default (SYNC_MAX_INFLIGHT=0).\n\n```json:metadata\n{\"files\": [\"apps-microservices/content-extractor-api-service/app/core/admission.py\", \"apps-microservices/content-extractor-api-service/app/core/metrics.py\", \"apps-microservices/content-extractor-api-service/app/routers/clean.py\", \"apps-microservices/content-extractor-api-service/app/routers/extract.py\", \"apps-microservices/content-extractor-api-service/tests/test_admission.py\"], \"verifyCommand\": \"cd apps-microservices/content-extractor-api-service && python -m pytest tests/test_admission.py -v\", \"acceptanceCriteria\": [\"0 always admits\", \"caps + releases\", \"router 503 Retry-After\"]}\n```"
+    },
+    {
+      "id": 4,
+      "subject": "Task 4: result_cache.py versioned content-hash cache",
+      "status": "pending",
+      "blockedBy": [0],
+      "description": "**Goal:** Cache-aside, never raises (guarded on redis_client), debug-aware key.\n\n```json:metadata\n{\"files\": [\"apps-microservices/content-extractor-api-service/app/core/result_cache.py\", \"apps-microservices/content-extractor-api-service/app/core/metrics.py\", \"apps-microservices/content-extractor-api-service/requirements.txt\", \"apps-microservices/content-extractor-api-service/tests/test_result_cache.py\"], \"verifyCommand\": \"cd apps-microservices/content-extractor-api-service && python -m pytest tests/test_result_cache.py -v\", \"acceptanceCriteria\": [\"clean_key deterministic+format-sensitive\", \"hf_key sort only when !debug\", \"never raise without client\", \"roundtrip+version-miss\"]}\n```"
+    },
+    {
+      "id": 5,
+      "subject": "Task 5: Wire cache into extractor_service",
+      "status": "pending",
+      "blockedBy": [2, 4],
+      "description": "**Goal:** run_clean/run_header_footer cache-aside + force_refresh + hit/miss metrics.\n\n```json:metadata\n{\"files\": [\"apps-microservices/content-extractor-api-service/app/core/extractor_service.py\", \"apps-microservices/content-extractor-api-service/tests/test_extractor_service.py\"], \"verifyCommand\": \"cd apps-microservices/content-extractor-api-service && python -m pytest tests/test_extractor_service.py -v\", \"acceptanceCriteria\": [\"hit returns cached+CACHE_HITS\", \"miss computes+CACHE_MISSES\", \"force_refresh skips read\"]}\n```"
+    },
+    {
+      "id": 6,
+      "subject": "Task 6: schemas/async_jobs.py",
+      "status": "pending",
+      "description": "**Goal:** submit + status pydantic models.\n\n```json:metadata\n{\"files\": [\"apps-microservices/content-extractor-api-service/app/schemas/async_jobs.py\", \"apps-microservices/content-extractor-api-service/tests/test_async_jobs.py\"], \"verifyCommand\": \"cd apps-microservices/content-extractor-api-service && python -m pytest tests/test_async_jobs.py -v\", \"acceptanceCriteria\": [\"CleanAsyncRequest >=1 item default mc 4\", \"HF >=2 refs\", \"status response shape\"]}\n```"
+    },
+    {
+      "id": 7,
+      "subject": "Task 7: async_jobs.py core (JobStore/JobManager/poll_status)",
+      "status": "pending",
+      "blockedBy": [0],
+      "description": "**Goal:** Redis-backed generic async job subsystem (shared cache_service pool) + async metrics.\n\n```json:metadata\n{\"files\": [\"apps-microservices/content-extractor-api-service/app/core/async_jobs.py\", \"apps-microservices/content-extractor-api-service/app/core/metrics.py\", \"apps-microservices/content-extractor-api-service/tests/test_async_jobs.py\"], \"verifyCommand\": \"cd apps-microservices/content-extractor-api-service && python -m pytest tests/test_async_jobs.py -v\", \"acceptanceCriteria\": [\"poll_status stale\", \"submit disabled/unavailable/capacity\", \"idempotent re-submit 200\", \"completed has results\", \"shutdown marks failed\"]}\n```"
+    },
+    {
+      "id": 8,
+      "subject": "Task 8: extractor_service.run_batch injected runner",
+      "status": "pending",
+      "blockedBy": [5, 6],
+      "description": "**Goal:** Dispatch by job_type, concurrent under semaphore, fixed-size indexed results, per-item failure isolation.\n\n```json:metadata\n{\"files\": [\"apps-microservices/content-extractor-api-service/app/core/extractor_service.py\", \"apps-microservices/content-extractor-api-service/tests/test_extractor_service.py\"], \"verifyCommand\": \"cd apps-microservices/content-extractor-api-service && python -m pytest tests/test_extractor_service.py -v\", \"acceptanceCriteria\": [\"order-aligned results\", \"per-item failure isolated\", \"progress_cb called\"]}\n```"
+    },
+    {
+      "id": 9,
+      "subject": "Task 9: async routers + main.py lifespan wiring",
+      "status": "pending",
+      "blockedBy": [7, 8],
+      "description": "**Goal:** /clean-async, /extract/header-footer-async, /jobs/{id}; lifespan redis pool + JobManager.\n\n```json:metadata\n{\"files\": [\"apps-microservices/content-extractor-api-service/app/routers/async_jobs.py\", \"apps-microservices/content-extractor-api-service/main.py\", \"apps-microservices/content-extractor-api-service/tests/test_async_jobs.py\", \"apps-microservices/content-extractor-api-service/tests/test_main.py\"], \"verifyCommand\": \"cd apps-microservices/content-extractor-api-service && python -m pytest tests/test_async_jobs.py tests/test_main.py -v\", \"acceptanceCriteria\": [\"202 -> poll completed\", \"disabled 503 no Retry-After\", \"unknown 404\", \"lifespan smoke\"]}\n```"
+    },
+    {
+      "id": 10,
+      "subject": "Task 10: api-gateway downstream timeout for extractor-service",
+      "status": "pending",
+      "description": "**Goal:** DOWNSTREAM_TIMEOUTS_S['extractor-service']=60.0.\n\n```json:metadata\n{\"files\": [\"apps-microservices/api-gateway/app/core/settings.py\", \"apps-microservices/api-gateway/tests/test_settings.py\"], \"verifyCommand\": \"cd apps-microservices/api-gateway && python -m pytest tests/test_settings.py -v\", \"acceptanceCriteria\": [\"extractor-service==60.0\", \"detection unchanged\"]}\n```"
+    },
+    {
+      "id": 11,
+      "subject": "Task 11: Documentation (CLAUDE.md)",
+      "status": "pending",
+      "blockedBy": [9],
+      "description": "**Goal:** Document async endpoints, Redis dep, env vars, 503 discriminator, admission flag.\n\n```json:metadata\n{\"files\": [\"apps-microservices/content-extractor-api-service/CLAUDE.md\"], \"verifyCommand\": \"\", \"acceptanceCriteria\": [\"async endpoints, Redis dep, env table, 503 discriminator, SYNC_MAX_INFLIGHT, UVICORN_WORKERS documented\"]}\n```"
+    }
+  ],
+  "lastUpdated": "2026-06-20"
+}

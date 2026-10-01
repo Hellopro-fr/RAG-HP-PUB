@@ -1,0 +1,4 @@
+pymilvus>=2.3.0,<2.5.0
+typesense==0.21.0
+requests>=2.31.0
+tqdm>=4.65.0

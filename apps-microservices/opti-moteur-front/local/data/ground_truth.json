@@ -1,0 +1,116 @@
+{
+  "_comment": "Pour chaque requete, liste des categories considerees comme PERTINENTES. 'accept' = match exact; 'prefix' = la categorie doit commencer par un de ces prefixes.",
+  "ground_truth": [
+    {
+      "query": "armoire medicale",
+      "accept": ["Armoire médicale", "Armoires à pharmacie", "Armoire médicale réfrigérée"]
+    },
+    {
+      "query": "armoire médicale",
+      "accept": ["Armoire médicale", "Armoires à pharmacie", "Armoire médicale réfrigérée"]
+    },
+    {
+      "query": "armoire pharmacie",
+      "accept": ["Armoires à pharmacie", "Armoire médicale"]
+    },
+    {
+      "query": "armoire pour médicaments hospitaliers",
+      "accept": ["Armoire médicale", "Armoires à pharmacie", "Armoire médicale réfrigérée"]
+    },
+    {
+      "query": "meuble stockage médical",
+      "accept": ["Armoire médicale", "Armoires à pharmacie", "Armoire médicale réfrigérée"],
+      "prefix": ["Rayonnage"]
+    },
+    {
+      "query": "pompe hydraulique",
+      "prefix": ["Pompe hydraulique", "Pompes hydrauliques", "Pompe à pistons", "Pompe centrifuge", "Pompes centrifuges"]
+    },
+    {
+      "query": "chariot élévateur électrique",
+      "accept": ["Chariot élévateur électrique", "Transpalette électrique", "Gerbeur électrique"],
+      "prefix": ["Chariot élévateur", "Transpalette", "Gerbeur"]
+    },
+    {
+      "query": "armoire réfrigérée pour vaccins",
+      "accept": ["Armoire médicale réfrigérée", "Armoire médicale", "Armoire réfrigérée"]
+    },
+    {
+      "query": "batterie lithium",
+      "accept": ["Batterie industrielle", "Batterie de démarrage", "Batterie pour onduleur", "Autres batteries"],
+      "prefix": ["Batterie"]
+    },
+    {
+      "query": "armoire sécurité inflammables",
+      "accept": ["Armoire de sécurité pour produits dangereux", "Armoire anti-feu"],
+      "prefix": ["Armoire de sécurité", "Armoire anti"]
+    },
+    {
+      "query": "extincteur",
+      "prefix": ["Extincteur"]
+    },
+    {
+      "query": "batterie industrielle 48V",
+      "accept": ["Batterie industrielle"],
+      "prefix": ["Batterie"]
+    },
+    {
+      "query": "chariot manutention",
+      "prefix": ["Chariot", "Transpalette", "Gerbeur"]
+    },
+    {
+      "query": "transpalette manuel",
+      "accept": ["Transpalette manuel"],
+      "prefix": ["Transpalette"]
+    },
+    {
+      "query": "vestiaire metallique 2 portes",
+      "prefix": ["Vestiaire"]
+    },
+    {
+      "query": "compresseur air atelier",
+      "prefix": ["Compresseur"]
+    },
+    {
+      "query": "rayonnage metallique lourd",
+      "prefix": ["Rayonnage"]
+    },
+    {
+      "query": "groupe electrogene diesel",
+      "prefix": ["Groupe électrogène"]
+    },
+    {
+      "query": "extincteur CO2 6kg",
+      "prefix": ["Extincteur"]
+    },
+    {
+      "query": "armoire inox alimentaire",
+      "accept": ["Armoire réfrigérée", "Armoires vitrées réfrigérantes"],
+      "prefix": ["Mobilier inox", "Armoire inox"]
+    },
+    {
+      "query": "coffre fort professionnel",
+      "prefix": ["Coffre-fort", "Coffre fort"]
+    },
+    {
+      "query": "palette plastique industrielle",
+      "prefix": ["Palette"]
+    },
+    {
+      "query": "ventilateur industriel",
+      "prefix": ["Ventilateur"]
+    },
+    {
+      "query": "perceuse sans fil 18V",
+      "prefix": ["Perceuse", "Visseuse"]
+    },
+    {
+      "query": "echelle telescopique aluminium",
+      "prefix": ["Échelle", "Echelle"]
+    },
+    {
+      "query": "signalisation securite",
+      "prefix": ["Signalisation", "Panneau signalisation"]
+    }
+  ]
+}

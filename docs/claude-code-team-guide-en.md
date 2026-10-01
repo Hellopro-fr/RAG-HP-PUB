@@ -53,9 +53,9 @@ Claude Code reads these files at session start and follows them as instructions.
 
 **2 agents:** `doc-writer`, `test-writer`
 **13 commands:** `/commit-msg`, `/explain`, `/understand`, `/new-feature-claude-md`, `/new-service-claude-md`, `/update-claude-md`, `/pre-push`, `/investigate`, `/audit-feature`, `/dependency-mapper`, `/secrets-scanner`, `/test-coverage`, `/architecture-review`
-**14 rules:** `code-modification.md`, `commit-messages.md`, `security.md`, `language.md`, `impact-awareness.md`, `docker-security.md`, `config-freshness.md`, `formatting.md`, `refactoring.md`, `stack-detection.md`, `critical-thinking.md`, `auto-simplify.md`, `auto-documentation.md`, `frontend-design-guidelines.md`
-**4 skills:** `/fastapi-service-scaffold`, `/rabbitmq-consumer-scaffold`, `/proto-sync`, `/php-script-scaffold`
-**6 hooks:** `secret-scanner`, `dangerous-command-blocker`, `conventional-commits`, `tdd-gate`, `auto-review-gate`, `scope-guard`
+**8 rules:** `code-modification.md`, `critical-thinking.md`, `docker-security.md`, `formatting.md`, `impact-awareness.md`, `refactoring.md`, `security.md`, `stack-detection.md`
+**5 skills:** `/fastapi-service-scaffold`, `/rabbitmq-consumer-scaffold`, `/proto-sync`, `docker-expert`, `document-mechanism`
+**5 hooks:** `secret-scanner`, `dangerous-command-blocker`, `conventional-commits`, `tdd-gate` (advisory), `nextjs-formulaire-prepush-build`
 
 ---
 
@@ -151,7 +151,7 @@ After launching `claude` from the project root, type:
 What configuration files are you aware of?
 ```
 
-Claude Code should list the root `CLAUDE.md`, all 14 rules in `.claude/rules/`, all 2 agents, all 13 commands, and all 4 skills. If anything is missing, check that the file exists and has valid Markdown frontmatter (for agents).
+Claude Code should list the root `CLAUDE.md`, all 8 rules in `.claude/rules/`, all 2 agents, all 13 commands, and all 5 skills. If anything is missing, check that the file exists and has valid Markdown frontmatter (for agents).
 
 ---
 
@@ -422,18 +422,7 @@ This rule ensures that Claude Code behaves like a **patch tool**, not a rewriter
 
 Every code block in Claude Code's output is preceded by the full file path as a header. For partial edits, surrounding context is marked with `// ... existing code ...`.
 
-### 5.2 `commit-messages.md` — Bilingual Conventional Commits
-
-**Location:** `.claude/rules/commit-messages.md`
-
-This rule defines how commit messages are generated:
-
-- Format: Conventional Commits (`feat:`, `fix:`, `refactor:`, `docs:`, `chore:`, `test:`)
-- Always bilingual: English + French
-- Scope limited to changes made in the current response only
-- Subject line under 72 characters
-
-### 5.3 `security.md` — Security Rules
+### 5.2 `security.md` — Security Rules
 
 **Location:** `.claude/rules/security.md`
 
@@ -445,19 +434,7 @@ This rule enforces security best practices across the entire project:
 4. **Input Validation** — Use Pydantic models for ALL request validation. Sanitize data before passing to LLM prompts (prompt injection prevention).
 5. **Logging** — Sensitive headers (`authorization`, `cookie`, `x-api-key`) must be redacted in logs.
 
-### 5.4 `language.md` — Language Rules
-
-**Location:** `.claude/rules/language.md`
-
-This rule defines Claude Code's linguistic behavior:
-
-1. **Response language** — Claude responds in the same language the user writes in (French if user writes French, English if English).
-2. **Code identifiers** — Always in English, regardless of conversation language.
-3. **Code comments** — Follow the conversation language (French comments for French users, English for English users).
-4. **Commit messages** — Always generated in BOTH English and French.
-5. **CLAUDE.md files** — Written in English for maximum instruction adherence.
-
-### 5.5 `impact-awareness.md` — Trade-Off & Blast Radius Analysis
+### 5.3 `impact-awareness.md` — Trade-Off & Blast Radius Analysis
 
 **Location:** `.claude/rules/impact-awareness.md`
 
@@ -467,7 +444,7 @@ This rule requires analyzing trade-offs BEFORE every code modification:
 2. **Bigger picture** — Understand the service's role in the pipeline, check if the same pattern exists in other services.
 3. **Blast radius** — For shared components (`libs/`, `protos/`, `docker-compose.yml`), list all downstream consumers and assess if the change is backward-compatible or breaking.
 
-### 5.6 `docker-security.md` — Docker Security Rules
+### 5.4 `docker-security.md` — Docker Security Rules
 
 **Location:** `.claude/rules/docker-security.md`
 
@@ -478,17 +455,7 @@ This rule enforces Docker best practices for all Dockerfiles and docker-compose.
 3. **Runtime** — No root user, no secrets in `ENV`, healthchecks required in compose.
 4. **Vulnerability patterns** — Flag `chmod 777`, `ADD` instead of `COPY`, missing `.dockerignore`.
 
-### 5.7 `config-freshness.md` — Configuration Freshness
-
-**Location:** `.claude/rules/config-freshness.md`
-
-This rule ensures Claude Code always works with the latest `.claude/` configuration, even mid-conversation:
-
-1. Re-read agent/command files before invoking them.
-2. After creating or updating any `.claude/` file, treat it as immediately active.
-3. If a conflict exists between a stale in-context version and the file on disk, the file on disk wins.
-
-### 5.8 `formatting.md` — Code Formatting Conventions
+### 5.5 `formatting.md` — Code Formatting Conventions
 
 **Location:** `.claude/rules/formatting.md`
 
@@ -499,7 +466,7 @@ No project-wide formatter is enforced yet. This rule defines the conventions Cla
 3. **JS/TS**: 2-space indent, semicolons required, single quotes.
 4. **Universal**: Match the file's existing style. Never reformat outside the scope of your change.
 
-### 5.9 `refactoring.md` — Refactoring Guidelines
+### 5.6 `refactoring.md` — Refactoring Guidelines
 
 **Location:** `.claude/rules/refactoring.md`
 
@@ -509,34 +476,6 @@ Governs when and how to refactor safely:
 2. **When NOT**: During bug fixes, during feature additions, without tests, or unprompted.
 3. **Shared components**: Always use `writing-plans` first, list all downstream consumers, commit library changes separately.
 4. **Known targets**: logging centralization (75 services), config duplication (45 services), structure standardization (15 services).
-
-### 5.10 `auto-simplify.md`
-
-**Location:** `.claude/rules/auto-simplify.md`
-
-**Purpose:** Automatically triggers a code simplification pass after every implementation.
-
-After you write or modify code, Claude will review the changes for unnecessary complexity, redundant code, naming clarity, over-abstraction, and obvious comments. This happens automatically — you don't need to ask.
-
-**Key constraint:** Never changes behavior — only improves how code is written. Prefers clarity over brevity.
-
-### 5.11 `auto-documentation.md`
-
-**Location:** `.claude/rules/auto-documentation.md`
-
-**Purpose:** Automatically fetches up-to-date library documentation when working with external libraries.
-
-When implementing code that uses FastAPI, Pydantic, Crawlee, Milvus, RabbitMQ, or other external libraries, Claude will use the context7 plugin to fetch current documentation before writing code. Also triggers during brainstorming when discussing technical choices.
-
-**Skip:** Internal project code (use codebase search), Python stdlib, libraries already verified in the session.
-
-### 5.12 `frontend-design-guidelines.md`
-
-**Location:** `.claude/rules/frontend-design-guidelines.md`
-
-**Purpose:** Design principles applied when building UI components or web applications.
-
-Guides Claude toward distinctive, intentional design rather than generic AI aesthetics. Covers typography, color, motion, layout, and detail. Key principle: "Bold maximalism and refined minimalism both work — the key is intentionality, not intensity."
 
 ### How Rules Are Loaded
 
@@ -959,15 +898,14 @@ Hooks are automated scripts that run on specific events. They execute externally
 | `secret-scanner.py` | Before `git commit`/`git add` | Blocking | Scans staged files for hardcoded secrets (API keys, passwords, connection strings). Blocks on critical/high findings. |
 | `dangerous-command-blocker.py` | Before any Bash command | Blocking | Blocks catastrophic commands (rm -rf /, dd) and commands targeting critical paths (.claude/, .git/, libs/). |
 | `conventional-commits.py` | Before `git commit` | Blocking | Validates commit message follows Conventional Commits format (feat/fix/refactor/docs/chore/test). |
-| `tdd-gate.sh` | Before Edit/Write | Blocking | Blocks production code edits if no corresponding test file exists. Encourages TDD. |
-| `auto-review-gate.sh` | Session stop | Non-blocking | Lists modified files and prompts for CLAUDE.md refresh and self-review. Delegates scope checking to scope-guard. |
-| `scope-guard.sh` | Session stop (via auto-review-gate) | Non-blocking | Warns if modified files fall outside the declared spec scope. |
+| `tdd-gate.sh` | Before Edit/Write | Advisory | Warns when production code is edited with no matching test, and names the convention for that stack. Set `TDD_GATE_STRICT=1` to make it blocking. |
+| `nextjs-formulaire-prepush-build.sh` | Before `git push` | Non-blocking | Builds `nextjs-formulaire-hp` before a push; fails open when `node_modules` is absent locally. |
 
 **How to add a new hook:** Edit `.claude/settings.json` and add entries under the `hooks` key. See [Claude Code documentation](https://docs.anthropic.com/en/docs/claude-code) for the full hook API (PreToolUse, PostToolUse, Stop, etc.).
 
 ### 12.4 Superpowers Plugin
 
-The project has the `superpowers` plugin installed project-wide. It provides 14 skills that enforce a structured development workflow: brainstorming before coding, plan writing, TDD, subagent orchestration, and verification-before-completion.
+The active plugin is `superpowers-extended-cc` (user scope). It provides a suite of skills that enforce a structured development workflow: brainstorming before coding, plan writing, TDD, subagent orchestration, and verification-before-completion.
 
 **When to use superpowers vs. project commands:**
 
@@ -1129,19 +1067,13 @@ Follow these steps in order on your first day:
 | Rule File | Purpose |
 |-----------|---------|
 | `.claude/rules/code-modification.md` | Surgical edit protocol: read first, minimal diff, preserve formatting, verify after |
-| `.claude/rules/commit-messages.md` | Bilingual Conventional Commits, scope to current response, < 72 chars |
 | `.claude/rules/security.md` | No hardcoded secrets/URLs, Pydantic BaseSettings, CORS (internal vs public), JWT, input validation, all infra connections |
-| `.claude/rules/language.md` | Respond in user's language, bilingual commits, English code identifiers |
 | `.claude/rules/impact-awareness.md` | Trade-off analysis, bigger picture, blast radius on shared components |
 | `.claude/rules/docker-security.md` | Pinned images, no root, healthchecks, no secrets in ENV, `.dockerignore` |
-| `.claude/rules/config-freshness.md` | Re-read `.claude/` config mid-session before using agents/commands |
 | `.claude/rules/formatting.md` | Code style per stack — references stack-detection.md, with unknown stack fallback |
 | `.claude/rules/refactoring.md` | When/how to refactor safely, scope rules, known duplication targets |
 | `.claude/rules/stack-detection.md` | Single source of truth for stack detection. All stack-dependent rules reference this file. |
 | `.claude/rules/critical-thinking.md` | Anti-sycophancy, blind spot detection, evidence over opinion, uncertainty transparency |
-| `.claude/rules/auto-simplify.md` | Auto simplification pass after every implementation — clarity over complexity, never changes behavior |
-| `.claude/rules/auto-documentation.md` | Auto-fetch external library docs (FastAPI, Pydantic, Milvus, etc.) via context7 before writing code |
-| `.claude/rules/frontend-design-guidelines.md` | Design principles for UI: typography, color, motion, layout — intentionality over intensity |
 
 ### Key Thresholds
 

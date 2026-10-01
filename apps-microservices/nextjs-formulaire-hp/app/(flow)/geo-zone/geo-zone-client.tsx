@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import GeoZoneStep from '@/components/flow/GeoZoneStep';
-import MatchingLoader from '@/components/flow/MatchingLoader';
+import MatchingLoaderV2 from '@/components/flow/MatchingLoaderV2';
 import { useFlowStore } from '@/lib/stores/flow-store';
 import { useFlowNavigation } from '@/hooks/useFlowNavigation';
 import { consolidateEquivalences } from '@/lib/utils/equivalence-merger';
@@ -292,7 +292,7 @@ export default function GeoZoneClient({
 
   // Afficher le loader pendant le matching
   if (showLoader) {
-    return <MatchingLoader onComplete={handleLoaderComplete} duration={5000} />;
+    return <MatchingLoaderV2 onComplete={handleLoaderComplete} duration={5000} />;
   }
 
   return (

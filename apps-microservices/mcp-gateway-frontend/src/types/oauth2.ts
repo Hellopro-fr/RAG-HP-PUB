@@ -1,5 +1,7 @@
 import type { ServerToolScope } from './token'
-import type { LeexiFilter } from './leexi'
+import type { LeexiFilter, ZohoFilter } from './leexi'
+import type { RingoverFilter } from './ringover'
+import type { BDDFilter } from './bdd'
 
 export interface OAuth2Client {
   id: string
@@ -9,6 +11,7 @@ export interface OAuth2Client {
   secret_prefix: string
   server_ids: string[]
   server_tools: ServerToolScope[]
+  instruction_ids?: string[]
   access_token_ttl: number
   is_active: boolean
   created_by?: string
@@ -19,6 +22,10 @@ export interface OAuth2Client {
   grant_types?: string[]
   dynamically_registered: boolean
   leexi_filter?: LeexiFilter
+  zoho_filter?: ZohoFilter
+  ringover_filter?: RingoverFilter
+  bdd_filter?: BDDFilter
+  inject_instructions_into_tools?: boolean
 }
 
 export interface OAuth2ClientListResponse {
@@ -31,9 +38,14 @@ export interface CreateOAuth2ClientRequest {
   redirect_uris?: string[]
   server_ids: string[]
   server_tools?: ServerToolScope[]
+  instruction_ids?: string[]
   access_token_ttl?: number
   expires_at?: string
   leexi_filter?: LeexiFilter
+  zoho_filter?: ZohoFilter
+  ringover_filter?: RingoverFilter
+  bdd_filter?: BDDFilter
+  inject_instructions_into_tools?: boolean
 }
 
 export interface UpdateOAuth2ClientRequest extends Partial<CreateOAuth2ClientRequest> {}
@@ -49,7 +61,10 @@ export interface AuthorizeInfo {
 export interface AuthorizeServer {
   id: string
   name: string
+  icon?: string
   tools: AuthorizeTool[]
+  configured?: boolean
+  docs_url?: string
 }
 
 export interface AuthorizeTool {

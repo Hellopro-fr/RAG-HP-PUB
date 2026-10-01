@@ -75,5 +75,286 @@ function testIsExcludedRegionalPath() {
     if (failed > 0) process.exit(1);
 }
 
+// --- isLocalePathPrefix tests ---
+// Renamed from isFrenchRegionalPathPrefix (C-2): the helper guards SHAPE, not language.
+
+function testIsLocalePathPrefix() {
+    const cases: [string, boolean, string][] = [
+        // Accepted shapes
+        ["/fr", true, "generic /fr"],
+        ["/fr/", true, "/fr with trailing slash"],
+        ["/fr-FR", true, "regional /fr-FR"],
+        ["/fr-FR/", true, "/fr-FR with trailing slash"],
+        ["/fr_FR", true, "/fr_FR underscore"],
+        ["/fr_FR/", true, "/fr_FR underscore with trailing slash"],
+        ["/fr-be", true, "/fr-be lowercase region"],
+        ["/FR-FR", true, "/FR-FR uppercase"],
+        ["/en", true, "/en non-FR language"],
+        ["/en-GB", true, "/en-GB"],
+        ["/de-DE", true, "/de-DE"],
+        ["/es", true, "/es"],
+        ["/es-ES", true, "/es-ES"],
+        // Rejected shapes
+        ["/nos-realisations", false, "content path"],
+        ["/produits", false, "content path"],
+        ["/a-propos", false, "content path with hyphen"],
+        ["/l-entreprise", false, "content path with hyphen"],
+        ["/", false, "root only"],
+        ["", false, "empty string"],
+        ["/fr/extra", false, "/fr with extra segment"],
+        ["/fr-FR/extra", false, "/fr-FR with extra segment"],
+        ["fr-FR", false, "missing leading slash"],
+        ["/123", false, "digits not letters"],
+        ["/f", false, "single-letter language code"],
+    ];
+
+    let passed = 0;
+    let failed = 0;
+
+    for (const [prefix, expected, label] of cases) {
+        const result = DetectionLangueClient.isLocalePathPrefix(prefix);
+        if (result === expected) {
+            passed++;
+        } else {
+            console.error(`FAIL [${label}]: isLocalePathPrefix("${prefix}") = ${result}, expected ${expected}`);
+            failed++;
+        }
+    }
+
+    console.log(`isLocalePathPrefix: ${passed} passed, ${failed} failed`);
+    if (failed > 0) process.exit(1);
+}
+
+// --- computeExcludedRegionalPaths tests ---
+// Production helper extracted from routes.ts loop body (C-3). Tests now exercise
+// the real method directly instead of a hand-mirrored copy in test_routes.ts.
+
+function testComputeExcludedRegionalPaths() {
+    let passed = 0;
+    let failed = 0;
+
+    function assertEqual<T>(actual: T, expected: T, label: string) {
+        const a = JSON.stringify(actual);
+        const e = JSON.stringify(expected);
+        if (a === e) {
+            passed++;
+        } else {
+            console.error(`FAIL [${label}]: got ${a}, expected ${e}`);
+            failed++;
+        }
+    }
+
+    // Case 1: typical clean hreflang — locale-shaped alts pass the gate.
+    {
+        const result = DetectionLangueClient.computeExcludedRegionalPaths(
+            [
+                { url: "https://www.manitou.com/fr-BE/", method: "hreflang", reliability: "high", validated: true },
+                { url: "https://www.manitou.com/fr-CA", method: "hreflang", reliability: "high", validated: true },
+                { url: "https://www.manitou.com/en-GB/", method: "hreflang", reliability: "high", validated: true },
+            ],
+            "/fr-FR",
+            "/fr-FR",
+        );
+        assertEqual(result.excluded.sort(), ["/en-GB", "/fr-BE", "/fr-CA"], "clean hreflang excludes all locale alts");
+        assertEqual(result.rejected, [], "clean hreflang rejects nothing");
+    }
+
+    // Case 2: jaunin.com-style malformed hreflang — content prefix must NOT enter excluded set.
+    // Under the implicit-winner branch (winnerPrefix=null, seedPrefix=null), /fr-CH
+    // becomes the implicit FR winner and is therefore not excluded. Content prefixes
+    // (/nos-realisations, /produits) are still rejected by the shape gate.
+    {
+        const result = DetectionLangueClient.computeExcludedRegionalPaths(
+            [
+                { url: "https://www.jaunin.com/nos-realisations", method: "hreflang", reliability: "high", validated: true },
+                { url: "https://www.jaunin.com/produits/", method: "hreflang", reliability: "high", validated: true },
+                { url: "https://www.jaunin.com/fr-CH/", method: "hreflang", reliability: "high", validated: true },
+            ],
+            null,
+            null,
+        );
+        assertEqual(result.excluded, [], "fr-CH is implicit winner; only locale alt is not excluded");
+        assertEqual(
+            result.rejected.map(r => r.prefix).sort(),
+            ["/nos-realisations", "/produits"],
+            "content prefixes rejected by gate",
+        );
+        assertEqual(
+            result.rejected.map(r => r.sourceUrl).sort(),
+            ["https://www.jaunin.com/nos-realisations", "https://www.jaunin.com/produits/"],
+            "rejected entries carry source URL for logging",
+        );
+    }
+
+    // Case 3: winner and seed prefixes are skipped before the gate is consulted.
+    {
+        const result = DetectionLangueClient.computeExcludedRegionalPaths(
+            [
+                { url: "https://www.manitou.com/fr-FR/", method: "hreflang", reliability: "high", validated: true },
+                { url: "https://www.manitou.com/fr-BE", method: "hreflang", reliability: "high", validated: true },
+            ],
+            "/fr-FR",
+            "/fr-FR",
+        );
+        assertEqual(result.excluded, ["/fr-BE"], "winner prefix is filtered out before gate");
+    }
+
+    // Case 4: dedup — same prefix appearing twice is added only once.
+    {
+        const result = DetectionLangueClient.computeExcludedRegionalPaths(
+            [
+                { url: "https://www.manitou.com/fr-BE/", method: "hreflang", reliability: "high", validated: true },
+                { url: "https://www.manitou.com/fr-BE/products", method: "hreflang", reliability: "high", validated: true },
+            ],
+            "/fr-FR",
+            null,
+        );
+        assertEqual(result.excluded, ["/fr-BE"], "duplicate alt prefixes are deduped");
+    }
+
+    // Case 5: alt URL whose path prefix cannot be extracted (root) is silently skipped.
+    {
+        const result = DetectionLangueClient.computeExcludedRegionalPaths(
+            [
+                { url: "https://www.manitou.com/", method: "hreflang", reliability: "high", validated: true },
+                { url: "https://www.manitou.com/fr-BE", method: "hreflang", reliability: "high", validated: true },
+            ],
+            "/fr-FR",
+            null,
+        );
+        assertEqual(result.excluded, ["/fr-BE"], "alt URLs with no extractable prefix are skipped");
+        assertEqual(result.rejected, [], "skipped alts do not enter rejected list");
+    }
+
+    // --- Implicit winner when homepage is at root (cases A–G from spec) ---
+
+    // Case A: multimattp.com — single FR alt, no winner/seed prefixes
+    {
+        const result = DetectionLangueClient.computeExcludedRegionalPaths(
+            [{ url: "https://www.multimattp.com/fr/", method: "hreflang", reliability: "high", validated: true }],
+            null,
+            null,
+        );
+        assertEqual(result.excluded, [], "Case A: implicit winner /fr not excluded");
+        assertEqual(result.rejected, [], "Case A: no rejections");
+    }
+
+    // Case B: multi-locale, FR present
+    {
+        const result = DetectionLangueClient.computeExcludedRegionalPaths(
+            [
+                { url: "https://example.com/fr/", method: "hreflang", reliability: "high", validated: true },
+                { url: "https://example.com/de/", method: "hreflang", reliability: "high", validated: true },
+                { url: "https://example.com/en/", method: "hreflang", reliability: "high", validated: true },
+            ],
+            null,
+            null,
+        );
+        assertEqual(result.excluded, ["/de", "/en"], "Case B: /fr implicit winner; /de and /en excluded");
+    }
+
+    // Case C: priority-based selection picks /fr-FR over /fr and /fr-CA
+    {
+        const result = DetectionLangueClient.computeExcludedRegionalPaths(
+            [
+                { url: "https://example.com/fr/", method: "hreflang", reliability: "high", validated: true, region_priority: 1 },
+                { url: "https://example.com/fr-FR/", method: "hreflang", reliability: "high", validated: true, region_priority: 0 },
+                { url: "https://example.com/fr-CA/", method: "hreflang", reliability: "high", validated: true, region_priority: 2 },
+            ],
+            null,
+            null,
+        );
+        assertEqual(result.excluded, ["/fr", "/fr-CA"], "Case C: /fr-FR (priority 0) wins; /fr and /fr-CA excluded");
+    }
+
+    // Case D: no priority data, first FR alt wins
+    {
+        const result = DetectionLangueClient.computeExcludedRegionalPaths(
+            [
+                { url: "https://example.com/fr/", method: "hreflang", reliability: "high", validated: true },
+                { url: "https://example.com/fr-CA/", method: "hreflang", reliability: "high", validated: true },
+            ],
+            null,
+            null,
+        );
+        assertEqual(result.excluded, ["/fr-CA"], "Case D: first FR alt /fr wins; /fr-CA excluded");
+    }
+
+    // Case E: no FR alt — fallback to current behavior
+    {
+        const result = DetectionLangueClient.computeExcludedRegionalPaths(
+            [
+                { url: "https://example.com/de/", method: "hreflang", reliability: "high", validated: true },
+                { url: "https://example.com/en/", method: "hreflang", reliability: "high", validated: true },
+            ],
+            null,
+            null,
+        );
+        assertEqual(result.excluded, ["/de", "/en"], "Case E: no FR alt; both /de and /en excluded");
+    }
+
+    // Case F: winnerPrefix non-null — regression of existing behavior
+    {
+        const result = DetectionLangueClient.computeExcludedRegionalPaths(
+            [
+                { url: "https://example.com/fr/", method: "hreflang", reliability: "high", validated: true },
+                { url: "https://example.com/de/", method: "hreflang", reliability: "high", validated: true },
+            ],
+            "/fr-FR",
+            null,
+        );
+        assertEqual(result.excluded, ["/fr", "/de"], "Case F: implicit winner branch does not fire; /fr excluded as non-winning alt");
+    }
+
+    // Case G: empty alts
+    {
+        const result = DetectionLangueClient.computeExcludedRegionalPaths(
+            [],
+            null,
+            null,
+        );
+        assertEqual(result.excluded, [], "Case G: empty alts produces empty excluded");
+        assertEqual(result.rejected, [], "Case G: empty alts produces no rejections");
+    }
+
+    // Case H: winner/seed prefix differs only by CASE from its own hreflang alt.
+    // BCP-47 locale codes are case-insensitive (lang lowercase, region uppercase:
+    // "fr-FR"), but the detection API may surface detectResult.url normalized to
+    // lowercase ("/fr-fr") while the alternative_urls entry keeps the raw hreflang
+    // casing ("/fr-FR"). A case-sensitive === skip would fail to recognize the
+    // winner's own tree and wrongly exclude it, blocking the locale we picked.
+    {
+        const result = DetectionLangueClient.computeExcludedRegionalPaths(
+            [
+                { url: "https://www.leybold.com/fr-FR/", method: "hreflang", reliability: "high", validated: true, region_priority: 0 },
+                { url: "https://www.leybold.com/en-be", method: "hreflang", reliability: "high", validated: true, region_priority: 2 },
+            ],
+            "/fr-fr", // winnerPrefix — API normalized detectResult.url to lowercase
+            "/fr-fr", // seedPrefix
+        );
+        assertEqual(result.excluded, ["/en-be"], "Case H: winner /fr-FR (case-variant of /fr-fr) NOT excluded; /en-be excluded");
+    }
+
+    // Case I: implicit-winner case-variant — seed/winner null, FR alt raw-cased.
+    // Confirms the case-insensitive skip also protects an implicit FR winner whose
+    // hreflang casing differs from a sibling non-FR locale we DO want excluded.
+    {
+        const result = DetectionLangueClient.computeExcludedRegionalPaths(
+            [
+                { url: "https://example.com/FR-fr/", method: "hreflang", reliability: "high", validated: true, region_priority: 0 },
+                { url: "https://example.com/DE-de/", method: "hreflang", reliability: "high", validated: true, region_priority: 2 },
+            ],
+            "/fr-FR", // winnerPrefix
+            "/fr-FR", // seedPrefix
+        );
+        assertEqual(result.excluded, ["/DE-de"], "Case I: /FR-fr case-variant of winner not excluded; /DE-de excluded");
+    }
+
+    console.log(`computeExcludedRegionalPaths: ${passed} passed, ${failed} failed`);
+    if (failed > 0) process.exit(1);
+}
+
 testExtractPathPrefix();
 testIsExcludedRegionalPath();
+testIsLocalePathPrefix();
+testComputeExcludedRegionalPaths();

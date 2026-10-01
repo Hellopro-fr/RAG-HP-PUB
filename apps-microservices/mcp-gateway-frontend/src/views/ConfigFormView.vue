@@ -112,12 +112,13 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { installGuidesAdminApi } from '@/api/install-guides'
 import { useToast } from '@/composables/useToast'
+import { toErrorMessage } from '@/utils/error'
 import PageBreadcrumb from '@/components/common/PageBreadcrumb.vue'
 import WysiwygEditor from '@/components/shared/WysiwygEditor.vue'
 import StepBuilder from '@/components/install-guides/StepBuilder.vue'
 import PrimeIconPicker from '@/components/shared/PrimeIconPicker.vue'
 import ColorClassPicker from '@/components/shared/ColorClassPicker.vue'
-import type { ConfigStep, ConfigStepTable } from '@/types/install-guide'
+import type { ConfigStep, ConfigStepTable, InstallConfig } from '@/types/install-guide'
 import { encodeHtmlEntities, encodeTextEntities } from '@/utils/htmlEntities'
 
 const route = useRoute()
@@ -174,11 +175,11 @@ function encodeAllEntities() {
   if (form.value.description) form.value.description = encodeHtmlEntities(form.value.description)
 
   steps.value = steps.value.map(step => {
-    const newStep: any = { ...step }
+    const newStep: ConfigStep = { ...step }
     for (const [k, v] of Object.entries(step)) {
       if (skipEncodingKeys.has(k) || typeof v !== 'string') continue
       const isHtmlish = /<[a-zA-Z\/!]/.test(v)
-      newStep[k] = isHtmlish ? encodeHtmlEntities(v) : encodeTextEntities(v)
+      ;(newStep as unknown as Record<string, unknown>)[k] = isHtmlish ? encodeHtmlEntities(v) : encodeTextEntities(v)
     }
     // Encode table cells (field/value)
     if (Array.isArray(step.table)) {
@@ -209,8 +210,8 @@ async function handleSave() {
       toast.success('Configuration creee')
     }
     router.push('/install-guides-admin')
-  } catch (err: any) {
-    toast.error(err?.body?.error || 'Erreur lors de l\'enregistrement')
+  } catch (err: unknown) {
+    toast.error(toErrorMessage(err, 'Erreur lors de l\'enregistrement'))
   } finally {
     submitting.value = false
   }
@@ -227,14 +228,16 @@ function handleExport() {
   URL.revokeObjectURL(url)
 }
 
-function applyImportData(data: any) {
+type ImportedConfig = Partial<Omit<InstallConfig, 'content'>> & { content?: ConfigStep[] }
+
+function applyImportData(data: ImportedConfig) {
   if (data.slug) form.value.slug = data.slug
   if (data.label) form.value.label = data.label
   if (data.description !== undefined) form.value.description = data.description
   if (data.icon) form.value.icon = data.icon
   if (data.color) form.value.color = data.color
   if (data.content) {
-    steps.value = data.content.map((s: any) => ({ ...s }))
+    steps.value = data.content.map((s) => ({ ...s }))
   }
   toast.success('Donnees importees')
 }

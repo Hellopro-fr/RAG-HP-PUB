@@ -112,6 +112,30 @@ const router = createRouter({
       meta: { requiresAuth: true, title: 'Serveurs MCP', minRole: 'read-only' }
     },
     {
+      path: '/bdd-tables',
+      name: 'bdd-tables',
+      component: () => import('@/views/BDDTablesView.vue'),
+      meta: { requiresAuth: true, title: 'Tables BDD', minRole: 'config-only' },
+    },
+    {
+      path: '/bdd-tables/new',
+      name: 'bdd-table-add',
+      component: () => import('@/views/BDDTableAddView.vue'),
+      meta: { requiresAuth: true, title: 'Ajouter une table BDD', minRole: 'admin' },
+    },
+    {
+      path: '/bdd-tables/:id',
+      name: 'bdd-table-detail',
+      component: () => import('@/views/BDDTableDetailView.vue'),
+      meta: { requiresAuth: true, title: 'Detail de la table', minRole: 'config-only' },
+    },
+    {
+      path: '/bdd-tables/:id/fields',
+      name: 'bdd-table-fields',
+      component: () => import('@/views/BDDTableFieldsView.vue'),
+      meta: { requiresAuth: true, title: 'Configurer les champs', minRole: 'admin' },
+    },
+    {
       path: '/servers/import-google',
       name: 'google-sheets-import',
       component: () => import('@/views/GoogleSheetsImportView.vue'),
@@ -122,6 +146,47 @@ const router = createRouter({
       name: 'docs-admin',
       component: () => import('@/views/DocsAdminView.vue'),
       meta: { requiresAuth: true, title: 'Documentation', minRole: 'admin' }
+    },
+    {
+      path: '/admin/templates',
+      name: 'templates',
+      component: () => import('@/views/TemplatesView.vue'),
+      meta: { requiresAuth: true, title: 'Templates', minRole: 'admin' }
+    },
+    {
+      path: '/admin/templates/:slug/new',
+      name: 'template-instance-new',
+      component: () => import('@/views/TemplateInstanceFormView.vue'),
+      meta: { requiresAuth: true, title: 'Nouvelle instance', minRole: 'admin' },
+      props: true
+    },
+    {
+      path: '/admin/templates/:slug/import-from-sheet',
+      name: 'template-instance-sheet-import',
+      component: () => import('@/views/TemplateInstanceSheetImportView.vue'),
+      meta: { requiresAuth: true, title: 'Import depuis Sheets', minRole: 'admin' },
+      props: true
+    },
+    {
+      path: '/admin/templates/:slug/zoho-imports/new',
+      name: 'zoho-import-new',
+      component: () => import('@/views/ZohoImportFormView.vue'),
+      meta: { requiresAuth: true, title: 'Nouvel import Zoho', minRole: 'admin' },
+      props: true,
+    },
+    {
+      path: '/admin/templates/:slug/zoho-imports/:id',
+      name: 'zoho-import-detail',
+      component: () => import('@/views/ZohoImportDetailView.vue'),
+      meta: { requiresAuth: true, title: 'Détails import Zoho', minRole: 'admin' },
+      props: true,
+    },
+    {
+      path: '/admin/templates/:slug',
+      name: 'template-detail',
+      component: () => import('@/views/TemplateDetailView.vue'),
+      meta: { requiresAuth: true, title: 'Template', minRole: 'admin' },
+      props: true
     },
     {
       path: '/tokens',
@@ -184,10 +249,40 @@ const router = createRouter({
       meta: { requiresAuth: true, title: 'Modifier configuration', minRole: 'admin' }
     },
     {
+      path: '/llm-instructions',
+      name: 'llm-instructions',
+      component: () => import('@/views/LLMInstructionsView.vue'),
+      meta: { requiresAuth: true, title: 'Instructions LLM' }
+    },
+    {
+      path: '/llm-instructions/new',
+      name: 'llm-instruction-create',
+      component: () => import('@/views/LLMInstructionFormView.vue'),
+      meta: { requiresAuth: true, title: 'Nouvelle instruction' }
+    },
+    {
+      path: '/llm-instructions/:id/edit',
+      name: 'llm-instruction-edit',
+      component: () => import('@/views/LLMInstructionFormView.vue'),
+      meta: { requiresAuth: true, title: 'Modifier instruction' }
+    },
+    {
+      path: '/llm-instructions/:id',
+      name: 'llm-instruction-detail',
+      component: () => import('@/views/LLMInstructionDetailView.vue'),
+      meta: { requiresAuth: true, title: 'Instruction' }
+    },
+    {
       path: '/users',
       name: 'users',
       component: () => import('@/views/UsersView.vue'),
       meta: { requiresAuth: true, title: 'Utilisateurs', minRole: 'admin' }
+    },
+    {
+      path: '/server-authorizations',
+      name: 'server-authorizations',
+      component: () => import('@/views/ServerAuthorizationsView.vue'),
+      meta: { requiresAuth: true, title: 'Serveur Autorisation', minRole: 'admin' }
     },
     {
       path: '/audit-logs',
@@ -204,6 +299,11 @@ const router = createRouter({
   ]
 })
 
+// SSO mode (account-service): redirect unauthenticated users full-page to
+// /sso/login on the gateway backend, which initiates the OAuth2 flow against
+// account-service. Legacy mode keeps the in-app /login route push.
+const SSO_MODE = import.meta.env.VITE_SSO_MODE === 'true'
+
 router.beforeEach(async (to) => {
   if (to.meta.requiresAuth === false) {
     return true
@@ -214,6 +314,11 @@ router.beforeEach(async (to) => {
   if (!authStore.isAuthenticated) {
     const valid = await authStore.checkSession()
     if (!valid) {
+      if (SSO_MODE) {
+        window.location.href = '/sso/login?return_to=' + encodeURIComponent(to.fullPath)
+        // Block the navigation while the browser tears down for the redirect.
+        return false
+      }
       return { path: '/login', query: { redirect: to.fullPath } }
     }
   }

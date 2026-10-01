@@ -1,0 +1,672 @@
+id_rubrique,nom,type,depth,parent,nb_produits
+2004600,"Aspirateurs industriels",0,2,9000163,895
+1001222,"Accessoires de marquage",0,2,1000225,887
+2016184,"Perforateur & burineur",0,2,1000264,784
+2014273,"Meuleuse à angle",0,2,2012218,690
+2007558,"Rampe pour PMR",0,2,2000408,581
+2018939,"Fraise à plaquette",0,2,2006852,414
+2002543,"Perceuses à colonne",0,2,1000264,375
+2011484,"Chariot de soin hospitalier",0,2,2000407,356
+2002201,"Nettoyeur ultrason",0,2,9000225,351
+2002905,Carotteuses,0,2,1000264,335
+2004068,"Filières d'usinage",0,2,2012389,333
+2000309,"Presse à injection",0,2,2000286,333
+1001217,"Presses plieuses industrielles",0,2,2009553,331
+2004615,"Rouleuses industrielles",0,2,2009553,327
+2002723,"Masque FFP2",0,2,9000386,318
+1001210,Fraiseuses,0,2,2006852,316
+1001320,"Extracteurs de gaz et de fumée",0,2,9000163,311
+1001212,"Centres d'usinage",0,2,2011969,306
+2009567,"Cintreuses manuelles",0,2,2009553,300
+2003281,Sableuses,0,2,2012579,290
+2007058,"Tours d'établi",0,2,2006894,273
+2002582,"Cintreuses industrielles",0,2,2009553,273
+2015687,"Coupe câble",0,2,2012391,268
+10804,"Gels hydroalcooliques",0,2,2011916,256
+2005580,Affûteuses,0,2,2012218,250
+10793,"Chariots à linge",0,2,2000407,233
+2010313,"Tronçonneuse à fraise-scie",0,2,2018382,226
+2005225,"Automates programmables industriels",0,2,2005223,226
+9000581,"Réacteur industriel",0,1,1000006,215
+2007191,"Armoire médicale",0,2,2000444,206
+2001729,"Cisaille industrielle",0,2,2011597,199
+9000188,"Aspirateur industriel huile et copeaux",0,2,9000163,199
+2010519,"Marquages à jet d'encre",0,2,1000225,197
+1001275,"Mélangeur industriel",0,2,9000616,195
+1001274,"Doseur industriel",0,2,1000038,191
+1001220,"Marquages laser",0,2,1000225,190
+2018916,Raboteuse-dégauchisseuse,0,2,2007322,189
+2018459,"Masque lavable",0,2,9000386,189
+2006367,"Marquages et découpes à laser",0,2,1000225,185
+9000518,"Machine a coudre industrielle",0,2,2000092,180
+2000122,"Piqueuse plate ",0,2,2000092,177
+2006895,"Tours cnc  horizontaux",0,2,2006894,176
+2010033,"Cabines de sablage",0,2,2012579,176
+2014574,"Coupe industrielle",0,2,2011597,167
+2001911,"Machines de séchage industriel",0,2,2011171,161
+2006857,"Perceuses fraiseuses",0,2,1000264,160
+2007559,"Élévateur PMR",0,2,2000408,158
+2002327,"Centrifugeuse industrielle",0,2,1000038,155
+2018765,"Compresseur pour sablage",0,2,2012579,152
+2000132,"Rectifieuse plane",0,2,2012218,150
+2007329,"Toupies à bois",0,2,2012354,147
+2014178,"Lampe médicale",0,2,2000444,143
+2007556,"Fauteuils monte-escaliers",0,2,2000408,142
+2004606,"Fontaines de dégraissage",0,2,1000043,140
+2018458,"Masque FFP3",0,2,9000386,140
+2018238,"Accessoires de prévention Covid",0,2,2018579,140
+2003726,"Masque chirurgical ",0,2,9000386,139
+2006356,"Machine de découpe laser ",0,2,2011597,139
+2015781,Sur-chaussures,0,2,2011916,137
+2017111,"Perceuses d'établis",0,2,1000264,134
+2018075,"Lampe UV pour désinfection",0,2,2011916,133
+2008058,"Sable pour sableuse et abrasifs de sablage",0,2,2012579,130
+2014843,Mortaiseuse,0,2,2006852,127
+2014844,"Découpeuse à lame portative",0,2,2011597,127
+2018383,"Tronçonneuse à double tête",0,2,2018382,126
+2008800,Aérogommage,0,2,2012579,125
+2011848,Défibrillateurs,0,2,1000383,124
+2011321,Poinçonneuse,0,2,2011009,119
+1001322,"Systèmes de nettoyage industriel",0,2,1000043,118
+2009559,"Presses plieuses manuelles",0,2,2009553,116
+2017274,"Armoires à pharmacie",0,2,1000383,113
+1001256,"Pinces de préhension",0,2,1000038,111
+2007870,"Logiciels métiers",0,2,2006270,109
+2011886,"Outils de dénudage de câbles",0,2,2012391,108
+2019203,"Rectifieuse cylindrique",0,2,2012218,107
+2018685,"Purificateurs d'air anti covid",0,2,2018579,106
+1001258,"Robots articulés industriels",0,2,2012448,105
+2002843,"Raboteuses industrielles",0,2,2007322,105
+2019173,"Interfaces homme machine",0,2,2005223,103
+2011236,"Moulins de broyage",0,2,1000038,103
+2017092,"Plateformes monte-escaliers",0,2,2000408,102
+2009398,"Stations de lavage industrielles",0,2,1000043,98
+2014889,"Découpage plasma",0,2,2011597,97
+2000437,Lèves-personnes,0,2,2000408,96
+2010646,"Logiciels de cao",0,2,2006270,95
+1001318,"Machines d'aspiration automatisée",0,2,9000163,95
+2019583,"Bâches chauffantes",0,2,1000237,93
+2000113,"Imprimantes textile",0,2,2000092,92
+2018506,"Buses de sablage",0,2,2012579,92
+1001221,"Marquages par micropercussions",0,2,1000225,91
+2018629,Cobot,0,2,2012448,90
+2018463,"Station de lavage par ultrasons",0,2,9000225,89
+1001354,"Meuleuse pneumatique",0,2,2012218,89
+9000006,"Table à langer pour handicapé",0,2,2000408,89
+2011888,"Outils de dégainage de câbles",0,2,2012391,88
+2017339,"Boucles magnétiques pour malentendants",0,2,2011456,88
+2016186,"Combinés à bois",0,2,2007322,88
+2004060,"Fours verticaux",0,2,1000237,87
+2005605,Tribofinition,0,2,1000221,86
+1001317,"Bras aspirants",0,2,9000163,86
+1001279,"Fours à convoyeur",0,2,1000237,86
+2015388,"Draps d'examen",0,2,2011916,85
+2005243,"Pupitre de commande",0,2,2005223,84
+2007180,"Lits médicalisés",0,2,2000444,84
+1001319,"Machines d'épuration et d'aspiration",0,2,9000163,83
+2008236,"Machine à dupliquer les clés ",0,2,9000349,82
+2013427,"Équipements pour personnes à mobilité réduite",0,2,2000408,81
+2006968,"Sous-traitance de découpe",0,2,1000097,80
+2008966,"Accessoires pour sableuses",0,2,2012579,79
+2006811,"Tables aspirantes",0,2,9000163,79
+2000493,"Equipements dentaires",0,2,2011456,78
+2011749,"Unités de perçage",0,2,1000264,78
+2017774,"Scooters électriques pour mobilité réduite",0,2,2000408,77
+2003667,"Rainureuses industrielles",0,2,2011009,75
+2017773,"Vélos pour handicapé",0,2,2000408,75
+2000225,"Mélangeurs pour liquides alimentaires",0,2,9000616,74
+2013970,"Accessoires pour systèmes de commande industrielle",0,2,2005223,74
+2018228,"Souffleuse de bouteilles PET",0,2,2000285,73
+1001277,"Fours de trempage",0,2,1000237,73
+2016376,"Tours conventionnel",0,2,2006894,72
+2006969,Hydrogommeuses,0,2,2012579,72
+2004760,"Maintenance et réparation en fabrication",0,2,1000097,71
+2014996,"Déambulateur, rollator et canne",0,2,2000408,70
+2009911,Chauffe-fût,0,2,1000237,69
+2007677,Ébavureuses,0,2,2012970,68
+2018675,"Étuve industrielle",0,2,1000237,68
+2004556,"Bacs de nettoyage par aspersion",0,2,1000043,68
+2019233,"Cellule robotisée",0,2,2012448,67
+2018386,"Tronçonneuses mono tête",0,2,2018382,66
+10800,"Lavabos médicaux",0,2,2000444,65
+2015380,"Chaise et tabouret médical",0,2,2000444,65
+2018556,"Fer à marquer électrique",0,2,1000225,65
+2000293,"Machines pour thermoformage",0,2,1000227,63
+1002539,"Polisseuses industrielles",0,2,2012970,63
+1001253,"Joysticks industriels",0,2,2005223,60
+2004558,"Contrôleurs de processus",0,2,2005224,60
+2002672,"Machine pneumatique de marquage à chaud",0,2,1000225,60
+2014806,"Balances médicales",0,2,2010588,59
+2004059,Dessiccateurs,0,2,2011171,59
+2014931,"Perceuse radiale",0,2,1000264,58
+2018772,"Brodeuse industrielle",0,2,2000092,57
+2001666,"Aspirateur centralisé industriel",0,2,9000163,56
+2017228,"Fauteuils roulants manuels",0,2,2000408,56
+2017625,"Sécheurs infrarouges",0,2,2011171,55
+2003108,Profileuses,0,2,2009553,55
+2017540,"Agitateurs  industriels",0,2,1000038,54
+2018534,"Plaque aluminium anodisé",0,2,1000225,54
+2013005,"Entraîneurs automatiques",0,2,2007322,53
+2015609,"Machines spéciales",0,2,1000097,53
+2005064,"Logiciels de fao",0,2,2006270,52
+2005603,"Chanfreineuses industrielles",0,2,2012970,52
+2000119,"Machines à broder",0,2,2000092,51
+1001260,"Alimentateurs automatiques",0,2,1000038,50
+2000305,"Extrudeuses pour plastique",0,2,1000227,50
+2013567,"Encocheuses à angle variable",0,2,2011009,48
+2012980,"Chanfreineuses portatives",0,2,2012970,48
+2000303,"Mélangeurs pour industrie plastique",0,2,2000285,48
+2007176,"Abris médicaux mobiles",0,2,2000444,47
+2000476,"Sous-traitance d'usinage",0,2,1000097,47
+2001665,Aléseuses,0,2,2006852,47
+1001206,"Machines d'oxycoupage",0,2,2011597,47
+9000555,"Perceuse magnétique",0,2,1000264,46
+2013548,"Protection pour robot industriel",0,2,2012448,46
+2012147,"Perceuse taraudeuse d'établi",0,2,2012389,46
+9000445,"Plaqueuse de chant",0,2,2007322,45
+2018504,"Pistolet de sablage",0,2,2012579,43
+2017753,"Matériels dermatologiques",0,2,2011456,43
+2014698,Tensiomètre,0,2,2010588,43
+1001242,"Découpeuses et dénudeuses de câbles",0,2,2012391,42
+2015470,Degauchisseuse,0,2,2007322,42
+2019751,"Pack défibrillateur",0,2,1000383,42
+2005589,Tenonneuses,0,2,2012354,41
+2005123,"Régulateurs de processus industriels",0,2,2005224,41
+2006896,"Tours cnc verticaux",0,2,2006894,41
+2017902,"Monte-escalier mobile",0,2,2000408,41
+2005237,"Télégestion de processus industriels",0,2,2005224,40
+9000281,"Robot palettiseur",0,2,2012448,40
+2015361,"Confort de la personne",0,2,2000408,40
+1001257,"Robots cartésiens",0,2,2012448,39
+2014951,"Matelas médicalisé",0,2,2000444,38
+2008968,"Machines pour industries cosmétiques",0,2,9000349,38
+2015776,"Matériels et produits de désinfectants sanitaires",0,2,2011916,37
+2005254,"Terminaux opérateurs industriels",0,2,2005224,37
+2005228,"Véhicules pour handicapés",0,2,2000408,37
+2013299,"Appareils de marquage portatifs",0,2,1000225,36
+1000744,"Logiciels de plannings",0,2,2006270,36
+2016401," Robots de dosage",0,2,2012448,35
+2004528,ERP,0,2,2006270,35
+2011674,"Découpeuses à fil",0,2,2011597,34
+2019560,"Tuyau de sablage",0,2,2012579,34
+2011708,"Presses de découpe industrielles",0,2,2011597,34
+2000330,"Soudeuses portatives pour plastique",0,2,1000227,33
+2004566,Grenaillage,0,2,2012579,33
+1001204,"Découpeuses à jet d'eau",0,2,2011597,33
+1001278,"Fours horizontaux",0,2,1000237,32
+2000013,"Logiciels de gpao",0,2,2006270,32
+2014977,"Pantalon d'infirmière",0,2,2007418,32
+2018582,"Test rapide coronavirus",0,2,2018579,31
+2014254,"Autres robots",0,2,2012448,31
+2006854,"Centres de fraisage",0,2,2006852,31
+2004549,"Broyeurs à percussion",0,2,1000038,31
+2000299,"Machines pour soudure plastique",0,2,1000227,30
+2019451,"Gabarit de perçage",0,2,1000264,30
+2016193,"Fauteuils roulants électriques",0,2,2000408,30
+2006855,"Banc de frettage",0,2,2006894,30
+2017012,"Bras de taraudage ",0,2,2012389,30
+2015151,"Matériel d'ophtalmologie",0,2,2011456,29
+9000053,"Aspirateur de brouillard d'huile",0,2,9000163,29
+2007832,"Logiciels et systèmes de réservation de salles",0,2,2006270,29
+9000397,"Gaz de soudage",0,2,2001160,29
+1001361,"Chauffages à induction",0,2,1000237,29
+2005142,"Mélangeur de gaz",0,2,9000616,29
+2018029,Compresse,0,2,2010588,28
+2019612,"Fauteuil de mise à l'eau",0,2,2000408,28
+2018708,"Stérilisateur UV",0,2,2011916,28
+9000170,"Epurateur de brouillard d'huile industriel",0,2,9000163,28
+2011884,"Postes de découpe et de dénudage de câbles",0,2,2012391,28
+2018507,"Tamis pour sableuse",0,2,2012579,28
+1001203,"Découpeuses à lames",0,2,2011597,27
+9000227,"Sécheur à air pulsé",0,2,9000225,27
+2014192,Nébuliseur,0,2,2010588,27
+2011235,"Broyeurs giratoires",0,2,1000038,26
+1001213,"Machines d'usinage",0,2,2011969,26
+2015397,"Divan d'examen",0,2,2000444,26
+9000032,"Tests de drogue",0,2,2010588,25
+10314,"Appels infirmières",0,2,2010588,25
+2014608,"Chaise de pesée",0,2,2000408,25
+9000164,"Installation de traitement d'air industriel ",0,2,1000097,25
+2018674,"Four de thermoformage",0,2,1000237,25
+2001850,"Équipements de traitement au plasma",0,2,1000221,25
+2007057,"Tours semi-automatiques horizontaux",0,2,2006894,25
+2018771,"Surjeteuse industrielle",0,2,2000092,24
+2004608,"Stands et bacs de dégraissage",0,2,9000225,24
+9000485,"Robot mobile autonome",0,2,2012448,24
+2016527,"Distributeurs de surchaussures",0,2,2011916,24
+2008322,"Fileteuses industrielles",0,2,2012389,24
+2012883,"Mélangeurs pour autres produits solides",0,2,9000616,23
+2017895,"Matériel pour le transfert de corps",0,2,2000444,23
+2019571,"Système d'impression DTF",0,2,2000092,23
+2010127,"Séparateur balistique",0,2,2000285,23
+2019172,"Robot pick and place",0,2,2012448,22
+10290,"Localisation et traçabilité des patients",0,2,2000408,22
+2005318,"Modules logiques ",0,2,2005224,22
+2003311,"Fours de refusions",0,2,1000237,22
+2004680,"Accessoires pour robotique",0,2,2012448,22
+9000214,"Débitmètre d'oxygène",0,2,1000383,22
+2001168,"Gaz inorganiques",0,2,2001160,22
+2009070,"Produits pour moulage de plastique",0,2,2000286,22
+2017266,"Chaises de transfert pour PMR",0,2,2000408,21
+9000267,"Sous-traitance de découpe au jet d'eau",0,2,1000097,21
+9000084,"Holter tensionnel - MAPA",0,2,2010588,20
+2006358,"Tables de découpe",0,2,2011597,20
+1001233,"Moules pour plasturgie et caoutchouc",0,2,2000286,20
+2019769,"Lignes d'extrusion",0,2,1000227,20
+2008668,"Cabines de nettoyage",0,2,2012579,19
+2019226,Autotest,0,2,2011916,19
+2007402,Corroyeuses,0,2,2007322,19
+9000156,"Four de revenu",0,2,1000237,19
+2017254,"Habitacles et boîtiers pour défibrillateurs",0,2,1000383,19
+2014688,"Guidage à bille",0,2,2012448,19
+2018558,"Marquage par roulement",0,2,1000225,19
+2010532,"Marquages électro-chimiques",0,2,1000225,19
+1001224,"Matériels de fonderie",0,2,9000349,19
+2018126,"Mètreuses -visiteuses",0,2,2000092,18
+2000298,"Machines pour recyclage de plastique",0,2,2000285,18
+1001250,"Logiciels combinés cfao",0,2,2006270,18
+2007403,"Tailleuses d'engrenages",0,2,2012389,18
+2018227,"Machine de granulation plastique",0,2,2000285,18
+2016191,"Paravent médical",0,2,2000444,18
+2007397,"Cadreuses visseuses",0,2,2012354,18
+2019747,"Presse à compression",0,2,1000227,17
+2012059,"Lecteurs de carte vitale",0,2,2000463,17
+2019220,"Montre infirmière",0,2,2007418,17
+2018739,"Essoreuse industrielle",0,2,1000038,16
+2017264,"Chaises de douche pour PMR",0,2,2000408,16
+2018462,"Générateur d'ultrasons pour nettoyage",0,2,9000225,16
+9000157,"Dosseret aspirant",0,2,9000163,16
+2002537,"Défonceuses industrielles",0,2,2012354,15
+2012215,Rodeuses,0,2,2012970,15
+2006984,"Equipements pour anesthésie",0,2,2000407,14
+2018555,"Marquage à chaud manuel",0,2,1000225,14
+9000524,"Machine de métallisation",0,2,2012579,14
+1001227,"Buses et injecteurs pour plasturgie",0,2,2000286,13
+2011557,"Marquages par grattage",0,2,1000225,13
+2003107,"Bordeuses et moulureuses électriques",0,2,2009553,13
+9000289,"Rétrofit de rectifieuse",0,2,2012218,13
+2005611,"Lignes de cuisson",0,2,1000237,13
+2019623,"Consommables DTF",0,2,2000092,13
+2019756,"Appareil técarthérapie",0,2,2011456,13
+2000226,"Lignes de séchage industriel",0,2,2011171,13
+2018736,"Tunnel de désinfection",0,2,2011916,13
+2015405,"Matériel orthopédique",0,2,2011456,13
+2019086,"Bladder scanner",0,2,2010555,13
+2014019,"Équipements pour douche au lit",0,2,2000444,13
+2017896,"Unité de Lavage",0,2,2000444,13
+2015387,"Tables de lit",0,2,2000444,12
+2018229,"Ligne de lavage plastique",0,2,2000285,12
+2019353,"Bouteille d'hélium",0,2,2001160,12
+2003109,"Plieuse baguetteuse",0,2,2009553,12
+9000159,"Table de moule",0,2,2000286,12
+2008829,"Nettoyage industriel",0,2,9000163,12
+2004423,"Logiciels de contrôle",0,2,2006270,12
+2019752,"Aspirateur de mucosité",0,2,1000383,11
+2000497,"Dispositifs de ventilation et d'aération",0,2,2010588,11
+9000128,"Robot Delta",0,2,2012448,11
+2002119,"Fours de crémation",0,2,1000237,11
+2017337,"Machines à ultrason pour coupe soudante",0,2,2000092,11
+2004175,"Taraudeuses industrielles",0,2,2012389,11
+2018624,"Gant pour sableuse",0,2,2012579,11
+2005094,"Calculateurs industriels",0,2,2005224,11
+2011880,"Piluliers médicaux",0,2,2010588,11
+2018779,"Armoire de stérilisation COVID",0,2,2018579,11
+2018505,"Cabine de soufflage",0,2,2012579,10
+2000292,"Autres machines pour plastique",0,2,2000285,10
+2014134,"Machines découpeuses de câble",0,2,2012391,10
+2002277,"Machines de prototypage",0,2,9000349,10
+9000562,"Sous-traitance de marquage ",0,2,1000097,10
+1001214,"Machines à l'électro-érosion par fil",0,2,2011969,10
+2000445,"Prothèses médicales",0,2,2011456,10
+2014330,Civière,0,2,1000383,10
+10838,"Traitements de l'eau et de l'air",0,2,2011916,10
+2015704,"Moniteur de surveillance",0,2,2000463,10
+2015412,"Oxymètre de pouls",0,2,2010588,10
+2010608,Echographes,0,2,2010555,9
+2007900,"Dresseuses industrielles",0,2,2009553,9
+2016400,"Crèmes bactéricides liquides",0,2,2011916,9
+2015617,"Fauteuil hippocampe",0,2,2000408,9
+2006988,Photothérapie,0,2,2011456,9
+2004306,Brocheuses,0,2,2011009,9
+1001281,"Accessoires de traitement thermique",0,2,1000237,8
+2008140,"Accessoires de séchage",0,2,2011171,8
+9000672,"gaz standards",0,2,2001160,8
+2017255,"Supports pour défibrillateurs",0,2,1000383,8
+2017030,"Machines à électro-érosion par enfonçage",0,2,2011969,8
+2005591,"Découpeuses à ultrason",0,2,2011597,7
+2006050,Abatteuses,0,2,2007322,7
+2015378,"Table gynécologique",0,2,2011456,7
+2001722,"Acides organiques",0,2,2001160,7
+2019312,"Borne de détection de température",0,2,2011916,6
+9000016,"Machine pour fabrication de masque chirurgicaux",0,2,9000349,6
+2000300,"Machines pour découpe de plastique",0,2,1000227,6
+2012167,"Procédés de fabrication industrielle",0,2,2006270,6
+2012223,Planeuses,0,2,2009553,6
+2007920,"Imprimantes de bracelets",0,2,2000463,6
+9000087,"Concentrateur d'oxygène",0,2,1000383,6
+2017999,"Tunnel de traitement thermique",0,2,1000237,6
+1001263,"Embarreurs pour tours",0,2,2006894,6
+2011885,"Récupérateurs de fils",0,2,2012391,6
+2016477,"Tables d'opération",0,2,2000444,6
+10866,"Guichets hospitaliers",0,2,2000444,6
+2014038,"Traitements de trouble musculo-squelettique",0,2,2011456,5
+2015288,"Matériel pour échographie",0,2,2010555,5
+2018633,"Tube à rayons X",0,2,2010555,5
+2002273,"Marqueurs rotatifs",0,2,1000225,5
+2011691,"Accessoires de dosage",0,2,1000038,5
+9000109,"Respirateur portable",0,2,1000383,5
+2016546,"Borne musicale",0,2,2000408,5
+9000623,"Mélangeur industriel de poudre",0,2,9000616,5
+2000343,"Colliers pour extrudeuses",0,2,1000227,4
+2017574,"Barres chauffantes",0,2,1000227,4
+2006372,"Postes de découpe à laser",0,2,2011597,4
+2004072,"Stations de traitement thermique",0,2,1000237,4
+9000625,"Mélangeur industriel pour produits pâteux",0,2,9000616,4
+2018557,"Unité modulaire de marquage à chaud",0,2,1000225,4
+9000589,"Machine de nettoyage solvant",0,2,1000043,3
+2000112,"Machines d'enduction",0,2,2000092,3
+2015021,Insufflateur,0,2,1000383,3
+2018172,"Accessoires de préhension ",0,2,1000038,3
+9000624,"Mélangeur de poudre et de liquide",0,2,9000616,3
+2019753,"Lecteur pour bandelette urinaire",0,2,2010588,2
+2019140,"Débitmètre urinaire",0,2,2011456,2
+9000401,"Gaz médicaux",0,2,2012749,2
+9000670,"Azote industriel",0,2,2001160,2
+2018262,"Planche de transfert",0,2,2000408,2
+2015281,ECG,0,2,2000407,2
+2001174,"Gaz organiques",0,2,2001160,2
+2000120,"Machines à tricoter",0,2,2000092,1
+2006897,"Tours semi-automatiques verticaux",0,2,2006894,1
+2018231,"Machine d'impression sur sac plastique",0,2,2000285,1
+2016026,"Cardiofréquencemètre et pulsomètre",0,2,2010588,1
+2012686,"Vessies à glace chirurgicales",0,3,2011914,0
+2011883,Gouges,0,3,2011914,0
+2011831,Curettes,0,3,2011914,0
+2012894,"Matériels d'analyses urinaires",0,2,2012794,0
+2011826,"Écarteurs chirurgicaux",0,3,2011914,0
+2011823,Canules,0,3,2011914,0
+2011802,"Abaisse-langues et ouvre-bouches",0,3,2011914,0
+1001240,"Outils de découpe câbles",0,2,2012391,0
+1001301,"Rainureuses portatives",0,2,2012970,0
+2000500,"Autres matériels spécifiques",0,2,2012749,0
+2011461,"Spatules opératoires",0,3,2011914,0
+2011068,"Bougies de hégar",0,3,2011914,0
+2010408,Rectoscopes,0,3,2011914,0
+2004000,"Documentations pour travail du bois",0,2,2013731,0
+2009012,"Documentations pour travail des métaux",0,2,2013731,0
+2011918,"Protections des chaussures",0,2,2011916,0
+2011917,"Masques et coiffes de protections",0,2,2011916,0
+2010410,"Matériels d'apprentissage du corps humain",0,2,2012749,0
+2006906,Enclumes,0,3,2012402,0
+2013184,"Porte-outils pour plaquette",0,3,2013214,0
+2012476,"Plaquettes d'usinage",0,3,2013214,0
+2005785,"Distributeurs automatiques de préservatifs",0,2,2012793,0
+2003980,"Porte-outils divers",0,3,2013214,0
+1002586,"Autres outillages industriel",0,3,2013214,0
+1001252,"Plateaux tournants",0,3,2013214,0
+2002480,"Éléments de bridage",0,3,2012629,0
+2012403,Burins,0,3,2012402,0
+2011979,"Accessoires pour outils de frappe",0,3,2012402,0
+2004309,"Coffrets d'outils de frappe",0,3,2012402,0
+2012766,"Pinces chirurgicales",0,3,2011914,0
+10722,"Conteneurs des instruments usés",0,2,2011916,0
+2011980,Préservatifs,0,2,2012793,0
+2012727,"Gels lubrifiants",0,2,2012793,0
+2003338,Bédanes,0,3,2012402,0
+2002892,Pointeaux,0,3,2012402,0
+2007554,"Autres matériels d'analyse médicale",0,2,2012794,0
+2012681,Biopsies,0,2,2012794,0
+2002678,"Battes, maillets et tas",0,3,2012402,0
+2012682,"Coupeurs et broyeurs de comprimés",0,2,2012749,0
+2000429,"Autres matériels chirurgicaux",0,3,2011914,0
+2019257,"Purificateur d'air - AeraMAX",0,2,2018579,0
+2011985,"Scies à plâtre",0,3,2011909,0
+2003105,"Portes-filières d'usinage",0,2,2012389,0
+2010601,"Aiguilles chirurgicales",0,3,2010593,0
+2010600,"Aiguilles de prélèvements médicaux",0,3,2010593,0
+2010393,"Forets à centrer",0,3,1001359,0
+2010395,"Forets hss",0,3,1001359,0
+2012125,"Accessoires pour fendeuses",0,2,2012354,0
+2013234,"Coins d'abattage",0,2,2012354,0
+2003078,Tarauds,0,2,2012389,0
+2003081,"Outils de restauration de filets",0,2,2012389,0
+2010595,"Aiguilles hypodermiques",0,3,2010593,0
+2010392,"Forets étagés",0,3,1001359,0
+2010396,"Forets à queue cylindrique",0,3,1001359,0
+2010406,"Coffrets de forets",0,3,1001359,0
+2007616,"Accessoires pour taraudeuses",0,2,2012389,0
+2002578,"Seringues médicales",0,3,2010593,0
+2011946,"Outils de filetage",0,2,2012389,0
+2001788,"Disques diamantés",0,3,2001784,0
+2001787,"Accessoires pour disque d'usinage",0,3,2001784,0
+2001785,"Disques abrasifs",0,3,2001784,0
+2003603,"Accessoires pour tronçonneuse",0,2,2012354,0
+1001209,"Tronçonneuses portables",0,2,2012354,0
+2011830,"Couteaux médicaux",0,3,2011909,0
+2012709,Perfuseurs,0,3,2010593,0
+2001786,"Disques à lamelle",0,3,2001784,0
+2017031,"Machines de perçage rapide par électro-érosion",0,2,2011969,0
+2011828,"Lames et burins chirurgicaux",0,3,2011909,0
+2011827,Scalpels,0,3,2011909,0
+2011460,"Ciseaux opératoires",0,3,2011909,0
+2011459,Bistouris,0,3,2011909,0
+2013953,"Accessoires de pousses seringues",0,3,2010593,0
+2013952,"Pousses seringues",0,3,2010593,0
+9000654,"Aspirateur à isolant",0,2,9000163,0
+2012222,Mini-affûteuses,0,2,2012266,0
+1001365,"Coffrets de mèches",0,3,1001359,0
+2003648,"Guidages robotiques",0,2,2012448,0
+1001267,"Robots mobiles",0,2,2012448,0
+2011964,"Aiguilles d'injections médicales",0,3,2010593,0
+2012224,Mini-rectifieuses,0,2,2012218,0
+2011960,"Vacuettes de prélèvements médicaux",0,3,2010593,0
+2011932,"Accessoires pour seringues",0,3,2010593,0
+2000727,Mèches,0,3,1001359,0
+2012220,"Accessoires d'affûtage",0,2,2012266,0
+1001251,"Accessoires d'alésage",0,1,1000006,0
+2010315,"Équipements portatifs pour menuiserie",0,2,2007322,0
+2006470,"Découpeuses à levier",0,2,2011597,0
+2011720,"Outils à trépaner",0,2,1000264,0
+1002062,"Secours d'urgence",0,2,1000383,0
+1002060,"Matériels pour brûlures",0,2,1000383,0
+1002059,"Trousses de secours",0,2,1000383,0
+1002057,"Équipements pour ambulances",0,2,1000383,0
+1002056,"Dispositifs de sauvetage",0,2,1000383,0
+1002053,"Portoirs d'évacuation",0,2,1000383,0
+1002052,"Appareils d'oxygénothérapie et de réanimation",0,2,1000383,0
+1002045,"Couvertures hyper isolantes",0,2,1000383,0
+2011750,"Gabarits de perçage",0,2,1000264,0
+2011719,Chasses-cônes,0,2,1000264,0
+10887,"Compresseurs - vaporisateurs - évaporateurs",0,2,2000407,0
+2011718,"Mandrins pour perceuses",0,2,1000264,0
+2011717,"Portes-outils pour perceuse",0,2,1000264,0
+2011716,"Guides de perçage",0,2,1000264,0
+2010827,"Accessoires pour carottage",0,2,1000264,0
+2007209,"Perforateurs industriels",0,2,1000264,0
+2006856,"Perceuses radiales",0,2,1000264,0
+2004037,"Perceuses visseuses",0,2,1000264,0
+2002839,"Perceuses à percussion",0,2,1000264,0
+1001358,"Perceuses revolvers",0,2,1000264,0
+1001357,"Perceuses d'angles",0,2,1000264,0
+2007514,"Mannequins d'exercice",0,2,1000383,0
+2007854,Insufflateurs,0,2,2000407,0
+1001340,Burineurs,0,2,1000264,0
+2007557,"Cannes et déambulateurs",0,2,2000408,0
+2011664,"Draps médicaux",0,2,2000444,0
+2011663,"Tables pour lits hospitaliers",0,2,2000444,0
+2011608,"Sièges médicaux",0,2,2000444,0
+2011607,"Paravents médicaux",0,2,2000444,0
+2007190,"Chariots de dossiers médicaux",0,2,2000444,0
+2007147,"Matelas médicaux",0,2,2000444,0
+10797,"Accessoires pour chambres médicales",0,2,2000444,0
+10264,"Lampes médicales",0,2,2000444,0
+2011448,"Supports d'appuis de relevage",0,2,2000408,0
+2011445,"Matériels de confort pour la personne",0,2,2000408,0
+2007555,"Fauteuils roulants",0,2,2000408,0
+2009967,"Papiers ecg",0,2,2000407,0
+2013992,"Accessoires d'ecg",0,2,2000407,0
+2013932,"Aspirateurs de mucosités",0,2,2000407,0
+2013930,"Accessoires pour chariots hospitaliers",0,2,2000407,0
+2013534,Cardiofréquencemètres,0,2,2000407,0
+2011989,"Accessoires pour aspirateurs de mucosités",0,2,2000407,0
+2011881,"Oxygénateurs médicaux",0,2,2000407,0
+2011850,"Portes sérums",0,2,2000407,0
+2011580,"Chariots de personnes",0,2,2000407,0
+2011485,"Chariots pour instruments de soins",0,2,2000407,0
+2010556,Electrocardiogrammes,0,2,2000407,0
+1001356,"Perceuses droites",0,2,1000264,0
+9000675,"Média de tribofinition",0,2,1000221,0
+2011990,"Miroirs médicaux",0,2,2000444,0
+2010890,Meules,0,1,1000006,0
+2007156,Poussettes,0,1,2000405,0
+2006989,"Matériels pour bébés",0,1,2000405,0
+2005265,Pèse-personne,0,1,2000405,0
+2003415,Impédancemètres,0,1,2000405,0
+2002967,"Fauteuils pèse-personne",0,1,2000405,0
+10802,"Tables à langer",0,1,2000405,0
+10801,"Equipements de désinfection",0,1,2000405,0
+2014018,"Machines-outils multifonctions",0,1,1000006,0
+2012504,"Accessoires de dégauchissage",0,1,1000006,0
+2011949,"Accessoires de rabotage",0,1,1000006,0
+2010811,"Meules à tige",0,1,1000006,0
+2008415,"Equipements pour biberons",0,1,2000405,0
+2009389,"Accessoires de meulage",0,1,1000006,0
+2007323,Rabots,0,1,1000006,0
+2006972,"Outils d'alésage",0,1,1000006,0
+2005588,Mortaiseuses,0,1,1000006,0
+2002580,"Tourets de meulage",0,1,1000006,0
+2001603,"Accessoires de polissage",0,1,1000006,0
+1001370,"Accessoires pour mortaiseuse",0,1,1000006,0
+1001367,"Polisseuses portatives",0,1,1000006,0
+1001355,"Meuleuses angulaires",0,1,1000006,0
+1001353,"Meuleuses droites",0,1,1000006,0
+2007157,"Couches pour bébé",0,1,2000405,0
+2008947,"Produits de puériculture",0,1,2000405,0
+2003817,"Variateurs pour moteurs pas à pas",0,2,1000193,0
+2002761,"Outils multifonctions",0,2,1000046,0
+2003793,"Variateurs pour moteurs brushless",0,2,1000193,0
+2002748,"Variateurs de vitesse",0,2,1000193,0
+9000659,"Chaudronnerie industrielle",0,2,1000097,0
+2013340,"Molettes pour coupe tubes",0,2,1000046,0
+2011948,"Outils de tournage manuel",0,2,1000046,0
+2009018,Gouges,0,2,1000046,0
+2008841,"Lames de cutters",0,2,1000046,0
+2005594,"Haches et hachettes",0,2,1000046,0
+2004038,"Ciseaux à bois",0,2,1000046,0
+2003867,"Outils de cisaille à main",0,2,1000046,0
+2002739,"Brosses métalliques",0,2,1000046,0
+2011531,"Désinfectants pour mobiliers de santé",0,1,2000405,0
+2002691,"Limes, râpes et rifloirs",0,2,1000046,0
+2002443,"Ciseaux multi-usages",0,2,1000046,0
+1000965,"Accessoires pour limes, râpes et rifloirs",0,2,1000046,0
+2013869,"Équipements maternels d'allaitement",0,1,2000405,0
+2012237,"Baignoires pour enfants",0,1,2000405,0
+2011913,"Portes bébés",0,1,2000405,0
+2011912,Biberons,0,1,2000405,0
+2011877,"Distributeurs d'équipements médicaux",0,1,2000405,0
+2011832,"Matériels d'exercice de rééducation",0,1,2000405,0
+2011824,Pèses-bébés,0,1,2000405,0
+2011801,"Divans médicaux",0,2,2000444,0
+2013908,"Tables de chevet hospitalière",0,2,2000444,0
+2006278,"Découpeuses à plasma",0,2,2011597,0
+2011915,"Thermomètres médicaux",0,2,2010588,0
+2013962,"Cupules, plateaux et cuvettes",0,2,2010588,0
+2013542,"Accessoires pour oxymètres",0,2,2010588,0
+2013246,"Ampoules pour appareils de diagnostic",0,2,2010588,0
+2013227,"Matériels pour coagulation sanguine",0,2,2010588,0
+2012797,"Fils chirurgicaux",0,2,2010588,0
+2012236,"Miroirs laryngiens",0,2,2010588,0
+2012137,"Accessoires pour dermatoscopes",0,2,2010588,0
+2011991,Dermatoscopes,0,2,2010588,0
+2011920,Oxymètres,0,2,2010588,0
+2011911,"Garrots médicaux",0,2,2010588,0
+2011045,"Alèses d'incontinences urinaires",0,2,2011043,0
+2011910,"Accessoires pour stéthoscopes",0,2,2010588,0
+2011853,"Marteaux médicaux",0,2,2010588,0
+2011829,"Diapasons médicaux",0,2,2010588,0
+2011606,Stéthoscopes,0,2,2010588,0
+2011066,"Matériels hydrophiles",0,2,2010588,0
+2011042,"Sets d'ablation de fils",0,2,2010588,0
+2011041,"Matériels de suture",0,2,2010588,0
+2011040,"Pansements médicaux",0,2,2010588,0
+2011038,Sparadraps,0,2,2010588,0
+2011037,"Bandes médicales",0,2,2010588,0
+2011044,"Protections anatomiques urinaires",0,2,2011043,0
+2013929,"Matériels pour les troubles urinaires",0,2,2011043,0
+2009968,"Accessoires pour électrodes",0,2,2010588,0
+2012311,"Coffrets laryngoscope",0,2,2011456,0
+2005590,"Découpeuses à lames portables",0,2,2011597,0
+2002714,"Outils de coupe industrielle",0,2,2011597,0
+1000728,"Lames de scie pour découpeuses portables",0,2,2011597,0
+9000432,"Matériel de cœlioscopie et de laparoscopie",0,2,2011456,0
+9000431,"Matériel pour chirurgie ophtalmologique",0,2,2011456,0
+2012873,"Semelles orthopédiques",0,2,2011456,0
+2012872,Ostéotomes,0,2,2011456,0
+2012708,Rhinologie,0,2,2011456,0
+2012324,"Matériels médicaux pour soin auditif",0,2,2011456,0
+2012323,"Accessoires pour otoscopes",0,2,2011456,0
+2012129,"Instruments gynécologiques",0,2,2011456,0
+2001693,"Dictionnaires de santé",0,2,2011407,0
+2011992,Electrothérapie,0,2,2011456,0
+2011882,"Autres matériels orthopédiques",0,2,2011456,0
+2011652,"Genouillères orthopédiques",0,2,2011456,0
+2011605,"Tables gynécologiques",0,2,2011456,0
+2011081,Chevillères,0,2,2011456,0
+2011080,"Colliers cervicaux",0,2,2011456,0
+2011079,"Ceintures orthopédiques",0,2,2011456,0
+2010247,Otoscopes,0,2,2011456,0
+2009065,Ophtalmologie,0,2,2011456,0
+2007828,"Documentations sanitaires",0,2,2011407,0
+2010591,"Matériels d'alcool pour soins",0,2,2010588,0
+2007682,Spiromètres,0,2,2010588,0
+2013925,"Accessoires de lits hospitaliers",0,2,2000444,0
+2006853,"Coffrets de fraises",0,2,2006852,0
+1001219,"Accessoires pour tours industriels",0,2,2006894,0
+2012093,"Fraiseuses électroportatives",0,2,2006852,0
+2009965,"Fraises à trépaner",0,2,2006852,0
+2009824,"Fraises à chanfreiner",0,2,2006852,0
+2009822,"Fraises lime",0,2,2006852,0
+2009820,"Fraises à surfacer",0,2,2006852,0
+2009819,"Fraises d'ébauche",0,2,2006852,0
+2009812,"Fraises à rainurer",0,2,2006852,0
+2009806,"Fraises de forme",0,2,2006852,0
+2009796,"Fraises cylindriques deux tailles",0,2,2006852,0
+2003956,"Outils de fraisage",0,2,2006852,0
+2003103,"Mors pour mandrins de tours",0,2,2006894,0
+2001025,"Douilles de réduction",0,2,2006852,0
+2005253,Microcontrôleurs,0,2,2005224,0
+9000669,"helium pour l’industrie",0,2,2001160,0
+2001161,"Produits chimiques pour l'électronique",0,2,2001160,0
+11063,"Moniteurs médicaux",0,2,2000463,0
+2013934,"Portes rouleaux médicaux",0,2,2000444,0
+2013933,"Matériels mortuaires hospitaliers",0,2,2000444,0
+2013931,"Accessoires pour sièges médicaux",0,2,2000444,0
+2013928,"Accessoires pour divans médicaux",0,2,2000444,0
+2013927,"Marchepieds médicaux",0,2,2000444,0
+1001248,"Mandrins de tours",0,2,2006894,0
+2002473,"Accessoires pour défonceuse",0,2,2007322,0
+2007148,"Electrodes médicales",0,2,2010588,0
+2011655,"Bas et chaussettes médicaux",0,2,2007418,0
+2006987,"Sondes médicales",0,2,2010588,0
+10214,"Boîtes d'instruments de soins",0,2,2010588,0
+2013724,"Equipements pour imagerie médicale",0,2,2010555,0
+2010607,"Gels d'échographie",0,2,2010555,0
+2010606,"Equipements d'échographie",0,2,2010555,0
+2002710,Négatoscopes,0,2,2010555,0
+2012658,"Mini-rouleuses industrielles",0,2,2009553,0
+2011568,"Accessoires de cintrage",0,2,2009553,0
+2002860,"Outils à évaser",0,2,2009553,0
+2002536,"Mini-dresseuses industrielles",0,2,2009553,0
+2011083,"Grenouillères et chemises de malade",0,2,2007418,0
+2002718,"Accessoires des équipements pour menuiserie",0,2,2007322,0
+2007424,"Hauts médicaux",0,2,2007418,0
+2007423,"Pantalons médicaux",0,2,2007418,0
+2007422,"Blouses médicales et tenues de bloc",0,2,2007418,0
+2013499,"Outils pour défonceuses",0,2,2007322,0
+2012503,"Défonceuses électroportatives",0,2,2007322,0
+1001324,"Scanners 3d de prototypage",0,1,1000006,0
+2008324,"Affleureuses électroportatives",0,2,2007322,0
+2007804,"Machines à bois combinées",0,2,2007322,0
+2004350,"Outils pour toupies à bois",0,2,2007322,0
+2004296,"Porte-outils pour toupies",0,2,2007322,0
+2013786,Molettes,0,3,2013214,0

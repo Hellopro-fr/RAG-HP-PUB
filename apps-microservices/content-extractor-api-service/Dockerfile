@@ -25,4 +25,4 @@ EXPOSE 8600
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
     CMD curl --fail http://localhost:8600/health || exit 1
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8600", "--proxy-headers"]
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port 8600 --proxy-headers --workers ${UVICORN_WORKERS:-2}"]

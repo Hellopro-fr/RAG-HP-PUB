@@ -20,9 +20,26 @@
       link-label="Voir la documentation"
     />
 
-    <!-- Loading -->
-    <div v-if="loading" class="flex items-center justify-center py-20">
-      <i class="pi pi-spinner pi-spin text-2xl text-gray-400 dark:text-gray-500" />
+    <!-- Loading skeleton -->
+    <div v-if="loading" class="animate-pulse" aria-hidden="true">
+      <div class="mb-8">
+        <div class="flex items-center gap-4">
+          <div class="w-12 h-12 rounded-lg bg-gray-200 dark:bg-gray-800" />
+          <div class="flex-1">
+            <div class="h-7 w-1/3 rounded bg-gray-200 dark:bg-gray-800 mb-2" />
+            <div class="h-3 w-2/3 rounded bg-gray-100 dark:bg-gray-800" />
+          </div>
+        </div>
+      </div>
+      <div class="space-y-4">
+        <div v-for="i in 4" :key="i" class="flex gap-3">
+          <div class="flex-shrink-0 w-7 h-7 rounded-full bg-gray-200 dark:bg-gray-800" />
+          <div class="flex-1 pt-0.5">
+            <div class="h-4 w-1/4 rounded bg-gray-200 dark:bg-gray-800 mb-2" />
+            <div class="h-3 w-5/6 rounded bg-gray-100 dark:bg-gray-800" />
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Not found -->
@@ -72,7 +89,7 @@
             </span>
             <div class="pt-0.5 flex-1 min-w-0">
               <p class="font-medium text-gray-900 dark:text-white text-sm">{{ step.title }}</p>
-              <p v-if="step.description" class="text-sm text-gray-600 dark:text-gray-400 mt-0.5" v-html="step.description" />
+              <p v-if="step.description" class="text-sm text-gray-600 dark:text-gray-400 mt-0.5" v-safe-html="step.description" />
 
               <!-- Executor selector (cards) -->
               <div v-if="step.hasExecutorSelector && executors.length" class="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3">
@@ -132,7 +149,7 @@
                   class="mt-3 rounded-lg p-3 text-sm"
                   :class="getExecutorNote(selectedExec).class"
                 >
-                  <strong>{{ getExecutorNote(selectedExec).label }}</strong> <span v-html="getExecutorNote(selectedExec).text" />
+                  <strong>{{ getExecutorNote(selectedExec).label }}</strong> <span v-safe-html="getExecutorNote(selectedExec).text" />
                 </div>
               </div>
 
@@ -174,7 +191,7 @@ import CodeBlock from '@/components/shared/CodeBlock.vue'
 import CrossSectionLink from '@/components/shared/CrossSectionLink.vue'
 import { useClipboard } from '@/composables/useClipboard'
 import { installGuidesPublicApi } from '@/api/install-guides'
-import type { InstallExecutor, InstallConfig } from '@/types/install-guide'
+import type { InstallExecutor, InstallConfig, ExecutorElement } from '@/types/install-guide'
 
 const route = useRoute()
 const clipboard = useClipboard()
@@ -210,30 +227,32 @@ function handleCopy(code: string) {
   clipboard.copy(code, 'Commande')
 }
 
-function getExecutorCode(exec: any, field: string): string {
-  if (!exec) return ''
+const TYPE_BY_FIELD: Record<string, ExecutorElement['type']> = {
+  mcp_config: 'mcp-config',
+  cli_add_cmd: 'cli-command',
+}
+
+function getExecutorCode(exec: InstallExecutor | null | undefined, field: string | undefined): string {
+  if (!exec || !field) return ''
   // Prefer dedicated top-level field (authoritative source)
-  if (exec[field]) return exec[field]
+  const top = (exec as unknown as Record<string, string | undefined>)[field]
+  if (top) return top
   // Fall back to page-builder `content` array
   if (Array.isArray(exec.content)) {
-    const typeByField: Record<string, string> = {
-      mcp_config: 'mcp-config',
-      cli_add_cmd: 'cli-command',
-    }
-    const elType = typeByField[field]
+    const elType = TYPE_BY_FIELD[field]
     if (elType) {
-      const el = exec.content.find((e: any) => e?.type === elType)
+      const el = exec.content.find((e) => e?.type === elType)
       if (el?.props?.code) return el.props.code
     }
   }
   return ''
 }
 
-function getExecutorNote(exec: any): { label: string; text: string; class: string } {
+function getExecutorNote(exec: InstallExecutor | null | undefined): { label: string; text: string; class: string } {
   if (!exec) return { label: '', text: '', class: '' }
   // Prefer a `note` element inside content (page-builder source of truth)
   if (Array.isArray(exec.content)) {
-    const noteEl = exec.content.find((e: any) => e?.type === 'note')
+    const noteEl = exec.content.find((e) => e?.type === 'note')
     if (noteEl?.props && (noteEl.props.text || noteEl.props.label)) {
       return {
         label: noteEl.props.label || '',

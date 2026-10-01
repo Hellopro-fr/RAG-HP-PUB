@@ -22,9 +22,9 @@ export interface CategorySelectionContent {
 }
 
 export interface CategoryStaticContent {
-  landing: CategoryLandingContent;
+  landing?: CategoryLandingContent;
   question: CategoryQuestionContent;
-  selection: CategorySelectionContent;
+  selection?: CategorySelectionContent;
 }
 
 const categoryStaticContent: Record<number, CategoryStaticContent> = {
@@ -223,6 +223,78 @@ const categoryStaticContent: Record<number, CategoryStaticContent> = {
     selection: {
       voirPlus: "Voir plus de tracteurs agricoles",
       recommandeReassurance: "Forts de 30+ ans de connaissance du marché, nous avons évalué xx références de tracteurs agricoles. Les modèles proposés sont les mieux adaptés à votre puissance cible, votre surface d'exploitation et vos travaux.",
+    },
+  },
+
+  // Remorque food-truck
+  9000218: {
+    question: {
+      header: "1 minute pour trouver la remorque food-truck adaptée à votre activité de restauration mobile",
+      reassurance: "xx remorques food-truck comparées auprès de zz fournisseurs spécialisés en équipement de restauration ambulante",
+    },
+  },
+
+  // Monnayeurs automatiques
+  2013765: {
+    question: {
+      header: "1 minute pour trouver le monnayeur automatique adapté à votre point de vente",
+      reassurance: "xx monnayeurs automatiques comparés auprès de zz fournisseurs spécialisés en automatisation de l'encaissement",
+    },
+  },
+
+  // Portionneuse à saucisses
+  9000470: {
+    question: {
+      header: "1 minute pour trouver la portionneuse à saucisses adaptée à votre atelier de transformation",
+      reassurance: "xx portionneuses à saucisses comparées auprès de zz fournisseurs spécialisés en équipement de charcuterie industrielle",
+    },
+  },
+
+  // Nettoyeur vapeur basse pression pour l'extérieur
+  9000554: {
+    question: {
+      header: "1 minute pour trouver le nettoyeur vapeur basse pression pour l'extérieur adapté à vos opérations de nettoyage",
+      reassurance: "xx nettoyeurs vapeur basse pression pour l'extérieur comparés auprès de zz fournisseurs spécialisés en matériel de nettoyage professionnel",
+    },
+  },
+
+  // Borne de satisfaction
+  2017576: {
+    question: {
+      header: "1 minute pour trouver la borne de satisfaction adaptée à votre point de contact client",
+      reassurance: "xx bornes de satisfaction comparées auprès de zz fournisseurs spécialisés en solutions de mesure de l'expérience client",
+    },
+  },
+
+  // Bloc béton empilable
+  2000807: {
+    question: {
+      header: "1 minute pour trouver le bloc béton empilable adapté à votre chantier",
+      reassurance: "xx blocs béton empilables comparés auprès de zz fournisseurs spécialisés en matériaux de construction et aménagement",
+    },
+  },
+
+  // Analyseurs de plomb
+  2007731: {
+    question: {
+      header: "1 minute pour trouver l'analyseur de plomb adapté à votre activité de diagnostic",
+      reassurance: "xx analyseurs de plomb comparés auprès de zz fournisseurs spécialisés en instruments de mesure et contrôle environnemental",
+    },
+  },
+
+  // Fraises & herses rotatives
+  2017750: {
+    question: {
+      header: "1 minute pour trouver la fraise ou herse rotative adaptée à votre exploitation agricole",
+      reassurance: "xx fraises et herses rotatives comparées auprès de zz fournisseurs spécialisés en matériel de travail du sol",
+    },
+  },
+
+  // Pompes à béton stationnaire
+  2010810: {
+    question: {
+      header: "1 minute pour trouver la pompe à béton stationnaire adaptée à votre chantier",
+      reassurance: "xx pompes à béton stationnaires comparées auprès de zz fournisseurs spécialisés en matériel de mise en œuvre du béton",
     },
   },
 };

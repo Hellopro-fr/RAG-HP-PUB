@@ -8,7 +8,7 @@ export default function Header({ createNewChat, sidebarCollapsed, setSidebarOpen
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
 
   const chatbots = [
-    { name: "DeepSeek-V3.2-Exp", provider: 'deepseek', model_name: 'deepseek-chat', icon: <Asterisk className="h-4 w-4" /> },
+    { name: "DeepSeek-V4-Flash", provider: 'deepseek', model_name: 'deepseek-v4-flash', icon: <Asterisk className="h-4 w-4" /> },
     { name: "gpt-4.1-2025-04-14", provider: 'gpt', model_name: 'gpt-4.1-2025-04-14', icon: <Asterisk className="h-4 w-4" /> },
     { name: "gpt-4o-2024-08-06", provider: 'gpt', model_name: 'gpt-4o-2024-08-06', icon: <Asterisk className="h-4 w-4" /> },
     { name: "gpt-4o-2024-11-20", provider: 'gpt', model_name: 'gpt-4o-2024-11-20', icon: <Asterisk className="h-4 w-4" /> },

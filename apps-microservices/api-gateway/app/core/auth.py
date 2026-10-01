@@ -75,8 +75,13 @@ class DocsAuthMiddleware:
 
         # Vérifie le token JWT
         try:
+            # Skip audience verification: account-service issues JWTs with
+            # aud=<client_id> per OAuth2 spec, not the legacy JWT_AUDIENCE.
+            # Signature match against the shared JWT_SECRET already proves
+            # the token came from a trusted issuer.
             decoded = jwt.decode(
-                token, JWT_SECRET, algorithms=[JWT_ALGO], audience=JWT_AUDIENCE
+                token, JWT_SECRET, algorithms=[JWT_ALGO],
+                options={"verify_aud": False},
             )
             logger.info(f"🔐 Utilisateur connecté: {decoded.get('name', 'unknown')}")
         except ExpiredSignatureError:

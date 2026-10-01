@@ -1,5 +1,7 @@
 import grpc
 import logging
+import asyncio
+import functools
 from concurrent import futures
 
 from grpc_stubs import embedding_pb2
@@ -78,10 +80,18 @@ class EmbeddingServiceImpl(embedding_pb2_grpc.EmbeddingServiceServicer):
         """
         logging.info(f"Requête ChunkText reçue.")
         try:
-            chunks = self.use_case.chunk_text(
-                text=request.text,
-                chunk_size=request.chunk_size,
-                chunk_overlap=request.chunk_overlap
+            # Offload : chunk_text est CPU-lourd (tokenizer par split) et bloquerait
+            # l'event loop du serveur, gelant toutes les RPC concurrentes. On l'exécute
+            # dans le thread pool par défaut (spec 2026-07-03).
+            loop = asyncio.get_running_loop()
+            chunks = await loop.run_in_executor(
+                None,
+                functools.partial(
+                    self.use_case.chunk_text,
+                    request.text,
+                    request.chunk_size,
+                    request.chunk_overlap,
+                ),
             )
             return embedding_pb2.ChunkResponse(chunks=chunks)
         except Exception as e:
@@ -90,8 +100,32 @@ class EmbeddingServiceImpl(embedding_pb2_grpc.EmbeddingServiceServicer):
             context.set_details("Erreur interne lors du chunking du texte.")
             return embedding_pb2.ChunkResponse()
         
+# 64 Mo : symétrie avec le canal client common-utils — une requête
+# ChunkText/GetEmbeddings dont le texte dépasse ~4 Mo serait sinon refusée
+# côté serveur par le défaut gRPC de réception (4 Mio). L'envoi est illimité
+# par défaut, seul le plafond de réception doit être relevé.
+#
+# Keepalive : le client (common_utils.grpc_clients.embedding_client) envoie un
+# PING toutes les 30s (keepalive_time_ms=30000, keepalive_permit_without_calls=1).
+# Par défaut le serveur gRPC n'accepte pas de PING plus fréquent que 300s sans
+# frame DATA et coupe la connexion (GOAWAY ENHANCE_YOUR_CALM "too_many_pings")
+# au bout de 2 strikes. Pendant un GetEmbeddings long (gros batch, aucune frame
+# DATA renvoyée), les PING de liveness du client déclenchaient donc UNAVAILABLE
+# ~4 min après le début de l'appel -> retry transitoire en boucle. On aligne le
+# serveur sur la cadence du client. min_ping_interval doit rester <= keepalive_time
+# client (30000ms). max_ping_strikes=0 = accepter n'importe quel nombre de pings.
+_SERVER_OPTIONS = [
+    ("grpc.max_receive_message_length", 64 * 1024 * 1024),
+    ("grpc.keepalive_permit_without_calls", 1),
+    ("grpc.http2.min_ping_interval_without_data_ms", 10000),
+    ("grpc.http2.max_ping_strikes", 0),
+]
+
+
 async def serve(use_case: EmbeddingUseCase):
-    server = grpc.aio.server(futures.ThreadPoolExecutor(max_workers=50))
+    server = grpc.aio.server(
+        futures.ThreadPoolExecutor(max_workers=50), options=_SERVER_OPTIONS
+    )
     embedding_pb2_grpc.add_EmbeddingServiceServicer_to_server(EmbeddingServiceImpl(use_case), server)
     server.add_insecure_port('[::]:50052')
     logging.info("Serveur gRPC Embedding démarré sur le port 50052...")

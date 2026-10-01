@@ -1,0 +1,7 @@
+node_modules
+dist
+.yarn/install-state.gz
+.yarn/cache
+workspace_context.txt
+*.md
+.git

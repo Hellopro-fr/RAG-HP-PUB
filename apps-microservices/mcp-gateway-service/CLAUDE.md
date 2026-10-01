@@ -35,11 +35,17 @@ internal/
     token_handlers.go        # Scope token CRUD endpoints
     oauth2_handlers.go       # OAuth2 client CRUD endpoints
     import_handler.go        # Import servers from .mcp.json
+    bdd_handlers.go          # BDD used-tables registry CRUD endpoints
+    bdd_catalog_proxy.go     # Read-only proxy to upstream Hellopro BDD catalog
+    bdd_dto.go               # BDD request/response models (used tables + fields)
     dto.go                   # Server request/response models
     token_dto.go             # Token request/response models
     oauth2_dto.go            # OAuth2 client request/response models
     middleware.go            # Logging, recovery, JSON content-type middleware
     openapi.go               # OpenAPI 3.0 spec generation
+  bddcatalog/
+    client.go                # Read-only HTTP client for upstream Hellopro BDD catalog
+    types.go                 # Catalog DTOs (databases, tables, fields)
   auth/
     handlers.go              # Login/logout endpoints
     jwt.go                   # JWT signing & validation
@@ -56,6 +62,7 @@ internal/
     gateway.go               # Core MCP routing logic
     registry.go              # In-memory backend server registry
     scoped_gateway.go        # Scope-token filtered gateway view
+    neo4j_access.go          # Service-level gate on Neo4j template instances (admin OR grant)
   health/
     checker.go               # Background health check loop (30s interval)
   mcp/
@@ -68,6 +75,7 @@ internal/
     token_endpoint.go        # POST /token — auth code exchange, client creds, refresh
     register.go              # POST /register — dynamic client registration (RFC 7591)
     consent.go               # Consent scope helpers, CSRF token generation
+    server_access.go         # Consent-screen server visibility (Neo4j access gate)
     pkce.go                  # PKCE S256 challenge/verifier verification
     codes.go                 # Authorization code generation + SHA-256 hashing
     templates/
@@ -85,6 +93,7 @@ internal/
     authcode_repo.go         # Authorization code CRUD
     consent_repo.go          # Per-client per-user consent CRUD
     refresh_repo.go          # Refresh token CRUD
+    bdd_used_repo.go         # BDD used-tables + fields registry CRUD over GORM
   scopetoken/
     generate.go              # Token generation & SHA-256 hashing
     cache.go                 # In-memory token cache
@@ -130,11 +139,42 @@ Dockerfile                   # Multi-stage build
 - `GET/PUT/DELETE /oauth2/clients/{id}` — Get / update / delete client
 - `POST /oauth2/clients/{id}/revoke` — Revoke client
 
+### LLM Instructions (`/api/v1/`)
+- `GET/POST /llm-instructions` — list (optional `?server_ids=csv` filter) / create
+- `GET/PUT/DELETE /llm-instructions/{id}` — detail / update / delete
+- `GET /llm-instructions/{id}/usage` — list tokens + OAuth2 clients that reference this instruction
+
 ### Leexi proxy (used by token / OAuth2 client creation forms)
 - `GET /api/v1/leexi/users` — List Leexi workspace users (proxied from mcp-leexi-service `/admin/users`)
 - `GET /api/v1/leexi/teams` — List Leexi teams (derived from the user payload)
 
 Both routes return 503 when the integration is not configured (LEEXI_INTERNAL_URL or LEEXI_ADMIN_TOKEN unset).
+
+### Ringover proxy (symmetric to Leexi)
+- `GET /api/v1/ringover/users` — List Ringover users (proxied from mcp-ringover-service `/admin/users`)
+- `GET /api/v1/ringover/teams` — List Ringover teams (derived from the user payload; each team is `{id:int, name:string}`)
+
+Both routes return 503 when `RINGOVER_INTERNAL_URL` or `RINGOVER_ADMIN_TOKEN` is unset.
+
+### BDD Hellopro Registry (admin only, `/api/v1/`)
+```
+GET    /bdd/catalog/databases                              — Read-only proxy: 3 Hellopro DBs
+GET    /bdd/catalog/databases/{db}/tables                  — Read-only proxy: catalog tables
+GET    /bdd/catalog/databases/{db}/tables/{tid}/fields     — Read-only proxy: catalog fields
+GET    /bdd/used/tables                                     — List registered tables (`?database_id=...&search=...&page=N&limit=M`, default page=1, limit=20, cap 100). Response: `{tables, total, page, limit}`. Ordering: `created_at DESC, table_name ASC`.
+POST   /bdd/used/tables                                     — Register a table + selected fields
+POST   /bdd/used/tables/bulk                                — Atomic multi-create (cap 50 items)
+GET    /bdd/used/tables/export                              — JSON download of full registry
+POST   /bdd/used/tables/import                              — Upsert from JSON (cap 1 MiB)
+GET    /bdd/used/tables/{id}                                — Get one with fields
+PATCH  /bdd/used/tables/{id}                                — Update curated description
+DELETE /bdd/used/tables/{id}                                — Remove from registry (cascades fields)
+POST   /bdd/used/tables/{id}/fields                         — Add a field
+PATCH  /bdd/used/tables/{id}/fields/{fid}                   — Update curated description
+DELETE /bdd/used/tables/{id}/fields/{fid}                   — Remove a field
+```
+
+Catalog routes return **503** when `BDD_CATALOG_BASE_URL` / `BDD_CATALOG_TOKEN` are unset. All `/api/v1/bdd/*` routes are admin-gated.
 
 ### OAuth2 Authorization Server (public, no admin auth — MCP spec-compliant)
 - `GET /.well-known/oauth-authorization-server` — Server metadata discovery (RFC 8414)
@@ -146,6 +186,40 @@ Both routes return 503 when the integration is not configured (LEEXI_INTERNAL_UR
 - `GET /sse` — Open SSE stream
 - `POST /message?sessionId={id}` — Send JSON-RPC over SSE
 - `POST /mcp` — Streamable HTTP JSON-RPC
+
+**Auth header precedence on MCP transports:**
+1. `X-MCP-Scope-Token: mcp_…` wins outright when present.
+2. Otherwise `Authorization: Bearer <token>` is dispatched by prefix:
+   - Starts with `mcp_` → validated as a `/tokens`-issued scope token (same pipeline as `X-MCP-Scope-Token`). Rejection emits **no** `WWW-Authenticate` header.
+   - Otherwise → validated as an OAuth2 access token (JWT, HS256). Rejection emits `WWW-Authenticate: Bearer error="invalid_token"`.
+3. Neither present → 401 + `WWW-Authenticate: Bearer resource_metadata="…"`.
+
+Scope-token accepts and rejects log an `auth_source=x-mcp-scope-token|bearer` tag; Slack `UnauthorizedEvent` reasons carry the same tag.
+
+### Template Catalog (`/api/v1/`)
+- `GET /templates` — list available templates (seeded: GA4, GSC, Neo4j) with live instance counts
+- `GET /templates/{slug}` — template detail
+- `GET /templates/export` — download the full catalog as JSON (active + inactive)
+- `POST /templates/import` — upsert templates from JSON (slug-keyed, transactional, no instances)
+- `GET/POST /template-instances` — list / create instance (POST is multipart: template_slug, name, extra_env JSON, plus a credentials file (Google runner) or neo4j_uri / neo4j_username / neo4j_password / neo4j_database fields (Neo4j runner))
+- `GET/DELETE /template-instances/{id}` — detail / remove (DELETE kills runner subprocess + removes mcp_servers row)
+- `POST /template-instances/{id}/restart` — respawn subprocess
+- `POST /template-instances/{id}/rotate-credentials` — replacement credentials (SA JSON, or Neo4j fields + optional extra_env) + respawn; a Neo4j rotate is persisted only after the runner pre-check accepted it (422 otherwise, DB and running instance untouched)
+- Runner error bodies are never logged or stored verbatim: logs and `RunnerLastError` carry a summary only (status + error code, no body). The Neo4j runner's request-validation 422 does not echo request input.
+
+### Zoho Imports Admin (`/api/v1/`)
+- `GET/POST/DELETE /api/v1/zoho-imports/admin` — manage the singleton admin Zoho row consumed by `mcp-zoho-service`. POST upserts (201 on create, 200 on update); GET returns the row with `auth_headers` keys redacted; DELETE clears.
+- `GET /api/v1/zoho-imports` — paginated list of all Zoho rows (admin + users). Query params: `is_admin=true|false`, `search=<substring on name or created_by>`, `page=N`, `limit=M` (default 1/20, max 100). `auth_headers` are redacted to header key names.
+- `POST /api/v1/zoho-imports` — create a per-user import row. Body: `{name, url, created_by, auth_headers?, is_active?, template_slug?}`. Returns 201 + row DTO on success, 400 on missing/malformed fields, 409 when `created_by` already has a row. Singleton admin rows still use `POST /api/v1/zoho-imports/admin`.
+- `GET /api/v1/zoho-imports/{id}` — fetch one row (same DTO shape as list items).
+- `PATCH /api/v1/zoho-imports/{id}` — partial update. Body fields all optional: `name`, `url`, `auth_headers` (replaces blob; `{}` clears it), `is_active`. Empty body → 400. `is_admin` and `created_by` are not editable here.
+- `DELETE /api/v1/zoho-imports/{id}` — hard delete a per-user row (204). Returns 400 when the target is the singleton admin row (use `/api/v1/zoho-imports/admin` for that).
+- `POST /api/v1/zoho-imports/{id}/test` — server-side `POST tools/list` probe against the row's upstream URL with decrypted headers, 10s timeout. Returns `{ok, status_code?, latency_ms, error?}`. Logs only the row ID + caller email (never the URL or headers).
+- `GET /api/v1/zoho-imports/{id}/tools` — list the persisted tool catalog for one row. Body: `{tools: [{name, description, input_schema, updated_at}], total}`. Returns 200 (empty list when catalog empty), 404 when the row is missing. Read-only — refresh the catalog via `POST /api/v1/zoho-imports/{id}/discover`.
+
+### Internal Sync (shared-secret auth via `X-Admin-Token`)
+- `POST /api/v1/internal/runner/sync` — a runner's pull of its desired instances — the X-Admin-Token identifies the runner (Google or Neo4j) and only that runner's instances are returned (decrypted credentials)
+- `POST /api/v1/internal/users/sync` — account-service-backend pushes its users; gateway creates missing `gateway_users` (role `config-only`, `is_allowed=false`) and returns `{created, skipped}`. Token: `ACCOUNT_INTERNAL_TOKEN`.
 
 ### Other
 - `GET /health` — Health probe
@@ -173,14 +247,30 @@ Both routes return 503 when the integration is not configured (LEEXI_INTERNAL_UR
 | `ALLOW_INTERNAL_URLS` | `false` | Set to `true` to allow Docker-internal/private IP ranges (172.x.x.x, 10.x.x.x, etc.) as backend URLs — required when gateway and backends share a Docker network |
 | `LEEXI_INTERNAL_URL` | — | In-cluster URL of mcp-leexi-service (e.g. `http://mcp-leexi-service:8589`). Required for Leexi-scoped tokens. |
 | `LEEXI_ADMIN_TOKEN` | — | Shared secret sent as `X-Admin-Token` to mcp-leexi-service `/admin/*`. Must match `MCP_LEEXI_ADMIN_TOKEN` on the Leexi side. |
+| `RINGOVER_INTERNAL_URL` | — | In-cluster URL of mcp-ringover-service (e.g. `http://mcp-ringover-service:8586`). Required for Ringover-scoped tokens. |
+| `RINGOVER_ADMIN_TOKEN` | — | Shared secret sent as `X-Admin-Token` to mcp-ringover-service `/admin/*`. Must match `MCP_RINGOVER_ADMIN_TOKEN` on the Ringover side. |
+| `BDD_CATALOG_BASE_URL` | — | Read-only upstream Hellopro BDD catalog URL (e.g. `https://test.hellopro.fr/admin/repertoire_test/moulinettes_interne/api_mcp`). Required for catalog proxy. |
+| `BDD_CATALOG_TOKEN`    | — | Shared secret sent as `X-Admin-Token` to the upstream catalog. Required alongside `BDD_CATALOG_BASE_URL`. |
+| `GOOGLE_TEMPLATES_RUNNER_URL` | — | In-cluster URL of mcp-google-templates-runner (e.g. `http://mcp-google-templates-runner:8595`). Required to spawn Google-runner template instances (ga, gsc). |
+| `GOOGLE_TEMPLATES_RUNNER_ADMIN_TOKEN` | — | Shared secret for the runner admin API (sent as `X-Admin-Token`). The runner uses the SAME value when calling back via `/api/v1/internal/runner/sync`. |
+| `NEO4J_TEMPLATES_RUNNER_URL` | — | In-cluster URL of mcp-template-neo4j-service (e.g. `http://mcp-template-neo4j-service:8598`). Required to spawn Neo4j template instances. |
+| `NEO4J_TEMPLATES_RUNNER_ADMIN_TOKEN` | — | Shared secret for the Neo4j runner (both directions). **Must differ** from `GOOGLE_TEMPLATES_RUNNER_ADMIN_TOKEN` — the sync endpoint uses it to tell the runners apart; equal tokens disable the Neo4j runner at boot. |
+| `SLACK_WEBHOOK_URL` | — | Slack incoming-webhook URL (`https://hooks.slack.com/services/...`). Empty = notifications disabled. |
+| `SLACK_ENV_LABEL` | — | Optional prefix shown on every message (e.g. `prod`, `staging`). |
+| `SLACK_AUTH_ALERT_COOLDOWN` | `600` | Seconds between duplicate unauthorized alerts per (ip, endpoint). `0` disables the cooldown. |
+| `ZOHO_INTERNAL_URL` | — | In-cluster URL of mcp-zoho-service (e.g. `http://mcp-zoho-service:8596`). Reserved for future health checks. |
+| `ZOHO_ADMIN_TOKEN` | — | Shared secret sent as `X-Admin-Token` to mcp-zoho-service. Must match `ZOHO_GATEWAY_TOKEN` on the service side. |
+| `ZOHO_STUB_SERVER_ID` | — | UUID of the gateway's `mcp_servers` row whose URL points at `mcp-zoho-service`. Captured by the operator and pasted into `.env`; required by the service to gate admin grants. |
 
 ## Database
 
-**MySQL** with GORM auto-migration. 15 tables:
+**MySQL** with GORM auto-migration. 25 tables:
 
 | Table | Purpose |
 |---|---|
 | `mcp_servers` | Backend servers (name, URL, health, capabilities) |
+| `templates` | Template catalog (seed: `ga` GA4, `gsc` GSC, `neo4j` Neo4j) — stdio_command, default_env with `{instance_id}` placeholder, required_extra_env schema, and runner (`google` or `neo4j`) |
+| `template_instances` | One row per template instance — encrypted credentials (SA JSON or Neo4j connection JSON), credentials_hash, runner_port/status, FK to `mcp_servers.id` |
 | `server_tools` | Tools per server (name, description, inputSchema, is_active) |
 | `server_resources` | Resources per server (URI, name, mimeType) |
 | `server_prompts` | Prompts per server |
@@ -195,6 +285,15 @@ Both routes return 503 when the integration is not configured (LEEXI_INTERNAL_UR
 | `oauth2_authorization_codes` | Short-lived auth codes (PKCE, 10-min expiry, single-use) |
 | `oauth2_refresh_tokens` | Refresh tokens (SHA-256 hashed, 30-day TTL, rotation) |
 | `oauth2_consents` | Per-client per-user consent decisions |
+| `llm_instructions` | Reusable LLM instruction snippets (title, body, description) rendered into the MCP `initialize` response |
+| `llm_instruction_servers` | Many-to-many: which servers an instruction applies to |
+| `scope_token_instructions` | Many-to-many: which instructions a scope token injects |
+| `oauth2_client_instructions` | Many-to-many: which instructions an OAuth2 client injects |
+| `bdd_used_tables` | Gateway-curated registry of MySQL tables exposed to MCP (one per DB) |
+| `bdd_used_fields` | Per-table field selection with curated descriptions |
+| `scope_token_bdd_tables` | Join: scope token ↔ allowed BDD used-tables |
+| `oauth2_client_bdd_tables` | Join: OAuth2 client ↔ allowed BDD used-tables |
+| `zoho_imports` | Per-user (and admin singleton) Zoho upstream URLs consumed by mcp-zoho-service for routing |
 
 Connection pooling: max 25 open, 5 idle connections.
 
@@ -208,10 +307,42 @@ Connection pooling: max 25 open, 5 idle connections.
 - Graceful shutdown (10s drain) on SIGINT/SIGTERM.
 - Encryption is optional: runs without `ENCRYPTION_KEY`, but auth headers are stored in plaintext.
 - Tools have an `is_active` flag (default `true`). Inactive tools are excluded from token scope selection in the UI. Tool active state is preserved across server rediscovery.
+- **Server-level full-access grants (admin)**: the `server_authorizations` table joins (`mcp_servers.id`, `email`). When a request's bearer-token email has a row for the targeted backend, the gateway skips ALL filter-header injection (Leexi, Ringover, BDD, Zoho) — the backend receives only the static auth headers and treats the call as unrestricted. Grants are managed via the admin-only `/api/v1/server-authorizations` REST endpoints and the "Serveur Autorisation" Vue admin page. Per-server granularity (a grant on `srv-1` does not affect `srv-2`). Client-credentials grants (no email) never match a row → grant table is irrelevant to non-human flows. Resolution order at `requestHeadersFor`: Step 0 server-authorization grant → Step 1 auto-self override → Step 2 admin-configured filter.
+- **Neo4j template instance access gate**: a backend whose `mcp_servers.template_slug` names a template with `runner = "neo4j"` (inactive templates included) is visible and callable only by gateway admins (`gateway_users.role = "admin"` with `is_allowed = true` — an admin disabled on the Users page is not treated as admin) and by emails holding a `server_authorizations` row for that exact instance — for Neo4j instances a grant therefore *opens* access, on top of its "unfiltered" meaning for filtered backends. Everybody else, including every caller without an end-user email (`mcp_…` scope tokens, `client_credentials`), gets the instance omitted from `tools/list` / `resources/list` / `prompts/list` and a JSON-RPC `-32600` `access denied: this server requires an admin role or a server authorization` on `tools/call` / `resources/read` / `prompts/get` (never forwarded, logged with backend id, template slug and email). The OAuth2 consent screens (`renderConsent`, `buildServerList`) hide the instance, and both consent submissions (`POST /authorize`, `POST /api/v1/oauth2/authorize/consent`) drop it from the stored scope. `initialize` omits every `per_server` LLM instruction none of whose linked servers is visible to the caller (so a hidden instance's schema text never leaks); `general` instructions are kept. Fail-closed: lookup errors make the instance restricted: only admins and holders of a grant on it get through; a user-lookup error means not-admin. A `template_slug` with no template row is restricted too (cached like a real answer, logged once per TTL). The slug is read from `mcp_servers` by id (`ServerRepo.TemplateSlugByID`) because the registry's `BackendServer.TemplateSlug` is empty after a successful discovery. Caches (60 s): server id → slug, slug → is-Neo4j; roles and grants are read on every request, so revoking a grant applies on the next request. Unrelated to the per-instance `NEO4J_READ_ONLY` flag (database-level) and to the static `mcp-neo4j-service` (no `template_slug`, unaffected). Implementation: `gateway.Neo4jAccess`, wired in `internal/app/app.go` into `Gateway.SetNeo4jAccess` and `AuthServer.SetServerAccess`.
+- **Auto-self filter override (OAuth2 only)**: when an OAuth2 access token's `email` claim resolves to a user in the target backend (Leexi or Ringover), the gateway injects that user's UUID/ID into the outbound header automatically — bypassing whatever filter mode the admin set on the OAuth2 client. Per-backend independent: a user might exist in Leexi but not Ringover; each backend resolves on its own. When the email is present but has no match in this backend: gateway admins (`gateway_users.role = "admin"`) fall back to the admin-configured filter; non-admin users get the deny-sentinel (`00000000-0000-0000-0000-000000000000` for Leexi, `0` for Ringover). Client-credentials grants (no email) bypass the override and use the admin-configured mode as before.
 - Scope tokens and OAuth2 clients carry an optional **Leexi ownership filter** (`LeexiFilterMode` + `LeexiAllowedUserUUIDs` + `LeexiAllowedTeamUUIDs`). When the filter is set and the request targets the Leexi-tagged backend (`ToolPrefix == "leexi"`), the gateway adds `X-Leexi-Allowed-Participants` to the outbound MCP request. mcp-leexi-service then enforces the scope server-side. See `internal/leexiadmin/` for the user/team resolution and cache (5 min TTL).
+  - Filter modes: `none` (unrestricted), `users`, `teams`, `creator` (frozen at create time from creator email), `self` (per-request, OAuth2 clients only — resolves the access-token `email` claim via `leexiadmin.FindUserByEmail` on every call). `self` is rejected for scope tokens (no end-user identity) and fails closed for `client_credentials` grants (no email claim).
+- Scope tokens and OAuth2 clients carry an optional **Ringover ownership filter** mirroring the Leexi one — same five modes (`none`/`users`/`teams`/`creator`/`self`), but Ringover identifies users via integer `user_id` instead of UUIDs. When set on a request to a Ringover-tagged backend (`ToolPrefix == "ringover"`), the gateway adds `X-Ringover-Allowed-User-IDs` (comma-separated ints, deny-sentinel `0`). See `internal/ringoveradmin/` for the user/team resolution and cache (5 min TTL).
+- Scope tokens and OAuth2 clients carry an optional **BDD scope filter** (`bdd_filter.used_table_ids`). When the filter is non-empty and the request targets a backend with `ToolPrefix == "bdd"`, the gateway resolves the IDs against `bdd_used_tables` and adds `X-BDD-Allowed-Tables: [{"database_id":int,"table_name":str}, ...]` to the outbound MCP request. **Fail-closed**: if the filter is set but every referenced row was deleted, the gateway emits `[]` so the upstream BDD MCP backend denies all calls. Empty/absent filter = full access.
+- **Zoho ownership filter**: scope tokens and OAuth2 clients carry an optional Zoho filter (`ZohoFilterMode` + `ZohoAllowedEmails`). Resolution at `requestHeadersFor`: Step 0 server-authorization grant → **Step 1 imported-server auto-filter** (when `backend.ToolPrefix == "zoho"` AND `backend.TemplateSlug != ""` AND `backend.CreatedBy != ""`, inject `X-Zoho-Allowed-User: <created_by>`) → Step 2 admin-configured filter (modes: `none` no header, `users` comma-joined emails, `creator` single email = token/client `created_by`). Deny sentinel `deny-all@hellopro.fr.deny` is injected when an admin filter resolves to an empty allow-list. The Zoho MCP backend enforces the header server-side. **Per-user routing** to the user's imported Zoho instance is handled by the dedicated `mcp-zoho-service` (port 8596) — the gateway sees that service as one Zoho backend and the service picks the right upstream from `X-End-User-Email` / `X-End-User-Login` headers the gateway always injects on Zoho-tagged calls. The per-user Zoho upstream URLs now live in the dedicated `zoho_imports` table (managed by the sheet-import handler and the admin endpoint `POST /api/v1/zoho-imports/admin`); `mcp_servers` keeps only the stub row pointing at `mcp-zoho-service`. **Per-user `tools/list`**: when the request carries an end-user identity AND the scope contains a Zoho-tagged backend, `handleToolsList` live-fetches the tool catalog from `mcp-zoho-service` with the identity headers so the client sees the user's own Zoho tools (catalog scoped to the user's upstream) instead of the cached admin catalog. Non-Zoho tools still come from the registry merge; the Zoho live-fetch fails open back to the cached admin tools on upstream error. **Per-user consent screen**: the OAuth2 `/authorize` consent UI applies the same override — `buildServerList` (JSON API) and `renderConsent` (HTML) call `Gateway.FetchZohoToolsForUser(ctx, email)` once after assembling the cached server list, then substitute the per-user tools for every Zoho-tagged server. The catalog is sourced from the persisted `zoho_import_tools` table via `gateway.ZohoUserCatalog` (wired in `app.go` to a `*repository.ZohoImportRepo` adapter that resolves email → user row → admin row fallback). Discovery refreshes the catalog on (1) sheet-import row create, (2) successful `POST /api/v1/zoho-imports/{id}/test`, and (3) manual `POST /api/v1/zoho-imports/{id}/discover`. Anonymous browsers, missing rows, and empty catalogs all leave the cached admin tools in place.
+- The catalog (`tbl_sauvegarde_tables` / `tbl_sauvegarde_champs`) is owned by the upstream Hellopro BDD admin API at `BDD_CATALOG_BASE_URL` — gateway is read-only against it. The "used tables" registry (gateway-curated subset + descriptions) lives in the gateway DB.
 - OAuth2 Authorization Server is MCP spec-compliant: OAuth 2.1, RFC 8414 (metadata), RFC 7591 (dynamic registration), PKCE (S256).
+- **OAuth2 `/authorize` login**: three-tier session resolution.
+  1. Valid `mcp_session` cookie → render consent.
+  2. Otherwise, valid `gw_session` cookie pointing to a non-expired `sso_sessions` row → bridge: mint `mcp_session` from the admin SSO row's email, render consent. No SSO roundtrip — admin already logged in.
+  3. Otherwise, 303 to `/sso/login?purpose=oauth2&return_to=<full-authorize-URL>`. The same SSO `client_id`/`client_secret` as the admin UI is reused; the `purpose` query parameter tells `/sso/callback` to skip the admin upsert + `IsAllowed` check + `SSOSession` persistence + `gw_session` cookie, and instead set the `mcp_session` cookie via `internal/auth.SetSession` before redirecting back to the original `/authorize` URL so the consent screen can render.
+  `client_credentials` grants are unaffected (they never hit `/authorize`).
+- **LLM instructions** are reusable snippets (title + body) linked to servers. Scope tokens and OAuth2 clients each pick a subset; at MCP `initialize` time, the gateway emits the composed `## <title>\n<body>` blocks (`\n\n`-joined, capped at 8 KiB) into the spec-defined `instructions` field. Picks are validated server-side: every `instruction_id` must share at least one server with the token/client's allowed set. Resolution happens once per scope-cache-miss (60 s TTL); instruction edits additionally invalidate both scope caches for immediate visibility.
+- **Instruction delivery via tool descriptions** (`oauth2_clients.inject_instructions_into_tools`, default `false`): some MCP hosts ignore the `initialize` `instructions` field (claude.ai web does; Claude Code honors it). When the flag is set on an OAuth2 client, the gateway instead appends the composed instruction blocks to tool descriptions in `tools/list` — `general` rows to every tool, `per_server` rows only to the owning server's tools (per-tool suffix capped at 4 KiB) — and omits the `initialize` field so spec-compliant hosts never see the text twice. Exposed as `inject_instructions_into_tools` on the OAuth2 client REST API and as a checkbox in the frontend's "Instructions LLM" section. Scope tokens do not support the flag. Implementation: `gateway.DecorateToolsWithInstructions` + `Registry.ToolServerIndex`.
 - MCP endpoints return 401 + `WWW-Authenticate` header when no auth is provided, triggering Claude.ai's OAuth2 discovery flow.
-- Unit tests in `internal/authserver/*_test.go`, `internal/oauth2/*_test.go`, `internal/repository/*_test.go`, `internal/db/mysql_test.go`.
+- Unit tests in `internal/authserver/*_test.go`, `internal/oauth2/*_test.go`, `internal/repository/*_test.go`, `internal/db/mysql_test.go`, `internal/gateway/*_test.go`. Tests using `gorm.io/driver/sqlite` need cgo; new SQLite-backed tests use the pure-Go `github.com/glebarez/sqlite` with hand-written DDL (see `internal/authserver/consent_neo4j_test.go`) so they also run in `golang:1.24-alpine`.
+
+### Slack notifications (`internal/slack/`)
+
+Posts six event types to a Slack incoming webhook when `SLACK_WEBHOOK_URL` is set. Empty URL = silently disabled (local dev and existing deployments untouched).
+
+| Event | Trigger |
+|---|---|
+| `ServerDown` | Health checker detects a backend transitioning to `unhealthy`. |
+| `ServerUp` | Health checker detects a backend recovering (`unhealthy`/`unknown` → `healthy`), includes downtime duration. |
+| `ToolsRegression` | `SaveDiscoveredCapabilities` sees `prevToolCount > 0 && len(newTools) == 0` for a server — fires from `api.Handler.saveBackendCapabilities`. |
+| `Unauthorized` | OAuth2 or scope-token middleware returns 401/403 on an MCP endpoint (`/sse`, `/mcp`, `/message`). Rate-limited per (ip, endpoint) by `SLACK_AUTH_ALERT_COOLDOWN`. |
+| `GatewayShutdown` | SIGINT/SIGTERM received in `main.go` before drain. |
+| `GatewayPanic` | Best-effort: deferred recover() in the HTTP-server goroutine posts synchronously before exit. |
+
+**Limitation:** The gateway cannot self-report SIGKILL, OOM, or hardware death — the process is already gone. For those, pair with an external watcher (Kubernetes liveness probe + alertmanager, or an uptime monitor polling `/health`).
+
+**Dispatch:** `Notify` is non-blocking (buffered channel, size 64; overflow drops with a log line). `NotifySync` posts inline with a 2 s timeout — used only by panic / shutdown paths where the worker goroutine is about to die.
 
 ## What This Provides to Other Services
 

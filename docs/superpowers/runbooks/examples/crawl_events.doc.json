@@ -1,0 +1,21 @@
+{
+  "crawl_events": {
+    "database_id": 10,
+    "description": "Journal append-only des transitions du cycle de vie de crawl : 1 ligne = 1 événement pour 1 domaine. Alimente le dashboard d'observabilité du crawling (BO). Stocké dans HELLOPRO_IA. Émis par les scripts de crawling BO et le handler de webhook crawler. Couvre le crawl initial, le crawl de mise à jour (MAJ), la réception des webhooks et la réconciliation ECI/DSPI.",
+    "primary_key": "id_event",
+    "default_order_by": "event_date DESC",
+    "rows": 3734,
+    "columns": {
+      "id_event": { "type": "int", "desc": "Identifiant unique de l'événement (PK, auto-increment). Strictement croissant → trier par id_event DESC pour les plus récents." },
+      "id_domaine": { "type": "int", "desc": "Id du domaine concerné (FK logique → domaine). Clé de regroupement de tous les événements d'un domaine (index idx_domaine_event). Recoupe crawl_metrics.id_domaine, domaine_funnel_state.id_domaine, initial_crawl_history.id_domaine_ref." },
+      "event_type": { "type": "enum", "desc": "Type de transition. Valeurs : entered (domaine entré dans l'entonnoir) ; initial_started / initial_succeeded / initial_failed (crawl initial) ; became_maj_eligible ; maj_triggered / maj_succeeded / maj_failed (crawl de mise à jour MAJ) ; domain_deactivated ; domain_redirected ; webhook_received (payload du webhook crawler journalisé à l'entrée du handler) ; late_failure_absorbed (échec tardif absorbé par les gardes handleCrawlFailure) ; eci_recovered_inline (statut ECI rétabli en fin de handler) ; eci_reconciled (réconciliation ECI/DSPI par script). Index (event_type, event_date)." },
+      "event_date": { "type": "datetime", "desc": "Date/heure de journalisation de l'événement (DEFAULT CURRENT_TIMESTAMP). Champ de tri temporel principal ; indexé via (id_domaine, event_date) et (event_type, event_date)." },
+      "details_json": { "type": "text", "desc": "Payload JSON spécifique au type (NULLable ; parser en JSON). Clés selon event_type : initial_started {crawl_id, id_domaine} ; initial_succeeded / initial_failed {id_eci, id_history_initial, error_code} ; webhook_received {id_domaine = storage_folder_name (ex 854-138-1780322934), isFinished, isError, stored_files_count, success, storagePath, message_erreur_crawling} ; maj_triggered {storage_folder, crawl_id} ; maj_succeeded {id_history} ; maj_failed {id_history, error_code} ; eci_recovered_inline {statut_dspi_target, eci_before, eci_after, source}." }
+    },
+    "relations": [
+      { "column": "id_domaine", "references": "domaine.id_domaine", "note": "Domaine crawlé ; recoupe les tables sœurs d'observabilité crawl_metrics / domaine_funnel_state / initial_crawl_history." },
+      { "via": "details_json", "keys": ["id_eci", "id_history_initial", "id_history", "crawl_id", "storage_folder_name"], "note": "Références croisées vers ECI / initial_crawl_history / crawl_metrics / dossier de stockage GCS." }
+    ],
+    "notes": "Une des 4 tables d'observabilité crawling (HELLOPRO_IA) : crawl_metrics, initial_crawl_history, domaine_funnel_state, crawl_events. ENUM event_type étendu le 2026-05-17 (correctifs ECI/DSPI). À ce jour, plusieurs types ont 0 ligne (entered, became_maj_eligible, domain_deactivated, domain_redirected, late_failure_absorbed, eci_reconciled). Distribution observée : initial_started 1836, initial_failed 1324, webhook_received 970, initial_succeeded 161, maj_triggered 22, maj_succeeded 12, maj_failed 3, eci_recovered_inline 1."
+  }
+}

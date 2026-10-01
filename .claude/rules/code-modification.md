@@ -9,7 +9,7 @@
 ## Surgical Edit Protocol
 
 1. **Read first** — always read the file from disk. Never rely on memory.
-2. **Minimal diff** — change only what the task requires. Preserve every unrelated line character-for-character.
+2. **Minimal diff** — change only what the task requires. Preserve every unrelated line character-for-character. The test: **every changed line traces directly to the request**. A line you cannot trace back is scope you added.
 3. **Preserve formatting** — keep original indentation, line structure, style.
 4. **Preserve comments** — never remove unless factually incorrect after the change.
 5. **Verify after** — run typecheck/lint. Fix before moving on.

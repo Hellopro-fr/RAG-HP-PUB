@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hellopro/mcp-gateway/internal/db"
-	oauth2pkg "github.com/hellopro/mcp-gateway/internal/oauth2"
+	"mcp-gateway/internal/db"
+	oauth2pkg "mcp-gateway/internal/oauth2"
 )
 
 // RegistrationRequest is the RFC 7591 client registration request.
@@ -62,7 +62,7 @@ func (s *AuthServer) HandleRegister(w http.ResponseWriter, r *http.Request) {
 		req.GrantTypes = []string{"authorization_code"}
 	}
 	if req.TokenEndpointAuthMethod == "" {
-		req.TokenEndpointAuthMethod = "client_secret_post"
+		req.TokenEndpointAuthMethod = "client_secret_basic"
 	}
 
 	clientID, clientSecret, secretHash, secretPrefix, err := oauth2pkg.GenerateCredentials()

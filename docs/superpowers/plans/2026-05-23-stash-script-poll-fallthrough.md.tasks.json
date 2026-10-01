@@ -1,0 +1,12 @@
+{
+  "planPath": "docs/superpowers/plans/2026-05-23-stash-script-poll-fallthrough.md",
+  "tasks": [
+    {
+      "id": 55,
+      "subject": "Task 1: Fall-through on POST timeout / persisted-5xx + constant bump + 4 tests",
+      "status": "completed",
+      "description": "**Goal:** `process_crawl` no longer raises `FatalError` on POST `TimeoutError` / `URLError` / `OSError` or on persisted 5xx; it falls through to the existing completion poll. New timeout constants accommodate worst-case 20 GB crawl wall-clock. Test suite covers all three fall-through paths.\n\n**Files:**\n- Modify: `tools/stash_crawls_batch.py` (imports, constants L150-152, process_crawl L260-317)\n- Modify: `tools/test_stash_crawls_batch.py` (update test_per_crawl_timeout_formula, add 3 new tests)\n\n**Verify:** `python -m pytest tools/test_stash_crawls_batch.py -v` → 13 passed\n\n**Commits:**\n- ab6331a7 — initial implementation, spec compliance PASS\n- 4e4d7e89 — quality-review fixes (log str(e), narrow catch tuple, strengthen test 11)\n\n```json:metadata\n{\"files\":[\"tools/stash_crawls_batch.py\",\"tools/test_stash_crawls_batch.py\"],\"verifyCommand\":\"python -m pytest tools/test_stash_crawls_batch.py -v\",\"acceptanceCriteria\":[\"narrow catch tuple (URLError, OSError)\",\"_TIMEOUT_MAX=7200\",\"_TIMEOUT_PER_GB=300\",\"process_crawl falls through on POST exception\",\"process_crawl falls through on persisted 5xx after one 30s retry\",\"FatalError still raised on unexpected non-202 2xx / dead-letter / stop / poll deadline\",\"fell_through threaded into poll/done/failed-state strings\",\"log includes type(e).__name__ + str(e)\",\"test_per_crawl_timeout_formula updated for new constants\",\"test 11 verifies retry POST fires (call_count == 2)\",\"13 tests green\"]}\n```"
+    }
+  ],
+  "lastUpdated": "2026-05-23T12:00:00Z"
+}

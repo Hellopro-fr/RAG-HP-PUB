@@ -199,7 +199,7 @@ const emit = defineEmits<{
 const steps = computed({
   get: () => props.modelValue.map((s, i) => ({
     ...s,
-    _id: (s as any)._id || `step-${i}-${Date.now()}`,
+    _id: s._id || `step-${i}-${Date.now()}`,
     _type: inferType(s),
   })) as InternalStep[],
   set: (val) => emit('update:modelValue', val.map(({ _id, _type, ...rest }) => rest as ConfigStep))
@@ -215,7 +215,7 @@ const selectedStep = computed(() =>
 
 function inferType(step: ConfigStep): string {
   if (step.hasExecutorSelector) return 'executor-selector'
-  if ((step as any).table?.length) return 'table'
+  if (step.table?.length) return 'table'
   if (step.code || step.codeField) return 'code'
   return 'step'
 }

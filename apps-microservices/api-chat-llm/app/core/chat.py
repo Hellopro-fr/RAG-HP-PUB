@@ -48,10 +48,13 @@ class DeepSeek:
         config = config or {}
         self.API_KEY = config.get("api_key", settings.DEEPSEEK_API_KEY)
         self.BASE_URL = "https://api.deepseek.com"
-        self.MODEL = "deepseek-chat"
+        self.MODEL = "deepseek-v4-flash"
         self.TEMPERATURE = 0.4
         self.client = OpenAI(api_key=self.API_KEY, base_url=self.BASE_URL)
         self.async_client = AsyncOpenAI(api_key=self.API_KEY, base_url=self.BASE_URL)
+        # V4 : thinking activé par défaut — désactiver pour garder le
+        # comportement deepseek-chat (temperature sinon ignorée)
+        self.EXTRA_BODY = {"thinking": {"type": "disabled"}}
 
     def chat(self, message, stream=False):
         response = self.client.chat.completions.create(
@@ -65,6 +68,7 @@ class DeepSeek:
             ],
             temperature=self.TEMPERATURE,
             stream=stream,
+            extra_body=self.EXTRA_BODY,
         )
         if stream:
             return response
@@ -85,6 +89,7 @@ class DeepSeek:
             ],
             temperature=self.TEMPERATURE,
             stream=True,
+            extra_body=self.EXTRA_BODY,
         )
         async for chunk in response_stream:
             yield chunk
@@ -104,10 +109,18 @@ class LLMProvider:
             self.API_KEY = config.get("api_key", settings.OPENROUTER_API_KEY)
             self.BASE_URL = ChatBaseURL.OPENROUTER
 
-        self.MODEL = config.get("model", "deepseek-chat")
+        self.MODEL = config.get("model", "deepseek-v4-flash")
         self.TEMPERATURE = config.get("temperature", 0.4)
         self.client = OpenAI(api_key=self.API_KEY, base_url=self.BASE_URL)
         self.async_client = AsyncOpenAI(api_key=self.API_KEY, base_url=self.BASE_URL)
+        # Param spécifique DeepSeek V4 (thinking activé par défaut) — ne pas
+        # l'envoyer aux autres providers (OpenAI/OpenRouter rejettent les
+        # paramètres inconnus)
+        self.EXTRA_BODY = (
+            {"thinking": {"type": "disabled"}}
+            if self.PROVIDER == ChatProvider.DEEPSEEK
+            else None
+        )
 
     def chat(self, message, stream=False):
         response = self.client.chat.completions.create(
@@ -121,6 +134,7 @@ class LLMProvider:
             ],
             temperature=self.TEMPERATURE,
             stream=stream,
+            extra_body=self.EXTRA_BODY,
         )
         if stream:
             return response
@@ -141,6 +155,7 @@ class LLMProvider:
             ],
             temperature=self.TEMPERATURE,
             stream=True,
+            extra_body=self.EXTRA_BODY,
         )
         async for chunk in response_stream:
             yield chunk

@@ -1,0 +1,40 @@
+version: "3.8"
+
+services:
+  opti-moteur-front:
+    build:
+      context: ../..
+      dockerfile: apps-microservices/opti-moteur-front/Dockerfile
+    container_name: opti-moteur-front
+    ports:
+      - "8570:8570"
+    env_file:
+      - .env
+    # Bind-mount du dossier `app/data/` pour partager les fichiers de donnees
+    # generes offline (idf_nom_produit.json en particulier) entre l'hote et le
+    # container. Sans ce mount, le fichier IDF cree par compute_idf.py serait
+    # perdu au prochain `docker compose down` ou rebuild d'image.
+    # Le fichier JSON est gitignore (cf root .gitignore).
+    volumes:
+      - ./app/data:/app/app/data
+    depends_on:
+      - typesense
+    restart: unless-stopped
+
+  typesense:
+    image: typesense/typesense:27.1
+    container_name: typesense-opti-moteur
+    ports:
+      - "8108:8108"
+    volumes:
+      - typesense-data:/data
+    command: >-
+      --data-dir /data
+      --api-key=${TYPESENSE_API_KEY:-hp_poc_2026}
+      --enable-cors
+    restart: unless-stopped
+    # Prod: limiter la RAM via mem_limit
+    # mem_limit: 32g
+
+volumes:
+  typesense-data:

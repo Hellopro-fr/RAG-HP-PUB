@@ -1,0 +1,54 @@
+{
+  "planPath": "docs/superpowers/plans/2026-06-18-redis-client-frontend-login.md",
+  "tasks": [
+    {
+      "id": 0,
+      "subject": "Task 0: Tooling + auth config",
+      "status": "completed",
+      "description": "**Goal:** Add jose + Vitest, and a tested config module (env validation, client-cred resolution, allow-list parsing).\n\n**Files:** Modify package.json; Create vitest.config.ts, lib/auth/config.ts; Test lib/auth/config.test.ts\n\n**Verify:** pnpm vitest run lib/auth/config.test.ts\n\n```json:metadata\n{\"files\":[\"apps-microservices/redis-client-frontend/package.json\",\"apps-microservices/redis-client-frontend/vitest.config.ts\",\"apps-microservices/redis-client-frontend/lib/auth/config.ts\",\"apps-microservices/redis-client-frontend/lib/auth/config.test.ts\"],\"verifyCommand\":\"pnpm vitest run lib/auth/config.test.ts\",\"acceptanceCriteria\":[\"config.test passes\",\"suffixed creds preferred\",\"parseAdminEmails normalizes\"]}\n```"
+    },
+    {
+      "id": 1,
+      "subject": "Task 1: OAuth/PKCE primitives",
+      "status": "completed",
+      "blockedBy": [0],
+      "description": "**Goal:** PKCE gen, URL-encoded authorize URL, token exchange (HTTP Basic), token signature verify — pure functions.\n\n**Files:** Create lib/auth/oauth.ts; Test lib/auth/oauth.test.ts\n\n**Verify:** pnpm vitest run lib/auth/oauth.test.ts\n\n```json:metadata\n{\"files\":[\"apps-microservices/redis-client-frontend/lib/auth/oauth.ts\",\"apps-microservices/redis-client-frontend/lib/auth/oauth.test.ts\"],\"verifyCommand\":\"pnpm vitest run lib/auth/oauth.test.ts\",\"acceptanceCriteria\":[\"pkce challenge correct\",\"authorize url encoded + S256\",\"verifyAndExtract valid/invalid\",\"exchangeCode basic+form\"]}\n```"
+    },
+    {
+      "id": 2,
+      "subject": "Task 2: Session cookie module",
+      "status": "completed",
+      "blockedBy": [0],
+      "description": "**Goal:** Sign/verify rcf_session JWT with dedicated SESSION_SECRET; edge-safe (jose only).\n\n**Files:** Create lib/auth/session.ts; Test lib/auth/session.test.ts\n\n**Verify:** pnpm vitest run lib/auth/session.test.ts\n\n```json:metadata\n{\"files\":[\"apps-microservices/redis-client-frontend/lib/auth/session.ts\",\"apps-microservices/redis-client-frontend/lib/auth/session.test.ts\"],\"verifyCommand\":\"pnpm vitest run lib/auth/session.test.ts\",\"acceptanceCriteria\":[\"round-trip\",\"expired->null\",\"garbage->null\",\"cookie name\"]}\n```"
+    },
+    {
+      "id": 3,
+      "subject": "Task 3: Auth flow orchestration",
+      "status": "completed",
+      "blockedBy": [1, 2],
+      "description": "**Goal:** Framework-free startLogin/completeCallback composing config+oauth+session; allow-list + all branching here, fully unit-tested.\n\n**Files:** Create lib/auth/flow.ts; Test lib/auth/flow.test.ts\n\n**Verify:** pnpm vitest run lib/auth/flow.test.ts\n\n```json:metadata\n{\"files\":[\"apps-microservices/redis-client-frontend/lib/auth/flow.ts\",\"apps-microservices/redis-client-frontend/lib/auth/flow.test.ts\"],\"verifyCommand\":\"pnpm vitest run lib/auth/flow.test.ts\",\"acceptanceCriteria\":[\"startLogin shape\",\"callback error branches\",\"denied branch\",\"ok branch\"]}\n```"
+    },
+    {
+      "id": 4,
+      "subject": "Task 4: Route handlers + middleware rewrite + drop old login",
+      "status": "completed",
+      "blockedBy": [3],
+      "description": "**Goal:** Wire tested flow into App Router routes + edge middleware; delete paste-token login.\n\n**Files:** Create app/auth/{login,callback,logout}/route.ts, app/auth/denied/page.tsx; Modify middleware.ts; Delete app/login/page.tsx\n\n**Verify:** pnpm build && pnpm lint; git grep -n ADMIN_TOKEN ... empty\n\n```json:metadata\n{\"files\":[\"apps-microservices/redis-client-frontend/app/auth/login/route.ts\",\"apps-microservices/redis-client-frontend/app/auth/callback/route.ts\",\"apps-microservices/redis-client-frontend/app/auth/logout/route.ts\",\"apps-microservices/redis-client-frontend/app/auth/denied/page.tsx\",\"apps-microservices/redis-client-frontend/middleware.ts\",\"apps-microservices/redis-client-frontend/app/login/page.tsx\"],\"verifyCommand\":\"pnpm build && pnpm lint\",\"acceptanceCriteria\":[\"build+lint\",\"matcher excludes auth\",\"old login deleted\",\"no ADMIN_TOKEN\"]}\n```"
+    },
+    {
+      "id": 5,
+      "subject": "Task 5: UI — signed-in email + sign out",
+      "status": "completed",
+      "blockedBy": [2, 4],
+      "description": "**Goal:** Show logged-in email + Sign out link in header.\n\n**Files:** Modify components/cache-header.tsx (userEmail prop), app/page.tsx (read session)\n\n**Verify:** pnpm build && pnpm lint\n\n```json:metadata\n{\"files\":[\"apps-microservices/redis-client-frontend/components/cache-header.tsx\",\"apps-microservices/redis-client-frontend/app/page.tsx\"],\"verifyCommand\":\"pnpm build && pnpm lint\",\"acceptanceCriteria\":[\"userEmail prop + signout\",\"page passes email\",\"build+lint\"]}\n```"
+    },
+    {
+      "id": 6,
+      "subject": "Task 6: Compose/network wiring + env docs + client registration + E2E",
+      "status": "completed",
+      "blockedBy": [4, 5],
+      "description": "**Goal:** Make service reachable to account-service (services-net) + documented; registration runbook + manual E2E.\n\n**Files:** Modify docker-compose.yml (redis-client-frontend block); Create .env.example; Modify CLAUDE.md\n\n**Verify:** docker compose config redis-client-frontend shows services-net + env; manual E2E\n\n```json:metadata\n{\"files\":[\"docker-compose.yml\",\"apps-microservices/redis-client-frontend/.env.example\",\"apps-microservices/redis-client-frontend/CLAUDE.md\"],\"verifyCommand\":\"docker compose config redis-client-frontend\",\"acceptanceCriteria\":[\"services-net + env\",\"env.example complete\",\"CLAUDE.md updated\",\"E2E passes\"]}\n```"
+    }
+  ],
+  "lastUpdated": "2026-06-18T17:30:00Z"
+}

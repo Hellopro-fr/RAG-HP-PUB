@@ -28,7 +28,8 @@ func main() {
 	ringoverClient := ringover.NewClient(cfg.RingoverAPIBaseURL, cfg.RingoverAPIKey)
 
 	clients := &tools.Clients{
-		Ringover: ringoverClient,
+		Ringover:           ringoverClient,
+		DefaultCountryCode: cfg.DefaultCountryCode,
 	}
 
 	// Set up MCP tool registry and handler.
@@ -41,6 +42,16 @@ func main() {
 	sseServer.Register(mux)
 	streamableServer := transport.NewStreamableHTTPServer(handler)
 	streamableServer.Register(mux)
+
+	// Internal admin endpoints (users/teams listing for the MCP gateway UI).
+	// Disabled when no admin token is set to avoid accidental exposure.
+	if cfg.AdminToken == "" {
+		log.Println("[main] MCP_RINGOVER_ADMIN_TOKEN not set — /admin/users and /admin/teams are disabled")
+	} else {
+		adminServer := transport.NewAdminServer(ringoverClient, cfg.AdminToken)
+		adminServer.Register(mux)
+		log.Println("[main] admin endpoints registered: GET /admin/users, GET /admin/teams")
+	}
 
 	httpServer := &http.Server{
 		Addr:         ":" + cfg.Port,

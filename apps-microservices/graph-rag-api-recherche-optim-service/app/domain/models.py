@@ -291,14 +291,14 @@ class ScoringOptions(BaseModel):
         0, description="Score pour les caractéristiques inconnues"
     )
     v_blocked: float = Field(
-        -20.0, description="Score pour les caractéristiques bloquées — P6 fix: pénalité forte pour éliminer les produits avec valeurs_bloquantes"
+        -2.0, description="Score pour les caractéristiques bloquées"
     )
     v_different: float = Field(
         -0.3, description="Score pour les caractéristiques différentes"
     )
     t_unmatched: float = Field(0.2, description="Score pour les typologies non matched")
     absolute_threshold: float = Field(
-        0.3, description="Seuil absolu de score minimum pour les produits"
+        0.2, description="Seuil absolu de score minimum pour les produits"
     )
     relative_tolerance: float = Field(
         0.15, description="Tolérance relative par rapport au meilleur score"
@@ -341,7 +341,7 @@ class MatchingPayload(BaseModel):
             e_unmatched=0.9,
             g_unknown_score=0.8,
             c_unknown_score=0,
-            v_blocked=-20.0,
+            v_blocked=-2.0,
             v_different=-0.3,
             t_unmatched=0.2,
         ),

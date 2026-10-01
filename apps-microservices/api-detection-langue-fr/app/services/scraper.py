@@ -1,13 +1,37 @@
 import asyncio
 import logging
+import os
 import random
+import time
 import uuid
+from dataclasses import dataclass, field
+from functools import partial
 from typing import Optional
 from urllib.parse import urlparse
 
 from app.core.config import settings
+from app.core.metrics import BROWSER_LAUNCH_DURATION, BROWSERS_UNCLOSED, TEARDOWN_ABANDONED
+
+try:
+    from playwright.async_api import async_playwright
+except ImportError:
+    async_playwright = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ScrapeResult:
+    """Result of a Playwright scrape: HTML body + final URL + HTTP status + headers.
+
+    status_code is 0 when Playwright returned no Response object (rare —
+    happens when navigation aborts before any response is received).
+    """
+    html: str
+    final_url: str
+    status_code: int
+    content_type: str = ""
+    headers: dict = field(default_factory=dict)
 
 
 def build_proxy_url(base_proxy: str, session_id: Optional[str] = None, country: Optional[str] = 'FR') -> str:
@@ -68,8 +92,72 @@ def build_proxy_url(base_proxy: str, session_id: Optional[str] = None, country: 
         return base_proxy
 
 # Sémaphore global limitant le nombre de navigateurs Playwright simultanés.
-# Protège contre l'épuisement mémoire en cas de requêtes /detect ou /detect-batch concurrentes.
-_BROWSER_SEMAPHORE = asyncio.Semaphore(10)
+# Taille configurable via BROWSER_SEMAPHORE_SIZE env var (défaut: 10).
+# Chaque Camoufox/Chromium consomme ~300-500 MB — ne pas dépasser la capacité du container.
+_BROWSER_SEMAPHORE_SIZE = int(os.getenv("BROWSER_SEMAPHORE_SIZE", "10"))
+
+
+class _BoundedBrowserSemaphore:
+    """Sémaphore de navigateurs dont l'ATTENTE est bornée.
+
+    Pourquoi : ce permis est pris à l'INTÉRIEUR du `wait_for` de l'item
+    (`routes.py:828`), alors que le sémaphore de lot est pris à l'extérieur
+    (`:826`). Avec `ADMISSION_MAX_SLOTS` (8) au-dessus de
+    `BROWSER_SEMAPHORE_SIZE` (4), les items en excès attendent donc ICI, sur
+    leur propre budget — un item pouvait épuiser ses 300 s sans lancer un seul
+    navigateur, et ne rapporter qu'un `error` sans étape.
+
+    L'attente n'est PAS annulée à l'échéance, pour la raison qui vaut déjà pour
+    `_close_or_abandon` : un permis accordé dans le même tick qu'une annulation
+    serait perdu sur une version de Python dont `Semaphore.acquire` ne le rend
+    pas. CPython 3.12 le rend (`self._value += 1` dans sa branche
+    `CancelledError`) — l'image est `python:3.10-slim` et ce code ne doit pas
+    dépendre de laquelle. On laisse donc l'acquisition courir, et un
+    done-callback rend au pool le permis accordé trop tard.
+
+    Contrairement à `_close_or_abandon`, le callback ne peut pas être attaché
+    AVANT l'await : sur succès, le permis appartient à l'appelant et ne doit
+    pas être rendu. Il s'attache donc sur les DEUX sorties sans permis :
+    l'échéance, et l'annulation de l'appelant pendant l'attente (`wait_for` de
+    l'item, `_abandon_job` dans `async_jobs.py`) — `asyncio.wait` n'annule pas
+    `t` non plus. Sans la seconde, `BROWSER_SEMAPHORE_SIZE` annulations vidaient
+    le pool pour la vie du process, et chaque détection levait ce timeout
+    (PROD, 2026-09-24). Elle couvre aussi le permis accordé dans le même tick
+    que l'annulation : `t` est alors déjà fini, et `add_done_callback` le
+    rend quand même.
+    """
+
+    def __init__(self, size: int) -> None:
+        self._sem = asyncio.Semaphore(size)
+
+    async def __aenter__(self) -> None:
+        t = asyncio.ensure_future(self._sem.acquire())
+        try:
+            done, _pending = await asyncio.wait(
+                {t}, timeout=settings.BROWSER_POOL_WAIT_S
+            )
+        except BaseException:
+            t.add_done_callback(self._release_if_granted)
+            raise
+        if not done:
+            t.add_done_callback(self._release_if_granted)
+            raise TimeoutError(
+                f"Timeout pool navigateurs — aucun créneau libre après "
+                f"{settings.BROWSER_POOL_WAIT_S}s"
+            )
+        t.result()  # ne pas masquer un échec réel de l'acquisition
+        return None
+
+    async def __aexit__(self, *_exc) -> None:
+        self._sem.release()
+
+    def _release_if_granted(self, fut: asyncio.Future) -> None:
+        """Un permis accordé après qu'on a cessé d'attendre retourne au pool."""
+        if not fut.cancelled() and fut.exception() is None:
+            self._sem.release()
+
+
+_BROWSER_SEMAPHORE = _BoundedBrowserSemaphore(_BROWSER_SEMAPHORE_SIZE)
 
 
 # Pool de User-Agents réalistes — rotation aléatoire à chaque requête
@@ -114,6 +202,32 @@ _PERMANENT_NAV_ERRORS = (
     'ERR_SSL_PROTOCOL_ERROR',
     'ERR_CERT_DATE_INVALID',
 )
+
+# Longueur max d'une cause publiée. Le message Playwright est multi-lignes et embarque
+# le call-log complet : sans troncature on l'injecterait dans chaque réponse HTTP et
+# dans le cache Redis.
+FAILURE_CAUSE_MAX_LEN = 200
+
+
+def _record_failure(sink: Optional[dict], stage: str, cause: str) -> None:
+    """Publie la cause d'un échec dans le dict fourni par l'appelant.
+
+    `stage` vient du SITE D'APPEL, jamais d'une analyse de `cause` : c'est ce qui
+    garantit qu'aucun libellé d'erreur n'est présupposé (aucun code Gecko/Chromium
+    n'est attesté en production — cf. spec §2.3).
+
+    Premier écrivain gagne : dans un même appel, une erreur de navigation est la
+    racine du « contenu trop court » qui suit, donc elle ne doit pas être écrasée.
+
+    NE JAMAIS passer une valeur de proxy dans `cause` : elle contient un mot de
+    passe et cette chaîne finit dans une réponse HTTP puis dans un mail opérateur.
+    """
+    if sink is None or 'cause' in sink:
+        return
+    lines = (cause or '').splitlines()
+    sink['cause'] = (lines[0] if lines else '')[:FAILURE_CAUSE_MAX_LEN]
+    sink['stage'] = stage
+
 
 # Import de la détection de challenge centralisée (évite la duplication)
 from app.services.language_detector import detect_challenge_page as _detect_challenge_page
@@ -162,6 +276,7 @@ async def _launch_browser(playwright_instance, playwright_proxy: Optional[dict] 
             from camoufox import AsyncNewBrowser
 
             # Camoufox accepts proxy in the same Playwright dict format
+            t0 = time.monotonic()
             browser = await asyncio.wait_for(
                 AsyncNewBrowser(
                     playwright_instance,
@@ -169,8 +284,9 @@ async def _launch_browser(playwright_instance, playwright_proxy: Optional[dict] 
                     proxy=playwright_proxy,
                     geoip=True,
                 ),
-                timeout=45,
+                timeout=settings.BROWSER_LAUNCH_TIMEOUT_S,
             )
+            BROWSER_LAUNCH_DURATION.labels(browser="camoufox").observe(time.monotonic() - t0)
             logger.info("Navigateur Camoufox (stealth Firefox) lancé")
             return browser, True
 
@@ -182,17 +298,22 @@ async def _launch_browser(playwright_instance, playwright_proxy: Optional[dict] 
             logger.warning(f"Erreur lancement Camoufox: {e}, fallback vers Chromium")
 
     # Fallback: Playwright Chromium
-    browser = await playwright_instance.chromium.launch(
-        headless=True,
-        proxy=playwright_proxy,
-        args=[
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-gpu',
-            '--disable-blink-features=AutomationControlled',
-        ],
+    t0 = time.monotonic()
+    browser = await asyncio.wait_for(
+        playwright_instance.chromium.launch(
+            headless=True,
+            proxy=playwright_proxy,
+            args=[
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-gpu',
+                '--disable-blink-features=AutomationControlled',
+            ],
+        ),
+        timeout=settings.BROWSER_LAUNCH_TIMEOUT_S,
     )
+    BROWSER_LAUNCH_DURATION.labels(browser="chromium").observe(time.monotonic() - t0)
     logger.info("Navigateur Playwright Chromium lancé (fallback)")
     return browser, False
 
@@ -251,7 +372,234 @@ async def _inject_cookie_consent(context, url: str) -> None:
         pass
 
 
-async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) -> Optional[tuple[str, str]]:
+def _teardown_op(what: str) -> str:
+    """Operation family of a teardown `what` string, for use as a metric label.
+
+    `what` is built at the call site as "<op> <url>"; the URL must never reach a
+    label (unbounded cardinality), so only the leading op survives:
+    unroute_all / context.close / browser.close / playwright.stop.
+    """
+    return what.split(" ", 1)[0] or "unknown"
+
+
+def _drain_orphan_exception(fut: asyncio.Future, what: str = "") -> None:
+    """Read an abandoned task's exception once it completes, whichever path got there.
+
+    Used by BOTH non-cancelling bounds: `_close_or_abandon` (teardown) and
+    `_await_or_raise` (setup calls with no native timeout, added 2026-08-19).
+    The `BROWSERS_UNCLOSED` clause below is gated on `_teardown_op(what) ==
+    "browser.close"`, so the setup call sites — `playwright.start`,
+    `new_context`, `cookie_consent`, `new_page`, `resource_blocking`,
+    `page.content` — never touch that gauge.
+
+    Without this, asyncio logs "Task exception was never retrieved" when the
+    task is garbage-collected — the log flood observed in prod on 2026-08-03.
+    A cancelled task must be skipped: `.exception()` re-raises CancelledError.
+    Attached as a done-callback so it also covers the caller-cancelled path
+    (see `_close_or_abandon`), not just the abandoned-after-timeout one.
+
+    Also the ONLY place `BROWSERS_UNCLOSED` comes back down: a `browser.close`
+    that settles WITHOUT RAISING — now or long after we stopped waiting for it —
+    is the single observable we have that the browser is done. An abandoned close
+    never settles, so the gauge stays up, which is the whole point.
+
+    A close that settles by RAISING does not come down, and that is deliberate.
+    `browser.close()` only returns after the driver confirms the browser is dead
+    and its profile removed; a `TargetClosedError` means the pipe died first, so
+    nothing was confirmed. This is the same reasoning `_teardown_targets` uses to
+    keep a browser counted when it SKIPS the close on `is_connected()` false — a
+    dead driver pipe is not proof the detached Firefox exited. Both paths say the
+    same thing, so both must be treated the same way. Decrementing here would
+    make the gauge under-report, i.e. err toward hiding the very overlap it
+    exists to reveal.
+    """
+    if fut.cancelled():
+        return
+    exc = fut.exception()
+    if _teardown_op(what) == "browser.close" and exc is None:
+        BROWSERS_UNCLOSED.dec()
+    if exc is not None:
+        logger.debug(f"tâche abandonnée en échec ({what}): {exc!r}")
+
+
+async def _close_or_abandon(coro, timeout: float, what: str = "") -> None:
+    """Await a browser teardown coroutine, but ABANDON it if it exceeds `timeout`.
+
+    A close() on a dead browser pipe ignores asyncio cancellation, so wait_for
+    (cancel-then-await) would itself hang. asyncio.wait() returns on timeout
+    WITHOUT cancelling; we simply stop waiting and leave the task detached. This
+    lets the caller escape `finally` and release its semaphore slot.
+
+    What abandoning costs (corrected 2026-08-17 — an earlier version of this
+    docstring claimed "its OS process is already gone, so it leaks nothing
+    meaningful", which was a belief, not a fact): abandoning a `browser.close`
+    means the browser's death was never confirmed, and neither was the removal
+    of its profile directory. This service tracks no PID and never kills
+    anything, and `p.stop()` only closes the driver pipe then waits for the
+    driver to exit on its own — the driver gives itself 30s before a hard exit,
+    ignores SIGINT, and launches Firefox DETACHED, so even killing the driver
+    would not kill the browser. An abandoned teardown can therefore leave a live
+    browser behind. How many, and how often, is NOT known — hence the
+    `TEARDOWN_ABANDONED` counter here and the `BROWSERS_UNCLOSED` gauge.
+
+    Do NOT "fix" this by raising the timeout. The cost is FOUR sequential awaits
+    on one scrape path — `unroute_all`, `context.close`, `browser.close`, then
+    `playwright.stop` — so raising 10s to 30s turns a 40s worst case into 120s,
+    exactly the stall abandoning exists to avoid. (Corrected 2026-08-17: an
+    earlier wording said "all five abandon sites, a pool of 4". Both numbers were
+    beside the point — five is the file-level count of call sites, of which the
+    two `p.stop()` ones are mutually exclusive, and the pool size never enters the
+    multiplication at all. The conclusion held; the arithmetic did not, and it had
+    been copied into four notes.) Deciding otherwise needs the per-browser
+    resident cost and the real abandon frequency, neither of which is measured.
+
+    The drain callback is attached BEFORE the await, so all three ways this
+    can end are covered: fast failure (done before timeout, exception read via
+    the callback), abandoned (task keeps running after we stop waiting, callback
+    fires whenever it eventually settles), and caller-cancelled (a CancelledError
+    delivered to us while suspended in asyncio.wait propagates out immediately,
+    but the callback is already attached to `t` and still fires later)."""
+    t = asyncio.ensure_future(coro)
+    t.add_done_callback(partial(_drain_orphan_exception, what=what))
+    done, _pending = await asyncio.wait({t}, timeout=timeout)
+    if not done:
+        TEARDOWN_ABANDONED.labels(op=_teardown_op(what)).inc()
+        logger.warning(f"scraper teardown abandoned after {timeout}s: {what}")
+
+
+# Tâches de récupération en vol : asyncio ne garde qu'une référence faible sur
+# une tâche, une récupération non référencée pourrait être ramassée en route.
+_RECLAIM_TASKS: set = set()
+
+
+def _reclaim_if_delivered(fut: asyncio.Future, reclaim, what: str = "") -> None:
+    """Un résultat livré après qu'on a cessé de l'attendre est rendu à `reclaim`.
+
+    Seul un succès a quelque chose à récupérer : une tâche annulée ou en échec
+    n'a rien livré (son exception est lue par `_drain_orphan_exception`).
+    """
+    if fut.cancelled() or fut.exception() is not None:
+        return
+    logger.warning(f"résultat livré après abandon, récupéré: {what}")
+    try:
+        task = asyncio.ensure_future(reclaim(fut.result()))
+    except Exception as err:  # un callback ne doit jamais lever
+        logger.debug(f"récupération impossible ({what}): {err!r}")
+        return
+    _RECLAIM_TASKS.add(task)
+    task.add_done_callback(_RECLAIM_TASKS.discard)
+
+
+def _stop_late_driver(url: str):
+    """`reclaim` des `playwright.start` : arrête le driver avec la borne des démontages."""
+    def reclaim(p):
+        return _close_or_abandon(
+            p.stop(), settings.TEARDOWN_TIMEOUT_S, f"playwright.stop (tardif) {url}"
+        )
+    return reclaim
+
+
+async def _await_or_raise(coro, timeout: float, what: str, reclaim=None):
+    """Borne un `await` qui n'a AUCUN timeout natif, et rend son résultat.
+
+    Frère de `_close_or_abandon`, même forme NON ANNULANTE et pour la même
+    raison : `asyncio.wait` laisse la tâche en dépassement continuer au lieu de
+    l'annuler. Annuler un appel Playwright en pleine conversation protocolaire
+    est précisément ce qui a orphelinné le callback de `page.goto` et produit le
+    flood « Future exception was never retrieved » — une borne ne doit pas
+    rouvrir ça.
+
+    Différence avec `_close_or_abandon` : ici il y a un résultat à livrer, donc
+    on LÈVE quand le budget est épuisé.
+
+    Le message contient délibérément « Timeout » :
+    `redirect_tracker._VARIANT_POINTLESS_ERRORS` teste ce jeton pour décider si
+    les variantes d'URL valent la peine. Un navigateur qui ne répond pas n'est
+    pas réparé en basculant http/https ou www — sans le jeton, chacun de ces
+    échecs réarmerait trois navigations supplémentaires.
+
+    Pourquoi ces appels en ont besoin : aucune de `Browser.new_context`,
+    `BrowserContext.new_page`, `BrowserContext.add_cookies`, `Page.route` ni
+    `Page.content` n'accepte de `timeout` (signatures du playwright installé), et
+    `set_default_timeout` ne régit que « all methods accepting a timeout
+    option » — il n'en bornait donc aucune.
+
+    `reclaim` (optionnel) : fonction qui reçoit un résultat livré APRÈS qu'on a
+    cessé de l'attendre et rend la coroutine qui le libère — pour un résultat
+    qu'aucun démontage ne couvre, le driver de `playwright.start`. Même patron
+    que `_BoundedBrowserSemaphore.__aenter__`, pour la même raison : sur succès
+    le résultat appartient à l'appelant, donc le callback ne peut s'attacher
+    qu'APRÈS l'await, et il s'attache sur les DEUX sorties sans résultat —
+    l'échéance, et l'annulation de l'appelant (`wait_for` de l'item,
+    `_abandon_job`), qu'`asyncio.wait` ne propage pas à `t`.
+    """
+    t = asyncio.ensure_future(coro)
+    t.add_done_callback(partial(_drain_orphan_exception, what=what))
+    try:
+        done, _pending = await asyncio.wait({t}, timeout=timeout)
+    except BaseException:
+        if reclaim is not None:
+            t.add_done_callback(partial(_reclaim_if_delivered, reclaim=reclaim, what=what))
+        raise
+    if not done:
+        if reclaim is not None:
+            t.add_done_callback(partial(_reclaim_if_delivered, reclaim=reclaim, what=what))
+        logger.warning(f"scraper étape abandonnée après {timeout}s: {what}")
+        raise TimeoutError(f"Timeout {what} — pas de réponse après {timeout}s")
+    return t.result()
+
+
+async def _teardown_targets(page, context, browser, url: str) -> None:
+    """Tear down page/context/browser, skipping targets that are already dead.
+
+    On a failed scrape the targets are usually gone, so every op would raise
+    TargetClosedError — each burning up to TEARDOWN_TIMEOUT_S, and `unroute_all`
+    on a dead page additionally makes Playwright schedule its internal
+    _update_interceptor_patterns task (the large repeated traceback in the
+    2026-08-03 logs). `is_closed()` / `is_connected()` are synchronous in the
+    Python API, so the guards cannot hang.
+
+    Runs inside a `finally`: never let anything propagate, or the original
+    scrape error would be masked.
+
+    Note for `BROWSERS_UNCLOSED`: when `browser.is_connected()` is already false
+    the close is skipped, so nothing ever settles and the gauge stays up for that
+    browser — deliberately. A dead driver pipe is no evidence that the detached
+    Firefox process exited.
+    """
+    try:
+        # Drain in-flight route callbacks before tearing down the page.
+        # Suppresses TargetClosedError flood from _route_handler firing
+        # on closed pages under concurrent load.
+        # Also consult the browser: if the driver pipe dies, page.is_closed()
+        # stays False (only the page's own close event flips it), so
+        # unroute_all would still run and race a concurrent route callback.
+        if page is not None and browser.is_connected() and not page.is_closed():
+            await _close_or_abandon(
+                page.unroute_all(behavior='ignoreErrors'),
+                settings.TEARDOWN_TIMEOUT_S,
+                f"unroute_all {url}",
+            )
+        # BrowserContext exposes no is_closed() in the Python API; if the
+        # browser is gone the context is gone with it.
+        if context is not None and browser.is_connected():
+            await _close_or_abandon(
+                context.close(), settings.TEARDOWN_TIMEOUT_S, f"context.close {url}"
+            )
+        if browser.is_connected():
+            await _close_or_abandon(
+                browser.close(), settings.TEARDOWN_TIMEOUT_S, f"browser.close {url}"
+            )
+    except Exception as teardown_err:
+        logger.debug(f"teardown error for {url}: {teardown_err!r}")
+
+
+async def scrape_html(
+    url: str,
+    timeout: int = 90,
+    proxy: Optional[str] = None,
+    error_sink: Optional[dict] = None,
+) -> Optional[ScrapeResult]:
     """
     Récupère le contenu HTML d'une URL via Playwright avec proxy obligatoire.
 
@@ -266,36 +614,54 @@ async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) 
         url: URL à scraper
         timeout: Timeout en secondes pour le chargement de la page (défaut: 90)
         proxy: Proxy URL obligatoire (format: http://user:pass@host:port)
+        error_sink: Dict optionnel où publier la cause d'un échec (clés 'cause'/'stage').
+            None (défaut) = comportement inchangé, rien n'est écrit.
 
     Returns:
-        Tuple (contenu_html, url_finale) ou None en cas d'erreur.
-        url_finale est l'URL après redirections (peut différer de l'URL d'entrée).
+        ScrapeResult (html, final_url, status_code, content_type, headers) ou None en cas d'erreur.
+        status_code est 0 si Playwright n'a retourné aucun objet Response.
+        final_url est l'URL après redirections (peut différer de l'URL d'entrée).
     """
-    try:
-        from playwright.async_api import async_playwright
-    except ImportError:
+    if async_playwright is None:
         logger.error(
             "Playwright non installé. Installez-le avec: "
             "pip install playwright && python -m playwright install chromium"
         )
+        _record_failure(error_sink, 'runtime', 'Playwright non installé')
         return None
 
     if not proxy:
         logger.error(f"Proxy obligatoire pour scrape_html: {url}")
+        _record_failure(error_sink, 'proxy', 'Proxy obligatoire non fourni')
         return None
 
     playwright_proxy = _parse_proxy(proxy)
     if not playwright_proxy:
         logger.error(f"Proxy invalide pour {url}: {proxy}")
+        # Volontairement SANS la valeur du proxy : elle contient le mot de passe.
+        _record_failure(error_sink, 'proxy', 'Proxy invalide (format non reconnu)')
         return None
 
-    browser = None
-    is_camoufox = False
-    try:
-        async with _BROWSER_SEMAPHORE:
-            async with async_playwright() as p:
-                browser, is_camoufox = await _launch_browser(p, playwright_proxy)
-
+    async with _BROWSER_SEMAPHORE:
+        # Un driver qui finit de démarrer APRÈS l'abandon (échéance ou annulation)
+        # est arrêté par `reclaim` : sans lui, aucun `p.stop()` ne l'atteignait et
+        # il vivait jusqu'au redémarrage (PROD 2026-09-24 : 39 drivers sans
+        # navigateur). Annuler le démarrage serait pire — c'est le mode d'échec
+        # qui a produit le flood de callbacks orphelins.
+        p = await _await_or_raise(
+            async_playwright().start(),
+            settings.BROWSER_OP_TIMEOUT_S,
+            f"playwright.start {url}",
+            reclaim=_stop_late_driver(url),
+        )
+        try:
+            browser, is_camoufox = await _launch_browser(p, playwright_proxy)
+            # Counted here, decremented only when its close() settles
+            # (`_drain_orphan_exception`) — an abandoned teardown keeps it up.
+            BROWSERS_UNCLOSED.inc()
+            context = None
+            page = None
+            try:
                 # Camoufox handles UA/fingerprinting at engine level — only set for Chromium
                 context_options = {
                     'locale': 'fr-FR',
@@ -307,15 +673,39 @@ async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) 
                 if not is_camoufox:
                     context_options['user_agent'] = random.choice(_USER_AGENTS)
 
-                context = await browser.new_context(**context_options)
+                # Ces quatre appels n'acceptent aucun timeout natif et
+                # `set_default_timeout` ne les régit pas (cf. config.py) : sans
+                # `_await_or_raise` ils étaient les seuls awaits du chemin que
+                # rien ne bornait, et un blocage y consommait les 300 s de
+                # l'item sans laisser d'étape. Les affectations restent
+                # incrémentales : `finally` a besoin de `context`/`page` pour
+                # démonter ce qui existe déjà.
+                context = await _await_or_raise(
+                    browser.new_context(**context_options),
+                    settings.BROWSER_OP_TIMEOUT_S,
+                    f"new_context {url}",
+                )
+                context.set_default_timeout(settings.BROWSER_OP_TIMEOUT_S * 1000)
 
                 # Injection cookie de consentement (comme crawler-service)
-                await _inject_cookie_consent(context, url)
+                await _await_or_raise(
+                    _inject_cookie_consent(context, url),
+                    settings.BROWSER_OP_TIMEOUT_S,
+                    f"cookie_consent {url}",
+                )
 
-                page = await context.new_page()
+                page = await _await_or_raise(
+                    context.new_page(),
+                    settings.BROWSER_OP_TIMEOUT_S,
+                    f"new_page {url}",
+                )
 
                 # Blocage des ressources lourdes (comme crawler-service)
-                await _setup_resource_blocking(page)
+                await _await_or_raise(
+                    _setup_resource_blocking(page),
+                    settings.BROWSER_OP_TIMEOUT_S,
+                    f"resource_blocking {url}",
+                )
 
                 # Navigation en deux phases :
                 # Phase 1 : domcontentloaded avec timeout réduit à 30s
@@ -323,17 +713,17 @@ async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) 
                 #   Les pages Cloudflare challenge chargent en < 5s.
                 # Phase 2 : networkidle avec timeout court (bonus JS rendering)
                 nav_timeout = min(timeout, 30) * 1000  # Max 30s pour domcontentloaded
+                response = None  # initialise avant le try pour rester en scope
                 try:
-                    await page.goto(url, wait_until='domcontentloaded', timeout=nav_timeout)
+                    response = await page.goto(url, wait_until='domcontentloaded', timeout=nav_timeout)
                 except Exception as nav_e:
                     err_str = str(nav_e)
+                    _record_failure(error_sink, 'navigation', err_str or type(nav_e).__name__)
                     # Erreurs permanentes — re-raise pour que fetch_html puisse
                     # classifier l'erreur et basculer vers les variantes URL (Phase 2)
                     if any(err in err_str for err in _PERMANENT_NAV_ERRORS):
                         logger.error(f"Erreur navigation permanente pour {url}: {err_str.splitlines()[0]}")
-                        await context.close()
-                        await browser.close()
-                        raise
+                        raise  # finally block will close context + browser
 
                     # Erreurs transitoires (proxy, timeout) — on tente l'extraction partielle
                     logger.warning(f"Timeout/Erreur navigation pour {url} (extraction partielle tentée): {nav_e}")
@@ -348,8 +738,18 @@ async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) 
                 content = None
                 for content_attempt in range(3):
                     try:
-                        content = await page.content()
+                        content = await _await_or_raise(
+                            page.content(),
+                            settings.BROWSER_OP_TIMEOUT_S,
+                            f"page.content {url}",
+                        )
                         break
+                    except TimeoutError:
+                        # Un content() qui ne répond pas n'est PAS « contenu vide
+                        # ou trop court » : le laisser remonter, sinon le
+                        # _record_failure('content', …) plus bas publierait une
+                        # cause fausse pour un blocage navigateur.
+                        raise
                     except Exception as content_e:
                         if 'navigating and changing the content' in str(content_e):
                             logger.warning(f"Page en navigation pour {url}, attente 1s (tentative {content_attempt + 1}/3)")
@@ -363,6 +763,7 @@ async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) 
                 # en attendant que le challenge se résolve (redirection ou remplacement DOM).
                 # Utilise un polling loop plutôt que wait_for_function car les challenges
                 # Cloudflare font souvent une navigation complète (qui détruit le contexte JS).
+                challenge_resolved = False
                 if content:
                     challenge_service = _detect_challenge_page(content)
                     if challenge_service:
@@ -374,19 +775,29 @@ async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) 
                         poll_start = _time.time()
                         poll_timeout = 45  # secondes
                         poll_interval = 3  # secondes
-                        challenge_resolved = False
 
                         while (_time.time() - poll_start) < poll_timeout:
                             await page.wait_for_timeout(poll_interval * 1000)
 
+                            # Bornés : la garde du `while` ne se réévalue qu'ENTRE
+                            # deux tours, donc un content() bloqué ici rendait la
+                            # boucle — et son plafond de 45 s — inopérante.
                             try:
-                                content = await page.content()
+                                content = await _await_or_raise(
+                                    page.content(),
+                                    settings.BROWSER_OP_TIMEOUT_S,
+                                    f"page.content (poll challenge) {url}",
+                                )
                             except Exception as poll_e:
                                 # Le contexte peut être détruit pendant une navigation
                                 logger.debug(f"Erreur content() pendant polling challenge pour {url}: {poll_e}")
                                 await page.wait_for_timeout(1000)
                                 try:
-                                    content = await page.content()
+                                    content = await _await_or_raise(
+                                        page.content(),
+                                        settings.BROWSER_OP_TIMEOUT_S,
+                                        f"page.content (poll retry) {url}",
+                                    )
                                 except Exception:
                                     continue
 
@@ -404,7 +815,11 @@ async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) 
                                     pass
                                 # Re-extraire le contenu final
                                 try:
-                                    content = await page.content()
+                                    content = await _await_or_raise(
+                                        page.content(),
+                                        settings.BROWSER_OP_TIMEOUT_S,
+                                        f"page.content (post-challenge) {url}",
+                                    )
                                 except Exception:
                                     pass
                                 break
@@ -423,27 +838,36 @@ async def scrape_html(url: str, timeout: int = 90, proxy: Optional[str] = None) 
                 # Capturer l'URL finale (après redirections éventuelles)
                 final_url = page.url
 
-                await context.close()
-                await browser.close()
-
+                # Do NOT close here — finally block handles it.
                 if content and len(content) > 100:
                     if final_url != url:
                         logger.info(f"Scraping réussi pour {url} → {final_url} ({len(content)} caractères)")
                     else:
                         logger.info(f"Scraping réussi pour {url} ({len(content)} caractères)")
-                    return (content, final_url)
+                    content_type = response.headers.get('content-type', '') if response else ''
+                    # `response` vient du goto INITIAL : après résolution d'un
+                    # challenge (navigation window.location.replace), son status
+                    # 401/403 est périmé — le garder ferait rejeter la vraie
+                    # page en HTTP_ERROR par validate_page malgré un contenu
+                    # sain. challenge_resolved n'est vrai que si le body est
+                    # passé de challenge → non-challenge.
+                    status_code = 200 if challenge_resolved else (response.status if response else 0)
+                    headers = dict(response.headers) if response else {}
+                    return ScrapeResult(
+                        html=content,
+                        final_url=final_url,
+                        status_code=status_code,
+                        content_type=content_type,
+                        headers=headers,
+                    )
                 else:
                     logger.warning(f"Contenu trop court pour {url}")
+                    _record_failure(error_sink, 'content', 'Contenu vide ou trop court')
                     return None
-
-    except Exception as e:
-        logger.error(f"Erreur scraping Playwright pour {url}: {e}")
-        if browser:
-            try:
-                await browser.close()
-            except Exception:
-                pass
-        return None
+            finally:
+                await _teardown_targets(page, context, browser, url)
+        finally:
+            await _close_or_abandon(p.stop(), settings.TEARDOWN_TIMEOUT_S, f"playwright.stop {url}")
 
 
 async def scrape_html_with_redirects(
@@ -485,79 +909,106 @@ async def scrape_html_with_redirects(
     is_camoufox = False
     try:
         async with _BROWSER_SEMAPHORE:
-            async with async_playwright() as p:
+            # Même récupération que dans scrape_html : un driver qui démarre
+            # après l'abandon est arrêté par `reclaim`.
+            p = await _await_or_raise(
+                async_playwright().start(),
+                settings.BROWSER_OP_TIMEOUT_S,
+                f"playwright.start (redirects) {url}",
+                reclaim=_stop_late_driver(url),
+            )
+            try:
                 browser, is_camoufox = await _launch_browser(p, playwright_proxy)
-
-                context_options = {
-                    'locale': 'fr-FR',
-                    'ignore_https_errors': True,  # Gère ERR_CERT_DATE_INVALID, ERR_SSL_PROTOCOL_ERROR
-                    'extra_http_headers': {
-                        'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
-                    },
-                }
-                if not is_camoufox:
-                    context_options['user_agent'] = random.choice(_USER_AGENTS)
-
-                context = await browser.new_context(**context_options)
-
-                await _inject_cookie_consent(context, url)
-
-                page = await context.new_page()
-                await _setup_resource_blocking(page)
-
-                # Capturer les redirections via événement response
-                def on_response(response):
-                    status = response.status
-                    if 300 <= status < 400:
-                        redirects.append({
-                            'url': response.url,
-                            'status_code': status
-                        })
-
-                page.on('response', on_response)
-
-                # Navigation deux phases (cohérent avec scrape_html)
-                nav_timeout = min(timeout, 30) * 1000  # Max 30s pour domcontentloaded
+                BROWSERS_UNCLOSED.inc()  # see scrape_html's launch site
+                context = None
+                page = None
                 try:
-                    response = await page.goto(url, wait_until='domcontentloaded', timeout=nav_timeout)
-                except Exception as nav_e:
-                    err_str = str(nav_e)
-                    if "ERR_CONNECTION_REFUSED" in err_str or "ERR_NAME_NOT_RESOLVED" in err_str:
-                        await context.close()
-                        await browser.close()
-                        return {'success': False, 'error': f'Site inaccessible: {err_str}'}
+                    context_options = {
+                        'locale': 'fr-FR',
+                        'ignore_https_errors': True,  # Gère ERR_CERT_DATE_INVALID, ERR_SSL_PROTOCOL_ERROR
+                        'extra_http_headers': {
+                            'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
+                        },
+                    }
+                    if not is_camoufox:
+                        context_options['user_agent'] = random.choice(_USER_AGENTS)
 
-                    logger.warning(f"Timeout/Erreur navigation pour {url}: {nav_e}")
-                    response = None
+                    # Mêmes bornes que scrape_html : aucun de ces quatre appels
+                    # n'a de timeout natif (cf. config.py:BROWSER_OP_TIMEOUT_S).
+                    context = await _await_or_raise(
+                        browser.new_context(**context_options),
+                        settings.BROWSER_OP_TIMEOUT_S,
+                        f"new_context (redirects) {url}",
+                    )
+                    context.set_default_timeout(settings.BROWSER_OP_TIMEOUT_S * 1000)
 
-                # Phase 2 : bonus networkidle (5s)
-                try:
-                    await page.wait_for_load_state('networkidle', timeout=5000)
-                except Exception:
-                    pass
+                    await _await_or_raise(
+                        _inject_cookie_consent(context, url),
+                        settings.BROWSER_OP_TIMEOUT_S,
+                        f"cookie_consent (redirects) {url}",
+                    )
 
-                final_url = page.url
-                status_code = response.status if response else 0
-                content_type = ''
-                if response:
-                    content_type = response.headers.get('content-type', '')
+                    page = await _await_or_raise(
+                        context.new_page(),
+                        settings.BROWSER_OP_TIMEOUT_S,
+                        f"new_page (redirects) {url}",
+                    )
+                    await _await_or_raise(
+                        _setup_resource_blocking(page),
+                        settings.BROWSER_OP_TIMEOUT_S,
+                        f"resource_blocking (redirects) {url}",
+                    )
 
-                await context.close()
-                await browser.close()
+                    # Capturer les redirections via événement response
+                    def on_response(response):
+                        status = response.status
+                        if 300 <= status < 400:
+                            redirects.append({
+                                'url': response.url,
+                                'status_code': status
+                            })
 
-                return {
-                    'success': True,
-                    'final_url': final_url,
-                    'status_code': status_code,
-                    'content_type': content_type,
-                    'redirects': redirects,
-                }
+                    page.on('response', on_response)
+
+                    # Navigation deux phases (cohérent avec scrape_html)
+                    nav_timeout = min(timeout, 30) * 1000  # Max 30s pour domcontentloaded
+                    try:
+                        response = await page.goto(url, wait_until='domcontentloaded', timeout=nav_timeout)
+                    except Exception as nav_e:
+                        err_str = str(nav_e)
+                        if "ERR_CONNECTION_REFUSED" in err_str or "ERR_NAME_NOT_RESOLVED" in err_str:
+                            # finally block will close context + browser
+                            return {'success': False, 'error': f'Site inaccessible: {err_str}'}
+
+                        logger.warning(f"Timeout/Erreur navigation pour {url}: {nav_e}")
+                        response = None
+
+                    # Phase 2 : bonus networkidle (5s)
+                    try:
+                        await page.wait_for_load_state('networkidle', timeout=5000)
+                    except Exception:
+                        pass
+
+                    final_url = page.url
+                    status_code = response.status if response else 0
+                    content_type = ''
+                    if response:
+                        content_type = response.headers.get('content-type', '')
+
+                    # Do NOT close here — finally block handles it.
+                    return {
+                        'success': True,
+                        'final_url': final_url,
+                        'status_code': status_code,
+                        'content_type': content_type,
+                        'redirects': redirects,
+                    }
+                finally:
+                    await _teardown_targets(page, context, browser, url)
+            finally:
+                await _close_or_abandon(p.stop(), settings.TEARDOWN_TIMEOUT_S, f"playwright.stop {url}")
 
     except Exception as e:
         logger.error(f"Erreur suivi redirections Playwright pour {url}: {e}")
-        if browser:
-            try:
-                await browser.close()
-            except Exception:
-                pass
+        # Inner finally block (above) has already closed context + browser.
         return {'success': False, 'error': str(e)}

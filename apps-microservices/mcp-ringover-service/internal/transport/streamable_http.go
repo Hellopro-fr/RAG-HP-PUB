@@ -45,13 +45,16 @@ func (s *StreamableHTTPServer) handleMCP(w http.ResponseWriter, r *http.Request)
 
 	log.Printf("[streamable-http] %s (id=%s)", req.Method, string(req.ID))
 
+	// Enrich context with the gateway-issued allowed-user-ids scope (if any).
+	scopedCtx := enrichRequestContext(r)
+
 	if len(req.ID) == 0 || string(req.ID) == "null" {
-		_ = s.handler.Handle(r.Context(), &req)
+		_ = s.handler.Handle(scopedCtx, &req)
 		w.WriteHeader(http.StatusAccepted)
 		return
 	}
 
-	resp := s.handler.Handle(r.Context(), &req)
+	resp := s.handler.Handle(scopedCtx, &req)
 	if resp == nil {
 		w.WriteHeader(http.StatusAccepted)
 		return

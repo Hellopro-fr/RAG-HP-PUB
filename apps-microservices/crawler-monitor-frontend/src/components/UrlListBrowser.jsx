@@ -79,7 +79,7 @@ const UrlListBrowser = ({ jobId, category, token }) => {
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="relative min-w-[200px] flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-3" />
           <Input
             type="text"
             value={search}
@@ -88,11 +88,11 @@ const UrlListBrowser = ({ jobId, category, token }) => {
             className="pl-9"
           />
         </div>
-        <span className="font-mono text-xs text-muted-foreground">{counterLabel}</span>
+        <span className="font-mono text-xs text-ink-3">{counterLabel}</span>
       </div>
 
       {error && (
-        <div className="flex items-center justify-between gap-3 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+        <div className="flex items-center justify-between gap-3 rounded-md border border-err/40 bg-err-soft p-3 text-sm text-err">
           <span className="flex items-center gap-2">
             <AlertTriangle className="h-4 w-4" /> Impossible de charger les URLs. {error}
           </span>
@@ -104,16 +104,16 @@ const UrlListBrowser = ({ jobId, category, token }) => {
 
       {loading && items.length === 0 ? (
         <div className="flex justify-center py-12">
-          <RefreshCw className="h-5 w-5 animate-spin text-primary" />
+          <RefreshCw className="h-5 w-5 animate-spin text-accent" />
         </div>
       ) : !error && items.length === 0 ? (
-        <div className="py-8 text-center text-sm text-muted-foreground">
+        <div className="py-8 text-center text-sm text-ink-3">
           Aucune URL dans cette catégorie.
         </div>
       ) : (
         <ul
           ref={listRef}
-          className="divide-y divide-border rounded-md border border-border bg-background max-h-[60vh] overflow-y-auto"
+          className="divide-y divide-hairline rounded-md border border-hairline bg-bg-1 max-h-[60vh] overflow-y-auto"
         >
           {items.map((it, i) => (
             <li key={`${it.url}-${i}`} className="p-3 transition-colors hover:bg-accent/40">
@@ -121,13 +121,13 @@ const UrlListBrowser = ({ jobId, category, token }) => {
                 href={it.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-start gap-2 break-all text-sm text-primary hover:text-primary/80"
+                className="flex items-start gap-2 break-all text-sm text-accent hover:text-accent/80"
               >
                 <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                 <span>{it.url}</span>
               </a>
               {category === 'error' && it.error && (
-                <p className="mt-1 pl-5 text-xs text-destructive">{it.error}</p>
+                <p className="mt-1 pl-5 text-xs text-err">{it.error}</p>
               )}
             </li>
           ))}
@@ -144,7 +144,7 @@ const UrlListBrowser = ({ jobId, category, token }) => {
           >
             <ChevronLeft className="h-3.5 w-3.5" /> Préc.
           </Button>
-          <span className="font-mono text-xs text-muted-foreground">
+          <span className="font-mono text-xs text-ink-3">
             Page {page} / {totalPages}
           </span>
           <Button

@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/hellopro/mcp-gateway/internal/gateway"
+	"mcp-gateway/internal/gateway"
 )
 
 // handleGenerateSlugs backfills doc_slug on servers that don't have one yet.

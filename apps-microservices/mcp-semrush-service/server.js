@@ -36,8 +36,31 @@ function httpGet(urlStr) {
 function buildQS(params) {
   return Object.entries(params)
     .filter(([, v]) => v !== undefined && v !== null && v !== '')
-    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
+    .flatMap(([k, v]) => {
+      const key = encodeURIComponent(k);
+      return Array.isArray(v)
+        ? v.map((item) => `${key}=${encodeURIComponent(String(item))}`)
+        : [`${key}=${encodeURIComponent(String(v))}`];
+    })
     .join('&');
+}
+
+// ── Cost guard ──────────────────────────────────────────────────────────────
+// Backlink reports bill 40 Semrush API units per returned row. Clamp silently:
+// the call succeeds with fewer rows rather than failing the caller's task.
+
+const MAX_DISPLAY_LIMIT = 100;   // 100 rows x 40 units = 4,000 unit ceiling
+
+function clampDisplayLimit(value, fallback) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 1) return fallback;
+  return Math.min(Math.floor(n), MAX_DISPLAY_LIMIT);
+}
+
+// The Semrush Analytics API answers HTTP 200 with a plain-text `ERROR n :: MESSAGE`
+// body on failure. Without this check such a body reaches the caller as a success.
+function isSemrushError(text) {
+  return /^ERROR\s+\d+\s*::/.test(String(text ?? '').trim());
 }
 
 // ── Semrush API base URLs ───────────────────────────────────────────────────
@@ -322,47 +345,6 @@ const TOOLS = [
     },
   },
 
-  // ── Backlinks (fixed: target_type now always included) ──
-  {
-    name: 'backlinks',
-    description: 'Backlinks for a domain: list of inbound links. Requires Semrush Business plan.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        target:        { type: 'string', description: 'Domain or URL to analyze (e.g. hellopro.fr)' },
-        target_type:   { type: 'string', description: 'Target type: root_domain, domain, or url. Default: root_domain' },
-        display_limit: { type: 'integer', description: 'Number of backlinks (default: 10)' },
-      },
-      required: ['target'],
-    },
-    async run({ target, target_type = 'root_domain', display_limit = 10 }) {
-      return httpGet(BACK + '?' + buildQS({
-        key: API_KEY, type: 'backlinks', target, target_type, display_limit,
-        export_columns: 'page_ascore,source_url,target_url,anchor,external_num,internal_num,first_seen,last_seen',
-      }));
-    },
-  },
-
-  {
-    name: 'backlinks_domains',
-    description: 'Referring domains (backlink sources) for a domain. Requires Semrush Business plan.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        target:        { type: 'string', description: 'Domain to analyze (e.g. hellopro.fr)' },
-        target_type:   { type: 'string', description: 'Target type: root_domain, domain, or url. Default: root_domain' },
-        display_limit: { type: 'integer', description: 'Number of referring domains (default: 10)' },
-      },
-      required: ['target'],
-    },
-    async run({ target, target_type = 'root_domain', display_limit = 10 }) {
-      return httpGet(BACK + '?' + buildQS({
-        key: API_KEY, type: 'backlinks_refdomains', target, target_type, display_limit,
-        export_columns: 'domain_ascore,domain,backlinks_num,ip,country,first_seen,last_seen',
-      }));
-    },
-  },
-
   // ── Traffic / Trends ──
   // DISABLED: requires Semrush Trends API subscription (returns ERROR 130 :: API DISABLED)
   // To re-enable: subscribe to Trends API at semrush.com, then uncomment the block below.
@@ -432,6 +414,199 @@ const TOOLS = [
   */
 ];
 
+// ── Backlink reports (table-driven) ─────────────────────────────────────────
+// Semrush backlink reports are not uniform. Three parameter shapes exist:
+//   standard — target + target_type + display_limit  (billed per row)
+//   summary  — target + target_type, single row      (billed per request)
+//   multi    — targets[] + target_types[]            (billed per row)
+// Columns are verbatim from developer.semrush.com/api/v3/analytics/backlinks/
+
+const BACKLINK_REPORTS = [
+  {
+    name: 'backlinks_overview',
+    type: 'backlinks_overview',
+    shape: 'summary',
+    description: 'Backlink profile summary for a domain: authority score, total backlinks, referring domains and IPs, and follow vs nofollow counts. Costs 40 units per request rather than per row, making it the cheapest backlink call — use it before drilling into per-row reports. Requires Semrush Business plan.',
+    columns: 'ascore,total,domains_num,urls_num,ips_num,ipclassc_num,follows_num,' +
+             'nofollows_num,sponsored_num,ugc_num,texts_num,images_num,forms_num,frames_num',
+  },
+  {
+    name: 'backlinks',
+    type: 'backlinks',
+    shape: 'standard',
+    description: 'Individual backlinks pointing at a domain or URL, with source page authority, anchor text and follow status. Requires Semrush Business plan.',
+    columns: 'page_ascore,source_url,target_url,anchor,nofollow,' +
+             'external_num,internal_num,first_seen,last_seen',
+  },
+  {
+    name: 'backlinks_domains',
+    type: 'backlinks_refdomains',
+    shape: 'standard',
+    description: 'Referring domains linking to a target, with authority score and link counts. Cheaper per unit of insight than the backlinks report — one row covers many links. Requires Semrush Business plan.',
+    columns: 'domain_ascore,domain,backlinks_num,ip,country,first_seen,last_seen',
+  },
+  {
+    name: 'backlinks_anchors',
+    type: 'backlinks_anchors',
+    shape: 'standard',
+    description: 'Anchor texts used in backlinks pointing at a domain, with domain and backlink counts. Requires Semrush Business plan.',
+    columns: 'anchor,domains_num,backlinks_num,first_seen,last_seen',
+  },
+  {
+    name: 'backlinks_pages',
+    type: 'backlinks_pages',
+    shape: 'standard',
+    description: 'Pages on the target that receive backlinks, ranked by backlink count. Requires Semrush Business plan.',
+    columns: 'source_url,source_title,response_code,backlinks_num,domains_num,last_seen,external_num,internal_num',
+  },
+  {
+    name: 'backlinks_competitors',
+    type: 'backlinks_competitors',
+    shape: 'standard',
+    description: 'Domains with a backlink profile similar to the target, with the number of shared referring domains. Requires Semrush Business plan.',
+    columns: 'score,neighbour,similarity,common_refdomains,domains_num,backlinks_num',
+  },
+  {
+    name: 'backlinks_geo',
+    type: 'backlinks_geo',
+    shape: 'standard',
+    description: 'Referring domains grouped by country. Requires Semrush Business plan.',
+    columns: 'country,domains_num,backlinks_num',
+  },
+  {
+    name: 'backlinks_tld',
+    type: 'backlinks_tld',
+    shape: 'standard',
+    description: 'Referring domains grouped by top-level domain (zone). Requires Semrush Business plan.',
+    columns: 'zone,domains_num,backlinks_num',
+  },
+  // Step 1 finding: display_limit IS documented for backlinks_matrix. Confirmed by
+  // fetching https://developer.semrush.com/api/v3/analytics/backlinks/ directly (raw
+  // HTML, not just the rendered summary) — the "Comparison by Referring Domains"
+  // section lists an optional `display_limit` parameter ("Number of results returned
+  // to a request... integer") alongside display_sort/display_offset/display_filter,
+  // and its own request example includes `&display_limit=5`. Clamped identically to
+  // the `standard` shape.
+  {
+    name: 'backlinks_matrix',
+    type: 'backlinks_matrix',
+    shape: 'multi',
+    description: 'Compare the backlink profiles of up to five domains by referring-domain overlap. Finds domains that link to competitors but not to you. Requires Semrush Business plan.',
+    columns: 'domain,domain_ascore,domain_score,matches_num,backlinks_num',
+  },
+];
+
+const TARGET_TYPE_DESC = 'Target type: root_domain, domain, or url. Default: root_domain';
+
+function backlinkInputSchema(spec) {
+  if (spec.shape === 'multi') {
+    return {
+      type: 'object',
+      properties: {
+        targets: {
+          type: 'array',
+          items: { type: 'string' },
+          minItems: 2,
+          maxItems: 5,
+          description: 'Domains to compare (2 to 5, e.g. ["hellopro.fr", "competitor.fr"])',
+        },
+        target_type: { type: 'string', description: `${TARGET_TYPE_DESC}. Applied to every target.` },
+        display_limit: {
+          type: 'integer',
+          description: `Rows to return (default 10, max ${MAX_DISPLAY_LIMIT}). Each row costs 40 Semrush API units.`,
+        },
+      },
+      required: ['targets'],
+    };
+  }
+
+  const properties = {
+    target: { type: 'string', description: 'Domain or URL to analyze (e.g. hellopro.fr)' },
+    target_type: { type: 'string', description: TARGET_TYPE_DESC },
+  };
+  // display_limit is the DEFAULT for every shape except summary (billed per request,
+  // always one row). Gating on `=== 'standard'` instead fails OPEN on any other shape.
+  if (spec.shape !== 'summary') {
+    properties.display_limit = {
+      type: 'integer',
+      description: `Rows to return (default 10, max ${MAX_DISPLAY_LIMIT}). Each row costs 40 Semrush API units.`,
+    };
+  }
+  return { type: 'object', properties, required: ['target'] };
+}
+
+function buildBacklinkParams(spec, args = {}) {
+  if (spec.shape === 'multi') {
+    const { targets = [], target_type = 'root_domain', display_limit } = args;
+    const list = Array.isArray(targets) ? targets : [targets];
+    return {
+      key: API_KEY,
+      type: spec.type,
+      targets: list,
+      target_types: list.map(() => target_type),
+      export_columns: spec.columns,
+      display_limit: clampDisplayLimit(display_limit, 10),
+    };
+  }
+
+  const { target, target_type = 'root_domain', display_limit } = args;
+  const params = {
+    key: API_KEY,
+    type: spec.type,
+    target,
+    target_type,
+    export_columns: spec.columns,
+  };
+  // Clamp is the DEFAULT for every shape except summary (billed per request, always
+  // one row). Gating on `=== 'standard'` instead fails OPEN: an unrecognized shape
+  // (typo, missing field) would send no display_limit at all, and Semrush applies its
+  // own 10,000-row default — 400,000 API units on a single call.
+  if (spec.shape !== 'summary') {
+    params.display_limit = clampDisplayLimit(display_limit, 10);
+  }
+  return params;
+}
+
+function buildBacklinkUrl(spec, args) {
+  return BACK + '?' + buildQS(buildBacklinkParams(spec, args));
+}
+
+function makeBacklinkTool(spec) {
+  return {
+    name: spec.name,
+    description: spec.description,
+    inputSchema: backlinkInputSchema(spec),
+    async run(args) {
+      const text = await httpGet(buildBacklinkUrl(spec, args));
+      if (isSemrushError(text)) {
+        return { content: [{ type: 'text', text: String(text) }], isError: true };
+      }
+      return text;
+    },
+  };
+}
+
+// Fail fast at startup, not silently at billing time: a BACKLINK_REPORTS entry with a
+// misspelled or missing `shape` must not reach buildBacklinkParams/backlinkInputSchema,
+// where an unrecognized value would otherwise be treated as "not summary" (safe) only
+// because of the inversion above — better to reject it outright and name the entry.
+const VALID_BACKLINK_SHAPES = ['summary', 'standard', 'multi'];
+
+function assertValidBacklinkShape(spec) {
+  if (!VALID_BACKLINK_SHAPES.includes(spec.shape)) {
+    throw new Error(
+      `BACKLINK_REPORTS entry "${spec.name}" has invalid shape "${spec.shape}" ` +
+      `(must be one of: ${VALID_BACKLINK_SHAPES.join(', ')})`,
+    );
+  }
+}
+
+for (const spec of BACKLINK_REPORTS) {
+  assertValidBacklinkShape(spec);
+}
+
+TOOLS.push(...BACKLINK_REPORTS.map(makeBacklinkTool));
+
 const toolByName = Object.fromEntries(TOOLS.map((t) => [t.name, t]));
 
 // ── MCP protocol (stdio) ────────────────────────────────────────────────────
@@ -448,69 +623,98 @@ function sendError(id, code, message) {
   sendMsg({ jsonrpc: '2.0', id, error: { code, message } });
 }
 
-const rl = readline.createInterface({ input: process.stdin, terminal: false });
+function handleLine(line) {
+  return (async () => {
+    line = line.trim();
+    if (!line) return;
 
-rl.on('line', async (line) => {
-  line = line.trim();
-  if (!line) return;
+    let req;
+    try {
+      req = JSON.parse(line);
+    } catch {
+      return;
+    }
 
-  let req;
-  try {
-    req = JSON.parse(line);
-  } catch {
-    return;
-  }
+    const { id, method, params = {} } = req;
 
-  const { id, method, params = {} } = req;
+    // Notifications (no id) — per MCP spec, no response
+    if (id === undefined || id === null) return;
 
-  // Notifications (no id) — per MCP spec, no response
-  if (id === undefined || id === null) return;
+    try {
+      switch (method) {
+        case 'initialize':
+          sendResult(id, {
+            protocolVersion: '2024-11-05',
+            capabilities: { tools: {} },
+            serverInfo: { name: 'semrush-mcp', version: '2.0.0' },
+          });
+          break;
 
-  try {
-    switch (method) {
-      case 'initialize':
-        sendResult(id, {
-          protocolVersion: '2024-11-05',
-          capabilities: { tools: {} },
-          serverInfo: { name: 'semrush-mcp', version: '2.0.0' },
-        });
-        break;
+        case 'tools/list':
+          sendResult(id, {
+            tools: TOOLS.map((t) => ({
+              name: t.name,
+              description: t.description,
+              inputSchema: t.inputSchema,
+            })),
+          });
+          break;
 
-      case 'tools/list':
-        sendResult(id, {
-          tools: TOOLS.map((t) => ({
-            name: t.name,
-            description: t.description,
-            inputSchema: t.inputSchema,
-          })),
-        });
-        break;
-
-      case 'tools/call': {
-        const { name, arguments: args = {} } = params;
-        const tool = toolByName[name];
-        if (!tool) {
-          sendError(id, -32602, `Unknown tool: ${name}`);
+        case 'tools/call': {
+          const { name, arguments: args = {} } = params;
+          const tool = toolByName[name];
+          if (!tool) {
+            sendError(id, -32602, `Unknown tool: ${name}`);
+            break;
+          }
+          try {
+            const out = await tool.run(args);
+            // A tool may return a plain string (the 14 original tools) or a
+            // complete MCP result object (the backlink factory, which sets isError).
+            if (out && typeof out === 'object' && Array.isArray(out.content)) {
+              sendResult(id, out);
+            } else {
+              sendResult(id, { content: [{ type: 'text', text: String(out) }] });
+            }
+          } catch (err) {
+            sendResult(id, {
+              content: [{ type: 'text', text: `Error: ${err.message}` }],
+              isError: true,
+            });
+          }
           break;
         }
-        try {
-          const text = await tool.run(args);
-          sendResult(id, {
-            content: [{ type: 'text', text: String(text) }],
-          });
-        } catch (err) {
-          sendResult(id, {
-            content: [{ type: 'text', text: `Error: ${err.message}` }],
-            isError: true,
-          });
-        }
-        break;
-      }
 
-      default:
-        sendError(id, -32601, `Method not found: ${method}`);
+        default:
+          sendError(id, -32601, `Method not found: ${method}`);
+      }
+    } catch (err) {
+      sendError(id, -32603, `Internal error: ${err.message}`);
     }
-  } catch (err) {
-    sendError(id, -32603, `Internal error: ${err.message}`);
-  }
-});
+  })();
+}
+
+function main() {
+  const rl = readline.createInterface({ input: process.stdin, terminal: false });
+  rl.on('line', handleLine);
+}
+
+if (require.main === module) {
+  main();
+}
+
+module.exports = {
+  TOOLS,
+  toolByName,
+  buildQS,
+  BACK,
+  handleLine,
+  MAX_DISPLAY_LIMIT,
+  clampDisplayLimit,
+  isSemrushError,
+  BACKLINK_REPORTS,
+  buildBacklinkParams,
+  buildBacklinkUrl,
+  makeBacklinkTool,
+  assertValidBacklinkShape,
+};

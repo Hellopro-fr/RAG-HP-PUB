@@ -1,0 +1,154 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* ============================================================================
+   Design tokens — alignés avec nextjs-formulaire-hp (HSL).
+   Toute modification ici doit être répercutée sur le formulaire pour cohérence UX.
+   ============================================================================ */
+
+@theme {
+  /* === Couleurs de base === */
+  --color-background: hsl(0 0% 100%);
+  --color-foreground: hsl(220 13% 13%);
+
+  --color-card: hsl(0 0% 100%);
+  --color-card-foreground: hsl(220 13% 13%);
+
+  --color-popover: hsl(0 0% 100%);
+  --color-popover-foreground: hsl(220 13% 13%);
+
+  --color-primary: oklch(0.523 0.245 268);
+  --color-primary-foreground: oklch(0.99 0 0);
+
+  --color-secondary: hsl(220 14% 96%);
+  --color-secondary-foreground: hsl(220 13% 13%);
+
+  --color-muted: hsl(220 14% 96%);
+  --color-muted-foreground: hsl(220 9% 46%);
+
+  --color-accent: hsl(21 80% 55%);
+  --color-accent-foreground: hsl(0 0% 100%);
+
+  --color-destructive: hsl(0 84% 60%);
+  --color-destructive-foreground: hsl(0 0% 100%);
+
+  --color-border: hsl(220 13% 91%);
+  --color-input: hsl(220 13% 91%);
+  --color-ring: hsl(231 100% 60%);
+
+  /* === Couleurs sémantiques === */
+  --color-success: oklch(0.62 0.16 150);
+  --color-success-foreground: oklch(1 0 0);
+  --color-warning: hsl(38 92% 50%);
+  --color-warning-foreground: hsl(0 0% 100%);
+  --color-info: hsl(199 89% 48%);
+  --color-info-foreground: hsl(0 0% 100%);
+
+  /* === Aliases CTA — valeurs oklch alignées avec templates Lovable === */
+  --color-cta: oklch(0.66 0.19 45);
+  --color-cta-hover: oklch(0.6 0.2 42);
+  --color-cta-foreground: oklch(1 0 0);
+
+  /* === Soft primary (fond léger bleu) === */
+  --color-primary-soft: oklch(0.96 0.03 268);
+
+  /* === Rating (étoiles) === */
+  --color-rating: oklch(0.78 0.16 80);
+
+  /* === Spécifique cartes fournisseurs (réutilisable conseils) === */
+  --color-recommended: hsl(231 100% 97%);
+  --color-recommended-border: hsl(231 100% 85%);
+  --color-match-high: hsl(142 71% 45%);
+  --color-match-medium: hsl(38 92% 50%);
+  --color-match-low: hsl(220 9% 46%);
+
+  /* === Rayons === */
+  --radius: 0.5rem;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+
+  /* === Conteneur === */
+  --container-2xl: 1400px;
+
+  /* === Surfaces (template HUB) ===
+     Fonds de section alternés. Valeurs reprises du prototype Lovable pour que
+     le rendu HUB soit conforme à la maquette. N'affectent aucune page conseil
+     (aucune n'utilise bg-surface / bg-surface-muted à ce jour). */
+  --color-surface: oklch(0.985 0.005 260);
+  --color-surface-muted: oklch(0.97 0.008 260);
+
+  /* Bleu marine profond des bandeaux de conversion HUB. Distinct de `primary`
+     (bleu vif HelloPro) : sur un aplat plein écran, primary écrase le CTA orange. */
+  --color-navy-deep: hsl(225 80% 22%);
+
+  /* === Ombres (template HUB) ===
+     Le namespace --shadow-* de Tailwind 4 génère les utilitaires
+     `shadow-elegant` et `shadow-cta`. Teintées depuis primary/cta pour rester
+     synchronisées si la palette évolue. */
+  --shadow-elegant: 0 10px 40px -12px color-mix(in oklab, var(--color-primary) 22%, transparent);
+  --shadow-cta: 0 8px 24px -8px color-mix(in oklab, var(--color-cta) 45%, transparent);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Curseur main sur les boutons — régression Tailwind v4, pas un choix de design.
+
+     Le Preflight de Tailwind v3 posait `cursor: pointer` sur `button`. Celui de v4
+     ne le fait plus et laisse le défaut du navigateur, qui est `cursor: default`.
+     Mesuré le 2026-09-03 sur la page 1001 : 44 boutons sur 49 en `default`. Les 3
+     restants en `pointer` venaient du bandeau cookies, dont le CSS est servi par le
+     PHP historique — d'où l'incohérence visible entre le bandeau et la page.
+
+     C'est la règle donnée par le guide de migration v4, et elle est mise ici plutôt
+     qu'en `cursor-pointer` au point d'appel : le défaut doit être bon partout, y
+     compris sur les flèches de carrousel, les options du questionnaire, l'accordéon
+     FAQ et la croix des dialogs — qu'on n'aurait pas pensé à annoter un par un.
+
+     `:not(:disabled)` compte : le CTA « Démarrer l'étude du projet » est désactivé
+     tant qu'aucune réponse n'est choisie, et lui donner un curseur main promettrait
+     une action indisponible. */
+  button:not(:disabled),
+  [role='button']:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
+@layer components {
+  /* Typographie WYSIWYG des blocs texte (TextBlock).
+     Factorise la chaîne d'utilitaires répétée ~16×/page (~408 car. chacune) :
+     réduit le poids brut du HTML (SSR + payload RSC self.__next_f) sans changer
+     le CSS généré. @apply → sortie identique aux classes inline d'origine. */
+  .rich-text {
+    @apply text-base leading-relaxed text-foreground/90
+      [&_p]:mb-3 [&_p:last-child]:mb-0
+      [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:space-y-1 [&_ul]:mb-3
+      [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:space-y-1 [&_ol]:mb-3
+      [&_li]:mb-1
+      [&_strong]:font-bold [&_b]:font-bold
+      [&_em]:italic [&_i]:italic
+      [&_a]:text-primary [&_a]:underline [&_a:hover]:text-primary/80;
+  }
+
+  /* Cellules de table conseil (TableauHtmlBlock) — factorise les classes de cellule
+     répétées. TableauHtmlBlock est un Server Component → ces classes sont présentes
+     ×2 (SSR + payload RSC), donc le gain brut est doublé. CSS identique via @apply. */
+  .conseil-td { @apply px-4 py-3 align-top text-foreground text-pretty; }
+  .conseil-th { @apply px-4 py-3 font-semibold; }
+  .conseil-card-th { @apply px-3 py-2 font-medium text-muted-foreground whitespace-nowrap; }
+  .conseil-card-td { @apply px-3 py-2 text-foreground whitespace-nowrap; }
+
+  /* Méga-menu catégories (SiteHeader) — lien + pastille d'icône répétés par catégorie.
+     `.cat-link` n'inclut PAS `group` (marqueur non @apply-able) : garder `group` sur l'élément. */
+  .cat-link { @apply flex items-center gap-3 rounded-md px-3 py-2 text-sm text-foreground hover:bg-primary-soft hover:text-primary; }
+  .cat-icon { @apply flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary-soft text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground; }
+}

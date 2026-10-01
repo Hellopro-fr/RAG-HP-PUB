@@ -1,0 +1,2 @@
+typesense==0.21.0
+requests>=2.31.0

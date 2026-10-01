@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+httpx
+mcp-proxy>=0.11.0,<0.13
+mcp-neo4j-cypher>=0.6.0,<0.7
+neo4j>=5.26,<7
