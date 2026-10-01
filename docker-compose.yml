@@ -2376,7 +2376,7 @@ services:
     profiles: ["agent-service"]
     restart: unless-stopped
     ports:
-      - "8592:8592"
+      - "8597:8597"
     environment:
       HELLOPRO_API_URL: ${HELLOPRO_API_URL}
       HP_TOKEN: ${HP_TOKEN}

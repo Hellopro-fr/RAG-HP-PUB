@@ -10,5 +10,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY apps-microservices/agent-service/app ./app
 COPY apps-microservices/agent-service/main.py .
 
-EXPOSE 8592
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8592"]
+EXPOSE 8597
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8597"]
