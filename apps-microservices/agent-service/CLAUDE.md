@@ -7,7 +7,7 @@ Doc : `analyse_prix_v2/dust_maison_langgraph_decision_et_plan.md`.
 
 ## Lancer / tester
 - Tests : `python -m venv .venv && .venv/Scripts/python -m pip install -r requirements-dev.txt && .venv/Scripts/python -m pytest -v`
-- Image : `docker build -f apps-microservices/agent-service/Dockerfile .` (contexte = racine du repo), port 8596, profil `agent-service`.
+- Image : `docker build -f apps-microservices/agent-service/Dockerfile .` (contexte = racine du repo), port 8592, profil `agent-service`.
 
 ## Routes
 - `POST /agents/{code}/run` `{input, origine?, version?: publiee|brouillon, id_user_bo?}` → 200 ok, 422 format invalide ou entrée vide, 502 erreur fournisseur, 504 délai, 404 agent introuvable, 503 API v2 injoignable.
