@@ -1,4 +1,5 @@
 """Client de l'étape « agents » de l'API v2 PHP : fiches et journal (aucun accès MySQL direct)."""
+import json
 import logging
 import threading
 import time
@@ -32,6 +33,9 @@ class ClientApiV2:
             corps = self._http.post(self._url, json=charge, headers=self._entetes).json()
         except (httpx.HTTPError, ValueError) as exc:
             raise ErreurApiV2(f"API v2 injoignable : {exc}") from exc
+
+        logger.info("retour API v2 agents/%s/%s : %s", field, action, json.dumps(corps, ensure_ascii=False))
+
         if corps.get("code") != 200:
             raise ErreurApiV2(f"API v2 agents/{field}/{action} : code {corps.get('code')} {corps.get('error', '')}")
         return corps.get("response")
