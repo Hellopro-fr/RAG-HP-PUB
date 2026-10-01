@@ -36,6 +36,15 @@ def test_lire_fiche_envoie_etape_agents_avec_jeton():
                                              "data": {"code": "get-siren", "version": "publiee"}}
 
 
+def test_retour_complet_de_l_api_v2_dans_le_log(caplog):
+    api = ClientApiV2(URL, "hp-token", client_http=client([]))
+    with caplog.at_level("INFO", logger="app.core.api_v2"):
+        api.lire_fiche("get-siren", "brouillon")
+    assert "agents/config/get" in caplog.text
+    assert '"trouve": true' in caplog.text and '"recherche_web": 1' in caplog.text
+    assert "hp-token" not in caplog.text
+
+
 def test_version_publiee_en_cache_jusqu_au_ttl():
     appels, horloge = [], Horloge()
     api = ClientApiV2(URL, "t", ttl_cache_s=60, client_http=client(appels), horloge=horloge)

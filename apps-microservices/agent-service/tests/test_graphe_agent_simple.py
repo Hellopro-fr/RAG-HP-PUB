@@ -50,3 +50,13 @@ def test_delai_depasse():
 
 def test_non_trouve_accentue_accepte():
     assert lancer(ModeleScripte(reponse("Non trouvé")))["statut"] == STATUT_OK
+
+
+def test_reponse_complete_du_modele_dans_le_log(caplog):
+    message = reponse("47893401100030")
+    message.response_metadata = {"grounding_metadata": {"web_search_queries": ["sol-equestre.fr siret"]}}
+    with caplog.at_level("INFO", logger="app.graphe.agent_simple"):
+        lancer(ModeleScripte(message))
+    assert "47893401100030" in caplog.text
+    assert "sol-equestre.fr siret" in caplog.text  # métadonnées de recherche du fournisseur
+    assert "input_tokens" in caplog.text

@@ -3,6 +3,7 @@
 preparer → appeler_modele → valider → fin | corriger → appeler_modele | echec.
 Les outils natifs sont exécutés par le fournisseur pendant appeler_modele.
 """
+import json
 import logging
 from typing import Callable, List, TypedDict
 
@@ -52,6 +53,11 @@ def construire_graphe(fabrique_modele: Callable[[dict], object]):
             logger.warning("appel modèle en échec : %s", exc)
             statut = STATUT_TIMEOUT if _est_timeout(exc) else STATUT_ERREUR
             return {"statut": statut, "erreur": f"{type(exc).__name__}: {exc}", "etapes": etapes}
+
+        # Réponse complète du fournisseur : texte, tokens, et recherches (grounding_metadata chez Gemini)
+        reponse_complete = json.dumps(reponse.model_dump(), ensure_ascii=False, default=str)
+        logger.info("réponse complète du modèle : %s", reponse_complete)
+
         texte = reponse.text.strip()
         # On renvoie seulement le texte au tour suivant : les blocs d'outils serveur ne se rejouent pas.
         return {"sortie": texte, "messages": etat["messages"] + [AIMessage(texte)], "essais": etat["essais"] + 1,
