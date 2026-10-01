@@ -112,7 +112,7 @@ C'est le morceau le plus risqué : la gateway migre le schéma de sa base au dé
 
 | # | Quoi | Qui | Comment | Où | Quand |
 |---|---|---|---|---|---|
-| e.1 | Cible GCS pour `image_download_data` (237 Go au 20/07) et `crawler_data` (374 Go) | DSO propose, CTO valide | bucket + montage ou API GCS ; données reconstituables | TF | semaine du 19/10 |
+| e.1 | Cible GCS pour `image_download_data` (**370 Go** au 01/10 ; 237 Go au 20/07) et `crawler_data` (**205 Go** au 01/10 ; 374 Go au 20/07) | DSO propose, CTO valide | bucket + montage ou API GCS ; données reconstituables | TF | semaine du 19/10 |
 | e.2 | Adaptation du code (`image-download` ×10, `image-cdn`, `crawler-service`) | devs | lecture / écriture GCS | code | à planifier |
 
 ---
@@ -121,8 +121,8 @@ C'est le morceau le plus risqué : la gateway migre le schéma de sa base au dé
 
 | Date | DSO | LEAD / devs | CTO / PROD | Ecritel |
 |---|---|---|---|---|
-| **Jeu 1/10** | revue ; mesures VM ; LB + certificats ; test VM → CR ; message Ecritel ; relevé réserve embedding | revue ; nommer un dev par service P4/P5 ; lancer les correctifs d'URL | revue ; décisions § 6 | reçoit la question |
-| **Ven 2/10** | NEG GKE ; **TTL Gandi 300 s** ; Cloud Armor PREVIEW ; runbook | correctifs d'URL | — | répond |
+| **Jeu 1/10** | revue ; mesures VM ; LB + certificats ; test VM → CR ; message Ecritel ; liste des URL en dur par service | revue (plan validé) | revue ; décisions § 6 | reçoit la question |
+| **Ven 2/10** | NEG GKE ; **TTL Gandi 300 s** ; Cloud Armor PREVIEW ; runbook ; tickets d'URL en dur prêts | — (devs disponibles à partir du 5/10) | — | répond |
 | **Lun 5 → mar 6/10** | V2-a (routes une à une) | tests fonctionnels à chaque route | — | — |
 | **Mer 7/10** | V2-b (MCP) | tests MCP | — | — |
 | **Jeu 8/10** | bilan ; préparation V2-c (c.1, c.2) | LEAD confirme la version gateway | point d'étape | — |
@@ -184,6 +184,7 @@ Chaque décision a un propriétaire et une échéance (tableau dans [`suivi-vagu
 - **Objectif** : que chacun sache, dès jeudi, quels jours il est mobilisé et sur quel service.
 - **Options** : (A) le plan tel quel, point d'étape jeu 8/10 ; (B) ne valider que V2-0 et V2-a, et replanifier la suite après le bilan du 8/10.
 - **Recommandation DSO** : **A**, avec le point d'étape du 8/10 comme porte de sortie. Il faut un nom par service P4/P5 (14 routes, 8 MCP) ; un même dev peut en couvrir plusieurs.
+- **Décision (01/10)** : ✅ **plan validé ; devs disponibles à partir du lun 5/10.** Conséquence : les correctifs d'URL en dur démarrent le 5/10 ; V2-a commence par les routes **sans** URL en dur (liste DSO du 1-2/10), les autres suivent leur correctif.
 - **Si on ne tranche pas** : V2-a ne peut pas démarrer le 5/10 (pas de testeur, pas de correctif d'URL).
 
 ### Décision 2 — `conseils.hellopro.fr` · PROD, LEAD · avant V2-d
@@ -217,6 +218,7 @@ Chaque décision a un propriétaire et une échéance (tableau dans [`suivi-vagu
 | route `SERVICE_OPTIMOTEUR` | **IP en dur** | donner un nom stable avant V2-c |
 
 - **Si on ne tranche pas** : ces services restent sur la VM par défaut ; la ConfigMap `.env.url` de V2-c reprend les routes telles quelles.
+- **Décision (01/10)** : ✅ **règle générale** — tout service qui n'est pas migré vers Cloud Run / GKE **reste sur la VM pendant un temps** : **UP** s'il est encore utilisé et ne peut pas être migré, **arrêté (conservé en réserve)** s'il n'est plus utilisé. L'action 0.13 (usage réel sur la VM) classe chaque service dans l'un des deux cas ; aucune suppression pendant la vague.
 
 ### Décision 5 — `dlq-manager-service` et `dlq.hellopro.eu` · métier, CTO · ⚠️ faits corrigés le 30/09
 
@@ -224,6 +226,7 @@ Chaque décision a un propriétaire et une échéance (tableau dans [`suivi-vagu
 - **Mesure immédiate (sans attendre la décision)** : lire le journal d'accès nginx de `dlq.hellopro.eu`, puis fermer l'accès public au niveau nginx (authentification HTTP ou liste d'IP). Réversible en une commande.
 - **Décision qui reste à prendre** : qui utilise cet outil, et doit-il migrer en vague 2 ? (A) garder, migrer sur GKE en V2-c derrière authentification (SSO ou jeton) et règle réseau, jumeau VM arrêté dans le même geste (sinon deux boucles d'auto-archivage) ; (B) retirer l'outil et l'adresse.
 - **Recommandation DSO** : A si l'outil est utilisé (le journal d'accès le dira), avec correction de F-HP-SEC-027 avant toute exposition.
+- **Décision (01/10)** : ✅ **on laisse sur la VM d'abord** — UP, restreint aux IP Hellopro (F-HP-SEC-028 atténué) ; migration sur GKE plus tard, **seulement** quand F-HP-SEC-027 (authentification) est corrigé.
 
 ### Décision 6 — Cloud Armor : quand bloquer · RSSI · avant V2-d
 
@@ -271,6 +274,33 @@ sudo awk '{print substr($4,2,14)}' /var/log/nginx/access.log | sort | uniq -c | 
 # taille actuelle des volumes nommés
 docker system df -v | grep -E 'image_download_data|crawler_data'
 ```
+
+---
+
+## 7bis. Dépendances entre ce qui reste sur la VM et ce qui migre
+
+**Règle (01/10)** : un jumeau VM n'est arrêté que lorsque **plus aucun service resté sur la VM ne l'appelle** — ou que ces appelants ont été repointés vers la nouvelle adresse (URL Cloud Run, IP interne d'un Service GKE, enabler `10.11.0.2`). À chaque bascule, le P0 liste les appelants restés sur la VM ; la bascule de l'entrée et l'arrêt du jumeau peuvent donc être décalés.
+
+**Chemins réseau disponibles** :
+
+| Sens | Chemin | Déjà utilisé |
+|---|---|---|
+| Cloud (GKE / Cloud Run) → VM | enabler haproxy `10.11.0.2:150xx` (gRPC, tracking `:8590`) | oui, depuis L1 |
+| VM → GKE | IP interne d'un Service GKE de type load balancer interne (`10.0.1.x`) | oui : `SERVICE_OPTIMOTEUR=http://10.0.1.240:8570` dans `.env.url` |
+| VM → Cloud Run | URL `https://…run.app` (entrée et authentification à valider : action 0.9) | à prouver |
+
+**Inventaire initial** (variables du compose VM du 25/09 qui désignent un autre service par son nom Docker ; à compléter par `.env.url`, `mcp_servers` et les défauts du code — action 0.8) :
+
+| Service qui migre (sous-vague) | Appelants qui **restent sur la VM** | Conséquence |
+|---|---|---|
+| `api-detection-langue-fr-service`, `content-extractor-api-service` (V2-a) | `crawler-service` (reste jusqu'à V2-e) | jumeaux VM **UP** tant que `crawler-service` n'est pas repointé vers les URL Cloud Run |
+| `api-classification-service` / `-lb` (V2-a) | `mcp-classification-produit-service` (jusqu'à V2-b) | jumeau VM UP jusqu'à V2-b, ou repointage du MCP |
+| `mcp-gateway-service` (V2-c) | `account-service-backend` (jusqu'à V2-d) | au moment de V2-c : repointer `account-service-backend` vers le Service GKE (IP interne) **avant** d'arrêter le jumeau |
+| `account-service-backend` (V2-d) | `redis-client-frontend` (front SSO, tant qu'il n'est pas migré) | repointage du front, ou jumeau UP |
+| `api-catalog-service` (**reste** sur la VM) | `api-gateway-go-service` (V2-c, vers GKE) | sens inverse : la gateway GKE doit joindre le catalogue par l'enabler (point 6 de la fiche L7) |
+| `image-download-service` (**reste**) | `crawler-monitor-backend` (Cloud Run) | sens inverse, déjà câblé vers la VM |
+
+Les consumers L1→L6 n'exposent pas d'HTTP : aucun service de la VM ne les appelle directement (ils passent par le broker).
 
 ---
 

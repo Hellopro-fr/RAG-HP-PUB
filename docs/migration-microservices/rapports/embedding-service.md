@@ -1,6 +1,6 @@
 # Rapport de bascule — `embedding-service`
 
-> **Lot L6 · basculé le 2026-09-29 à 11:23 UTC (13:23 Paris)** · exécuté par le DevSecOps · pré-contrôle vérifié par le DSO le 25/09 · **GO le 30/09 sous réserve** : levée au relevé de la nuit du 30/09 au 01/10 (4 réplicas).
+> **Lot L6 · basculé le 2026-09-29 à 11:23 UTC (13:23 Paris)** · exécuté par le DevSecOps · pré-contrôle vérifié par le DSO le 25/09 · **GO le 30/09**, réserve **levée le 01/10** (nuit à 4 réplicas : file à 0, 0 deadline).
 > Ce rapport dit ce qui a changé, ce qui a été prouvé, et **comment vous accédez maintenant au service** pour le déboguer.
 
 ---
@@ -32,7 +32,7 @@
 | Pré-contrôle | ✅ vérifié par le DSO le 25/09 dans le code, les conteneurs VM et Secret Manager (réponses du dev le 28/09) |
 | Abonnement à la file **prod** | ✅ 29/09 11:23 UTC : `consumers=1`, jumeaux arrêtés ; `consumers=4` depuis le 30/09 05:15 |
 | Santé | ✅ 0 redémarrage ; 0 Traceback jusqu'au pic nocturne |
-| Traitement de bout en bout sur données réelles | ⚠️ nuit du 29 au 30/09 : **11 662 messages en attente** à 1 réplica (290 deadlines gRPC 02h-05h UTC, aucun message perdu) ; à 4 réplicas, file vidée en 14 min, 0 deadline. Réserve levée si la nuit du 30/09 au 01/10 reste au niveau VM |
+| Traitement de bout en bout sur données réelles | ⚠️ nuit du 29 au 30/09 : **11 662 messages en attente** à 1 réplica (290 deadlines gRPC 02h-05h UTC, aucun message perdu) ; à 4 réplicas, file vidée en 14 min, 0 deadline. **Nuit du 30/09 au 01/10 à 4 réplicas : file à 0, 0 `DEADLINE_EXCEEDED` en 24 h sur les 4 pods → réserve levée le 01/10** |
 | Rollback | ⬜ non joué (procédure identique aux lots précédents) |
 
 ---
@@ -124,7 +124,7 @@ kubectl -n apps-microservices port-forward deploy/embedding-service 8530:8530   
 
 | # | Constat | Pour qui |
 |---|---|---|
-| 1 | Lever la réserve : relevé de la nuit du 30/09 au 01/10 (`embedding_queue` sans backlog durable, deadlines au niveau VM) | DSO |
+| 1 | ✅ Réserve levée le 01/10 (0 deadline, file à 0) ; ne pas descendre sous 4 réplicas sans mesure | DSO |
 | 2 | **SIGTERM ignoré** à l'arrêt des conteneurs VM (`Exited (137)`, F-HP-DEV-006) | LEAD |
 | 3 | Jumeaux VM conservés pendant la fenêtre de rollback, puis retrait | DevSecOps |
 | 4 | Mot de passe du broker dans les logs au démarrage (F-HP-SEC-021) | Tous |

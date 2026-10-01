@@ -69,19 +69,21 @@ Une ligne par adresse. C'est la vue « où en est chaque aiguillage ».
 
 | # | Action | Qui | Échéance | Statut | Preuve / commentaire |
 |---|---|---|---|:--:|---|
-| 0.1 | Revue du plan, décisions, un dev nommé par service | CTO, LEAD, DSO, PROD | jeu 1/10 matin | ⬜ | |
-| 0.2 | Mesures VM : trafic horaire nginx, `dlq.hellopro.eu`, taille des volumes | DSO | jeu 1/10 | ⬜ | |
+| 0.1 | Revue du plan, décisions, un dev nommé par service | CTO, LEAD, DSO, PROD | jeu 1/10 matin | ✅ | 01/10 : plan validé, devs disponibles à partir du 5/10 |
+| 0.2 | Mesures VM : trafic horaire nginx, `dlq.hellopro.eu`, taille des volumes | DSO | jeu 1/10 | ✅ | log `data/cutover/carte-v2-0.log` : `api.` pic 10h-17h UTC, nuit non nulle ; `rag.`, `login.` plats sur 24 h (sondes probables) ; volumes **370 Go** images / **205 Go** crawler ; vhosts publics hors plan : `grafana.`, `n8n-dev.`, `pmyadm.` (phpMyAdmin), `neo4j1.`, `mep.` → 0.16 |
 | 0.3 | Load balancer HTTPS prod (back-ends Cloud Run) | DSO | jeu 1/10 | ⬜ | IP du LB : |
 | 0.4 | Certificats par validation DNS (CNAME `_acme-challenge` chez Gandi) | DSO | jeu 1/10 | ⬜ | |
 | 0.5 | NEG GKE pour `api.` et `mcp.` rattachés au LB | DSO | ven 2/10 | ⬜ | |
 | 0.6 | TTL 300 s sur les 6 adresses | DSO | ven 2/10 | ⬜ | voir journal Gandi |
 | 0.7 | Cloud Armor en observation sur le LB prod | DSO | ven 2/10 | ⬜ | |
-| 0.8 | Liste des URL en dur par service → tickets devs | DSO → devs | jeu 1/10 (liste) | ⬜ | |
+| 0.8 | Liste des URL en dur par service → tickets devs | DSO (liste 1-2/10) → devs (à partir du 5/10) | ven 2/10 (tickets prêts) | ⬜ | conditionne l'ordre de V2-a |
 | 0.9 | Test VM → Cloud Run (entrée, authentification) | DSO | jeu 1/10 | ⬜ | résultat : OUI / NON → ordre V2-a |
 | 0.10 | Runbook HTTP + scripts P1 / bascule / relevés | DSO | ven 2/10 | ⬜ | |
 | 0.11 | Message à Ecritel | DSO | jeu 1/10 | ⬜ | voir § 4 |
-| 0.13 | Usage réel des services P9 sur la VM (logs 7 jours, appelants, routes `.env.url`) | DSO | jeu 1/10 | ⬜ | entrée de la décision 4 |
+| 0.13 | Usage réel des services P9 sur la VM (logs 7 jours, appelants, routes `.env.url`) | DSO | jeu 1/10 | 🔄 | `api-gateway-service`, `api-model`, `api-chatbot` : **aucun conteneur** sur la VM (rien à faire) ; `graph-rag-api-recherche-service-debug` **UP depuis 4 mois**, appelé seulement par **`api-catalog-service`** (`172.20.0.148`, sondage `/openapi.json`) → aucun usage fonctionnel → **arrêt en réserve** (décision 4), après contrôle de `.env.url` ; `SERVICE_CRAWLING=reverse-proxy:8050/crawler` (VM), `SERVICE_OPTIMOTEUR=10.0.1.240:8570` (**déjà sur GKE**, IP interne) |
 | 0.14 | **F-HP-SEC-028** : journal d'accès `dlq.hellopro.eu`, puis fermeture de l'accès public (nginx) | DSO | **30/09 – 1/10, prioritaire** | ✅ | 30/09 12:44 UTC : allowlist 8 IP Hellopro + `deny all` ; `403` hors liste, accès bureau / télétravail / Ecritel OK ; aucune modification ni lecture de messages externe dans le journal |
+| 0.16 | Vhosts publics hors plan : `pmyadm.hellopro.eu` (phpMyAdmin), `grafana.`, `n8n-dev.`, `neo4j1.`, `mep.` — contrôle d'accès nginx et journal (même méthode que F-HP-SEC-028) | DSO | jeu 1/10 | ✅ | 01/10 : **aucun contrôle d'accès nginx** sur les 5 ; IP hors liste : pmyadm 97, grafana 128, n8n-dev 169, neo4j1 13, mep 130 ; phpMyAdmin 5.2.3 consulté par des robots (pages de doc, scans `.env`/`.git`) → allowlist `vhost_allowlist.sh` (F-HP-SEC-029) : ✅ **phpMyAdmin fermé 01/10 10:48 UTC** (aucune connexion réussie hors liste dans le journal ; 18 tentatives échouées) ; ✅ **grafana et neo4j1 fermés 01/10 11:53 UTC** ; **mep** : appels `launch_mep` / `claim_mep` **légitimes** (confirmé 01/10 : actions depuis des mobiles) → pas d'allowlist ; ✅ **durci 01/10 14:49 UTC** (`api.php` exige une session : 401 sans session ; 429 après 10 connexions/min/IP) ; ✅ **n8n-dev durci 01/10 12:15 UTC** (option A : 404 sur chemins sensibles, 429 après 10 `POST /rest/login`/min/IP) |
+| 0.17 | Dépendances VM ↔ cloud : inventaire des appelants restés sur la VM pour chaque service qui migre (compose, `.env.url`, `mcp_servers`, code) ; règle « jumeau arrêté seulement sans appelant VM » | DSO | ven 2/10 | 🔄 | inventaire initial du compose : plan § 7bis |
 | 0.15 | Clé SSH ajoutée aux métadonnées **du projet** par `gcloud compute scp` (30/09, utilisateur `deploy`) : décider de la garder ou la retirer (accès à toutes les VM qui acceptent les clés projet) | DSO | fin de vague | ⬜ | |
 | 0.12 | Jeton Gandi LiveDNS temporaire (`hellopro.eu` seul, expiration ≈ 23/10) → Secret Manager `gandi-livedns-pat` ; scripts `GET`/`PUT`/`GET` | titulaire Gandi (création), DSO | jeu 1/10 | ⬜ | révocation prévue en fin de vague |
 
@@ -131,7 +133,7 @@ Une ligne par adresse. C'est la vue « où en est chaque aiguillage ».
 
 | # | Action | Qui | Échéance | Statut | Preuve / commentaire |
 |---|---|---|---|:--:|---|
-| e.1 | Cible GCS pour `image_download_data` et `crawler_data` | DSO propose, CTO valide | sem. du 19/10 | ⬜ | |
+| e.1 | Cible GCS pour `image_download_data` et `crawler_data` | DSO propose, CTO valide | sem. du 19/10 | ⬜ | tailles au 01/10 : 370 Go et 205 Go |
 | e.2 | Code `image-download`, `image-cdn`, `crawler-service` | devs | à planifier | ⬜ | |
 | e.3 | Retrait de l'IP publique VM (plus rien n'y pointe) | DSO + Ecritel | fin de vague | ⬜ | |
 
@@ -161,11 +163,11 @@ Le détail de chaque décision (pourquoi, objectif, options, recommandation, con
 
 | # | Décision | Qui | Échéance | Statut | Décision prise |
 |---|---|---|---|:--:|---|
-| 1 | Plan et calendrier ; un dev par service P4/P5 | CTO, LEAD | jeu 1/10 | ⬜ | |
+| 1 | Plan et calendrier ; un dev par service P4/P5 | CTO, LEAD | jeu 1/10 | ✅ | **01/10 : plan validé, devs prêts à partir du 5/10** |
 | 2 | Bascule de `conseils` (SEO, pages PHP non migrées) | PROD, LEAD | avant V2-d | ✅ | **30/09 : GO reco** — back-end seul ; comparaison préalable Cloud Run / VM, **contenus identiques exigés** |
 | 3 | Formulaire Next.js | LEAD | jeu 1/10 | ✅ | **30/09 : hors vague 2** — pas en production, fonctionnalités en cours ; Next 15 non urgent |
-| 4 | P9 à trancher (`api-gateway-service`, `api-model`, `api-chatbot`, `…-debug`, `SERVICE_CRAWLING`, `SERVICE_OPTIMOTEUR`) | LEAD | jeu 8/10 | 🔄 | 30/09 : **revérifier l'usage réel sur la VM d'abord** (action 0.13, DSO), puis décision service par service |
-| 5 | `dlq-manager-service` / `dlq.hellopro.eu` | métier, CTO | avant V2-c | 🔄 | ⚠️ 30/09 : service **UP depuis 2 mois** sur la VM, **exposé sans authentification** (F-HP-SEC-028 CRITICAL) → **accès fermé aux IP Hellopro le 30/09** (0.14 ✅). Journal : outil **utilisé** (requeue quotidien par le bureau, appels Ecritel) → la décision penche vers **migrer derrière authentification en V2-c** |
+| 4 | P9 à trancher (`api-gateway-service`, `api-model`, `api-chatbot`, `…-debug`, `SERVICE_CRAWLING`, `SERVICE_OPTIMOTEUR`) | LEAD | jeu 8/10 | ✅ | **01/10 : règle** — non migré = reste sur la VM : **UP** si utilisé et non migrable, **arrêté en réserve** sinon ; classement par l'action 0.13 ; aucune suppression pendant la vague |
+| 5 | `dlq-manager-service` / `dlq.hellopro.eu` | métier, CTO | avant V2-c | ✅ | ⚠️ 30/09 : service **UP depuis 2 mois** sur la VM, **exposé sans authentification** (F-HP-SEC-028 CRITICAL) → **accès fermé aux IP Hellopro le 30/09** (0.14 ✅). Journal : outil **utilisé** (requeue quotidien par le bureau, appels Ecritel) → ✅ **01/10 : on laisse sur la VM d'abord** (UP, restreint aux IP Hellopro) ; migration GKE quand F-HP-SEC-027 est corrigé |
 | 6 | Cloud Armor : critères de passage en blocage | RSSI | avant V2-d | ✅ | **30/09 : option A** — observation, blocage adresse par adresse après 7 jours sans faux positif, limite de débit sur `login.` (« la sécurité est importante ») |
 | 7 | CD GKE prod (F-HP-IND-005) : calage | CTO | jeu 1/10 | ✅ | **30/09 : GO, progressif** — cadrage 1-2/10, puis **un service par jour**, testé et validé avant le suivant (à partir du 19/10) |
 | 8 | Certificats par validation DNS (évolution du module LB) | CTO, DSO | jeu 1/10 | ✅ | **30/09 : GO reco** (Certificate Manager, CNAME Gandi) |
@@ -178,3 +180,4 @@ Le détail de chaque décision (pourquoi, objectif, options, recommandation, con
 | Date | Événement |
 |---|---|
 | 30/09 | Série des consumers close (GO L6). Inventaire vague 2 : 85 services encore sur la VM. Faits confirmés : DNS `hellopro.fr` / `hellopro.eu` pilotés par nous sur Gandi ; Apache `hellopro.fr` = Ecritel ; `*.hellopro.eu` Gandi → VM directe ; `conseils.hellopro.fr` résout vers le front Ecritel (45.223.103.188) ; vhost VM `nextjs-conseils.hellopro.eu` → `:8610`. Plan et suivi rédigés, à valider le 1/10. Décision 3 prise : formulaire hors vague 2 (pas en production). Détail des décisions ajouté au plan (§ 6). Soir : décisions 2, 6, 7, 8, 9 prises ; 4 = revérifier l'usage sur la VM ; **5 : `dlq-manager-service` UP depuis 2 mois et `dlq.hellopro.eu` exposé sans authentification → F-HP-SEC-028 (CRITICAL)**, mesure immédiate. |
+| 01/10 | Réserve embedding levée (L6 entièrement validé). Revue : décision 1 (plan validé, devs à partir du 5/10) et décision 4 (règle « non migré = VM, UP ou arrêté en réserve ») ; décision 5 : **on laisse sur la VM d'abord**. Mesures VM (0.2) et usage P9 (0.13) relevés ; nouvelle règle « un jumeau VM n'est arrêté que sans appelant resté sur la VM » (plan § 7bis, action 0.17) ; 5 vhosts publics hors plan à contrôler (0.16). |
