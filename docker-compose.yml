@@ -2378,7 +2378,6 @@ services:
     ports:
       - "8597:8597"
     environment:
-      HELLOPRO_API_URL: ${HELLOPRO_API_URL}
       HP_TOKEN: ${HP_TOKEN}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
