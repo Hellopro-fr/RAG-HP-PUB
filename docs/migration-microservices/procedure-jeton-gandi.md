@@ -1,5 +1,7 @@
 # Procédure — jeton d'accès Gandi temporaire pour la vague 2
 
+> ⚠️ **Statut au 02/10 : jeton inutilisable pour la vague.** `hellopro.eu` est sur le **DNS Gandi classique** (`a/b/c.dns.gandi.net`), que l'API LiveDNS ne gère pas (« Unknown domain »). Décision 10 : bascule par le nginx de la VM pendant la vague, DNS en une seule intervention du titulaire à la fin ([plan § 1bis](plan-vague-2.md)). Le jeton `migrationdns` et le secret `gandi-livedns-pat` sont **à supprimer** (§ 6). Cette procédure reste valable si la zone passe un jour sur LiveDNS.
+
 > **Pour qui** : le titulaire du compte Gandi de l'organisation Hellopro (création du jeton), puis le DSO (stockage, usage, révocation).
 > **Pourquoi** : décision 9 de la vague 2 (30/09) — toutes les modifications DNS de la vague passent par des scripts relus
 > (lecture de la valeur actuelle, écriture, relecture, journal) plutôt que par des clics dans l'interface.
