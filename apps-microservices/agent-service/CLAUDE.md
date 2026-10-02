@@ -19,4 +19,6 @@ Doc : `analyse_prix_v2/dust_maison_langgraph_decision_et_plan.md`.
 
 ## Pièges
 - La version publiée est en cache 60 s : une publication s'applique en moins d'une minute.
-- Outils refusés quand `capacites` (renvoyé par `agents.php` : XML de prix du BO + règle MCP) les met à 0 : MCP Gemini, tous les outils DeepSeek, modèle absent des XML.
+- Outils refusés quand `capacites` (renvoyé par `agents.php` : XML de prix du BO + règles en code) les met à 0 : MCP Gemini, lecture de pages OpenAI (incluse dans `web_search`), tous les outils DeepSeek, modèle absent des XML.
+- Gemini (`app/core/gemini.py`, sous-classe de `ChatGoogleGenerativeAI`) : recherche Google et lecture de pages (`url_context`) passent par l'API Interactions, le reste par `generateContent`. `generateContent` ne lançait aucune recherche avec gemini-3.1-flash-lite (testé le 01/10/2026). Avec ces outils : un seul tour, température ignorée (absente de l'API Interactions), relances du SDK forcées à `max_retries`.
+- Pas de relance après un format invalide (`MAX_RELANCES = 0`, tous fournisseurs) : le champ `relances` des fiches est ignoré.

@@ -20,21 +20,15 @@ def test_reponse_correcte_du_premier_coup():
     assert "exemple.fr" in modele.recus[0][0].content  # {entree} remplacé dans les instructions
 
 
-def test_texte_autour_du_siret_corrige_par_une_relance():
-    modele = ModeleScripte(reponse("Le SIRET est 12345678900012"), reponse("12345678900012"))
-    etat = lancer(modele)
-    assert etat["statut"] == STATUT_OK and etat["essais"] == 2
-    assert "corriger" in etat["etapes"]
-    assert "format attendu" in modele.recus[1][-1].content
-    assert etat["usage"]["tokens_entree"] == 200
-
-
-def test_format_toujours_faux_apres_relance_garde_la_derniere_sortie():
-    modele = ModeleScripte(reponse("Le SIRET est 1"), reponse("Toujours pas"))
-    etat = lancer(modele, relances=1)
+def test_format_invalide_sans_relance_meme_si_la_fiche_en_demande():
+    # Relance désactivée pour tous les fournisseurs : un seul appel, la sortie est gardée
+    modele = ModeleScripte(reponse("Le SIRET est 12345678900012"))
+    etat = lancer(modele, relances=2)
     assert etat["statut"] == STATUT_FORMAT_INVALIDE
-    assert etat["sortie"] == "Toujours pas"
-    assert "format" in etat["erreur"] and etat["etapes"][-1] == "echec"
+    assert etat["sortie"] == "Le SIRET est 12345678900012"
+    assert etat["essais"] == 1 and len(modele.recus) == 1
+    assert etat["etapes"] == ["preparer", "appeler_modele", "valider", "echec"]
+    assert "format" in etat["erreur"]
 
 
 def test_erreur_du_fournisseur():

@@ -17,7 +17,7 @@ from app.core.usage import additionner_usage, extraire_usage
 logger = logging.getLogger(__name__)
 
 STATUT_OK, STATUT_FORMAT_INVALIDE, STATUT_ERREUR, STATUT_TIMEOUT = 1, 2, 3, 4
-MAX_RELANCES = 3
+MAX_RELANCES = 0  # relance désactivée pour tous (décision du 01/10/2026) : format faux → echec
 
 
 class EtatAgent(TypedDict, total=False):

@@ -9,9 +9,14 @@ def compter_recherches(message: AIMessage) -> int:
     """Recherches exécutées par le fournisseur pendant l'appel.
 
     OpenAI et Anthropic : blocs standard `server_tool_call` nommés web_search.
-    Gemini (grounding) : requêtes distinctes de `web_search_queries`, lues dans les
+    Gemini via l'API Interactions : `response_metadata["nb_recherches"]`, chiffre facturé.
+    Gemini via generateContent : requêtes distinctes de `web_search_queries`, lues dans les
     annotations des blocs texte et dans `response_metadata["grounding_metadata"]`.
     """
+    nb_facture = (message.response_metadata or {}).get("nb_recherches")
+    if isinstance(nb_facture, int):
+        return nb_facture
+
     blocs = message.content_blocks
     nb = sum(1 for b in blocs if b.get("type") == "server_tool_call" and b.get("name") in NOMS_RECHERCHE)
     if nb:
