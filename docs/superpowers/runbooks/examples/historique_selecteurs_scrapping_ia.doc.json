@@ -1,0 +1,123 @@
+{
+  "historique_domaine_scrapping_produit_ia": {
+    "database_id": 10,
+    "description": "Historique PAR FICHE des sélecteurs CSS proposés par le LLM pendant l'extraction produit IA (script_scrapping_produit_ia_V2.php, fonction historiser_selecteur) : 1 ligne par fiche scrapée (scrapping_fiche_produit_ia), clé UNIQUE (domaine, fiche). Pour chaque type d'information, la colonne selecteur_<type>_hdspi garde, du DERNIER appel LLM ayant produit un sélecteur neuf pour ce type sur cette fiche, les candidats proposés (data) et celui qui a réellement extrait le contenu (used_selecteur). La synthèse suivante relit used_selecteur pour reconstruire les sélecteurs du domaine (domaine_scrapping_produit_ia.selecteur_<type>_dspi). Ce n'est PAS le journal des changements de sélecteurs du domaine : voir historique_reajustement_selecteur_ia. Base HELLOPRO_IA.",
+    "primary_key": "id_historique_domaine_scrapping_produit_ia",
+    "default_order_by": "date_creation_hdspi DESC",
+    "rows": null,
+    "columns": {
+      "id_historique_domaine_scrapping_produit_ia": {
+        "type": "int",
+        "desc": "Identifiant technique (PK auto-incrément). N'ordonne pas les écritures : une ligne existante est mise à jour sur place (INSERT … ON DUPLICATE KEY UPDATE) sans changer d'id."
+      },
+      "id_domaine_scrapping_produit_hdspi": {
+        "type": "int",
+        "desc": "Domaine de la fiche — FK domaine_scrapping_produit_ia.id_domaine_scrapping_produit_ia. Indexé ; 1re colonne de la clé UNIQUE (domaine, fiche). resetData.php supprime toutes les lignes d'un domaine par cette colonne (réinitialisation)."
+      },
+      "id_scrapping_fiche_produit_hdspi": {
+        "type": "int",
+        "desc": "Fiche produit scrapée — FK scrapping_fiche_produit_ia.id_scrapping_fiche_produit_ia. Indexé. Unique en pratique : 1 ligne par fiche (23 393 lignes = 23 393 fiches distinctes, mesuré le 2026-10-02). Jointure usuelle : LEFT JOIN sur la fiche (une fiche sans ligne n'a pas reçu de sélecteur neuf du LLM, ou son domaine a été réinitialisé)."
+      },
+      "date_creation_hdspi": {
+        "type": "datetime",
+        "desc": "⚠ Malgré son nom, date de DERNIÈRE écriture : remise à NOW() à chaque mise à jour de la ligne (ON DUPLICATE KEY UPDATE), quel que soit le type réécrit. Heure serveur MySQL. Ne date ni la création de la fiche ni le premier appel LLM, et ne dit pas quelle colonne a changé. Plage mesurée le 2026-10-02 : 2025-03-05 → 2026-09-14 (aucune écriture depuis)."
+      },
+      "selecteur_titre_hdspi": {
+        "type": "longtext",
+        "desc": "Sélecteurs de TITRE proposés par le LLM pour cette fiche, sérialisé PHP : {data: [ {selecteur:[css]}, … ] (un groupe par choix candidat, dans l'ordre de priorité), used_selecteur: {selecteur:[css]} (celui qui a extrait le titre ; a:0:{} si aucun n'a rien extrait)}. NULL = aucun sélecteur titre neuf demandé au LLM pour cette fiche (non NULL sur 4 309 lignes au 2026-10-02). Écrasé à chaque nouvel appel LLM titre ; les autres colonnes de la ligne restent inchangées."
+      },
+      "selecteur_description_hdspi": {
+        "type": "longtext",
+        "desc": "Même principe pour la DESCRIPTION, sérialisé PHP : {data: [ {selecteur:[css, …]} ], used_selecteur: {selecteur:[…]} }. La liste 'selecteur' peut contenir des null sérialisés (N;). NULL = pas de sélecteur neuf pour ce type sur cette fiche."
+      },
+      "selecteur_prix_hdspi": {
+        "type": "longtext",
+        "desc": "Même principe pour le PRIX ; chaque sélecteur est un objet {selecteur, devise, type (normal|barré|…), indicatif (HT|TTC), mention (fixe|…)}, comme selecteur_prix_dspi. ⚠ La devise € peut s'afficher « â‚¬ » via le MCP alors que la longueur sérialisée (s:3) compte bien 3 octets UTF-8 : ne pas « corriger » la chaîne avant unserialize."
+      },
+      "selecteur_image_hdspi": {
+        "type": "longtext",
+        "desc": "Même principe pour les IMAGES, sérialisé PHP : {data: [ {selecteur:[css img, …]} ], used_selecteur: {selecteur:[…]} }. NULL = pas de sélecteur neuf pour ce type."
+      },
+      "selecteur_livraison_hdspi": {
+        "type": "longtext",
+        "desc": "Même principe pour la LIVRAISON ; sélecteurs sous forme d'objets {selecteur, unite, label} (les plus anciennes lignes portent parfois un objet unique au lieu d'une liste). selecteur '' et used_selecteur a:0:{} = le LLM n'a rien trouvé."
+      },
+      "selecteur_stock_hdspi": {
+        "type": "longtext",
+        "desc": "Même principe pour le STOCK / disponibilité : {data: [ {selecteur:[css]} ], used_selecteur: {selecteur:[…]} }. selecteur '' et used_selecteur a:0:{} = le LLM n'a rien trouvé."
+      },
+      "selecteur_categorie_hdspi": {
+        "type": "longtext",
+        "desc": "Même principe pour la CATÉGORIE ; sélecteurs sous forme d'objets {selecteur, type: fil_d_ariane|mention_categorie}, comme selecteur_categorie_dspi."
+      }
+    },
+    "relations": [
+      {
+        "column": "id_domaine_scrapping_produit_hdspi",
+        "references": "domaine_scrapping_produit_ia.id_domaine_scrapping_produit_ia",
+        "note": "Les sélecteurs de domaine (selecteur_<type>_dspi) sont synthétisés à partir des used_selecteur de cette table."
+      },
+      {
+        "column": "id_scrapping_fiche_produit_hdspi",
+        "references": "scrapping_fiche_produit_ia.id_scrapping_fiche_produit_ia",
+        "cardinality": "0..1 ligne par fiche",
+        "note": "Le contenu extrait (titre_produit_sfpi, prix_produit_sfpi…) est sur la fiche ; cette table dit par quel sélecteur."
+      }
+    ],
+    "notes": "Lire le sélecteur réellement utilisé : unserialize(selecteur_<type>_hdspi)['used_selecteur']. Les colonnes d'une même ligne peuvent venir de passages différents : seule la dernière écriture est datée. Remplissage au 2026-10-02 (lignes non NULL) : titre 4 309, description 6 622, prix 6 665, image 4 133, livraison 6 232, stock 3 801, catégorie 3 818. Écrivains : script_scrapping_produit_ia_V2.php (V1 et DOCUMENTE_2 portent la même fonction) ; suppression : resetData.php. Lecteurs : V2 (synthèse), export BO ajax_exporter_scrapping.php."
+  },
+  "historique_reajustement_selecteur_ia": {
+    "database_id": 10,
+    "description": "Journal des changements de sélecteurs CSS au niveau DOMAINE (domaine_scrapping_produit_ia.selecteur_<type>_dspi) : 1 ligne = 1 écriture historisée d'un type de sélecteur pour un domaine, avec la valeur avant (ancien) et après (nouveau). Alimente l'écran « Restaurer » du BO (moulinette scrapping produit IA) : chaque ligne y est une version restaurable, égale à son ancien_selecteur_hrsi ; la plus ancienne ligne d'un (domaine, type) est libellée « Original chatgpt ». Écrivains : validation manuelle d'un sélecteur (ajax_scrapping_v2.php action=modifier_selecteur → ComparateurSelecteur::save_selecteur sans fusion), restauration (ajax_restaurer_selecteur.php), réécriture CLI A36 de script_scrapping_produit_ia_V2.php (id_utilisateur_hrsi = 0). ⚠ Couverture incomplète : la synthèse automatique avec fusion (V2) et l'enregistrement d'un sélecteur NOK n'écrivent AUCUNE ligne — l'absence de ligne ne prouve pas que le sélecteur du domaine n'a pas changé. Base HELLOPRO_IA.",
+    "primary_key": "id_historique_reajustement_selecteur_ia",
+    "default_order_by": "id_historique_reajustement_selecteur_ia DESC",
+    "rows": null,
+    "columns": {
+      "id_historique_reajustement_selecteur_ia": {
+        "type": "int",
+        "desc": "Identifiant (PK auto-incrément), croissant dans l'ordre des changements (l'écran Restaurer trie par cet id DESC). C'est l'id de version passé à la restauration."
+      },
+      "id_domaine_hrsi": {
+        "type": "int",
+        "desc": "Domaine concerné — FK domaine_scrapping_produit_ia.id_domaine_scrapping_produit_ia (aucune orpheline au 2026-10-02). ⚠ NON indexé (seule la PK l'est) : un filtre par domaine parcourt toute la table."
+      },
+      "type_selecteur_hrsi": {
+        "type": "varchar(255)",
+        "desc": "Type d'information dont le sélecteur a changé ; désigne la colonne selecteur_<type>_dspi du domaine. Valeurs au 2026-10-02 : description 4 598, image 1 511, categorie 1 170, titre 913, prix 891, stock 237, livraison 223. Jamais les sélecteurs NOK (selecteur_nok_*_dspi)."
+      },
+      "date_hrsi": {
+        "type": "datetime",
+        "desc": "Date/heure du changement : NOW() serveur MySQL à l'insertion, jamais mise à jour ensuite. Plage au 2026-10-02 : 2025-03-05 → 2026-10-02 (table alimentée en continu)."
+      },
+      "ancien_selecteur_hrsi": {
+        "type": "longtext",
+        "desc": "Valeur BRUTE de selecteur_<type>_dspi AVANT le changement, sérialisé PHP au format de la colonne du domaine : array[ {selecteur:[…]} ] ; titre = un groupe par choix ; prix, catégorie, livraison = objets avec métadonnées (devise/type/indicatif/mention, type, unite/label). C'est CETTE valeur que « Restaurer » réécrit dans le domaine. Chaîne vide '' (33 lignes au 2026-10-02) = colonne du domaine vide avant ce premier enregistrement."
+      },
+      "nouveau_selecteur_hrsi": {
+        "type": "longtext",
+        "desc": "Valeur écrite dans selecteur_<type>_dspi par ce changement, même format. Identique à ancien_selecteur_hrsi sur 890 lignes au 2026-10-02 (validation sans modification effective). Sur une ligne de restauration, égale à l'ancien_selecteur_hrsi de la version restaurée."
+      },
+      "id_utilisateur_hrsi": {
+        "type": "int",
+        "desc": "Utilisateur BO auteur du changement ($_SESSION['user_bo']) — référence administrateur.id_administrateur de la base annuaire BO (jointure inter-bases ; l'écran affiche « Changé par <login> »). 0 = traitement CLI (réécriture A36 de V2) : aucune ligne de ce type au 2026-10-02. Nullable en schéma, jamais NULL en pratique ; 12 utilisateurs distincts."
+      },
+      "tag_restaurer_hrsi": {
+        "type": "int",
+        "desc": "Marqueur de restauration, posé sur la ligne SOURCE (celle dont l'ancien_selecteur_hrsi a été restauré), pas sur la ligne neuve que la restauration insère. 1 = version restaurée actuellement en place (badge « Version restaurée actuelle ») ; 0 = a été la version restaurée, marqueur retiré depuis (nouvelle restauration ou nouvelle validation) ; NULL = jamais restaurée (cas général). Au 2026-10-02 : NULL : 9 453, 0 : 75, 1 : 15 (au plus 1 par domaine). ⚠ Le retrait du marqueur filtre par domaine SANS type (LIMIT 1) : restaurer le type B efface le 1 du type A sur le même domaine. Un 1 est donc unique par domaine, pas par (domaine, type), et un 0 ne prouve pas que la version a été remplacée sur son propre type."
+      }
+    },
+    "relations": [
+      {
+        "column": "id_domaine_hrsi",
+        "references": "domaine_scrapping_produit_ia.id_domaine_scrapping_produit_ia",
+        "note": "Avec type_selecteur_hrsi, désigne la colonne selecteur_<type>_dspi modifiée."
+      },
+      {
+        "column": "id_utilisateur_hrsi",
+        "references": "administrateur.id_administrateur (base annuaire BO)",
+        "note": "Jointure inter-bases ; 0 = CLI."
+      }
+    ],
+    "notes": "Historique d'un (domaine, type) : WHERE id_domaine_hrsi = X AND type_selecteur_hrsi = 'titre' ORDER BY id_historique_reajustement_selecteur_ia DESC. Une restauration produit une ligne neuve (ancien = valeur en place, nouveau = version restaurée) et pose tag_restaurer_hrsi = 1 sur la ligne source. Restaurer ne recalcule pas le contenu des fiches (scrapping_fiche_produit_ia). Une validation manuelle remet aussi à 0 le marqueur de restauration du domaine. Pour l'historique PAR FICHE des sélecteurs proposés par le LLM, voir historique_domaine_scrapping_produit_ia."
+  }
+}
