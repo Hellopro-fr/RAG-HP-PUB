@@ -93,6 +93,25 @@ def test_fournisseur_inconnu_refuse():
         construire_modele(fiche("mistral", "mistral-large"), AUCUN, SETTINGS)
 
 
+SANS_OUTIL = (("openai", "gpt-6-luna"), ("anthropic", "claude-haiku-4-5"),
+              ("gemini", "gemini-2.5-flash"), ("deepseek", "deepseek-flash"))
+
+
+def test_temperature_null_ou_absente_non_envoyee():
+    # gemini-2.5 : ChatGoogleGenerativeAI mettrait 0.7 par défaut si la température n'était pas passée
+    for fournisseur, nom in SANS_OUTIL:
+        for modele in ({"fournisseur": fournisseur, "nom": nom, "temperature": None},
+                       {"fournisseur": fournisseur, "nom": nom}):
+            llm = construire_modele({"modele": modele, "outils": {}}, AUCUN, SETTINGS)
+            assert llm.temperature is None, (fournisseur, modele)
+
+
+def test_temperature_de_la_fiche_transmise():
+    for fournisseur, nom in SANS_OUTIL:
+        modele = {"fournisseur": fournisseur, "nom": nom, "temperature": 0.3}
+        assert construire_modele({"modele": modele, "outils": {}}, AUCUN, SETTINGS).temperature == 0.3
+
+
 def test_aucune_relance_des_sdk():
     # Les relances internes des SDK dépasseraient le budget de 300 s du curl PHP.
     # Gemini avec recherche (API Interactions) : un seul appel HTTP, vérifié dans test_gemini.py.

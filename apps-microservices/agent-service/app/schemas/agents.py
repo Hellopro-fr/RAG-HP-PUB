@@ -1,4 +1,4 @@
-from typing import Annotated, List, Literal, Optional
+from typing import Annotated, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, StringConstraints
 
@@ -8,6 +8,7 @@ class DemandeExecution(BaseModel):
     origine: str = Field("inconnue", max_length=100)
     version: Literal["publiee", "brouillon"] = "publiee"
     id_user_bo: Optional[int] = None
+    variables: Dict[str, Annotated[str, StringConstraints(max_length=2000)]] = {}  # valeurs des {{nom}}
 
 
 class Usage(BaseModel):
@@ -24,6 +25,7 @@ class ReponseExecution(BaseModel):
     version: int
     etapes: List[str]
     usage: Usage
+    trace: dict = {}  # recherches, pages lues, appels MCP, sources, tokens des outils, variables
     cout_usd: Optional[float]
     duree_ms: int
     execution_id: Optional[int]

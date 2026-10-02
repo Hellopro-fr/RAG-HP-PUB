@@ -4,6 +4,7 @@ import time
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
+from app.core.trace import trace_vide
 from app.graphe.agent_simple import STATUT_ERREUR, construire_graphe
 
 logger = logging.getLogger(__name__)
@@ -29,7 +30,7 @@ def _probleme_definition(definition) -> Optional[str]:
         return "la définition n'est pas un objet JSON"
     if not isinstance(definition.get("modele"), dict):
         return "« modele » absent ou invalide"
-    for champ in ("format_sortie", "outils"):
+    for champ in ("format_sortie", "outils", "variables"):
         if not isinstance(definition.get(champ, {}), dict):
             return f"« {champ} » doit être un objet"
     relances = definition.get("relances", 1)
@@ -39,7 +40,7 @@ def _probleme_definition(definition) -> Optional[str]:
 
 
 def executer_agent(code: str, entree: str, version: str, origine: str,
-                   id_user_bo: Optional[int], deps: Dependances) -> dict:
+                   id_user_bo: Optional[int], deps: Dependances, variables: Optional[dict] = None) -> dict:
     """Lève AgentIntrouvable si la fiche est absente ; sinon journalise toujours l'exécution, jamais de 500."""
     fiche = deps.api_v2.lire_fiche(code, version) or {}
     if not fiche.get("trouve"):
@@ -54,12 +55,13 @@ def executer_agent(code: str, entree: str, version: str, origine: str,
     else:
         try:
             graphe = construire_graphe(lambda d: deps.fabrique_modele(d, capacites))
-            etat = graphe.invoke({"entree": entree, "definition": definition})
+            etat = graphe.invoke({"entree": entree, "definition": definition, "variables": variables or {}})
         except Exception as exc:  # défaut imprévu d'un nœud : journalisé et renvoyé en erreur, pas en 500
             logger.exception("exécution de %s en échec", code)
             etat = {"statut": STATUT_ERREUR, "erreur": f"{type(exc).__name__}: {exc}", "etapes": []}
     duree_ms = int((time.monotonic() - debut) * 1000)
     usage = etat.get("usage") or {"tokens_entree": 0, "tokens_sortie": 0, "recherches": 0}
+    trace = etat.get("trace") or trace_vide()
 
     journal = deps.api_v2.enregistrer_execution({
         "id_agent": fiche["id_agent"], "id_version": fiche["id_version"], "origine": origine,
@@ -68,8 +70,9 @@ def executer_agent(code: str, entree: str, version: str, origine: str,
         "etapes": etat.get("etapes", []), "fournisseur": modele.get("fournisseur", ""),
         "modeles": modele.get("nom", ""), "tokens_entree": usage["tokens_entree"],
         "tokens_sortie": usage["tokens_sortie"], "nb_recherches": usage["recherches"], "duree_ms": duree_ms,
+        "trace": trace,
     })
     return {"output": etat.get("sortie"), "statut": NOMS_STATUT[etat["statut"]], "erreur": etat.get("erreur"),
             "agent": fiche["code"], "version": fiche["numero"], "etapes": etat.get("etapes", []),
-            "usage": usage, "cout_usd": journal["cout"], "duree_ms": duree_ms,
+            "usage": usage, "trace": trace, "cout_usd": journal["cout"], "duree_ms": duree_ms,
             "execution_id": journal["id_execution"]}

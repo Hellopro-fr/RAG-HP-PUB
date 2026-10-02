@@ -39,9 +39,8 @@ def construire_modele(definition: dict, capacites: dict, settings: Settings,
         raise ErreurConfiguration(f"lecture de pages native indisponible pour {fournisseur}/{nom}")
 
     # max_retries=0 : les relances des SDK (6 chez Gemini) dépasseraient le budget de 300 s du curl PHP.
-    params = {"timeout": settings.TIMEOUT_MODELE_S, "max_retries": 0}
-    if "temperature" in modele:
-        params["temperature"] = modele["temperature"]
+    # Température null = non envoyée ; None explicite, sinon ChatGoogleGenerativeAI met 0.7 avant Gemini 3.
+    params = {"timeout": settings.TIMEOUT_MODELE_S, "max_retries": 0, "temperature": modele.get("temperature")}
     autorises = list((mcp or {}).get("outils_autorises") or [])
 
     if fournisseur == "openai":
