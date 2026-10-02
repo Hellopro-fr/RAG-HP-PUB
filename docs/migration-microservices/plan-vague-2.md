@@ -119,10 +119,13 @@ C'est le morceau le plus risqué : la gateway migre le schéma de sa base au dé
 
 ## 4. Calendrier et mobilisation
 
+> **Jeton Gandi (01/10)** : idéalement créé le **ven 2/10** ([procédure](procedure-jeton-gandi.md)) ; sinon le **lun 5/10 après-midi**. Dans ce second cas, seuls les CNAME de validation des certificats et le TTL 300 s glissent au 5/10 : **aucun effet sur V2-a et V2-b** (pas de DNS : routes de la gateway, lignes `mcp_servers`), ni sur V2-c / V2-d (semaine du 12/10, toujours plus de 48 h après le TTL).
+
 | Date | DSO | LEAD / devs | CTO / PROD | Ecritel |
 |---|---|---|---|---|
 | **Jeu 1/10** | revue ; mesures VM ; LB + certificats ; test VM → CR ; message Ecritel ; liste des URL en dur par service | revue (plan validé) | revue ; décisions § 6 | reçoit la question |
-| **Ven 2/10** | NEG GKE ; **TTL Gandi 300 s** ; Cloud Armor PREVIEW ; runbook ; tickets d'URL en dur prêts | — (devs disponibles à partir du 5/10) | — | répond |
+| **Ven 2/10** | test d'entrée interne (0.19) ; Terraform LB + autorisations DNS des certificats (`plan`) ; NEG GKE ; runbook et script de bascule de route ; P0 des premiers services V2-a ; tickets d'URL en dur ; arrêt en réserve du service debug ; **si le jeton Gandi arrive** : CNAME de validation + TTL 300 s | titulaire Gandi : création du jeton ([procédure](procedure-jeton-gandi.md)) si possible | — | répond |
+| **Lun 5/10 après-midi** (si jeton reporté) | jeton Gandi → CNAME de validation des certificats, **TTL 300 s** (≥ 48 h avant les bascules DNS de la semaine du 12/10) | — | — | — |
 | **Lun 5 → mar 6/10** | V2-a (routes une à une) | tests fonctionnels à chaque route | — | — |
 | **Mer 7/10** | V2-b (MCP) | tests MCP | — | — |
 | **Jeu 8/10** | bilan ; préparation V2-c (c.1, c.2) | LEAD confirme la version gateway | point d'étape | — |
@@ -276,6 +279,41 @@ docker system df -v | grep -E 'image_download_data|crawler_data'
 ```
 
 ---
+
+## 7ter. Exposition des Cloud Run — cible validée le 02/10
+
+Audit du 01/10 : 29 Cloud Run sur 31 étaient publics et anonymes (wrappers CD en `ingress: all` + `allow_unauthenticated: true`) — `allUsers` retiré partout le 01/10 (F-HP-SEC-030). Test du 02/10 sur un service sans trafic : en entrée **`internal-and-cloud-load-balancing`**, **internet reçoit 404, la VM et les pods GKE obtiennent 200**.
+
+| Catégorie | Cible | Posée quand |
+|---|---|---|
+| API et MCP appelés par la gateway, les MCP ou les consumers | entrée `internal-and-cloud-load-balancing` + appel anonyme (`allow_unauthenticated: true`) + `min_instances: 1` | dans le wrapper CD, **au moment de la bascule de sa route** (V2-a, V2-b) |
+| Fronts publics (`rag.`, `login.`, conseils…) | même entrée : le public passe **par le load balancer** (Cloud Armor), l'URL `run.app` reste fermée | à la bascule DNS (V2-d) |
+| Services non basculés | restent sans `allUsers` (aucun appelant) | déjà fait (01/10) |
+
+**Parité de code (02/10)** : la VM fait tourner le code de `features/poc` (branche des devs) ; Cloud Run est construit depuis `prod`. Sur les 4 premiers services, 2 font tourner sur la VM un fichier **absent de `prod`** (un correctif de production du 24/09 pour detection-langue). Règle : **avant de basculer une route, le code du service (et de ses bibliothèques) est remonté de `poc` vers `prod` par les devs, dans une PR qui porte aussi les réglages cible du wrapper** (entrée interne, appel anonyme, `min_instances: 1`, variables manquantes) ; le merge redéploie Cloud Run avec le bon code et la bonne exposition. Contrôle : `p0_code.sh` (VM = image Cloud Run).
+
+**Prérequis** : le smoke test du workflow réutilisable `deploy-cloud-run.yml` ne s'ignore aujourd'hui que pour `ingress: internal` ; avec `internal-and-cloud-load-balancing`, le runner GitHub (internet) échouerait et déclencherait le retour arrière automatique. Le corriger (ignorer toute entrée ≠ `all`) **avant** de modifier le moindre wrapper.
+
+## 7quater. Rapatriement `features/poc` → `prod` (constat du 02/10)
+
+Des **correctifs urgents** partent sur la VM par `features/poc` ; ils ne sont pas dans `prod`, d'où sont construites les images Cloud Run et GKE. Base commune des deux branches : `fe7a6923` (25/08). Services touchés depuis par des commits présents **seulement** dans `poc` (relevé du 02/10) :
+
+| Service / bibliothèque | Dernier commit `poc` seul | Sous-vague | À faire |
+|---|---|---|---|
+| `api-detection-langue-fr` | 24/09 (fuite du pool de navigateurs, correctif PROD) | V2-a | rapatrier **avant** la bascule (DSO) |
+| `content-extractor-api-service` + `libs/common-utils` (`HeaderFooterExtractor`, `cache_service`) | 30/09 | V2-a | rapatrier **avant** la bascule |
+| `mcp-semrush-service` | 02/09 | V2-b | à vérifier en P0 |
+| `mcp-gateway-service`, `mcp-template-neo4j-service`, `mcp-gateway-frontend` | 30/09 | V2-c / V2-d | à rapatrier avec le bloc gateway |
+| `nextjs-conseils-hp`, `crawler-monitor-*` | 18/09, 28/08 | V2-d | idem |
+| `crawler-service`, `image-download-service` | 02-03/09 | V2-e | idem |
+| `agent-service`, `graph-rag-normalize-unite-service` | 01-02/10 | hors vague (nouveau / reste sur la VM) | — |
+
+**Consumers L1→L6 (déjà sur GKE)** : aucun commit `poc` seul sur leur code ; seul point d'attention, `website-processor-service` importe des modules de `common_utils` modifiés le 30/09 dans `poc`.
+
+**Règles**
+1. Avant chaque bascule : `p0_code.sh` (le code VM = l'image Cloud Run ?) et `p0_diff.sh` (origine `poc` / `prod`).
+2. Rapatriement **assuré par le DSO** (décision du 02/10, pour garantir que tout est fait) : PR `poc` → `prod` du **code fonctionnel uniquement** : on garde les `requirements.txt` épinglés et les Dockerfile de `prod` (durcissement CD3.c, gate Trivy). La même PR porte les réglages cible du wrapper.
+3. **Après la bascule d'un service, ses correctifs vont dans `prod`** (PR, gate, CD) et plus par `poc` → VM : la VM ne le sert plus. Jusqu'au CD GKE (F-HP-IND-005), le DSO redéploie les services GKE à la main.
 
 ## 7bis. Dépendances entre ce qui reste sur la VM et ce qui migre
 
