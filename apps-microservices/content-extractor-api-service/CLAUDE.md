@@ -10,14 +10,14 @@ REST API exposing boilerpy3 HTML cleaning and HeaderFooterExtractor for external
 - Redis (async job store + result cache — **required for async, optional for sync**)
 - Prometheus metrics
 
-> **CPU offload:** all extraction (boilerpy3 + the 706-line BeautifulSoup `HeaderFooterExtractor`) is CPU-bound and runs via `asyncio.to_thread` so the event loop never blocks. The GIL means real parallelism comes from **processes** (`UVICORN_WORKERS` × replicas), not threads.
+> **CPU offload:** all extraction (boilerpy3 + the BeautifulSoup `HeaderFooterExtractor`) is CPU-bound and runs via `asyncio.to_thread` so the event loop never blocks. The GIL means real parallelism comes from **processes** (`UVICORN_WORKERS` × replicas), not threads.
 
 ## Endpoints
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
 | `/clean` | POST | boilerpy3 HTML cleaning (text or HTML output). Cached + non-blocking; may return `503 + Retry-After` when `SYNC_MAX_INFLIGHT` exceeded |
-| `/extract/header-footer` | POST | Header/footer extraction with optional debug mode. Cached + non-blocking; same `503` admission as `/clean` |
+| `/extract/header-footer` | POST | Header/footer extraction with optional debug mode. `debug=true` returns the same `header`/`footer`/`*_method` as `debug=false`, plus every strategy's text (one selection table, `HeaderFooterExtractor.SELECTION_PRIORITY`, since R10 a). Cached + non-blocking; same `503` admission as `/clean` |
 | `/clean-async` | POST | Submit a **batch** of clean items → `202 {job_id}` (or `200` idempotent re-submit). Poll `/jobs/{job_id}` |
 | `/extract/header-footer-async` | POST | Submit a **batch** of header/footer items → `202 {job_id}`. Poll `/jobs/{job_id}` |
 | `/jobs/{job_id}` | GET | Poll an async job: `pending\|running\|completed\|failed\|stale`; `results` present at terminal; `404` when unknown/expired |
@@ -58,7 +58,7 @@ python -m pytest tests/ -v
 | `REDIS_URL` | `redis://redis:6379` | Job store + result cache. Absent → async `503`; sync degrades cache-less |
 | `RESULT_CACHE_ENABLED` | `true` | Result cache kill-switch |
 | `RESULT_CACHE_TTL_S` | `86400` | Result cache TTL (24h) |
-| `RESULT_CACHE_VERSION` | `v1` | Bump to invalidate cache on extractor/boilerpy3 change |
+| `RESULT_CACHE_VERSION` | `v2` | Bump to invalidate cache on extractor/boilerpy3 change (`v2`: debug pick aligned on production, R10 a) |
 | `SYNC_MAX_INFLIGHT` | `0` | Sync admission cap (`0` = disabled) |
 | `ASYNC_JOBS_ENABLED` | `true` | Async API kill-switch (`false` → submit `503`, no `Retry-After`) |
 | `MAX_ACTIVE_JOBS` | `8` | Per-worker in-flight async jobs (capacity `503` + `Retry-After` beyond) |
