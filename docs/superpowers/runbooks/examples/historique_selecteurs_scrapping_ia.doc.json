@@ -1,7 +1,7 @@
 {
   "historique_domaine_scrapping_produit_ia": {
     "database_id": 10,
-    "description": "Historique PAR FICHE des sélecteurs CSS proposés par le LLM pendant l'extraction produit IA (script_scrapping_produit_ia_V2.php, fonction historiser_selecteur) : 1 ligne par fiche scrapée (scrapping_fiche_produit_ia), clé UNIQUE (domaine, fiche). Pour chaque type d'information, la colonne selecteur_<type>_hdspi garde, du DERNIER appel LLM ayant produit un sélecteur neuf pour ce type sur cette fiche, les candidats proposés (data) et celui qui a réellement extrait le contenu (used_selecteur). La synthèse suivante relit used_selecteur pour reconstruire les sélecteurs du domaine (domaine_scrapping_produit_ia.selecteur_<type>_dspi). Ce n'est PAS le journal des changements de sélecteurs du domaine : voir historique_reajustement_selecteur_ia. Base HELLOPRO_IA.",
+    "description": "Historique PAR FICHE des sélecteurs CSS proposés par le LLM pendant l'extraction produit IA (script_scrapping_produit_ia_V2.php, fonction historiser_selecteur) : 1 ligne par fiche scrapée (scrapping_fiche_produit_ia), clé UNIQUE (domaine, fiche). Pour chaque type d'information, la colonne selecteur_{type}_hdspi garde, du DERNIER appel LLM ayant produit un sélecteur neuf pour ce type sur cette fiche, les candidats proposés (data) et celui qui a réellement extrait le contenu (used_selecteur). La synthèse suivante relit used_selecteur pour reconstruire les sélecteurs du domaine (domaine_scrapping_produit_ia.selecteur_{type}_dspi). Ce n'est PAS le journal des changements de sélecteurs du domaine : voir historique_reajustement_selecteur_ia. Base HELLOPRO_IA.",
     "primary_key": "id_historique_domaine_scrapping_produit_ia",
     "default_order_by": "date_creation_hdspi DESC",
     "rows": null,
@@ -55,7 +55,7 @@
       {
         "column": "id_domaine_scrapping_produit_hdspi",
         "references": "domaine_scrapping_produit_ia.id_domaine_scrapping_produit_ia",
-        "note": "Les sélecteurs de domaine (selecteur_<type>_dspi) sont synthétisés à partir des used_selecteur de cette table."
+        "note": "Les sélecteurs de domaine (selecteur_{type}_dspi) sont synthétisés à partir des used_selecteur de cette table."
       },
       {
         "column": "id_scrapping_fiche_produit_hdspi",
@@ -64,11 +64,11 @@
         "note": "Le contenu extrait (titre_produit_sfpi, prix_produit_sfpi…) est sur la fiche ; cette table dit par quel sélecteur."
       }
     ],
-    "notes": "Lire le sélecteur réellement utilisé : unserialize(selecteur_<type>_hdspi)['used_selecteur']. Les colonnes d'une même ligne peuvent venir de passages différents : seule la dernière écriture est datée. Remplissage au 2026-10-02 (lignes non NULL) : titre 4 309, description 6 622, prix 6 665, image 4 133, livraison 6 232, stock 3 801, catégorie 3 818. Écrivains : script_scrapping_produit_ia_V2.php (V1 et DOCUMENTE_2 portent la même fonction) ; suppression : resetData.php. Lecteurs : V2 (synthèse), export BO ajax_exporter_scrapping.php."
+    "notes": "Lire le sélecteur réellement utilisé : unserialize(selecteur_{type}_hdspi)['used_selecteur']. Les colonnes d'une même ligne peuvent venir de passages différents : seule la dernière écriture est datée. Remplissage au 2026-10-02 (lignes non NULL) : titre 4 309, description 6 622, prix 6 665, image 4 133, livraison 6 232, stock 3 801, catégorie 3 818. Écrivains : script_scrapping_produit_ia_V2.php (V1 et DOCUMENTE_2 portent la même fonction) ; suppression : resetData.php. Lecteurs : V2 (synthèse), export BO ajax_exporter_scrapping.php."
   },
   "historique_reajustement_selecteur_ia": {
     "database_id": 10,
-    "description": "Journal des changements de sélecteurs CSS au niveau DOMAINE (domaine_scrapping_produit_ia.selecteur_<type>_dspi) : 1 ligne = 1 écriture historisée d'un type de sélecteur pour un domaine, avec la valeur avant (ancien) et après (nouveau). Alimente l'écran « Restaurer » du BO (moulinette scrapping produit IA) : chaque ligne y est une version restaurable, égale à son ancien_selecteur_hrsi ; la plus ancienne ligne d'un (domaine, type) est libellée « Original chatgpt ». Écrivains : validation manuelle d'un sélecteur (ajax_scrapping_v2.php action=modifier_selecteur → ComparateurSelecteur::save_selecteur sans fusion), restauration (ajax_restaurer_selecteur.php), réécriture CLI A36 de script_scrapping_produit_ia_V2.php (id_utilisateur_hrsi = 0). ⚠ Couverture incomplète : la synthèse automatique avec fusion (V2) et l'enregistrement d'un sélecteur NOK n'écrivent AUCUNE ligne — l'absence de ligne ne prouve pas que le sélecteur du domaine n'a pas changé. Base HELLOPRO_IA.",
+    "description": "Journal des changements de sélecteurs CSS au niveau DOMAINE (domaine_scrapping_produit_ia.selecteur_{type}_dspi) : 1 ligne = 1 écriture historisée d'un type de sélecteur pour un domaine, avec la valeur avant (ancien) et après (nouveau). Alimente l'écran « Restaurer » du BO (moulinette scrapping produit IA) : chaque ligne y est une version restaurable, égale à son ancien_selecteur_hrsi ; la plus ancienne ligne d'un (domaine, type) est libellée « Original chatgpt ». Écrivains : validation manuelle d'un sélecteur (ajax_scrapping_v2.php action=modifier_selecteur → ComparateurSelecteur::save_selecteur sans fusion), restauration (ajax_restaurer_selecteur.php), réécriture CLI A36 de script_scrapping_produit_ia_V2.php (id_utilisateur_hrsi = 0). ⚠ Couverture incomplète : la synthèse automatique avec fusion (V2) et l'enregistrement d'un sélecteur NOK n'écrivent AUCUNE ligne — l'absence de ligne ne prouve pas que le sélecteur du domaine n'a pas changé. Base HELLOPRO_IA.",
     "primary_key": "id_historique_reajustement_selecteur_ia",
     "default_order_by": "id_historique_reajustement_selecteur_ia DESC",
     "rows": null,
@@ -83,7 +83,7 @@
       },
       "type_selecteur_hrsi": {
         "type": "varchar(255)",
-        "desc": "Type d'information dont le sélecteur a changé ; désigne la colonne selecteur_<type>_dspi du domaine. Valeurs au 2026-10-02 : description 4 598, image 1 511, categorie 1 170, titre 913, prix 891, stock 237, livraison 223. Jamais les sélecteurs NOK (selecteur_nok_*_dspi)."
+        "desc": "Type d'information dont le sélecteur a changé ; désigne la colonne selecteur_{type}_dspi du domaine. Valeurs au 2026-10-02 : description 4 598, image 1 511, categorie 1 170, titre 913, prix 891, stock 237, livraison 223. Jamais les sélecteurs NOK (selecteur_nok_*_dspi)."
       },
       "date_hrsi": {
         "type": "datetime",
@@ -91,15 +91,15 @@
       },
       "ancien_selecteur_hrsi": {
         "type": "longtext",
-        "desc": "Valeur BRUTE de selecteur_<type>_dspi AVANT le changement, sérialisé PHP au format de la colonne du domaine : array[ {selecteur:[…]} ] ; titre = un groupe par choix ; prix, catégorie, livraison = objets avec métadonnées (devise/type/indicatif/mention, type, unite/label). C'est CETTE valeur que « Restaurer » réécrit dans le domaine. Chaîne vide '' (33 lignes au 2026-10-02) = colonne du domaine vide avant ce premier enregistrement."
+        "desc": "Valeur BRUTE de selecteur_{type}_dspi AVANT le changement, sérialisé PHP au format de la colonne du domaine : array[ {selecteur:[…]} ] ; titre = un groupe par choix ; prix, catégorie, livraison = objets avec métadonnées (devise/type/indicatif/mention, type, unite/label). C'est CETTE valeur que « Restaurer » réécrit dans le domaine. Chaîne vide '' (33 lignes au 2026-10-02) = colonne du domaine vide avant ce premier enregistrement."
       },
       "nouveau_selecteur_hrsi": {
         "type": "longtext",
-        "desc": "Valeur écrite dans selecteur_<type>_dspi par ce changement, même format. Identique à ancien_selecteur_hrsi sur 890 lignes au 2026-10-02 (validation sans modification effective). Sur une ligne de restauration, égale à l'ancien_selecteur_hrsi de la version restaurée."
+        "desc": "Valeur écrite dans selecteur_{type}_dspi par ce changement, même format. Identique à ancien_selecteur_hrsi sur 890 lignes au 2026-10-02 (validation sans modification effective). Sur une ligne de restauration, égale à l'ancien_selecteur_hrsi de la version restaurée."
       },
       "id_utilisateur_hrsi": {
         "type": "int",
-        "desc": "Utilisateur BO auteur du changement ($_SESSION['user_bo']) — référence administrateur.id_administrateur de la base annuaire BO (jointure inter-bases ; l'écran affiche « Changé par <login> »). 0 = traitement CLI (réécriture A36 de V2) : aucune ligne de ce type au 2026-10-02. Nullable en schéma, jamais NULL en pratique ; 12 utilisateurs distincts."
+        "desc": "Utilisateur BO auteur du changement ($_SESSION['user_bo']) — référence administrateur.id_administrateur de la base annuaire BO (jointure inter-bases ; l'écran affiche « Changé par {login} »). 0 = traitement CLI (réécriture A36 de V2) : aucune ligne de ce type au 2026-10-02. Nullable en schéma, jamais NULL en pratique ; 12 utilisateurs distincts."
       },
       "tag_restaurer_hrsi": {
         "type": "int",
@@ -110,7 +110,7 @@
       {
         "column": "id_domaine_hrsi",
         "references": "domaine_scrapping_produit_ia.id_domaine_scrapping_produit_ia",
-        "note": "Avec type_selecteur_hrsi, désigne la colonne selecteur_<type>_dspi modifiée."
+        "note": "Avec type_selecteur_hrsi, désigne la colonne selecteur_{type}_dspi modifiée."
       },
       {
         "column": "id_utilisateur_hrsi",
