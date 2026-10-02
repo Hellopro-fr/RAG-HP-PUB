@@ -15,7 +15,7 @@ CODES_HTTP = {"ok": 200, "format_invalide": 422, "erreur": 502, "timeout": 504}
 def run(code: str, demande: DemandeExecution, deps: Dependances = Depends(get_dependances)):
     try:
         resultat = executer_agent(code, demande.input, demande.version, demande.origine,
-                                  demande.id_user_bo, deps)
+                                  demande.id_user_bo, deps, variables=demande.variables)
     except AgentIntrouvable as exc:
         raise HTTPException(status_code=404, detail=exc.raison)
     except ErreurApiV2:

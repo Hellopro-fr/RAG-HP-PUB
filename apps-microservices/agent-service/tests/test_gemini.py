@@ -29,6 +29,20 @@ REPONSE_GENERATE_CONTENT = {
     "candidates": [{"content": {"role": "model", "parts": [{"text": "sans recherche"}]}, "finishReason": "STOP"}],
     "usageMetadata": {"promptTokenCount": 5, "candidatesTokenCount": 2, "totalTokenCount": 7},
 }
+# Variante avec lecture de pages : résultat url_context et tokens du contenu lu (total_tool_use_tokens)
+REPONSE_AVEC_LECTURE = {
+    **REPONSE_SOL_EQUESTRE,
+    "usage": {**REPONSE_SOL_EQUESTRE["usage"], "total_tool_use_tokens": 3200, "total_thought_tokens": 40},
+    "steps": REPONSE_SOL_EQUESTRE["steps"][:3] + [
+        {"type": "url_context_result", "call_id": "c2",
+         "result": [{"url": "https://www.sol-equestre.fr/mentions", "status": "success"},
+                    {"url": "https://www.sol-equestre.fr/cgv", "status": "paywall"}]},
+        {"type": "mcp_server_tool_call", "id": "c3", "name": "fiche_societe", "server_name": "hellopro",
+         "arguments": {"siren": "478934011"}},
+        {"type": "mcp_server_tool_result", "call_id": "c3", "name": "fiche_societe", "server_name": "hellopro",
+         "result": "ok"},
+    ] + REPONSE_SOL_EQUESTRE["steps"][3:],
+}
 MESSAGES = [SystemMessage("Trouve le SIRET"), HumanMessage("sol-equestre.fr")]
 
 
@@ -68,6 +82,7 @@ def test_recherche_google_passe_par_interactions(api):
     gemini({"google_search": {}}).invoke(MESSAGES)
     assert len(api.appels) == 1
     assert api.appels[0]["url"] == "https://generativelanguage.googleapis.com/v1beta/interactions"
+    # Température de la fiche non envoyée : information seulement
     assert api.appels[0]["corps"] == {"model": "gemini-3.1-flash-lite", "input": "sol-equestre.fr",
                                       "system_instruction": "Trouve le SIRET", "store": False,
                                       "tools": [{"type": "google_search"}]}
@@ -88,10 +103,25 @@ def test_reponse_convertie_au_format_langchain(api):
     assert extraire_usage(reponse) == {"tokens_entree": 1021, "tokens_sortie": 14, "recherches": 10}
     assert reponse.usage_metadata["input_token_details"] == {"cache_read": 403}
     meta = reponse.response_metadata
-    assert meta["requetes_recherche"] == ['"sol-equestre" SIRET OR SIREN', "site:sol-equestre.fr SIRET OR SIREN OR RCS"]
-    assert meta["urls_lues"] == ["https://www.sol-equestre.fr/mentions"]
-    assert meta["sources"] == [{"url": "https://www.sol-equestre.fr/mentions", "title": "sol-equestre.fr"}]
+    assert meta["trace"]["recherches"] == [{"requete": '"sol-equestre" SIRET OR SIREN'},
+                                           {"requete": "site:sol-equestre.fr SIRET OR SIREN OR RCS"}]
+    assert meta["trace"]["pages_lues"] == [{"url": "https://www.sol-equestre.fr/mentions", "statut": "ok"}]
+    assert meta["trace"]["sources"] == [{"url": "https://www.sol-equestre.fr/mentions", "titre": "sol-equestre.fr"}]
     assert (meta["interaction_id"], meta["status"], meta["api"]) == ("v1_ChczWFMt", "completed", "interactions")
+    assert meta["usage_fournisseur"]["total_input_tokens"] == 1021  # usage brut de Google, visible dans le log
+
+
+def test_lecture_de_pages_mcp_et_tokens_du_contenu_lu(api):
+    api.interaction = REPONSE_AVEC_LECTURE
+    reponse = gemini({"google_search": {}}, {"url_context": {}}).invoke(MESSAGES)
+    trace = reponse.response_metadata["trace"]
+    assert trace["pages_lues"] == [{"url": "https://www.sol-equestre.fr/mentions", "statut": "ok"},
+                                   {"url": "https://www.sol-equestre.fr/cgv", "statut": "paywall"}]
+    assert trace["appels_mcp"] == [{"serveur": "hellopro", "outil": "fiche_societe", "arguments": {"siren": "478934011"},
+                                    "statut": "ok", "erreur": None}]
+    # Contenu des pages lues facturé en tokens d'entrée (doc URL context) ; réflexion au tarif sortie
+    assert trace["tokens_outils"] == 3200
+    assert extraire_usage(reponse) == {"tokens_entree": 1021 + 3200, "tokens_sortie": 14 + 40, "recherches": 10}
 
 
 def test_sans_recherche_ni_lecture_reste_sur_generate_content(api):

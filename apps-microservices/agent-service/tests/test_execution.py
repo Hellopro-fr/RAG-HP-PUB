@@ -89,3 +89,28 @@ def test_defaut_imprevu_dans_le_graphe_journalise_plutot_qu_un_500():
                               deps_avec(api, reponse("12345678900012")))
     assert resultat["statut"] == "erreur" and "TypeError" in resultat["erreur"]
     assert api.executions[0]["statut"] == 3
+
+
+def test_variables_et_trace_journalisees_et_renvoyees():
+    api = FauxApiV2(fiche=fiche_modifiee(instructions="SIRET de {{domaine}} ({{nom_domaine}}), pays {{pays}}.",
+                                         variables={"pays": {"defaut": "FR"}}))
+    message = reponse("12345678900012")
+    message.response_metadata = {"trace": {"recherches": [{"requete": "hellopro siren"}], "tokens_outils": 0}}
+    modele = ModeleScripte(message)
+    deps = Dependances(api_v2=api, fabrique_modele=lambda d, c: modele)
+    resultat = executer_agent("get-siren", "https://www.hellopro.fr/", "brouillon", "test_admin", 2256, deps,
+                              variables={"pays": "BE"})
+    assert modele.recus[0][0].content == "SIRET de hellopro.fr (hellopro), pays BE."
+    trace = api.executions[0]["trace"]
+    assert trace["recherches"] == [{"requete": "hellopro siren"}]
+    assert trace["variables"] == {"domaine": "hellopro.fr", "nom_domaine": "hellopro", "pays": "BE"}
+    assert resultat["trace"] == trace
+
+
+def test_variable_sans_valeur_erreur_journalisee_sans_appel():
+    api = FauxApiV2(fiche=fiche_modifiee(instructions="Pays {{pays}}", variables={"pays": {}}))
+    modele = ModeleScripte()
+    resultat = executer_agent("get-siren", "hellopro.fr", "publiee", "x", None,
+                              Dependances(api_v2=api, fabrique_modele=lambda d, c: modele))
+    assert resultat["statut"] == "erreur" and "{{pays}}" in resultat["erreur"]
+    assert modele.recus == [] and api.executions[0]["statut"] == 3
