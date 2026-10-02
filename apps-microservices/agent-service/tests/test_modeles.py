@@ -2,13 +2,15 @@ import pytest
 from langchain_deepseek import ChatDeepSeek
 
 from app.core.config import Settings
+from app.core.gemini import ChatGemini
 from app.core.modeles import ErreurConfiguration, construire_modele
 
 SETTINGS = Settings(OPENAI_API_KEY="sk-test", ANTHROPIC_API_KEY="sk-test", GEMINI_API_KEY="g-test",
                     DEEPSEEK_API_KEY="sk-test", MCP_GATEWAY_URL="https://mcp.test")
-TOUT = {"recherche_web": 1, "mcp": 1}
-RECHERCHE_SEULE = {"recherche_web": 1, "mcp": 0}
-AUCUN = {"recherche_web": 0, "mcp": 0}
+TOUT = {"recherche_web": 1, "mcp": 1, "lecture_pages": 1}
+RECHERCHE_SEULE = {"recherche_web": 1, "mcp": 0, "lecture_pages": 0}
+GEMINI = {"recherche_web": 1, "mcp": 0, "lecture_pages": 1}
+AUCUN = {"recherche_web": 0, "mcp": 0, "lecture_pages": 0}
 
 
 def fiche(fournisseur, nom, outils=None):
@@ -42,15 +44,33 @@ def test_anthropic_recherche_et_mcp_natifs():
         {"type": "url", "url": "https://mcp.test/mcp", "name": "hellopro", "authorization_token": "jwt-test"}]
 
 
-def test_gemini_recherche_google_native():
-    modele = construire_modele(fiche("gemini", "gemini-3.5-flash-lite", {"recherche_web": {"max": 5}}),
-                               RECHERCHE_SEULE, SETTINGS)
-    assert modele.kwargs["tools"][0]["google_search"] is not None
+def test_gemini_recherche_et_lecture_de_pages_natives():
+    outils = {"recherche_web": {"max": 5}, "lecture_pages": {}}
+    modele = construire_modele(fiche("gemini", "gemini-3.1-flash-lite", outils), GEMINI, SETTINGS)
+    assert isinstance(modele.bound, ChatGemini)
+    assert [sorted(k for k, v in outil.items() if v is not None) for outil in modele.kwargs["tools"]] == [
+        ["google_search"], ["url_context"]]
+
+
+def test_gemini_sans_outil_modele_seul():
+    assert type(construire_modele(fiche("gemini", "gemini-3.1-flash-lite"), GEMINI, SETTINGS)) is ChatGemini
+
+
+def test_anthropic_lecture_de_pages_web_fetch():
+    modele = construire_modele(fiche("anthropic", "claude-haiku-4-5", {"lecture_pages": {}}), TOUT, SETTINGS)
+    assert modele.kwargs["tools"] == [{"type": "web_fetch_20260209", "name": "web_fetch", "max_uses": 5}]
+
+
+def test_lecture_de_pages_refusee_sans_la_capacite():
+    # OpenAI : lecture incluse dans web_search ; DeepSeek : aucun outil
+    for fournisseur, nom in (("openai", "gpt-6-luna"), ("deepseek", "deepseek-flash")):
+        with pytest.raises(ErreurConfiguration, match="lecture de pages native indisponible"):
+            construire_modele(fiche(fournisseur, nom, {"lecture_pages": {}}), RECHERCHE_SEULE, SETTINGS)
 
 
 def test_gemini_mcp_refuse_tant_que_non_confirme():
     with pytest.raises(ErreurConfiguration, match="MCP natif indisponible"):
-        construire_modele(fiche("gemini", "gemini-3.5-flash-lite", {"mcp": {}}), RECHERCHE_SEULE, SETTINGS, jeton)
+        construire_modele(fiche("gemini", "gemini-3.5-flash-lite", {"mcp": {}}), GEMINI, SETTINGS, jeton)
 
 
 def test_deepseek_sans_outils():
@@ -73,13 +93,14 @@ def test_fournisseur_inconnu_refuse():
         construire_modele(fiche("mistral", "mistral-large"), AUCUN, SETTINGS)
 
 
-def test_aucune_relance_des_sdk_le_graphe_gere_les_relances():
-    # Les relances internes des SDK (jusqu'à 6 chez Gemini) dépasseraient le budget de 300 s du curl PHP.
+def test_aucune_relance_des_sdk():
+    # Les relances internes des SDK dépasseraient le budget de 300 s du curl PHP.
+    # Gemini avec recherche (API Interactions) : un seul appel HTTP, vérifié dans test_gemini.py.
     recherche = {"recherche_web": {"max": 5}}
     modeles = [
         construire_modele(fiche("openai", "gpt-6-luna", recherche), TOUT, SETTINGS).bound,
         construire_modele(fiche("anthropic", "claude-haiku-4-5", recherche), TOUT, SETTINGS).bound,
-        construire_modele(fiche("gemini", "gemini-3.5-flash-lite", recherche), RECHERCHE_SEULE, SETTINGS).bound,
+        construire_modele(fiche("gemini", "gemini-3.1-flash-lite", recherche), GEMINI, SETTINGS).bound,
         construire_modele(fiche("deepseek", "deepseek-flash"), AUCUN, SETTINGS),
     ]
     assert [m.max_retries for m in modeles] == [0, 0, 0, 0]

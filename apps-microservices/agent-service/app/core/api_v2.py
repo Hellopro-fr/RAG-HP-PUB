@@ -29,6 +29,8 @@ class ClientApiV2:
 
     def _appeler(self, field: str, action: str, data: dict):
         charge = {"etape": "agents", "field": field, "action": action, "data": data}
+        logger.info("envoi API v2 agents/%s/%s : %s", field, action, json.dumps(data, ensure_ascii=False))
+
         try:
             corps = self._http.post(self._url, json=charge, headers=self._entetes).json()
         except (httpx.HTTPError, ValueError) as exc:

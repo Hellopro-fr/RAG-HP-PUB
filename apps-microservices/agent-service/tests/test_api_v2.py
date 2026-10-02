@@ -45,6 +45,16 @@ def test_retour_complet_de_l_api_v2_dans_le_log(caplog):
     assert "hp-token" not in caplog.text
 
 
+def test_donnees_envoyees_a_l_api_v2_dans_le_log(caplog):
+    corps = {"code": 200, "response": {"enregistre": True, "id_execution": 16, "cout": 0.000258}}
+    api = ClientApiV2(URL, "hp-token", client_http=client([], corps))
+    with caplog.at_level("INFO", logger="app.core.api_v2"):
+        api.enregistrer_execution({"id_agent": 1, "nb_recherches": 0, "tokens_entree": 1019})
+    assert "envoi API v2 agents/execution/save" in caplog.text
+    assert '"nb_recherches": 0' in caplog.text
+    assert "hp-token" not in caplog.text
+
+
 def test_version_publiee_en_cache_jusqu_au_ttl():
     appels, horloge = [], Horloge()
     api = ClientApiV2(URL, "t", ttl_cache_s=60, client_http=client(appels), horloge=horloge)

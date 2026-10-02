@@ -26,10 +26,10 @@ def test_200_reponse_ok():
 
 
 def test_422_format_invalide_garde_la_sortie():
-    r = client_avec(FauxApiV2(), reponse("Le SIRET est 1"), reponse("toujours faux")).post(
+    r = client_avec(FauxApiV2(), reponse("Le SIRET est 1")).post(
         "/agents/get-siren/run", json={"input": "exemple.fr"})
     assert r.status_code == 422
-    assert r.json()["statut"] == "format_invalide" and r.json()["output"] == "toujours faux"
+    assert r.json()["statut"] == "format_invalide" and r.json()["output"] == "Le SIRET est 1"
 
 
 def test_502_erreur_fournisseur():

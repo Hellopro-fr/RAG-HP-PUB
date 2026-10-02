@@ -7,13 +7,15 @@ from typing import Callable, Optional
 
 from langchain_anthropic import ChatAnthropic
 from langchain_deepseek import ChatDeepSeek
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
 
 from app.core.config import Settings
+from app.core.gemini import ChatGemini
 
 NOM_SERVEUR_MCP = "hellopro"
 TYPE_RECHERCHE_ANTHROPIC = "web_search_20260209"
+TYPE_LECTURE_ANTHROPIC = "web_fetch_20260209"
+MAX_LECTURES_ANTHROPIC = 5  # plafond de pages lues par appel, comme la recherche par défaut
 
 
 class ErreurConfiguration(Exception):
@@ -26,12 +28,15 @@ def construire_modele(definition: dict, capacites: dict, settings: Settings,
     fournisseur, nom = modele.get("fournisseur", ""), modele.get("nom", "")
     outils = definition.get("outils") or {}
     recherche, mcp = outils.get("recherche_web"), outils.get("mcp")
+    lecture = outils.get("lecture_pages")  # {} dans la fiche : tester `is not None`
     if not nom:
         raise ErreurConfiguration("modèle absent de la fiche")
     if recherche and not capacites.get("recherche_web"):
         raise ErreurConfiguration(f"recherche web native indisponible pour {fournisseur}/{nom}")
     if mcp is not None and not capacites.get("mcp"):
         raise ErreurConfiguration(f"MCP natif indisponible pour {fournisseur}/{nom}")
+    if lecture is not None and not capacites.get("lecture_pages"):
+        raise ErreurConfiguration(f"lecture de pages native indisponible pour {fournisseur}/{nom}")
 
     # max_retries=0 : les relances des SDK (6 chez Gemini) dépasseraient le budget de 300 s du curl PHP.
     params = {"timeout": settings.TIMEOUT_MODELE_S, "max_retries": 0}
@@ -56,6 +61,8 @@ def construire_modele(definition: dict, capacites: dict, settings: Settings,
         if recherche:
             liste.append({"type": TYPE_RECHERCHE_ANTHROPIC, "name": "web_search",
                           "max_uses": int(recherche.get("max", 5))})
+        if lecture is not None:
+            liste.append({"type": TYPE_LECTURE_ANTHROPIC, "name": "web_fetch", "max_uses": MAX_LECTURES_ANTHROPIC})
         if mcp is not None:
             serveur = {"type": "url", "url": _url_mcp(settings), "name": NOM_SERVEUR_MCP,
                        "authorization_token": _jeton(obtenir_jeton_mcp)}
@@ -69,8 +76,14 @@ def construire_modele(definition: dict, capacites: dict, settings: Settings,
         return llm.bind_tools(liste) if liste else llm
 
     if fournisseur == "gemini":
-        llm = ChatGoogleGenerativeAI(model=nom, google_api_key=settings.GEMINI_API_KEY, **params)
-        return llm.bind_tools([{"google_search": {}}]) if recherche else llm
+        # ChatGemini : recherche et lecture de pages via l'API Interactions, le reste via generateContent
+        llm = ChatGemini(model=nom, google_api_key=settings.GEMINI_API_KEY, **params)
+        liste = []
+        if recherche:
+            liste.append({"google_search": {}})
+        if lecture is not None:
+            liste.append({"url_context": {}})
+        return llm.bind_tools(liste) if liste else llm
 
     if fournisseur == "deepseek":
         return ChatDeepSeek(model=nom, api_key=settings.DEEPSEEK_API_KEY, **params)
