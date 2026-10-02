@@ -2560,6 +2560,26 @@ services:
       - services-net
     logging: *logging_defaults
 
+  # ── MCP Normalize Unite Service ───────────────────────────────────────
+  # Reached by mcp-gateway-service over services-net only: no host port.
+  mcp-normalize-unite-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/mcp-normalize-unite-service/Dockerfile
+    container_name: mcp-normalize-unite-service
+    profiles: [ "mcp" ]
+    restart: unless-stopped
+    expose:
+      - "8602"
+    environment:
+      - MCP_PORT=8602
+      - MCP_SERVICE_NAME=mcp-normalize-unite
+      - MCP_SERVICE_VERSION=0.1.0
+      - NORMALIZATION_SERVICE_URL=graph-rag-normalize-unite-service:50057
+    networks:
+      - services-net
+    logging: *logging_defaults
+
   # ── MCP Neo4j Service ─────────────────────────────────────────────────
   mcp-neo4j-service:
     build:
