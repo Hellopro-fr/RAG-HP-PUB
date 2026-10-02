@@ -52,7 +52,9 @@ jobs:
       # applicatif dans le code. Pour la migration, on garde ce comportement (api-gateway VM
       # appelle l'URL CR publique directement). Durcissement S004 via Cloud Armor + LB interne.
       # Mitigations financières : max_instances=3, cpu=1, memory=512Mi (borne DoS/abus compute).
-      ingress: all
+      # Vague 2 / V2-a (02/10, F-HP-SEC-030) : entree interne (VM + GKE joignables, internet 404, teste le 02/10),
+      # appel anonyme reserve au reseau interne, 1 instance chaude (demarrage a froid 5-7 s).
+      ingress: internal-and-cloud-load-balancing
       allow_unauthenticated: true
       cpu: '1'
       memory: '512Mi'
@@ -60,9 +62,12 @@ jobs:
       # rebasculé sur la VM (état homogène jusqu'au cutover Phase 3). Le service CR
       # reste déployé idle, sans coût quand pas de trafic. min_instances=1 avait été
       # utilisé temporairement pendant le pilot pour éviter le cold start.
-      min_instances: 0
+      min_instances: 1
       max_instances: 3
       container_port: 8600
+      # Cache de resultats Redis prod (parite VM) : 10.0.1.220:6379 via le connecteur VPC.
+      vpc_connector: vpc-access-connector
+      vpc_egress: private-ranges-only
       # Pas de VPC Connector : aucune dépendance interne (Redis, MySQL, Milvus, RabbitMQ).
       health_check_path: /health
       # Env vars : valeurs identiques au docker-compose.yml ligne 607-610.
@@ -74,7 +79,10 @@ jobs:
           "MAX_PAYLOAD_SIZE_MB": "10"
         }
       # Aucun secret Secret Manager : 0 secret confirmé par audit CR-readiness matrix.
-      secret_env_vars_json: '{}'
+      secret_env_vars_json: |
+        {
+          "REDIS_URL": "platform-redis-url:latest"
+        }
       # Gate Trivy désactivé pour POC étendu — 3 HIGH python-pkg connus :
       #   - jaraco.context 5.3.0 CVE-2026-23949 (vendored dans setuptools)
       #   - wheel 0.45.1 CVE-2026-24049 (vendored dans setuptools + standalone)

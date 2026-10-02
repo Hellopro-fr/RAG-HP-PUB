@@ -232,12 +232,24 @@ async def delete_key(key: str) -> bool:
         logger.error(f"Failed to delete key '{key}' from Redis: {e}", exc_info=True)
         return False
 
+# SCAN examines COUNT keys per round-trip; it does NOT return COUNT matches.
+# redis-py's default is 10, which is why this helper was unusable on a shared
+# Redis: finding the 7,643 crawl_job:* keys meant walking the whole keyspace ten
+# at a time. Measured 2026-09-02 from the BO server, the crawler route built on
+# this helper (GET /status) returned http=000 after a 900s cap while a sibling
+# route answered in 0.54s and zero crawls were running -- so it could not answer
+# even with nothing to report. 500 matches the value already in production for
+# the same prefix (crawler-service admin.py, archived-status-repair dry-run).
+SCAN_COUNT = 500
+
+
 async def scan_keys_by_prefix(prefix: str) -> List[str]:
     """Gets all keys matching a given prefix using SCAN."""
     if not redis_client:
         raise ConnectionError("Redis is not connected.")
     try:
-        return [key async for key in redis_client.scan_iter(f"{prefix}*")]
+        return [key async for key in redis_client.scan_iter(f"{prefix}*",
+                                                            count=SCAN_COUNT)]
     except Exception as e:
         logger.error(f"Failed to scan keys with prefix '{prefix}' from Redis: {e}", exc_info=True)
         return []

@@ -56,15 +56,20 @@ jobs:
       dockerfile_path: apps-microservices/api-detection-langue-fr/Dockerfile
       build_context: .
       cloud_run_region: ${{ github.event.inputs.cloud_run_region || 'europe-west1' }}
-      ingress: all
+      # Vague 2 / V2-a (02/10, F-HP-SEC-030) : entree interne (VM + GKE joignables, internet 404, teste le 02/10),
+      # appel anonyme reserve au reseau interne, 1 instance chaude (demarrage a froid 5-7 s).
+      ingress: internal-and-cloud-load-balancing
       allow_unauthenticated: true
       # Chromium lourd au launch -> cpu 2 + boost cold start ; 2Gi pour ≤2 instances navigateur.
       cpu: '2'
       memory: '2Gi'
       startup_cpu_boost: true
-      min_instances: 0
+      min_instances: 1
       max_instances: 3
       container_port: 8999
+      # Cache Redis prod (parite VM) : 10.0.1.220:6379 via le connecteur VPC (meme cablage qu'image-comparison).
+      vpc_connector: vpc-access-connector
+      vpc_egress: private-ranges-only
       health_check_path: /api/v1/health
       env_vars_json: |
         {
@@ -74,7 +79,8 @@ jobs:
         }
       secret_env_vars_json: |
         {
-          "APIFY_PROXY": "api-detection-langue-fr-apify-proxy:latest"
+          "APIFY_PROXY": "api-detection-langue-fr-apify-proxy:latest",
+          "REDIS_URL": "platform-redis-url:latest"
         }
       # Image Python lourde (chromium+camoufox+fasttext) : dette CVE Python assumée (F-HP-T001-SEC-001).
       trivy_disable_gate: true

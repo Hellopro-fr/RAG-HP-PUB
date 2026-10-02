@@ -114,6 +114,17 @@ class _BoundedBrowserSemaphore:
     `CancelledError`) — l'image est `python:3.10-slim` et ce code ne doit pas
     dépendre de laquelle. On laisse donc l'acquisition courir, et un
     done-callback rend au pool le permis accordé trop tard.
+
+    Contrairement à `_close_or_abandon`, le callback ne peut pas être attaché
+    AVANT l'await : sur succès, le permis appartient à l'appelant et ne doit
+    pas être rendu. Il s'attache donc sur les DEUX sorties sans permis :
+    l'échéance, et l'annulation de l'appelant pendant l'attente (`wait_for` de
+    l'item, `_abandon_job` dans `async_jobs.py`) — `asyncio.wait` n'annule pas
+    `t` non plus. Sans la seconde, `BROWSER_SEMAPHORE_SIZE` annulations vidaient
+    le pool pour la vie du process, et chaque détection levait ce timeout
+    (PROD, 2026-09-24). Elle couvre aussi le permis accordé dans le même tick
+    que l'annulation : `t` est alors déjà fini, et `add_done_callback` le
+    rend quand même.
     """
 
     def __init__(self, size: int) -> None:
@@ -121,9 +132,13 @@ class _BoundedBrowserSemaphore:
 
     async def __aenter__(self) -> None:
         t = asyncio.ensure_future(self._sem.acquire())
-        done, _pending = await asyncio.wait(
-            {t}, timeout=settings.BROWSER_POOL_WAIT_S
-        )
+        try:
+            done, _pending = await asyncio.wait(
+                {t}, timeout=settings.BROWSER_POOL_WAIT_S
+            )
+        except BaseException:
+            t.add_done_callback(self._release_if_granted)
+            raise
         if not done:
             t.add_done_callback(self._release_if_granted)
             raise TimeoutError(
@@ -452,7 +467,39 @@ async def _close_or_abandon(coro, timeout: float, what: str = "") -> None:
         logger.warning(f"scraper teardown abandoned after {timeout}s: {what}")
 
 
-async def _await_or_raise(coro, timeout: float, what: str):
+# Tâches de récupération en vol : asyncio ne garde qu'une référence faible sur
+# une tâche, une récupération non référencée pourrait être ramassée en route.
+_RECLAIM_TASKS: set = set()
+
+
+def _reclaim_if_delivered(fut: asyncio.Future, reclaim, what: str = "") -> None:
+    """Un résultat livré après qu'on a cessé de l'attendre est rendu à `reclaim`.
+
+    Seul un succès a quelque chose à récupérer : une tâche annulée ou en échec
+    n'a rien livré (son exception est lue par `_drain_orphan_exception`).
+    """
+    if fut.cancelled() or fut.exception() is not None:
+        return
+    logger.warning(f"résultat livré après abandon, récupéré: {what}")
+    try:
+        task = asyncio.ensure_future(reclaim(fut.result()))
+    except Exception as err:  # un callback ne doit jamais lever
+        logger.debug(f"récupération impossible ({what}): {err!r}")
+        return
+    _RECLAIM_TASKS.add(task)
+    task.add_done_callback(_RECLAIM_TASKS.discard)
+
+
+def _stop_late_driver(url: str):
+    """`reclaim` des `playwright.start` : arrête le driver avec la borne des démontages."""
+    def reclaim(p):
+        return _close_or_abandon(
+            p.stop(), settings.TEARDOWN_TIMEOUT_S, f"playwright.stop (tardif) {url}"
+        )
+    return reclaim
+
+
+async def _await_or_raise(coro, timeout: float, what: str, reclaim=None):
     """Borne un `await` qui n'a AUCUN timeout natif, et rend son résultat.
 
     Frère de `_close_or_abandon`, même forme NON ANNULANTE et pour la même
@@ -476,11 +523,27 @@ async def _await_or_raise(coro, timeout: float, what: str):
     `Page.content` n'accepte de `timeout` (signatures du playwright installé), et
     `set_default_timeout` ne régit que « all methods accepting a timeout
     option » — il n'en bornait donc aucune.
+
+    `reclaim` (optionnel) : fonction qui reçoit un résultat livré APRÈS qu'on a
+    cessé de l'attendre et rend la coroutine qui le libère — pour un résultat
+    qu'aucun démontage ne couvre, le driver de `playwright.start`. Même patron
+    que `_BoundedBrowserSemaphore.__aenter__`, pour la même raison : sur succès
+    le résultat appartient à l'appelant, donc le callback ne peut s'attacher
+    qu'APRÈS l'await, et il s'attache sur les DEUX sorties sans résultat —
+    l'échéance, et l'annulation de l'appelant (`wait_for` de l'item,
+    `_abandon_job`), qu'`asyncio.wait` ne propage pas à `t`.
     """
     t = asyncio.ensure_future(coro)
     t.add_done_callback(partial(_drain_orphan_exception, what=what))
-    done, _pending = await asyncio.wait({t}, timeout=timeout)
+    try:
+        done, _pending = await asyncio.wait({t}, timeout=timeout)
+    except BaseException:
+        if reclaim is not None:
+            t.add_done_callback(partial(_reclaim_if_delivered, reclaim=reclaim, what=what))
+        raise
     if not done:
+        if reclaim is not None:
+            t.add_done_callback(partial(_reclaim_if_delivered, reclaim=reclaim, what=what))
         logger.warning(f"scraper étape abandonnée après {timeout}s: {what}")
         raise TimeoutError(f"Timeout {what} — pas de réponse après {timeout}s")
     return t.result()
@@ -580,14 +643,16 @@ async def scrape_html(
         return None
 
     async with _BROWSER_SEMAPHORE:
-        # Résiduel assumé, même arbitrage que `_close_or_abandon` : un driver
-        # qui finit par démarrer APRÈS l'abandon n'est pas récupéré (`p.stop()`
-        # ne sera jamais appelé). Annuler serait pire — c'est le mode d'échec
+        # Un driver qui finit de démarrer APRÈS l'abandon (échéance ou annulation)
+        # est arrêté par `reclaim` : sans lui, aucun `p.stop()` ne l'atteignait et
+        # il vivait jusqu'au redémarrage (PROD 2026-09-24 : 39 drivers sans
+        # navigateur). Annuler le démarrage serait pire — c'est le mode d'échec
         # qui a produit le flood de callbacks orphelins.
         p = await _await_or_raise(
             async_playwright().start(),
             settings.BROWSER_OP_TIMEOUT_S,
             f"playwright.start {url}",
+            reclaim=_stop_late_driver(url),
         )
         try:
             browser, is_camoufox = await _launch_browser(p, playwright_proxy)
@@ -844,12 +909,13 @@ async def scrape_html_with_redirects(
     is_camoufox = False
     try:
         async with _BROWSER_SEMAPHORE:
-            # Même résiduel assumé que dans scrape_html : un driver qui démarre
-            # après l'abandon n'est pas récupéré.
+            # Même récupération que dans scrape_html : un driver qui démarre
+            # après l'abandon est arrêté par `reclaim`.
             p = await _await_or_raise(
                 async_playwright().start(),
                 settings.BROWSER_OP_TIMEOUT_S,
                 f"playwright.start (redirects) {url}",
+                reclaim=_stop_late_driver(url),
             )
             try:
                 browser, is_camoufox = await _launch_browser(p, playwright_proxy)
