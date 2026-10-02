@@ -40,12 +40,14 @@ jobs:
       # Build context = racine du repo (le Dockerfile COPY depuis apps-microservices/).
       build_context: .
       cloud_run_region: ${{ github.event.inputs.cloud_run_region || 'europe-west1' }}
-      ingress: all
+      # Vague 2 / V2-a (02/10, F-HP-SEC-030) : entree interne (VM + GKE joignables, internet 404, teste le 02/10),
+      # appel anonyme reserve au reseau interne, 1 instance chaude (demarrage a froid 5-7 s).
+      ingress: internal-and-cloud-load-balancing
       allow_unauthenticated: true
       cpu: '1'
       memory: '512Mi'
       # Shadow : pas de trafic de prod route vers ce service -> scale-to-zero.
-      min_instances: 0
+      min_instances: 1
       max_instances: 3
       container_port: 8998
       # Aucune dependance interne (Redis/MySQL/Milvus/RabbitMQ) -> pas de VPC Connector.
