@@ -36,4 +36,4 @@ infrastructure/
 - gRPC service on port **50057** (no REST endpoints)
 
 ## Dependencies
-- **Consumed by:** normalize-unite-processor, normalize-unite-retry-processor, API recherche services
+- **Consumed by:** normalize-unite-processor, normalize-unite-retry-processor, API recherche services, mcp-normalize-unite-service (MCP tools, `NormalizeQuantity` only)
