@@ -12,6 +12,8 @@
 
 ## 1. État des adresses publiques
 
+> **Décision 10 (02/10)** : pendant la vague, l'aiguillage est le **vhost nginx de la VM** (destination changée, DNS inchangé) ; l'enregistrement A Gandi ne change qu'une fois, à la fin, par le titulaire du compte. Colonnes TTL / certificat : à la bascule DNS finale.
+
 Une ligne par adresse. C'est la vue « où en est chaque aiguillage ».
 
 | Adresse | Aujourd'hui | Cible | Aiguillage | Sous-vague | TTL 300 s | Certificat | Basculée le | Validée (J+1) | Jumeau VM |
@@ -71,10 +73,10 @@ Une ligne par adresse. C'est la vue « où en est chaque aiguillage ».
 |---|---|---|---|:--:|---|
 | 0.1 | Revue du plan, décisions, un dev nommé par service | CTO, LEAD, DSO, PROD | jeu 1/10 matin | ✅ | 01/10 : plan validé, devs disponibles à partir du 5/10 |
 | 0.2 | Mesures VM : trafic horaire nginx, `dlq.hellopro.eu`, taille des volumes | DSO | jeu 1/10 | ✅ | log `data/cutover/carte-v2-0.log` : `api.` pic 10h-17h UTC, nuit non nulle ; `rag.`, `login.` plats sur 24 h (sondes probables) ; volumes **370 Go** images / **205 Go** crawler ; vhosts publics hors plan : `grafana.`, `n8n-dev.`, `pmyadm.` (phpMyAdmin), `neo4j1.`, `mep.` → 0.16 |
-| 0.3 | Load balancer HTTPS prod (back-ends Cloud Run) | DSO | ven 2/10 (`plan`) → `apply` dès les certificats prêts | ⬜ | IP du LB : |
-| 0.4 | Certificats par validation DNS (CNAME `_acme-challenge` chez Gandi) | DSO | ven 2/10 (autorisations TF) → CNAME **dès le jeton** (ven 2/10, sinon lun 5/10 après-midi) | ⬜ | |
+| 0.3 | Load balancer HTTPS prod (back-ends Cloud Run) | DSO | ven 2/10 (`plan`) → `apply` dès les certificats prêts | ⏭️ | IP du LB : ; **reporté à la bascule DNS finale** (décision 10) |
+| 0.4 | Certificats par validation DNS (CNAME `_acme-challenge` chez Gandi) | DSO | ven 2/10 (autorisations TF) → CNAME **dès le jeton** (ven 2/10, sinon lun 5/10 après-midi) | ⏭️ ; **reporté à la bascule DNS finale** (décision 10) |
 | 0.5 | NEG GKE pour `api.` et `mcp.` rattachés au LB | DSO | ven 2/10 | ⬜ | |
-| 0.6 | TTL 300 s sur les 6 adresses | DSO | **dès le jeton** (ven 2/10, sinon lun 5/10 après-midi) | ⬜ | ≥ 48 h avant V2-c / V2-d (sem. du 12/10) ; voir journal Gandi |
+| 0.6 | TTL 300 s sur les 6 adresses | DSO | **dès le jeton** (ven 2/10, sinon lun 5/10 après-midi) | ⏭️ | ≥ 48 h avant V2-c / V2-d (sem. du 12/10) ; voir journal Gandi ; **état au 02/10** : les 6 A = `35.245.31.1`, **TTL 10 800 s (3 h)** (TTL par défaut de la zone) → le TTL 300 s doit être posé **au moins 3 h** avant une bascule DNS ; **reporté à la bascule DNS finale** (décision 10) |
 | 0.7 | Cloud Armor en observation sur le LB prod | DSO | ven 2/10 | ⬜ | |
 | 0.8 | Liste des URL en dur par service → tickets devs | DSO (liste 1-2/10) → devs (à partir du 5/10) | ven 2/10 (tickets prêts) | ⬜ | conditionne l'ordre de V2-a |
 | 0.9 | Test VM → Cloud Run (entrée, authentification) | DSO | jeu 1/10 | ✅ | 01/10 : **OUI** — `api-detection-langue-fr` et `api-comparaison-texte` répondent `200` depuis la VM (démarrage à froid 5-7 s, puis 0,55 s) → **V2-a depuis la gateway VM, comme prévu** ; ⚠️ mais ils répondent aussi **sans authentification**, entrée `all` → audit de tous les Cloud Run avant d'y envoyer du trafic (action 0.18) ; `min instances ≥ 1` nécessaire |
@@ -88,8 +90,9 @@ Une ligne par adresse. C'est la vue « où en est chaque aiguillage ».
 | 0.19 | Test d'entrée **interne** (`internal-and-cloud-load-balancing`) sur un Cloud Run sans trafic, appelé depuis la VM, depuis un pod GKE et depuis internet → cible d'entrée des API de V2-a ; et authentification (jeton) côté gateway si besoin | DSO | ven 2/10 | ✅ | 02/10 07:18 UTC (`cr_test_entree_interne.sh`, `api-detection-langue-fr`) : **internet 404 (fermé), VM 200, pod GKE 200** → **cible A validée** : entrée `internal-and-cloud-load-balancing` + appel anonyme, service remis en état (`all`, `allUsers=0`) ; prérequis : le smoke test du CD doit ignorer toute entrée ≠ `all` (`deploy-cloud-run.yml`) |
 | 0.20 | Smoke test du CD Cloud Run : ignorer toute entrée ≠ `all` (`deploy-cloud-run.yml`), prérequis des wrappers V2-a | DSO | ven 2/10 | ✅ | PR `fix/cd-smoke-internal-ingress` mergée 02/10 (gate verte) |
 | 0.21 | **Rapatriement `poc` → `prod`** des correctifs urgents (plan § 7quater), **assuré par le DSO** (02/10) : PR detection-langue, PR content-extractor + `common_utils`, avec les réglages cible des wrappers ; information aux devs ([message](demande-rapatriement-poc-prod.md)) | DSO | PR prêtes ven 2/10, merge lun 5/10 matin | ✅ (lot 1) | prérequis de la bascule de ces 2 routes ; comparaison-texte et optimize : rien à rapatrier ; 02/10 : PR detection-langue, content-extractor + `common_utils`, wrappers comparaison / optimize **mergées**, déployées |
+| 0.22 | **Script de bascule nginx** d'un vhost VM (destination → Cloud Run / IP interne GKE, sauvegarde, `nginx -t`, `reload`, contrôle, retour arrière) | DSO | avant V2-c | ⬜ | décision 10 |
 | 0.15 | Clé SSH ajoutée aux métadonnées **du projet** par `gcloud compute scp` (30/09, utilisateur `deploy`) : décider de la garder ou la retirer (accès à toutes les VM qui acceptent les clés projet) | DSO | fin de vague | ⬜ | |
-| 0.12 | Jeton Gandi LiveDNS temporaire (`hellopro.eu` seul, expiration ≈ 23/10) → Secret Manager `gandi-livedns-pat` ; scripts `GET`/`PUT`/`GET` | titulaire Gandi (création), DSO | **ven 2/10 si possible, sinon lun 5/10 après-midi** — [procédure](procedure-jeton-gandi.md) | ⬜ | révocation prévue en fin de vague |
+| 0.12 | Jeton Gandi LiveDNS temporaire (`hellopro.eu` seul, expiration ≈ 23/10) → Secret Manager `gandi-livedns-pat` ; scripts `GET`/`PUT`/`GET` | titulaire Gandi (création), DSO | **ven 2/10 si possible, sinon lun 5/10 après-midi** — [procédure](procedure-jeton-gandi.md) | ⏭️ | révocation prévue en fin de vague ; **02/10** : jeton `migrationdns` recréé avec le droit DNS seul (`hellopro.eu`, expire 01/11), rangé dans Secret Manager ; **mais `hellopro.eu` n'est pas sur LiveDNS** (serveurs `a/b/c.dns.gandi.net` = DNS Gandi classique) → l'API LiveDNS répond « Unknown domain » ; `hellopro.fr`, lui, est sur LiveDNS → décision à prendre (interface Gandi, ou passage de `hellopro.eu` à LiveDNS) ; **décision 10 : jeton inutilisable → à supprimer** (titulaire) avec le secret `gandi-livedns-pat` |
 
 ### V2-a — Routes gateway (lun 5 → mar 6/10)
 
@@ -175,6 +178,7 @@ Le détail de chaque décision (pourquoi, objectif, options, recommandation, con
 | 6 | Cloud Armor : critères de passage en blocage | RSSI | avant V2-d | ✅ | **30/09 : option A** — observation, blocage adresse par adresse après 7 jours sans faux positif, limite de débit sur `login.` (« la sécurité est importante ») |
 | 7 | CD GKE prod (F-HP-IND-005) : calage | CTO | jeu 1/10 | ✅ | **30/09 : GO, progressif** — cadrage 1-2/10, puis **un service par jour**, testé et validé avant le suivant (à partir du 19/10) |
 | 8 | Certificats par validation DNS (évolution du module LB) | CTO, DSO | jeu 1/10 | ✅ | **30/09 : GO reco** (Certificate Manager, CNAME Gandi) |
+| 10 | **Mécanisme de bascule des entrées publiques** : nginx VM pendant la vague, DNS Gandi en une seule intervention du titulaire à la fin | DSO, user | 02/10 | ✅ | **02/10 : option 1 retenue** (pas d'accès DSO à l'interface Gandi ; `hellopro.eu` en DNS classique) |
 | 9 | Jeton API Gandi temporaire plutôt que l'interface | CTO, DSO | jeu 1/10 | ✅ | **30/09 : GO** — le jeton va être créé (action 0.12) |
 
 ---
@@ -190,3 +194,6 @@ Le détail de chaque décision (pourquoi, objectif, options, recommandation, con
 | 02/10 | Service debug graph-rag mis en réserve (décision 4). Correctif du smoke test CD préparé (0.20). |
 | 02/10 | Constat (confirmé par le user) : des correctifs urgents partent sur la VM par `features/poc` sans passer par `prod`. P0 : comparaison-texte et optimize prêts ; detection-langue et content-extractor attendent le rapatriement (0.21). Nouvelle règle : après bascule, les correctifs vont dans `prod`. |
 | 02/10 après-midi | V2-a lot 1 prêt : 3 PR (rapatriement detection-langue, content-extractor + `common_utils`, wrappers comparaison / optimize) mergées et déployées, vérifiées (entrée interne, VM 200, internet 404, code = VM, Redis OK). Script de bascule de route prêt. |
+| 02/10 15h | Jeton Gandi reçu et rangé (droit DNS seul). `hellopro.eu` est sur le **DNS Gandi classique**, pas sur LiveDNS : l'API du jeton ne s'applique pas. Photo DNS : 6 A en `35.245.31.1`, TTL 3 h. |
+| 02/10 15h30 | **Contrainte** : pas d'accès DSO à l'interface Gandi (droits, informations confidentielles) ; seul le titulaire du compte peut agir. Avec `hellopro.eu` en DNS classique, le jeton ne sert pas → mécanisme de bascule des entrées publiques à revoir (proposition : nginx VM d'abord, DNS ensuite, en une intervention du titulaire). |
+| 02/10 16h | **Décision 10** : bascule des entrées publiques par le nginx de la VM pendant la vague, DNS en une seule fois à la fin (titulaire Gandi) ; LB / certificats / TTL reportés ; jeton Gandi à supprimer. |

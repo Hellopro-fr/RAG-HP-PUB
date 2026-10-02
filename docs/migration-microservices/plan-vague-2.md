@@ -25,6 +25,20 @@
 
 ---
 
+## 1bis. Décision du 02/10 — nginx de la VM d'abord, DNS en une seule fois à la fin
+
+**Constat** : le DSO n'a pas accès à l'interface Gandi (droits, informations confidentielles) et `hellopro.eu` est sur le **DNS Gandi classique** (serveurs `a/b/c.dns.gandi.net`) : le jeton d'API LiveDNS ne peut pas modifier cette zone.
+
+**Décision** : pendant toute la vague, les entrées publiques `*.hellopro.eu` basculent **sur le nginx de la VM** (nous le contrôlons) : on remplace la destination `127.0.0.1:<port>` du vhost par l'URL Cloud Run ou l'IP interne du Service GKE — la VM joint Cloud Run et GKE en interne (test du 02/10). Le DNS ne change pas ; les certificats Let's Encrypt de la VM restent en place ; le retour arrière est un `nginx reload`. **À la fin de la vague**, une **seule intervention du titulaire Gandi** : le matin TTL 300 s + CNAME de validation des certificats, l'après-midi (≥ 3 h après) les enregistrements A vers le load balancer ; puis extinction de la VM.
+
+| Conséquence | Détail |
+|---|---|
+| V2-0 | Load balancer prod, certificats, TTL et CNAME **reportés** à la bascule DNS finale ; à préparer : **script de bascule nginx** (sauvegarde, `nginx -t`, `reload`, retour arrière) |
+| V2-a, V2-b | Inchangées (lignes `.env.url`, lignes `mcp_servers`) |
+| V2-c (`api.`, `mcp.`), V2-d (fronts, dont `conseils.hellopro.fr` via `nextjs-conseils.hellopro.eu`) | Bascule = **destination du vhost nginx VM** (au lieu de l'enregistrement A) |
+| Limites transitoires | VM toujours sur le chemin (pas d'extinction avant la fin) ; un aller-retour VM (us-east4) → Europe en plus (~0,1-0,2 s) ; Cloud Armor seulement après la bascule DNS finale |
+| Jeton Gandi | **inutilisable** sur `hellopro.eu` en DNS classique → à supprimer (titulaire) avec le secret `gandi-livedns-pat`, sauf passage de la zone sur LiveDNS (déconseillé pendant la vague) |
+
 ## 2. Les rôles
 
 | Rôle | Qui | Ce qu'on attend de lui dans la vague 2 |
