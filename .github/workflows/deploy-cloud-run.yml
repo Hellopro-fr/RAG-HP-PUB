@@ -409,10 +409,12 @@ jobs:
           HEALTH_URL="${SERVICE_URL}${{ inputs.health_check_path }}"
           echo "Health endpoint : ${HEALTH_URL}"
 
-          # ⚠️ Si ingress=internal, le runner GHA (Internet public) NE PEUT PAS atteindre l'URL.
+          # ⚠️ Si l'ingress n'est pas "all" (internal, internal-and-cloud-load-balancing), le runner GHA
+          # (Internet public) NE PEUT PAS atteindre l'URL : 404 -> faux echec -> rollback automatique.
           # Dans ce cas, on skip le smoke test (à améliorer C.5 : via VM Manager ou Cloud Build).
-          if [ "${{ inputs.ingress }}" = "internal" ]; then
-            echo "::warning::Smoke test skip (ingress=internal, runner GHA ne peut pas atteindre l'URL)"
+          # Cible vague 2 (02/10) : API/MCP en internal-and-cloud-load-balancing (F-HP-SEC-030).
+          if [ "${{ inputs.ingress }}" != "all" ]; then
+            echo "::warning::Smoke test skip (ingress=${{ inputs.ingress }}, runner GHA ne peut pas atteindre l'URL)"
             echo "status=skipped" >> "$GITHUB_OUTPUT"
             exit 0
           fi
