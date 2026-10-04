@@ -192,3 +192,92 @@ func TestExporterCSV_SelectionVide(t *testing.T) {
 		t.Errorf("Contenu = %q, attendu vide", got.Contenu)
 	}
 }
+
+// Le webhook FRONT parle le meme contrat que le BO : son propre Bearer,
+// ?action=, enveloppe {code, response}.
+func TestClient_WebhookEnregistrerReponses(t *testing.T) {
+	c := serveur(t, func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "Bearer jeton-test" {
+			t.Errorf("Authorization = %q", got)
+		}
+		if r.URL.Path != "/index.php" || r.URL.Query().Get("action") != "enregistrer_reponses" {
+			t.Errorf("URL = %s", r.URL)
+		}
+		var d DemandeReponses
+		if err := json.NewDecoder(r.Body).Decode(&d); err != nil || d.CodeCampagne != "c1" || len(d.Reponses) != 1 {
+			t.Errorf("corps = %+v, err %v", d, err)
+		}
+		io.WriteString(w, `{"code":200,"response":{"mis_a_jour":1,"hors_campagne":["0611111111"],"stop_force":0}}`)
+	})
+	got, err := c.EnregistrerReponses(context.Background(), DemandeReponses{
+		CodeCampagne: "c1",
+		Reponses:     []Reponse{{Telephone: "0612345678", ReponseBrute: "oui", Categorie: "positive"}},
+	})
+	if err != nil {
+		t.Fatalf("erreur inattendue: %v", err)
+	}
+	if got.MisAJour != 1 || len(got.HorsCampagne) != 1 {
+		t.Errorf("resultat = %+v", got)
+	}
+}
+
+func TestClient_WebhookErreurs(t *testing.T) {
+	cas := []struct {
+		nom, corps string
+		statut     int
+		code       string
+	}{
+		{"code stable du webhook", `{"code":400,"response":{"erreur":"categorie_invalide","message":"x"}}`, 400, "categorie_invalide"},
+		{"page HTML d erreur", `<html>500</html>`, 500, "moteur_indisponible"},
+		{"jeton refuse", `{"code":401,"response":{"erreur":"non_autorise","message":"jeton"}}`, 401, "non_autorise"},
+	}
+	for _, k := range cas {
+		t.Run(k.nom, func(t *testing.T) {
+			c := serveur(t, func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(k.statut)
+				io.WriteString(w, k.corps)
+			})
+			_, err := c.EnregistrerReponses(context.Background(), DemandeReponses{CodeCampagne: "c1"})
+			var em *ErreurMoteur
+			if !errors.As(err, &em) || em.Code != k.code {
+				t.Errorf("erreur = %v, attendu le code %q", err, k.code)
+			}
+		})
+	}
+}
+
+// Une reponse 200 hors enveloppe (redirection de session, page Apache) ne
+// doit jamais passer pour un enregistrement reussi.
+func TestClient_WebhookHorsContrat(t *testing.T) {
+	c := serveur(t, func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, `<html>login</html>`)
+	})
+	if _, err := c.EnregistrerReponses(context.Background(), DemandeReponses{CodeCampagne: "c1"}); err == nil {
+		t.Error("attendu une erreur sur une reponse hors contrat")
+	}
+}
+
+func TestClient_RecupAcheteurEtBilan(t *testing.T) {
+	c := serveur(t, func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Query().Get("action") {
+		case "recup_acheteur":
+			io.WriteString(w, `{"code":200,"response":{"id_campagne":7,"selectionnes":2,"exclus":{"deja_dans_campagne":1},"epuise":false,"csv":"a;b\n"}}`)
+		case "bilan_campagnes":
+			b, _ := io.ReadAll(r.Body)
+			if string(b) != `{}` {
+				t.Errorf("bilan sans code: corps = %s, attendu {}", b)
+			}
+			io.WriteString(w, `{"code":200,"response":{"campagnes":[{"code":"c1","envoyes":2}]}}`)
+		default:
+			t.Errorf("action inattendue %q", r.URL.Query().Get("action"))
+		}
+	})
+	rec, err := c.RecupAcheteur(context.Background(), DemandeRecup{N: 2, CreePar: "a@example.test"})
+	if err != nil || rec.IDCampagne != 7 || rec.CSV != "a;b\n" || rec.Exclus["deja_dans_campagne"] != 1 || rec.Epuise {
+		t.Errorf("recup = %+v, err %v", rec, err)
+	}
+	bil, err := c.BilanCampagnes(context.Background(), "")
+	if err != nil || len(bil.Campagnes) != 1 || bil.Campagnes[0].Envoyes != 2 {
+		t.Errorf("bilan = %+v, err %v", bil, err)
+	}
+}

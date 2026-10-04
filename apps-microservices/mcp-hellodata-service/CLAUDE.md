@@ -2,13 +2,14 @@
 
 Custom MCP server exposing the BO's buyer-targeting engine (HelloData) as MCP
 tools: filtered counting, paginated sampling, and CSV export of buyer
-selections, over Streamable HTTP.
+selections, plus SMS / call campaigns (selection with history, responses),
+over Streamable HTTP.
 
 ## Tech Stack
 
 - **Language:** Go 1.24
 - **Protocol:** MCP (JSON-RPC 2.0 over Streamable HTTP, single `/mcp` endpoint — no SSE)
-- **Backend communication:** HelloData engine REST API on Ecritel (`/admin/mcp/hellodata`), Bearer token
+- **Backend communication:** HelloData engine REST API on the BO (`/admin/mcp/hellodata`), Bearer token; campaign responses go to the FRONT webhook (`/partenaires_externes/mcp/hellodata`), its own Bearer token. Both speak the same contract: `POST {base}/index.php?action=<name>`, JSON body, `{code, response}` envelope.
 - **Dependencies:** Go stdlib only (no external deps — `go.mod` declares none)
 
 ## Build / Run
@@ -38,9 +39,10 @@ mcp-hellodata-service/
 │   ├── acces/acces.go               # Authorization re-check (admin role OR gateway-reported grant)
 │   ├── filtre/filtre.go             # Filter-tree validation/translation
 │   ├── tools/
-│   │   ├── registry.go              # Tool definitions (compter, echantillon, export_csv)
+│   │   ├── registry.go              # Tool definitions (selection + campaign tools)
 │   │   ├── handler.go                # MCP request handler (initialize, tools/list, tools/call)
-│   │   ├── selection.go             # Tool implementations, calls into hellodata.Client
+│   │   ├── selection.go             # Selection tools (compter, echantillon, export_csv), calls into hellodata.Client
+│   │   ├── campagnes.go             # Campaign tools (recup_acheteur, bilan_campagnes, enregistrer_reponses)
 │   │   └── jetons.go                 # Download-token issuance/table for the CSV export flow
 │   ├── download/proxy.go            # /download/ HTTP proxy that redeems a token for a CSV
 │   └── transport/http.go            # /mcp Streamable HTTP handler, identity extraction from headers (also used by /download)
@@ -60,6 +62,9 @@ The name below is the one the LLM finally sees.
 | `hellodata_compter` | `compter` | Counts buyers matching a filter tree. Fast approximate mode (capped at 10000) by default; `exact=true` gives the real count but can take over a minute. |
 | `hellodata_echantillon` | `echantillon` | Reads buyers matching the filter, page by page (up to 2000 rows/call, 50 by default, cursor-based pagination). |
 | `hellodata_export_csv` | `export_csv` | Renders one page (≤2000 rows) of the selection as a CSV download URL. Link expires after 15 minutes and does not survive a service restart. |
+| `hellodata_recup_acheteur` | `recup_acheteur` | BO. Selects `n` (1–2000) buyers for a campaign (created when its `code` is unknown), deduplicated by phone, filter combining `acheteur` criteria and `hist_*` history leaves. Returns counters and `url_csv` (served by `/download`, never inline). `cree_par` is the caller's `X-End-User-Email`, never an argument. |
+| `hellodata_bilan_campagnes` | `bilan_campagnes` | BO. Lists campaigns with their counters (sent, positive, negative_contactable, negative_stop, no answer); optional `code`. |
+| `hellodata_enregistrer_reponses` | `enregistrer_reponses` | FRONT webhook. Records ≤500 provider responses classified by the LLM (`positive` / `negative_contactable` / `negative_stop`). |
 
 There is no `hellodata_export_statut` tool: exports are single-page and
 rendered directly by `hellodata_export_csv` — no async job to poll.
@@ -69,7 +74,7 @@ rendered directly by `hellodata_export_csv` — no async job to poll.
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
 | `/mcp` | POST | Streamable HTTP transport (stateless JSON-RPC) |
-| `/download/{token}` | GET | Redeems a short-lived token issued by `hellodata_export_csv` for the CSV |
+| `/download/{token}` | GET | Redeems a short-lived token issued by `hellodata_export_csv` or `hellodata_recup_acheteur` for the CSV |
 | `/health` | GET | Liveness probe — no identity required, no business data returned |
 
 ## Environment Variables
@@ -80,6 +85,8 @@ rendered directly by `hellodata_export_csv` — no async job to poll.
 | `HELLODATA_BASE_URL` | — | Base URL of the HelloData engine (`/admin/mcp/hellodata` on Ecritel), required |
 | `HELLODATA_TOKEN` | — | Bearer token presented to the engine, required |
 | `HELLODATA_PUBLIC_URL` | — | Public base URL used to build the `/download` links returned to the LLM |
+| `HELLODATA_WEBHOOK_URL` | — | Base URL of the FRONT webhook (`/partenaires_externes/mcp/hellodata`), required |
+| `HELLODATA_WEBHOOK_TOKEN` | — | Bearer token presented to the webhook (distinct from `HELLODATA_TOKEN`), required |
 
 There is no allow-list variable any more: who may use the service is managed
 in the gateway's `/server-authorizations` screen (see § Accès).
@@ -106,8 +113,12 @@ Le gateway injecte trois en-têtes non signés : `X-End-User-Email`,
 seule la valeur exacte `true` compte. Chaque appel d'outil accepté est
 journalisé avec l'adresse et la source du droit (`admin` ou `grant`). Un
 titulaire de grant n'est pas admin : il n'a pas accès aux colonnes
-restreintes (`email`, `mobile`). Seul `/health` répond sans identité, et il
-ne renvoie aucune donnée métier.
+restreintes (`email`, `mobile`) de `echantillon` / `export_csv`. **En
+revanche**, le CSV de `recup_acheteur` porte `telephone_normalise` pour tout
+appelant autorisé : c'est la liste à transmettre au prestataire (spec
+campagnes § 6.1). La précondition 5 (droit aux colonnes téléphone) n'étant
+pas tranchée, ce point reste à valider. Seul `/health` répond sans
+identité, et il ne renvoie aucune donnée métier.
 
 Cette re-vérification n'a de sens que si le service n'est **joignable que
 depuis le réseau Docker interne** — d'où `expose:` et jamais `ports:` dans
@@ -122,9 +133,12 @@ Raisonnement complet : `docs/superpowers/specs/2026-09-28-mcp-hellodata-server-a
 ## Prerequisites
 
 1. Network access to the HelloData engine on Ecritel (`HELLODATA_BASE_URL`) and a valid `HELLODATA_TOKEN`.
-2. A `server_authorizations` grant on the hellodata server (gateway `/server-authorizations` screen) for each non-admin caller.
+2. The FRONT webhook (`HELLODATA_WEBHOOK_URL`) and its `HELLODATA_WEBHOOK_TOKEN` — the service refuses to start without them.
+3. The four campaign tables (`historique_campagne_*_ia`, database `edgb2b`) — read and written by the BO and the webhook, never by this service.
+4. A `server_authorizations` grant on the hellodata server (gateway `/server-authorizations` screen) for each non-admin caller.
 
 ## What This Provides to Other Services
 
 - MCP-accessible buyer counting, sampling, and CSV export from the BO's HelloData targeting engine.
+- SMS / call campaign workflow: selection crossed with response history, campaign report, response recording.
 - A per-call, per-identity re-check of the gateway's access decision (defense in depth).

@@ -17,14 +17,21 @@ type Config struct {
 	Token string
 	// PublicURL sert a fabriquer les liens /download rendus au LLM.
 	PublicURL string
+	// WebhookURL : base du webhook FRONT partenaires_externes/mcp/hellodata,
+	// qui enregistre les reponses de campagne.
+	WebhookURL string
+	// WebhookToken : Bearer propre au webhook, distinct de Token.
+	WebhookToken string
 }
 
 func Charger() (Config, error) {
 	c := Config{
-		Port:      8597,
-		BaseURL:   strings.TrimRight(os.Getenv("HELLODATA_BASE_URL"), "/"),
-		Token:     os.Getenv("HELLODATA_TOKEN"),
-		PublicURL: strings.TrimRight(os.Getenv("HELLODATA_PUBLIC_URL"), "/"),
+		Port:         8597,
+		BaseURL:      strings.TrimRight(os.Getenv("HELLODATA_BASE_URL"), "/"),
+		Token:        os.Getenv("HELLODATA_TOKEN"),
+		PublicURL:    strings.TrimRight(os.Getenv("HELLODATA_PUBLIC_URL"), "/"),
+		WebhookURL:   strings.TrimRight(os.Getenv("HELLODATA_WEBHOOK_URL"), "/"),
+		WebhookToken: os.Getenv("HELLODATA_WEBHOOK_TOKEN"),
 	}
 	if v := os.Getenv("MCP_PORT"); v != "" {
 		p, err := strconv.Atoi(v)
@@ -38,6 +45,12 @@ func Charger() (Config, error) {
 	}
 	if c.Token == "" {
 		return Config{}, fmt.Errorf("HELLODATA_TOKEN est requis")
+	}
+	if c.WebhookURL == "" {
+		return Config{}, fmt.Errorf("HELLODATA_WEBHOOK_URL est requis")
+	}
+	if c.WebhookToken == "" {
+		return Config{}, fmt.Errorf("HELLODATA_WEBHOOK_TOKEN est requis")
 	}
 	return c, nil
 }

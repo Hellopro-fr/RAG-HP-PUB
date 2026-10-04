@@ -18,7 +18,8 @@ func main() {
 		log.Fatalf("configuration: %v", err)
 	}
 	client := hellodata.Nouveau(c.BaseURL, c.Token)
-	h := tools.Nouveau(client, c.PublicURL)
+	webhook := hellodata.Nouveau(c.WebhookURL, c.WebhookToken)
+	h := tools.Nouveau(client, webhook, c.PublicURL)
 
 	mux := http.NewServeMux()
 	mux.Handle("/mcp", transport.MCP(h))

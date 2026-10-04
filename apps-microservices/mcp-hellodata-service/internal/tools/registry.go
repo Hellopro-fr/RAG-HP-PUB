@@ -37,11 +37,19 @@ func schemaFiltre() map[string]interface{} {
 	}
 }
 
+// objet omet "required" quand rien n'est requis : un "required": null est
+// refuse par les clients qui valident le schema.
 func objet(props map[string]interface{}, requis ...string) map[string]interface{} {
-	return map[string]interface{}{"type": "object", "properties": props, "required": requis}
+	o := map[string]interface{}{"type": "object", "properties": props}
+	if len(requis) > 0 {
+		o["required"] = requis
+	}
+	return o
 }
 
-// Definitions rend les trois outils exposes au LLM. hellodata_export_statut
+// Definitions rend les six outils exposes au LLM : trois de selection
+// (compter, echantillon, export_csv) et trois de campagne (recup_acheteur,
+// bilan_campagnes, enregistrer_reponses). hellodata_export_statut
 // n'existe pas : l'export tient sur une seule page, plafonnee a 2000
 // lignes, rendue directement par hellodata_export_csv.
 //
@@ -99,6 +107,64 @@ func Definitions() []mcp.Outil {
 				"cursor":       map[string]interface{}{"type": "integer"},
 				"type_blocage": blocage,
 			}, "filtre"),
+		},
+		{
+			Nom: "recup_acheteur",
+			Description: "Selectionne n acheteurs (1 a 2000) pour une campagne SMS ou appel et les y " +
+				"inscrit ; la campagne est creee si son code est inconnu. Les acheteurs sont " +
+				"dedoublonnes par numero de telephone. Toujours exclus : ne_plus_contacter, numero " +
+				"deja dans cette campagne, numero invalide (ou non mobile en sms). Le filtre combine " +
+				"les criteres acheteur et les feuilles d'historique hist_jamais_contacte, " +
+				"hist_derniere_categorie, hist_derniere_reponse_il_y_a_plus_de_jours, hist_campagne, " +
+				"placees directement sous le ET racine (ou dans un sous-groupe dedie enfant du ET " +
+				"racine). Rend les compteurs et url_csv (lien de 15 minutes) a transmettre au " +
+				"prestataire. Si epuise=false, rappeler avec la meme campagne pour la suite.",
+			SchemaEntre: objet(map[string]interface{}{
+				"campagne": objet(map[string]interface{}{
+					"code": map[string]interface{}{
+						"type": "string", "maxLength": codeMax,
+						"description": "Cle de la campagne, a reutiliser pour bilan_campagnes et enregistrer_reponses.",
+					},
+					"nom":           map[string]interface{}{"type": "string", "maxLength": texteMax},
+					"canal":         map[string]interface{}{"type": "string", "enum": []string{"sms", "appel"}},
+					"prestataire":   map[string]interface{}{"type": "string", "maxLength": texteMax},
+					"message":       map[string]interface{}{"type": "string"},
+					"date_campagne": map[string]interface{}{"type": "string", "format": "date"},
+				}, "code", "nom", "canal", "date_campagne"),
+				"n":      map[string]interface{}{"type": "integer", "minimum": 1, "maximum": NMax},
+				"filtre": schemaFiltre(),
+			}, "campagne", "n", "filtre"),
+		},
+		{
+			Nom: "bilan_campagnes",
+			Description: "Liste les campagnes avec leurs compteurs : envoyes, positive, " +
+				"negative_contactable, negative_stop, sans_reponse. Sert a retrouver le code d'une " +
+				"campagne. code limite le resultat a une campagne.",
+			SchemaEntre: objet(map[string]interface{}{
+				"code": map[string]interface{}{"type": "string", "maxLength": codeMax},
+			}),
+		},
+		{
+			Nom: "enregistrer_reponses",
+			Description: "Enregistre les reponses du prestataire pour une campagne, au plus 500 par " +
+				"appel (decouper au-dela). Classer chaque reponse : positive, negative_contactable " +
+				"(non, mais d'autres campagnes restent possibles) ou negative_stop (ne veut plus " +
+				"rien recevoir : le numero passe en ne_plus_contacter, definitivement). Une reponse " +
+				"commencant par STOP est toujours enregistree negative_stop. Rend mis_a_jour, les " +
+				"numeros inconnus et ceux hors campagne.",
+			SchemaEntre: objet(map[string]interface{}{
+				"code_campagne": map[string]interface{}{"type": "string", "maxLength": codeMax},
+				"reponses": map[string]interface{}{
+					"type": "array", "minItems": 1, "maxItems": ReponsesMax,
+					"items": objet(map[string]interface{}{
+						"telephone":     map[string]interface{}{"type": "string"},
+						"reponse_brute": map[string]interface{}{"type": "string"},
+						"categorie": map[string]interface{}{
+							"type": "string", "enum": []string{"positive", "negative_contactable", "negative_stop"},
+						},
+					}, "telephone", "reponse_brute", "categorie"),
+				},
+			}, "code_campagne", "reponses"),
 		},
 	}
 }

@@ -22,13 +22,16 @@ type Identite struct {
 }
 
 type Handler struct {
-	client    *hellodata.Client
+	client *hellodata.Client
+	// webhook parle au FRONT (partenaires_externes/mcp/hellodata), qui
+	// enregistre les reponses de campagne ; client parle au BO.
+	webhook   *hellodata.Client
 	publicURL string
 	jetons    *Jetons
 }
 
-func Nouveau(c *hellodata.Client, publicURL string) *Handler {
-	return &Handler{client: c, publicURL: publicURL, jetons: NouveauxJetons()}
+func Nouveau(c, webhook *hellodata.Client, publicURL string) *Handler {
+	return &Handler{client: c, webhook: webhook, publicURL: publicURL, jetons: NouveauxJetons()}
 }
 
 // Jetons rend la table de jetons de ce Handler — la MEME instance que

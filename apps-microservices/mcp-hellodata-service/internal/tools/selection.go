@@ -37,6 +37,16 @@ type sortieExportCSV struct {
 }
 
 func (h *Handler) appeler(ctx context.Context, id Identite, rpcID json.RawMessage, nom string, brut json.RawMessage) mcp.Reponse {
+	// Les outils de campagne ont leurs propres arguments (campagnes.go).
+	switch nom {
+	case "recup_acheteur":
+		return h.recupAcheteur(ctx, id, rpcID, brut)
+	case "bilan_campagnes":
+		return h.bilanCampagnes(ctx, rpcID, brut)
+	case "enregistrer_reponses":
+		return h.enregistrerReponses(ctx, id, rpcID, brut)
+	}
+
 	var a argsCommuns
 	if len(brut) > 0 {
 		if err := json.Unmarshal(brut, &a); err != nil {
