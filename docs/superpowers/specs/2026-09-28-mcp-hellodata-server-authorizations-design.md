@@ -32,6 +32,13 @@
 >   absent du registre vers le backend hellodata du scope
 >   (`findHellodataFallback`), avant le repli Zoho ; `min_role` et le
 >   contrôle d'accès s'appliquent ensuite.
+> - **A6 — valeur de `min_role` :** les rôles du gateway s'écrivent
+>   `config-only` < `read-only` < `admin` (`internal/auth/role.go`).
+>   `readonly` sans tiret n'est pas un rôle : `GateAllowsEmail` refuse
+>   alors tout le monde, admins compris. `read-only` écarterait les
+>   titulaires de grant au rôle `config-only`, rôle par défaut de
+>   `users/sync`. Valeur retenue : **`min_role = config-only`**, qui écarte
+>   toujours les chemins sans e-mail.
 > - **§ 4.5 et § 5 :** implémentés tels quels. Le proxy `/download` lit les
 >   en-têtes par le même `transport.IdentiteDepuis` que `/mcp`.
 

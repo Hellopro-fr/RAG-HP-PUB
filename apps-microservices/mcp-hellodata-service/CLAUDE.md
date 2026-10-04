@@ -93,9 +93,11 @@ hellodata, e-mail de l'appelant), gérée depuis l'écran
 contrôle que les instances Neo4j (`gateway.Neo4jAccess`, qui reconnaît ce
 serveur à son `tool_prefix = "hellodata"`) : un appelant refusé ne voit pas
 le serveur à l'écran de consentement OAuth2, reçoit un `tools/list` vide et
-voit ses `tools/call` refusés sans transmission. `min_role = readonly` reste
-posé sur le serveur : il écarte les chemins sans identité (tokens de scope,
-grants `client_credentials`).
+voit ses `tools/call` refusés sans transmission. Poser `min_role =
+config-only` sur le serveur : il écarte les chemins sans identité (tokens de
+scope, grants `client_credentials`) sans écarter un titulaire de grant au
+rôle `config-only`. `read-only` l'écarterait, et `readonly` (sans tiret)
+n'est pas un rôle : il refuse tout le monde, admins compris.
 
 Le gateway injecte trois en-têtes non signés : `X-End-User-Email`,
 `X-End-User-Role` (seulement si le rôle est résolu) et
