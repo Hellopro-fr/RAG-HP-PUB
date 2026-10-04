@@ -2,11 +2,46 @@
 
 **Date :** 2026-09-28
 **Branche :** `features/mcp-bdd-table`
-**Statut :** design validé, avant plan d'implémentation
+**Statut :** wrapper Go implémenté le 2026-10-04 ; BO et webhook FRONT à écrire (voir l'amendement)
 **Dépend de :** `2026-09-28-mcp-hellodata-server-authorizations-design.md` (sous-projet 1, livré avant)
 **Étend :** `2026-09-21-mcp-hellodata-selection-design.md` (moteur BO, arbre de filtres, proxy `/download`)
 
 Sous-projet 2 de la fonctionnalité « campagnes acheteurs via Claude ».
+
+> **Amendement du 2026-10-04 — contrat fixé par le wrapper.** Le wrapper
+> (`apps-microservices/mcp-hellodata-service`) est implémenté ; le BO et le
+> webhook FRONT doivent respecter ceci :
+>
+> - **Transport, BO et webhook :** `POST {base}/index.php?action=<nom>`,
+>   `Authorization: Bearer <jeton>` (`HELLODATA_TOKEN` pour le BO,
+>   `HELLODATA_WEBHOOK_TOKEN` pour le webhook), corps JSON, réponse dans
+>   l'enveloppe `{code, response}` ; une erreur rend
+>   `{code, response: {erreur, message}}` avec un statut HTTP non 2xx, et
+>   `erreur` remonte tel quel au LLM. Actions : `recup_acheteur`,
+>   `bilan_campagnes` (BO), `enregistrer_reponses` (webhook).
+> - **§ 6.1 — le CSV voyage dans la réponse.** « Le BO renvoie un handle »
+>   devient : `recup_acheteur` renvoie le CSV complet dans le champ `csv`
+>   (BOM compris), à côté des compteurs. Le wrapper le mémorise, émet le
+>   jeton `/download` et ne renvoie au LLM que `url_csv`, jamais le
+>   contenu. `selectionnes > 0` avec un `csv` vide est traité comme une
+>   panne du moteur. Le corps envoyé au BO porte `cree_par` (e-mail de
+>   l'appelant) au premier niveau, à côté de `campagne`, `n`, `filtre`.
+> - **§ 6.3 :** `bilan_campagnes` reçoit `{}` ou `{"code": "…"}` et répond
+>   `{"campagnes": [ … ]}`.
+> - **Validations faites aussi par le wrapper, avant le réseau** (le moteur
+>   les refait) : `n_hors_bornes`, `campagne_invalide` (code ≤ 64, nom
+>   ≤ 255, canal `sms`/`appel`, date `AAAA-MM-JJ`), forme de l'arbre ;
+>   `categorie_invalide`, `trop_de_reponses` (> 500), `corps_trop_gros`
+>   (> 256 Ko), `code_campagne_invalide`, `telephone_manquant`. La place
+>   des feuilles `hist_*` (`hist_hors_et_racine`) reste jugée par le
+>   compilateur du moteur.
+> - **Constat du 2026-10-04 :** sur le BO de dev, `/admin/mcp/hellodata`
+>   existe mais est **vide**, et `/admin/mcp` n'existe pas en production :
+>   le moteur du sous-projet 0 n'est pas déployé. Les extensions de ce
+>   document supposent ce moteur ; il doit être livré d'abord.
+> - **À valider :** le CSV porte `telephone_normalise` pour tout appelant
+>   autorisé, alors que `echantillon` / `export_csv` réservent `mobile` à
+>   l'admin (précondition 5 non tranchée).
 
 ---
 
