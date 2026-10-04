@@ -2541,6 +2541,37 @@ services:
       - services-net
     logging: *logging_defaults
 
+  # ── MCP HelloData Service ───────────────────────────────────────────────
+  mcp-hellodata-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/mcp-hellodata-service/Dockerfile
+    container_name: mcp-hellodata-service
+    profiles: [ "mcp" ]
+    restart: unless-stopped
+    # expose, PAS ports. L'autorisation de ce service repose sur des
+    # en-tetes non signes (X-End-User-Email, X-End-User-Role,
+    # X-End-User-Granted) : si un tiers peut joindre 8597 directement,
+    # X-End-User-Role: admin et X-End-User-Granted: true sont forgeables. La
+    # frontiere reseau EST la garantie (spec design § 7.1). mcp-leexi-service
+    # ci-dessus publie 8589:8589 ; cette divergence est deliberee, pas un
+    # oubli — ne pas "corriger" en ajoutant ports: ici.
+    expose:
+      - "8597"
+    environment:
+      - MCP_PORT=8597
+      - HELLODATA_BASE_URL=${HELLODATA_BASE_URL}
+      - HELLODATA_TOKEN=${HELLODATA_TOKEN}
+      - HELLODATA_PUBLIC_URL=${HELLODATA_PUBLIC_URL}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8597/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - services-net
+    logging: *logging_defaults
+
   # ── MCP Classification Produit Service ──────────────────────────────────
   mcp-classification-produit-service:
     build:

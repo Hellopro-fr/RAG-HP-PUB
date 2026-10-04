@@ -18,8 +18,8 @@ import (
 // api.RunnerNeo4j — duplicated because internal/api imports this package.
 const neo4jRunner = "neo4j"
 
-// neo4jAccessCacheTTL bounds both policy caches (server id → template slug,
-// template slug → is-Neo4j). Grants and roles are never cached.
+// neo4jAccessCacheTTL bounds both policy caches (server id → template slug
+// and tool prefix, template slug → is-Neo4j). Grants and roles are never cached.
 const neo4jAccessCacheTTL = 60 * time.Second
 
 // Neo4jAccessDeniedMessage is the JSON-RPC error message returned when a
@@ -33,18 +33,25 @@ type templateRunnerLookup interface {
 	GetBySlugAny(slug string) (*db.Template, error)
 }
 
-// serverTemplateSlugLookup is the slice of *repository.ServerRepo the policy
-// needs. It returns "" and a nil error when no mcp_servers row has that id.
-// Needed because the in-memory registry does not reliably carry
-// BackendServer.TemplateSlug: DiscoverAndRegister only copies it from a
-// previous registry entry, so a backend discovered successfully at boot or
-// right after instance creation has TemplateSlug == "".
-type serverTemplateSlugLookup interface {
-	TemplateSlugByID(id string) (string, error)
+// serverAccessKeysLookup is the slice of *repository.ServerRepo the policy
+// needs: a server's template_slug and tool_prefix. It returns "", "" and a
+// nil error when no mcp_servers row has that id. Needed because the
+// in-memory registry does not reliably carry BackendServer.TemplateSlug:
+// DiscoverAndRegister only copies it from a previous registry entry, so a
+// backend discovered successfully at boot or right after instance creation
+// has TemplateSlug == "". The consent screens only hold a server id, so the
+// tool_prefix comes from the same row.
+type serverAccessKeysLookup interface {
+	AccessKeysByID(id string) (templateSlug, toolPrefix string, err error)
 }
 
-type cachedString struct {
-	value   string
+type serverKeys struct {
+	templateSlug string
+	toolPrefix   string
+}
+
+type cachedKeys struct {
+	value   serverKeys
 	expires time.Time
 }
 
@@ -53,20 +60,22 @@ type cachedBool struct {
 	expires time.Time
 }
 
-// Neo4jAccess decides service-level access to Neo4j template instances: a
-// backend is restricted when its mcp_servers.template_slug names a template
-// whose runner is "neo4j"; a restricted backend is reachable only by gateway
-// admins and by holders of a server_authorizations row for that exact
-// server. A nil *Neo4jAccess allows everything.
+// Neo4jAccess decides service-level access to restricted servers. A backend
+// is restricted when its mcp_servers.template_slug names a template whose
+// runner is "neo4j", or when its tool_prefix is "hellodata" (the buyer
+// export service, docs/superpowers/specs/2026-09-28-mcp-hellodata-server-authorizations-design.md).
+// A restricted backend is reachable only by gateway admins and by holders of
+// a server_authorizations row for that exact server. A nil *Neo4jAccess
+// allows everything.
 type Neo4jAccess struct {
 	templates templateRunnerLookup
-	servers   serverTemplateSlugLookup
+	servers   serverAccessKeysLookup
 	users     gatewayUserFinder
 	grants    serverAuthorizer
 	now       func() time.Time
 
 	mu          sync.Mutex
-	serverSlugs map[string]cachedString
+	serverKeys  map[string]cachedKeys
 	slugIsNeo4j map[string]cachedBool
 }
 
@@ -74,25 +83,26 @@ type Neo4jAccess struct {
 // lookup makes every templated backend restricted (fail-closed), nil users
 // or grants deny every restricted backend, and a nil servers lookup limits
 // detection to BackendServer.TemplateSlug.
-func NewNeo4jAccess(t templateRunnerLookup, s serverTemplateSlugLookup, u gatewayUserFinder, g serverAuthorizer) *Neo4jAccess {
+func NewNeo4jAccess(t templateRunnerLookup, s serverAccessKeysLookup, u gatewayUserFinder, g serverAuthorizer) *Neo4jAccess {
 	return &Neo4jAccess{
 		templates:   t,
 		servers:     s,
 		users:       u,
 		grants:      g,
 		now:         time.Now,
-		serverSlugs: make(map[string]cachedString),
+		serverKeys:  make(map[string]cachedKeys),
 		slugIsNeo4j: make(map[string]cachedBool),
 	}
 }
 
-// Restricted reports whether b is a Neo4j template instance. Lookup errors
-// and a missing template row count as restricted (fail-closed).
+// Restricted reports whether b is a Neo4j template instance or the hellodata
+// backend. Lookup errors and a missing template row count as restricted
+// (fail-closed).
 func (a *Neo4jAccess) Restricted(b *BackendServer) bool {
 	if a == nil || b == nil {
 		return false
 	}
-	return a.restricted(b.ID, b.TemplateSlug)
+	return a.restricted(b.ID, b.TemplateSlug, b.ToolPrefix)
 }
 
 // Allows reports whether the request's end user (the OAuth2 email claim on
@@ -102,7 +112,7 @@ func (a *Neo4jAccess) Allows(ctx context.Context, b *BackendServer) bool {
 		return true
 	}
 	email, _ := scopetoken.EndUserEmailFromContext(ctx)
-	return a.AllowsEmail(email, b.ID, b.TemplateSlug)
+	return a.allowsEmail(email, b.ID, b.TemplateSlug, b.ToolPrefix)
 }
 
 // AllowsEmail is Allows for callers that hold the viewer's email directly
@@ -117,10 +127,17 @@ func (a *Neo4jAccess) Allows(ctx context.Context, b *BackendServer) bool {
 // other email passes only with a grant on this exact server; callers
 // without email are denied.
 func (a *Neo4jAccess) AllowsEmail(email, serverID, templateSlug string) bool {
+	return a.allowsEmail(email, serverID, templateSlug, "")
+}
+
+// allowsEmail is AllowsEmail with the server's tool_prefix when the caller
+// holds it (a registry backend); "" makes the policy resolve it from
+// serverID.
+func (a *Neo4jAccess) allowsEmail(email, serverID, templateSlug, toolPrefix string) bool {
 	if a == nil {
 		return true
 	}
-	if !a.restricted(serverID, templateSlug) {
+	if !a.restricted(serverID, templateSlug, toolPrefix) {
 		return true
 	}
 	if email == "" {
@@ -143,18 +160,28 @@ func (a *Neo4jAccess) DenialSlug(b *BackendServer) string {
 	if b.TemplateSlug != "" {
 		return b.TemplateSlug
 	}
-	slug, _ := a.serverSlug(b.ID)
-	return slug
+	keys, _ := a.serverKeysFor(b.ID)
+	return keys.templateSlug
 }
 
-func (a *Neo4jAccess) restricted(serverID, slugHint string) bool {
+// restricted: a hellodata prefix (hint or row) restricts at once; otherwise
+// a template slug (hint or row) restricts when its runner is Neo4j. A
+// template instance is never the hellodata backend, so a non-empty slug hint
+// skips the row lookup as before.
+func (a *Neo4jAccess) restricted(serverID, slugHint, prefixHint string) bool {
+	if prefixHint == hellodataToolPrefix {
+		return true
+	}
 	slug := slugHint
 	if slug == "" {
-		var ok bool
-		slug, ok = a.serverSlug(serverID)
+		keys, ok := a.serverKeysFor(serverID)
 		if !ok {
 			return true
 		}
+		if keys.toolPrefix == hellodataToolPrefix {
+			return true
+		}
+		slug = keys.templateSlug
 	}
 	if slug == "" {
 		return false
@@ -162,29 +189,31 @@ func (a *Neo4jAccess) restricted(serverID, slugHint string) bool {
 	return a.isNeo4jSlug(slug)
 }
 
-// serverSlug resolves a server's template slug. ok == false means the lookup
-// failed; the caller must then treat the server as restricted.
-func (a *Neo4jAccess) serverSlug(serverID string) (slug string, ok bool) {
+// serverKeysFor resolves a server's template slug and tool prefix. ok ==
+// false means the lookup failed; the caller must then treat the server as
+// restricted.
+func (a *Neo4jAccess) serverKeysFor(serverID string) (keys serverKeys, ok bool) {
 	if a.servers == nil || serverID == "" {
-		return "", true
+		return serverKeys{}, true
 	}
 	now := a.now()
 	a.mu.Lock()
-	if e, hit := a.serverSlugs[serverID]; hit && now.Before(e.expires) {
+	if e, hit := a.serverKeys[serverID]; hit && now.Before(e.expires) {
 		a.mu.Unlock()
 		return e.value, true
 	}
 	a.mu.Unlock()
 
-	slug, err := a.servers.TemplateSlugByID(serverID)
+	slug, prefix, err := a.servers.AccessKeysByID(serverID)
 	if err != nil {
-		log.Printf("[neo4j-access] template_slug lookup failed for server %s: %v — treating as restricted", serverID, err)
-		return "", false
+		log.Printf("[neo4j-access] template_slug/tool_prefix lookup failed for server %s: %v — treating as restricted", serverID, err)
+		return serverKeys{}, false
 	}
+	keys = serverKeys{templateSlug: slug, toolPrefix: prefix}
 	a.mu.Lock()
-	a.serverSlugs[serverID] = cachedString{value: slug, expires: now.Add(neo4jAccessCacheTTL)}
+	a.serverKeys[serverID] = cachedKeys{value: keys, expires: now.Add(neo4jAccessCacheTTL)}
 	a.mu.Unlock()
-	return slug, true
+	return keys, true
 }
 
 // isNeo4jSlug reports whether the template with this slug runs on the Neo4j

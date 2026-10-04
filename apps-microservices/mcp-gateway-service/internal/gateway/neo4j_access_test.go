@@ -31,20 +31,21 @@ func (f *countingTemplates) GetBySlugAny(slug string) (*db.Template, error) {
 	return nil, gorm.ErrRecordNotFound
 }
 
-// countingServerSlugs is an in-memory serverTemplateSlugLookup. An id absent
-// from slugs returns "" and no error, like the real repo.
+// countingServerSlugs is an in-memory serverAccessKeysLookup. An id absent
+// from slugs and prefixes returns "", "" and no error, like the real repo.
 type countingServerSlugs struct {
-	slugs map[string]string
-	err   error
-	calls int
+	slugs    map[string]string
+	prefixes map[string]string
+	err      error
+	calls    int
 }
 
-func (f *countingServerSlugs) TemplateSlugByID(id string) (string, error) {
+func (f *countingServerSlugs) AccessKeysByID(id string) (string, string, error) {
 	f.calls++
 	if f.err != nil {
-		return "", f.err
+		return "", "", f.err
 	}
-	return f.slugs[id], nil
+	return f.slugs[id], f.prefixes[id], nil
 }
 
 // countingUsers is an in-memory gatewayUserFinder. An email absent from rows

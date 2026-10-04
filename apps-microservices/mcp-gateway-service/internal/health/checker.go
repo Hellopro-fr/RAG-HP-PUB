@@ -110,6 +110,15 @@ func (c *Checker) checkOne(srv *db.MCPServer, authHeaders map[string]string) {
 		c.registry.SetToolPrefix(srv.ID, srv.ToolPrefix)
 	}
 
+	// Restore the access gate after re-discovery. This covers every path
+	// that can leave the registry without a prior entry to preserve MinRole
+	// from — e.g. a gated server created with AutoDiscover unchecked never
+	// gets an initial SetMinRole push — regardless of how that hole came to
+	// be. gateway.go's `prev`-preservation clause only helps when a prior
+	// entry already exists; this push is unconditional so it also covers the
+	// case where it doesn't.
+	c.registry.SetMinRole(srv.ID, srv.MinRole)
+
 	// Sync tool active states from DB (discovery marks all as active,
 	// but some may have been deactivated by the user)
 	if len(srv.Tools) > 0 {
