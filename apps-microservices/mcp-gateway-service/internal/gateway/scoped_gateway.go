@@ -47,18 +47,19 @@ const ringoverToolPrefix = "ringover"
 // OAuth2 client declares a BDD scope.
 const bddToolPrefix = "bdd"
 
-// hellodataToolPrefix identifies the mcp-hellodata-service backend. It
-// receives the end-user's identity because IT decides authorization: the
-// gateway only posts a minimal min_role gate on this server, which excludes
-// paths without a user.
+// hellodataToolPrefix identifies the mcp-hellodata-service backend. The
+// gateway decides access to it (Neo4jAccess: admin OR server_authorizations
+// grant) and posts the end-user's identity so the service re-checks it.
 const hellodataToolPrefix = "hellodata"
 
 // Identity headers. X-End-User-Email already existed as a literal on the
 // Zoho path (injectZohoIdentity); it is named here and the literal is
-// replaced with the constant.
+// replaced with the constant. X-End-User-Granted is posted to hellodata
+// only, and only as "true".
 const (
-	EndUserEmailHeader = "X-End-User-Email"
-	EndUserRoleHeader  = "X-End-User-Role"
+	EndUserEmailHeader   = "X-End-User-Email"
+	EndUserRoleHeader    = "X-End-User-Role"
+	EndUserGrantedHeader = "X-End-User-Granted"
 )
 
 // LeexiAllowedParticipantsHeader mirrors the constant defined in mcp-leexi-service
@@ -465,8 +466,21 @@ func (sg *ScopedGateway) hellodataBackendsInScope(allowedIDs map[string]bool) []
 	return out
 }
 
+// findHellodataFallback returns the in-scope hellodata backend whose
+// prefix the tool name carries, with the unprefixed name to forward.
+// (nil, "") when none matches.
+func (sg *ScopedGateway) findHellodataFallback(name string) (*BackendServer, string) {
+	for _, b := range sg.hellodataBackendsInScope(sg.allowedIDs) {
+		prefix := b.ToolPrefix + "_"
+		if len(name) > len(prefix) && name[:len(prefix)] == prefix {
+			return b, name[len(prefix):]
+		}
+	}
+	return nil, ""
+}
+
 // fetchHellodataTools queries the backend with the caller's identity. The
-// backend returns its four tools to an authorized caller, an empty list
+// backend returns its three tools to an authorized caller, an empty list
 // otherwise.
 //
 // DELIBERATE DIVERGENCE from fetchZohoTools: on failure, the fallback is the
@@ -508,6 +522,15 @@ func (sg *ScopedGateway) handleToolsCall(ctx context.Context, req *mcp.Request) 
 	}
 
 	backend, originalName := sg.registry.FindByToolFilteredWithTools(params.Name, sg.allowedIDs, sg.allowedTools)
+	if backend == nil {
+		// hellodata fallback: the registry never holds hellodata tools —
+		// discovery queries the service without identity and gets an empty
+		// list (see fetchHellodataTools) — so a "hellodata_" name is routed
+		// to the in-scope hellodata backend. Checked before the Zoho branch,
+		// whose unconfigured-catalog refusal would otherwise answer first.
+		// The min_role and Neo4jAccess checks below still decide access.
+		backend, originalName = sg.findHellodataFallback(params.Name)
+	}
 	if backend == nil {
 		// Zoho fallback: the registry only caches the admin tool catalog;
 		// per-user upstreams expose tools the admin instance doesn't have
@@ -588,6 +611,12 @@ func (sg *ScopedGateway) requestHeadersFor(ctx context.Context, backend *Backend
 		if backend.HasTag(zohoToolPrefix) || backend.ToolPrefix == zohoToolPrefix {
 			sg.injectZohoIdentity(ctx, headers, backend)
 		}
+		// hellodata authenticates on these headers, it is not filtered by
+		// them: dropping the identity here would make the grant refuse the
+		// very caller it authorizes.
+		if backend.ToolPrefix == hellodataToolPrefix {
+			sg.injectHellodataIdentity(ctx, headers, true)
+		}
 		return headers
 	}
 
@@ -607,30 +636,33 @@ func (sg *ScopedGateway) requestHeadersFor(ctx context.Context, backend *Backend
 		case bddToolPrefix:
 			sg.injectBDDHeader(ctx, headers)
 		case hellodataToolPrefix:
-			sg.injectHellodataIdentity(ctx, headers)
+			sg.injectHellodataIdentity(ctx, headers, false)
 		}
 	}
 	return headers
 }
 
 // injectHellodataIdentity posts the end-user's identity for
-// mcp-hellodata-service, which alone decides authorization (admin or static
-// allow-list).
+// mcp-hellodata-service, which re-checks the gateway's decision: admin role,
+// or granted (a server_authorizations row on this backend, found by Step 0).
 //
 // Fail-closed at emission: when the role cannot be resolved — repository not
 // wired, SQL error, email with no row in gateway_users — NO role header is
-// sent at all. Never a default value: downstream, a default would become an
-// effective role.
+// sent at all. X-End-User-Granted is sent only as "true", never "false":
+// downstream, any default would become an effective right.
 //
 // With no email on the context, nothing is posted at all. That covers scope
 // tokens, client_credentials grants, and health probes; the backend will
 // refuse, and that is the intended behavior.
-func (sg *ScopedGateway) injectHellodataIdentity(ctx context.Context, headers map[string]string) {
+func (sg *ScopedGateway) injectHellodataIdentity(ctx context.Context, headers map[string]string, granted bool) {
 	email, ok := scopetoken.EndUserEmailFromContext(ctx)
 	if !ok || email == "" {
 		return
 	}
 	headers[EndUserEmailHeader] = email
+	if granted {
+		headers[EndUserGrantedHeader] = "true"
+	}
 	role, ok := gatewayUserRole(sg.gatewayUsers, email)
 	if !ok {
 		log.Printf("[scoped] hellodata: role non resolu pour %s — aucun en-tete de role envoye", email)
