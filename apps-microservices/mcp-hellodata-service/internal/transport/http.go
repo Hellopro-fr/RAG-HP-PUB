@@ -13,11 +13,13 @@ const corpsMax = 256 << 10
 
 // IdentiteDepuis lit ce que le gateway injecte. Un en-tete absent donne
 // une chaine vide, qui vaut refus en aval : l'absence n'est pas une
-// confiance implicite.
+// confiance implicite. X-End-User-Granted ne compte que s'il vaut
+// exactement "true" : "TRUE", "1" ou "yes" ne sont pas un grant.
 func IdentiteDepuis(r *http.Request) tools.Identite {
 	return tools.Identite{
-		Email: r.Header.Get("X-End-User-Email"),
-		Role:  r.Header.Get("X-End-User-Role"),
+		Email:   r.Header.Get("X-End-User-Email"),
+		Role:    r.Header.Get("X-End-User-Role"),
+		Granted: r.Header.Get("X-End-User-Granted") == "true",
 	}
 }
 

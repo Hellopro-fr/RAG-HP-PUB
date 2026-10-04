@@ -9,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"mcp-hellodata/internal/acces"
 	"mcp-hellodata/internal/hellodata"
 	"mcp-hellodata/internal/mcp"
 	"mcp-hellodata/internal/tools"
@@ -25,10 +24,9 @@ func TestHandlerJetons_RendLaTableQuAlimenteLExport(t *testing.T) {
 	}))
 	defer moteur.Close()
 
-	h := tools.Nouveau(hellodata.Nouveau(moteur.URL, "jeton"),
-		acces.Nouveau("alice@example.test"), "https://mcp.example.test")
+	h := tools.Nouveau(hellodata.Nouveau(moteur.URL, "jeton"), "https://mcp.example.test")
 
-	rep := h.Traiter(context.Background(), tools.Identite{Email: "alice@example.test", Role: "readonly"},
+	rep := h.Traiter(context.Background(), tools.Identite{Email: "alice@example.test", Role: "readonly", Granted: true},
 		mcp.Requete{
 			JSONRPC: "2.0", ID: json.RawMessage(`1`), Methode: "tools/call",
 			Params: json.RawMessage(`{"name":"export_csv","arguments":{"filtre":{"critere":"a_siret","comparateur":"=","valeur":true}}}`),
@@ -58,8 +56,7 @@ func TestHandlerJetons_RendLaTableQuAlimenteLExport(t *testing.T) {
 // Un jeton qui n'a jamais ete frappe ne doit rien rendre : h.Jetons() ne
 // doit pas exposer une table qui accepterait n'importe quoi.
 func TestHandlerJetons_JetonInconnuNonTrouve(t *testing.T) {
-	h := tools.Nouveau(hellodata.Nouveau("http://exemple.invalid", "jeton"),
-		acces.Nouveau("alice@example.test"), "https://mcp.example.test")
+	h := tools.Nouveau(hellodata.Nouveau("http://exemple.invalid", "jeton"), "https://mcp.example.test")
 	if _, ok := h.Jetons().Lire("deadbeefdeadbeefdeadbeefdeadbeef"); ok {
 		t.Error("un jeton jamais frappe ne doit pas etre trouve")
 	}

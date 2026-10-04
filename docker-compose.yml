@@ -2550,9 +2550,9 @@ services:
     profiles: [ "mcp" ]
     restart: unless-stopped
     # expose, PAS ports. L'autorisation de ce service repose sur des
-    # en-tetes non signes (X-End-User-Email, X-End-User-Role) : si un tiers
-    # peut joindre 8597 directement, X-End-User-Role: admin est forgeable
-    # et la liste HELLODATA_ALLOWED_EMAILS ne protege plus rien. La
+    # en-tetes non signes (X-End-User-Email, X-End-User-Role,
+    # X-End-User-Granted) : si un tiers peut joindre 8597 directement,
+    # X-End-User-Role: admin et X-End-User-Granted: true sont forgeables. La
     # frontiere reseau EST la garantie (spec design § 7.1). mcp-leexi-service
     # ci-dessus publie 8589:8589 ; cette divergence est deliberee, pas un
     # oubli — ne pas "corriger" en ajoutant ports: ici.
@@ -2563,9 +2563,6 @@ services:
       - HELLODATA_BASE_URL=${HELLODATA_BASE_URL}
       - HELLODATA_TOKEN=${HELLODATA_TOKEN}
       - HELLODATA_PUBLIC_URL=${HELLODATA_PUBLIC_URL}
-      # Adresses separees par des virgules, autorisees en plus des admin.
-      # JAMAIS de valeur ici ni dans un .env.example : le depot est public.
-      - HELLODATA_ALLOWED_EMAILS=${HELLODATA_ALLOWED_EMAILS}
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8597/health"]
       interval: 30s

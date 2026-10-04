@@ -7,7 +7,7 @@ import (
 
 func poser(t *testing.T, kv map[string]string) {
 	t.Helper()
-	for _, k := range []string{"HELLODATA_BASE_URL", "HELLODATA_TOKEN", "HELLODATA_ALLOWED_EMAILS", "HELLODATA_PUBLIC_URL", "MCP_PORT"} {
+	for _, k := range []string{"HELLODATA_BASE_URL", "HELLODATA_TOKEN", "HELLODATA_PUBLIC_URL", "MCP_PORT"} {
 		os.Unsetenv(k)
 	}
 	for k, v := range kv {
@@ -26,9 +26,6 @@ func TestCharger_ValeursParDefaut(t *testing.T) {
 	}
 	if c.Port != 8597 {
 		t.Errorf("Port = %d, attendu 8597", c.Port)
-	}
-	if c.EmailsAutorises != "" {
-		t.Errorf("EmailsAutorises = %q, attendu vide", c.EmailsAutorises)
 	}
 }
 

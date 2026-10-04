@@ -5,8 +5,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"mcp-hellodata/internal/acces"
 )
 
 // tableFake tient lieu de table de jetons pour ces tests : le proxy ne
@@ -23,15 +21,19 @@ func (t *tableFake) Lire(jeton string) ([]byte, bool) {
 	return c, ok
 }
 
-func monter(t *testing.T, table *tableFake, emailsAutorises string) http.Handler {
+func monter(t *testing.T, table *tableFake) http.Handler {
 	t.Helper()
-	return Nouveau(table, acces.Nouveau(emailsAutorises))
+	return Nouveau(table)
 }
 
-func appel(h http.Handler, chemin, email, role string) *httptest.ResponseRecorder {
+// appel pose les en-tetes du gateway ; granted vide = en-tete absent.
+func appel(h http.Handler, chemin, email, role, granted string) *httptest.ResponseRecorder {
 	r := httptest.NewRequest(http.MethodGet, chemin, nil)
 	r.Header.Set("X-End-User-Email", email)
 	r.Header.Set("X-End-User-Role", role)
+	if granted != "" {
+		r.Header.Set("X-End-User-Granted", granted)
+	}
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
 	return w
@@ -42,9 +44,9 @@ func TestTelechargement_JetonValide_RendExactementLesOctetsMemorises(t *testing.
 	table := &tableFake{contenu: map[string][]byte{
 		"deadbeefdeadbeefdeadbeefdeadbeef": attendu,
 	}}
-	h := monter(t, table, "alice@example.test")
+	h := monter(t, table)
 
-	w := appel(h, "/download/deadbeefdeadbeefdeadbeefdeadbeef", "alice@example.test", "readonly")
+	w := appel(h, "/download/deadbeefdeadbeefdeadbeefdeadbeef", "alice@example.test", "readonly", "true")
 	if w.Code != http.StatusOK {
 		t.Fatalf("code = %d", w.Code)
 	}
@@ -60,16 +62,18 @@ func TestTelechargement_Refus(t *testing.T) {
 	table := &tableFake{contenu: map[string][]byte{
 		"deadbeefdeadbeefdeadbeefdeadbeef": []byte("id;ville\n1;Rennes\n"),
 	}}
-	h := monter(t, table, "alice@example.test")
+	h := monter(t, table)
 
-	cas := []struct{ nom, email, role string }{
-		{"non autorise", "dave@example.test", "readonly"},
-		{"sans identite", "", ""},
+	cas := []struct{ nom, email, role, granted string }{
+		{"non autorise", "dave@example.test", "readonly", ""},
+		{"sans identite", "", "", ""},
+		{"grant sans email", "", "", "true"},
+		{"granted autre que true", "dave@example.test", "readonly", "TRUE"},
 	}
 	for _, c := range cas {
 		t.Run(c.nom, func(t *testing.T) {
 			table.appelee = false
-			w := appel(h, "/download/deadbeefdeadbeefdeadbeefdeadbeef", c.email, c.role)
+			w := appel(h, "/download/deadbeefdeadbeefdeadbeefdeadbeef", c.email, c.role, c.granted)
 			if w.Code != http.StatusForbidden {
 				t.Errorf("code = %d, attendu 403", w.Code)
 			}
@@ -84,11 +88,11 @@ func TestTelechargement_Refus(t *testing.T) {
 // liste blanche ne doit jamais atteindre la table de jetons.
 func TestTelechargement_FormatDeJetonInvalide(t *testing.T) {
 	table := &tableFake{contenu: map[string][]byte{}}
-	h := monter(t, table, "alice@example.test")
+	h := monter(t, table)
 
 	for _, mauvais := range []string{"../../etc/passwd", "pas-hexa", "", "DEADBEEFDEADBEEFDEADBEEFDEADBEEF"} {
 		table.appelee = false
-		w := appel(h, "/download/"+mauvais, "alice@example.test", "readonly")
+		w := appel(h, "/download/"+mauvais, "alice@example.test", "readonly", "true")
 		if w.Code != http.StatusBadRequest && w.Code != http.StatusNotFound {
 			t.Errorf("jeton %q: code = %d, attendu 400 ou 404", mauvais, w.Code)
 		}
@@ -103,9 +107,9 @@ func TestTelechargement_FormatDeJetonInvalide(t *testing.T) {
 // d'erreur moteur a relayer, seulement une table qui ne le connait pas.
 func TestTelechargement_JetonExpireOuInconnu(t *testing.T) {
 	table := &tableFake{contenu: map[string][]byte{}}
-	h := monter(t, table, "alice@example.test")
+	h := monter(t, table)
 
-	w := appel(h, "/download/deadbeefdeadbeefdeadbeefdeadbeef", "alice@example.test", "readonly")
+	w := appel(h, "/download/deadbeefdeadbeefdeadbeefdeadbeef", "alice@example.test", "readonly", "true")
 	if w.Code != http.StatusNotFound {
 		t.Errorf("code = %d, attendu 404", w.Code)
 	}

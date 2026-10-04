@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"mcp-hellodata/internal/acces"
+	"mcp-hellodata/internal/transport"
 )
 
 // Le jeton vient du reseau. Liste blanche stricte plutot que nettoyage :
@@ -33,17 +34,17 @@ type Resolveur interface {
 
 type proxy struct {
 	jetons Resolveur
-	acces  *acces.Acces
 }
 
-func Nouveau(j Resolveur, a *acces.Acces) http.Handler {
-	return &proxy{jetons: j, acces: a}
+func Nouveau(j Resolveur) http.Handler {
+	return &proxy{jetons: j}
 }
 
 func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	email := r.Header.Get("X-End-User-Email")
-	role := r.Header.Get("X-End-User-Role")
-	if !p.acces.Autorise(email, role) {
+	// Meme lecture des en-tetes que /mcp : une seule regle pour Granted.
+	id := transport.IdentiteDepuis(r)
+	email := id.Email
+	if !acces.Autorise(id.Email, id.Role, id.Granted) {
 		http.Error(w, "acces refuse", http.StatusForbidden)
 		return
 	}

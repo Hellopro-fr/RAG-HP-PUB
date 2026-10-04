@@ -4,72 +4,51 @@ import "testing"
 
 // Adresses fictives en .test : le depot est public, aucune adresse reelle
 // ne doit apparaitre, y compris dans un test.
-const liste = "alice@example.test, BOB@Example.TEST ,,carol@example.test"
-
 func TestAutorise(t *testing.T) {
-	a := Nouveau(liste)
 	cas := []struct {
-		nom    string
-		email  string
-		role   string
-		attend bool
+		nom     string
+		email   string
+		role    string
+		granted bool
+		attend  bool
 	}{
-		{"admin hors liste passe", "dave@example.test", "admin", true},
-		{"readonly hors liste refuse", "dave@example.test", "readonly", false},
-		{"readonly dans la liste passe", "alice@example.test", "readonly", true},
-		{"casse et espaces normalises des deux cotes", "  BoB@EXAMPLE.test  ", "readonly", true},
-		{"email vide refuse", "", "readonly", false},
-		{"email vide avec role admin refuse", "", "admin", false},
-		{"role vide hors liste refuse", "dave@example.test", "", false},
-		{"role Admin capitalise n est pas admin", "dave@example.test", "Admin", false},
-		{"role superadmin n est pas admin", "dave@example.test", "superadmin", false},
-		{"role avec espaces reste admin", "dave@example.test", " admin ", true},
+		{"admin sans grant passe", "dave@example.test", "admin", false, true},
+		{"readonly avec grant passe", "alice@example.test", "readonly", true, true},
+		{"readonly sans grant refuse", "dave@example.test", "readonly", false, false},
+		{"role absent avec grant passe", "alice@example.test", "", true, true},
+		{"role absent sans grant refuse", "dave@example.test", "", false, false},
+		{"email vide refuse", "", "readonly", false, false},
+		{"email vide avec role admin refuse", "", "admin", false, false},
+		{"grant sans email refuse", "", "", true, false},
+		{"email fait d espaces refuse", "   ", "admin", true, false},
+		{"role Admin capitalise n est pas admin", "dave@example.test", "Admin", false, false},
+		{"role superadmin n est pas admin", "dave@example.test", "superadmin", false, false},
+		{"role avec espaces reste admin", "dave@example.test", " admin ", false, true},
 	}
 	for _, c := range cas {
 		t.Run(c.nom, func(t *testing.T) {
-			if got := a.Autorise(c.email, c.role); got != c.attend {
-				t.Errorf("Autorise(%q, %q) = %v, attendu %v", c.email, c.role, got, c.attend)
+			if got := Autorise(c.email, c.role, c.granted); got != c.attend {
+				t.Errorf("Autorise(%q, %q, %v) = %v, attendu %v", c.email, c.role, c.granted, got, c.attend)
 			}
 		})
 	}
 }
 
-// Une entree vide dans la liste ne doit pas devenir une cle vide, sinon un
-// email vide correspondrait.
-func TestEntreeVideIgnoree(t *testing.T) {
-	a := Nouveau("alice@example.test,,")
-	if len(a.autorises) != 1 {
-		t.Errorf("liste = %d entrees, attendu 1", len(a.autorises))
-	}
-}
-
-// Controle positif de l'absence : sans lui, un bug qui refuserait tout
-// ferait passer tous les tests de refus ci-dessus.
-func TestListeVide_SeulsLesAdminsPassent(t *testing.T) {
-	a := Nouveau("")
-	if a.Autorise("alice@example.test", "readonly") {
-		t.Error("liste vide: un readonly ne doit pas passer")
-	}
-	if !a.Autorise("alice@example.test", "admin") {
-		t.Error("liste vide: un admin doit toujours passer")
-	}
-}
-
-// Un receveur nil ne doit jamais autoriser : un cablage oublie au demarrage
-// deviendrait sinon une porte ouverte.
-func TestReceveurNil_Refuse(t *testing.T) {
-	var a *Acces
-	if a.Autorise("alice@example.test", "admin") {
-		t.Error("un Acces nil ne doit jamais autoriser")
-	}
-}
-
+// Un grant n'ouvre pas les colonnes restreintes : seul l'admin y a droit.
 func TestEstAdmin(t *testing.T) {
-	a := Nouveau("")
-	if !a.EstAdmin("admin") {
+	if !EstAdmin("admin") {
 		t.Error("admin doit etre admin")
 	}
-	if a.EstAdmin("readonly") {
+	if EstAdmin("readonly") {
 		t.Error("readonly ne doit pas etre admin")
+	}
+}
+
+func TestSource(t *testing.T) {
+	if got := Source("admin"); got != "admin" {
+		t.Errorf("Source(admin) = %q", got)
+	}
+	if got := Source("readonly"); got != "grant" {
+		t.Errorf("Source(readonly) = %q", got)
 	}
 }

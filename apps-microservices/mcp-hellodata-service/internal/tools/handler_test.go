@@ -9,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"mcp-hellodata/internal/acces"
 	"mcp-hellodata/internal/hellodata"
 	"mcp-hellodata/internal/mcp"
 )
@@ -18,8 +17,7 @@ func handler(t *testing.T, g http.HandlerFunc) *Handler {
 	t.Helper()
 	s := httptest.NewServer(g)
 	t.Cleanup(s.Close)
-	return Nouveau(hellodata.Nouveau(s.URL, "jeton"),
-		acces.Nouveau("alice@example.test"), "https://mcp.example.test")
+	return Nouveau(hellodata.Nouveau(s.URL, "jeton"), "https://mcp.example.test")
 }
 
 func req(methode string, params string) mcp.Requete {
@@ -44,10 +42,11 @@ func TestToolsList_VariableSelonLAppelant(t *testing.T) {
 		id     Identite
 		attend int
 	}{
-		{"admin voit les trois outils", Identite{"dave@example.test", "admin"}, 3},
-		{"autorise par liste voit les trois", Identite{"alice@example.test", "readonly"}, 3},
-		{"non autorise ne voit rien", Identite{"dave@example.test", "readonly"}, 0},
-		{"sans identite ne voit rien", Identite{"", ""}, 0},
+		{"admin voit les trois outils", Identite{"dave@example.test", "admin", false}, 3},
+		{"titulaire d un grant voit les trois", Identite{"alice@example.test", "readonly", true}, 3},
+		{"grant sans email ne voit rien", Identite{"", "", true}, 0},
+		{"non autorise ne voit rien", Identite{"dave@example.test", "readonly", false}, 0},
+		{"sans identite ne voit rien", Identite{"", "", false}, 0},
 	}
 	for _, c := range cas {
 		t.Run(c.nom, func(t *testing.T) {
@@ -64,7 +63,7 @@ func TestToolsList_VariableSelonLAppelant(t *testing.T) {
 func TestToolsCall_RefuseUnNonAutorise(t *testing.T) {
 	appele := false
 	h := handler(t, func(w http.ResponseWriter, r *http.Request) { appele = true })
-	r := h.Traiter(context.Background(), Identite{"dave@example.test", "readonly"},
+	r := h.Traiter(context.Background(), Identite{"dave@example.test", "readonly", false},
 		req("tools/call", `{"name":"compter","arguments":{"filtre":{"critere":"region","comparateur":"dans","valeur":[6]}}}`))
 	if r.Error == nil {
 		t.Fatal("attendu une erreur pour un appelant non autorise")
@@ -78,7 +77,7 @@ func TestCompter_CheminNominal(t *testing.T) {
 	h := handler(t, func(w http.ResponseWriter, r *http.Request) {
 		io.WriteString(w, `{"code":200,"response":{"count":42,"exact":false,"plafonne":false,"depuis_cache":false}}`)
 	})
-	r := h.Traiter(context.Background(), Identite{"alice@example.test", "readonly"},
+	r := h.Traiter(context.Background(), Identite{"alice@example.test", "readonly", true},
 		req("tools/call", `{"name":"compter","arguments":{"filtre":{"critere":"region","comparateur":"dans","valeur":[6]}}}`))
 	if r.Error != nil {
 		t.Fatalf("erreur inattendue: %+v", r.Error)
@@ -97,7 +96,7 @@ func TestEchantillon_ArbreTropProfondRefuseAvantAppel(t *testing.T) {
 	for i := 0; i < 6; i++ {
 		profond = `{"operateur":"ET","conditions":[` + profond + `]}`
 	}
-	r := h.Traiter(context.Background(), Identite{"alice@example.test", "readonly"},
+	r := h.Traiter(context.Background(), Identite{"alice@example.test", "readonly", true},
 		req("tools/call", `{"name":"echantillon","arguments":{"filtre":`+profond+`}}`))
 	if r.Error == nil || !strings.Contains(r.Error.Message, "arbre_trop_complexe") {
 		t.Fatalf("attendu arbre_trop_complexe, obtenu %+v", r.Error)
@@ -111,7 +110,7 @@ func TestEchantillon_PlafondDeTaille(t *testing.T) {
 	h := handler(t, func(w http.ResponseWriter, r *http.Request) {
 		io.WriteString(w, `{"code":200,"response":{"rows":[],"next_cursor":null,"has_more":false}}`)
 	})
-	r := h.Traiter(context.Background(), Identite{"alice@example.test", "readonly"},
+	r := h.Traiter(context.Background(), Identite{"alice@example.test", "readonly", true},
 		req("tools/call", `{"name":"echantillon","arguments":{"filtre":{"critere":"a_siret","comparateur":"=","valeur":true},"taille":5000}}`))
 	if r.Error == nil || !strings.Contains(r.Error.Message, "2000") {
 		t.Fatalf("attendu un refus citant 2000, obtenu %+v", r.Error)
@@ -123,7 +122,7 @@ func TestEchantillon_PlafondDeTaille(t *testing.T) {
 func TestEchantillon_ColonneRestreinteSansDroit(t *testing.T) {
 	appele := false
 	h := handler(t, func(w http.ResponseWriter, r *http.Request) { appele = true })
-	r := h.Traiter(context.Background(), Identite{"alice@example.test", "readonly"},
+	r := h.Traiter(context.Background(), Identite{"alice@example.test", "readonly", true},
 		req("tools/call", `{"name":"echantillon","arguments":{"filtre":{"critere":"a_siret","comparateur":"=","valeur":true},"colonnes":["email"]}}`))
 	if r.Error == nil || !strings.Contains(r.Error.Message, "colonne_restreinte") {
 		t.Fatalf("attendu colonne_restreinte, obtenu %+v", r.Error)
@@ -141,7 +140,7 @@ func TestExportCSV_LUrlPointeLeWrapper(t *testing.T) {
 		urlMoteur = "http://" + r.Host
 		io.WriteString(w, "siren,region\n123456789,6\n# fin-export;1;\n")
 	})
-	r := h.Traiter(context.Background(), Identite{"alice@example.test", "readonly"},
+	r := h.Traiter(context.Background(), Identite{"alice@example.test", "readonly", true},
 		req("tools/call", `{"name":"export_csv","arguments":{"filtre":{"critere":"a_siret","comparateur":"=","valeur":true}}}`))
 	if r.Error != nil {
 		t.Fatalf("erreur inattendue: %+v", r.Error)
@@ -163,7 +162,7 @@ func TestExportCSV_LUrlPointeLeWrapper(t *testing.T) {
 func TestExportCSV_ColonneRestreinteSansDroit(t *testing.T) {
 	appele := false
 	h := handler(t, func(w http.ResponseWriter, r *http.Request) { appele = true })
-	r := h.Traiter(context.Background(), Identite{"alice@example.test", "readonly"},
+	r := h.Traiter(context.Background(), Identite{"alice@example.test", "readonly", true},
 		req("tools/call", `{"name":"export_csv","arguments":{"filtre":{"critere":"a_siret","comparateur":"=","valeur":true},"colonnes":["mobile"]}}`))
 	if r.Error == nil || !strings.Contains(r.Error.Message, "colonne_restreinte") {
 		t.Fatalf("attendu colonne_restreinte, obtenu %+v", r.Error)
@@ -175,7 +174,7 @@ func TestExportCSV_ColonneRestreinteSansDroit(t *testing.T) {
 
 func TestMethodeInconnue(t *testing.T) {
 	h := handler(t, func(w http.ResponseWriter, r *http.Request) {})
-	r := h.Traiter(context.Background(), Identite{"dave@example.test", "admin"}, req("resources/list", `{}`))
+	r := h.Traiter(context.Background(), Identite{"dave@example.test", "admin", false}, req("resources/list", `{}`))
 	if r.Error == nil || r.Error.Code != mcp.CodeMethodeInconnue {
 		t.Fatalf("attendu CodeMethodeInconnue, obtenu %+v", r.Error)
 	}

@@ -3,29 +3,32 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"log"
 
 	"mcp-hellodata/internal/acces"
 	"mcp-hellodata/internal/hellodata"
 	"mcp-hellodata/internal/mcp"
 )
 
-// Identite est ce que le gateway injecte en X-End-User-Email et
-// X-End-User-Role. Les deux champs vides signifient "on ignore qui
-// appelle", ce qui vaut refus — pas confiance.
+// Identite est ce que le gateway injecte en X-End-User-Email,
+// X-End-User-Role et X-End-User-Granted. Les champs vides signifient "on
+// ignore qui appelle", ce qui vaut refus — pas confiance.
 type Identite struct {
 	Email string
 	Role  string
+	// Granted : le gateway a constate un grant server_authorizations sur
+	// ce serveur (en-tete exactement "true").
+	Granted bool
 }
 
 type Handler struct {
 	client    *hellodata.Client
-	acces     *acces.Acces
 	publicURL string
 	jetons    *Jetons
 }
 
-func Nouveau(c *hellodata.Client, a *acces.Acces, publicURL string) *Handler {
-	return &Handler{client: c, acces: a, publicURL: publicURL, jetons: NouveauxJetons()}
+func Nouveau(c *hellodata.Client, publicURL string) *Handler {
+	return &Handler{client: c, publicURL: publicURL, jetons: NouveauxJetons()}
 }
 
 // Jetons rend la table de jetons de ce Handler — la MEME instance que
@@ -52,7 +55,7 @@ func (h *Handler) Traiter(ctx context.Context, id Identite, req mcp.Requete) mcp
 	case "tools/list":
 		// Liste variable selon l'appelant : un non autorise ne voit rien,
 		// donc son LLM n'essaie pas d'appeler ce qu'il ne peut pas obtenir.
-		if !h.acces.Autorise(id.Email, id.Role) {
+		if !acces.Autorise(id.Email, id.Role, id.Granted) {
 			return mcp.OK(req.ID, map[string]interface{}{"tools": []mcp.Outil{}})
 		}
 		return mcp.OK(req.ID, map[string]interface{}{"tools": Definitions()})
@@ -60,7 +63,7 @@ func (h *Handler) Traiter(ctx context.Context, id Identite, req mcp.Requete) mcp
 	case "tools/call":
 		// Le masquage de tools/list est du confort. La barriere est ici :
 		// un outil non liste reste appelable directement.
-		if !h.acces.Autorise(id.Email, id.Role) {
+		if !acces.Autorise(id.Email, id.Role, id.Granted) {
 			return mcp.Echec(req.ID, mcp.CodeParamsInvalides,
 				"acces_refuse: ce service est reserve aux administrateurs et aux utilisateurs autorises")
 		}
@@ -71,6 +74,7 @@ func (h *Handler) Traiter(ctx context.Context, id Identite, req mcp.Requete) mcp
 		if err := json.Unmarshal(req.Params, &p); err != nil {
 			return mcp.Echec(req.ID, mcp.CodeParamsInvalides, "params illisibles: "+err.Error())
 		}
+		log.Printf("[hellodata] appel outil=%s demandeur=%s droit=%s", p.Name, id.Email, acces.Source(id.Role))
 		return h.appeler(ctx, id, req.ID, p.Name, p.Arguments)
 	}
 	return mcp.Echec(req.ID, mcp.CodeMethodeInconnue, "methode inconnue: "+req.Methode)

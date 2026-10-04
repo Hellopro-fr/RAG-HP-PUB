@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 
+	"mcp-hellodata/internal/acces"
 	"mcp-hellodata/internal/filtre"
 	"mcp-hellodata/internal/hellodata"
 	"mcp-hellodata/internal/mcp"
@@ -42,7 +43,7 @@ func (h *Handler) appeler(ctx context.Context, id Identite, rpcID json.RawMessag
 			return mcp.Echec(rpcID, mcp.CodeParamsInvalides, "arguments illisibles: "+err.Error())
 		}
 	}
-	admin := h.acces.EstAdmin(id.Role)
+	admin := acces.EstAdmin(id.Role)
 
 	switch nom {
 	case "compter":

@@ -5,7 +5,6 @@ import (
 	"log"
 	"net/http"
 
-	"mcp-hellodata/internal/acces"
 	"mcp-hellodata/internal/config"
 	"mcp-hellodata/internal/download"
 	"mcp-hellodata/internal/hellodata"
@@ -19,15 +18,14 @@ func main() {
 		log.Fatalf("configuration: %v", err)
 	}
 	client := hellodata.Nouveau(c.BaseURL, c.Token)
-	autorisation := acces.Nouveau(c.EmailsAutorises)
-	h := tools.Nouveau(client, autorisation, c.PublicURL)
+	h := tools.Nouveau(client, c.PublicURL)
 
 	mux := http.NewServeMux()
 	mux.Handle("/mcp", transport.MCP(h))
 	// h.Jetons() rend la MEME table que celle que hellodata_export_csv
 	// alimente : c'est l'instance reelle, obtenue par une API publique
 	// ordinaire (internal/tools/handler.go), pas une copie.
-	mux.Handle("/download/", download.Nouveau(h.Jetons(), autorisation))
+	mux.Handle("/download/", download.Nouveau(h.Jetons()))
 	// /health ne porte aucune donnee metier : c'est le seul endpoint qui
 	// repond sans identite, et il doit le rester.
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
