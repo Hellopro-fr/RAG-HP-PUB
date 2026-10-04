@@ -2,8 +2,38 @@
 
 **Date :** 2026-09-28
 **Branche :** `features/mcp-bdd-table`
-**Statut :** design validé, avant plan d'implémentation
+**Statut :** implémenté le 2026-10-04, avec l'amendement ci-dessous
 **Remplace :** D10, D11 et § 7.1 de `2026-09-21-mcp-hellodata-selection-design.md`
+
+> **Amendement du 2026-10-04 — réutilisation de `Neo4jAccess`.** Entre la
+> rédaction et l'implémentation, `features/poc` a reçu #832
+> (`internal/gateway/neo4j_access.go`), qui applique déjà la règle A2
+> (admin OU grant, admin vérifié d'abord, fail-closed) aux trois points du
+> § 3 — consentement HTML/JSON et soumissions, `tools/list` /
+> `resources/list` / `prompts/list`, `tools/call` / `resources/read` /
+> `prompts/get`. HelloData est le « deuxième service » qu'évoquait le § 2,
+> et la branche a d'abord été fusionnée avec poc. Écarts au texte qui suit :
+>
+> - **§ 4.1 à 4.4 :** pas de `HellodataAllows` ni de
+>   `FilterHellodataServers`. `Neo4jAccess` tient un serveur pour
+>   restreint aussi quand son `tool_prefix` vaut `hellodata` (en mémoire
+>   pour un backend du registre ; relu en base par
+>   `ServerRepo.AccessKeysByID` quand on n'a que l'id, au consentement).
+>   Une erreur de lecture rend le serveur restreint. Le refus de
+>   `tools/call` utilise le message existant
+>   `access denied: this server requires an admin role or a server authorization`
+>   (JSON-RPC `-32600`).
+> - **§ 4.6 :** les refus sont journalisés par le préfixe `[neo4j-access]`
+>   existant (backend, slug, e-mail), sans les codes de raison du § 4.6.
+> - **Défaut trouvé à l'implémentation :** le registre ne contient jamais
+>   d'outil hellodata (la découverte interroge le wrapper sans identité et
+>   reçoit `[]`), donc `tools/call` renvoyait `unknown tool` à tout le monde,
+>   admin compris. `handleToolsCall` route désormais un nom `hellodata_*`
+>   absent du registre vers le backend hellodata du scope
+>   (`findHellodataFallback`), avant le repli Zoho ; `min_role` et le
+>   contrôle d'accès s'appliquent ensuite.
+> - **§ 4.5 et § 5 :** implémentés tels quels. Le proxy `/download` lit les
+>   en-têtes par le même `transport.IdentiteDepuis` que `/mcp`.
 
 Ce document est le **sous-projet 1** de la fonctionnalité « campagnes
 acheteurs via Claude ». Le sous-projet 2 (tables d'historique, sélection

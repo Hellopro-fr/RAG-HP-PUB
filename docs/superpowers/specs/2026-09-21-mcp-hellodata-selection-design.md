@@ -97,8 +97,8 @@ l'existant : il s'assure seulement que les nouveaux exports n'y participent pas.
 | D7 | Coût du comptage | **Comptage approché par défaut + cache court**, comptage exact sur demande |
 | D8 | Service MCP | **Service séparé** `mcp-hellodata-service`, distinct du MCP `bdd` |
 | D9 | Forme des filtres | **Arbre booléen imbriqué** (groupes ET / OU / NON contenant des sous-groupes et des feuilles), livré **en un seul appel** |
-| D10 | Accès au service | Décidé **dans le wrapper**, sur l'e-mail et le rôle injectés par le gateway : `admin` OU présent dans une liste statique. `access_gate.go` n'est pas modifié ; `server_authorizations` n'est pas utilisé (§ 7.1) |
-| D11 | Visibilité des outils | Le wrapper sert un `tools/list` **variable selon l'appelant** — liste vide pour un non-autorisé. Le gateway l'interroge par requête, sur le modèle du live-fetch Zoho (§ 7.2) |
+| D10 | Accès au service | **Remplacé** par `2026-09-28-mcp-hellodata-server-authorizations-design.md` (admin OU grant `server_authorizations`, décidé par le gateway, re-vérifié par le wrapper). Texte d'origine : décidé **dans le wrapper**, sur l'e-mail et le rôle injectés par le gateway : `admin` OU présent dans une liste statique. `access_gate.go` n'est pas modifié ; `server_authorizations` n'est pas utilisé (§ 7.1) |
+| D11 | Visibilité des outils | **Remplacé** par `2026-09-28-mcp-hellodata-server-authorizations-design.md` (admin OU grant `server_authorizations`, décidé par le gateway, re-vérifié par le wrapper). Texte d'origine : le wrapper sert un `tools/list` **variable selon l'appelant** — liste vide pour un non-autorisé. Le gateway l'interroge par requête, sur le modèle du live-fetch Zoho (§ 7.2) |
 
 ---
 
@@ -489,6 +489,8 @@ authentification que le reste du service, donc au `min_role` du gateway.
 ## 7. Sécurité et autorisation
 
 ### 7.1 Accès au service — décidé dans le wrapper (D10)
+
+> **Remplacé** par `2026-09-28-mcp-hellodata-server-authorizations-design.md` (admin OU grant `server_authorizations`, décidé par le gateway, re-vérifié par le wrapper). Le texte ci-dessous est conservé comme historique de la décision.
 
 **Règle** : seuls les utilisateurs de rôle `admin` et ceux dont l'adresse
 figure dans une liste statique peuvent utiliser `mcp-hellodata-service`. La
