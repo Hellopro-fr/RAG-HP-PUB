@@ -132,6 +132,10 @@ type ScopedGateway struct {
 	// viewers get no Zoho tools (instead of an admin-catalog fallback).
 	// nil falls back to the legacy behavior (live-fetch + admin fallback).
 	zohoCatalog ZohoUserCatalog
+	// neo4jAccess (optional) hides Neo4j template instances from callers
+	// that are neither gateway admins nor holders of a server_authorizations
+	// grant on that instance. nil allows everything.
+	neo4jAccess *Neo4jAccess
 }
 
 // NewScopedGateway creates a handler that only exposes tools/resources/prompts
@@ -152,6 +156,7 @@ func NewScopedGateway(gw *Gateway, allowedServerIDs map[string]bool, allowedTool
 		gatewayUsers:  gw.gatewayUsers,
 		serverAuth:    gw.serverAuth,
 		zohoCatalog:   gw.zohoCatalog,
+		neo4jAccess:   gw.neo4jAccess,
 	}
 }
 
@@ -185,7 +190,8 @@ func (sg *ScopedGateway) Handle(ctx context.Context, req *mcp.Request) *mcp.Resp
 }
 
 func (sg *ScopedGateway) handleInitialize(ctx context.Context, req *mcp.Request) *mcp.Response {
-	caps := sg.registry.MergedCapabilitiesFiltered(sg.allowedIDs)
+	visible := sg.withoutDeniedNeo4j(ctx, sg.allowedIDs)
+	caps := sg.registry.MergedCapabilitiesFiltered(visible)
 	if caps.Tools == nil {
 		caps.Tools = &mcp.ToolsCapability{}
 	}
@@ -201,15 +207,45 @@ func (sg *ScopedGateway) handleInitialize(ctx context.Context, req *mcp.Request)
 	// Tool-description injection mode omits the initialize field entirely so
 	// hosts that honor both channels never receive the text twice.
 	if !sg.injectInstructionsIntoTools {
-		result.Instructions = ComposeInstructions(sg.instructions, name)
+		instructions := sg.instructions
+		if sg.neo4jAccess != nil {
+			instructions = instructionsForVisible(instructions, visible)
+		}
+		result.Instructions = ComposeInstructions(instructions, name)
 	}
 	return okResp(req.ID, result)
 }
 
+// instructionsForVisible drops every per_server instruction none of whose
+// linked servers is in visible, so an instruction bound to a hidden Neo4j
+// instance (typically its graph schema) never reaches a denied caller.
+// General rows (and rows with an empty Kind, treated as general) are kept.
+// Applied only when the gate is wired, so the unwired path is unchanged.
+func instructionsForVisible(instructions []InstructionView, visible map[string]bool) []InstructionView {
+	out := make([]InstructionView, 0, len(instructions))
+	for _, ins := range instructions {
+		if ins.Kind == db.LLMInstructionRowKindPerServer && !anyVisible(ins.ServerIDs, visible) {
+			continue
+		}
+		out = append(out, ins)
+	}
+	return out
+}
+
+func anyVisible(ids []string, visible map[string]bool) bool {
+	for _, id := range ids {
+		if visible[id] {
+			return true
+		}
+	}
+	return false
+}
+
 func (sg *ScopedGateway) handleToolsList(ctx context.Context, req *mcp.Request) *mcp.Response {
-	// Narrow the scope to backends this caller may reach before any of the
-	// Zoho branching below reads sg.allowedIDs.
-	allowedIDs := sg.allowedIDsMinusGated(ctx)
+	// Narrow the scope to backends this caller may reach (min_role gate,
+	// then the Neo4j template instance gate) before any of the Zoho
+	// branching below reads sg.allowedIDs.
+	allowedIDs := sg.withoutDeniedNeo4j(ctx, sg.allowedIDsMinusGated(ctx))
 
 	// Backends hellodata : leur catalogue depend de l'appelant, donc il ne
 	// peut pas venir du cache du registre. On les retire de la fusion et
@@ -506,6 +542,9 @@ func (sg *ScopedGateway) handleToolsCall(ctx context.Context, req *mcp.Request) 
 		email, _ := scopetoken.EndUserEmailFromContext(ctx)
 		log.Printf("[scoped] tools/call DENIED name=%s backend=%s min_role=%q email=%q — caller does not meet the server's required role", params.Name, backend.ID, backend.MinRole, email)
 		return errorResp(req.ID, mcp.ErrInvalidParams, fmt.Sprintf("tool %q is not allowed: this server requires the gateway role %q", params.Name, backend.MinRole))
+	}
+	if denied := sg.neo4jDenied(ctx, req.ID, backend, "tools/call"); denied != nil {
+		return denied
 	}
 
 	// Compute per-request backend headers, starting from the static auth
@@ -963,7 +1002,7 @@ func (sg *ScopedGateway) handleResourcesList(ctx context.Context, req *mcp.Reque
 	// handleToolsList so a gated backend's resources never appear for a
 	// caller that doesn't meet its min_role (including mcp_… scope tokens
 	// and client_credentials grants, which never carry an end-user email).
-	resources := sg.registry.MergedResourcesFiltered(sg.allowedIDsMinusGated(ctx))
+	resources := sg.registry.MergedResourcesFiltered(sg.withoutDeniedNeo4j(ctx, sg.allowedIDsMinusGated(ctx)))
 	if resources == nil {
 		resources = []mcp.Resource{}
 	}
@@ -979,6 +1018,9 @@ func (sg *ScopedGateway) handleResourcesRead(ctx context.Context, req *mcp.Reque
 	backend := sg.registry.FindByResourceFiltered(params.URI, sg.allowedIDs)
 	if backend == nil {
 		return errorResp(req.ID, mcp.ErrInvalidParams, fmt.Sprintf("unknown resource: %s", params.URI))
+	}
+	if denied := sg.neo4jDenied(ctx, req.ID, backend, "resources/read"); denied != nil {
+		return denied
 	}
 
 	if !GateAllows(backend.MinRole, ctx, sg.gatewayUsers) {
@@ -997,7 +1039,7 @@ func (sg *ScopedGateway) handleResourcesRead(ctx context.Context, req *mcp.Reque
 
 func (sg *ScopedGateway) handlePromptsList(ctx context.Context, req *mcp.Request) *mcp.Response {
 	// See handleResourcesList: same gate-aware narrowing.
-	prompts := sg.registry.MergedPromptsFiltered(sg.allowedIDsMinusGated(ctx))
+	prompts := sg.registry.MergedPromptsFiltered(sg.withoutDeniedNeo4j(ctx, sg.allowedIDsMinusGated(ctx)))
 	if prompts == nil {
 		prompts = []mcp.Prompt{}
 	}
@@ -1014,6 +1056,9 @@ func (sg *ScopedGateway) handlePromptsGet(ctx context.Context, req *mcp.Request)
 	if backend == nil {
 		return errorResp(req.ID, mcp.ErrInvalidParams, fmt.Sprintf("unknown prompt: %s", params.Name))
 	}
+	if denied := sg.neo4jDenied(ctx, req.ID, backend, "prompts/get"); denied != nil {
+		return denied
+	}
 
 	if !GateAllows(backend.MinRole, ctx, sg.gatewayUsers) {
 		email, _ := scopetoken.EndUserEmailFromContext(ctx)
@@ -1027,4 +1072,37 @@ func (sg *ScopedGateway) handlePromptsGet(ctx context.Context, req *mcp.Request)
 		return errorResp(req.ID, mcp.ErrInternalError, err.Error())
 	}
 	return okResp(req.ID, result)
+}
+
+// withoutDeniedNeo4j returns ids minus every registered backend the
+// request's caller may not reach under the Neo4j template instance gate.
+// With no gate wired it returns ids unchanged. Omissions are not logged —
+// listing verbs would log one line per hidden backend on every call.
+func (sg *ScopedGateway) withoutDeniedNeo4j(ctx context.Context, ids map[string]bool) map[string]bool {
+	if sg.neo4jAccess == nil {
+		return ids
+	}
+	out := make(map[string]bool, len(ids))
+	for id, ok := range ids {
+		if !ok {
+			continue
+		}
+		if b := sg.registry.FindByID(id); b != nil && !sg.neo4jAccess.Allows(ctx, b) {
+			continue
+		}
+		out[id] = true
+	}
+	return out
+}
+
+// neo4jDenied returns the access-denied JSON-RPC error when backend is a
+// Neo4j template instance the caller may not reach, nil otherwise. Every
+// denial is logged with the backend id, template slug and caller email.
+func (sg *ScopedGateway) neo4jDenied(ctx context.Context, id json.RawMessage, backend *BackendServer, verb string) *mcp.Response {
+	if sg.neo4jAccess.Allows(ctx, backend) {
+		return nil
+	}
+	email, _ := scopetoken.EndUserEmailFromContext(ctx)
+	log.Printf("[neo4j-access] %s denied backend=%s template_slug=%q email=%q", verb, backend.ID, sg.neo4jAccess.DenialSlug(backend), email)
+	return errorResp(id, mcp.ErrInvalidRequest, Neo4jAccessDeniedMessage)
 }

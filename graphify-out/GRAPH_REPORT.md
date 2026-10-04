@@ -1,12 +1,12 @@
-# Graph Report - docs (historique_exec_chatgpt)  (2026-09-03)
+# Graph Report - docs (--update, doc pass)  (2026-09-30)
 
 ## Corpus Check
-- 1 files · ~0 words
+- 4 files · ~0 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 12026 nodes · 28518 edges · 225 communities detected
-- Extraction: 64% EXTRACTED · 36% INFERRED · 0% AMBIGUOUS · INFERRED: 10125 edges (avg confidence: 0.61)
+- 12249 nodes · 28973 edges · 236 communities detected
+- Extraction: 65% EXTRACTED · 35% INFERRED · 0% AMBIGUOUS · INFERRED: 10188 edges (avg confidence: 0.61)
 - Token cost: 0 input · 0 output
 
 ## Community Hubs (Navigation)
@@ -19,7 +19,7 @@
 - [[_COMMUNITY_common-utils Creates a dictionary of headers...|common-utils: Creates a dictionary of headers...]]
 - [[_COMMUNITY_common-utils OCR Extractor & CleanHTML|common-utils: OCR Extractor & CleanHTML]]
 - [[_COMMUNITY_common-utils Creates pika.BasicProperties fo...|common-utils: Creates pika.BasicProperties fo...]]
-- [[_COMMUNITY_superpowers crawler-service CLAUDE|superpowers: crawler-service CLAUDE.md]]
+- [[_COMMUNITY_common-utils HTML Extractors (HeaderFooter + Trafilatura)|common-utils: HTML Extractors (HeaderFooter + Trafilatura)]]
 - [[_COMMUNITY_API Gateway Go (routingauthcatalog)|API Gateway Go (routing/auth/catalog)]]
 - [[_COMMUNITY_Detection FR Response Models|Detection FR Response Models]]
 - [[_COMMUNITY_common-utils Milvus Concurrency Guard|common-utils: Milvus Concurrency Guard]]
@@ -61,7 +61,7 @@
 - [[_COMMUNITY_rust-common-utils mod.rs|rust-common-utils: mod.rs]]
 - [[_COMMUNITY_common-utils get_message_or_stop()|common-utils: get_message_or_stop()]]
 - [[_COMMUNITY_superpowers GCS Archive Audit Tool Plan|superpowers: GCS Archive Audit Tool Plan]]
-- [[_COMMUNITY_crawler-service test_crawler_capacity_disk.py|crawler-service: test_crawler_capacity_disk.py]]
+- [[_COMMUNITY_content-extractor API Design Spec|content-extractor: API Design Spec]]
 - [[_COMMUNITY_Crawler - Detection Client Seam (docs)|Crawler <-> Detection Client Seam (docs)]]
 - [[_COMMUNITY_crawler-service test_crawler_version.py|crawler-service: test_crawler_version.py]]
 - [[_COMMUNITY_api-detection-langue-fr INFLIGHT_REQUESTS Gauge Semanti...|api-detection-langue-fr: INFLIGHT_REQUESTS Gauge Semanti...]]
@@ -75,7 +75,7 @@
 - [[_COMMUNITY_CrawlerManager Core & Reconcile|CrawlerManager Core & Reconcile]]
 - [[_COMMUNITY_superpowers 7 import gotchas (G1-G7)|superpowers: 7 import gotchas (G1-G7)]]
 - [[_COMMUNITY_superpowers robots.txt Total Block Detectio...|superpowers: robots.txt Total Block Detectio...]]
-- [[_COMMUNITY_superpowers SSO, MCP Zoho & Consent Specs|superpowers: SSO, MCP Zoho & Consent Specs]]
+- [[_COMMUNITY_superpowers MCP gateway specs (SSO, Zoho, consent, Neo4j templates)|superpowers: MCP gateway specs (SSO, Zoho, consent, Neo4j templates)]]
 - [[_COMMUNITY_Detection Langue FR Core|Detection Langue FR Core]]
 - [[_COMMUNITY_common-utils __init__.py|common-utils: __init__.py]]
 - [[_COMMUNITY_api-detection-langue-fr __init__.py|api-detection-langue-fr: __init__.py]]
@@ -222,7 +222,7 @@
 - [[_COMMUNITY_graphify-guide-en.md scriptsgraphify_plan_update.py...|graphify-guide-en.md: scripts/graphify_plan_update.py...]]
 - [[_COMMUNITY_crawler-service PushedSet.test.ts|crawler-service: PushedSet.test.ts]]
 - [[_COMMUNITY_crawler-service UpdateChecker.test.ts|crawler-service: UpdateChecker.test.ts]]
-- [[_COMMUNITY_crawler-service test_admin_redis_debug.py|crawler-service: test_admin_redis_debug.py]]
+- [[_COMMUNITY_graphify guide unified-graph merge process & gotchas|graphify guide: unified-graph merge process & gotchas]]
 - [[_COMMUNITY_api-detection-langue-fr Noscript Repair Fallback (clean...|api-detection-langue-fr: Noscript Repair Fallback (clean...]]
 - [[_COMMUNITY_graphify-guide-en.md graphify-outmemory (saved Q&A...|graphify-guide-en.md: graphify-out/memory/ (saved Q&A...]]
 - [[_COMMUNITY_crawler-service crawler-service Phase-2 limitDi...|crawler-service: crawler-service Phase-2 limitDi...]]
@@ -235,6 +235,17 @@
 - [[_COMMUNITY_superpowers Faux-négatifs — suite de référence avant chantier|superpowers: Faux-négatifs — suite de référence avant chantier]]
 - [[_COMMUNITY_common-utils Fenetre tarifaire (pricing window)|common-utils: Fenetre tarifaire (pricing window)]]
 - [[_COMMUNITY_superpowers SEMrush Backlink Tools (mcp-semrush-service)|superpowers: SEMrush Backlink Tools (mcp-semrush-service)]]
+- [[_COMMUNITY_MCP Table Service Design Decisions|MCP Table Service Design Decisions]]
+- [[_COMMUNITY_MCP Table Service Write Tools|MCP Table Service Write Tools]]
+- [[_COMMUNITY_MCP Table Service Act-As Auth & Deploy|MCP Table Service Act-As Auth & Deploy]]
+- [[_COMMUNITY_MCP Table Service Scaffold & Read Tools|MCP Table Service Scaffold & Read Tools]]
+- [[_COMMUNITY_Domain Blacklist Table|Domain Blacklist Table]]
+- [[_COMMUNITY_Supplier Eligibility v2 Verdicts|Supplier Eligibility v2 Verdicts]]
+- [[_COMMUNITY_Eligibility v2 Event Journal|Eligibility v2 Event Journal]]
+- [[_COMMUNITY_Zoho Domain Pool & Deferred Judgment Queue|Zoho Domain Pool & Deferred Judgment Queue]]
+- [[_COMMUNITY_Prospect Dashboard Snapshot Table|Prospect Dashboard Snapshot Table]]
+- [[_COMMUNITY_Item-Level Abandon Rationale (test)|Item-Level Abandon Rationale (test)]]
+- [[_COMMUNITY_On-Time Driver Teardown Guard (test)|On-Time Driver Teardown Guard (test)]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `CrawlerManager` - 550 edges
@@ -312,6 +323,11 @@
 - **What this chantier deliberately did not settle: two rejected reports, no CSV parsing, deferred filter and offset, an unconfirmed matrix display_limit, and an unverified Business-plan entitlement** — semrush_spec_r_reject_backlinks_comparison, semrush_spec_r_reject_backlinks_refips, semrush_spec_r_reject_csv_parsing, semrush_spec_r_defer_display_filter_offset, semrush_spec_r_matrix_display_limit_unconfirmed, semrush_spec_r_business_plan_entitlement_unverified, semrush_plan_r_matrix_display_limit_gate, semrush_plan_r_escalate_on_api_disabled [INFERRED 0.75]
 - **The GCS-verified allowlist as shared state with three consumers and three different meanings: evidence authorising a status repair, the arming input of a destructive sweep, and now the sole warrant for a non-destructive restore — with staleness harmless on the third and dangerous on the second** — archived_repair_spec_allowlist_evidence, reclean_spec_design, restore_allowlist_spec_third_path_frontier, restore_allowlist_spec_rationale_fail_closed_none_vs_empty, restore_allowlist_spec_out_of_scope_manual_allowlist [INFERRED 0.80]
 - **The dead-end chain the lot closes: blob absent, datasets absent, tar present and listed — measured on two crawls in two days, defeating both existing recovery mechanisms, and resolved by an id-only restore inserted before the existing 400** — restore_allowlist_spec_defect_two_blind_mechanisms, restore_allowlist_spec_measurement_14_reference_crawls, restore_allowlist_spec_two_manual_interventions, restore_allowlist_spec_third_path_frontier, restore_allowlist_spec_insertion_point, restore_allowlist_spec_rationale_id_only_restore [INFERRED 0.85]
+- **Identity-forwarding pattern reused across gateway MCP backends** — mcp_table_service_gateway_change_identity_forwarding, mcp_table_service_task2_identity_forwarding, mcp_zoho_service [INFERRED 0.80]
+- **Draft-to-active table lifecycle gate (add_fields activates, set_tables_active refuses zero-field)** — mcp_table_service_decision_activation_rule, mcp_table_service_task9_field_tools, mcp_table_service_task11_activate_delete_contract, mcp_table_service_rationale_activation_step [INFERRED 0.85]
+- **Spec-to-plan-to-acceptance traceability chain** — mcp_table_service_design_doc, mcp_table_service_plan_doc, mcp_table_service_acceptance, mcp_table_service_acceptance_mapping [INFERRED 0.85]
+- **Système d'éligibilité fournisseur v2 (moteur, journal, vivier Zoho, file différée, blacklist)** — eligibilite_fournisseur_table_doc, cld_journal_eligibilite_table_doc, cld_domaine_compte_zoho_table_doc, cld_file_jugement_table_doc, domain_blacklist_table_doc [INFERRED 0.85]
+- **Famille des enrichissements fournisseur additionnels (visibilité SEMrush, profil LLM v2, avis, données légales, établissements)** — semrush_domaine_societe_table_doc, fournisseur_profil_v2_sp_table_doc, enrichissement_fournisseur_avis_fournisseur_table, enrichissement_fournisseur_societe_datagouv_table, enrichissement_fournisseur_etablissement_societe_table [INFERRED 0.65]
 
 ## Communities
 
@@ -351,9 +367,9 @@ Nodes (86): gen_email_uuid(), AnonymizeText, CleanHTML, Class base to clean data
 Cohesion: 1.0
 Nodes (1): Cleans up whitespace and removes control characters.
 
-### Community 30 - "superpowers: crawler-service CLAUDE.md"
-Cohesion: 0.07
-Nodes (27): TrafilaturaHp, _normalize_sentence(), _normalize_whitespace(), Normalizes a sentence for accurate comparison., Cleans up whitespace and removes control characters., Pre-processes the HTML content:         1. Removes script/style/noscript tags., Post-processes the extracted content:         1. Extracts article content (produ, Extrait le texte avec BeautifulSoup en ciblant les balises pertinentes. (+19 more)
+### Community 30 - "common-utils: HTML Extractors (HeaderFooter + Trafilatura)"
+Cohesion: 0.04
+Nodes (57): TrafilaturaHp, _normalize_sentence(), _normalize_whitespace(), Normalizes a sentence for accurate comparison., Cleans up whitespace and removes control characters., Pre-processes the HTML content:         1. Removes script/style/noscript tags., Post-processes the extracted content:         1. Extracts article content (produ, Extrait le texte avec BeautifulSoup en ciblant les balises pertinentes. (+49 more)
 
 ### Community 5 - "API Gateway Go (routing/auth/catalog)"
 Cohesion: 0.01
@@ -369,7 +385,7 @@ Nodes (63): GuardConfig, GuardMetrics, Prometheus metrics for MilvusConcurrencyG
 
 ### Community 6 - "Detection FR Scraper & Redirects"
 Cohesion: 0.01
-Nodes (470): Configuration de l'application, reconcile_running_jobs_count(), scheduled_archive_cleanup(), validation_exception_handler(), startup_event(), shutdown_event(), read_root(), Periodically checks the actual number of 'running' jobs in Redis and corrects (+462 more)
+Nodes (511): Configuration de l'application, reconcile_running_jobs_count(), scheduled_archive_cleanup(), validation_exception_handler(), startup_event(), shutdown_event(), read_root(), Periodically checks the actual number of 'running' jobs in Redis and corrects (+503 more)
 
 ### Community 104 - "crawler-service: redisClient.test.ts"
 Cohesion: 1.0
@@ -519,7 +535,7 @@ Nodes (5): Archive Disk Space Pre-flight Check, 503 Rejection + Fail-Open Diagno
 Cohesion: 0.17
 Nodes (12): GCS Archive Audit Tool Plan, Archive Classifications (OK/CORRUPTED/WRONG_NAME/...), gcloud Storage CLI Shell Wrappers (no Python GCS lib), GCS Audit Multi-Source Domain Resolution, _resolve_domain_name Multi-Source Helper, GCS Audit Prefix Fix + Quarantine Restore, _normalize_member_name (handles ./ prefix), --restore-from-quarantine Flag (+4 more)
 
-### Community 87 - "crawler-service: test_crawler_capacity_disk.py"
+### Community 87 - "content-extractor: API Design Spec"
 Cohesion: 0.5
 Nodes (4): content-extractor-api-service Design Spec, boilerpy3 /clean Endpoint, HeaderFooterExtractor /extract Endpoint, Thin Wrapper Over libs/common-utils
 
@@ -575,9 +591,9 @@ Nodes (34): TimingRecorder, assert(), tmpDir(), mkEntry(), mkSample(), test1(), 
 Cohesion: 0.67
 Nodes (3): Crawler Monitor UI Redesign (oklch tokens, Linear/Vercel/Stripe aesthetic), Crawler Monitor design system: oklch tokens + Tailwind theme + primitives (Pill, StatTile, Sparkline, Timeline, CapacityRing, AreaChart, LogLine, KV, ProjCard), Refondue pages: Overview, Job Details, Domains, Capacity Planning, Health, Audit, Albums, Dark Mode, Mobile responsive
 
-### Community 27 - "superpowers: SSO, MCP Zoho & Consent Specs"
-Cohesion: 0.04
-Nodes (75): account-service SSO, account-service-backend, account-service-frontend, OAuth 2.1 Authorization Server module (lifted from mcp-gateway authserver, consent stripped), PKCE S256 mandatory (code_verifier + code_challenge SHA-256), Refresh token rotation + reuse detection (chain revocation by sid + Slack alert), Logout broadcaster (HMAC-SHA256 webhook + 4 worker goroutines + retries 1s/2s/4s + logout_events table), MySQL schema: users, oauth2_clients, oauth2_authorization_codes, oauth2_refresh_tokens, logout_events, audit_logs (+67 more)
+### Community 27 - "superpowers: MCP gateway specs (SSO, Zoho, consent, Neo4j templates)"
+Cohesion: 0.03
+Nodes (136): account-service SSO, account-service-backend, account-service-frontend, OAuth 2.1 Authorization Server module (lifted from mcp-gateway authserver, consent stripped), PKCE S256 mandatory (code_verifier + code_challenge SHA-256), Refresh token rotation + reuse detection (chain revocation by sid + Slack alert), Logout broadcaster (HMAC-SHA256 webhook + 4 worker goroutines + retries 1s/2s/4s + logout_events table), MySQL schema: users, oauth2_clients, oauth2_authorization_codes, oauth2_refresh_tokens, logout_events, audit_logs (+128 more)
 
 ### Community 2 - "Detection Langue FR Core"
 Cohesion: 0.01
@@ -864,8 +880,8 @@ Cohesion: 0.03
 Nodes (82): Dynamic Unit Normalization Design Spec, graph-rag-normalize-unite-service (target service), Redeploy-per-unit pain (FIX 1-16 churn), Five dynamic layers A-E, Layer A pint defines (56 statements), Layer B UNIT_TO_DIMENSION (200 keys), Layer C LABEL_TO_DIMENSION (99 ordered keys), Layer D CANONICAL_UNITS (36 entries) (+74 more)
 
 ### Community 28 - "BDD Doc-Enrichment Workflow"
-Cohesion: 0.03
-Nodes (126): BDD doc-enrichment workflow (design spec), BDD doc-enrichment workflow (implementation plan), BDD doc-enrichment runbook, Objective: reusable code-free table doc-enrichment process, MCP 'Table BDD' system (read-only MySQL exposure to LLM), Six bdd_* MCP tools (read-only), bdd_list_tables tool, bdd_describe_table tool (+118 more)
+Cohesion: 0.02
+Nodes (134): BDD doc-enrichment workflow (design spec), BDD doc-enrichment workflow (implementation plan), BDD doc-enrichment runbook, Objective: reusable code-free table doc-enrichment process, MCP 'Table BDD' system (read-only MySQL exposure to LLM), Six bdd_* MCP tools (read-only), bdd_list_tables tool, bdd_describe_table tool (+126 more)
 
 ### Community 112 - "crawler-service: test_timing_summary_tool.ts"
 Cohesion: 1.0
@@ -1163,9 +1179,9 @@ Nodes (1): graphify-out/memory/ (saved Q&A, promoted to nodes)
 Cohesion: 1.0
 Nodes (1): Upstream `graphify hook install` unscoped rescan (gotcha)
 
-### Community 74 - "crawler-service: test_admin_redis_debug.py"
-Cohesion: 0.33
-Nodes (7): Gotcha: invented cross-link target IDs, Gotcha: community re-clustering shuffles labels.json, Rationale: labels should derive from community content, not be human-assigned, Decision: one unified graph over per-service graphs, 4-step checklist: add a service to the unified graph, .github/workflows/graphify-auto-rebuild.yml, scripts/graphify_check_service.py (classifier)
+### Community 74 - "graphify guide: unified-graph merge process & gotchas"
+Cohesion: 0.32
+Nodes (8): Gotcha: invented cross-link target IDs, Gotcha: community labels after a merge — assert 0 drift, name the new communities, audit the ones that received nodes, Rule: labels come from community content; no hand relabel of the largest communities when drift is 0, Decision: one unified graph over per-service graphs, 4-step checklist: add a service to the unified graph, .github/workflows/graphify-auto-rebuild.yml, scripts/graphify_check_service.py (classifier), _preserve_and_place merge (since 37247ad5, 2026-08-07): prior nodes keep their community, only new nodes are placed
 
 ### Community 257 - "api-detection-langue-fr: Noscript Repair Fallback (clean..."
 Cohesion: 1.0
@@ -1214,6 +1230,50 @@ Nodes (34): parser_fenetres(), _heure_utc(), est_heure_pleine(), libelle_fenetre
 ### Community 269 - "superpowers: SEMrush Backlink Tools (mcp-semrush-service)"
 Cohesion: 0.05
 Nodes (64): Semrush backlink tools — design (2026-08-07, approved): extend mcp-semrush-service from 2 backlink tools to 9 via a declarative table + factory, Problem: only 2 of Semrush v3's 11 backlink report types are exposed; the 9 missing ones block link-health monitoring, competitive analysis, prospecting and anchor/quality auditing — and the 2 existing tools lack nofollow, pagination, filtering and display_limit validation, Scope: 7 new backlink tools, shared table-driven factory, display_limit cap, buildQS array support, ERROR-body detection, unit tests — everything else explicitly out, Three report shapes: standard (target + target_type + clamped display_limit, 7 reports), summary (backlinks_overview, target + target_type only), multi (backlinks_matrix, targets[] + target_types[]), BACKLINK_REPORTS declarative table: 9 entries carrying name, Semrush API type, shape, description and export_columns — adding a tenth report becomes a table entry instead of a hand-written tool block, makeBacklinkTool(spec) factory: returns a tool object matching the 16 existing tools, switches on the report shape, and is the single place where clamping and ERROR detection live; every table entry is registered by mapping the table over the factory, Change 1 — buildQS gains array support: an array value expands to repeated key=value pairs instead of being stringified to a comma list; backward compatible because no current caller passes an array, pinned by a regression test, Change 2 — display_limit clamp: MAX_DISPLAY_LIMIT = 100 applied in the factory wherever a shape exposes display_limit; clamping is silent and the cap is a module constant so raising it is a one-line change (+56 more)
+
+### Community 272 - "MCP Table Service Design Decisions"
+Cohesion: 0.15
+Nodes (22): mcp-table-service design spec, Problem: BDD registry admin reachable only via browser UI, Decision: privilege model = gateway role, mirrors the UI exactly, Decision: expose catalog-browsing tools, Decision: Architecture A — thin MCP façade over gateway REST API, Decision: activation requires >=1 exposed field, Decision: tools cover every attribute the fields page can set, Rejected Architecture B: direct MySQL access like mcp-zoho-service (+14 more)
+
+### Community 274 - "MCP Table Service Write Tools"
+Cohesion: 0.44
+Nodes (9): Write tools (role admin): add_tables, add_fields, update_*, remove_fields, set_tables_active, delete_tables, sync_table_catalog, Task 8: add_tables, Task 9: field tools (add_fields, update_fields, remove_fields), Task 10: update_table_info and sync_table_catalog, Task 11: set_tables_active, delete_tables, 13-tool contract test, Rationale: add_fields is the activation step; set_tables_active refuses zero-field tables, Rationale: uniform batch result {ok, errors}; isError only when nothing succeeded, Rationale: add_fields(all_fields=true) bypasses the 50-item batch cap (+1 more)
+
+### Community 278 - "MCP Table Service Act-As Auth & Deploy"
+Cohesion: 0.32
+Nodes (8): Documentation: new/updated CLAUDE.md files, Task 1: gateway act-as authentication branch, Task 12: deployment and documentation, Rationale: act-as branch needed in both JWT and SSO middlewares (production runs SSO), Rationale: act-as accepted only under /api/v1/bdd/ to bound the shared secret's blast radius, Plan-driven spec addendum: SSO middleware also needs the act-as branch, Drafted CLAUDE.md for mcp-table-service (tools table, privilege flow, env vars, boundaries), Manual end-to-end smoke test (post-deploy, not automatable)
+
+### Community 273 - "MCP Table Service Scaffold & Read Tools"
+Cohesion: 0.33
+Nodes (9): mcp-table-service implementation plan overview, Global constraints: module path, port 8597, no deps, 13 tool names, batch cap, timeouts, File structure: gateway-modified, service-new, repo-root-modified files, Task 3: service scaffold (module, MCP types, transports, identity middleware, boot), Task 4: gateway REST client (internal/gateway), Task 5: tool infrastructure (args, session, errors, resolve, status, relations), Task 6: read tools (list_registered_tables, get_table_info), Task 7: catalog tools (list_databases, list_catalog_tables, list_catalog_fields) (+1 more)
+
+### Community 277 - "Domain Blacklist Table"
+Cohesion: 0.4
+Nodes (5): Table domain_blacklist — liste noire de domaines non-entreprise (places de marché, réseaux sociaux, occasion), Piège : deux lecteurs (moteur éligibilité v2 normalisé+suffixe, prospection SERP brut) divergent sur nom_domaine_dbl, Pas la seule liste noire : 809 domaines codés en dur ailleurs, plus deux exclusions dynamiques distinctes, Aucun écrivain dans le dépôt : la table est alimentée hors dépôt (code de prod absent en local), Cause unique des anomalies : colonnes NOT NULL sans défaut + date zéro acceptée ⇒ INSERT partiel en mode non strict
+
+### Community 276 - "Supplier Eligibility v2 Verdicts"
+Cohesion: 0.33
+Nodes (6): Table eligibilite_fournisseur — verdict d'éligibilité fournisseur du moteur v2 (LLM + règles PHP), append-only, Les quatre critères C1-C4 (matériel pro, cible pros, valeur unitaire, France) et le piège du verdict rendu sans évaluation (NULL ≠ refus), Cycle append-only : est_courant démote les anciennes lignes ; requalification NON_ELIGIBLE→NON_TESTABLE après coup, statut_zoho_pose/date_maj_zoho posées par un tagueur Zoho distinct du moteur, après réponse favorable de Zoho, trace_json (eligibilite_fournisseur) et valeur_brute (cld_domaine_compte_zoho) : volontairement hors périmètre MCP pour données sensibles, Le moteur v2 est déployé en production mais ABSENT du dépôt git — sens dérivé de copies de prod, types mesurés sur schéma live
+
+### Community 280 - "Eligibility v2 Event Journal"
+Cohesion: 0.67
+Nodes (3): Table cld_journal_eligibilite — journal d'événements du moteur v2, sans clé primaire, jamais relu en SQL, cld_journal_eligibilite n'a AUCUNE clé primaire — table de trace pure, écriture défensive (peut avoir des trous silencieux), L'interrupteur du pont ne couvre que 7 de ses 8 fonctions publiques — la 8e (drain de la file de jugement) n'a AUCUNE garde
+
+### Community 279 - "Zoho Domain Pool & Deferred Judgment Queue"
+Cohesion: 0.5
+Nodes (4): Table cld_domaine_compte_zoho — vivier des domaines déclarés sur les comptes Zoho, dédoublonnés, Table cld_file_jugement — file différée des domaines sans verdict connu, jugés en lot, Piège de comptage : clé UNIQUE (compte,domaine) — COUNT(*) sur cld_domaine_compte_zoho compte des déclarations, pas des domaines, La file différée : drain par tranches CRC32 sans verrou, garde tarifaire aux heures pleines du fournisseur de modèle
+
+### Community 275 - "Prospect Dashboard Snapshot Table"
+Cohesion: 0.33
+Nodes (6): Table tableau_bord_identification_prospects — instantané figé du pipeline Identification Prospects, 1 ligne = 1 domaine, Instantané figé à l'insertion : 22 des 30 colonnes ne sont JAMAIS rafraîchies après l'INSERT ; requêter la table amont pour un état à jour, etat_serp/etat_cheerio/etat_chatgpt : agrégats calculés une fois, la valeur 1 est ambiguë (terminé sans résultat = introuvable = aucune ligne), eligibilite_tbip n'est PAS l'autorité du verdict prospect : figée à l'insertion, -1 a trois causes indiscernables, id_societe_existant_tbip est multi-valuée (CSV dans un varchar) — une jointure directe par égalité matche silencieusement la première valeur seule, prompt_title_description_tbip : 'OUI' peut signifier 'rien ne s'oppose au crawl' sans aucun appel modèle (title+meta absents), pas une validation du modèle
+
+### Community 281 - "Item-Level Abandon Rationale (test)"
+Cohesion: 1.0
+Nodes (1): L'autre sortie sans résultat : le `wait_for` de l'item, `_abandon_job`.
+
+### Community 282 - "On-Time Driver Teardown Guard (test)"
+Cohesion: 1.0
+Nodes (1): Garde : le driver livré à temps n'est arrêté que par le `finally` normal.
 
 ## Ambiguous Edges - Review These
 - `security-auditor agent (proposed)` → `Removed agents @code-reviewer and @debugger, superseded by superpowers skills`  [AMBIGUOUS]
@@ -1300,7 +1360,7 @@ Nodes (64): Semrush backlink tools — design (2026-08-07, approved): extend mcp
   docs/superpowers/runbooks/examples/tracking_mail2bdd_tables.doc.json · relation: conceptually_related_to
 
 ## Knowledge Gaps
-- **3468 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+3463 more)
+- **3524 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+3519 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **Thin community `graphify-guide-en.md: Limitation: ID collision on sha...`** (1 nodes): `Creates a dictionary of headers for a DLQ message, compatible with both pika and`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -1561,6 +1621,10 @@ Nodes (64): Semrush backlink tools — design (2026-08-07, approved): extend mcp
 - **Thin community `graphify-guide-en.md: PreToolUse hook on Glob|Grep (n...`** (1 nodes): `Détermine si l'URL a un signal très fort de site français.                  Le`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `superpowers: Faux-négatifs — suite de référence avant chantier`** (2 nodes): `Référence de suite AVANT chantier : 7 échecs préexistants + 1 erreur de collecte, à comparer et jamais compter comme introduits`, `PIÈGE D'OUTILLAGE : une erreur de collecte pytest préexistante INTERROMPT tout le run, si bien qu'aucune commande l'incluant n'est exploitable — la contourner par --ignore, ne pas la réparer (hors périmètre)`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Item-Level Abandon Rationale (test)`** (1 nodes): `L'autre sortie sans résultat : le `wait_for` de l'item, `_abandon_job`.`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `On-Time Driver Teardown Guard (test)`** (1 nodes): `Garde : le driver livré à temps n'est arrêté que par le `finally` normal.`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 
 ## Suggested Questions

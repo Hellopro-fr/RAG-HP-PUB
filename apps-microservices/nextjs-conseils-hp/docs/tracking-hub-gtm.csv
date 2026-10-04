@@ -17,7 +17,7 @@ Variable dataLayer;DL - id_page_hub;id_page_hub;1000 / 1001 / 1002 - id de l'URL
 Variable dataLayer;DL - session_id;session_id;reutilise getHpSessionId() existant - fenetre glissante 30 min
 Variable dataLayer;DL - form_id;form_id;assistant | guide
 Variable dataLayer;DL - hub_entry_point;hub_entry_point;hero | banner_guide | cta_final | bloc_thematique | popup_scroll | sticky_mobile
-Variable dataLayer;DL - step_name;step_name;GENERIQUE: 1ere-question | 2eme-question | 3eme-question | 4eme-question | email | coordinates - JAMAIS l'id metier (sinon les 3 pages ne sont pas comparables dans un meme entonnoir)
+Variable dataLayer;DL - step_name;step_name;GENERIQUE: 1ere-question | 2eme-question | 3eme-question | 4eme-question | email | coordinates - porte AUSSI par hub_form_abandon depuis le 2026-09-18 - JAMAIS l'id metier (sinon les 3 pages ne sont pas comparables dans un meme entonnoir)
 Variable dataLayer;DL - step_index;step_index;0-based
 Variable dataLayer;DL - step_total;step_total;
 Variable dataLayer;DL - result;result;known | unknown - pour hub_email_check
@@ -25,7 +25,7 @@ Variable dataLayer;DL - user_known_status;user_known_status;Known | Unknown - is
 Variable dataLayer;DL - hub_lead_path;hub_lead_path;complet | reconnu | deja_converti
 Variable dataLayer;DL - steps_answered;steps_answered;
 Variable dataLayer;DL - answer_label;answer_label;libelle du choix - choix ferme donc pas de PII
-Variable dataLayer;DL - last_step_name;last_step_name;pour hub_form_abandon
+Variable dataLayer;DL - last_step_name;last_step_name;A SUPPRIMER du conteneur - hub_form_abandon pousse desormais step_name/step_index (2026-09-18), deja couverts par DL - step_name et DL - step_index
 Variable dataLayer;DL - error_stage;error_stage;email | coordinates
 Variable dataLayer;DL - http_status;http_status;
 Variable dataLayer;DL - download_trigger;download_trigger;auto | manual

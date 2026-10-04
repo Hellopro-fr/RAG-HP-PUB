@@ -250,7 +250,7 @@ We chose to grow a **single unified graph** instead of one standalone graph per 
     3. Dispatches one semantic subagent for its docs (`CLAUDE.md`, `README.md`, `requirements.txt`). Few LLM tokens — expect under $0.10 per service.
     4. Merges new nodes / edges into `graphify-out/graph.json` and adds the files to the manifest.
 
-    Remember to apply the two known gotchas after the subagent finishes (invented cross-link IDs + community relabelling — both recipes in the "Gotchas when merging a service" section).
+    Remember to apply the two known gotchas after the subagent finishes (invented cross-link IDs + community labels — assert 0 drift, name the new communities, audit the ones that received nodes; both recipes in the "Gotchas when merging a service" section).
 
 3. **Update the CI rebuild workflow.** Add the new service's path glob to the `paths:` filter in `.github/workflows/graphify-auto-rebuild.yml`. Forgetting this step is silent: the service is in `graph.json` but its commits will no longer trigger CI rebuilds, so the graph slowly goes stale whenever someone edits that service on `main` / `features/poc`.
 
@@ -307,9 +307,13 @@ for e in sem['edges']:
 
 Keep a running remap list in this document (the `labels.json` update story will let us amortise this over time). Pre-seed the subagent prompt with a list of known backbone node IDs to reduce invention — the prompt we used for `graph-rag-api-recherche-rust-service` lists them explicitly and cut invention rate from 10/10 to 6/16.
 
-**2. Community re-clustering shuffles labels.** Each merge re-runs clustering. Community `c0` may become `c4`, `c7` may become `c1`, etc. The labels in `graphify-out/labels.json` are keyed by community ID — after a merge they point to the *new* community at that ID, which is probably a different topic.
+**2. Community labels after a merge.** The labels in `graphify-out/labels.json` are keyed by community ID. Merges used to re-run clustering and reshuffle those IDs (`c0` becoming `c4`, …), so every label pointed at a different topic. Since `37247ad5` (2026-08-07) a merge goes through `_preserve_and_place` (`scripts/graphify_rebuild_scoped.py`): prior nodes keep their community, only new nodes are placed. The check is therefore no longer "re-label everything" but:
 
-Workaround — after every merge, regenerate the sample per community and re-label:
+- **assert 0 drift** — every node present before the merge keeps its community ID (0.00 % expected; anything else means the merge re-clustered: stop and report it);
+- **name only the new communities**, from their content;
+- **audit every community that received nodes**, from its content — a placed node can land in a community whose label was already wrong (measured 2026-09-30: two such labels, c30 and c87).
+
+To inspect communities, regenerate the sample per community:
 
 ```bash
 # dump first 4 node labels per community for cross-check
@@ -319,9 +323,7 @@ python -c "import json, os; d=json.loads(open('graphify-out/graph.json').read())
   [print(f'c{k} ({len(v)}): {v[:4]}') for k,v in sorted(c.items(), key=lambda x:-len(x[1]))[:30]]"
 ```
 
-Compare to `labels.json`, rewrite where wrong, commit the label update with the graph update.
-
-Long term, labels should be derived from community content (top-N node labels) rather than human-assigned, so they survive re-clustering for free. Not worth the engineering investment until we hit this a few more times.
+Compare the new and receiving communities to `labels.json`, rewrite where wrong, commit the label update with the graph update. Do not hand-relabel the largest communities when drift is 0: their labels are still correct.
 
 ## Updating the graph
 

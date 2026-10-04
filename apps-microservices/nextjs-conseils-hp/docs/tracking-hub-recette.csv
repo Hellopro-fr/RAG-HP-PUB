@@ -15,13 +15,13 @@
 14;Projet;Conversion complete;Completer les coordonnees;hub_form_submission / hub_group=projet / id_page_hub=1000;OK;verifie le 2026-08-05 (hub_lead_path=complet) et le 2026-08-07 (hub_lead_path=reconnu)
 15;Projet;PDF depuis le tunnel projet;Ecran de remerciement projet;hub_guide_download avec hub_group=projet;OK;hub_group=projet / download_trigger=auto
 16;Projet;Anti-double-comptage;Cliquer 2x rapidement sur soumettre;1 SEUL hub_form_submission;A TESTER MANUELLEMENT;impossible a simuler de facon fiable dans l'onglet automatise
-17;Projet;Abandon;Fermer le dialog avant conversion;hub_form_abandon / AUCUN hub_form_submission;OK;last_step_name=email / last_step_index=4 / aucune conversion
+17;Projet;Abandon;Fermer le dialog avant conversion;hub_form_abandon / AUCUN hub_form_submission;A REJOUER;step_name=email / step_index=4 / aucune conversion - vu OK le 2026-08-07 sous last_step_name, renomme le 2026-09-18
 18;Projet;Erreur technique;Simuler une reponse 500;hub_form_error http_status=500 / AUCUNE conversion;NON TESTE;la soumission simulee n'a pas atteint send() - a rejouer manuellement
 19;Guide;Portes d'entree;Ouvrir le dialog depuis les 4 emplacements;hub_entry_point correct pour chacune;OK;banner_guide / cta_final / bloc_thematique / popup_scroll - 4/4
 20;Guide;Ouverture = ecran e-mail;Ouvrir le dialog guide;1 x hub_form_view et AUCUN hub_form_email_view;OK;conforme sur les 4 portes
 21;Guide;Conversion guide;Completer le parcours guide;hub_form_submission / hub_group=guide / id_page_hub=1000 (id de l'URL depuis le 2026-08-25);A REJOUER;valide le 2026-08-07 quand le guide envoyait encore 2000
 22;Guide;Erreur technique;Simuler une 500 pendant le parcours guide;hub_form_error avec hub_group=guide;NON TESTE;meme limite que #18
-23;Guide;Abandon aux coordonnees;Fermer le dialog guide en cours;hub_form_abandon last_step_name=coordinates;NON TESTE;le dialog guide ne se ferme pas dans l'onglet automatise (clic et Echap non traites)
+23;Guide;Abandon aux coordonnees;Fermer le dialog guide en cours;hub_form_abandon step_name=coordinates;NON TESTE;le dialog guide ne se ferme pas dans l'onglet automatise (clic et Echap non traites)
 24;Guide;Raccourci deja converti;Cookie hub_lead contenant l'id de CETTE page puis clic CTA guide;hub_guide_shortcut + hub_guide_download / AUCUNE conversion / AUCUN appel API;OK;hub_guide_shortcut + hub_guide_download hub_lead_path=deja_converti - 0 appel API - 0 hub_form_submission
 25;Guide;Pas de conversion fantome;Rejouer 24 trois fois;3 x hub_guide_download et TOUJOURS 0 conversion;PARTIEL;0 conversion sur les 3 passages (le point critique est OK). 1 seul hub_guide_download car le dialog ne s'est pas ferme entre les passages - a reconfirmer manuellement
 26;Guide;Telechargement auto puis manuel;Ecran de remerciement puis clic sur le lien;download_trigger=auto puis manual;OK;les deux emis avec le bon hub_group

@@ -25,6 +25,17 @@
 **Cross-service:**
 - Use `/plan with file details` first. One service at a time. Commit per service.
 
+## Characterization Before Refactoring
+
+Record on the **unchanged** code, and keep green before and after the change:
+
+1. The output **with its order** — assert `list(result.items())`, not a dict `==` (which ignores key order).
+2. The **sequence of expensive or side-effecting calls** per branch — spies built on the saved originals, never
+   delegating to the patched attribute (a stub that calls the patched name recurses into itself).
+
+Output equality alone lets a refactor stay correct while doing more work (e.g. eager evaluation replacing a
+short-circuit).
+
 ## Commit Convention
 
 - `refactor(scope):` prefix. Separate commit from fix/feature. Explain *why* in message.

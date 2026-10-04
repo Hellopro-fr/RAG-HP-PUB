@@ -158,7 +158,7 @@ export function GuideDownloadDialog({
           pushHubEvent('hub_form_abandon', 'guide', {
             form_id: 'guide',
             hub_entry_point: entryPoint,
-            last_step_name: lead.phase,
+            step_name: lead.phase,
           });
         }
         setOpen(next);

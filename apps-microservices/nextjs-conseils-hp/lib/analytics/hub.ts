@@ -113,6 +113,13 @@ export interface HubEventParams {
   /**
    * Position de l'étape en libellé GÉNÉRIQUE : `1ere-question`, `2eme-question`…
    * (plus `email` et `coordinates`). Voir `questionStepName`.
+   *
+   * ⚠️ `hub_form_abandon` utilise CE paramètre pour l'étape atteinte, et non un
+   * `last_step_name` dédié (supprimé le 2026-09-18). Un nom propre à l'abandon
+   * exigeait sa propre dimension GA4 — quota event-scoped plein à 50/50 — et
+   * n'était donc pas interrogeable : les abandons ressortaient avec une étape
+   * vide. Réutiliser `step_name`, enregistré depuis 2022, croise abandons et
+   * affichages dans un seul rapport sans rien créer.
    */
   step_name?: string;
   /**
@@ -138,8 +145,6 @@ export interface HubEventParams {
   /** Dimension GA4 dédiée `hub_lead_path` — cf. convention ci-dessus. */
   hub_lead_path?: 'complet' | 'reconnu' | 'deja_converti';
   steps_answered?: number;
-  last_step_name?: string;
-  last_step_index?: number;
   error_stage?: 'email' | 'coordinates';
   http_status?: number;
   download_trigger?: 'auto' | 'manual';
@@ -171,8 +176,6 @@ const HUB_PARAM_KEYS = Object.keys({
   user_known_status: 0,
   hub_lead_path: 0,
   steps_answered: 0,
-  last_step_name: 0,
-  last_step_index: 0,
   error_stage: 0,
   http_status: 0,
   download_trigger: 0,

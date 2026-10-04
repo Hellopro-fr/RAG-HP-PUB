@@ -366,6 +366,12 @@ func (s *AuthServer) handleAuthorizeConsent(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
+	scope = filterScopeForViewer(scope, s.serverAccess, userEmail)
+	if len(client.Servers) == 0 && len(scope.ServerIDs) == 0 {
+		writeJSONError(w, http.StatusBadRequest, "select at least one server")
+		return
+	}
+
 	// Save consent
 	s.consentRepo.Upsert(&db.OAuth2Consent{
 		ID:        fmt.Sprintf("%s:%s", client.ID, userEmail),
@@ -428,6 +434,7 @@ func (s *AuthServer) buildServerList(ctx context.Context, client *db.OAuth2Clien
 	// Same gate as renderConsent — see the note there on why this one seam
 	// covers both branches.
 	servers = gateway.FilterServersByGate(servers, userEmail, s.userRepo)
+	servers = visibleServers(servers, s.serverAccess, userEmail)
 	serverMap := make(map[string]db.MCPServer, len(servers))
 	zohoIDs := make(map[string]bool, len(servers))
 	for _, srv := range servers {

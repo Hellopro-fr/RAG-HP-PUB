@@ -116,6 +116,22 @@ func (r *ServerRepo) GetURL(id string) (string, error) {
 	return url, err
 }
 
+// TemplateSlugByID returns just the template_slug column of one server.
+// A missing row yields ("", nil): env-var backends and deleted servers are
+// not template instances. Used by gateway.Neo4jAccess, which cannot rely on
+// the in-memory registry's BackendServer.TemplateSlug.
+func (r *ServerRepo) TemplateSlugByID(id string) (string, error) {
+	var slugs []string
+	err := r.db.Model(&db.MCPServer{}).Where("id = ?", id).Limit(1).Pluck("template_slug", &slugs).Error
+	if err != nil {
+		return "", err
+	}
+	if len(slugs) == 0 {
+		return "", nil
+	}
+	return slugs[0], nil
+}
+
 // Delete removes a server and all its associations (CASCADE).
 func (r *ServerRepo) Delete(id string) error {
 	return r.db.Delete(&db.MCPServer{}, "id = ?", id).Error

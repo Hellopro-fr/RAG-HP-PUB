@@ -91,14 +91,14 @@ describe('pushHubEvent — nettoyage des paramètres', () => {
     // fusionne les pushes, une clé absente conserve la valeur précédente.
     pushHubEvent('hub_form_step', 'projet', {
       step_name: '2eme-question',
-      last_step_name: '',
+      step_id: '',
     });
     const push = dl()[0];
     expect(push.step_name).toBe('2eme-question');
     expect('step_index' in push).toBe(true);
     expect(push.step_index).toBeUndefined();
     // Chaîne vide traitée comme une absence, pour la même raison.
-    expect(push.last_step_name).toBeUndefined();
+    expect(push.step_id).toBeUndefined();
   });
 
   it('efface la valeur d’un paramètre laissé par l’événement précédent', () => {

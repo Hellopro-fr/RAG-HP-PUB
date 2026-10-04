@@ -79,6 +79,28 @@ afterEach(() => {
 });
 
 describe('AssistantForm', () => {
+
+  /**
+   * Chaque evenement du tunnel doit porter sa porte d'entree. L'oubli ne se voit
+   * nulle part : la cle manquante part a `undefined`, le tag GA4 ne l'emet pas, et
+   * la dimension reste vide dans les rapports. D'ou ce test plutot qu'une relecture.
+   */
+  it('porte hub_entry_point sur hub_form_start', () => {
+    render(<AssistantForm data={data} idPageHub={ID_PAGE_HUB} />);
+    fireEvent.click(screen.getByText(data.steps[0].options[0]));
+    const start = dl().find((e) => e.event === 'hub_form_start');
+    expect(start?.hub_entry_point).toBe('hero');
+  });
+
+  /** Deep-link externe : la valeur ne doit pas retomber sur le defaut. */
+  it('porte la porte d entree du deep-link sur hub_form_start', async () => {
+    render(<AssistantForm data={data} idPageHub={ID_PAGE_HUB} />);
+    openAssistantDialog('external_projet');
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeDefined());
+    fireEvent.click(within(screen.getByRole('dialog')).getByText(data.steps[0].options[0]));
+    const start = dl().find((e) => e.event === 'hub_form_start');
+    expect(start?.hub_entry_point).toBe('external_projet');
+  });
   it('rend l’étape 1 inline dans le hero, sans clic', () => {
     render(<AssistantForm data={data} idPageHub={ID_PAGE_HUB} />);
     expect(screen.getByText(data.cardTitle)).toBeDefined();

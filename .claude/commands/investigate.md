@@ -19,6 +19,9 @@ The user provides a statement to verify, e.g.:
 
 1. **Parse the claim** into a testable assertion.
 2. **Gather evidence** — use Grep, Glob, Read, and Bash (git log/git blame) to search the codebase exhaustively.
+   If the claim is "A and B implement the same decision differently": run `git log -L` on both line ranges,
+   report the last intentional change of each, and the callers of each (which one runs in production). Name
+   the side that was left behind — a divergence is usually a change that reached only one of them.
 3. **Check every relevant service/file** — do not sample. If the claim is "all services do X", check ALL services.
 4. **Produce a verdict** with one of these labels:
 

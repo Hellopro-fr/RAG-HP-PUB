@@ -244,8 +244,11 @@ interrogeable qu'en **BigQuery** : le quota de la propriété était à 47/50 au
 se compare d'une verticale à l'autre. Cf. l'annexe de
 `docs/tracking-hub-gtm-runbook.md`.
 
-`last_step_name` de `hub_form_abandon` suit le même vocabulaire, sans quoi
-abandons et affichages ne se croiseraient pas dans un même rapport.
+`hub_form_abandon` renseigne `step_name` / `step_index` — les mêmes paramètres que
+les affichages, et non des clés dédiées. Le vocabulaire commun ne suffisait pas :
+tant que l'abandon poussait `last_step_name`, il alimentait un paramètre sans
+dimension GA4 enregistrée, donc invisible hors BigQuery, et les abandons
+ressortaient avec une étape vide (constaté le 2026-09-17, corrigé le 2026-09-18).
 
 ---
 

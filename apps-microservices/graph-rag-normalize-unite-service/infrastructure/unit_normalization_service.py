@@ -397,6 +397,15 @@ class UnitNormalizationService:
                 # Mirrors FIX 8 'minutes' and FIX 10 'heures' patterns.
                 "secondes": "time",
                 "seconde": "time",
+                # --- FIX 18: 15th DLQ batch ---
+                # 'mesures' = number of readings stored in device memory
+                # ("Capacité de mémoire interne : 6000 mesures") — a count, NOT
+                # an information size: the value counts records, not bytes.
+                # Required here (not just as a pint define) because the bare
+                # 'capacité' label fallback resolves to mass before 'mémoire'
+                # can match, so unit lookup must win first.
+                "mesures": "count",
+                "mesure": "count",
             }
 
             # --- Label-to-Dimension Mapping ---
