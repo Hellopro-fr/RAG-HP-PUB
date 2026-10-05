@@ -9,30 +9,34 @@ const (
 	TailleDefaut = 50
 )
 
-// schemaFiltre decrit l'arbre imbrique. La recursion passe par $ref sur
-// la definition, ce que les clients MCP savent lire.
+// schemaFiltre decrit l'arbre imbrique SANS $ref. Une reference
+// "#/definitions/..." se resout depuis la racine de l'inputSchema, pas depuis
+// la propriete : placee ici, elle etait cassee, et claude.ai envoyait alors
+// filtre comme une chaine ("filtre illisible: cannot unmarshal string").
+// Le type "object" explicite suffit aux clients ; la forme recursive est
+// decrite en texte et validee cote serveur par filtre.Valider.
 func schemaFiltre() map[string]interface{} {
 	return map[string]interface{}{
-		"$ref": "#/definitions/noeud",
-		"definitions": map[string]interface{}{
-			"noeud": map[string]interface{}{
-				"type":        "object",
-				"description": "Soit un groupe {operateur, conditions}, soit une feuille {critere, comparateur, valeur}.",
-				"properties": map[string]interface{}{
-					"operateur": map[string]interface{}{
-						"type": "string", "enum": []string{"ET", "OU", "NON"},
-						"description": "NON est unaire : exactement une condition.",
-					},
-					"conditions": map[string]interface{}{
-						"type":     "array",
-						"items":    map[string]interface{}{"$ref": "#/definitions/noeud"},
-						"minItems": 1, "maxItems": 20,
-					},
-					"critere":     map[string]interface{}{"type": "string"},
-					"comparateur": map[string]interface{}{"type": "string"},
-					"valeur":      map[string]interface{}{},
-				},
+		"type": "object",
+		"description": "Arbre de filtres. Un noeud est soit un groupe " +
+			"{operateur: ET|OU|NON, conditions: [noeuds]} (NON : exactement une condition, " +
+			"1 a 20 conditions par groupe), soit une feuille {critere, comparateur, valeur}. " +
+			"Exemple : {\"operateur\":\"ET\",\"conditions\":[{\"critere\":\"departement\"," +
+			"\"comparateur\":\"dans\",\"valeur\":[\"75\"]}]}",
+		"properties": map[string]interface{}{
+			"operateur": map[string]interface{}{
+				"type": "string", "enum": []string{"ET", "OU", "NON"},
 			},
+			"conditions": map[string]interface{}{
+				"type":        "array",
+				"items":       map[string]interface{}{"type": "object"},
+				"minItems":    1,
+				"maxItems":    20,
+				"description": "Noeuds enfants, de meme forme que le filtre.",
+			},
+			"critere":     map[string]interface{}{"type": "string"},
+			"comparateur": map[string]interface{}{"type": "string"},
+			"valeur":      map[string]interface{}{},
 		},
 	}
 }

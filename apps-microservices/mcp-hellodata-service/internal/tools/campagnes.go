@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -67,6 +68,7 @@ func (h *Handler) recupAcheteur(ctx context.Context, id Identite, rpcID json.Raw
 		return mcp.Echec(rpcID, mcp.CodeParamsInvalides,
 			fmt.Sprintf("n_hors_bornes: %d hors bornes 1..%d ; au-dela, rappeler sur la meme campagne", a.N, NMax))
 	}
+	a.Filtre = normaliserFiltre(a.Filtre)
 	if errRep := validerFiltre(rpcID, a.Filtre); errRep != nil {
 		return *errRep
 	}
@@ -196,6 +198,23 @@ func validerCampagne(c hellodata.Campagne) error {
 		return fmt.Errorf("campagne_invalide: date_campagne %q, format AAAA-MM-JJ attendu", c.DateCampagne)
 	}
 	return nil
+}
+
+// normaliserFiltre accepte un filtre recu comme chaine JSON contenant
+// l'objet (certains clients serialisent ainsi un parametre dont ils ne lisent
+// pas le type) et rend l'objet brut. Tout le reste est rendu tel quel :
+// validerFiltre / filtre.Valider tranchent ensuite. Le filtre normalise est
+// aussi celui transmis au moteur, qui attend un objet.
+func normaliserFiltre(brut json.RawMessage) json.RawMessage {
+	t := bytes.TrimSpace(brut)
+	if len(t) == 0 || t[0] != '"' {
+		return brut
+	}
+	var interieur string
+	if err := json.Unmarshal(t, &interieur); err != nil {
+		return brut
+	}
+	return json.RawMessage(interieur)
 }
 
 // validerFiltre applique la validation structurelle commune. Les feuilles
