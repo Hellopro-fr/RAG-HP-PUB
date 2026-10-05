@@ -43,6 +43,68 @@ Sous-projet 2 de la fonctionnalité « campagnes acheteurs via Claude ».
 >   autorisé, alors que `echantillon` / `export_csv` réservent `mobile` à
 >   l'admin (précondition 5 non tranchée).
 
+> **Amendement du 2026-10-05 — deux décisions de l'utilisateur.**
+>
+> - **§ 7 — chaque appel continue la campagne, par exclusion.** Pour une
+>   campagne existante, `recup_acheteur` lit d'abord, sur le lien annuaire BO
+>   (tables `edgb2b` seulement), toutes les fiches rattachées à un numéro déjà
+>   réservé dans cette campagne (`historique_campagne_acheteur_doublon_ia`
+>   joint à `historique_campagne_suivi_ia`), plus les `id_acheteur` réservés
+>   eux-mêmes. Le parcours `DESC` de `acheteur` repart toujours du sommet avec
+>   `AND A.id_acheteur NOT IN (<entiers castés>)` (clause omise si la liste est
+>   vide ; jamais de jointure entre les deux liens). Les fiches couvertes ne
+>   comptent donc plus dans la borne de 100 000, et un appel avec un AUTRE filtre
+>   sur la même campagne retrouve les candidats situés au-dessus des réservations
+>   précédentes. Le contrôle par numéro `deja_dans_campagne` reste le filet
+>   (nouvelle fiche d'un numéro réservé, pas encore rattachée). Au-delà de
+>   200 000 fiches couvertes, l'appel est refusé (`campagne_trop_volumineuse`) :
+>   ouvrir une nouvelle campagne. Une campagne neuve part de la fiche la plus
+>   récente. *Correction le même jour : une première version reprenait sous le
+>   plus petit `id_acheteur` réservé ; ce plancher ignorait le filtre (un autre
+>   filtre perdait les candidats au-dessus) et, `id_acheteur` étant la fiche
+>   active, pouvait rescanner sans fin la même plage après la borne de 100 000.*
+>   Recontacter après un délai reste le rôle des feuilles `hist_*` dans une
+>   campagne ultérieure.
+> - **§ 8 — STOP l'emporte quelle que soit la campagne.** `negative_stop`
+>   signifie « ne plus me contacter » : définitif. Quand la catégorie
+>   effective d'une réponse est `negative_stop` (explicite ou forcée par le
+>   filet `^\s*STOP`) et que le numéro normalisé existe dans
+>   `historique_campagne_acheteur_ia` sans être dans la campagne citée,
+>   `statut_contact` passe quand même à `ne_plus_contacter` (même transaction),
+>   le numéro reste listé dans `hors_campagne`, aucune ligne de suivi n'est
+>   écrite, `mis_a_jour` ne compte toujours que les suivis mis à jour, et
+>   `stop_force` compte le filet STOP s'il a joué. `ResultatReponses` est
+>   inchangé. Un numéro inconnu (`inconnus`) n'est jamais touché.
+>   `negative_contactable` = « non », recontactable dans une campagne
+>   ultérieure après le délai choisi dans Claude.
+
+> **Amendement du 2026-10-05 (bis) — le CSV est servi par le BO.** Le
+> `/download/{jeton}` du wrapper n'a pas de route publique (service
+> `expose:` seulement) : les liens rendus au LLM étaient morts. Décision de
+> l'utilisateur : le CSV est servi par `/admin/mcp/hellodata/download.php`,
+> en GET, **sans session BO ni Bearer**, sur présentation d'un **ticket signé
+> qui expire** (15 min), et **régénéré** à chaque téléchargement (aucun
+> fichier au repos).
+>
+> - Ticket = `base64url(gzdeflate(JSON))` . `.` . `base64url(HMAC-SHA256)`,
+>   clé dérivée du jeton existant (`hash_hmac('sha256', 'mcp-hellodata-download',
+>   _MCP_HELLODATA_TOKEN_, true)`) : pas de nouveau secret. Le JSON porte `exp`
+>   et tous les paramètres (droit aux colonnes restreintes compris) : le porteur
+>   du lien ne peut rien changer. Altéré ou malformé → 403, expiré → 410, le
+>   contenu n'est jamais renvoyé. Un ticket de plus de 6000 caractères n'est pas
+>   émis (`lien_trop_long`) : Apache coupe la ligne de requête vers 8190 octets.
+> - `export` garde son corps et sa sentinelle et ajoute l'en-tête
+>   `X-Hellodata-Lien: <url>` ; le téléchargement rend la même page, à l'octet
+>   près, sans la sentinelle.
+> - `recup_acheteur` ajoute le champ `url_csv` (vide sans sélection) ; le
+>   ticket porte `id_campagne` et la plage `id_suivi` des réservations de
+>   l'appel, le CSV est refait depuis `edgb2b` puis `acheteur` (requêtes
+>   séparées), mêmes colonnes. § 6.1 et § 9 (« le wrapper émet le jeton
+>   `/download` ») ne valent plus que comme repli quand le moteur ne fournit
+>   pas de lien.
+> - Le wrapper rend ce lien au LLM ; `HELLODATA_PUBLIC_URL` n'est plus
+>   nécessaire une fois `download.php` déployé.
+
 ---
 
 ## 1. Besoin
