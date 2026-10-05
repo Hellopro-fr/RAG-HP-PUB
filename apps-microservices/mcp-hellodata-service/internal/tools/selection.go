@@ -13,10 +13,6 @@ import (
 	"mcp-hellodata/internal/mcp"
 )
 
-// colonnesRestreintes reflete requete.php cote moteur. Le refus se prend
-// ici pour eviter un aller-retour reseau qui echouerait de toute facon.
-var colonnesRestreintes = map[string]bool{"email": true, "mobile": true}
-
 type argsCommuns struct {
 	Filtre      json.RawMessage `json:"filtre"`
 	Colonnes    []string        `json:"colonnes"`
@@ -88,6 +84,13 @@ func (h *Handler) appeler(ctx context.Context, id Identite, rpcID json.RawMessag
 		return contenu(rpcID, res)
 
 	case "export_csv":
+		// L'utilisateur choisit les champs : sans liste, refus immediat qui
+		// rend le catalogue a lui montrer. Le LLM ne choisit pas a sa place.
+		if len(a.Colonnes) == 0 {
+			return mcp.Echec(rpcID, mcp.CodeParamsInvalides,
+				"colonnes_requises: demander a l'utilisateur quels champs extraire, parmi : "+
+					listeColonnes()+". Non disponibles : "+nonDisponibles+".")
+		}
 		// Une seule page, plafonnee a 2000 lignes cote moteur : pas de
 		// statut a interroger, le CSV revient dans cet appel.
 		d, errRep := h.demande(rpcID, a, admin, true)
@@ -149,6 +152,15 @@ func (h *Handler) demande(rpcID json.RawMessage, a argsCommuns, admin, avecColon
 	if _, err := filtre.Valider(n); err != nil {
 		r := mcp.Echec(rpcID, mcp.CodeParamsInvalides, err.Error())
 		return hellodata.Demande{}, &r
+	}
+	if avecColonnes {
+		for _, c := range a.Colonnes {
+			if !colonneConnue(c) {
+				r := mcp.Echec(rpcID, mcp.CodeParamsInvalides,
+					"colonne_inconnue: '"+c+"'. Colonnes disponibles : "+listeColonnes())
+				return hellodata.Demande{}, &r
+			}
+		}
 	}
 	if avecColonnes && !admin {
 		for _, c := range a.Colonnes {

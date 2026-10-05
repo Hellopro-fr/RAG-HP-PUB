@@ -25,7 +25,7 @@ func TestExportCSV_LienDuBO(t *testing.T) {
 		io.WriteString(w, "siren,region\n123456789,6\n# fin-export;1;\n")
 	})
 	r := h.Traiter(context.Background(), Identite{"alice@example.test", "readonly", true},
-		req("tools/call", `{"name":"export_csv","arguments":{"filtre":{"critere":"a_siret","comparateur":"=","valeur":true}}}`))
+		req("tools/call", `{"name":"export_csv","arguments":{"filtre":{"critere":"a_siret","comparateur":"=","valeur":true},"colonnes":["raison_sociale","ville"]}}`))
 	if r.Error != nil {
 		t.Fatalf("erreur inattendue: %+v", r.Error)
 	}

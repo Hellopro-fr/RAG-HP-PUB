@@ -63,9 +63,10 @@ func objet(props map[string]interface{}, requis ...string) map[string]interface{
 // Le renommer ici donnerait hellodata_hellodata_compter au LLM.
 func Definitions() []mcp.Outil {
 	colonnes := map[string]interface{}{
-		"type":        "array",
-		"items":       map[string]interface{}{"type": "string"},
-		"description": "Colonnes a restituer. email et mobile exigent le role admin.",
+		"type":  "array",
+		"items": map[string]interface{}{"type": "string", "enum": nomsColonnes()},
+		"description": "Colonnes a restituer, choisies par l'utilisateur. Champs : " + listeColonnes() +
+			". Non disponibles : " + nonDisponibles + ".",
 	}
 	blocage := map[string]interface{}{
 		"type": "integer", "enum": []int{1, 2, 3, 4, 5, 7, 8},
@@ -89,7 +90,9 @@ func Definitions() []mcp.Outil {
 			Description: "Lit les acheteurs correspondant au filtre, page par page. " +
 				"Maximum 2000 lignes par appel, 50 par defaut. Pour la page suivante, repasser " +
 				"next_cursor dans cursor. Pour recuperer l'integralite d'une selection volumineuse, " +
-				"utiliser hellodata_export_csv plutot que de boucler ici.",
+				"utiliser hellodata_export_csv plutot que de boucler ici. Sans colonnes, rend un " +
+				"apercu (id_acheteur, raison_sociale, ville, code_postal) ; si l'utilisateur veut " +
+				"d'autres champs, lui montrer la liste de colonnes et le laisser choisir.",
 			SchemaEntre: objet(map[string]interface{}{
 				"filtre":   schemaFiltre(),
 				"colonnes": colonnes,
@@ -102,15 +105,18 @@ func Definitions() []mcp.Outil {
 		},
 		{
 			Nom: "export_csv",
-			Description: "Rend le CSV d'une page de la selection, au plus 2000 lignes, sous forme " +
-				"d'URL de telechargement. Pour la suite, rappeler avec cursor = next_cursor. " +
-				"Le lien expire apres 15 minutes et ne survit pas a un redemarrage du service.",
+			Description: "AVANT d'appeler cet outil, montrer a l'utilisateur la liste des champs " +
+				"disponibles (voir colonnes) et lui demander lesquels extraire ; ne jamais choisir " +
+				"les champs a sa place, et dire clairement ceux qui ne sont pas disponibles. " +
+				"Rend ensuite le CSV d'une page de la selection, au plus 2000 lignes, sous forme " +
+				"d'URL de telechargement. Pour la suite, rappeler avec cursor = next_cursor et les " +
+				"memes colonnes. Le lien expire apres 15 minutes.",
 			SchemaEntre: objet(map[string]interface{}{
 				"filtre":       schemaFiltre(),
 				"colonnes":     colonnes,
 				"cursor":       map[string]interface{}{"type": "integer"},
 				"type_blocage": blocage,
-			}, "filtre"),
+			}, "filtre", "colonnes"),
 		},
 		{
 			Nom: "recup_acheteur",
