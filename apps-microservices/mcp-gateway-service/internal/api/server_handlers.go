@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -118,6 +119,10 @@ type Handler struct {
 	serverAuthRepo *repository.ServerAuthorizationRepo
 	// zohoImportRepo backs the /api/v1/zoho-imports/admin REST endpoints.
 	zohoImportRepo *repository.ZohoImportRepo
+	// hellodataLister fetches a hellodata backend's tools with an admin's
+	// identity (see hellodata_catalog.go). nil = live network call; tests
+	// stub it.
+	hellodataLister hellodataToolLister
 	// encryptor is used by handlers that encrypt/decrypt sensitive blobs (e.g.
 	// auth_headers on the admin Zoho import row). nil when ENCRYPTION_KEY is unset.
 	encryptor *crypto.Encryptor
@@ -346,7 +351,7 @@ func (h *Handler) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 			}
 			// Récupère le serveur mis à jour pour sauvegarder les capabilities
 			if backend := h.registry.FindByID(id); backend != nil {
-				h.saveBackendCapabilities(id, backend)
+				h.saveBackendCapabilities(r.Context(), id, backend)
 			}
 		}
 	}
@@ -581,7 +586,7 @@ func (h *Handler) handleUpdateServer(w http.ResponseWriter, r *http.Request) {
 			// back in after the fresh init result lands.
 			h.registry.SetMinRole(id, refreshed.MinRole)
 			if backend := h.registry.FindByID(id); backend != nil {
-				h.saveBackendCapabilities(id, backend)
+				h.saveBackendCapabilities(r.Context(), id, backend)
 			}
 		}
 	}
@@ -664,7 +669,7 @@ func (h *Handler) handleEnableServer(w http.ResponseWriter, r *http.Request) {
 		// with no prev entry — push min_role explicitly here too.
 		h.registry.SetMinRole(id, srv.MinRole)
 		if backend := h.registry.FindByID(id); backend != nil {
-			h.saveBackendCapabilities(id, backend)
+			h.saveBackendCapabilities(r.Context(), id, backend)
 		}
 	}
 
@@ -724,7 +729,7 @@ func (h *Handler) handleDiscoverServer(w http.ResponseWriter, r *http.Request) {
 	// re-discover silently makes a gated server public.
 	h.registry.SetMinRole(id, srv.MinRole)
 	if backend := h.registry.FindByID(id); backend != nil {
-		h.saveBackendCapabilities(id, backend)
+		h.saveBackendCapabilities(r.Context(), id, backend)
 	}
 
 	updated, _ := h.repo.GetByID(id)
@@ -798,7 +803,7 @@ func (h *Handler) handleDisableTool(w http.ResponseWriter, r *http.Request, serv
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-func (h *Handler) saveBackendCapabilities(id string, backend *gateway.BackendServer) {
+func (h *Handler) saveBackendCapabilities(ctx context.Context, id string, backend *gateway.BackendServer) {
 	capsRaw, _ := json.Marshal(backend.Capabilities)
 	dbSrv := &db.MCPServer{
 		ID:              id,
@@ -808,7 +813,11 @@ func (h *Handler) saveBackendCapabilities(id string, backend *gateway.BackendSer
 		ServerVersion:   backend.Version,
 		CapabilitiesRaw: capsRaw,
 	}
-	for _, t := range backend.Tools {
+	tools := backend.Tools
+	if hdTools, ok := h.hellodataToolsToPersist(ctx, id, backend); ok {
+		tools = hdTools
+	}
+	for _, t := range tools {
 		dbSrv.Tools = append(dbSrv.Tools, db.ServerTool{
 			Name:        t.Name,
 			Description: t.Description,

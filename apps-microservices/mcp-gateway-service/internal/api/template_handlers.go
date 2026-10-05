@@ -516,7 +516,7 @@ func (h *Handler) createInstanceFromSpec(
 				h.registry.SetToolPrefix(mcpServerID, mcpSrv.ToolPrefix)
 			}
 			if backend := h.registry.FindByID(mcpServerID); backend != nil {
-				h.saveBackendCapabilities(mcpServerID, backend)
+				h.saveBackendCapabilities(ctx, mcpServerID, backend)
 			}
 		}
 	}
@@ -815,7 +815,7 @@ func (h *Handler) rediscoverAfterRotate(ctx context.Context, inst *db.TemplateIn
 		h.registry.SetToolPrefix(inst.MCPServerID, srv.ToolPrefix)
 	}
 	if backend := h.registry.FindByID(inst.MCPServerID); backend != nil {
-		h.saveBackendCapabilities(inst.MCPServerID, backend)
+		h.saveBackendCapabilities(ctx, inst.MCPServerID, backend)
 	}
 }
 
