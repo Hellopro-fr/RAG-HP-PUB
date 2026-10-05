@@ -69,6 +69,15 @@ The name below is the one the LLM finally sees.
 There is no `hellodata_export_statut` tool: exports are single-page and
 rendered directly by `hellodata_export_csv` — no async job to poll.
 
+The `filtre` input schema (`schemaFiltre`, `internal/tools/registry.go`) is a
+plain `"type": "object"` with NO `$ref`: a `#/definitions/...` reference
+resolves from the root of the tool's `inputSchema`, so one nested inside the
+property is broken, and claude.ai then sent `filtre` as a JSON string
+(`filtre illisible: cannot unmarshal string`) on every filter tool. The
+recursive shape is described in the text and enforced by `filtre.Valider`.
+`normaliserFiltre` also accepts a stringified object and forwards the object
+to the engine. Tests: `internal/tools/filtre_chaine_test.go`.
+
 ## MCP Endpoints
 
 | Endpoint | Method | Purpose |
