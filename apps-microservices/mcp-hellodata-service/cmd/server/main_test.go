@@ -24,7 +24,7 @@ func TestHandlerJetons_RendLaTableQuAlimenteLExport(t *testing.T) {
 	}))
 	defer moteur.Close()
 
-	h := tools.Nouveau(hellodata.Nouveau(moteur.URL, "jeton"), "https://mcp.example.test")
+	h := tools.Nouveau(hellodata.Nouveau(moteur.URL, "jeton"), hellodata.Nouveau("http://webhook.invalid", "jeton-webhook"), "https://mcp.example.test")
 
 	rep := h.Traiter(context.Background(), tools.Identite{Email: "alice@example.test", Role: "readonly", Granted: true},
 		mcp.Requete{
@@ -56,7 +56,7 @@ func TestHandlerJetons_RendLaTableQuAlimenteLExport(t *testing.T) {
 // Un jeton qui n'a jamais ete frappe ne doit rien rendre : h.Jetons() ne
 // doit pas exposer une table qui accepterait n'importe quoi.
 func TestHandlerJetons_JetonInconnuNonTrouve(t *testing.T) {
-	h := tools.Nouveau(hellodata.Nouveau("http://exemple.invalid", "jeton"), "https://mcp.example.test")
+	h := tools.Nouveau(hellodata.Nouveau("http://exemple.invalid", "jeton"), hellodata.Nouveau("http://webhook.invalid", "jeton-webhook"), "https://mcp.example.test")
 	if _, ok := h.Jetons().Lire("deadbeefdeadbeefdeadbeefdeadbeef"); ok {
 		t.Error("un jeton jamais frappe ne doit pas etre trouve")
 	}

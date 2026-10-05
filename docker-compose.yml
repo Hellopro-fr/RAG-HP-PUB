@@ -2563,6 +2563,10 @@ services:
       - HELLODATA_BASE_URL=${HELLODATA_BASE_URL}
       - HELLODATA_TOKEN=${HELLODATA_TOKEN}
       - HELLODATA_PUBLIC_URL=${HELLODATA_PUBLIC_URL}
+      # Webhook FRONT partenaires_externes/mcp/hellodata (reponses de
+      # campagne) : obligatoires au demarrage, valeurs dans le .env.
+      - HELLODATA_WEBHOOK_URL=${HELLODATA_WEBHOOK_URL}
+      - HELLODATA_WEBHOOK_TOKEN=${HELLODATA_WEBHOOK_TOKEN}
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8597/health"]
       interval: 30s

@@ -48,3 +48,75 @@ type ErreurMoteur struct {
 }
 
 func (e *ErreurMoteur) Error() string { return e.Code + ": " + e.Message }
+
+// Campagne identifie une campagne SMS / appel. Code est la cle naturelle :
+// le moteur cree la campagne si le code est inconnu, la reutilise sinon.
+// Pas de cree_par ici : il vient de l'identite (Recuperation.CreePar),
+// jamais des arguments de l'outil.
+type Campagne struct {
+	Code         string `json:"code"`
+	Nom          string `json:"nom"`
+	Canal        string `json:"canal"`
+	Prestataire  string `json:"prestataire,omitempty"`
+	Message      string `json:"message,omitempty"`
+	DateCampagne string `json:"date_campagne"`
+}
+
+// DemandeRecup est la charge utile de l'action recup_acheteur du BO.
+type DemandeRecup struct {
+	Campagne Campagne        `json:"campagne"`
+	N        int             `json:"n"`
+	Filtre   json.RawMessage `json:"filtre"`
+	CreePar  string          `json:"cree_par"`
+}
+
+// Recuperation est la reponse de recup_acheteur. CSV porte la liste des
+// numeros retenus (BOM compris) : le wrapper la sert par /download et ne
+// la renvoie jamais telle quelle au LLM.
+type Recuperation struct {
+	IDCampagne       int            `json:"id_campagne"`
+	CampagneCreee    bool           `json:"campagne_creee"`
+	Selectionnes     int            `json:"selectionnes"`
+	Exclus           map[string]int `json:"exclus"`
+	FichesParcourues int            `json:"fiches_parcourues"`
+	Epuise           bool           `json:"epuise"`
+	CSV              string         `json:"csv"`
+}
+
+// LigneBilan est une campagne vue par bilan_campagnes.
+type LigneBilan struct {
+	Code                string `json:"code"`
+	Nom                 string `json:"nom"`
+	Canal               string `json:"canal"`
+	DateCampagne        string `json:"date_campagne"`
+	CreePar             string `json:"cree_par"`
+	Envoyes             int    `json:"envoyes"`
+	Positive            int    `json:"positive"`
+	NegativeContactable int    `json:"negative_contactable"`
+	NegativeStop        int    `json:"negative_stop"`
+	SansReponse         int    `json:"sans_reponse"`
+}
+
+type Bilan struct {
+	Campagnes []LigneBilan `json:"campagnes"`
+}
+
+// Reponse est une reponse du prestataire, deja classee par le LLM.
+type Reponse struct {
+	Telephone    string `json:"telephone"`
+	ReponseBrute string `json:"reponse_brute"`
+	Categorie    string `json:"categorie"`
+}
+
+// DemandeReponses est la charge utile du webhook FRONT enregistrer_reponses.
+type DemandeReponses struct {
+	CodeCampagne string    `json:"code_campagne"`
+	Reponses     []Reponse `json:"reponses"`
+}
+
+type ResultatReponses struct {
+	MisAJour     int      `json:"mis_a_jour"`
+	Inconnus     []string `json:"inconnus"`
+	HorsCampagne []string `json:"hors_campagne"`
+	StopForce    int      `json:"stop_force"`
+}

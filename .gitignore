@@ -215,3 +215,5 @@ bash.exe.stackdump*:Zone.Identifier
 # acheteur, et ce depot est public sur GitHub : un `git add -A` distrait
 # le publierait.
 site/admin/
+# Webhook FRONT de mcp-hellodata, depose a la main sur Ecritel (site/CLAUDE.md)
+site/partenaires_externes/

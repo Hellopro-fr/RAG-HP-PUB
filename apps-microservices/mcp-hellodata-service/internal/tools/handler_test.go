@@ -17,7 +17,7 @@ func handler(t *testing.T, g http.HandlerFunc) *Handler {
 	t.Helper()
 	s := httptest.NewServer(g)
 	t.Cleanup(s.Close)
-	return Nouveau(hellodata.Nouveau(s.URL, "jeton"), "https://mcp.example.test")
+	return Nouveau(hellodata.Nouveau(s.URL, "jeton"), hellodata.Nouveau("http://webhook.invalid", "jeton-webhook"), "https://mcp.example.test")
 }
 
 func req(methode string, params string) mcp.Requete {
@@ -42,8 +42,8 @@ func TestToolsList_VariableSelonLAppelant(t *testing.T) {
 		id     Identite
 		attend int
 	}{
-		{"admin voit les trois outils", Identite{"dave@example.test", "admin", false}, 3},
-		{"titulaire d un grant voit les trois", Identite{"alice@example.test", "readonly", true}, 3},
+		{"admin voit les six outils", Identite{"dave@example.test", "admin", false}, 6},
+		{"titulaire d un grant voit les six", Identite{"alice@example.test", "readonly", true}, 6},
 		{"grant sans email ne voit rien", Identite{"", "", true}, 0},
 		{"non autorise ne voit rien", Identite{"dave@example.test", "readonly", false}, 0},
 		{"sans identite ne voit rien", Identite{"", "", false}, 0},
@@ -191,7 +191,7 @@ func TestInitialize_RepondSansIdentite(t *testing.T) {
 // Les noms sont SANS prefixe : le gateway ajoute 'hellodata_'. Les
 // prefixer ici aussi donnerait hellodata_hellodata_compter au LLM.
 func TestDefinitions_NomsSansPrefixe(t *testing.T) {
-	attendus := []string{"compter", "echantillon", "export_csv"}
+	attendus := []string{"compter", "echantillon", "export_csv", "recup_acheteur", "bilan_campagnes", "enregistrer_reponses"}
 	defs := Definitions()
 	if len(defs) != len(attendus) {
 		t.Fatalf("%d outils, attendu %d", len(defs), len(attendus))

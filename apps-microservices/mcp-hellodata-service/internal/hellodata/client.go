@@ -23,6 +23,10 @@ const (
 	BudgetComptageApproche = 20 * time.Second
 	BudgetComptageExact    = 120 * time.Second
 	BudgetEchantillon      = 30 * time.Second
+	// recup_acheteur parcourt jusqu'a 100 000 fiches par appel.
+	BudgetRecup    = 120 * time.Second
+	BudgetBilan    = 20 * time.Second
+	BudgetReponses = 30 * time.Second
 )
 
 // Plafond de lecture d'une reponse JSON. Un moteur qui deraille ne doit
@@ -71,6 +75,33 @@ func (c *Client) Compter(ctx context.Context, d Demande) (Comptage, error) {
 func (c *Client) Echantillon(ctx context.Context, d Demande) (Echantillon, error) {
 	var out Echantillon
 	err := c.poster(ctx, "echantillon", d, BudgetEchantillon, &out)
+	return out, err
+}
+
+// RecupAcheteur selectionne et inscrit n acheteurs dans une campagne (BO).
+func (c *Client) RecupAcheteur(ctx context.Context, d DemandeRecup) (Recuperation, error) {
+	var out Recuperation
+	err := c.poster(ctx, "recup_acheteur", d, BudgetRecup, &out)
+	return out, err
+}
+
+// BilanCampagnes liste les campagnes, ou la seule campagne code si non vide (BO).
+func (c *Client) BilanCampagnes(ctx context.Context, code string) (Bilan, error) {
+	var out Bilan
+	corps := map[string]string{}
+	if code != "" {
+		corps["code"] = code
+	}
+	err := c.poster(ctx, "bilan_campagnes", corps, BudgetBilan, &out)
+	return out, err
+}
+
+// EnregistrerReponses ecrit les reponses d'une campagne. Appele sur le
+// client du webhook FRONT (partenaires_externes/mcp/hellodata), qui parle
+// le meme contrat que le BO : Bearer, ?action=, enveloppe {code, response}.
+func (c *Client) EnregistrerReponses(ctx context.Context, d DemandeReponses) (ResultatReponses, error) {
+	var out ResultatReponses
+	err := c.poster(ctx, "enregistrer_reponses", d, BudgetReponses, &out)
 	return out, err
 }
 
