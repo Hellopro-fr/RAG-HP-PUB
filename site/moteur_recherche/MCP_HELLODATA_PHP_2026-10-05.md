@@ -135,7 +135,27 @@ requêtes rendent `500 jeton_absent`.
 Points que l'agent n'a pas pu vérifier (lecture SFTP seule, `no_read_access/` illisible) :
 
 1. **Version de PHP** des deux serveurs. Le code est vérifié (`php -l` et tests unitaires) sur PHP 7.0 et 8.2 ; il exige 7.0 au minimum (`Throwable`, tableau dans `define()`).
-2. **Propagation de `Authorization`** : si un bon jeton rend `401`, ajouter au `.htaccess` du dossier `SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1`. Le routeur lit aussi `REDIRECT_HTTP_AUTHORIZATION`.
+2. **Propagation de `Authorization`** : **constaté en prod le 2026-10-05** — même jeton des deux côtés (SHA-256 identiques) et `401 non_autorise` systématique : Ecritel (PHP-FPM) ne transmet pas `Authorization` au PHP, comme le montre déjà le webhook openclaw qui passe par ses propres en-têtes `X-LF-*`. Correctif, sans toucher au `.htaccess` : le wrapper envoie aussi le jeton dans **`X-Hellodata-Token`**, que `mcp_hd_verifier_jeton()` (BO et FRONT, copie identique) lit en second recours, toujours avec `hash_equals`. `Authorization: Bearer` reste lu en premier et suffit ailleurs (dev, tests).
+
+   ```diff
+   -	if (strpos($entete, 'Bearer ') !== 0) {
+   -		return false;
+   -	}
+   -	$fourni = substr($entete, 7);
+   -	if ($fourni === '' || $fourni === false) {
+   +	$fourni = '';
+   +	if (strpos($entete, 'Bearer ') === 0) {
+   +		$fourni = (string)substr($entete, 7);
+   +	} elseif (!empty($_SERVER['HTTP_X_HELLODATA_TOKEN'])) {
+   +		$fourni = (string)$_SERVER['HTTP_X_HELLODATA_TOKEN'];
+   +	}
+   +	if ($fourni === '') {
+    		return false;
+    	}
+    	return hash_equals($attendu, $fourni);
+   ```
+
+   Fichiers à redéposer : `admin/mcp/hellodata/fonctions_mcp_hellodata.php` et `partenaires_externes/mcp/hellodata/fonctions_mcp_hellodata.php`. Test : le gate `entete` du harnais (jeton seul dans `X-Hellodata-Token` → 200 ; mauvais, vide ou jeton de l'autre côté → 401).
 3. **mysqli disponible sur les deux liens** : `admin/secure/connexion.php` doit bien créer `LINK_MYSQLI_ANNUAIRE_BO` sur le BO sans passer par `check_session.php`, et `include/connexion.php` le même lien sur le FRONT. Sinon : `500 erreur_interne`, journal `lien mysqli absent`.
 4. **Droits d'écriture sur `edgb2b`** du compte annuaire BO, sur le BO **et** sur le FRONT : `SELECT`, `INSERT`, `UPDATE`, `DELETE` (le `DELETE` sert à détacher une fiche dont le numéro est devenu invalide).
 5. **Tables en InnoDB** : les transactions par lot (BO) et par appel (FRONT) en dépendent ; en MyISAM le rollback ne fait rien.
@@ -176,7 +196,7 @@ morts. Le BO sert désormais le fichier lui-même.
 
 > **Amendement du 2026-10-05** (décisions de l'utilisateur, reportées dans la spec campagnes) : `recup_acheteur` continue chaque campagne en excluant du parcours toutes les fiches rattachées à un numéro déjà réservé dans cette campagne (reprise par exclusion, quel que soit le filtre ; au-delà de 200 000 fiches couvertes : `campagne_trop_volumineuse`), et STOP l'emporte quelle que soit la campagne dans `enregistrer_reponses`. Le contrat `ResultatReponses` ne change pas. Les deux routeurs posent aussi `ini_set('display_errors', '0')` : aucune erreur PHP ne s'affiche dans une réponse JSON.
 
-- **Transport** : `POST {base}/index.php?action=<nom>`, `Authorization: Bearer <jeton>`, corps JSON. Succès `{"code":200,"response":{…}}` ; erreur : statut non 2xx et `{"code":<statut>,"response":{"erreur":"<code_stable>","message":"…"}}`. Le code stable est la tête du message (`groupe_vide: …`) et remonte tel quel au LLM.
+- **Transport** : `POST {base}/index.php?action=<nom>`, `Authorization: Bearer <jeton>` et le même jeton dans `X-Hellodata-Token` (voir § vérifications, point 2), corps JSON. Succès `{"code":200,"response":{…}}` ; erreur : statut non 2xx et `{"code":<statut>,"response":{"erreur":"<code_stable>","message":"…"}}`. Le code stable est la tête du message (`groupe_vide: …`) et remonte tel quel au LLM.
 - **Sélection** (`comptage`, `echantillon`, `export`) : arbre validé puis compilé en SQL échappé ; `id_acheteur <> 0 AND bloquage_a = 0` toujours posés ; dédoublonnage par `ROW_NUMBER()` dont le `CASE` donne sa propre partition à chaque fiche sans SIRET ; page lue avec une ligne de sonde pour `has_more` ; `export` = la même page en CSV (BOM + en-tête + lignes + sentinelle, sélection vide = BOM + sentinelle). Une feuille `hist_*` y est refusée (`critere_historique_hors_campagne`).
 - **`recup_acheteur`** : validation (`campagne_invalide`, `n_hors_bornes`), campagne créée si son code est inconnu (`cree_par` lu au premier niveau du corps), sinon réutilisée ; canal ou date différents → `409 campagne_incoherente`. Feuilles `hist_*` admises seulement à la racine, en enfant direct du `ET` racine ou dans un sous-groupe purement `hist_*` enfant du `ET` racine (sinon `hist_hors_et_racine`). Parcours de `acheteur` par id décroissant, toujours depuis la fiche la plus récente ; pour une campagne existante il exclut (`AND A.id_acheteur NOT IN (…)`, entiers castés) toutes les fiches rattachées à un numéro déjà réservé dans cette campagne, lues par une requête séparée sur `edgb2b` — amendement du 2026-10-05 ; plus de 200 000 fiches couvertes → `campagne_trop_volumineuse`, lots de 500, au plus 100 000 fiches et 100 s ; une transaction par lot : identité du numéro, rattachement des fiches et `est_actif` (fiche de plus grand `id_acheteur`), exclusions (`ne_plus_contacter`, déjà dans la campagne, numéro invalide ou non mobile en `sms`), feuilles `hist_*`, puis réservation `INSERT IGNORE` jusqu'à `n`. `epuise = false` seulement si la borne ou une erreur a arrêté l'appel avant `n` : rappeler avec la même campagne. Sortie : `id_campagne`, `campagne_creee`, `selectionnes`, `exclus` (`ne_plus_contacter`, `critere_historique`, `deja_dans_campagne`, `telephone_invalide`), `fiches_parcourues`, `epuise`, `csv` (BOM + `telephone_normalise;id_acheteur;civilite;nom;prenom;raison_sociale;cp;ville`, sur la fiche active du numéro).
 - **`bilan_campagnes`** : `{}` ou `{"code": "…"}` → `{"campagnes": [{code, nom, canal, date_campagne, cree_par, envoyes, positive, negative_contactable, negative_stop, sans_reponse}]}`.

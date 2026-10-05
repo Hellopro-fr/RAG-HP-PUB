@@ -256,6 +256,11 @@ func (c *Client) requete(ctx context.Context, methode, action string, params map
 	}
 	req.URL.RawQuery = q.Encode()
 	req.Header.Set("Authorization", "Bearer "+c.token)
+	// Ecritel (PHP-FPM) ne transmet pas Authorization au PHP : jeton identique
+	// des deux cotes et refus systematique, constate le 2026-10-05. Le meme
+	// jeton part donc aussi dans un en-tete propre, lu en second recours par
+	// mcp_hd_verifier_jeton (BO et FRONT).
+	req.Header.Set(EnteteJeton, c.token)
 	req.Header.Set("Accept", "application/json")
 	return req, nil
 }
@@ -300,3 +305,7 @@ func (c *Client) erreurDepuis(resp *http.Response) error {
 		Message: fmt.Sprintf("statut HTTP %d", resp.StatusCode),
 	}
 }
+
+// EnteteJeton porte le jeton en doublon d'Authorization, pour les serveurs
+// qui retirent Authorization avant le PHP.
+const EnteteJeton = "X-Hellodata-Token"

@@ -23,6 +23,9 @@ func TestCompter_DeballeLEnveloppe(t *testing.T) {
 		if got := r.Header.Get("Authorization"); got != "Bearer jeton-test" {
 			t.Errorf("Authorization = %q", got)
 		}
+		if got := r.Header.Get(EnteteJeton); got != "jeton-test" {
+			t.Errorf("%s = %q, attendu le jeton en doublon d'Authorization", EnteteJeton, got)
+		}
 		if r.URL.Query().Get("action") != "comptage" {
 			t.Errorf("action = %q", r.URL.Query().Get("action"))
 		}
@@ -199,6 +202,9 @@ func TestClient_WebhookEnregistrerReponses(t *testing.T) {
 	c := serveur(t, func(w http.ResponseWriter, r *http.Request) {
 		if got := r.Header.Get("Authorization"); got != "Bearer jeton-test" {
 			t.Errorf("Authorization = %q", got)
+		}
+		if got := r.Header.Get(EnteteJeton); got != "jeton-test" {
+			t.Errorf("%s = %q, attendu le jeton en doublon d'Authorization", EnteteJeton, got)
 		}
 		if r.URL.Path != "/index.php" || r.URL.Query().Get("action") != "enregistrer_reponses" {
 			t.Errorf("URL = %s", r.URL)

@@ -136,6 +136,7 @@ func (h *Handler) appeler(ctx context.Context, id Identite, rpcID json.RawMessag
 // reseau : un refus doit etre immediat et porter un message que le LLM
 // peut corriger.
 func (h *Handler) demande(rpcID json.RawMessage, a argsCommuns, admin, avecColonnes bool) (hellodata.Demande, *mcp.Reponse) {
+	a.Filtre = normaliserFiltre(a.Filtre)
 	if len(a.Filtre) == 0 {
 		r := mcp.Echec(rpcID, mcp.CodeParamsInvalides, "filtre requis")
 		return hellodata.Demande{}, &r
