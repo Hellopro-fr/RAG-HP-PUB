@@ -82,6 +82,7 @@ func (c *Client) Echantillon(ctx context.Context, d Demande) (Echantillon, error
 func (c *Client) RecupAcheteur(ctx context.Context, d DemandeRecup) (Recuperation, error) {
 	var out Recuperation
 	err := c.poster(ctx, "recup_acheteur", d, BudgetRecup, &out)
+	out.URLCSV = lienValide(out.URLCSV)
 	return out, err
 }
 
@@ -139,7 +140,22 @@ func (c *Client) ExporterCSV(ctx context.Context, d Demande) (PageCSV, error) {
 	if err != nil {
 		return PageCSV{}, fmt.Errorf("export: lecture: %w", err)
 	}
-	return analyserPageCSV(corps)
+	page, err := analyserPageCSV(corps)
+	if err != nil {
+		return PageCSV{}, err
+	}
+	page.Lien = lienValide(resp.Header.Get("X-Hellodata-Lien"))
+	return page, nil
+}
+
+// lienValide garde un lien de telechargement du moteur seulement s'il est
+// une URL http(s) absolue ; tout autre contenu est ignore (repli /download).
+func lienValide(lien string) string {
+	lien = strings.TrimSpace(lien)
+	if strings.HasPrefix(lien, "https://") || strings.HasPrefix(lien, "http://") {
+		return lien
+	}
+	return ""
 }
 
 // analyserPageCSV separe le contenu CSV de la ligne sentinelle finale

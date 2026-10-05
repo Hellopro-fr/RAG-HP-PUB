@@ -35,7 +35,7 @@ mcp-hellodata-service/
 │   ├── mcp/types.go                 # MCP protocol types (JSON-RPC, tools)
 │   ├── hellodata/
 │   │   ├── client.go                # HTTP client wrapping the HelloData engine (Bearer auth)
-│   │   └── types.go                 # Engine request/response types
+│   │   └── types.go                 # Engine request/response types (PageCSV.Lien, Recuperation.URLCSV: BO signed links)
 │   ├── acces/acces.go               # Authorization re-check (admin role OR gateway-reported grant)
 │   ├── filtre/filtre.go             # Filter-tree validation/translation
 │   ├── tools/
@@ -61,8 +61,8 @@ The name below is the one the LLM finally sees.
 |------|------|-------------|
 | `hellodata_compter` | `compter` | Counts buyers matching a filter tree. Fast approximate mode (capped at 10000) by default; `exact=true` gives the real count but can take over a minute. |
 | `hellodata_echantillon` | `echantillon` | Reads buyers matching the filter, page by page (up to 2000 rows/call, 50 by default, cursor-based pagination). |
-| `hellodata_export_csv` | `export_csv` | Renders one page (≤2000 rows) of the selection as a CSV download URL. Link expires after 15 minutes and does not survive a service restart. |
-| `hellodata_recup_acheteur` | `recup_acheteur` | BO. Selects `n` (1–2000) buyers for a campaign (created when its `code` is unknown), deduplicated by phone, filter combining `acheteur` criteria and `hist_*` history leaves. Returns counters and `url_csv` (served by `/download`, never inline). `cree_par` is the caller's `X-End-User-Email`, never an argument. |
+| `hellodata_export_csv` | `export_csv` | Renders one page (≤2000 rows) of the selection as a CSV download URL: the BO's signed `download.php` link (header `X-Hellodata-Lien`, 15 minutes, CSV regenerated on each download). Falls back to a wrapper `/download` token only when the engine sends no link. |
+| `hellodata_recup_acheteur` | `recup_acheteur` | BO. Selects `n` (1–2000) buyers for a campaign (created when its `code` is unknown), deduplicated by phone, filter combining `acheteur` criteria and `hist_*` history leaves. Returns counters and `url_csv`: the BO's signed `download.php` link from the engine's `url_csv` field (fallback: a wrapper `/download` token); the CSV itself is never inline. `cree_par` is the caller's `X-End-User-Email`, never an argument. |
 | `hellodata_bilan_campagnes` | `bilan_campagnes` | BO. Lists campaigns with their counters (sent, positive, negative_contactable, negative_stop, no answer); optional `code`. |
 | `hellodata_enregistrer_reponses` | `enregistrer_reponses` | FRONT webhook. Records ≤500 provider responses classified by the LLM (`positive` / `negative_contactable` / `negative_stop`). |
 
@@ -74,7 +74,7 @@ rendered directly by `hellodata_export_csv` — no async job to poll.
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
 | `/mcp` | POST | Streamable HTTP transport (stateless JSON-RPC) |
-| `/download/{token}` | GET | Redeems a short-lived token issued by `hellodata_export_csv` or `hellodata_recup_acheteur` for the CSV |
+| `/download/{token}` | GET | Fallback only: redeems a short-lived token for the CSV when the engine sent no signed link. The service is `expose:`-only, so this route is not publicly reachable — the normal path is the BO's `download.php?t=<ticket>` link |
 | `/health` | GET | Liveness probe — no identity required, no business data returned |
 
 ## Environment Variables
@@ -84,7 +84,7 @@ rendered directly by `hellodata_export_csv` — no async job to poll.
 | `MCP_PORT` | 8597 | HTTP server port |
 | `HELLODATA_BASE_URL` | — | Base URL of the HelloData engine (`/admin/mcp/hellodata` on Ecritel), required |
 | `HELLODATA_TOKEN` | — | Bearer token presented to the engine, required |
-| `HELLODATA_PUBLIC_URL` | — | Public base URL used to build the `/download` links returned to the LLM |
+| `HELLODATA_PUBLIC_URL` | — | Public base URL of the fallback `/download` links. Not needed once the BO serves `download.php` (links come from the engine) |
 | `HELLODATA_WEBHOOK_URL` | — | Base URL of the FRONT webhook (`/partenaires_externes/mcp/hellodata`), required |
 | `HELLODATA_WEBHOOK_TOKEN` | — | Bearer token presented to the webhook (distinct from `HELLODATA_TOKEN`), required |
 
