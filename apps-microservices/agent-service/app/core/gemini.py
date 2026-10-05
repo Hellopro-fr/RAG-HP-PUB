@@ -102,8 +102,13 @@ class ChatGemini(ChatGoogleGenerativeAI):
             requete["system_instruction"] = instructions
 
         # Pas de température : le generation_config d'Interactions n'a pas ce champ (SDK 2.25)
+        config = {}
         if self.max_output_tokens:
-            requete["generation_config"] = {"max_output_tokens": self.max_output_tokens}
+            config["max_output_tokens"] = self.max_output_tokens
+        if self.reasoning_effort:
+            config["thinking_level"] = self.reasoning_effort
+        if config:
+            requete["generation_config"] = config
         return requete
 
     @staticmethod

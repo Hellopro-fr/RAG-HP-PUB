@@ -61,8 +61,20 @@ def test_anthropic_lecture_de_pages_web_fetch():
     assert modele.kwargs["tools"] == [{"type": "web_fetch_20260209", "name": "web_fetch", "max_uses": 5}]
 
 
+def test_openai_lecture_de_pages_contexte_de_recherche_eleve():
+    # Pas d'outil de lecture séparé chez OpenAI : web_search remonte plus de contenu des pages
+    outils = {"recherche_web": {"max": 5}, "lecture_pages": {}}
+    modele = construire_modele(fiche("openai", "gpt-6-luna", outils), TOUT, SETTINGS)
+    assert modele.kwargs["tools"] == [{"type": "web_search", "search_context_size": "high"}]
+
+
+def test_openai_lecture_de_pages_sans_recherche_refusee():
+    with pytest.raises(ErreurConfiguration, match="recherche web"):
+        construire_modele(fiche("openai", "gpt-6-luna", {"lecture_pages": {}}), TOUT, SETTINGS)
+
+
 def test_lecture_de_pages_refusee_sans_la_capacite():
-    # OpenAI : lecture incluse dans web_search ; DeepSeek : aucun outil
+    # Capacité absente de la fiche (modèle sans recherche) ; DeepSeek : aucun outil
     for fournisseur, nom in (("openai", "gpt-6-luna"), ("deepseek", "deepseek-flash")):
         with pytest.raises(ErreurConfiguration, match="lecture de pages native indisponible"):
             construire_modele(fiche(fournisseur, nom, {"lecture_pages": {}}), RECHERCHE_SEULE, SETTINGS)
@@ -110,6 +122,28 @@ def test_temperature_de_la_fiche_transmise():
     for fournisseur, nom in SANS_OUTIL:
         modele = {"fournisseur": fournisseur, "nom": nom, "temperature": 0.3}
         assert construire_modele({"modele": modele, "outils": {}}, AUCUN, SETTINGS).temperature == 0.3
+
+
+AVEC_RAISONNEMENT = {"recherche_web": 1, "mcp": 0, "lecture_pages": 1, "raisonnement": 1}
+
+
+def test_effort_de_raisonnement_transmis_aux_trois_fournisseurs():
+    # reasoning_effort : reasoning.effort (OpenAI), output_config.effort (Anthropic), thinking_level (Gemini)
+    for fournisseur, nom in (("openai", "gpt-6-luna"), ("anthropic", "claude-sonnet-5"), ("gemini", "gemini-3.1-flash-lite")):
+        modele = {"fournisseur": fournisseur, "nom": nom, "raisonnement": "high"}
+        llm = construire_modele({"modele": modele, "outils": {}}, AVEC_RAISONNEMENT, SETTINGS)
+        assert llm.reasoning_effort == "high", fournisseur
+
+
+def test_sans_effort_de_raisonnement_rien_n_est_impose():
+    llm = construire_modele(fiche("openai", "gpt-6-luna"), AVEC_RAISONNEMENT, SETTINGS)
+    assert llm.reasoning_effort is None
+
+
+def test_effort_de_raisonnement_refuse_sans_la_capacite():
+    modele = {"fournisseur": "deepseek", "nom": "deepseek-flash", "raisonnement": "high"}
+    with pytest.raises(ErreurConfiguration, match="effort de raisonnement"):
+        construire_modele({"modele": modele, "outils": {}}, AUCUN, SETTINGS)
 
 
 def test_aucune_relance_des_sdk():

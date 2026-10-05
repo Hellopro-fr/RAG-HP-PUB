@@ -37,15 +37,27 @@ def construire_modele(definition: dict, capacites: dict, settings: Settings,
         raise ErreurConfiguration(f"MCP natif indisponible pour {fournisseur}/{nom}")
     if lecture is not None and not capacites.get("lecture_pages"):
         raise ErreurConfiguration(f"lecture de pages native indisponible pour {fournisseur}/{nom}")
+    raisonnement = modele.get("raisonnement")
+    if raisonnement and not capacites.get("raisonnement"):
+        raise ErreurConfiguration(f"effort de raisonnement non réglable pour {fournisseur}/{nom}")
 
     # max_retries=0 : les relances des SDK (6 chez Gemini) dépasseraient le budget de 300 s du curl PHP.
     # Température null = non envoyée ; None explicite, sinon ChatGoogleGenerativeAI met 0.7 avant Gemini 3.
     params = {"timeout": settings.TIMEOUT_MODELE_S, "max_retries": 0, "temperature": modele.get("temperature")}
+    if raisonnement:
+        # reasoning.effort (OpenAI), output_config.effort (Anthropic), thinking_level (Gemini)
+        params["reasoning_effort"] = raisonnement
     autorises = list((mcp or {}).get("outils_autorises") or [])
 
     if fournisseur == "openai":
+        # Pas d'outil de lecture séparé : web_search ouvre les pages lui-même ; « high » remonte plus de leur contenu
+        if lecture is not None and not recherche:
+            raise ErreurConfiguration("lecture de pages OpenAI : elle passe par la recherche web, à activer aussi")
         llm = ChatOpenAI(model=nom, api_key=settings.OPENAI_API_KEY, use_responses_api=True, **params)
-        liste = [{"type": "web_search"}] if recherche else []
+        liste = []
+        if recherche:
+            liste.append({"type": "web_search", "search_context_size": "high"} if lecture is not None
+                         else {"type": "web_search"})
         if mcp is not None:
             outil = {"type": "mcp", "server_label": NOM_SERVEUR_MCP, "server_url": _url_mcp(settings),
                      "require_approval": "never",
