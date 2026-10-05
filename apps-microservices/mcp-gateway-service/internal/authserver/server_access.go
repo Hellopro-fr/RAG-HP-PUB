@@ -24,6 +24,13 @@ func (s *AuthServer) SetServerAccess(p ServerAccessPolicy) {
 	s.serverAccess = p
 }
 
+// SetGrantChecker wires the server_authorizations lookup used by the
+// consent screens' min_role filter: a grant on a server shows it to that
+// email whatever its min_role. nil (the default) keeps the role-only gate.
+func (s *AuthServer) SetGrantChecker(g gateway.GrantChecker) {
+	s.grants = g
+}
+
 // visibleServers returns the servers the viewer may see, preserving order.
 func visibleServers(servers []db.MCPServer, policy ServerAccessPolicy, email string) []db.MCPServer {
 	if policy == nil {

@@ -41,7 +41,7 @@ func TestConsentFilterSeam(t *testing.T) {
 	}
 
 	buildMap := func(email string) map[string]db.MCPServer {
-		filtered := gateway.FilterServersByGate(servers, email, users)
+		filtered := gateway.FilterServersByGate(servers, email, users, nil)
 		m := make(map[string]db.MCPServer, len(filtered))
 		for _, s := range filtered {
 			m[s.ID] = s

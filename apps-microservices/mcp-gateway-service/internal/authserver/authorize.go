@@ -245,7 +245,7 @@ func (s *AuthServer) renderConsent(w http.ResponseWriter, r *http.Request, clien
 	// Drop servers this viewer's gateway role does not reach. Filtering here,
 	// before serverMap is built, covers both the pre-configured-scope branch
 	// and the show-all branch below.
-	servers = gateway.FilterServersByGate(servers, userEmail, s.userRepo)
+	servers = gateway.FilterServersByGate(servers, userEmail, s.userRepo, s.grants)
 	servers = visibleServers(servers, s.serverAccess, userEmail)
 
 	// Build server lookup for name resolution + identify Zoho-tagged servers
