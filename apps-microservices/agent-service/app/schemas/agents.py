@@ -8,7 +8,7 @@ class DemandeExecution(BaseModel):
     origine: str = Field("inconnue", max_length=100)
     version: Literal["publiee", "brouillon"] = "publiee"
     id_user_bo: Optional[int] = None
-    variables: Dict[str, Annotated[str, StringConstraints(max_length=2000)]] = {}  # valeurs des {{nom}}
+    variables: Dict[str, Annotated[str, StringConstraints(max_length=2000)]] = {}  # valeurs des variables cochées dans la fiche
 
 
 class Usage(BaseModel):
