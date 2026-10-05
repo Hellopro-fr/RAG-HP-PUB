@@ -13,6 +13,19 @@ def test_recherches_openai_anthropic_blocs_server_tool_call():
     assert compter_recherches(message) == 2
 
 
+def test_openai_pages_ouvertes_non_comptees_comme_recherches():
+    # OpenAI ne facture que l'action search (doc web search) ; open_page et find_in_page sont gratuites
+    message = AIMessage(content=[
+        {"type": "server_tool_call", "name": "web_search", "id": "ws_1", "args": {"type": "search", "query": "a"}},
+        {"type": "server_tool_call", "name": "web_search", "id": "ws_2",
+         "args": {"type": "open_page", "url": "https://www.sol-equestre.fr/mentions"}},
+        {"type": "server_tool_call", "name": "web_search", "id": "ws_3",
+         "args": {"type": "find_in_page", "url": "https://www.sol-equestre.fr/mentions", "pattern": "SIRET"}},
+        {"type": "text", "text": "47893401100030"},
+    ])
+    assert compter_recherches(message) == 1
+
+
 def test_appel_mcp_non_compte_comme_recherche():
     message = AIMessage(content=[
         {"type": "server_tool_call", "name": "bdd_query_readonly", "id": "mcp_1", "args": {}},
