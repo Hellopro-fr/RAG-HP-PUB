@@ -89,6 +89,13 @@ def test_recherche_google_passe_par_interactions(api):
     assert api.appels[0]["timeout"]["read"] == 300
 
 
+def test_effort_de_raisonnement_envoye_en_thinking_level(api):
+    llm = ChatGemini(model="gemini-3.1-flash-lite", google_api_key="g-test", timeout=300, max_retries=0,
+                     reasoning_effort="high")
+    llm.bind_tools([{"google_search": {}}]).invoke(MESSAGES)
+    assert api.appels[0]["corps"]["generation_config"] == {"thinking_level": "high"}
+
+
 def test_lecture_de_pages_seule_ou_avec_la_recherche(api):
     gemini({"google_search": {}}, {"url_context": {}}).invoke(MESSAGES)
     gemini({"url_context": {}}).invoke(MESSAGES)
