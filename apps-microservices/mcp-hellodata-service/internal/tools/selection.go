@@ -100,6 +100,18 @@ func (h *Handler) appeler(ctx context.Context, id Identite, rpcID json.RawMessag
 		if err != nil {
 			return erreurMoteur(rpcID, err)
 		}
+		// Le BO fournit un lien signe (download.php, 15 min, CSV regenere) :
+		// le /download du wrapper n'a pas de route publique. Repli sur notre
+		// jeton seulement quand un moteur plus ancien ne le fournit pas.
+		if page.Lien != "" {
+			log.Printf("[hellodata] export lien_bo demandeur=%s lignes=%d", id.Email, page.Lignes)
+			return contenu(rpcID, sortieExportCSV{
+				URL:        page.Lien,
+				Lignes:     page.Lignes,
+				NextCursor: page.NextCursor,
+				HasMore:    page.HasMore,
+			})
+		}
 		jeton, err := h.jetons.Frapper(page.Contenu)
 		if err != nil {
 			log.Printf("[hellodata] export: %v", err)
@@ -109,8 +121,7 @@ func (h *Handler) appeler(ctx context.Context, id Identite, rpcID json.RawMessag
 		// est la seule qui existera sur une extraction de donnees
 		// personnelles.
 		log.Printf("[hellodata] export jeton=%s demandeur=%s lignes=%d", jeton, id.Email, page.Lignes)
-		// L'URL pointe le wrapper, JAMAIS le moteur : aucune URL du BO ne
-		// doit circuler, et le telechargement doit passer par notre auth.
+		// Repli : l'URL pointe le /download du wrapper.
 		return contenu(rpcID, sortieExportCSV{
 			URL:        h.publicURL + "/download/" + jeton,
 			Lignes:     page.Lignes,

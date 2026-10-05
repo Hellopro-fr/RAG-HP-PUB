@@ -38,6 +38,10 @@ type PageCSV struct {
 	Lignes     int
 	NextCursor *int
 	HasMore    bool
+	// Lien est l'URL signee (15 min) de download.php sur le BO, lue dans
+	// l'en-tete X-Hellodata-Lien. Vide quand le moteur ne la fournit pas
+	// encore : le wrapper retombe alors sur son propre /download.
+	Lien string
 }
 
 // ErreurMoteur porte le code stable rendu par le moteur. Le LLM le lit
@@ -81,6 +85,9 @@ type Recuperation struct {
 	FichesParcourues int            `json:"fiches_parcourues"`
 	Epuise           bool           `json:"epuise"`
 	CSV              string         `json:"csv"`
+	// URLCSV est le lien signe (15 min) de download.php sur le BO qui
+	// regenere ce CSV. Vide sur un moteur plus ancien : repli sur /download.
+	URLCSV string `json:"url_csv"`
 }
 
 // LigneBilan est une campagne vue par bilan_campagnes.

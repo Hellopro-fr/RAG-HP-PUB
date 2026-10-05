@@ -90,6 +90,12 @@ func (h *Handler) recupAcheteur(ctx context.Context, id Identite, rpcID json.Raw
 		FichesParcourues: res.FichesParcourues,
 		Epuise:           res.Epuise,
 	}
+	if res.Selectionnes > 0 && res.URLCSV != "" {
+		// Lien signe du BO (download.php, 15 min, CSV regenere depuis edgb2b).
+		log.Printf("[hellodata] recup_acheteur lien_bo campagne=%s demandeur=%s selectionnes=%d", a.Campagne.Code, id.Email, res.Selectionnes)
+		sortie.URLCSV = res.URLCSV
+		return contenu(rpcID, sortie)
+	}
 	if res.Selectionnes > 0 {
 		if res.CSV == "" {
 			log.Printf("[hellodata] recup_acheteur campagne=%s: %d selectionnes mais CSV absent", a.Campagne.Code, res.Selectionnes)
