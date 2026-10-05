@@ -36,6 +36,13 @@
               {{ tag }}
             </span>
           </div>
+          <span
+            v-if="server.min_role"
+            class="text-xs bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400 px-2 py-0.5 rounded-full font-medium shrink-0"
+            :title="'Accès restreint : rôle ' + server.min_role + ' minimum'"
+          >
+            <i class="pi pi-lock mr-1" />{{ minRoleLabel(server.min_role) }}
+          </span>
         </div>
         <div class="flex items-center gap-1.5 shrink-0">
           <span
@@ -167,6 +174,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { Server } from '@/types/server'
+import { minRoleLabel } from '@/types/server'
 
 const props = defineProps<{ server: Server; isAdmin?: boolean }>()
 

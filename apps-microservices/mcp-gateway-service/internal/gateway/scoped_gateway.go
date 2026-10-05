@@ -47,6 +47,21 @@ const ringoverToolPrefix = "ringover"
 // OAuth2 client declares a BDD scope.
 const bddToolPrefix = "bdd"
 
+// hellodataToolPrefix identifies the mcp-hellodata-service backend. The
+// gateway decides access to it (Neo4jAccess: admin OR server_authorizations
+// grant) and posts the end-user's identity so the service re-checks it.
+const hellodataToolPrefix = "hellodata"
+
+// Identity headers. X-End-User-Email already existed as a literal on the
+// Zoho path (injectZohoIdentity); it is named here and the literal is
+// replaced with the constant. X-End-User-Granted is posted to hellodata
+// only, and only as "true".
+const (
+	EndUserEmailHeader   = "X-End-User-Email"
+	EndUserRoleHeader    = "X-End-User-Role"
+	EndUserGrantedHeader = "X-End-User-Granted"
+)
+
 // LeexiAllowedParticipantsHeader mirrors the constant defined in mcp-leexi-service
 // (transport.AllowedParticipantsHeader). Duplicated here to avoid a cross-module
 // import; both sides MUST stay in sync.
@@ -228,6 +243,28 @@ func anyVisible(ids []string, visible map[string]bool) bool {
 }
 
 func (sg *ScopedGateway) handleToolsList(ctx context.Context, req *mcp.Request) *mcp.Response {
+	// Narrow the scope to backends this caller may reach (min_role gate,
+	// then the Neo4j template instance gate) before any of the Zoho
+	// branching below reads sg.allowedIDs.
+	allowedIDs := sg.withoutDeniedNeo4j(ctx, sg.allowedIDsMinusGated(ctx))
+
+	// Backends hellodata : leur catalogue depend de l'appelant, donc il ne
+	// peut pas venir du cache du registre. On les retire de la fusion et
+	// on les interroge en direct.
+	hdBackends := sg.hellodataBackendsInScope(allowedIDs)
+	var hdTools []mcp.Tool
+	if len(hdBackends) > 0 {
+		sansHD := make(map[string]bool, len(allowedIDs))
+		for id, ok := range allowedIDs {
+			sansHD[id] = ok
+		}
+		for _, b := range hdBackends {
+			delete(sansHD, b.ID)
+			hdTools = append(hdTools, sg.fetchHellodataTools(ctx, b)...)
+		}
+		allowedIDs = sansHD
+	}
+
 	// Per-user Zoho tools/list — when an end-user identity is on the context
 	// AND the scope contains a Zoho-tagged backend, fetch the tool catalog
 	// live from mcp-zoho-service with the user's identity headers so the
@@ -237,7 +274,8 @@ func (sg *ScopedGateway) handleToolsList(ctx context.Context, req *mcp.Request) 
 	email, hasEmail := scopetoken.EndUserEmailFromContext(ctx)
 	zohoBackends := sg.zohoBackendsInScope()
 	if !hasEmail || len(zohoBackends) == 0 {
-		tools := sg.registry.MergedToolsFilteredWithTools(sg.withoutDeniedNeo4j(ctx, sg.allowedIDs), sg.allowedTools)
+		tools := sg.registry.MergedToolsFilteredWithTools(allowedIDs, sg.allowedTools)
+		tools = append(tools, hdTools...)
 		return sg.toolsListResp(req.ID, tools, nil)
 	}
 
@@ -251,12 +289,13 @@ func (sg *ScopedGateway) handleToolsList(ctx context.Context, req *mcp.Request) 
 		state := sg.zohoCatalog.StateForEmail(ctx, email, granted)
 		if !state.Configured {
 			log.Printf("[scoped] tools/list email=%s: zoho catalog unconfigured (granted=%t) — omitting %d zoho backend(s) from result", email, granted, len(zohoBackends))
-			tools := sg.registry.MergedToolsFilteredWithTools(sg.withoutDeniedNeo4j(ctx, sg.nonZohoAllowedIDs(zohoBackends)), sg.allowedTools)
+			tools := sg.registry.MergedToolsFilteredWithTools(sg.nonZohoAllowedIDs(allowedIDs, zohoBackends), sg.allowedTools)
+			tools = append(tools, hdTools...)
 			return sg.toolsListResp(req.ID, tools, nil)
 		}
 	}
 
-	tools := sg.registry.MergedToolsFilteredWithTools(sg.withoutDeniedNeo4j(ctx, sg.nonZohoAllowedIDs(zohoBackends)), sg.allowedTools)
+	tools := sg.registry.MergedToolsFilteredWithTools(sg.nonZohoAllowedIDs(allowedIDs, zohoBackends), sg.allowedTools)
 	// Live-fetched Zoho tools are absent from the registry index — record
 	// their owning backend so per-server instruction rows still reach them.
 	zohoIndex := make(map[string]string)
@@ -267,6 +306,7 @@ func (sg *ScopedGateway) handleToolsList(ctx context.Context, req *mcp.Request) 
 		}
 		tools = append(tools, zt...)
 	}
+	tools = append(tools, hdTools...)
 	return sg.toolsListResp(req.ID, tools, zohoIndex)
 }
 
@@ -289,17 +329,59 @@ func (sg *ScopedGateway) toolsListResp(id json.RawMessage, tools []mcp.Tool, ext
 	return okResp(id, mcp.ListToolsResult{Tools: tools})
 }
 
-// nonZohoAllowedIDs returns sg.allowedIDs minus every backend in zohoBackends.
+// nonZohoAllowedIDs returns allowedIDs minus every backend in zohoBackends.
 // Used by handleToolsList to split the merged-from-registry result from the
 // per-user Zoho live-fetch (or the unconfigured-viewer omission).
-func (sg *ScopedGateway) nonZohoAllowedIDs(zohoBackends []*BackendServer) map[string]bool {
+func (sg *ScopedGateway) nonZohoAllowedIDs(allowedIDs map[string]bool, zohoBackends []*BackendServer) map[string]bool {
 	zohoIDs := make(map[string]bool, len(zohoBackends))
 	for _, b := range zohoBackends {
 		zohoIDs[b.ID] = true
 	}
+	out := make(map[string]bool, len(allowedIDs))
+	for id, ok := range allowedIDs {
+		if ok && !zohoIDs[id] {
+			out[id] = true
+		}
+	}
+	return out
+}
+
+// gatedOutIDs returns the subset of sg.allowedIDs whose backend carries a
+// min_role the caller behind ctx does not meet. Modelled on
+// nonZohoAllowedIDs: the scope is narrowed per request rather than at cache
+// build time, because the answer depends on who is asking.
+func (sg *ScopedGateway) gatedOutIDs(ctx context.Context) map[string]bool {
+	out := make(map[string]bool)
+	for _, s := range sg.registry.All() {
+		if !sg.allowedIDs[s.ID] || s.MinRole == "" {
+			continue
+		}
+		if !sg.minRoleAllows(ctx, s) {
+			out[s.ID] = true
+		}
+	}
+	return out
+}
+
+// minRoleAllows applies b's min_role gate to the caller behind ctx: the
+// caller's role reaches min_role, OR the caller holds a server_authorizations
+// grant on b. The grant arm needs an end-user email (isServerAuthorized), so
+// scope tokens and client_credentials stay gated exactly as before.
+func (sg *ScopedGateway) minRoleAllows(ctx context.Context, b *BackendServer) bool {
+	return GateAllows(b.MinRole, ctx, sg.gatewayUsers) || sg.isServerAuthorized(ctx, b.ID)
+}
+
+// allowedIDsMinusGated returns sg.allowedIDs without the gated-out backends.
+// Returns sg.allowedIDs itself when nothing is gated, so the overwhelmingly
+// common all-public case allocates nothing.
+func (sg *ScopedGateway) allowedIDsMinusGated(ctx context.Context) map[string]bool {
+	gated := sg.gatedOutIDs(ctx)
+	if len(gated) == 0 {
+		return sg.allowedIDs
+	}
 	out := make(map[string]bool, len(sg.allowedIDs))
 	for id, ok := range sg.allowedIDs {
-		if ok && !zohoIDs[id] {
+		if ok && !gated[id] {
 			out[id] = true
 		}
 	}
@@ -380,6 +462,67 @@ func (sg *ScopedGateway) fetchZohoTools(ctx context.Context, b *BackendServer) [
 	return out
 }
 
+// hellodataBackendsInScope returns the allowed hellodata backends in the
+// current scope. Order is undefined.
+func (sg *ScopedGateway) hellodataBackendsInScope(allowedIDs map[string]bool) []*BackendServer {
+	var out []*BackendServer
+	for _, s := range sg.registry.All() {
+		if allowedIDs[s.ID] && s.ToolPrefix == hellodataToolPrefix {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// findHellodataFallback returns the in-scope hellodata backend whose
+// prefix the tool name carries, with the unprefixed name to forward.
+// (nil, "") when none matches.
+func (sg *ScopedGateway) findHellodataFallback(name string) (*BackendServer, string) {
+	for _, b := range sg.hellodataBackendsInScope(sg.allowedIDs) {
+		prefix := b.ToolPrefix + "_"
+		if len(name) > len(prefix) && name[:len(prefix)] == prefix {
+			return b, name[len(prefix):]
+		}
+	}
+	return nil, ""
+}
+
+// fetchHellodataTools queries the backend with the caller's identity. The
+// backend returns its six tools to an authorized caller, an empty list
+// otherwise.
+//
+// DELIBERATE DIVERGENCE from fetchZohoTools: on failure, the fallback is the
+// EMPTY LIST, not the cached catalog. Falling back to the cache would make
+// the tools visible to everyone the moment the backend is unreachable,
+// which is exactly what this hiding exists to prevent. Do not "harmonize"
+// with the Zoho path.
+func (sg *ScopedGateway) fetchHellodataTools(ctx context.Context, b *BackendServer) []mcp.Tool {
+	headers := sg.requestHeadersFor(ctx, b)
+	client := transport.NewBackendClientWithEndpoint(b.MessageURL, headers)
+	liveTools, err := client.ListTools(ctx)
+	if err != nil {
+		log.Printf("[scoped] hellodata tools/list live-fetch backend=%s err=%v — liste vide (pas de repli sur le cache)", b.ID, err)
+		return nil
+	}
+	if len(liveTools) == 0 {
+		return nil
+	}
+	// Le catalogue vient du live-fetch, JAMAIS du registre : celui-ci est
+	// alimente par DiscoverAndRegister, qui interroge le backend sans
+	// X-End-User-Email et recoit donc toujours la liste vide. S'appuyer sur
+	// lui rendrait la liste vide pour tout le monde, y compris un admin.
+	out := make([]mcp.Tool, 0, len(liveTools))
+	for _, t := range liveTools {
+		out = append(out, mcp.Tool{
+			Name:        PrefixedToolName(b.ToolPrefix, t.Name),
+			Description: t.Description,
+			InputSchema: t.InputSchema,
+			IsActive:    true,
+		})
+	}
+	return out
+}
+
 func (sg *ScopedGateway) handleToolsCall(ctx context.Context, req *mcp.Request) *mcp.Response {
 	var params mcp.CallToolParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
@@ -387,6 +530,15 @@ func (sg *ScopedGateway) handleToolsCall(ctx context.Context, req *mcp.Request) 
 	}
 
 	backend, originalName := sg.registry.FindByToolFilteredWithTools(params.Name, sg.allowedIDs, sg.allowedTools)
+	if backend == nil {
+		// hellodata fallback: the registry never holds hellodata tools —
+		// discovery queries the service without identity and gets an empty
+		// list (see fetchHellodataTools) — so a "hellodata_" name is routed
+		// to the in-scope hellodata backend. Checked before the Zoho branch,
+		// whose unconfigured-catalog refusal would otherwise answer first.
+		// The min_role and Neo4jAccess checks below still decide access.
+		backend, originalName = sg.findHellodataFallback(params.Name)
+	}
 	if backend == nil {
 		// Zoho fallback: the registry only caches the admin tool catalog;
 		// per-user upstreams expose tools the admin instance doesn't have
@@ -417,6 +569,11 @@ func (sg *ScopedGateway) handleToolsCall(ctx context.Context, req *mcp.Request) 
 		}
 	}
 
+	if !sg.minRoleAllows(ctx, backend) {
+		email, _ := scopetoken.EndUserEmailFromContext(ctx)
+		log.Printf("[scoped] tools/call DENIED name=%s backend=%s min_role=%q email=%q — caller does not meet the server's required role", params.Name, backend.ID, backend.MinRole, email)
+		return errorResp(req.ID, mcp.ErrInvalidParams, fmt.Sprintf("tool %q is not allowed: this server requires the gateway role %q", params.Name, backend.MinRole))
+	}
 	if denied := sg.neo4jDenied(ctx, req.ID, backend, "tools/call"); denied != nil {
 		return denied
 	}
@@ -462,6 +619,12 @@ func (sg *ScopedGateway) requestHeadersFor(ctx context.Context, backend *Backend
 		if backend.HasTag(zohoToolPrefix) || backend.ToolPrefix == zohoToolPrefix {
 			sg.injectZohoIdentity(ctx, headers, backend)
 		}
+		// hellodata authenticates on these headers, it is not filtered by
+		// them: dropping the identity here would make the grant refuse the
+		// very caller it authorizes.
+		if backend.ToolPrefix == hellodataToolPrefix {
+			sg.injectHellodataIdentity(ctx, headers, true)
+		}
 		return headers
 	}
 
@@ -480,9 +643,40 @@ func (sg *ScopedGateway) requestHeadersFor(ctx context.Context, backend *Backend
 			sg.injectRingoverHeader(ctx, headers)
 		case bddToolPrefix:
 			sg.injectBDDHeader(ctx, headers)
+		case hellodataToolPrefix:
+			sg.injectHellodataIdentity(ctx, headers, false)
 		}
 	}
 	return headers
+}
+
+// injectHellodataIdentity posts the end-user's identity for
+// mcp-hellodata-service, which re-checks the gateway's decision: admin role,
+// or granted (a server_authorizations row on this backend, found by Step 0).
+//
+// Fail-closed at emission: when the role cannot be resolved — repository not
+// wired, SQL error, email with no row in gateway_users — NO role header is
+// sent at all. X-End-User-Granted is sent only as "true", never "false":
+// downstream, any default would become an effective right.
+//
+// With no email on the context, nothing is posted at all. That covers scope
+// tokens, client_credentials grants, and health probes; the backend will
+// refuse, and that is the intended behavior.
+func (sg *ScopedGateway) injectHellodataIdentity(ctx context.Context, headers map[string]string, granted bool) {
+	email, ok := scopetoken.EndUserEmailFromContext(ctx)
+	if !ok || email == "" {
+		return
+	}
+	headers[EndUserEmailHeader] = email
+	if granted {
+		headers[EndUserGrantedHeader] = "true"
+	}
+	role, ok := gatewayUserRole(sg.gatewayUsers, email)
+	if !ok {
+		log.Printf("[scoped] hellodata: role non resolu pour %s — aucun en-tete de role envoye", email)
+		return
+	}
+	headers[EndUserRoleHeader] = role
 }
 
 // isServerAuthorized returns true when the request's end-user has an explicit
@@ -583,15 +777,15 @@ func (sg *ScopedGateway) tryAutoSelfLeexi(ctx context.Context) (string, bool) {
 // isGatewayAdmin returns true when the email belongs to a gateway_users row
 // with Role=admin. Returns false when the repo isn't configured, the row is
 // missing, or the role is anything else.
+//
+// Note the asymmetry with the access gate: here false means "not an admin, so
+// fall through to the admin-configured filter" — permissive by design for the
+// Leexi/Ringover auto-self override. GateAllowsEmail treats the same
+// uncertainty as a denial. Both share gatewayUserRole; only the reading of a
+// failed lookup differs.
 func (sg *ScopedGateway) isGatewayAdmin(email string) bool {
-	if sg.gatewayUsers == nil {
-		return false
-	}
-	user, err := sg.gatewayUsers.GetByEmail(email)
-	if err != nil || user == nil {
-		return false
-	}
-	return user.Role == auth.RoleAdmin
+	role, ok := gatewayUserRole(sg.gatewayUsers, email)
+	return ok && role == auth.RoleAdmin
 }
 
 // injectRingoverHeader is the Ringover-side mirror of injectLeexiHeader:
@@ -803,7 +997,7 @@ func (sg *ScopedGateway) injectZohoIdentity(ctx context.Context, headers map[str
 	// filter feature: these are always injected on Zoho backends when an end-user
 	// is on context, so the downstream router can pick the right per-user upstream.
 	if email, ok := scopetoken.EndUserEmailFromContext(ctx); ok {
-		headers["X-End-User-Email"] = email
+		headers[EndUserEmailHeader] = email
 		if at := strings.IndexByte(email, '@'); at > 0 {
 			headers["X-End-User-Login"] = email[:at]
 		}
@@ -844,7 +1038,11 @@ func (sg *ScopedGateway) injectZohoHeader(ctx context.Context, headers map[strin
 }
 
 func (sg *ScopedGateway) handleResourcesList(ctx context.Context, req *mcp.Request) *mcp.Response {
-	resources := sg.registry.MergedResourcesFiltered(sg.withoutDeniedNeo4j(ctx, sg.allowedIDs))
+	// Narrow the scope to backends this caller may reach — mirrors
+	// handleToolsList so a gated backend's resources never appear for a
+	// caller that doesn't meet its min_role (including mcp_… scope tokens
+	// and client_credentials grants, which never carry an end-user email).
+	resources := sg.registry.MergedResourcesFiltered(sg.withoutDeniedNeo4j(ctx, sg.allowedIDsMinusGated(ctx)))
 	if resources == nil {
 		resources = []mcp.Resource{}
 	}
@@ -865,6 +1063,12 @@ func (sg *ScopedGateway) handleResourcesRead(ctx context.Context, req *mcp.Reque
 		return denied
 	}
 
+	if !sg.minRoleAllows(ctx, backend) {
+		email, _ := scopetoken.EndUserEmailFromContext(ctx)
+		log.Printf("[scoped] resources/read DENIED uri=%s backend=%s min_role=%q email=%q — caller does not meet the server's required role", params.URI, backend.ID, backend.MinRole, email)
+		return errorResp(req.ID, mcp.ErrInvalidParams, fmt.Sprintf("resource %q is not allowed: this server requires the gateway role %q", params.URI, backend.MinRole))
+	}
+
 	client := transport.NewBackendClientWithEndpoint(backend.MessageURL, backend.AuthHeaders)
 	result, err := client.ReadResource(ctx, params)
 	if err != nil {
@@ -874,7 +1078,8 @@ func (sg *ScopedGateway) handleResourcesRead(ctx context.Context, req *mcp.Reque
 }
 
 func (sg *ScopedGateway) handlePromptsList(ctx context.Context, req *mcp.Request) *mcp.Response {
-	prompts := sg.registry.MergedPromptsFiltered(sg.withoutDeniedNeo4j(ctx, sg.allowedIDs))
+	// See handleResourcesList: same gate-aware narrowing.
+	prompts := sg.registry.MergedPromptsFiltered(sg.withoutDeniedNeo4j(ctx, sg.allowedIDsMinusGated(ctx)))
 	if prompts == nil {
 		prompts = []mcp.Prompt{}
 	}
@@ -893,6 +1098,12 @@ func (sg *ScopedGateway) handlePromptsGet(ctx context.Context, req *mcp.Request)
 	}
 	if denied := sg.neo4jDenied(ctx, req.ID, backend, "prompts/get"); denied != nil {
 		return denied
+	}
+
+	if !sg.minRoleAllows(ctx, backend) {
+		email, _ := scopetoken.EndUserEmailFromContext(ctx)
+		log.Printf("[scoped] prompts/get DENIED name=%s backend=%s min_role=%q email=%q — caller does not meet the server's required role", params.Name, backend.ID, backend.MinRole, email)
+		return errorResp(req.ID, mcp.ErrInvalidParams, fmt.Sprintf("prompt %q is not allowed: this server requires the gateway role %q", params.Name, backend.MinRole))
 	}
 
 	client := transport.NewBackendClientWithEndpoint(backend.MessageURL, backend.AuthHeaders)

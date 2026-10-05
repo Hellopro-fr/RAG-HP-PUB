@@ -31,6 +31,11 @@ type MCPServer struct {
 	// Icon is a URL or path to the server's icon image.
 	Icon string `gorm:"type:varchar(512);not null;default:''" json:"icon"`
 
+	// MinRole is the minimum gateway_users.role required to see this server
+	// on the OAuth2 consent screen and to reach its tools over MCP. Empty
+	// means public — the value every pre-existing server carries.
+	MinRole string `gorm:"type:varchar(20);not null;default:''" json:"min_role"`
+
 	// TemplateSlug links this server to a template catalog row when the server
 	// was created via one of the templates flows (stdio instance or http_batch
 	// sheet import). Empty string means "regular server". Used to filter

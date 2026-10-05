@@ -502,6 +502,10 @@ func (h *Handler) createInstanceFromSpec(
 
 	// 6) Optional: auto-discover tools against the live instance. No auth
 	// headers — the runner proxies with the decrypted SA JSON internally.
+	// Known gap: template instances have no min_role field, so this path
+	// never pushes SetMinRole — harmless today since the DB value and the
+	// registry both default to "". If min_role ever becomes settable on
+	// template instances, add the push (see CLAUDE.md's min_role invariant).
 	if autoDiscover && h.gw != nil && h.registry != nil {
 		log.Printf("[templates] auto-discover for %s at %s", mcpServerID, instanceURL)
 		if err := h.gw.DiscoverAndRegister(ctx, mcpServerID, instanceURL, nil); err != nil {
@@ -512,7 +516,7 @@ func (h *Handler) createInstanceFromSpec(
 				h.registry.SetToolPrefix(mcpServerID, mcpSrv.ToolPrefix)
 			}
 			if backend := h.registry.FindByID(mcpServerID); backend != nil {
-				h.saveBackendCapabilities(mcpServerID, backend)
+				h.saveBackendCapabilities(ctx, mcpServerID, backend)
 			}
 		}
 	}
@@ -811,7 +815,7 @@ func (h *Handler) rediscoverAfterRotate(ctx context.Context, inst *db.TemplateIn
 		h.registry.SetToolPrefix(inst.MCPServerID, srv.ToolPrefix)
 	}
 	if backend := h.registry.FindByID(inst.MCPServerID); backend != nil {
-		h.saveBackendCapabilities(inst.MCPServerID, backend)
+		h.saveBackendCapabilities(ctx, inst.MCPServerID, backend)
 	}
 }
 

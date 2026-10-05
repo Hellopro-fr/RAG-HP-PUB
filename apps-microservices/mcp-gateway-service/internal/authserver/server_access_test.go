@@ -21,9 +21,11 @@ func (f gateTemplates) GetBySlugAny(slug string) (*db.Template, error) {
 	return nil, errors.New("record not found")
 }
 
-type gateServers struct{ slugs map[string]string }
+type gateServers struct{ slugs, prefixes map[string]string }
 
-func (f gateServers) TemplateSlugByID(id string) (string, error) { return f.slugs[id], nil }
+func (f gateServers) AccessKeysByID(id string) (string, string, error) {
+	return f.slugs[id], f.prefixes[id], nil
+}
 
 type gateUsers struct{ rows map[string]*db.GatewayUser }
 

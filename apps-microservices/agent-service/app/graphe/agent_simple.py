@@ -12,7 +12,9 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, System
 from langgraph.graph import END, START, StateGraph
 
 from app.core.format_sortie import verifier_format
+from app.core.trace import additionner_trace, extraire_trace, trace_vide
 from app.core.usage import additionner_usage, extraire_usage
+from app.core.variables import resoudre_variables
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +25,7 @@ MAX_RELANCES = 0  # relance désactivée pour tous (décision du 01/10/2026) : f
 class EtatAgent(TypedDict, total=False):
     entree: str
     definition: dict
+    variables: dict
     messages: List[BaseMessage]
     sortie: str
     essais: int
@@ -30,6 +33,7 @@ class EtatAgent(TypedDict, total=False):
     erreur: str
     message_format: str
     usage: dict
+    trace: dict
     etapes: List[str]
 
 
@@ -41,9 +45,12 @@ def construire_graphe(fabrique_modele: Callable[[dict], object]):
     """fabrique_modele(definition) renvoie un objet dont .invoke(messages) renvoie un AIMessage."""
 
     def preparer(etat: EtatAgent) -> dict:
-        instructions = (etat["definition"].get("instructions") or "").replace("{entree}", etat["entree"])
+        definition = etat["definition"]
+        instructions, valeurs = resoudre_variables(definition.get("instructions") or "", etat["entree"],
+                                                   definition.get("variables") or {}, etat.get("variables") or {})
         return {"messages": [SystemMessage(instructions), HumanMessage(etat["entree"])], "essais": 0,
-                "usage": {"tokens_entree": 0, "tokens_sortie": 0, "recherches": 0}, "etapes": ["preparer"]}
+                "usage": {"tokens_entree": 0, "tokens_sortie": 0, "recherches": 0},
+                "trace": {**trace_vide(), "variables": valeurs}, "etapes": ["preparer"]}
 
     def appeler_modele(etat: EtatAgent) -> dict:
         etapes = etat["etapes"] + ["appeler_modele"]
@@ -61,7 +68,8 @@ def construire_graphe(fabrique_modele: Callable[[dict], object]):
         texte = reponse.text.strip()
         # On renvoie seulement le texte au tour suivant : les blocs d'outils serveur ne se rejouent pas.
         return {"sortie": texte, "messages": etat["messages"] + [AIMessage(texte)], "essais": etat["essais"] + 1,
-                "usage": additionner_usage(etat["usage"], extraire_usage(reponse)), "etapes": etapes}
+                "usage": additionner_usage(etat["usage"], extraire_usage(reponse)),
+                "trace": additionner_trace(etat["trace"], extraire_trace(reponse)), "etapes": etapes}
 
     def valider(etat: EtatAgent) -> dict:
         ok, message = verifier_format(etat["sortie"], etat["definition"].get("format_sortie") or {})

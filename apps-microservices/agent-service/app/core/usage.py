@@ -1,6 +1,8 @@
 """Consommation d'un appel modèle : tokens et nombre de recherches web natives."""
 from langchain_core.messages import AIMessage
 
+from app.core.trace import ACTIONS_LECTURE_OPENAI
+
 NOMS_RECHERCHE = {"web_search", "google_search"}
 CLES = ("tokens_entree", "tokens_sortie", "recherches")
 
@@ -8,7 +10,8 @@ CLES = ("tokens_entree", "tokens_sortie", "recherches")
 def compter_recherches(message: AIMessage) -> int:
     """Recherches exécutées par le fournisseur pendant l'appel.
 
-    OpenAI et Anthropic : blocs standard `server_tool_call` nommés web_search.
+    OpenAI et Anthropic : blocs standard `server_tool_call` nommés web_search ; chez OpenAI, sans les
+    actions open_page / find_in_page (pages ouvertes, non facturées : seule l'action search l'est).
     Gemini via l'API Interactions : `response_metadata["nb_recherches"]`, chiffre facturé.
     Gemini via generateContent : requêtes distinctes de `web_search_queries`, lues dans les
     annotations des blocs texte et dans `response_metadata["grounding_metadata"]`.
@@ -18,7 +21,8 @@ def compter_recherches(message: AIMessage) -> int:
         return nb_facture
 
     blocs = message.content_blocks
-    nb = sum(1 for b in blocs if b.get("type") == "server_tool_call" and b.get("name") in NOMS_RECHERCHE)
+    nb = sum(1 for b in blocs if b.get("type") == "server_tool_call" and b.get("name") in NOMS_RECHERCHE
+             and (b.get("args") or {}).get("type") not in ACTIONS_LECTURE_OPENAI)
     if nb:
         return nb
     requetes = set()

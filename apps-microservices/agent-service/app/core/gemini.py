@@ -100,31 +100,69 @@ class ChatGemini(ChatGoogleGenerativeAI):
         }
         if instructions:
             requete["system_instruction"] = instructions
+
+        # Pas de température : le generation_config d'Interactions n'a pas ce champ (SDK 2.25)
+        config = {}
         if self.max_output_tokens:
-            requete["generation_config"] = {"max_output_tokens": self.max_output_tokens}
+            config["max_output_tokens"] = self.max_output_tokens
+        if self.reasoning_effort:
+            config["thinking_level"] = self.reasoning_effort
+        if config:
+            requete["generation_config"] = config
         return requete
+
+    @staticmethod
+    def _trace(donnees: dict) -> dict:
+        trace = {"recherches": [], "pages_lues": [], "appels_mcp": [], "sources": [], "tokens_outils": 0}
+        urls_demandees, resultats_mcp = [], {}
+        for etape in donnees.get("steps") or []:
+            if etape.get("type") == "mcp_server_tool_result":
+                resultats_mcp[etape.get("call_id")] = etape
+
+        for etape in donnees.get("steps") or []:
+            type_etape = etape.get("type")
+            arguments = etape.get("arguments") or {}
+            if type_etape == "google_search_call":
+                trace["recherches"].extend({"requete": r} for r in arguments.get("queries") or [])
+            elif type_etape == "url_context_call":
+                urls_demandees.extend(arguments.get("urls") or [])
+            elif type_etape == "url_context_result":
+                for page in etape.get("result") or []:
+                    statut = page.get("status") or ("erreur" if etape.get("is_error") else "ok")
+                    trace["pages_lues"].append({"url": page.get("url"), "statut": "ok" if statut == "success" else statut})
+            elif type_etape == "mcp_server_tool_call":
+                resultat = resultats_mcp.get(etape.get("id")) or {}
+                trace["appels_mcp"].append({
+                    "serveur": etape.get("server_name"),
+                    "outil": etape.get("name"),
+                    "arguments": arguments,
+                    "statut": "erreur" if resultat.get("is_error") else "ok",
+                    "erreur": resultat.get("result") if resultat.get("is_error") else None,
+                })
+            elif type_etape == "model_output":
+                for bloc in etape.get("content") or []:
+                    for note in bloc.get("annotations") or []:
+                        source = {"url": note.get("url"), "titre": note.get("title")}
+                        if note.get("type") == "url_citation" and source not in trace["sources"]:
+                            trace["sources"].append(source)
+
+        # Page demandée sans résultat détaillé : gardée, statut inconnu de Google
+        if not trace["pages_lues"]:
+            trace["pages_lues"] = [{"url": url, "statut": "ok"} for url in urls_demandees]
+        trace["tokens_outils"] = int((donnees.get("usage") or {}).get("total_tool_use_tokens") or 0)
+        return trace
 
     def _message(self, interaction: Any) -> AIMessage:
         donnees = interaction.model_dump(mode="json", exclude_none=True)
         if donnees.get("status") != "completed":
             raise ErreurGeminiInteractions(f"interaction en statut {donnees.get('status')}")
 
-        requetes, urls, sources = [], [], []
-        for etape in donnees.get("steps") or []:
-            arguments = etape.get("arguments") or {}
-            if etape.get("type") == "google_search_call":
-                requetes.extend(arguments.get("queries") or [])
-            if etape.get("type") == "url_context_call":
-                urls.extend(arguments.get("urls") or [])
-            if etape.get("type") == "model_output":
-                for bloc in etape.get("content") or []:
-                    for note in bloc.get("annotations") or []:
-                        source = {"url": note.get("url"), "title": note.get("title")}
-                        if note.get("type") == "url_citation" and source not in sources:
-                            sources.append(source)
-
+        trace = self._trace(donnees)
         usage = donnees.get("usage") or {}
-        tokens_entree = int(usage.get("total_input_tokens") or 0)
+        # Contenu des pages lues (url_context) facturé en tokens d'entrée (doc URL context) ; le contenu
+        # trouvé par la recherche Google ne l'est pas (page tarifs). À vérifier au 1er appel réel avec lecture :
+        # total_tokens doit alors valoir entrée + sortie + tool_use (usage_fournisseur, dans le log).
+        tokens_entree = int(usage.get("total_input_tokens") or 0) + trace["tokens_outils"]
         # Réflexion facturée au tarif sortie (valait 0 sur les tests du 01/10/2026)
         tokens_sortie = int(usage.get("total_output_tokens") or 0) + int(usage.get("total_thought_tokens") or 0)
         # Chiffre facturé : search_query_count, que le SDK 2.25 ne garde pas ; count lui était égal
@@ -141,7 +179,7 @@ class ChatGemini(ChatGoogleGenerativeAI):
             response_metadata={"model_name": donnees.get("model", self.model), "model_provider": "google_genai",
                                "api": "interactions", "interaction_id": donnees.get("id"),
                                "status": donnees.get("status"), "nb_recherches": nb_recherches,
-                               "requetes_recherche": requetes, "urls_lues": urls, "sources": sources},
+                               "trace": trace, "usage_fournisseur": usage},
         )
 
     @staticmethod

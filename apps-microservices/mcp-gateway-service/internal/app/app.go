@@ -443,6 +443,7 @@ func registerRESTAndOAuthServer(
 		ConsentRepo:    consentRepo,
 		RefreshRepo:    refreshRepo,
 		ServerRepo:     dbs.repo,
+		UserRepo:       dbs.userRepo,
 		SSOSessionRepo: ssoSessionRepo,
 		ZohoFetcher:    gw,
 		DocsURL:        strings.TrimRight(cfg.GatewayPublicURL, "/") + "/docs/zohocrm",
@@ -453,6 +454,7 @@ func registerRESTAndOAuthServer(
 		RefreshTTL:     cfg.OAuth2RefreshTokenTTL,
 	})
 	authSrv.SetServerAccess(neo4jAccess)
+	authSrv.SetGrantChecker(serverAuthRepo)
 	authSrv.Register(mux)
 	authSrv.RegisterAPI(mux)
 	log.Println("[main] OAuth2 Authorization Server mounted at /authorize, /token, /register, /.well-known/")
@@ -551,6 +553,14 @@ func loadServersFromDB(gw *gateway.Gateway, reg *gateway.Registry, repo *reposit
 				checker.ApplyHealthResult(&s, err)
 				registerFromDBCache(gw, &s)
 			} else {
+				// The registry is empty at boot, so gateway.go's prev-
+				// preservation clause has nothing to preserve from — push
+				// min_role unconditionally (unlike ToolPrefix/Tags below,
+				// no guard: pushing "" onto a freshly-registered backend is
+				// a no-op, but skipping the push for a gated server is
+				// exactly the bug this closes) or every gated server comes
+				// up public on every restart until manually touched.
+				reg.SetMinRole(s.ID, s.MinRole)
 				if s.ToolPrefix != "" {
 					reg.SetToolPrefix(s.ID, s.ToolPrefix)
 				}
@@ -590,6 +600,7 @@ func registerFromDBCache(gw *gateway.Gateway, srv *db.MCPServer) {
 		TemplateSlug:  srv.TemplateSlug,
 		CreatedBy:     srv.CreatedBy,
 		Tags:          tags,
+		MinRole:       srv.MinRole,
 	}
 	for _, t := range srv.Tools {
 		backend.Tools = append(backend.Tools, mcp.Tool{
