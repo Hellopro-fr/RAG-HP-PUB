@@ -356,11 +356,19 @@ func (sg *ScopedGateway) gatedOutIDs(ctx context.Context) map[string]bool {
 		if !sg.allowedIDs[s.ID] || s.MinRole == "" {
 			continue
 		}
-		if !GateAllows(s.MinRole, ctx, sg.gatewayUsers) {
+		if !sg.minRoleAllows(ctx, s) {
 			out[s.ID] = true
 		}
 	}
 	return out
+}
+
+// minRoleAllows applies b's min_role gate to the caller behind ctx: the
+// caller's role reaches min_role, OR the caller holds a server_authorizations
+// grant on b. The grant arm needs an end-user email (isServerAuthorized), so
+// scope tokens and client_credentials stay gated exactly as before.
+func (sg *ScopedGateway) minRoleAllows(ctx context.Context, b *BackendServer) bool {
+	return GateAllows(b.MinRole, ctx, sg.gatewayUsers) || sg.isServerAuthorized(ctx, b.ID)
 }
 
 // allowedIDsMinusGated returns sg.allowedIDs without the gated-out backends.
@@ -561,7 +569,7 @@ func (sg *ScopedGateway) handleToolsCall(ctx context.Context, req *mcp.Request) 
 		}
 	}
 
-	if !GateAllows(backend.MinRole, ctx, sg.gatewayUsers) {
+	if !sg.minRoleAllows(ctx, backend) {
 		email, _ := scopetoken.EndUserEmailFromContext(ctx)
 		log.Printf("[scoped] tools/call DENIED name=%s backend=%s min_role=%q email=%q — caller does not meet the server's required role", params.Name, backend.ID, backend.MinRole, email)
 		return errorResp(req.ID, mcp.ErrInvalidParams, fmt.Sprintf("tool %q is not allowed: this server requires the gateway role %q", params.Name, backend.MinRole))
@@ -1055,7 +1063,7 @@ func (sg *ScopedGateway) handleResourcesRead(ctx context.Context, req *mcp.Reque
 		return denied
 	}
 
-	if !GateAllows(backend.MinRole, ctx, sg.gatewayUsers) {
+	if !sg.minRoleAllows(ctx, backend) {
 		email, _ := scopetoken.EndUserEmailFromContext(ctx)
 		log.Printf("[scoped] resources/read DENIED uri=%s backend=%s min_role=%q email=%q — caller does not meet the server's required role", params.URI, backend.ID, backend.MinRole, email)
 		return errorResp(req.ID, mcp.ErrInvalidParams, fmt.Sprintf("resource %q is not allowed: this server requires the gateway role %q", params.URI, backend.MinRole))
@@ -1092,7 +1100,7 @@ func (sg *ScopedGateway) handlePromptsGet(ctx context.Context, req *mcp.Request)
 		return denied
 	}
 
-	if !GateAllows(backend.MinRole, ctx, sg.gatewayUsers) {
+	if !sg.minRoleAllows(ctx, backend) {
 		email, _ := scopetoken.EndUserEmailFromContext(ctx)
 		log.Printf("[scoped] prompts/get DENIED name=%s backend=%s min_role=%q email=%q — caller does not meet the server's required role", params.Name, backend.ID, backend.MinRole, email)
 		return errorResp(req.ID, mcp.ErrInvalidParams, fmt.Sprintf("prompt %q is not allowed: this server requires the gateway role %q", params.Name, backend.MinRole))

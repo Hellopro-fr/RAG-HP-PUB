@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"mcp-gateway/internal/db"
+	"mcp-gateway/internal/gateway"
 	"mcp-gateway/internal/repository"
 )
 
@@ -53,6 +54,9 @@ type AuthServer struct {
 	// template instances without admin role or grant) from both consent
 	// screens and drops them from consent submissions. nil shows everything.
 	serverAccess ServerAccessPolicy
+	// grants (optional) lets a server_authorizations row satisfy a
+	// server's min_role on the consent screens. See SetGrantChecker.
+	grants gateway.GrantChecker
 	// docsURL is the absolute URL surfaced in the "Non configurés"
 	// section so viewers know where to learn how to wire their Zoho
 	// import. Computed from GATEWAY_PUBLIC_URL + "/docs/zohocrm" at

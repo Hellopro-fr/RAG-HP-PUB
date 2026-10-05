@@ -162,27 +162,27 @@ func TestFilterServersByGate(t *testing.T) {
 		return out
 	}
 
-	got := ids(FilterServersByGate(servers, "admin@hellopro.fr", users))
+	got := ids(FilterServersByGate(servers, "admin@hellopro.fr", users, nil))
 	if len(got) != 3 {
 		t.Fatalf("admin sees %v, want all three", got)
 	}
 
-	got = ids(FilterServersByGate(servers, "ro@hellopro.fr", users))
+	got = ids(FilterServersByGate(servers, "ro@hellopro.fr", users, nil))
 	if len(got) != 2 || got[0] != "pub-1" || got[1] != "pub-2" {
 		t.Fatalf("read-only sees %v, want [pub-1 pub-2]", got)
 	}
 
-	got = ids(FilterServersByGate(servers, "", users))
+	got = ids(FilterServersByGate(servers, "", users, nil))
 	if len(got) != 2 {
 		t.Fatalf("anonymous sees %v, want the two public servers", got)
 	}
 
-	if out := FilterServersByGate(nil, "admin@hellopro.fr", users); len(out) != 0 {
+	if out := FilterServersByGate(nil, "admin@hellopro.fr", users, nil); len(out) != 0 {
 		t.Fatalf("nil input produced %v", out)
 	}
 
 	allGated := []db.MCPServer{{ID: "g1", MinRole: auth.RoleAdmin}}
-	if out := FilterServersByGate(allGated, "ro@hellopro.fr", users); len(out) != 0 {
+	if out := FilterServersByGate(allGated, "ro@hellopro.fr", users, nil); len(out) != 0 {
 		t.Fatalf("all-gated input produced %v for a read-only viewer", out)
 	}
 }

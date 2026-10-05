@@ -454,6 +454,7 @@ func registerRESTAndOAuthServer(
 		RefreshTTL:     cfg.OAuth2RefreshTokenTTL,
 	})
 	authSrv.SetServerAccess(neo4jAccess)
+	authSrv.SetGrantChecker(serverAuthRepo)
 	authSrv.Register(mux)
 	authSrv.RegisterAPI(mux)
 	log.Println("[main] OAuth2 Authorization Server mounted at /authorize, /token, /register, /.well-known/")

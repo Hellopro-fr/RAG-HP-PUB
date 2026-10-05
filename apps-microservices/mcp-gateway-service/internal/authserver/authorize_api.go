@@ -433,7 +433,7 @@ func (s *AuthServer) buildServerList(ctx context.Context, client *db.OAuth2Clien
 	servers, _ := s.serverRepo.ListActive()
 	// Same gate as renderConsent — see the note there on why this one seam
 	// covers both branches.
-	servers = gateway.FilterServersByGate(servers, userEmail, s.userRepo)
+	servers = gateway.FilterServersByGate(servers, userEmail, s.userRepo, s.grants)
 	servers = visibleServers(servers, s.serverAccess, userEmail)
 	serverMap := make(map[string]db.MCPServer, len(servers))
 	zohoIDs := make(map[string]bool, len(servers))

@@ -73,14 +73,34 @@ func GateAllows(minRole string, ctx context.Context, users gatewayUserFinder) bo
 	return GateAllowsEmail(minRole, email, users)
 }
 
+// GrantChecker is the slice of *repository.ServerAuthorizationRepo the gate
+// consults. A server_authorizations row is an admin's explicit decision to
+// open one server to one email, so it satisfies that server's min_role:
+// access is "role >= min_role OR grant on this server".
+type GrantChecker interface {
+	IsAuthorized(serverID, email string) bool
+}
+
+// GateOrGrantAllowsEmail is GateAllowsEmail widened by a grant on serverID.
+// A nil grants, an empty email or an empty serverID never match a grant, so
+// email-less paths (scope tokens, client_credentials) stay gated.
+func GateOrGrantAllowsEmail(minRole, serverID, email string, users gatewayUserFinder, grants GrantChecker) bool {
+	if GateAllowsEmail(minRole, email, users) {
+		return true
+	}
+	return grants != nil && email != "" && serverID != "" && grants.IsAuthorized(serverID, email)
+}
+
 // FilterServersByGate returns the subset of servers that email may see.
 // Pure: no receiver, no I/O beyond the injected finder, so the consent-screen
 // call sites stay unit-testable without any AuthServer plumbing — the same
 // discipline as applyZohoUserState.
-func FilterServersByGate(servers []db.MCPServer, email string, users gatewayUserFinder) []db.MCPServer {
+// A grant on a server lets it through whatever its min_role (see
+// GateOrGrantAllowsEmail); grants may be nil.
+func FilterServersByGate(servers []db.MCPServer, email string, users gatewayUserFinder, grants GrantChecker) []db.MCPServer {
 	out := make([]db.MCPServer, 0, len(servers))
 	for _, s := range servers {
-		if GateAllowsEmail(s.MinRole, email, users) {
+		if GateOrGrantAllowsEmail(s.MinRole, s.ID, email, users, grants) {
 			out = append(out, s)
 		}
 	}
