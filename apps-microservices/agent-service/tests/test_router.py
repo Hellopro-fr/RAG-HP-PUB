@@ -70,7 +70,8 @@ def test_get_fiche_publiee_et_404():
 
 def test_variables_transmises_et_trace_renvoyee():
     api = FauxApiV2()
-    api.fiche["definition"] = {**api.fiche["definition"], "instructions": "Pays {{pays}}", "variables": {"pays": {}}}
+    api.fiche["definition"] = {**api.fiche["definition"], "instructions": "Pays {pays}",
+                             "variables": {"pays": {"motif": "{pays}"}}}
     r = client_avec(api, reponse("12345678900012")).post(
         "/agents/get-siren/run", json={"input": "exemple.fr", "variables": {"pays": "FR"}})
     assert r.status_code == 200

@@ -46,7 +46,6 @@ def construire_graphe(fabrique_modele: Callable[[dict], object]):
 
     def preparer(etat: EtatAgent) -> dict:
         definition = etat["definition"]
-        # VariableManquante remonte jusqu'à executer_agent : exécution journalisée en erreur, sans appel modèle
         instructions, valeurs = resoudre_variables(definition.get("instructions") or "", etat["entree"],
                                                    definition.get("variables") or {}, etat.get("variables") or {})
         return {"messages": [SystemMessage(instructions), HumanMessage(etat["entree"])], "essais": 0,
