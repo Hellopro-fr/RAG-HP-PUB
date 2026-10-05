@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -82,7 +83,7 @@ func (c *Client) Echantillon(ctx context.Context, d Demande) (Echantillon, error
 func (c *Client) RecupAcheteur(ctx context.Context, d DemandeRecup) (Recuperation, error) {
 	var out Recuperation
 	err := c.poster(ctx, "recup_acheteur", d, BudgetRecup, &out)
-	out.URLCSV = lienValide(out.URLCSV)
+	out.URLCSV = c.lienValide(out.URLCSV)
 	return out, err
 }
 
@@ -144,18 +145,34 @@ func (c *Client) ExporterCSV(ctx context.Context, d Demande) (PageCSV, error) {
 	if err != nil {
 		return PageCSV{}, err
 	}
-	page.Lien = lienValide(resp.Header.Get("X-Hellodata-Lien"))
+	page.Lien = c.lienValide(resp.Header.Get("X-Hellodata-Lien"))
 	return page, nil
 }
 
-// lienValide garde un lien de telechargement du moteur seulement s'il est
-// une URL http(s) absolue ; tout autre contenu est ignore (repli /download).
-func lienValide(lien string) string {
+// lienValide garde un lien de telechargement du moteur seulement s'il pointe
+// le MEME schema et le MEME hote que HELLODATA_BASE_URL (https exige, sauf si
+// la base elle-meme est en http). Tout autre lien est ignore : l'outil
+// retombe sur /download plutot que de rendre au LLM une URL etrangere.
+func (c *Client) lienValide(lien string) string {
 	lien = strings.TrimSpace(lien)
-	if strings.HasPrefix(lien, "https://") || strings.HasPrefix(lien, "http://") {
-		return lien
+	if lien == "" {
+		return ""
 	}
-	return ""
+	base, err := url.Parse(c.baseURL)
+	if err != nil {
+		return ""
+	}
+	u, err := url.Parse(lien)
+	if err != nil || u.User != nil || u.Host == "" {
+		return ""
+	}
+	if !strings.EqualFold(u.Scheme, base.Scheme) || !strings.EqualFold(u.Host, base.Host) {
+		return ""
+	}
+	if u.Scheme != "https" && u.Scheme != "http" {
+		return ""
+	}
+	return lien
 }
 
 // analyserPageCSV separe le contenu CSV de la ligne sentinelle finale
