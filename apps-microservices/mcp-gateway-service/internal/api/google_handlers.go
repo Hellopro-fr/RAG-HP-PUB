@@ -867,7 +867,7 @@ func (h *Handler) importSheetRow(r *http.Request, rowNum int, row []string, colI
 			_ = h.repo.UpdateHealth(id, "unhealthy", err.Error())
 		} else {
 			if backend := h.registry.FindByID(id); backend != nil {
-				h.saveBackendCapabilities(id, backend)
+				h.saveBackendCapabilities(r.Context(), id, backend)
 			}
 		}
 	}

@@ -684,7 +684,7 @@ func (h *Handler) handleDiscoverAll(w http.ResponseWriter, r *http.Request) {
 			// for the min_role gate work; flagged so the next reader doesn't
 			// rediscover it or assume it was an oversight in this change.
 			if backend := h.registry.FindByID(srv.ID); backend != nil {
-				h.saveBackendCapabilities(srv.ID, backend)
+				h.saveBackendCapabilities(r.Context(), srv.ID, backend)
 			}
 			result["status"] = "discovered"
 		}
