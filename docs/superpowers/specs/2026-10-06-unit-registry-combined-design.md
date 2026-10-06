@@ -1,7 +1,7 @@
 # Unit Registry — combined design (June dynamic-units spec + October CRUD/MCP request)
 
 - **Date:** 2026-10-06
-- **Status:** APPROVED 2026-10-06 (all of §0 C1–C8 accepted). Next: implementation plan.
+- **Status:** APPROVED 2026-10-06 (all of §0 C1–C8 accepted). Revised and re-approved 2026-10-06: **unit types** added (C9, §4.4, §6.1, §7.1). Next: implementation plan.
 - **Merges:**
   - **[J]** `2026-06-01-dynamic-unit-normalization-design.md`: backend, never implemented (status "DESIGN — not code"; its branch `features/normalization-dynamic` no longer exists on origin).
   - **[UI]** `2026-06-01-units-admin-frontend-design.md`: admin UI, on `features/poc`, depends on [J]'s API.
@@ -25,6 +25,7 @@ These are the places where [J] and [O] disagree. Each row gives a recommendation
 | C6 | Phase-1 layer scope | All 5 layers (A, B, C, D, E1–E3) | Units only | **Layers A + B + D (read-only) in P1**; C, E1, E2, E3 in P2 with the admin UI | The October request is unit CRUD; C/E3 CRUD only matters once the admin UI exists. Full [J] schema created in P1 so P2 needs no migration |
 | C7 | Regression sample on create | Mandatory (G4) | Not planned | **Mandatory**, including from MCP | It is the permanent test that stops a wrong conversion factor from going live. The MCP tool takes a `sample` object |
 | C8 | Per-unit optimistic `version` | none ([J] uses `FieldMask` partial update) | `version` column | **Drop it**; keep `FieldMask` + global `registry_version` | YAGNI: low write volume, single operator surface |
+| C9 | Unit types (added 2026-10-06) | — | User: "add the type of unit, e.g. DIMENSION, CAPACITY; other types not registered yet" | **Open vocabulary `unit_types`**, linked **many-to-many to physical dimensions**; a unit inherits the types of its dimension. Explicit CRUD (gRPC + MCP); unknown codes are rejected, never auto-created. **Metadata only in P1** | Decided with the user: attach to the dimension, several types per dimension, explicit registration (so `CAPACITE` vs `CAPACITY` typos can't fork the vocabulary), no effect on normalization |
 
 ---
 
@@ -85,7 +86,7 @@ After this work:
 | `libs/unit-registry/` (NEW Python lib) | Domain types ([J] A.1), `build_registry_bundle(units, dimensions)` ([J] §3.3), `validate_unit()` G1–G6 ([J] §5, collect-all per [J] B.2), seed extractor ([J] §9) | Shared by the CRUD service (trial build) and the normalizer (real build), so the two can never disagree |
 | `apps-microservices/unit-registry-service/` (NEW) | gRPC `UnitRegistryService` (§6), SQLAlchemy 2 + PyMySQL ([J] D8), outbox relay, auth interceptor ([J] B.3), `/health` + `/metrics` on a side HTTP port | New |
 | `graph-rag-normalize-unite-service` | Reads layers A/B/D from a `RegistryBundle` instead of the hard-coded dicts; event consumer; frozen dicts kept as **fallback floor** ([J] D11) | Modified; no DB access, no write RPCs |
-| `mcp-normalize-unite-service` | 4 new tools (§7) calling `UnitRegistryService` over gRPC | Modified |
+| `mcp-normalize-unite-service` | 4 unit tools (§7) + 5 unit-type tools (§7.1) calling `UnitRegistryService` over gRPC | Modified |
 | `protos/grpc_stubs/unit_registry.proto` (NEW) | [J] A.3's CRUD contract, moved off `GraphNormalizationService` | `graph_normalization.proto` stays **untouched** |
 
 ### 3.2 Concurrency rule [J] §3.4, kept
@@ -124,6 +125,43 @@ Conventions from [J] §4: `CHAR(36)` UUID PKs, `JSON` lists, `ENUM` closed sets,
 - `unit-registry-service/init-db/01_schema.sql` creates the database, the `normalization_user` user and all tables. It is mounted into `mysql` for fresh volumes.
 - For the **existing** volume, the service CLAUDE.md documents a one-time `mysql -uroot … < init-db/01_schema.sql`.
 - On boot, the service runs `Base.metadata.create_all()` and `bootstrap_units()` when `units` is empty ([J]'s "skip if exists").
+
+### 4.4 Unit types (C9) — created, written and read in P1
+
+A **type** is a business category of measurement (`DIMENSION`, `CAPACITY`, …). The vocabulary is **open**: new types are registered at runtime through CRUD, never hard-coded. A type is attached to **physical dimensions**, many-to-many. A unit has no type column; its types are **inherited from its dimension**. For example, if `length` is linked to `DIMENSION`, then `mm`, `cm` and `pouce` are all `DIMENSION`.
+
+```sql
+CREATE TABLE IF NOT EXISTS unit_types (
+  id          CHAR(36)     PRIMARY KEY,
+  code        VARCHAR(64)  NOT NULL,          -- stable key, ^[A-Z][A-Z0-9_]{1,63}$, immutable after create
+  label       VARCHAR(128) NOT NULL,          -- display label, e.g. 'Capacité'
+  description VARCHAR(512) NULL,
+  is_active   TINYINT(1)   NOT NULL DEFAULT 1,
+  created_by  VARCHAR(255) NOT NULL,
+  created_at  DATETIME     NOT NULL,
+  updated_at  DATETIME     NOT NULL,
+  UNIQUE KEY uniq_unit_type_code (code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS dimension_unit_types (
+  dimension_id CHAR(36)     NOT NULL,
+  unit_type_id CHAR(36)     NOT NULL,
+  created_by   VARCHAR(255) NOT NULL,
+  created_at   DATETIME     NOT NULL,
+  PRIMARY KEY (dimension_id, unit_type_id),
+  CONSTRAINT fk_dut_dimension FOREIGN KEY (dimension_id) REFERENCES unit_dimensions (id) ON DELETE RESTRICT,
+  CONSTRAINT fk_dut_type      FOREIGN KEY (unit_type_id) REFERENCES unit_types (id)      ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+```
+
+Rules:
+
+- **T1 — explicit registration.** Linking a code that does not exist, or is inactive, is rejected (`NotFound` / `FailedPrecondition`); nothing is auto-created. A near-duplicate code (same code once `_` and accents are stripped, e.g. `CAPACITE` vs `CAPACITÉ`) is rejected on create (`AlreadyExists`, the message names the existing code).
+- **T2 — `code` is immutable.** Update changes `label` and `description` only.
+- **T3 — deactivate is soft.** `is_active=0` keeps the links, but inactive types are omitted from every read that returns types (`GetUnit`, `ListUnits`, `GetUnitType` on a dimension). Reactivating restores them. Hard delete is out of scope.
+- **T4 — links are set per dimension, as a whole.** `SetDimensionTypes(dimension, codes[])` replaces that dimension's set (empty list clears it). That is idempotent and avoids add/remove pairs.
+- **T5 — metadata only.** Types never enter the `RegistryBundle`, do **not** bump `registry_version`, write **no** outbox row, and emit **no** event. The 5 normalizer replicas are unaware of them.
+- **Seed:** the types `DIMENSION` (label `Dimension`) and `CAPACITY` (label `Capacité`) are created at bootstrap **with no links**. Which dimensions they cover is an operator decision, made with `set_dimension_types`.
 
 ---
 
@@ -165,11 +203,38 @@ Conventions from [J] §4: `CHAR(36)` UUID PKs, `JSON` lists, `ENUM` closed sets,
 
 1. `GetUnitRequest` gains `string token = 2;` (get by id **or** token; the MCP resolves names this way).
 2. `ListUnitsResponse` gains `int64 registry_version = 3;` (for resync, §5).
-3. P1 serves only `RegisterUnit`, `GetUnit`, `ListUnits`, `UpdateUnit`, `DeleteUnit`, `GetRegistryStatus`, `ValidateUnit`. The other RPCs from [J] §6 and B.1 (dimensions, label rules, disambiguation, proposals) are added to the proto in P2/P3, when they are implemented. No stubs for RPCs that do nothing.
+   `UnitResponse` gains `repeated string types = 9;`: the active type codes inherited from the unit's dimension (read-only, §4.4). `ListUnitsRequest` gains `string type = 5;` (filter by type code).
+3. P1 serves only `RegisterUnit`, `GetUnit`, `ListUnits`, `UpdateUnit`, `DeleteUnit`, `GetRegistryStatus`, `ValidateUnit`, plus the unit-type RPCs in §6.1. The other RPCs from [J] §6 and B.1 (dimensions, label rules, disambiguation, proposals) are added to the proto in P2/P3, when they are implemented. No stubs for RPCs that do nothing.
 
 **Status codes [J] §6.2:** G1–G5 failure / missing field / P2-only field → `InvalidArgument` (failing guard named). G6 → `AlreadyExists`. Unknown id/token → `NotFound`. DB down → `Unavailable`.
 
 **Auth [J] D10 + B.3:** a server interceptor requires `authorization: Bearer <UNITS_ADMIN_KEY>` on `RegisterUnit`, `UpdateUnit`, `DeleteUnit`. Reads and `ValidateUnit` are open. Listener on `services-net` via `expose`, never `ports`. The `authorization` header is redacted in logs.
+
+### 6.1 Unit-type RPCs (C9) [O]
+
+```proto
+rpc CreateUnitType(CreateUnitTypeRequest)         returns (UnitTypeResponse);       // WRITE
+rpc UpdateUnitType(UpdateUnitTypeRequest)         returns (UnitTypeResponse);       // WRITE: label/description (FieldMask)
+rpc DeactivateUnitType(DeactivateUnitTypeRequest) returns (UnitTypeResponse);       // WRITE: is_active=0 (idempotent)
+rpc GetUnitType(GetUnitTypeRequest)               returns (UnitTypeResponse);       // READ: by id or code
+rpc ListUnitTypes(ListUnitTypesRequest)           returns (ListUnitTypesResponse);  // READ: include_inactive flag
+rpc SetDimensionTypes(SetDimensionTypesRequest)   returns (DimensionTypesResponse); // WRITE: replace a dimension's type set (T4)
+
+message UnitTypeSpec        { string code = 1; string label = 2; string description = 3; }
+message UnitTypeResponse    { string id = 1; UnitTypeSpec spec = 2; bool is_active = 3;
+                              repeated string dimensions = 4;   // dimension names linked to this type
+                              string created_by = 5; string created_at = 6; string updated_at = 7; }
+message CreateUnitTypeRequest     { UnitTypeSpec spec = 1; string created_by = 2; }
+message UpdateUnitTypeRequest     { string id = 1; UnitTypeSpec spec = 2; google.protobuf.FieldMask update_mask = 3; string updated_by = 4; }
+message DeactivateUnitTypeRequest { string id = 1; string updated_by = 2; }
+message GetUnitTypeRequest        { string id = 1; string code = 2; }
+message ListUnitTypesRequest      { bool include_inactive = 1; }
+message ListUnitTypesResponse     { repeated UnitTypeResponse types = 1; }
+message SetDimensionTypesRequest  { string dimension = 1; repeated string type_codes = 2; string updated_by = 3; }
+message DimensionTypesResponse    { string dimension = 1; repeated string type_codes = 2; }
+```
+
+Status codes: bad `code` format, `code` in the update mask, or an unknown dimension → `InvalidArgument`. Duplicate or near-duplicate code → `AlreadyExists`. Unknown id/code (including in `type_codes`) → `NotFound`. Inactive code in `type_codes` → `FailedPrecondition`. The auth interceptor's write set gains `CreateUnitType`, `UpdateUnitType`, `DeactivateUnitType` and `SetDimensionTypes`.
 
 **Write pipeline [J] §6.3 + [O]:** `validate_unit()` (G1–G6 collect-all) → if not ok, abort with the first failing guard's code → build + validate the full new registry → `BEGIN { write units row; registry_version += 1; insert unit_events row } COMMIT` → return `UnitResponse{registry_version}`. The relay publishes asynchronously.
 
@@ -189,6 +254,19 @@ A new gRPC client to `unit-registry-service` (`UNIT_REGISTRY_GRPC_ADDR`, `UNITS_
 - `aliases: []` given explicitly clears the aliases; omitted leaves them unchanged (the `FieldMask` distinction from [J] §6).
 - On `InvalidArgument`/`AlreadyExists`/`NotFound`, the tool returns `isError: true` with the server message, which names the failing guard, so the agent can fix its input. Other errors return `isError: true` and are logged.
 - Tool descriptions state that writes go live on all replicas within about a second, and that a sample is required because it becomes a permanent regression test.
+- `get_unit` output includes `types` (inherited from the dimension, §4.4).
+
+### 7.1 Unit-type tools (C9)
+
+| tool | input | RPC |
+|---|---|---|
+| `create_unit_type` | `code` (req), `label` (req), optional `description` | `CreateUnitType` |
+| `update_unit_type` | `id` **or** `code` (req) + any of `label`, `description` | `GetUnitType` (if code) → `UpdateUnitType` (FieldMask of the fields given) |
+| `deactivate_unit_type` | `id` **or** `code` | `GetUnitType` (if code) → `DeactivateUnitType` |
+| `get_unit_type` | `id` **or** `code`; omit both to list all active types | `GetUnitType` / `ListUnitTypes` |
+| `set_dimension_types` | `dimension` (req), `type_codes[]` (req, `[]` clears) | `SetDimensionTypes` |
+
+`create_unit_type`'s description tells the agent to call `get_unit_type` without arguments first, to reuse an existing type instead of creating a near-duplicate.
 
 ---
 
@@ -209,8 +287,9 @@ A new gRPC client to `unit-registry-service` (`UNIT_REGISTRY_GRPC_ADDR`, `UNITS_
 | Write path | Full-registry validation before commit; one transaction writes row + version + outbox; P2-only fields rejected; auth interceptor rejects a missing/wrong bearer on writes and lets reads through |
 | Relay | Publishes in version order, marks `published_at` only on ack, retries on nack/broker down |
 | Replica | duplicate dropped; gap → resync; DISABLED removes the unit; in-flight request on the old bundle returns the old result (atomic swap); build failure keeps last-good; CRUD down at boot → fallback + metric |
-| MCP | 4 tools against a fake `UnitRegistryService` (bufconn): success, NotFound, AlreadyExists, InvalidArgument passthrough, token→id resolution, `FieldMask` contents, bearer only on writes |
-| Wiring | compose blocks, env vars, `tools/list` returns 6 tools |
+| Unit types | T1 unknown/inactive code rejected and never auto-created; near-duplicate code rejected; T2 `code` immutable; T3 inactive types hidden from `GetUnit`/`ListUnits` but links kept; T4 `SetDimensionTypes` replaces the set and is idempotent; T5 no `registry_version` bump, no outbox row; `ListUnits(type=…)` filter; bootstrap seeds `DIMENSION` and `CAPACITY` with no links |
+| MCP | 4 unit tools + 5 type tools against a fake `UnitRegistryService`: success, NotFound, AlreadyExists, InvalidArgument/FailedPrecondition passthrough, token/code→id resolution, `FieldMask` contents, bearer only on writes |
+| Wiring | compose blocks, env vars, `tools/list` returns 11 tools |
 
 ---
 
@@ -218,7 +297,7 @@ A new gRPC client to `unit-registry-service` (`UNIT_REGISTRY_GRPC_ADDR`, `UNITS_
 
 | Phase | Scope |
 |---|---|
-| **P1 (this request)** | `libs/unit-registry`, `unit_registry.proto`, `unit-registry-service` (units CRUD + ValidateUnit + outbox + auth), normalizer reads A/B/D from DB via events, 4 MCP tools, seed + parity for A/B/D, pint pin |
+| **P1 (this request)** | `libs/unit-registry`, `unit_registry.proto`, `unit-registry-service` (units CRUD + ValidateUnit + outbox + auth), normalizer reads A/B/D from DB via events, unit types (C9: vocabulary + dimension links, metadata only), 9 MCP tools, seed + parity for A/B/D, pint pin |
 | **P2 (admin UI)** | Dimension / label-rule / disambiguation CRUD ([J] B.1), G5, E1/E2/C/E3 seeded and DB-driven behind their own parity gate, the [UI] BFF and frontend |
 | **P3** | Auto-proposals from the manual DLQ ([J] §8), unchanged, gated on a measured drain |
 
@@ -236,7 +315,7 @@ A new gRPC client to `unit-registry-service` (`UNIT_REGISTRY_GRPC_ADDR`, `UNITS_
 ## 11. Amendments this implies to the June specs
 
 - **[J]:** superseded for P1 by this document on C1 (writes leave the normalizer), C2 (new proto), C3/C4 (push + build-and-swap), C5 (own DB), C6 (layer phasing). Everything else ([J] §3.3–§5, §9, §10, appendices) still applies and is referenced here.
-- **[UI]:** the BFF upstream changes from `graph-rag-normalize-unite-service:50057` to `unit-registry-service`; env `UnitsRegistryGRPC` points there. The "propagation toast" (`GetRegistryStatus`) now reports near-instant propagation. No UX change.
+- **[UI]:** the BFF upstream changes from `graph-rag-normalize-unite-service:50057` to `unit-registry-service`; env `UnitsRegistryGRPC` points there. The "propagation toast" (`GetRegistryStatus`) now reports near-instant propagation. The Unités table can show the inherited `types` column, and P2 adds a "Types" tab (or a section of the Dimensions tab) on top of the §6.1 RPCs.
 
 When this spec is approved, both June files get a one-line header pointing here.
 
