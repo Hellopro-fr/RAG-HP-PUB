@@ -15,8 +15,9 @@ Python 3.10, grpcio (sync server), SQLAlchemy 2 + PyMySQL, pika, prometheus-clie
 - `RABBITMQ_URL`, `UNITS_EXCHANGE` (`normalization.units`), `UNITS_ADMIN_KEY` (≥ 16 chars; Bearer for write RPCs)
 
 ## Database bootstrap
-`init-db/10_normalization_db.sh` creates the database and user, but only on a **fresh** `mysql` volume.
-On the existing volume, run it once:
+`init-db/10_normalization_db.sh` creates the database and user. It is **NOT** auto-mounted into `mysql`: a single-file
+bind inside the read-only `docker-entrypoint-initdb.d` mount stops mysql from starting. Run it once by hand in every
+environment (fresh or existing volume) before the service's first start:
 ```bash
 docker exec -i -e NORMALIZATION_MYSQL_PASS="$NORMALIZATION_MYSQL_PASS" mysql bash < apps-microservices/unit-registry-service/init-db/10_normalization_db.sh
 ```

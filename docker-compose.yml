@@ -690,14 +690,11 @@ services:
       - MYSQL_USER=${GATEWAY_MYSQL_USER:-gateway_user}
       - MYSQL_PASSWORD=${GATEWAY_MYSQL_PASS:-gateway_pass}
       - MYSQL_TCP_PORT=${GATEWAY_MYSQL_PORT:-3306}
-      - NORMALIZATION_MYSQL_USER=${NORMALIZATION_MYSQL_USER:-normalization_user}
-      - NORMALIZATION_MYSQL_PASS=${NORMALIZATION_MYSQL_PASS:-}
     ports:
       - "${GATEWAY_MYSQL_PORT:-3306}:${GATEWAY_MYSQL_PORT:-3306}"
     volumes:
       - gateway_mysql_data:/var/lib/mysql
       - ./apps-microservices/mcp-gateway-service/init-db:/docker-entrypoint-initdb.d:ro
-      - ./apps-microservices/unit-registry-service/init-db/10_normalization_db.sh:/docker-entrypoint-initdb.d/10_normalization_db.sh:ro
     networks:
       - services-net
     healthcheck:

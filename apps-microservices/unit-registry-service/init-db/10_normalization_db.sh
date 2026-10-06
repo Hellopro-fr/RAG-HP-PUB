@@ -1,7 +1,8 @@
 #!/bin/bash
-# Creates normalization_db and its user. Mounted into /docker-entrypoint-initdb.d of the
-# `mysql` compose service, so it runs only on a FRESH volume. For an existing volume run it
-# once by hand (see CLAUDE.md). Tables are created by the service itself (plan delta P7).
+# Creates normalization_db and its user. NOT mounted into the `mysql` compose service (a single-file
+# bind inside the read-only docker-entrypoint-initdb.d mount stops mysql from starting). Run it once by
+# hand, on fresh and existing volumes alike (command in CLAUDE.md). Tables are created by the service
+# itself (plan delta P7).
 set -uo pipefail
 if [ -z "${NORMALIZATION_MYSQL_PASS:-}" ]; then
   echo "[10_normalization_db] NORMALIZATION_MYSQL_PASS not set: skipping normalization_db" >&2
