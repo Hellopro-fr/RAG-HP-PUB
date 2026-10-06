@@ -49,7 +49,7 @@ After this work:
 
 - **pint 0.24.4** (what `pip install pint` gives in `python:3.10-slim`; `requirements.txt` has bare `pint`). Probed in a container:
   - `define()` of a **new** name on a live registry works.
-  - `define()` of an **existing** name is **silently ignored** (`3 galette` stays `3 count` after redefining it as `2 * count`).
+  - `define()` of an **existing** name: a redefinition of an existing name overrides it (last define wins) with a 'Redefining' warning, and a conversion cached before the redefinition stays stale (`3 galette` still reads `3 count` if it was converted before redefining it as `2 * count`; a fresh registry gives `6 count`). Pinned by `libs/unit-registry/tests/test_pint_contract.py`.
   - No public API removes a unit (only `remove_context`).
   - `UnitRegistry()` builds in **0.22 s**.
 - **[J] §5.2:** `define()` is **lazy**: `baz = 3 * nonexistent` is accepted, and fails only when used. Validation must force evaluation (G1).
@@ -236,6 +236,8 @@ message DimensionTypesResponse    { string dimension = 1; repeated string type_c
 
 Status codes: bad `code` format, `code` in the update mask, or an unknown dimension → `InvalidArgument`. Duplicate or near-duplicate code → `AlreadyExists`. Unknown id/code (including in `type_codes`) → `NotFound`. Inactive code in `type_codes` → `FailedPrecondition`. The auth interceptor's write set gains `CreateUnitType`, `UpdateUnitType`, `DeactivateUnitType` and `SetDimensionTypes`.
 
+**Final-review additions (P1):** every pint name of a definition (name + `= alias` segments) is checked by G3/G6, and seed grandfathering is by exact definition. **Alias rule (G2):** each alias must normalize like the token on the new bundle, so a spelling pint does not know must also be a pint alias in `pint_definition`. **Collateral check (G4 + `DeleteUnit`):** every other active unit's spellings are replayed on the old and new bundles; any change refuses the write (`InvalidArgument`) or the deactivation (`FailedPrecondition`).
+
 **Write pipeline [J] §6.3 + [O]:** `validate_unit()` (G1–G6 collect-all) → if not ok, abort with the first failing guard's code → build + validate the full new registry → `BEGIN { write units row; registry_version += 1; insert unit_events row } COMMIT` → return `UnitResponse{registry_version}`. The relay publishes asynchronously.
 
 ---
@@ -255,6 +257,7 @@ A new gRPC client to `unit-registry-service` (`UNIT_REGISTRY_GRPC_ADDR`, `UNITS_
 - On `InvalidArgument`/`AlreadyExists`/`NotFound`, the tool returns `isError: true` with the server message, which names the failing guard, so the agent can fix its input. Other errors return `isError: true` and are logged.
 - Tool descriptions state that writes go live on all replicas within about a second, and that a sample is required because it becomes a permanent regression test.
 - `get_unit` output includes `types` (inherited from the dimension, §4.4).
+- **`UNIT_WRITE_TOOLS_ENABLED`** (default `false`; `true`/`1`/`yes`): without it only `normalize_*`, `get_unit` and `get_unit_type` are registered; the seven write tools (units, unit types, `set_dimension_types`) are opt-in. The `create_unit`/`update_unit` descriptions state the alias rule of §6.
 
 ### 7.1 Unit-type tools (C9)
 

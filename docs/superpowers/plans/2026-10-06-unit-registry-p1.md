@@ -62,7 +62,7 @@ These are inputs the spec implies but no feature test exercises directly. Each o
 - Seed mapping: 26 keys equal a define name, so the seed has **233** unit rows.
 - `UnitRegistry()` never calls `define()` itself. `define("baz = 3 * nonexistent")` is accepted and fails only on use (`UndefinedUnitError`).
 - `"foo = = bar"` is accepted *and* evaluates to `1 dimensionless`, so G1 can't catch it, but G2 rejects it for any physical dimension.
-- `"nm" in ureg` is `True` (prefix), circular defines raise `RecursionError`, and redefinitions are silently ignored.
+- `"nm" in ureg` is `True` (prefix), circular defines raise `RecursionError`, and a redefinition of an existing name overrides it (last define wins) with a 'Redefining' warning, and a conversion cached before the redefinition stays stale.
 
 ---
 

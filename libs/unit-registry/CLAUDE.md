@@ -14,7 +14,7 @@ Shared Python package `unit_registry` used by **unit-registry-service** (writes,
 - `proto_codec.py`: `Unit` <-> `unit_registry_pb2`; needs generated `grpc_stubs`, so it is not imported by `__init__`.
 
 ## Rules
-- pint is pinned to `0.24.4`; `tests/test_pint_contract.py` fails on drift (silent redefinition, lazy define, prefix names).
+- pint is pinned to `0.24.4`; `tests/test_pint_contract.py` fails on drift (redefinition overrides with a warning, lazy define, prefix names).
 - Never `define()` on a registry that serves requests: build a new bundle and swap the reference.
 - `tests/golden/golden.json` was captured from the pre-move engine. A golden mismatch is a behaviour change, not a fixture to regenerate.
 

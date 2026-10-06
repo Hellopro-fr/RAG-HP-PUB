@@ -1,7 +1,8 @@
-"""pint normalization engine, moved verbatim from graph-rag-normalize-unite-service (plan Task 2).
+"""pint normalization engine, moved from graph-rag-normalize-unite-service (plan Task 2).
 
-The only change: unit tables come from a RegistryBundle fetched ONCE per normalize()
-call, so a concurrent swap never mixes two registries inside one call. Layer C
+The conversion logic was moved as is; the bundle plumbing was added around it: unit
+tables now come from a RegistryBundle fetched ONCE per normalize() call (and once per
+normalize_range()), so a concurrent swap never mixes two registries inside one call. Layer C
 (LABEL_TO_DIMENSION) and the sanitize chain stay in code until P2 (spec §8).
 """
 import logging
