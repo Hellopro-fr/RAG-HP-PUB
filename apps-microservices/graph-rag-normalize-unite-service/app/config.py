@@ -10,6 +10,11 @@ class Settings(BaseSettings):
     # Prometheus Metrics
     PROMETHEUS_PORT: int = 8557
 
+    # Live unit updates (empty RABBITMQ_URL = serve the frozen fallback tables only)
+    RABBITMQ_URL: str = ""
+    UNITS_EXCHANGE: str = "normalization.units"
+    UNIT_REGISTRY_GRPC_ADDR: str = "unit-registry-service:50059"
+
     class Config:
         env_file = ".env"
         case_sensitive = True
