@@ -17,6 +17,7 @@ if [ "$mounted" != "$ROOT" ] || [ "$running" != "true" ]; then
   docker rm -f "$NAME" >/dev/null 2>&1 || true
   docker run -d --name "$NAME" -v "$ROOT:/repo" -w /repo \
     -e PYTHONPATH=/stubs:/repo/libs/unit-registry/src:/repo/libs/common-utils/src \
+    -e PYTHONDONTWRITEBYTECODE=1 \
     "$IMAGE" sleep infinity >/dev/null
 fi
 
@@ -26,4 +27,4 @@ docker exec "$NAME" sh -c 'rm -rf /stubs && mkdir -p /stubs \
   && touch /stubs/grpc_stubs/__init__.py'
 
 dir="$1"; shift
-docker exec -w "/repo/$dir" "$NAME" python -m pytest "$@"
+docker exec -w "/repo/$dir" "$NAME" python -m pytest -p no:cacheprovider "$@"
