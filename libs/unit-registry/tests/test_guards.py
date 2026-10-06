@@ -1,6 +1,8 @@
+from dataclasses import replace
+
 import pytest
 
-from unit_registry.guards import find_dependents, validate_unit
+from unit_registry.guards import collateral_changes, find_dependents, validate_unit
 from unit_registry.seed import build_seed_units
 from unit_registry.types import RegressionSample, Unit, UnitSource
 
@@ -130,3 +132,63 @@ def test_find_dependents_reports_units_built_on_a_define(seed):
 def test_find_dependents_is_empty_for_lookup_only_units(seed):
     galette = next(u for u in seed if u.token == "galette")
     assert find_dependents(galette, seed) == []
+
+
+# --- final review C1/I1/I2: every pint name is guarded, collateral changes, aliases ---
+
+def test_a_pint_alias_cannot_redefine_an_existing_seed_unit(seed):
+    outcome = validate_unit(candidate(token="sac", pint_definition="sac = 25 * kilogram = kg"), seed)
+    g = by_guard(outcome)
+    assert not outcome.ok and (not g["G3"].ok or not g["G6"].ok)
+    assert not g["G6"].ok and "'kg'" in g["G6"].message
+
+
+def test_a_pint_alias_cannot_shadow_a_pint_builtin(seed):
+    outcome = validate_unit(candidate(token="sac", pint_definition="sac = 25 * kilogram = g"), seed)
+    assert not by_guard(outcome)["G3"].ok
+
+
+def test_grandfathering_is_by_exact_definition_not_by_name(seed):
+    without_kg = [u for u in seed if u.token != "kg"]
+    outcome = validate_unit(candidate(token="kg", pint_definition="kg = 25 * kilogram"), without_kg)
+    assert not by_guard(outcome)["G3"].ok
+
+
+def test_renaming_a_define_that_others_build_on_is_a_collateral_change(seed):
+    cv = next(u for u in seed if u.token == "cheval_vapeur")
+    renamed = replace(cv, dimension="power", pint_definition="cheval_vap2 = 735.49875 * watt = cv",
+                      regression_sample=sample(value="2", expected=1470.9975, unit_out="watt",
+                                               label="Puissance", unit="cv"))
+    outcome = validate_unit(renamed, seed)
+    g4 = by_guard(outcome)["G4"]
+    assert not g4.ok and "would change" in g4.message and "'CV'" in g4.message
+
+
+def test_a_plain_new_unit_has_no_collateral_change(seed):
+    assert by_guard(validate_unit(candidate(), seed))["G4"].ok
+
+
+def test_an_alias_that_hijacks_a_pint_name_is_rejected(seed):
+    bidon = candidate(token="bidon", dimension="volume", pint_definition="bidon = 20 * liter",
+                      aliases=("gram",),
+                      regression_sample=sample(value="1", expected=20.0, unit_out="liter", label="Volume"))
+    assert not validate_unit(bidon, seed).ok
+
+
+def test_an_alias_pint_does_not_know_is_rejected(seed):
+    outcome = validate_unit(candidate(aliases=("sc",)), seed)
+    g2 = by_guard(outcome)["G2"]
+    assert not g2.ok and "alias 'sc' does not normalize like the token" in g2.message
+
+
+def test_an_alias_declared_in_the_pint_definition_passes(seed):
+    outcome = validate_unit(candidate(aliases=("sc",), pint_definition="sac_ciment = 25 * kilogram = sc"), seed)
+    assert outcome.ok, outcome.failures
+
+
+def test_collateral_changes_reports_a_removed_pint_alias(seed):
+    pieds = next(u for u in seed if u.token == "pieds")
+    remaining = [u for u in seed if u.id != pieds.id]
+    changes = collateral_changes(seed, remaining, {pieds.id})
+    assert any(c.startswith("'pied'") for c in changes)
+    assert collateral_changes(seed, seed, set()) == []

@@ -49,3 +49,13 @@ def test_dict_round_trip_is_lossless():
 def test_dict_round_trip_without_sample_or_dates():
     unit = make_unit(regression_sample=None, created_at=None, updated_at=None)
     assert unit_from_dict(unit_to_dict(unit)) == unit
+
+
+def test_define_names_lists_the_name_and_every_pint_alias():
+    assert make_unit(pint_definition="cheval_vapeur = 735.49875 * watt = cv").define_names == (
+        "cheval_vapeur", "cv")
+    assert make_unit(pint_definition="decibel = [sound] = dB = dBA").define_names == (
+        "decibel", "dB", "dBA")
+    assert make_unit(pint_definition="foo_u = 3 * meter = _ = fu").define_names == ("foo_u", "fu")
+    assert make_unit(pint_definition="kg = kilogram").define_names == ("kg",)
+    assert make_unit(pint_definition=None).define_names == ()

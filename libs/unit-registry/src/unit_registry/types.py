@@ -56,6 +56,19 @@ class Unit:
             return None
         return self.pint_definition.split("=", 1)[0].strip()
 
+    @property
+    def define_names(self) -> tuple[str, ...]:
+        """Every name the pint definition introduces: the name, then each `= alias` after the expression.
+
+        "cheval_vapeur = 735.49875 * watt = cv" -> ("cheval_vapeur", "cv"). Segment 1 is the
+        expression; empty segments and "_" (pint's "no symbol" placeholder) are skipped.
+        """
+        if not self.pint_definition:
+            return ()
+        segments = [s.strip() for s in self.pint_definition.split("=")]
+        names = [segments[0], *segments[2:]]
+        return tuple(n for n in names if n and n != "_")
+
     def lookup_keys(self) -> list[str]:
         # The engine lowercases the raw unit before the layer-B lookup.
         return [key.lower() for key in (self.token, *self.aliases)]
