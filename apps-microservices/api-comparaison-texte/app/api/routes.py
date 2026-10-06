@@ -24,6 +24,23 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _summary(text: str) -> str:
+    """Resume loggable d'un texte : longueur + debut sur une ligne, jamais le texte entier."""
+    n = settings.LOG_PREVIEW_CHARS
+    if n <= 0:
+        return f"len={len(text)}"
+    head = " ".join(text[: n * 2].split())[:n]
+    return f"len={len(text)} debut={head!r}"
+
+
+def _log_comparison(url: str, content_type: ContentType, old_text: str, new_text: str, comp: dict) -> None:
+    logger.info(
+        "comparaison url=%s type=%s ancien(%s) nouveau(%s) ratio=%.3f decision=%s",
+        url, content_type.value, _summary(old_text), _summary(new_text),
+        comp["similarity_ratio"], comp["decision"],
+    )
+
+
 def _compare_one(request: ComparisonRequest) -> ComparisonResult:
     """Pure synchronous single comparison (offloaded via asyncio.to_thread)."""
     new_text = (
@@ -32,6 +49,7 @@ def _compare_one(request: ComparisonRequest) -> ComparisonResult:
         else request.new_content
     )
     comp = compare_texts(request.old_text, new_text, request.threshold)
+    _log_comparison(request.url, request.content_type, request.old_text, new_text, comp)
     return ComparisonResult(url=request.url, **comp)
 
 
@@ -49,6 +67,7 @@ def _run_batch(items, threshold) -> tuple[list, int]:
                 else item.new_content
             )
             comp = compare_texts(item.old_text, new_text, threshold)
+            _log_comparison(item.url, item.content_type, item.old_text, new_text, comp)
             results.append(ComparisonResult(url=item.url, **comp))
         except Exception as e:
             logger.error("Erreur traitement item %s: %s", item.url, e)

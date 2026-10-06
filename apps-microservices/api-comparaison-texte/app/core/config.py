@@ -7,6 +7,10 @@ class Settings(BaseSettings):
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = False
 
+    # Logs : niveau, et nombre de caracteres du debut de chaque texte repris dans le resume (0 = aucun extrait)
+    LOG_LEVEL: str = "INFO"
+    LOG_PREVIEW_CHARS: int = 80
+
     # Seuil de similarité (reproduit processor.py CONDITION 2 : ratio < 0.85)
     SIMILARITY_THRESHOLD: float = 0.85
 

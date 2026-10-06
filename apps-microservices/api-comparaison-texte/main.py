@@ -1,9 +1,19 @@
+import logging
+import sys
+
 from fastapi import FastAPI, Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from app.api.routes import router
 from app.core.config import settings
 from app.core import metrics  # noqa: F401  — registers metric objects with the default registry
+
+# stdout : sur Cloud Run / GKE, stderr est classe en erreur quel que soit le niveau
+logging.basicConfig(
+    level=settings.LOG_LEVEL,
+    stream=sys.stdout,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
 
 app = FastAPI(
     title=settings.APP_NAME,
