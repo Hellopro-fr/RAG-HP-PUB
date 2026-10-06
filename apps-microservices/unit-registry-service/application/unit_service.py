@@ -9,6 +9,7 @@ from typing import Any, Callable, Iterable, Mapping
 from sqlalchemy.orm import Session, sessionmaker
 
 from infrastructure.db.repository import TypeRepository, UnitRepository
+from unit_registry.bundle import BundleBuildError
 from unit_registry.events import EVENT_CREATED, EVENT_DISABLED, EVENT_UPDATED, make_event
 from unit_registry.guards import (
     ValidationOutcome,
@@ -144,7 +145,11 @@ class UnitService:
                 raise FailedPrecondition(
                     f"cannot deactivate {existing.token!r}: still used by "
                     + ", ".join(sorted(u.token for u in dependents)))
-            changes = collateral_changes(active, remaining, {existing.id})
+            try:
+                changes = collateral_changes(active, remaining, {existing.id})
+            except BundleBuildError as exc:
+                raise FailedPrecondition(
+                    f"cannot deactivate {existing.token!r}: current registry does not build: {exc}") from exc
             if changes:
                 raise FailedPrecondition(f"cannot deactivate {existing.token!r}: it {format_changes(changes)}")
             disabled = replace(existing, status=UnitStatus.DISABLED, updated_at=now)

@@ -139,3 +139,16 @@ def test_disable_refuses_when_removal_changes_another_unit(service):
     with pytest.raises(FailedPrecondition, match=r"cannot deactivate 'pieds': it would change 'pied'"):
         service.disable(pieds.id, "editor")
     assert service.get(token="pieds").status is UnitStatus.ACTIVE
+
+
+def test_disable_maps_a_registry_build_error_to_failed_precondition(service, monkeypatch):
+    import application.unit_service as unit_service_module
+    from unit_registry.bundle import BundleBuildError
+
+    def broken(*_args, **_kwargs):
+        raise BundleBuildError("pint rejected define 'x'")
+
+    monkeypatch.setattr(unit_service_module, "collateral_changes", broken)
+    unit, _ = service.register(draft(), "tester")
+    with pytest.raises(FailedPrecondition, match=r"cannot deactivate 'sac_ciment': current registry does not build"):
+        service.disable(unit.id, "editor")
