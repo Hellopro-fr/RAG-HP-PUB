@@ -10,7 +10,7 @@ import logging
 import re
 import threading
 from dataclasses import dataclass, replace
-from typing import Collection, Iterator, Mapping, Sequence
+from typing import Collection, Iterable, Iterator, Mapping, Sequence
 
 from .bundle import BundleBuildError, RegistryBundle, active_defines, build_bundle, bundle_from_units
 from .engine import Normalizer
@@ -106,6 +106,20 @@ def _g6_uniqueness(candidate: Unit, others: Sequence[Unit]) -> GuardResult:
         if other.dimension is not None:
             for key in other.lookup_keys():
                 taken.setdefault(key, other.token)
+    # The engine lowercases the raw unit for the lookup but hands the raw spelling to pint:
+    # a pint name "KG" would make the existing spelling "KG" resolve differently (residual R2).
+    # Exact seed definitions are trusted (the seed itself has CV/cv, kg/m2 alias + row, ...).
+    if candidate.pint_definition not in GRANDFATHERED_DEFINITIONS:
+        spelled: dict[str, str] = dict(taken)
+        for other in others:
+            for name in other.define_names:
+                spelled.setdefault(name.lower(), other.token)
+        exact = {n for other in others for n in other.define_names}
+        for name in candidate.define_names:
+            owner = spelled.get(name.lower())
+            if owner is not None and name not in exact:
+                problems.append(f"pint name {name!r} matches spelling {name.lower()!r} of unit {owner!r} "
+                                "(case-insensitive)")
     if candidate.dimension is not None:
         for key in sorted({k for k in candidate.lookup_keys() if k in taken}):
             problems.append(f"lookup key {key!r} already belongs to unit {taken[key]!r}")
@@ -124,6 +138,7 @@ def _g3_collision(candidate: Unit, base_defines: list[str]) -> GuardResult:
         probe = build_bundle(base_defines, {}).ureg
     except Exception as exc:
         return _fail("G3", f"cannot build the pint probe: {type(exc).__name__}: {exc}")
+    lowered = {known.lower(): known for known in probe._units}  # names + aliases (pint 0.24.4, contract-tested)
     problems = []
     for name in names:
         try:
@@ -134,12 +149,23 @@ def _g3_collision(candidate: Unit, base_defines: list[str]) -> GuardResult:
         if collides:
             problems.append(f"{name!r} already resolves in pint (stored unit, built-in, or prefix "
                             "form such as nm = nano + meter); pick another name")
+            continue
+        # A case variant of an existing pint name ("Kilogram" vs kilogram) would make a
+        # spelling that used to fail resolve to the new unit (residual R2).
+        variant = lowered.get(name.lower())
+        if variant is not None:
+            problems.append(f"{name!r} is a case variant of the pint name {variant!r}; pick another name")
     return _fail("G3", "; ".join(problems)) if problems else _ok("G3")
 
 
 def _g1_parse(candidate: Unit, base_defines: list[str]):
     if candidate.pint_definition is None:
         return _skip("G1", "no pint_definition"), None
+    if "\n" in candidate.pint_definition or "\r" in candidate.pint_definition:
+        # pint's define() accepts several lines in one string, so a second line could
+        # redefine any built-in (residual R1).
+        return _fail("G1", "pint_definition must be one definition on a single line "
+                           "(line breaks are not allowed)"), None
     name = candidate.define_name
     if not name:
         return _fail("G1", f"{candidate.pint_definition!r} has no unit name before '='"), None
@@ -234,19 +260,21 @@ def _g4_sample(candidate: Unit, others: Sequence[Unit], previous: Sequence[Unit]
     except BundleBuildError as exc:
         problems.append(f"current registry does not build, collateral check not run: {exc}")
     else:
-        changes = _collateral(before, bundle, others, {candidate.id})
+        new_names = [n for n in candidate.define_names if n.lower() not in candidate.lookup_keys()]
+        changes = _collateral(before, bundle, others, {candidate.id}, new_names)
         if changes:
             problems.append(format_changes(changes))
     return (_fail("G4", "; ".join(problems)) if problems else _ok("G4")), dry_run
 
 
 def collateral_changes(before_units: Sequence[Unit], after_units: Sequence[Unit],
-                       exclude_ids: Collection[str]) -> list[str]:
-    """Spellings of the active units in `before_units` (minus `exclude_ids`) that normalize
-    differently once the registry is rebuilt from `after_units`. Each entry: "'key': old -> new"."""
+                       exclude_ids: Collection[str], extra_keys: Iterable[str] = ()) -> list[str]:
+    """Spellings of the active units in `before_units` (minus `exclude_ids`), plus `extra_keys`,
+    that normalize differently once the registry is rebuilt from `after_units`.
+    Each entry: "'key': old -> new"."""
     before = bundle_from_units(before_units)
     after = bundle_from_units(after_units)
-    return _collateral(before, after, before_units, exclude_ids)
+    return _collateral(before, after, before_units, exclude_ids, extra_keys)
 
 
 def format_changes(changes: Sequence[str], limit: int = COLLATERAL_LIST_LIMIT) -> str:
@@ -257,18 +285,24 @@ def format_changes(changes: Sequence[str], limit: int = COLLATERAL_LIST_LIMIT) -
 
 
 def _collateral(before: RegistryBundle, after: RegistryBundle, units: Sequence[Unit],
-                exclude_ids: Collection[str]) -> list[str]:
+                exclude_ids: Collection[str], extra_keys: Iterable[str] = ()) -> list[str]:
     old_n, new_n = Normalizer(lambda: before), Normalizer(lambda: after)
     changes = []
     kept = sorted((u for u in units if u.status is UnitStatus.ACTIVE and u.id not in exclude_ids),
                   key=lambda u: (u.sort_order, u.token))
     with _quiet_engine_warnings():
+        # Lowercased lookup keys AND raw (case-preserved) tokens/pint names: pint is case-sensitive.
+        keys: dict[str, None] = {}
         for unit in kept:
-            for key in sorted({unit.token, *unit.lookup_keys()}):
-                old = old_n.normalize(COLLATERAL_LABEL, key, COLLATERAL_VALUE)
-                new = new_n.normalize(COLLATERAL_LABEL, key, COLLATERAL_VALUE)
-                if old != new:
-                    changes.append(f"{key!r}: {_describe(old)} -> {_describe(new)}")
+            for key in sorted({unit.token, *unit.lookup_keys(), *unit.define_names}):
+                keys.setdefault(key)
+        for key in extra_keys:
+            keys.setdefault(key)
+        for key in keys:
+            old = old_n.normalize(COLLATERAL_LABEL, key, COLLATERAL_VALUE)
+            new = new_n.normalize(COLLATERAL_LABEL, key, COLLATERAL_VALUE)
+            if old != new:
+                changes.append(f"{key!r}: {_describe(old)} -> {_describe(new)}")
     return changes
 
 

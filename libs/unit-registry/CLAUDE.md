@@ -10,7 +10,7 @@ Shared Python package `unit_registry` used by **unit-registry-service** (writes,
 - `engine.py`: `Normalizer`, the pint engine (moved verbatim; reads one bundle per call).
 - `seed.py`: `build_seed_units()` from the legacy tables (233 rows).
 - `events.py`: outbox event payloads (`make_event` / `parse_event`).
-- `guards.py`: `validate_unit()` G1–G6 (collect-all), `find_dependents()`, `collateral_changes()`. G3/G6 check every pint name of a definition (`Unit.define_names`: name + `= alias` segments); seed grandfathering is by exact definition. G2 checks that each alias normalizes like the token; G4 replays every other unit's spellings and fails on any change (also used by deactivation).
+- `guards.py`: `validate_unit()` G1–G6 (collect-all), `find_dependents()`, `collateral_changes()`. G3/G6 check every pint name of a definition (`Unit.define_names`: name + `= alias` segments); seed grandfathering is by exact definition. G1 rejects multi-line definitions; G3 rejects case variants of a pint name, G6 compares pint names case-insensitively against other spellings. G2 checks that each alias normalizes like the token; G4 replays (lookup keys + raw tokens and pint names) every other unit's spellings and fails on any change (also used by deactivation).
 - `proto_codec.py`: `Unit` <-> `unit_registry_pb2`; needs generated `grpc_stubs`, so it is not imported by `__init__`.
 
 ## Rules

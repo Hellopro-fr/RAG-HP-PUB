@@ -38,3 +38,9 @@ def test_circular_definitions_raise_instead_of_hanging():
     ureg.define("cyc_b = 3 * cyc_a")
     with pytest.raises(RecursionError):
         (1 * ureg["cyc_a"]).to_base_units()
+
+
+def test_units_table_lists_names_for_the_case_variant_check():
+    # guards._g3_collision reads ureg._units to reject case variants such as "Kilogram".
+    units = pint.UnitRegistry()._units
+    assert "kilogram" in units and "Kilogram" not in units

@@ -156,9 +156,10 @@ def test_grandfathering_is_by_exact_definition_not_by_name(seed):
 
 def test_renaming_a_define_that_others_build_on_is_a_collateral_change(seed):
     cv = next(u for u in seed if u.token == "cheval_vapeur")
-    renamed = replace(cv, dimension="power", pint_definition="cheval_vap2 = 735.49875 * watt = cv",
+    # Without "= cv": since R2, "cv" as a pint alias already fails G6 (spelling of unit CV).
+    renamed = replace(cv, dimension="power", pint_definition="cheval_vap2 = 735.49875 * watt",
                       regression_sample=sample(value="2", expected=1470.9975, unit_out="watt",
-                                               label="Puissance", unit="cv"))
+                                               label="Puissance", unit="cheval_vap2"))
     outcome = validate_unit(renamed, seed)
     g4 = by_guard(outcome)["G4"]
     assert not g4.ok and "would change" in g4.message and "'CV'" in g4.message
@@ -192,3 +193,43 @@ def test_collateral_changes_reports_a_removed_pint_alias(seed):
     changes = collateral_changes(seed, remaining, {pieds.id})
     assert any(c.startswith("'pied'") for c in changes)
     assert collateral_changes(seed, seed, set()) == []
+
+
+# --- residual review: multi-line defines (R1), case-only pint aliases (R2) ---
+
+@pytest.mark.parametrize("multi", ["zz_q = 3*gram\nounce = zz_q", "zz_q = 3*gram\nkilogram = zz_q",
+                                   "zz_q = 3*gram\r\nounce = zz_q", "zz_q = 3*gram\rounce = zz_q"])
+def test_g1_rejects_a_multi_line_definition(seed, multi):
+    outcome = validate_unit(candidate(token="zz_q", pint_definition=multi), seed)
+    g1 = by_guard(outcome)["G1"]
+    assert not outcome.ok and not g1.ok and "one definition" in g1.message
+
+
+@pytest.mark.parametrize("alias", ["KG", "Kg", "Kilogram"])
+def test_a_case_variant_pint_alias_of_an_existing_spelling_is_rejected(seed, alias):
+    outcome = validate_unit(candidate(pint_definition=f"sac_ciment = 25 * kilogram = {alias}"), seed)
+    assert not outcome.ok
+
+
+def test_g6_compares_pint_names_case_insensitively(seed):
+    g6 = by_guard(validate_unit(candidate(pint_definition="sac_ciment = 25 * kilogram = KG"), seed))["G6"]
+    assert not g6.ok and "'KG'" in g6.message
+
+
+def test_collateral_replays_the_candidates_new_pint_names(seed):
+    # Bypass G6 to prove the replay alone catches a new pint name that alters an existing spelling.
+    sac = candidate(pint_definition="sac_ciment = 25 * kilogram = KG")
+    changes = collateral_changes(seed, [*seed, sac], {sac.id}, extra_keys=["KG"])
+    assert any(c.startswith("'KG'") for c in changes)
+
+
+def test_seed_definitions_still_pass_g6(seed):
+    for token in ("CV", "cheval_vapeur", "kg", "kg_par_m2", "pieds", "unité"):
+        unit = next(u for u in seed if u.token == token)
+        assert by_guard(validate_unit(unit, seed))["G6"].ok, token
+
+
+def test_renaming_with_the_old_pint_alias_is_caught_by_g6(seed):
+    cv = next(u for u in seed if u.token == "cheval_vapeur")
+    renamed = replace(cv, dimension="power", pint_definition="cheval_vap2 = 735.49875 * watt = cv")
+    assert "'cv'" in by_guard(validate_unit(renamed, seed))["G6"].message
