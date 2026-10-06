@@ -11,7 +11,8 @@ import threading
 from datetime import datetime
 from typing import Callable
 
-from sqlalchemy import select, update
+from prometheus_client import Gauge
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
 from application.clock import utcnow
@@ -20,6 +21,8 @@ from infrastructure.db.models import UnitEventRow
 from .publisher import Publisher
 
 logger = logging.getLogger(__name__)
+
+OUTBOX_PENDING = Gauge("unit_registry_outbox_pending", "unit_events rows not yet published (published_at IS NULL)")
 
 
 class OutboxRelay:
@@ -31,6 +34,21 @@ class OutboxRelay:
         self._batch_size = batch_size
 
     def run_once(self) -> int:
+        try:
+            return self._publish_pending()
+        finally:
+            self._update_pending_gauge()
+
+    def _update_pending_gauge(self) -> None:
+        try:
+            with self._sf() as session:
+                OUTBOX_PENDING.set(session.execute(
+                    select(func.count()).select_from(UnitEventRow).where(UnitEventRow.published_at.is_(None))
+                ).scalar_one())
+        except Exception:  # the gauge must never mask the relay's own error
+            logger.warning("could not count pending unit events", exc_info=True)
+
+    def _publish_pending(self) -> int:
         with self._sf() as session:
             pending = session.execute(
                 select(UnitEventRow.id, UnitEventRow.payload)

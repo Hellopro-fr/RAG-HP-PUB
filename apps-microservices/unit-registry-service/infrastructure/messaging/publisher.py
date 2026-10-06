@@ -24,10 +24,20 @@ class PikaPublisher:
 
     def _ensure_channel(self):
         if self._channel is None or self._channel.is_closed:
-            self._connection = pika.BlockingConnection(pika.URLParameters(self._url))
-            self._channel = self._connection.channel()
-            self._channel.exchange_declare(exchange=self._exchange, exchange_type="fanout", durable=True)
-            self._channel.confirm_delivery()
+            # Keep nothing until the channel is fully set up: a half-open channel without
+            # confirms would let publish() succeed without a broker ack.
+            connection = pika.BlockingConnection(pika.URLParameters(self._url))
+            try:
+                channel = connection.channel()
+                channel.exchange_declare(exchange=self._exchange, exchange_type="fanout", durable=True)
+                channel.confirm_delivery()
+            except Exception:
+                try:
+                    connection.close()
+                except Exception:  # the connection may already be broken
+                    logger.debug("ignoring error while closing a half-open connection", exc_info=True)
+                raise
+            self._connection, self._channel = connection, channel
         return self._channel
 
     def publish(self, body: bytes) -> None:

@@ -52,7 +52,9 @@ def test_reads_are_open(stub):
 
 
 def test_register_get_update_delete_round_trip(stub):
-    created = stub.RegisterUnit(pb.RegisterUnitRequest(spec=sac_spec(), created_by="mcp:test"), metadata=AUTH)
+    # An alias must normalize like the token (G2), so pint learns it in the definition first.
+    created = stub.RegisterUnit(pb.RegisterUnitRequest(
+        spec=sac_spec(pint_definition="sac_ciment = 25 * kilogram = sacs"), created_by="mcp:test"), metadata=AUTH)
     assert created.registry_version == 2 and created.status == "ACTIVE" and created.created_by == "mcp:test"
     # The stored sample is re-run by G4, so an alias-only update needs no new sample.
     updated = stub.UpdateUnit(pb.UpdateUnitRequest(id=created.id, spec=pb.UnitSpec(aliases=["sacs"]),

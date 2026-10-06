@@ -10,7 +10,13 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from infrastructure.db.repository import TypeRepository, UnitRepository
 from unit_registry.events import EVENT_CREATED, EVENT_DISABLED, EVENT_UPDATED, make_event
-from unit_registry.guards import ValidationOutcome, find_dependents, validate_unit
+from unit_registry.guards import (
+    ValidationOutcome,
+    collateral_changes,
+    find_dependents,
+    format_changes,
+    validate_unit,
+)
 from unit_registry.types import RegressionSample, Unit, UnitSource, UnitStatus
 
 from .clock import utcnow
@@ -131,12 +137,16 @@ class UnitService:
                 raise NotFound(f"unit {unit_id!r} not found")
             if existing.status is UnitStatus.DISABLED:
                 return existing, repo.current_version()
-            remaining = [u for u in repo.list_units(status=UnitStatus.ACTIVE) if u.id != existing.id]
+            active = repo.list_units(status=UnitStatus.ACTIVE)
+            remaining = [u for u in active if u.id != existing.id]
             dependents = find_dependents(existing, remaining)
             if dependents:
                 raise FailedPrecondition(
                     f"cannot deactivate {existing.token!r}: still used by "
                     + ", ".join(sorted(u.token for u in dependents)))
+            changes = collateral_changes(active, remaining, {existing.id})
+            if changes:
+                raise FailedPrecondition(f"cannot deactivate {existing.token!r}: it {format_changes(changes)}")
             disabled = replace(existing, status=UnitStatus.DISABLED, updated_at=now)
             repo.update_unit(disabled)
             version = repo.bump_version(actor, now)

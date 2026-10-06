@@ -130,3 +130,12 @@ def test_get_requires_id_or_token(service):
         service.get()
     with pytest.raises(NotFound):
         service.get(token="nope")
+
+
+def test_disable_refuses_when_removal_changes_another_unit(service):
+    # "pieds = foot = pied": no define references pieds, but the lookup-only row 'pied'
+    # only resolves through the pint alias, so removing it would change 'pied' (F2).
+    pieds = service.get(token="pieds")
+    with pytest.raises(FailedPrecondition, match=r"cannot deactivate 'pieds': it would change 'pied'"):
+        service.disable(pieds.id, "editor")
+    assert service.get(token="pieds").status is UnitStatus.ACTIVE

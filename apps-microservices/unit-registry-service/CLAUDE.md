@@ -24,6 +24,13 @@ docker exec -i -e NORMALIZATION_MYSQL_PASS="$NORMALIZATION_MYSQL_PASS" mysql bas
 Tables are created at startup (`create_all`); `bootstrap()` seeds the 36 dimensions, the 233 legacy units and the
 `DIMENSION`/`CAPACITY` types when their tables are empty.
 
+## Deploy checklist
+- **Manual DB bootstrap**: run `init-db/10_normalization_db.sh` by hand (see above) before the first start in every environment.
+- **Collateral check**: every write (G4) and every DeleteUnit replays all other units' spellings on the old and new
+  registry; a change to any of them is refused (`would change 'CV': 1838.75 watt -> no value`). It costs one extra pint registry build plus the replay per write.
+- **Outbox gauge**: alert on `unit_registry_outbox_pending` (rows with `published_at IS NULL`, set on every relay loop)
+  staying above 0 — replicas are not receiving events.
+
 ## Folder Structure
 ```
 app/            config.py (Settings), main.py (wiring)
@@ -34,6 +41,7 @@ init-db/        10_normalization_db.sh
 ```
 
 ## Rules
+- DeleteUnit is refused when another define depends on the unit or when removing it changes another unit's output.
 - Write RPCs: RegisterUnit, UpdateUnit, DeleteUnit, CreateUnitType, UpdateUnitType, DeactivateUnitType, SetDimensionTypes.
 - Unit types are metadata: they never bump `registry_version` and emit no event.
 - P2-only fields (`kind`, `case_sensitive`, `rewrite_expression`, `label_condition`, `canonical_override`) are rejected.

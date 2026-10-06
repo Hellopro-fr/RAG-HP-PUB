@@ -78,3 +78,13 @@ def test_run_forever_resets_the_publisher_after_a_failure(three_events):
     publisher.reset = reset_then_stop
     OutboxRelay(three_events, publisher, clock=lambda: NOW).run_forever(stop, poll_seconds=0.01)
     assert publisher.resets == 1
+
+
+def test_run_once_sets_the_outbox_pending_gauge(three_events):
+    from infrastructure.messaging.relay import OUTBOX_PENDING
+
+    with pytest.raises(ConnectionError):
+        OutboxRelay(three_events, FakePublisher(fail_on_call=3), clock=lambda: NOW).run_once()
+    assert OUTBOX_PENDING._value.get() == 1  # set even when the loop fails mid-batch
+    OutboxRelay(three_events, FakePublisher(), clock=lambda: NOW).run_once()
+    assert OUTBOX_PENDING._value.get() == 0
