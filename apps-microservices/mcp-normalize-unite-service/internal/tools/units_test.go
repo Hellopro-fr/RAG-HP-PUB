@@ -179,7 +179,7 @@ func callRegistry(t *testing.T, fake *fakeRegistry, tool string, args map[string
 	if err := json.Unmarshal(raw, &decoded); err != nil {
 		t.Fatalf("unmarshal args: %v", err)
 	}
-	r := NewRegistry(&Clients{Normalization: &fakeNormalization{}, Units: fake, UnitsAdminKey: testAdminKey, Actor: "mcp:test"})
+	r := NewRegistry(&Clients{Normalization: &fakeNormalization{}, Units: fake, UnitsAdminKey: testAdminKey, Actor: "mcp:test", WriteToolsEnabled: true})
 	return r.CallTool(context.Background(), &mcp.CallToolParams{Name: tool, Arguments: decoded})
 }
 

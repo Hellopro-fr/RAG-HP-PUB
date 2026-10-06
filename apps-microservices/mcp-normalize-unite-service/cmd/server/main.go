@@ -38,6 +38,13 @@ func main() {
 		Units:         unitregistrypb.NewUnitRegistryServiceClient(unitRegistryConn),
 		UnitsAdminKey: cfg.UnitsAdminKey,
 		Actor:         "mcp:" + cfg.Name,
+
+		WriteToolsEnabled: cfg.UnitWriteToolsEnabled,
+	}
+	if cfg.UnitWriteToolsEnabled {
+		log.Printf("[main] unit write tools ENABLED (UNIT_WRITE_TOOLS_ENABLED): create/update/deactivate unit + unit type, set_dimension_types")
+	} else {
+		log.Printf("[main] read-only mode: unit write tools disabled (set UNIT_WRITE_TOOLS_ENABLED=true to expose them)")
 	}
 
 	// Set up MCP tool registry and handler.

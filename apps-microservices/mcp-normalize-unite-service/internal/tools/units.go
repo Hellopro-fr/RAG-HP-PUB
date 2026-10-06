@@ -39,7 +39,9 @@ const sampleSchema = `{
 const createUnitDescription = "Créer une unité de normalisation dans le registre HelloPro (unit-registry-service). " +
 	"Elle est active sur tous les réplicas du normaliseur en environ une seconde. Six garde-fous (G1–G6) valident " +
 	"la définition pint, la dimension, les collisions de noms et rejouent l'exemple 'sample', obligatoire car il " +
-	"devient un test permanent. Si un token désactivé existe déjà, il est réactivé avec les nouvelles valeurs."
+	"devient un test permanent. Si un token désactivé existe déjà, il est réactivé avec les nouvelles valeurs. " +
+	"Chaque alias doit normaliser exactement comme le token ; une graphie que pint ne connaît pas doit aussi être " +
+	"ajoutée comme alias pint dans pint_definition ('sac_ciment = 25 * kilogram = sc' pour l'alias 'sc')."
 
 const createUnitInputSchema = `{
 	"type": "object",
@@ -56,7 +58,9 @@ const createUnitInputSchema = `{
 
 const updateUnitDescription = "Modifier une unité existante (par 'id' ou 'token'). Seuls les champs fournis changent ; " +
 	"'aliases': [] vide la liste. Les six garde-fous sont rejoués : une unité issue du seed n'a pas d'exemple, " +
-	"il faut donc fournir 'sample' pour la modifier. Effet sur tous les réplicas en environ une seconde."
+	"il faut donc fournir 'sample' pour la modifier. Effet sur tous les réplicas en environ une seconde. " +
+	"Chaque alias doit normaliser exactement comme le token ; une graphie que pint ne connaît pas doit aussi être " +
+	"ajoutée comme alias pint dans pint_definition ('<nom> = <expression> = <alias>')."
 
 const updateUnitInputSchema = `{
 	"type": "object",

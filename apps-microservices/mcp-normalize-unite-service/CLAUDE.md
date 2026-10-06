@@ -32,6 +32,7 @@ mcp-normalize-unite-service/
 ├── cmd/server/main.go              # Entry point, gRPC connection, MCP server setup
 ├── internal/
 │   ├── config/config.go            # Environment-based configuration
+│   ├── config/config_test.go       # UNIT_WRITE_TOOLS_ENABLED parsing
 │   ├── mcp/types.go                # MCP protocol types (copied from mcp-api-recherche-service)
 │   ├── tools/
 │   │   ├── registry.go             # Tool registration and dispatch
@@ -39,7 +40,9 @@ mcp-normalize-unite-service/
 │   │   ├── normalize.go            # normalize_quantity + normalize_range handlers, argument validation
 │   │   ├── units.go                # create/update/deactivate/get_unit handlers + registry helpers
 │   │   ├── unit_types.go           # create/update/deactivate/get_unit_type + set_dimension_types handlers
-│   │   └── normalize_test.go       # Unit tests against a fake gRPC client
+│   │   ├── normalize_test.go       # Unit tests against a fake gRPC client (+ tools/list per write mode)
+│   │   ├── units_test.go           # Unit tool tests against a fake unit-registry client
+│   │   └── unit_types_test.go      # Unit-type tool tests against the same fake
 │   └── transport/
 │       ├── sse.go                  # SSE transport (GET /sse, POST /message, GET /health)
 │       └── streamable_http.go      # Streamable HTTP transport (POST /mcp)
@@ -52,20 +55,24 @@ mcp-normalize-unite-service/
 
 ## MCP Tools
 
-11 tools: `normalize_quantity`, `normalize_range`, `create_unit`, `update_unit`, `deactivate_unit`, `get_unit`, `create_unit_type`, `update_unit_type`, `deactivate_unit_type`, `get_unit_type`, `set_dimension_types`.
+Up to 11 tools (4 when write tools are disabled, see below): `normalize_quantity`, `normalize_range`, `create_unit`, `update_unit`, `deactivate_unit`, `get_unit`, `create_unit_type`, `update_unit_type`, `deactivate_unit_type`, `get_unit_type`, `set_dimension_types`.
 
 | Tool | Arguments | Backend RPC |
 |------|-----------|-------------|
 | `normalize_quantity` | `label` (required), `value` (required, number or string), `unit`, `data_type` (`numeric` default, or `numeric_range`) | `NormalizeQuantity` |
 | `normalize_range` | `label` (required), `min_value` and/or `max_value` (number or numeric string), `unit` | `NormalizeQuantity` once per bound, concurrently |
-
-`normalize_range` deliberately does **not** call the `NormalizeRange` RPC: when one bound fails to convert, that RPC still answers `success=true` and proto3 reports the missing bound as `0.0`. Per-bound `NormalizeQuantity` calls run the same backend code path (`normalize_range` is two `normalize(..., "numeric")` calls) and let the tool name the failing bound.
-| `create_unit` / `update_unit` / `deactivate_unit` / `get_unit` | see `units.go` | unit-registry `CreateUnit` / `UpdateUnit` / `DeactivateUnit` / `GetUnit` |
+| `create_unit` / `update_unit` / `deactivate_unit` / `get_unit` | see `units.go` | unit-registry `RegisterUnit` / `UpdateUnit` / `DeleteUnit` / `GetUnit` |
 | `create_unit_type` | `code`, `label` (required), `description` | `CreateUnitType` |
 | `update_unit_type` | `id` or `code`, `label` and/or `description` | `UpdateUnitType` (field mask) |
 | `deactivate_unit_type` | `id` or `code` | `DeactivateUnitType` |
 | `get_unit_type` | `id` or `code`; none = list active types | `GetUnitType` / `ListUnitTypes` |
 | `set_dimension_types` | `dimension`, `type_codes` (required; `[]` clears) | `SetDimensionTypes` |
+
+`normalize_range` deliberately does **not** call the `NormalizeRange` RPC: when one bound fails to convert, that RPC still answers `success=true` and proto3 reports the missing bound as `0.0`. Per-bound `NormalizeQuantity` calls run the same backend code path (`normalize_range` is two `normalize(..., "numeric")` calls) and let the tool name the failing bound.
+
+**Write tools are opt-in.** `create_unit`, `update_unit`, `deactivate_unit`, `create_unit_type`, `update_unit_type`,
+`deactivate_unit_type` and `set_dimension_types` are registered only when `UNIT_WRITE_TOOLS_ENABLED` is `true`/`1`/`yes`
+(case-insensitive); otherwise `tools/list` shows 4 tools and a write call answers `unknown tool`. `main.go` logs the mode.
 
 Unit-registry writes send `authorization: Bearer $UNITS_ADMIN_KEY` (and `created_by`/`updated_by` = `mcp:<service name>`); token/code lookups and reads are unauthenticated.
 
@@ -90,6 +97,7 @@ A backend `success=false` is returned as an MCP tool error (`isError: true`) car
 | `NORMALIZATION_SERVICE_URL` | graph-rag-normalize-unite-service:50057 | Normalization gRPC address |
 | `UNIT_REGISTRY_GRPC_ADDR` | unit-registry-service:50059 | unit-registry-service gRPC address |
 | `UNITS_ADMIN_KEY` | (empty) | Bearer key for unit-registry writes; empty = writes rejected |
+| `UNIT_WRITE_TOOLS_ENABLED` | false | `true`/`1`/`yes` registers the 7 unit/unit-type write tools; anything else = read-only (compose default `false`) |
 
 ## Dependencies on Other Services
 

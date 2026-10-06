@@ -87,8 +87,8 @@ func wantError(t *testing.T, res *mcp.CallToolResult, substr string) {
 	}
 }
 
-func TestToolsList(t *testing.T) {
-	r := NewRegistry(&Clients{Normalization: &fakeNormalization{}})
+func toolNames(t *testing.T, r *Registry) string {
+	t.Helper()
 	tools := r.ListTools()
 	names := []string{}
 	for _, tl := range tools {
@@ -101,8 +101,29 @@ func TestToolsList(t *testing.T) {
 			t.Fatalf("tool %s schema type = %v", tl.Name, schema["type"])
 		}
 	}
-	if strings.Join(names, ",") != "normalize_quantity,normalize_range,create_unit,update_unit,deactivate_unit,get_unit,create_unit_type,update_unit_type,deactivate_unit_type,get_unit_type,set_dimension_types" {
-		t.Fatalf("tools = %v", names)
+	return strings.Join(names, ",")
+}
+
+func TestToolsList(t *testing.T) {
+	// Write tools are opt-in (UNIT_WRITE_TOOLS_ENABLED): by default only reads are exposed.
+	got := toolNames(t, NewRegistry(&Clients{Normalization: &fakeNormalization{}}))
+	if got != "normalize_quantity,normalize_range,get_unit,get_unit_type" {
+		t.Fatalf("tools = %v", got)
+	}
+}
+
+func TestToolsListWithWriteToolsEnabled(t *testing.T) {
+	got := toolNames(t, NewRegistry(&Clients{Normalization: &fakeNormalization{}, WriteToolsEnabled: true}))
+	if got != "normalize_quantity,normalize_range,create_unit,update_unit,deactivate_unit,get_unit,create_unit_type,update_unit_type,deactivate_unit_type,get_unit_type,set_dimension_types" {
+		t.Fatalf("tools = %v", got)
+	}
+}
+
+func TestWriteToolsAreUnknownWhenDisabled(t *testing.T) {
+	r := NewRegistry(&Clients{Normalization: &fakeNormalization{}})
+	res := r.CallTool(context.Background(), &mcp.CallToolParams{Name: "create_unit", Arguments: map[string]any{}})
+	if !res.IsError || !strings.Contains(res.Content[0].Text, "unknown tool") {
+		t.Fatalf("create_unit must be unknown when writes are disabled: %+v", res)
 	}
 }
 
