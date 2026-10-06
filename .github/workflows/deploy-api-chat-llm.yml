@@ -38,7 +38,9 @@ jobs:
       dockerfile_path: apps-microservices/api-chat-llm/Dockerfile
       build_context: .
       cloud_run_region: ${{ github.event.inputs.cloud_run_region || 'europe-west1' }}
-      ingress: all
+      # Vague 2 / V2-a2 (06/10, F-HP-SEC-030) : entree interne (VM + GKE joignables, internet 404, cible validee le 02/10),
+      # appel anonyme reserve au reseau interne. Doit rester ainsi : un retour a `all` rouvrirait le service a internet.
+      ingress: internal-and-cloud-load-balancing
       allow_unauthenticated: true
       cpu: '1'
       memory: '512Mi'
