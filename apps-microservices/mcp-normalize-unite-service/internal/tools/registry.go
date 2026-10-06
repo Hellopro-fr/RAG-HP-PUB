@@ -49,6 +49,11 @@ func NewRegistry(clients *Clients) *Registry {
 	r.register("update_unit", updateUnitDescription, updateUnitInputSchema, handleUpdateUnit)
 	r.register("deactivate_unit", deactivateUnitDescription, unitRefInputSchema, handleDeactivateUnit)
 	r.register("get_unit", getUnitDescription, unitRefInputSchema, handleGetUnit)
+	r.register("create_unit_type", createUnitTypeDescription, createUnitTypeInputSchema, handleCreateUnitType)
+	r.register("update_unit_type", updateUnitTypeDescription, updateUnitTypeInputSchema, handleUpdateUnitType)
+	r.register("deactivate_unit_type", deactivateUnitTypeDescription, unitTypeRefInputSchema, handleDeactivateUnitType)
+	r.register("get_unit_type", getUnitTypeDescription, unitTypeRefInputSchema, handleGetUnitType)
+	r.register("set_dimension_types", setDimensionTypesDescription, setDimensionTypesInputSchema, handleSetDimensionTypes)
 
 	return r
 }

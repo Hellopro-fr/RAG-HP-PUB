@@ -101,7 +101,7 @@ func TestToolsList(t *testing.T) {
 			t.Fatalf("tool %s schema type = %v", tl.Name, schema["type"])
 		}
 	}
-	if strings.Join(names, ",") != "normalize_quantity,normalize_range,create_unit,update_unit,deactivate_unit,get_unit" {
+	if strings.Join(names, ",") != "normalize_quantity,normalize_range,create_unit,update_unit,deactivate_unit,get_unit,create_unit_type,update_unit_type,deactivate_unit_type,get_unit_type,set_dimension_types" {
 		t.Fatalf("tools = %v", names)
 	}
 }
