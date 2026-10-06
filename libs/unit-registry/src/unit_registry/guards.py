@@ -118,8 +118,8 @@ def _g6_uniqueness(candidate: Unit, others: Sequence[Unit]) -> GuardResult:
         for name in candidate.define_names:
             owner = spelled.get(name.lower())
             if owner is not None and name not in exact:
-                problems.append(f"pint name {name!r} matches spelling {name.lower()!r} of unit {owner!r} "
-                                "(case-insensitive)")
+                suffix = " (case-insensitive)" if name != name.lower() else ""
+                problems.append(f"pint name {name!r} matches spelling {name.lower()!r} of unit {owner!r}{suffix}")
     if candidate.dimension is not None:
         for key in sorted({k for k in candidate.lookup_keys() if k in taken}):
             problems.append(f"lookup key {key!r} already belongs to unit {taken[key]!r}")
@@ -153,6 +153,12 @@ def _g3_collision(candidate: Unit, base_defines: list[str]) -> GuardResult:
         # A case variant of an existing pint name ("Kilogram" vs kilogram) would make a
         # spelling that used to fail resolve to the new unit (residual R2).
         variant = lowered.get(name.lower())
+        if variant is None and name != name.lower():
+            # Prefixed/plural forms are not in _units ("Hectogram", "Grams", "KGS"): ask pint's parser.
+            try:
+                variant = name.lower() if name.lower() in probe else None
+            except Exception:
+                variant = None
         if variant is not None:
             problems.append(f"{name!r} is a case variant of the pint name {variant!r}; pick another name")
     return _fail("G3", "; ".join(problems)) if problems else _ok("G3")

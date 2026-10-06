@@ -233,3 +233,34 @@ def test_renaming_with_the_old_pint_alias_is_caught_by_g6(seed):
     cv = next(u for u in seed if u.token == "cheval_vapeur")
     renamed = replace(cv, dimension="power", pint_definition="cheval_vap2 = 735.49875 * watt = cv")
     assert "'cv'" in by_guard(validate_unit(renamed, seed))["G6"].message
+
+
+# --- second re-review: prefixed/plural case variants, G6 message ---
+
+@pytest.mark.parametrize("alias", ["Hectogram", "Grams", "Kilos", "KGS"])
+def test_g3_rejects_case_variants_that_pint_resolves_by_prefix_or_plural(seed, alias):
+    outcome = validate_unit(candidate(pint_definition=f"sac_ciment = 25 * kilogram = {alias}"), seed)
+    g3 = by_guard(outcome)["G3"]
+    assert not outcome.ok and not g3.ok and repr(alias) in g3.message
+
+
+def test_g6_says_case_insensitive_only_when_case_differs(seed):
+    exact = by_guard(validate_unit(candidate(pint_definition="sac_ciment = 25 * kilogram = unites"), seed))["G6"]
+    assert not exact.ok and "'unites'" in exact.message and "case-insensitive" not in exact.message
+    variant = by_guard(validate_unit(candidate(pint_definition="sac_ciment = 25 * kilogram = Unites"), seed))["G6"]
+    assert not variant.ok and "(case-insensitive)" in variant.message
+
+
+def test_token_sac_with_a_capitalised_define_still_passes(seed):
+    assert validate_unit(candidate(token="Sac", pint_definition="Sac = 25 * kilogram"), seed).ok
+
+
+@pytest.mark.parametrize("token,value,expected,unit_out,label", [
+    ("kg", "2", 2.0, "kilogram", "Poids"),
+    ("pieds", "2", 0.6096, "meter", "Longueur"),
+])
+def test_seed_units_updated_unchanged_with_a_sample_pass(seed, token, value, expected, unit_out, label):
+    unit = next(u for u in seed if u.token == token)
+    updated = replace(unit, regression_sample=sample(value=value, expected=expected, unit_out=unit_out, label=label))
+    outcome = validate_unit(updated, seed)
+    assert outcome.ok, outcome.failures
