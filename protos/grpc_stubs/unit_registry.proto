@@ -1,0 +1,120 @@
+syntax = "proto3";
+
+package unit_registry;
+
+import "google/protobuf/field_mask.proto";
+
+// Owned by unit-registry-service. Spec: docs/superpowers/specs/2026-10-06-unit-registry-combined-design.md
+// Messages copied from the June design ([J] A.3) with the deltas noted inline.
+service UnitRegistryService {
+  // Units (WRITE = Bearer UNITS_ADMIN_KEY; READ and ValidateUnit = open)
+  rpc RegisterUnit(RegisterUnitRequest) returns (UnitResponse);
+  rpc GetUnit(GetUnitRequest) returns (UnitResponse);
+  rpc ListUnits(ListUnitsRequest) returns (ListUnitsResponse);
+  rpc UpdateUnit(UpdateUnitRequest) returns (UnitResponse);
+  rpc DeleteUnit(DeleteUnitRequest) returns (DeleteUnitResponse);            // soft: status=DISABLED
+  rpc GetRegistryStatus(GetRegistryStatusRequest) returns (RegistryStatus);
+  rpc ValidateUnit(ValidateUnitRequest) returns (ValidationResult);          // read-only dry run
+
+  // Unit types (C9) — metadata only, never propagated to the normalizer
+  rpc CreateUnitType(CreateUnitTypeRequest) returns (UnitTypeResponse);
+  rpc UpdateUnitType(UpdateUnitTypeRequest) returns (UnitTypeResponse);
+  rpc DeactivateUnitType(DeactivateUnitTypeRequest) returns (UnitTypeResponse);
+  rpc GetUnitType(GetUnitTypeRequest) returns (UnitTypeResponse);
+  rpc ListUnitTypes(ListUnitTypesRequest) returns (ListUnitTypesResponse);
+  rpc SetDimensionTypes(SetDimensionTypesRequest) returns (DimensionTypesResponse);
+}
+
+message RegressionSample {
+  string label = 1;
+  string unit = 2;                            // empty -> the unit's own token
+  string value = 3;
+  string data_type = 4;                       // "numeric" | "numeric_range"
+  double expected_canonical_value = 5;
+  optional double expected_canonical_max = 6; // numeric_range only
+  string expected_canonical_unit = 7;
+  optional string value_max = 8;              // numeric_range input max (plan delta P4)
+}
+
+message UnitSpec {
+  string token = 1;
+  bool case_sensitive = 2;                    // P2-only: must be false
+  repeated string aliases = 3;
+  string kind = 4;                            // P2-only: "" or "NORMAL"
+  string label_condition = 5;                 // P2-only
+  string pint_definition = 6;
+  repeated string depends_on = 7;
+  string rewrite_expression = 8;              // P2-only
+  string dimension = 9;
+  string canonical_override = 10;             // P2-only
+  RegressionSample regression_sample = 11;
+}
+
+message UnitResponse {
+  string id = 1;
+  UnitSpec spec = 2;
+  string status = 3;                          // ACTIVE | PENDING | REJECTED | DISABLED
+  string source = 4;                          // seed | manual | auto_proposal
+  string created_by = 5;
+  string created_at = 6;
+  string updated_at = 7;
+  int64 registry_version = 8;
+  repeated string types = 9;                  // active type codes inherited from the dimension (C9)
+  int64 sort_order = 10;                      // define application order (plan delta P1)
+}
+
+message RegisterUnitRequest { UnitSpec spec = 1; string created_by = 2; }
+message GetUnitRequest { string id = 1; string token = 2; }
+
+message ListUnitsRequest {
+  string status = 1;
+  string dimension = 2;
+  int32 limit = 3;                            // <= 0: every row (plan delta P8)
+  int32 offset = 4;
+  string type = 5;                            // unit-type code filter (C9)
+}
+message ListUnitsResponse { repeated UnitResponse units = 1; int64 total = 2; int64 registry_version = 3; }
+
+message UpdateUnitRequest {
+  string id = 1;
+  UnitSpec spec = 2;
+  google.protobuf.FieldMask update_mask = 3;  // dimension, pint_definition, aliases, depends_on, regression_sample
+  string updated_by = 4;
+}
+
+message DeleteUnitRequest { string id = 1; string deleted_by = 2; }
+message DeleteUnitResponse { bool success = 1; }
+
+message GetRegistryStatusRequest {}
+message RegistryStatus { int64 loaded_version = 1; string last_reconcile_at = 2; int64 active_unit_count = 3; }
+
+message ValidateUnitRequest { UnitSpec spec = 1; string id = 2; }  // id set -> validate as an update of that unit
+message GuardResult { string guard = 1; bool ok = 2; bool skipped = 3; string message = 4; }
+message DryRunResult {
+  bool ok = 1;
+  double canonical_value = 2;
+  optional double canonical_max = 3;
+  string canonical_unit = 4;
+  bool bypassed = 5;
+  string error = 6;
+}
+message ValidationResult { bool overall_ok = 1; repeated GuardResult guards = 2; DryRunResult dry_run = 3; }
+
+message UnitTypeSpec { string code = 1; string label = 2; string description = 3; }
+message UnitTypeResponse {
+  string id = 1;
+  UnitTypeSpec spec = 2;
+  bool is_active = 3;
+  repeated string dimensions = 4;
+  string created_by = 5;
+  string created_at = 6;
+  string updated_at = 7;
+}
+message CreateUnitTypeRequest { UnitTypeSpec spec = 1; string created_by = 2; }
+message UpdateUnitTypeRequest { string id = 1; UnitTypeSpec spec = 2; google.protobuf.FieldMask update_mask = 3; string updated_by = 4; }
+message DeactivateUnitTypeRequest { string id = 1; string updated_by = 2; }
+message GetUnitTypeRequest { string id = 1; string code = 2; }
+message ListUnitTypesRequest { bool include_inactive = 1; }
+message ListUnitTypesResponse { repeated UnitTypeResponse types = 1; }
+message SetDimensionTypesRequest { string dimension = 1; repeated string type_codes = 2; string updated_by = 3; }
+message DimensionTypesResponse { string dimension = 1; repeated string type_codes = 2; }
