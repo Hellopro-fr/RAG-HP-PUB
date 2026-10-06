@@ -16,6 +16,7 @@ import (
 	"github.com/hellopro/mcp-normalize-unite/internal/tools"
 	"github.com/hellopro/mcp-normalize-unite/internal/transport"
 	normalizationpb "github.com/hellopro/mcp-normalize-unite/proto/gen/graph_normalization"
+	unitregistrypb "github.com/hellopro/mcp-normalize-unite/proto/gen/unit_registry"
 )
 
 func main() {
@@ -26,9 +27,17 @@ func main() {
 	// Establish the gRPC connection to the normalization backend.
 	normalizationConn := mustDial(cfg.NormalizationServiceURL, "normalization")
 	defer normalizationConn.Close()
+	unitRegistryConn := mustDial(cfg.UnitRegistryAddr, "unit-registry")
+	defer unitRegistryConn.Close()
+	if cfg.UnitsAdminKey == "" {
+		log.Printf("[main] UNITS_ADMIN_KEY is empty: unit write tools will be rejected by unit-registry-service")
+	}
 
 	clients := &tools.Clients{
 		Normalization: normalizationpb.NewGraphNormalizationServiceClient(normalizationConn),
+		Units:         unitregistrypb.NewUnitRegistryServiceClient(unitRegistryConn),
+		UnitsAdminKey: cfg.UnitsAdminKey,
+		Actor:         "mcp:" + cfg.Name,
 	}
 
 	// Set up MCP tool registry and handler.

@@ -8,11 +8,17 @@ import (
 
 	"github.com/hellopro/mcp-normalize-unite/internal/mcp"
 	normalizationpb "github.com/hellopro/mcp-normalize-unite/proto/gen/graph_normalization"
+	unitregistrypb "github.com/hellopro/mcp-normalize-unite/proto/gen/unit_registry"
 )
 
 // Clients holds persistent gRPC connections to backend services.
 type Clients struct {
 	Normalization normalizationpb.GraphNormalizationServiceClient
+	Units         unitregistrypb.UnitRegistryServiceClient
+	// UnitsAdminKey is sent as "authorization: Bearer <key>" on unit-registry writes only.
+	UnitsAdminKey string
+	// Actor is recorded as created_by / updated_by on unit-registry writes.
+	Actor string
 }
 
 // ToolHandler processes a tool call and returns the result.
@@ -39,6 +45,10 @@ func NewRegistry(clients *Clients) *Registry {
 
 	r.register("normalize_quantity", normalizeQuantityDescription, normalizeQuantityInputSchema, handleNormalizeQuantity)
 	r.register("normalize_range", normalizeRangeDescription, normalizeRangeInputSchema, handleNormalizeRange)
+	r.register("create_unit", createUnitDescription, createUnitInputSchema, handleCreateUnit)
+	r.register("update_unit", updateUnitDescription, updateUnitInputSchema, handleUpdateUnit)
+	r.register("deactivate_unit", deactivateUnitDescription, unitRefInputSchema, handleDeactivateUnit)
+	r.register("get_unit", getUnitDescription, unitRefInputSchema, handleGetUnit)
 
 	return r
 }

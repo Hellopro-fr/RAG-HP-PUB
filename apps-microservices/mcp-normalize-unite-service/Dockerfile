@@ -8,7 +8,7 @@ RUN go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.5.1
 WORKDIR /build
 
 # Copy proto definitions
-COPY protos/grpc_stubs/graph_normalization.proto /protos/grpc_stubs/
+COPY protos/grpc_stubs/graph_normalization.proto protos/grpc_stubs/unit_registry.proto /protos/grpc_stubs/
 
 # Copy service source
 COPY apps-microservices/mcp-normalize-unite-service/ /build/
@@ -23,6 +23,14 @@ RUN mkdir -p /build/proto/gen/graph_normalization && \
         --go-grpc_out=/build/proto/gen/graph_normalization --go-grpc_opt=paths=source_relative \
         --go-grpc_opt=Mgraph_normalization.proto=${MOD}/graph_normalization \
         /protos/grpc_stubs/graph_normalization.proto
+
+RUN mkdir -p /build/proto/gen/unit_registry && \
+    protoc --proto_path=/protos/grpc_stubs \
+        --go_out=/build/proto/gen/unit_registry --go_opt=paths=source_relative \
+        --go_opt=Munit_registry.proto=${MOD}/unit_registry \
+        --go-grpc_out=/build/proto/gen/unit_registry --go-grpc_opt=paths=source_relative \
+        --go-grpc_opt=Munit_registry.proto=${MOD}/unit_registry \
+        /protos/grpc_stubs/unit_registry.proto
 
 # ── Stage 2: Build Go binary ─────────────────────────────────────────────────
 FROM golang:1.24-alpine AS builder
