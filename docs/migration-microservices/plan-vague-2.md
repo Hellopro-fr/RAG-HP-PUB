@@ -5,6 +5,7 @@
 > les API HTTP, les MCP, la gateway, les fronts. Les services GPU, les bases et les backends gRPC **restent sur la VM**.
 > Inventaire détaillé : [`inventaire-services-migration-par-lot.md`](inventaire-services-migration-par-lot.md) · préparation gateway : [`lots/L7.md`](lots/L7.md).
 > **Suivi d'exécution (cases à cocher, journal Gandi, demandes Ecritel, décisions) : [`suivi-vague-2.md`](suivi-vague-2.md).**
+> **Exécution par lot (05/10), comme la vague 1** : procédure [`procedure-bascule-route-http.md`](procedure-bascule-route-http.md) · fiches [`lots/V2-a1.md`](lots/V2-a1.md) → [`lots/V2-d.md`](lots/V2-d.md) · état des lots et des services : `suivi-vague-2.md` § 0 / 0bis.
 
 ---
 
@@ -347,6 +348,8 @@ Des **correctifs urgents** partent sur la VM par `features/poc` ; ils ne sont pa
 |---|---|---|
 | `api-detection-langue-fr-service`, `content-extractor-api-service` (V2-a) | `crawler-service` (reste jusqu'à V2-e) | jumeaux VM **UP** tant que `crawler-service` n'est pas repointé vers les URL Cloud Run |
 | `api-classification-service` / `-lb` (V2-a) | `mcp-classification-produit-service` (jusqu'à V2-b) | jumeau VM UP jusqu'à V2-b, ou repointage du MCP |
+| `optimize-service` (V2-a1, basculé 06/10) | `api-classification-service` (jusqu'à V2-a3) — appel direct `POST /optimize-product/qwen/v2` (relevé 06/10) | jumeau VM UP jusqu'à la bascule ou au repointage de la classification |
+| `api-detection-langue-fr-service`, `content-extractor-api-service` (V2-a1, basculés 06/10) | `crawler-service` : `DETECTION_LANGUE_API_URL` / `CONTENT_EXTRACTOR_API_URL` (`docker-compose.yml:1410-1411`, en dur) ; volume 48 h : ~200-470 appels detection, 0 extractor | repointage par le dev du crawler (option B : valeurs surchargeables par le `.env`), puis jumeaux en réserve |
 | `mcp-gateway-service` (V2-c) | `account-service-backend` (jusqu'à V2-d) | au moment de V2-c : repointer `account-service-backend` vers le Service GKE (IP interne) **avant** d'arrêter le jumeau |
 | `account-service-backend` (V2-d) | `redis-client-frontend` (front SSO, tant qu'il n'est pas migré) | repointage du front, ou jumeau UP |
 | `api-catalog-service` (**reste** sur la VM) | `api-gateway-go-service` (V2-c, vers GKE) | sens inverse : la gateway GKE doit joindre le catalogue par l'enabler (point 6 de la fiche L7) |

@@ -75,6 +75,24 @@ ouvrées**. La seconde option est préparée en détail :
 *lots d'exécution*, qui ne couvrent que P1, P2 et P3. Si ton service est en P4 ou au-delà, cette série ne te
 concerne pas encore.
 
+## Vague 2 — par lot, comme la vague 1
+
+La vague 2 déplace ce qui reste de public sur la VM (API HTTP, MCP, gateway, fronts). Elle suit la même organisation
+que la vague 1 : une procédure commune, une fiche par lot, un tableau de suivi, un rapport par service.
+
+| Document | Ce qu'il contient |
+|---|---|
+| [`procedure-bascule-route-http.md`](procedure-bascule-route-http.md) | La procédure commune d'un service HTTP (P0 → P7, rollback R) : on bascule **une adresse**, le jumeau VM reste allumé |
+| [`lots/V2-a1.md`](lots/V2-a1.md) · [`V2-a2`](lots/V2-a2.md) · [`V2-a3`](lots/V2-a3.md) | API HTTP internes (P4), routes de la gateway, 14 services en trois lots |
+| [`lots/V2-b.md`](lots/V2-b.md) | Les 8 serveurs MCP (P5), lignes `mcp_servers` |
+| [`lots/V2-c.md`](lots/V2-c.md) | Bloc gateway (P2, P3, ex-L7), `api.` et `mcp.hellopro.eu` |
+| [`lots/V2-d.md`](lots/V2-d.md) | SSO et fronts publics (P6-P8) : `login.`, `rag.`, `conseils`, `cmf.` |
+| [`suivi-vague-2.md`](suivi-vague-2.md) § 0 et 0bis | **État des lots** et **état des services**, une ligne par service |
+| [`plan-vague-2.md`](plan-vague-2.md) | Le pourquoi : rôles, sous-vagues, décisions, demandes externes |
+
+**Si ton service est en P4 à P8** : ta fiche de lot dit quand il bascule et quel parcours tu auras à tester. Après la
+bascule, tes correctifs pour ce service partent dans `prod`, plus par `features/poc`.
+
 **Ce que ça change pour toi si tu es en P1-P3** : ton pré-contrôle doit être remis **avant la veille du lot de ton
 service**, et un référent de ta chaîne doit être joignable entre 14h et 16h le jour du lot, puis le lendemain matin.
 La fiche de ton lot dit quel jour.

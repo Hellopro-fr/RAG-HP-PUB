@@ -5,7 +5,8 @@
 > avec `gcloud`. Aucun accès à la VM Manager, aucun `kubectl` nécessaire pour lire des logs.
 >
 > **Depuis quand** : les logs des pods GKE ne sont collectés que depuis le **21/09/2026 14h21 (Paris)**. Avant cette
-> date, il n'y a rien à trouver côté GKE (finding F-HP-OBS-004). Cloud Run était déjà collecté.
+> date, il n'y a rien à trouver côté GKE (finding F-HP-OBS-004). Cloud Run était déjà collecté (revérifié le 05/10 : journal
+> des requêtes et sortie de l'application, aucune exclusion FinOps sur Cloud Run). **Vague 2** : voir la section dédiée plus bas.
 
 ## Ce qu'il te faut
 
@@ -84,7 +85,7 @@ générées depuis [`inventaire-services-migration-par-lot.md`](inventaire-servi
 | `account-service-frontend` | `account-service-frontend` | shadow |
 | `api-chat-llm-service` | `api-chat-llm` | shadow |
 | `api-classification-service` | `api-classification` | shadow |
-| `api-comparaison-texte-service` | `api-comparaison-texte` | shadow |
+| `api-comparaison-texte-service` | `api-comparaison-texte` | **PROD** (route gateway, 05/10) |
 | `api-detection-langue-fr-service` | `api-detection-langue-fr` | shadow |
 | `api-embedding-service` | `api-embedding-service` | shadow |
 | `api-html-recherche-service` | `api-html-recherche` | shadow |
@@ -116,6 +117,65 @@ Les services absents de ces tables ne sont pas migrés : `docker logs` sur la VM
 > ⚠️ **Piège vu le 21/09** : `gcloud run services logs read nettoyage-bruit-ocr-service` ne rend rien, et c'est normal :
 > ce service est sur **GKE**. `gcloud run …` ne sert qu'aux services de la table Cloud Run. Pour GKE, c'est `gcloud logging read`
 > avec `resource.type="k8s_container"`, ou la console.
+
+## Vague 2 — vérifier un service HTTP basculé sur Cloud Run, et lire ses logs
+
+> Ajouté le 05/10 avec la première route basculée (`SERVICE_COMPARAISON_TEXTE`). Procédure de bascule :
+> [`procedure-bascule-route-http.md`](procedure-bascule-route-http.md) · état des services : [`suivi-vague-2.md`](suivi-vague-2.md) § 0bis.
+
+En vague 2, ton service HTTP **existe deux fois** : le jumeau sur la VM (resté allumé, c'est le repli) et le service
+Cloud Run. Après la bascule de sa route, les appels qui passent par la gateway (`api.hellopro.eu`) vont sur Cloud Run ;
+les appels **directs** entre conteneurs de la VM (par exemple `crawler-service` → content-extractor) vont toujours sur le
+jumeau. Avant de chercher un bug, regarde donc **où** est arrivée la requête.
+
+### Deux journaux par service Cloud Run
+
+| Journal | Ce qu'il contient | Comment le reconnaître |
+|---|---|---|
+| **Requêtes** (`run.googleapis.com/requests`) | une ligne par requête HTTP reçue : méthode, code, URL, latence — écrite par Cloud Run, même si ton code ne logue rien | `GET 200 https://api-comparaison-texte-xqksdwdiga-ew.a.run.app/openapi.json` |
+| **Application** (`run.googleapis.com/stdout`, `stderr`) | ce que ton code écrit (uvicorn, `logging`, `print`) | `INFO: 169.254.169.126:38440 - "GET /api/v1/health HTTP/1.1" 200 OK` |
+
+L'adresse `169.254.x.x` est le frontal de Google, pas l'appelant réel : pour savoir **qui** a appelé, regarde les logs de
+la gateway sur la VM (elle reste sur la VM jusqu'à V2-c).
+
+### Lire les logs
+
+**Le plus simple, depuis ton poste** (marche aussi sous Git Bash) :
+
+```bash
+gcloud run services logs read api-comparaison-texte --region europe-west1 --project hellopro-rag-project --limit 100
+```
+
+**Console** : Cloud Run → le service → onglet **Logs** ; ou Logs Explorer avec :
+
+```
+resource.type="cloud_run_revision"
+resource.labels.service_name="api-comparaison-texte"
+```
+
+Ajoute `httpRequest.status>=500` pour les erreurs serveur, `logName:"run.googleapis.com%2Frequests"` pour ne garder que
+les requêtes, `logName:"stdout" OR logName:"stderr"` pour ne garder que ton code.
+
+> ⚠️ **Sous Windows (Git Bash, PowerShell)**, `gcloud logging read` avec un filtre entre guillemets, ou un `--format`
+> avec des parenthèses (`value(...)`, `table(...)`), est **mal transmis par `gcloud.cmd`** : 0 ligne, ou une erreur
+> `… was unexpected at this time`. Ce n'est pas l'absence de logs (constaté le 05/10). Utilise
+> `gcloud run services logs read`, la console, ou **Cloud Shell** (icône `>_` de la console) pour les filtres avancés.
+
+### Vérifier que le service reçoit bien ses requêtes
+
+| Question | Où regarder |
+|---|---|
+| Ma requête est-elle arrivée sur Cloud Run ? | journal des requêtes (ci-dessus), à l'heure de ton test |
+| … ou sur le jumeau VM ? | `docker logs -t --since 10m <conteneur>` sur la VM (accès SSH) : si ta requête y est, la route n'a pas (encore) basculé — la gateway relit sa table toutes les 15 min, le DevSecOps peut forcer un rescan |
+| Combien d'appels, combien d'erreurs ? | Cloud Run → le service → onglet **Métriques** : nombre de requêtes par classe de code (2xx, 4xx, 5xx), latence, instances (rôle `monitoring.viewer`, posé le 06/10 pour les 13 comptes devs) |
+| Quelle révision sert le trafic ? | Cloud Run → le service → onglet **Révisions** (ou `gcloud run services describe <service> --region europe-west1 --format=json`) |
+
+### Ce qu'on attend de toi après la bascule de ton service
+
+1. Joue le parcours décrit dans la fiche du lot (`lots/V2-a1.md`…) et écris **OK / KO** dans le canal de bascule.
+2. Un KO : envoie l'heure du test et, si possible, le lien « Share » de la requête Logs Explorer. **Ne corrige pas en
+   direct** : le DevSecOps remet la route sur la VM en une minute, on analyse ensuite.
+3. Après validation, tes correctifs pour ce service partent dans `prod` (PR, gate, CD) — plus par `features/poc`.
 
 ## Option 1 — la console (le plus simple)
 

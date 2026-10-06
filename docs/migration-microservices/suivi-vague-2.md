@@ -3,10 +3,80 @@
 > Tableau de bord vivant de la vague 2. Le **pourquoi** et le **comment détaillé** sont dans [`plan-vague-2.md`](plan-vague-2.md) ;
 > ici, on coche. Mis à jour par le DSO après chaque action, relu à chaque point d'équipe.
 > Les numéros d'action (0.1, a.2…) sont ceux du plan.
+> **Par lot, comme en vague 1** : procédure commune [`procedure-bascule-route-http.md`](procedure-bascule-route-http.md) · fiches [`lots/V2-a1.md`](lots/V2-a1.md), [`V2-a2`](lots/V2-a2.md), [`V2-a3`](lots/V2-a3.md), [`V2-b`](lots/V2-b.md), [`V2-c`](lots/V2-c.md), [`V2-d`](lots/V2-d.md) · rapports par service dans [`rapports/`](rapports/).
 
 ## Légende
 
 ⬜ à faire · 🔄 en cours · ✅ fait · ❌ bloqué · ⏭️ reporté / sans objet · ↩️ rollback joué
+
+---
+
+## 0. État des lots
+
+> **Le tableau qui dit où en est chaque lot.** Mis à jour à chaque geste. Détail du déroulé : la feuille de lot de chaque fiche.
+
+| Lot | Contenu | Aiguillage | Date | Statut | Bascule | Obs. 24 h | Décision J+1 |
+|:--:|---|---|---|---|---|---|---|
+| **V2-a1** | comparaison-texte, optimize, detection-langue, content-extractor (P4) | routes `.env.url` | lun 5/10 → mar 6/10 | 🔄 **4/4 routes basculées** : comparaison 05/10 15:23 (✅ validée), optimize 06/10 09:30, detection 11:18, extractor 11:42 | comparaison : 8 min (attente du scan du catalogue) | | |
+| **V2-a2** | chat-llm, embedding HTTP, graph-rag recherche ×3 (P4) | routes `.env.url` | proposé mer 7/10 | 🔄 P0 fait 05/10 : 0 appel via la gateway en 7 j ; chat-llm = changement de modèle DeepSeek à valider ; wrappers à régler | | | |
+| **V2-a3** | recherche, classification, rest-milvus, ingestion, prix-traitement (P4) | routes `.env.url` | proposé jeu 8/10 | ⬜ P0 à faire ; correctif `localhost` rest-milvus (dev) | | | |
+| **V2-b** | 8 serveurs MCP (P5) | lignes `mcp_servers` | après V2-a3 | ⬜ script `mcp_servers` à écrire | | | |
+| **V2-c** | gateway B1 + B3, comparateur d'images (P2, P3, ex-L7) | vhosts nginx `api.`, `mcp.` + routes | sem. du 12/10, journée dédiée | ⬜ script nginx (0.22) à écrire | | | |
+| **V2-d** | SSO et fronts : `login.`, `rag.`, `conseils`, `cmf.` (P6-P8) | vhosts nginx | sem. du 12/10, après V2-c | ⬜ | | | |
+| *V2-e* | *stockage images et crawler — chantier, pas une bascule* | — | sem. du 19/10 | ⬜ | | | |
+| *Fin* | *DNS Gandi en une intervention du titulaire (décision 10)* | A Gandi | fin de vague | ⬜ | | | |
+
+Répartition de la priorité **P4** (16 services) : 14 dans V2-a1 / a2 / a3 ; `image-comparison-service` dans V2-c (route `/comparator` du `reverse-proxy`) ; `crawler-monitor-backend` dans V2-d (avec son front).
+
+## 0bis. État des services
+
+> Un service = une ligne. **Jumeau VM** : `UP` (sert encore, ou repli) · `RÉSERVE` (arrêté, jamais supprimé, décision 4). **Cible** : `shadow` (aucun trafic) · `PROD` (reçoit le trafic). Deux validations : DSO (technique) et dev (parcours réel).
+
+| Lot | Service VM | Cible (nom exact) | Aiguillage | Jumeau VM | Cible | Basculé le | Validé DSO | Validé dev | Obs. 24 h | Notes |
+|:--:|---|---|---|:--:|:--:|---|---|---|:--:|---|
+| V2-a1 | `api-comparaison-texte-service` | CR `api-comparaison-texte` | `SERVICE_COMPARAISON_TEXTE` | UP | **PROD** | 05/10 12:15 UTC (effectif 12:23:33, scan du catalogue) | ✅ DSO 05/10 (destination prouvée) | ⬜ | ⬜ | P1 ✅ 14:41 ; P2 ✅ 15:15 ; P3 ✅ 15:32 (0 requête sur le jumeau) ; relevé 17h ✅ ; nuit ✅ (18 h : 0 erreur, jumeau 0 requête) ; **GO technique J+1** ; P4 dev ✅ 06/10 (OK ; payload absent des logs = comportement d'origine) |
+| V2-a1 | `optimize-service` | CR `optimize-service` | `SERVICE_OPTIMIZE` | UP | **PROD** | 06/10 06:30 UTC (apply + `rescan`) | ✅ DSO 06/10 (preuve : jumeau 0) | ⬜ | ⬜ | ~1 500 à 5 000 req./jour, 0 erreur sur 24 h côté VM (référence) |
+| V2-a1 | `api-detection-langue-fr-service` | CR `api-detection-langue-fr` | `SERVICE_DETECTION_SITE_FR` | UP | **PROD** | 06/10 08:18 UTC (apply + `rescan`) | ✅ DSO 06/10 (preuve) | ⬜ | ⬜ | code rapatrié 02/10 ; jumeau UP (appelé par `crawler-service`) |
+| V2-a1 | `content-extractor-api-service` | CR `content-extractor-api-service` | `SERVICE_EXTRACTOR` | UP | **PROD** | 06/10 08:42 UTC (apply + `rescan`) | ✅ DSO 06/10 (preuve) | ⬜ | ⬜ | code + `common_utils` rapatriés 02/10 ; jumeau UP (`crawler-service`) |
+| V2-a2 | `api-chat-llm-service` | CR `api-chat-llm` | `SERVICE_CHAT` | UP | shadow | | | | ⬜ | |
+| V2-a2 | `api-embedding-service` | CR `api-embedding-service` | `SERVICE_EMBEDDING` | UP | shadow | | | | ⬜ | ≠ `embedding-service` (L6) |
+| V2-a2 | `graph-rag-api-recherche-service` | CR `graph-rag-api-recherche-service` | `SERVICE_GRAPH` | UP | shadow | | | | ⬜ | |
+| V2-a2 | `graph-rag-api-recherche-optim-service` | CR `graph-rag-api-recherche-optim-service` | `SERVICE_GRAPHOPTIM` | UP | shadow | | | | ⬜ | |
+| V2-a2 | `graph-rag-api-recherche-rust-service` | CR `graph-rag-api-recherche-rust-service` | `SERVICE_GRAPHRUST` | UP | shadow | | | | ⬜ | sortie NAT statique |
+| V2-a3 | `api-recherche-service` | CR `api-recherche` | `SERVICE_SEARCH` | UP | shadow | | | | ⬜ | |
+| V2-a3 | `api-classification-service` | CR `api-classification` | `SERVICE_CLASSIFICATION` | UP | shadow | | | | ⬜ | 10 réplicas VM ; jumeau UP jusqu'à V2-b |
+| V2-a3 | `api-rest-milvus-service` | CR `api-rest-milvus` | `SERVICE_REST_MILVUS` | UP | shadow | | | | ⬜ | correctif `localhost` avant |
+| V2-a3 | `api-ingestion-service` | CR `api-ingestion` | `SERVICE_INGESTION` | UP | shadow | | | | ⬜ | écrit (broker prod à câbler) |
+| V2-a3 | `prix-traitement` | CR `prix-traitement` | `SERVICE_PRIX_TRAITEMENT` | UP | shadow | | | | ⬜ | |
+| V2-b | `mcp-api-recherche-service` | CR `mcp-api-recherche-service` | `mcp_servers` | UP | shadow | | | | ⬜ | après V2-a3 |
+| V2-b | `mcp-classification-produit-service` | CR `mcp-classification-produit-service` | `mcp_servers` | UP | shadow | | | | ⬜ | |
+| V2-b | `mcp-google-analytics-service` | CR `mcp-google-analytics-service` | `mcp_servers` | UP | shadow | | | | ⬜ | |
+| V2-b | `mcp-google-analytics-minisite-service` | CR `mcp-google-analytics-minisite-service` | `mcp_servers` | UP | shadow | | | | ⬜ | |
+| V2-b | `mcp-google-search-console-service` | CR `mcp-google-search-console-service` | `mcp_servers` | UP | shadow | | | | ⬜ | |
+| V2-b | `mcp-semrush-service` | CR `mcp-semrush-service` | `mcp_servers` | UP | shadow | | | | ⬜ | commit `poc` seul 02/09 |
+| V2-b | `mcp-ringover-service` | CR `mcp-ringover-service` | `mcp_servers` | UP | shadow | | | | ⬜ | |
+| V2-b | `mcp-leexi-service` | CR `mcp-leexi-service` | `mcp_servers` | UP | shadow | | | | ⬜ | |
+| V2-c | `api-gateway-go-service` | GKE `api-gateway-go` | vhost `api.` | UP → arrêté au geste | shadow | | | | ⬜ | |
+| V2-c | `mcp-gateway-service` | GKE `mcp-gateway-service` | vhost `mcp.` | UP → arrêté au geste | shadow | | | | ⬜ | |
+| V2-c | `mcp-zoho-service` | GKE `mcp-zoho-service` | `mcp_servers` | UP | shadow | | | | ⬜ | |
+| V2-c | `mcp-google-templates-runner` | GKE `mcp-google-templates-runner` | URL `mcp-gateway` | UP | shadow | | | | ⬜ | |
+| V2-c | `graph-rag-api-admin-service` | GKE `graph-rag-api-admin-service` | `SERVICE_GRAPHADMIN` | UP | shadow | | | | ⬜ | |
+| V2-c | `graph-rag-dlq-manager-service` | GKE `graph-rag-dlq-manager` | `SERVICE_GRAPHDLQ` | UP | shadow | | | | ⬜ | |
+| V2-c | `image-comparison-service` | CR `image-comparison-service` | `SERVICE_IMAGE_COMPARATOR` | UP | shadow | | | | ⬜ | compteur Redis à isoler |
+| V2-d | `account-service-backend` | CR `account-service-backend` | URL appelants | UP | shadow | | | | ⬜ | |
+| V2-d | `account-service-frontend` | CR `account-service-frontend` | vhost `login.` | UP | shadow | | | | ⬜ | |
+| V2-d | `api-html-recherche-service` | CR `api-html-recherche` | vhost `rag.` | UP | shadow | | | | ⬜ | |
+| V2-d | `nextjs-conseils-hp` | CR `nextjs-conseils-hp` | vhost `nextjs-conseils.` | UP | shadow | | | | ⬜ | contenus identiques exigés |
+| V2-d | `crawler-monitor-backend` | CR `crawler-monitor-backend` | à qualifier | UP | shadow | | | | ⬜ | |
+| V2-d | `redis-client-frontend`, `crawler-monitor-frontend`, `mcp-gateway-frontend` | à créer | vhost `cmf.`, front `mcp.` | UP | — | | | | ⬜ | build racine, `@hellopro/auth` |
+
+**Restent sur la VM pendant la vague** : `dlq-manager-service` (décision 5), `mcp-neo4j-service` (F-HP-SEC-020), `nextjs-formulaire-hp` (décision 3), services P9 / P10 de l'inventaire.
+
+### Rollbacks
+
+| Date | Lot | Service / route | Déclencheur | Durée | Cause | Reprise |
+|---|---|---|---|---|---|---|
+| | | | | | | |
 
 ---
 
@@ -197,3 +267,10 @@ Le détail de chaque décision (pourquoi, objectif, options, recommandation, con
 | 02/10 15h | Jeton Gandi reçu et rangé (droit DNS seul). `hellopro.eu` est sur le **DNS Gandi classique**, pas sur LiveDNS : l'API du jeton ne s'applique pas. Photo DNS : 6 A en `35.245.31.1`, TTL 3 h. |
 | 02/10 15h30 | **Contrainte** : pas d'accès DSO à l'interface Gandi (droits, informations confidentielles) ; seul le titulaire du compte peut agir. Avec `hellopro.eu` en DNS classique, le jeton ne sert pas → mécanisme de bascule des entrées publiques à revoir (proposition : nginx VM d'abord, DNS ensuite, en une intervention du titulaire). |
 | 02/10 16h | **Décision 10** : bascule des entrées publiques par le nginx de la VM pendant la vague, DNS en une seule fois à la fin (titulaire Gandi) ; LB / certificats / TTL reportés ; jeton Gandi à supprimer. |
+| 05/10 | V2-a1 : comparaison-texte P1 ✅ (14:41). Bascule suspendue à la demande du user le temps de structurer la vague 2 **par lot, comme la vague 1** : procédure commune [`procedure-bascule-route-http.md`](procedure-bascule-route-http.md), fiches `lots/V2-a1` → `V2-d`, tableaux « État des lots » et « État des services » (§ 0, 0bis). |
+| 05/10 15:15 | **Première route basculée** : `SERVICE_COMPARAISON_TEXTE` → Cloud Run. Effective au scan du catalogue de 15:23:33 et non à l'écriture : `api-catalog` ne détecte pas l'écriture de `.env.url` (fichier monté seul) et le relit toutes les 15 min → délai réel ≤ 15 min, rollback compris ; mode `rescan` ajouté au script (redémarrage d'`api-catalog`, la gateway garde sa table pendant ce temps). |
+| 05/10 15:40 | **Journaux Cloud Run : présents.** Le constat « journaux absents » du 01/10 était un artefact de `gcloud.cmd` sous Git Bash (filtres `gcloud logging read` mal transmis) ; `gcloud run services logs read` montre requêtes et sortie applicative, notre `GET` via la gateway de 12:32:54 UTC y figure (preuve de destination côté Cloud Run). Aucune exclusion FinOps sur Cloud Run. Procédure d'accès des devs ajoutée au guide `acces-logs-services-migres.md` (section Vague 2). |
+| 05/10 17h | V2-a1 comparaison-texte : relevé 17h propre (gateway `200` seulement, jumeau VM sans requête, Cloud Run 0 erreur) ; test du dev en cours. V2-a2 : P0 fait (0 appel via la gateway en 7 j sur les 5 routes ; chat-llm = changement de modèle DeepSeek `prod` jamais déployé sur la VM → décision dev) ; questions envoyées au LEAD. |
+| 06/10 matin | Réponses devs V2-a2 : pas d'appel direct, usage ponctuel. chat-llm : la VM tourne avec `deepseek-chat`, **retiré par DeepSeek le 24/07** (message du commit `f375968e`) → **option A** retenue : bascule avec `deepseek-v4-flash`. IAM : `monitoring.viewer` posé aux 13 comptes devs (onglet Métriques Cloud Run), 13/13. |
+| 06/10 matin | V2-a1 : comparaison-texte **validé** (OK dev) + résumé de chaque comparaison dans les logs (PR DSO mergée, révision `00009-n8z`, vérifié) ; **optimize basculé** 09:30 (`rescan`, preuve OK) ; **detection-langue basculé** 11:18 (référence VM : 20 % de `503`, saturation du jumeau). Catalogue : `failed=1` intermittent = **deadlock MySQL** (`Error 1213`, `internal/repository/endpoint_repo.go:23`) entre scans concurrents — la mise à jour de l'URL (table des services) passe avant l'écriture des endpoints, la route n'est pas affectée ; à remonter aux devs (retry sur 1213 ou concurrence réduite). Crawler : appelle detection-langue et content-extractor en direct (`docker-compose.yml:1410-1411`) → repointage à proposer au dev du crawler après mesure du volume. |
+| 06/10 après-midi | V2-a2 prêt (wrappers en entrée interne mergés, `min_instances` 0 ; correctif Rust : Dockerfile sans `Cargo.lock` → copié ; vérifié : internet 404, VM 200). Relevés de midi et 17h : detection `503` à ~1 % (20-60 % sur la VM) ; les `503` de la gateway sont surtout des **abandons de l'appelant** (extractor : Cloud Run a servi `200`) ; classification appelle optimize en direct ; 2 erreurs d'encodage detection = défaut du code (`language_detector.py:482`). Incident doc : `lots/V2-a1.md` vidé par un script, reconstruit ; écritures désormais atomiques. |
