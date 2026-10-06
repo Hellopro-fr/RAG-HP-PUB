@@ -682,7 +682,7 @@ services:
   mysql:
     image: mysql:8.0
     container_name: mysql
-    profiles: [ "app", "mcp" ]
+    profiles: [ "app", "mcp", "graph-rag" ]
     restart: unless-stopped
     environment:
       - MYSQL_ROOT_PASSWORD=${GATEWAY_MYSQL_ROOT_PASSWORD:-gateway_root_pass}
@@ -2643,6 +2643,7 @@ services:
       - NORMALIZATION_SERVICE_URL=graph-rag-normalize-unite-service:50057
       - UNIT_REGISTRY_GRPC_ADDR=unit-registry-service:50059
       - UNITS_ADMIN_KEY=${UNITS_ADMIN_KEY:-}
+      - UNIT_WRITE_TOOLS_ENABLED=${UNIT_WRITE_TOOLS_ENABLED:-false}
     networks:
       - services-net
     logging: *logging_defaults
