@@ -1,12 +1,17 @@
+from __future__ import annotations
+
 import grpc
 import logging
 from concurrent import futures
+from typing import TYPE_CHECKING
 
 from grpc_stubs import graph_normalization_pb2
 from grpc_stubs import graph_normalization_pb2_grpc
 
-from application.normalization_use_case import NormalizationUseCase
 from app.config import settings
+
+if TYPE_CHECKING:  # annotation only: a runtime import would close a cycle with application/
+    from application.normalization_use_case import NormalizationUseCase
 
 
 class GraphNormalizationServiceImpl(

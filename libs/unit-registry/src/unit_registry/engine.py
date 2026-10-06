@@ -87,7 +87,16 @@ class Normalizer:
         """
         Normalizes a single value.
         """
-        bundle = self._bundle_provider()
+        return self._normalize(self._bundle_provider(), label, unit, value, data_type)
+
+    def _normalize(
+        self,
+        bundle: RegistryBundle,
+        label: str,
+        unit: Optional[str],
+        value: Any,
+        data_type: Optional[str] = "numeric",
+    ) -> Dict[str, Any]:
         if data_type not in ["numeric", "numeric_range"]:
             return {}
 
@@ -387,17 +396,18 @@ class Normalizer:
     ) -> Dict[str, Any]:
         """Normalizes units for a numeric range."""
         result = {}
+        bundle = self._bundle_provider()  # one bundle for the whole range
 
         # Normalize Min
         if min_val is not None:
-            norm_min = self.normalize(label, unit, min_val, "numeric")
+            norm_min = self._normalize(bundle, label, unit, min_val, "numeric")
             if norm_min:
                 result["valeur_min_canonique"] = norm_min["valeur_canonique"]
                 result["unite_canonique"] = norm_min["unite_canonique"]
 
         # Normalize Max
         if max_val is not None:
-            norm_max = self.normalize(label, unit, max_val, "numeric")
+            norm_max = self._normalize(bundle, label, unit, max_val, "numeric")
             if norm_max:
                 result["valeur_max_canonique"] = norm_max["valeur_canonique"]
                 if "unite_canonique" not in result:

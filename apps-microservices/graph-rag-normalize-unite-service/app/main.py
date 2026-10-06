@@ -3,10 +3,8 @@ import threading
 
 from app.config import settings
 from common_utils.metrics.prometheus import start_metrics_server_in_thread
-# grpc_server must be imported before application.*: infrastructure/__init__ and
-# application/normalization_use_case import each other (circular if application goes first).
-from infrastructure.grpc_server import serve
 from application.normalization_use_case import NormalizationUseCase
+from infrastructure.grpc_server import serve
 from infrastructure.registry_client import RegistryClient
 from infrastructure.unit_events_consumer import UnitEventsConsumer
 from infrastructure.unit_normalization_service import unit_state
