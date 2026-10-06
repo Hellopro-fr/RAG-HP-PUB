@@ -46,6 +46,7 @@ type Gateway struct {
 	gatewayUsers  gatewayUserFinder     // optional; nil disables auto-self admin fallback
 	serverAuth    serverAuthorizer      // optional; nil disables Step-0 server-authorization bypass
 	zohoCatalog   ZohoUserCatalog       // optional; nil marks all Zoho backends unconfigured
+	neo4jAccess   *Neo4jAccess          // optional; nil disables the Neo4j template instance gate
 }
 
 func New(name, version string, registry *Registry) *Gateway {
@@ -89,6 +90,13 @@ func (g *Gateway) SetServerAuthorizer(s serverAuthorizer) {
 // "Non configuré").
 func (g *Gateway) SetZohoUserCatalog(c ZohoUserCatalog) {
 	g.zohoCatalog = c
+}
+
+// SetNeo4jAccess registers the service-level gate for Neo4j template
+// instances, copied into every ScopedGateway. Pass nil to disable it (every
+// backend then behaves as before the gate existed).
+func (g *Gateway) SetNeo4jAccess(a *Neo4jAccess) {
+	g.neo4jAccess = a
 }
 
 // SetBDDResolver attaches the BDD used-table resolver consumed by
@@ -161,8 +169,9 @@ func (g *Gateway) DiscoverAndRegister(ctx context.Context, id string, url string
 	}
 
 	// Preserve metadata that lives on the registry but wasn't fetched from
-	// the upstream init result: TemplateSlug, CreatedBy, Tags. Health-checker
-	// re-discovery would otherwise wipe them every probe cycle.
+	// the upstream init result: TemplateSlug, CreatedBy, Tags, ToolPrefix,
+	// MinRole. Health-checker re-discovery would otherwise wipe them every
+	// probe cycle — for MinRole that would silently un-gate the backend.
 	if prev := g.registry.FindByID(id); prev != nil {
 		if srv.TemplateSlug == "" {
 			srv.TemplateSlug = prev.TemplateSlug
@@ -175,6 +184,9 @@ func (g *Gateway) DiscoverAndRegister(ctx context.Context, id string, url string
 		}
 		if srv.ToolPrefix == "" {
 			srv.ToolPrefix = prev.ToolPrefix
+		}
+		if srv.MinRole == "" {
+			srv.MinRole = prev.MinRole
 		}
 	}
 

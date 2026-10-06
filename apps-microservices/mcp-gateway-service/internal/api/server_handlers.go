@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -14,14 +15,14 @@ import (
 	"mcp-gateway/internal/auth"
 	"mcp-gateway/internal/bddcatalog"
 	"mcp-gateway/internal/config"
+	"mcp-gateway/internal/crypto"
 	"mcp-gateway/internal/db"
 	"mcp-gateway/internal/gateway"
 	goGoogle "mcp-gateway/internal/google"
-	"mcp-gateway/internal/crypto"
 	"mcp-gateway/internal/leexiadmin"
-	"mcp-gateway/internal/ringoveradmin"
 	oauth2pkg "mcp-gateway/internal/oauth2"
 	"mcp-gateway/internal/repository"
+	"mcp-gateway/internal/ringoveradmin"
 	"mcp-gateway/internal/runnerclient"
 	"mcp-gateway/internal/slack"
 	"mcp-gateway/internal/urlvalidation"
@@ -118,6 +119,10 @@ type Handler struct {
 	serverAuthRepo *repository.ServerAuthorizationRepo
 	// zohoImportRepo backs the /api/v1/zoho-imports/admin REST endpoints.
 	zohoImportRepo *repository.ZohoImportRepo
+	// hellodataLister fetches a hellodata backend's tools with an admin's
+	// identity (see hellodata_catalog.go). nil = live network call; tests
+	// stub it.
+	hellodataLister hellodataToolLister
 	// encryptor is used by handlers that encrypt/decrypt sensitive blobs (e.g.
 	// auth_headers on the admin Zoho import row). nil when ENCRYPTION_KEY is unset.
 	encryptor *crypto.Encryptor
@@ -266,6 +271,11 @@ func (h *Handler) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !ValidMinRole(req.MinRole) {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "min_role must be one of: \"\", config-only, read-only, admin"})
+		return
+	}
+
 	id := uuid.New().String()
 	srv := db.MCPServer{
 		ID:                  id,
@@ -278,6 +288,7 @@ func (h *Handler) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 		MCPTransport:        mcpTransport,
 		MCPCommand:          req.MCPCommand,
 		ToolPrefix:          req.ToolPrefix,
+		MinRole:             req.MinRole,
 		Icon:                req.Icon,
 		DocSlug:             generateDocSlug(req.Name, id),
 		CreatedBy:           auth.UserEmailFromContext(r.Context()),
@@ -332,9 +343,15 @@ func (h *Handler) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 			if len(req.Tags) > 0 {
 				h.registry.SetTags(id, req.Tags)
 			}
+			// This is a brand-new id, so gateway.go's rediscovery
+			// preservation clause has no prev entry to fall back to —
+			// push min_role explicitly or a gated server registers public.
+			if req.MinRole != "" {
+				h.registry.SetMinRole(id, req.MinRole)
+			}
 			// Récupère le serveur mis à jour pour sauvegarder les capabilities
 			if backend := h.registry.FindByID(id); backend != nil {
-				h.saveBackendCapabilities(id, backend)
+				h.saveBackendCapabilities(r.Context(), id, backend)
 			}
 		}
 	}
@@ -489,6 +506,13 @@ func (h *Handler) handleUpdateServer(w http.ResponseWriter, r *http.Request) {
 		}
 		updates["tool_prefix"] = *req.ToolPrefix
 	}
+	if req.MinRole != nil {
+		if !ValidMinRole(*req.MinRole) {
+			writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "min_role must be one of: \"\", config-only, read-only, admin"})
+			return
+		}
+		updates["min_role"] = *req.MinRole
+	}
 	if req.Icon != nil {
 		updates["icon"] = *req.Icon
 	}
@@ -533,6 +557,12 @@ func (h *Handler) handleUpdateServer(w http.ResponseWriter, r *http.Request) {
 		h.registry.SetToolPrefix(id, *req.ToolPrefix)
 	}
 
+	// Update min_role on the in-memory registry if changed (even without
+	// re-discovery) so the access gate takes effect immediately.
+	if req.MinRole != nil {
+		h.registry.SetMinRole(id, *req.MinRole)
+	}
+
 	// Re-discover if URL or auth headers changed
 	if (urlChanged || authChanged) && existing.IsActive {
 		h.registry.Unregister(id)
@@ -551,8 +581,12 @@ func (h *Handler) handleUpdateServer(w http.ResponseWriter, r *http.Request) {
 				refreshedTags = append(refreshedTags, t.Tag)
 			}
 			h.registry.SetTags(id, refreshedTags)
+			// Same reasoning for min_role: Unregister above drops the
+			// preservation clause's `prev`, so push the persisted value
+			// back in after the fresh init result lands.
+			h.registry.SetMinRole(id, refreshed.MinRole)
 			if backend := h.registry.FindByID(id); backend != nil {
-				h.saveBackendCapabilities(id, backend)
+				h.saveBackendCapabilities(r.Context(), id, backend)
 			}
 		}
 	}
@@ -630,8 +664,12 @@ func (h *Handler) handleEnableServer(w http.ResponseWriter, r *http.Request) {
 		_ = h.repo.UpdateHealth(id, "unhealthy", err.Error())
 	} else {
 		h.registry.SetToolPrefix(id, srv.ToolPrefix)
+		// handleDisableServer unregisters the backend outright, so a
+		// disable→enable cycle leaves gateway.go's preservation clause
+		// with no prev entry — push min_role explicitly here too.
+		h.registry.SetMinRole(id, srv.MinRole)
 		if backend := h.registry.FindByID(id); backend != nil {
-			h.saveBackendCapabilities(id, backend)
+			h.saveBackendCapabilities(r.Context(), id, backend)
 		}
 	}
 
@@ -686,8 +724,12 @@ func (h *Handler) handleDiscoverServer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.registry.SetToolPrefix(id, srv.ToolPrefix)
+	// The explicit Unregister above wipes gateway.go's preservation clause's
+	// prev entry, same as the enable path — push min_role back in or a
+	// re-discover silently makes a gated server public.
+	h.registry.SetMinRole(id, srv.MinRole)
 	if backend := h.registry.FindByID(id); backend != nil {
-		h.saveBackendCapabilities(id, backend)
+		h.saveBackendCapabilities(r.Context(), id, backend)
 	}
 
 	updated, _ := h.repo.GetByID(id)
@@ -761,17 +803,21 @@ func (h *Handler) handleDisableTool(w http.ResponseWriter, r *http.Request, serv
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-func (h *Handler) saveBackendCapabilities(id string, backend *gateway.BackendServer) {
+func (h *Handler) saveBackendCapabilities(ctx context.Context, id string, backend *gateway.BackendServer) {
 	capsRaw, _ := json.Marshal(backend.Capabilities)
 	dbSrv := &db.MCPServer{
-		ID:            id,
-		MessageURL:    backend.MessageURL,
-		TransportType: backend.TransportType,
-		ServerName:    backend.Name,
-		ServerVersion: backend.Version,
+		ID:              id,
+		MessageURL:      backend.MessageURL,
+		TransportType:   backend.TransportType,
+		ServerName:      backend.Name,
+		ServerVersion:   backend.Version,
 		CapabilitiesRaw: capsRaw,
 	}
-	for _, t := range backend.Tools {
+	tools := backend.Tools
+	if hdTools, ok := h.hellodataToolsToPersist(ctx, id, backend); ok {
+		tools = hdTools
+	}
+	for _, t := range tools {
 		dbSrv.Tools = append(dbSrv.Tools, db.ServerTool{
 			Name:        t.Name,
 			Description: t.Description,
@@ -901,6 +947,7 @@ func toServerResponse(srv *db.MCPServer) ServerResponse {
 		LastError:           srv.LastError,
 		LastDiscoveredAt:    srv.LastDiscoveredAt,
 		ToolPrefix:          srv.ToolPrefix,
+		MinRole:             srv.MinRole,
 		Icon:                srv.Icon,
 		ToolsCount:          len(srv.Tools),
 		ToolNames:           toolNames,

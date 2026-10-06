@@ -116,6 +116,28 @@ func (r *ServerRepo) GetURL(id string) (string, error) {
 	return url, err
 }
 
+// AccessKeysByID returns just the template_slug and tool_prefix columns of
+// one server — the two keys gateway.Neo4jAccess restricts on (a Neo4j
+// template instance, the hellodata backend). A missing row yields
+// ("", "", nil): env-var backends and deleted servers are neither. Used by
+// gateway.Neo4jAccess, which cannot rely on the in-memory registry's
+// BackendServer.TemplateSlug, and whose consent-screen callers only hold a
+// server id.
+func (r *ServerRepo) AccessKeysByID(id string) (templateSlug, toolPrefix string, err error) {
+	var rows []struct {
+		TemplateSlug string
+		ToolPrefix   string
+	}
+	err = r.db.Model(&db.MCPServer{}).Where("id = ?", id).Limit(1).Select("template_slug", "tool_prefix").Scan(&rows).Error
+	if err != nil {
+		return "", "", err
+	}
+	if len(rows) == 0 {
+		return "", "", nil
+	}
+	return rows[0].TemplateSlug, rows[0].ToolPrefix, nil
+}
+
 // Delete removes a server and all its associations (CASCADE).
 func (r *ServerRepo) Delete(id string) error {
 	return r.db.Delete(&db.MCPServer{}, "id = ?", id).Error

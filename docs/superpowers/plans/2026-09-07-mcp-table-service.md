@@ -10,6 +10,16 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-07-mcp-table-service-design.md`
 
+> **Amended 2026-09-16.** The privilege model is now **admin-only**: all 13
+> tools require `gateway_users.role == "admin"`, including the two read tools
+> that originally required `read-only`. Reachability is enforced at the server
+> level by `mcp_servers.min_role = 'admin'` — designed in
+> `docs/superpowers/specs/2026-09-16-mcp-server-min-role-gate-design.md`, which
+> must be implemented **before** this plan so the service is never deployed in
+> an ungated window. No task here was added or removed; the edits are confined
+> to tool descriptions, the `roleAdmin` constant, one 403 test expectation, one
+> commit message and the acceptance mapping.
+
 ## Global Constraints
 
 - Service module path `github.com/hellopro/mcp-table`, directory `apps-microservices/mcp-table-service`, port `8597`, binary `/usr/local/bin/mcp-table`.
@@ -1611,7 +1621,8 @@ func New(baseURL, token string, timeout time.Duration) *Client {
 // Session is a Client acting for one end user. Every request carries
 // X-Admin-Token (service identity) and X-Act-As-Email (user identity); the
 // gateway resolves the user's role from gateway_users and applies its own
-// admin / read-only gate.
+// isAdminOnly / isReadOnlyPlus gate on the wrapped REST route. Reachability of
+// this service is a separate, stricter check: mcp_servers.min_role = "admin".
 type Session struct {
 	c     *Client
 	email string
@@ -1898,7 +1909,7 @@ FR: Session liee a l'utilisateur final envoie X-Admin-Token + X-Act-As-Email ; u
 - Produces (all package-private, used by every tool task):
   - `argString(args, key) string`, `argInt(args, key) (int, bool)`, `argBool(args, key) (bool, bool)`, `argStringList(args, key) ([]string, error)`, `argObjectList(args, key) ([]map[string]any, error)`, `argDatabaseID(args, required bool) (int, error)`, `checkBatch(key string, n int) error`, `maxBatch = 50`, `invalidArgs(err) *mcp.CallToolResult`
   - `requireSession(ctx, deps) (*gateway.Session, *mcp.CallToolResult)`
-  - `errNoIdentity`, `roleAdmin`, `roleReadOnly`, `gatewayErrorText(err, action, role, notFound) string`, `gatewayError(...) *mcp.CallToolResult`
+  - `errNoIdentity`, `roleAdmin`, `gatewayErrorText(err, action, role, notFound) string`, `gatewayError(...) *mcp.CallToolResult`
   - `resolveTable(ctx, sess, args) (*gateway.UsedTable, *mcp.CallToolResult)`, `findRegisteredByName(ctx, sess, databaseID, name) (*gateway.UsedTable, error)`, `registeredByName(ctx, sess, databaseID) (map[string]gateway.UsedTable, error)`, `findCatalogTable(ctx, sess, databaseID, name) (*gateway.CatalogTable, error)`
   - `StatusActive/StatusDraft/StatusInactive`, `tableStatus(t) string`, `missingChecklist(t) []string`, `tableSummary`, `summarize(t) tableSummary`, `tableDetail`, `detail(t) tableDetail`
   - `RelationRow{SelfCol, TargetTable, TargetCol}`, `parseRelations(raw) []RelationRow`, `serializeRelations(selfTable, rows) (json.RawMessage, error)`, `identRe`
@@ -2431,11 +2442,10 @@ import (
 // errNoIdentity is returned by every tool when the gateway forwarded no end-user.
 const errNoIdentity = "No end-user identity. Connect through the gateway with an OAuth2 user login; scope tokens are not supported by this service."
 
-// Minimum gateway roles, as named in gateway_users.role.
-const (
-	roleAdmin    = "admin"
-	roleReadOnly = "read-only"
-)
+// Minimum gateway role, as named in gateway_users.role. Every tool of this
+// service requires "admin" (amendment of 2026-09-16): reachability is gated at
+// the server level by mcp_servers.min_role, so a non-admin never gets here.
+const roleAdmin = "admin"
 
 // gatewayErrorText maps a gateway client error to the user-facing text of the
 // spec (§7). action names what was attempted ("add tables"), role is the
@@ -2724,7 +2734,7 @@ func resolveTable(ctx context.Context, sess *gateway.Session, args map[string]an
 	if id := argString(args, "table_id"); id != "" {
 		t, err := sess.GetUsedTable(ctx, id)
 		if err != nil {
-			return nil, gatewayError(err, "read table", roleReadOnly, "Table not found: "+id)
+			return nil, gatewayError(err, "read table", roleAdmin, "Table not found: "+id)
 		}
 		return t, nil
 	}
@@ -2738,7 +2748,7 @@ func resolveTable(ctx context.Context, sess *gateway.Session, args map[string]an
 	}
 	t, err := findRegisteredByName(ctx, sess, dbID, name)
 	if err != nil {
-		return nil, gatewayError(err, "read table", roleReadOnly, "Table not found")
+		return nil, gatewayError(err, "read table", roleAdmin, "Table not found")
 	}
 	if t == nil {
 		scope := ""
@@ -2832,7 +2842,7 @@ func TestListRegisteredTables_ForbiddenAndNoIdentity(t *testing.T) {
 	reg := NewRegistry(f.deps())
 
 	res := reg.CallTool(userCtx("cfg@hellopro.fr"), &mcp.CallToolParams{Name: "list_registered_tables"})
-	if !res.IsError || !strings.Contains(resultText(res), "requires role read-only") {
+	if !res.IsError || !strings.Contains(resultText(res), "requires role admin") {
 		t.Fatalf("res = %s", resultText(res))
 	}
 	res = reg.CallTool(context.Background(), &mcp.CallToolParams{Name: "list_registered_tables"})
@@ -2904,7 +2914,7 @@ import (
 
 // ── list_registered_tables ───────────────────────────────────────────────
 
-const listRegisteredTablesDescription = `List the Hellopro BDD tables registered in the MCP gateway registry (the "Tables BDD" admin page). Each row has a computed status: "active" (flag on and at least one exposed field), "draft" (flag on but no field yet — call add_fields to activate it), "inactive" (flag off). Paginated. Filter by database (1 = Hellopro BO, 5 = Hellopro Data, 10 = Hellopro IA) and by a case-insensitive substring of the table name or description. Requires gateway role read-only or higher.`
+const listRegisteredTablesDescription = `List the Hellopro BDD tables registered in the MCP gateway registry (the "Tables BDD" admin page). Each row has a computed status: "active" (flag on and at least one exposed field), "draft" (flag on but no field yet — call add_fields to activate it), "inactive" (flag off). Paginated. Filter by database (1 = Hellopro BO, 5 = Hellopro Data, 10 = Hellopro IA) and by a case-insensitive substring of the table name or description. Requires gateway role admin.`
 
 const listRegisteredTablesInputSchema = `{
   "type": "object",
@@ -2947,7 +2957,7 @@ func handleListRegisteredTables(ctx context.Context, deps *Deps, args map[string
 	}
 	res, err := sess.ListUsedTables(ctx, p)
 	if err != nil {
-		return gatewayError(err, "list registered tables", roleReadOnly, "Registry not found"), nil
+		return gatewayError(err, "list registered tables", roleAdmin, "Registry not found"), nil
 	}
 	out := listRegisteredTablesResult{Tables: make([]tableSummary, 0, len(res.Tables)), Total: res.Total, Page: res.Page, Limit: res.Limit}
 	for i := range res.Tables {
@@ -2958,7 +2968,7 @@ func handleListRegisteredTables(ctx context.Context, deps *Deps, args map[string
 
 // ── get_table_info ───────────────────────────────────────────────────────
 
-const getTableInfoDescription = `Full detail of one registered table: description, notes, metadata (primary_key, rows, default_order_by, relations and their parsed relation_rows), the exposed fields with type and description, the computed status (active / draft / inactive) and a "missing" checklist — no_fields, empty_description, fields_without_description:N, unknown_primary_key, unknown_rows — telling what is left to complete the table. Address the table by table_id, or by table_name (optionally with database_id). Requires gateway role read-only or higher.`
+const getTableInfoDescription = `Full detail of one registered table: description, notes, metadata (primary_key, rows, default_order_by, relations and their parsed relation_rows), the exposed fields with type and description, the computed status (active / draft / inactive) and a "missing" checklist — no_fields, empty_description, fields_without_description:N, unknown_primary_key, unknown_rows — telling what is left to complete the table. Address the table by table_id, or by table_name (optionally with database_id). Requires gateway role admin.`
 
 const getTableInfoInputSchema = `{
   "type": "object",
@@ -2985,7 +2995,7 @@ func handleGetTableInfo(ctx context.Context, deps *Deps, args map[string]any) (*
 In `registry.go` `NewRegistry`, after `r := &Registry{...}` add:
 
 ```go
-	// ── Read (gateway role read-only or higher) ──────────────────────────
+	// ── Read (gateway role admin) ────────────────────────────────────────
 	r.register("list_registered_tables", listRegisteredTablesDescription, listRegisteredTablesInputSchema, handleListRegisteredTables, readOnly)
 	r.register("get_table_info", getTableInfoDescription, getTableInfoInputSchema, handleGetTableInfo, readOnly)
 ```
@@ -3000,8 +3010,8 @@ cd /home/hellopro/RAG-HP-PUB
 git add apps-microservices/mcp-table-service/internal/tools
 git commit -m "feat(mcp-table-service): list_registered_tables and get_table_info tools
 
-EN: Read tools over the registry with computed status and missing checklist; role read-only enforced by the gateway, mapped to clear MCP errors.
-FR: Outils de lecture sur le registre avec statut calcule et checklist des manques ; role read-only applique par le gateway, traduit en erreurs MCP claires."
+EN: Read tools over the registry with computed status and missing checklist; role admin enforced by the gateway, mapped to clear MCP errors.
+FR: Outils de lecture sur le registre avec statut calcule et checklist des manques ; role admin applique par le gateway, traduit en erreurs MCP claires."
 ```
 
 ---
@@ -3207,7 +3217,7 @@ func handleListCatalogTables(ctx context.Context, deps *Deps, args map[string]an
 	}
 	registered, err := registeredByName(ctx, sess, dbID)
 	if err != nil {
-		return gatewayError(err, "list registered tables", roleReadOnly, "Registry not found"), nil
+		return gatewayError(err, "list registered tables", roleAdmin, "Registry not found"), nil
 	}
 	out := struct {
 		DatabaseID int               `json:"database_id"`
@@ -3272,7 +3282,7 @@ func handleListCatalogFields(ctx context.Context, deps *Deps, args map[string]an
 	exposed := map[string]bool{}
 	registeredID := ""
 	if reg, err := findRegisteredByName(ctx, sess, dbID, name); err != nil {
-		return gatewayError(err, "list registered tables", roleReadOnly, "Registry not found"), nil
+		return gatewayError(err, "list registered tables", roleAdmin, "Registry not found"), nil
 	} else if reg != nil {
 		registeredID = reg.ID
 		for _, f := range reg.Fields {
@@ -4391,7 +4401,7 @@ func handleUpdateTableInfo(ctx context.Context, deps *Deps, args map[string]any)
 		if len(relRows) > 0 {
 			registered, err := registeredByName(ctx, sess, 0)
 			if err != nil {
-				return gatewayError(err, "list registered tables", roleReadOnly, "Registry not found"), nil
+				return gatewayError(err, "list registered tables", roleAdmin, "Registry not found"), nil
 			}
 			for i, r := range relRows {
 				key := strings.ToLower(r.TargetTable)
@@ -4914,8 +4924,8 @@ Gateway tool prefix `tables` → clients see `tables_<name>`.
 
 | Tool | Gateway role | Wraps |
 |---|---|---|
-| `list_registered_tables` | read-only | `GET /bdd/used/tables` |
-| `get_table_info` | read-only | `GET /bdd/used/tables/{id}` (+ list search for name lookup) |
+| `list_registered_tables` | admin | `GET /bdd/used/tables` |
+| `get_table_info` | admin | `GET /bdd/used/tables/{id}` (+ list search for name lookup) |
 | `list_databases` | admin | `GET /bdd/catalog/databases` |
 | `list_catalog_tables` | admin | catalog tables + registry (flags `registered`) |
 | `list_catalog_fields` | admin | catalog fields + registry (flags `exposed`) |
@@ -4934,9 +4944,10 @@ Batch tools return `{ok, errors}`, capped at 50 items (`all_fields` excepted), `
 
 ## Privilege flow
 
+0. **The server is admin-only.** Its `mcp_servers` row carries `min_role = 'admin'`, so the gateway hides it from non-admins on the OAuth2 consent screen and in `tools/list`, and refuses `tools/call` — including for every `mcp_…` scope token and every `client_credentials` grant, which carry no end-user identity. Steps 1–4 below therefore only ever run for a gateway admin.
 1. Gateway forwards the OAuth2 user's email as `X-End-User-Email` (tool prefix `tables`), plus the static `X-Admin-Token` from the `mcp_servers` row.
 2. This service checks `X-Admin-Token == MCP_TABLE_GATEWAY_TOKEN`; `tools/call` without an end-user email fails closed (scope tokens are not supported). `initialize` / `tools/list` need no identity.
-3. Each tool calls the gateway with `X-Admin-Token` + `X-Act-As-Email`; the gateway's act-as branch (`internal/auth/actas.go`, only on `/api/v1/bdd/*`, present in both JWT and SSO middlewares) resolves the role from `gateway_users` and applies its normal admin / read-only gate. `created_by` is the real user.
+3. Each tool calls the gateway with `X-Admin-Token` + `X-Act-As-Email`; the gateway's act-as branch (`internal/auth/actas.go`, only on `/api/v1/bdd/*`, present in both JWT and SSO middlewares) resolves the role from `gateway_users` and applies its normal `isAdminOnly` / `isReadOnlyPlus` gate on the wrapped REST route. That gate is unchanged and is *not* what makes this service admin-only — step 0 is. `created_by` is the real user.
 4. Gateway 403 → "Your gateway role does not allow this action…"; 401 → shared secret mismatch (configuration error, logged).
 
 ## Environment Variables
@@ -5003,8 +5014,8 @@ Note: `apps-microservices/mcp-gateway-service/CLAUDE.md` already carries an unre
 |---|---|
 | 1. `go vet`, `go build`, `go test` clean in both modules | Last step of every task; Tasks 1–2 (gateway), 3–11 (service) |
 | 2. `tools/list` returns exactly the 13 names | Task 11 `TestRegistry_ExposesExactlyThe13Tools`, `TestMCPHandler_ToolsListWorksWithoutIdentity` |
-| 3. read-only user: list OK, add_tables role error; admin: add_tables → add_fields → `status: "active"`; zero-field activation refused | Task 6 `TestListRegisteredTables_*`, Task 8 `TestAddTables_ForbiddenForReadOnly`, Task 9 `TestAddFields_ExplicitNamesActivateDraft`, Task 11 `TestSetTablesActive_RefusesZeroFieldTables` |
+| 3. *(amended 2026-09-16)* non-admin: every tool returns the role error when the gateway answers 403 — and in production a non-admin never reaches the service at all (`min_role` gate, proven in the gate spec §10.3); admin: add_tables → add_fields → `status: "active"`; zero-field activation refused | Task 6 `TestListRegisteredTables_*`, Task 8 `TestAddTables_ForbiddenForReadOnly` (retained: it pins the 403→text mapping, whatever the caller's role), Task 9 `TestAddFields_ExplicitNamesActivateDraft`, Task 11 `TestSetTablesActive_RefusesZeroFieldTables` |
 | 4. `docker compose --profile mcp config` validates | Task 12 Step 3 |
 | 5. Both CLAUDE.md mention the env vars | Task 12 Steps 4–5 |
 
-End-to-end smoke (manual, after deploy — needs the gateway DB and OAuth2, not automatable here): register the backend in the Servers UI, connect with an OAuth2 client as a read-only user and as an admin, run `tables_list_registered_tables`, `tables_add_tables`, `tables_add_fields`, `tables_get_table_info`; check `created_by` on the new row and the "Active" badge in `/bdd-tables`.
+End-to-end smoke (manual, after deploy — needs the gateway DB and OAuth2, not automatable here): register the backend in the Servers UI **with "Niveau d'accès requis" = admin**, then connect with an OAuth2 client as an admin and run `tables_list_registered_tables`, `tables_add_tables`, `tables_add_fields`, `tables_get_table_info`; check `created_by` on the new row and the "Active" badge in `/bdd-tables`. Then connect as a `read-only` user and confirm the server appears on **neither** the consent screen nor `tools/list`, and that a direct `tools/call` is refused.

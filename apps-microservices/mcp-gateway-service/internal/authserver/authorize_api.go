@@ -26,11 +26,11 @@ type ZohoStateForUser interface {
 // ── JSON API DTOs ────────────────────────────────────────────────────────────
 
 type authorizeInfoResponse struct {
-	ClientName string              `json:"client_name"`
+	ClientName string               `json:"client_name"`
 	Servers    []authorizeServerDTO `json:"servers"`
-	HasSession bool                `json:"has_session"`
-	HasConsent bool                `json:"has_consent"`
-	CSRFToken  string              `json:"csrf_token,omitempty"`
+	HasSession bool                 `json:"has_session"`
+	HasConsent bool                 `json:"has_consent"`
+	CSRFToken  string               `json:"csrf_token,omitempty"`
 }
 
 type authorizeServerDTO struct {
@@ -58,11 +58,11 @@ type authorizeLoginRequest struct {
 }
 
 type authorizeLoginResponse struct {
-	Success    bool                `json:"success"`
-	ClientName string              `json:"client_name"`
+	Success    bool                 `json:"success"`
+	ClientName string               `json:"client_name"`
 	Servers    []authorizeServerDTO `json:"servers"`
-	CSRFToken  string              `json:"csrf_token"`
-	Error      string              `json:"error,omitempty"`
+	CSRFToken  string               `json:"csrf_token"`
+	Error      string               `json:"error,omitempty"`
 }
 
 type authorizeConsentRequest struct {
@@ -366,6 +366,12 @@ func (s *AuthServer) handleAuthorizeConsent(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
+	scope = filterScopeForViewer(scope, s.serverAccess, userEmail)
+	if len(client.Servers) == 0 && len(scope.ServerIDs) == 0 {
+		writeJSONError(w, http.StatusBadRequest, "select at least one server")
+		return
+	}
+
 	// Save consent
 	s.consentRepo.Upsert(&db.OAuth2Consent{
 		ID:        fmt.Sprintf("%s:%s", client.ID, userEmail),
@@ -425,6 +431,10 @@ func (s *AuthServer) buildServerList(ctx context.Context, client *db.OAuth2Clien
 	hasPreConfiguredScope := len(client.Servers) > 0
 
 	servers, _ := s.serverRepo.ListActive()
+	// Same gate as renderConsent — see the note there on why this one seam
+	// covers both branches.
+	servers = gateway.FilterServersByGate(servers, userEmail, s.userRepo, s.grants)
+	servers = visibleServers(servers, s.serverAccess, userEmail)
 	serverMap := make(map[string]db.MCPServer, len(servers))
 	zohoIDs := make(map[string]bool, len(servers))
 	for _, srv := range servers {
