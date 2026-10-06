@@ -1,5 +1,7 @@
 # Units Admin UI — Frontend Design Spec
 
+> **Amended (2026-10-06):** the backend now lives in `unit-registry-service`, not `graph-rag-normalize-unite-service`. See `2026-10-06-unit-registry-combined-design.md` §11.
+
 **Host:** `apps-microservices/account-service-frontend` (Vue 3.5 + TS 5.7 + Vite 6 + Tailwind v4 / TailAdmin Pro, Pinia, vue-router)
 **BFF:** `apps-microservices/account-service-backend` (Go 1.24, `net/http` `ServeMux`)
 **Upstream:** `graph-rag-normalize-unite-service` (Python, gRPC `:50057`)
