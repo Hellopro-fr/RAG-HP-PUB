@@ -1,0 +1,2096 @@
+{
+  "definitions": [
+    {
+      "definition": "unité = count = unite = Nb = nb",
+      "ordre": 0
+    },
+    {
+      "definition": "pieds = foot = pied",
+      "ordre": 1
+    },
+    {
+      "definition": "decibel = [sound] = dB = dBA",
+      "ordre": 2
+    },
+    {
+      "definition": "cheval = 735.49875 * watt = ch",
+      "ordre": 3
+    },
+    {
+      "definition": "chevaux = count",
+      "ordre": 4
+    },
+    {
+      "definition": "segments = count = segment",
+      "ordre": 5
+    },
+    {
+      "definition": "mètres = meter",
+      "ordre": 6
+    },
+    {
+      "definition": "Litres = liter",
+      "ordre": 7
+    },
+    {
+      "definition": "Volts = volt",
+      "ordre": 8
+    },
+    {
+      "definition": "sélections = count = selections = selection = sélection",
+      "ordre": 9
+    },
+    {
+      "definition": "galettes = count = galette = Galettes = Galette",
+      "ordre": 10
+    },
+    {
+      "definition": "tasses_par_jour = count",
+      "ordre": 11
+    },
+    {
+      "definition": "Watts = watt",
+      "ordre": 12
+    },
+    {
+      "definition": "unités = count",
+      "ordre": 13
+    },
+    {
+      "definition": "billets = count = billet",
+      "ordre": 14
+    },
+    {
+      "definition": "pièces = count = pièce",
+      "ordre": 15
+    },
+    {
+      "definition": "personnes = count = personne",
+      "ordre": 16
+    },
+    {
+      "definition": "degré = degree = degre = degrés = degres",
+      "ordre": 17
+    },
+    {
+      "definition": "Tonnes = tonne",
+      "ordre": 18
+    },
+    {
+      "definition": "démarrages = count = démarrage",
+      "ordre": 19
+    },
+    {
+      "definition": "lignes = count = ligne",
+      "ordre": 20
+    },
+    {
+      "definition": "tours_par_minute_fr = revolutions_per_minute",
+      "ordre": 21
+    },
+    {
+      "definition": "pouces = 0.0254 * meter = pouce = inch_fr",
+      "ordre": 22
+    },
+    {
+      "definition": "semelles_unit = count = semelles = semelle",
+      "ordre": 23
+    },
+    {
+      "definition": "plots_unit = count = plots = plot",
+      "ordre": 24
+    },
+    {
+      "definition": "bacs_unit = count = bacs = bac",
+      "ordre": 25
+    },
+    {
+      "definition": "vehicules_unit = count = vehicules = vehicule",
+      "ordre": 26
+    },
+    {
+      "definition": "recettes_par_programme = count",
+      "ordre": 27
+    },
+    {
+      "definition": "coups_par_minute = count / minute",
+      "ordre": 28
+    },
+    {
+      "definition": "coupes_par_minute = count / minute",
+      "ordre": 29
+    },
+    {
+      "definition": "tonne = 1000 * kilogram = t",
+      "ordre": 30
+    },
+    {
+      "definition": "mm = millimeter",
+      "ordre": 31
+    },
+    {
+      "definition": "cm = centimeter",
+      "ordre": 32
+    },
+    {
+      "definition": "m = meter",
+      "ordre": 33
+    },
+    {
+      "definition": "kg = kilogram",
+      "ordre": 34
+    },
+    {
+      "definition": "KW = 1000 * watt",
+      "ordre": 35
+    },
+    {
+      "definition": "kw = 1000 * watt",
+      "ordre": 36
+    },
+    {
+      "definition": "cheval_vapeur = 735.49875 * watt = cv",
+      "ordre": 37
+    },
+    {
+      "definition": "CV = cheval_vapeur",
+      "ordre": 38
+    },
+    {
+      "definition": "V = volt",
+      "ordre": 39
+    },
+    {
+      "definition": "A = ampere",
+      "ordre": 40
+    },
+    {
+      "definition": "sec = second",
+      "ordre": 41
+    },
+    {
+      "definition": "ph = hertz",
+      "ordre": 42
+    },
+    {
+      "definition": "tours_par_minute = revolutions_per_minute = rpm = tr/min = trs/min",
+      "ordre": 43
+    },
+    {
+      "definition": "Pa = pascal",
+      "ordre": 44
+    },
+    {
+      "definition": "kPa = 1000 * pascal",
+      "ordre": 45
+    },
+    {
+      "definition": "L_par_min = liter / minute = l/min",
+      "ordre": 46
+    },
+    {
+      "definition": "L_par_h = liter / hour = l/h",
+      "ordre": 47
+    },
+    {
+      "definition": "m3_par_h = meter**3 / hour",
+      "ordre": 48
+    },
+    {
+      "definition": "m3 = meter**3",
+      "ordre": 49
+    },
+    {
+      "definition": "litres = liter",
+      "ordre": 50
+    },
+    {
+      "definition": "L = liter",
+      "ordre": 51
+    },
+    {
+      "definition": "N = newton",
+      "ordre": 52
+    },
+    {
+      "definition": "kgf = 9.80665 * newton",
+      "ordre": 53
+    },
+    {
+      "definition": "Nm = newton * meter",
+      "ordre": 54
+    },
+    {
+      "definition": "kg_par_m2 = kilogram / meter ** 2 = kg/m² = kg/m2",
+      "ordre": 55
+    }
+  ],
+  "unite_dimension": [
+    {
+      "unite": "unité",
+      "dimension": "count"
+    },
+    {
+      "unite": "unités",
+      "dimension": "count"
+    },
+    {
+      "unite": "unite",
+      "dimension": "count"
+    },
+    {
+      "unite": "unites",
+      "dimension": "count"
+    },
+    {
+      "unite": "nb",
+      "dimension": "count"
+    },
+    {
+      "unite": "chevaux",
+      "dimension": "count"
+    },
+    {
+      "unite": "segments",
+      "dimension": "count"
+    },
+    {
+      "unite": "segment",
+      "dimension": "count"
+    },
+    {
+      "unite": "sélections",
+      "dimension": "count"
+    },
+    {
+      "unite": "selections",
+      "dimension": "count"
+    },
+    {
+      "unite": "sélection",
+      "dimension": "count"
+    },
+    {
+      "unite": "selection",
+      "dimension": "count"
+    },
+    {
+      "unite": "galettes",
+      "dimension": "count"
+    },
+    {
+      "unite": "galette",
+      "dimension": "count"
+    },
+    {
+      "unite": "tasses/jour",
+      "dimension": "count"
+    },
+    {
+      "unite": "tasses_par_jour",
+      "dimension": "count"
+    },
+    {
+      "unite": "billets",
+      "dimension": "count"
+    },
+    {
+      "unite": "billet",
+      "dimension": "count"
+    },
+    {
+      "unite": "pièces",
+      "dimension": "count"
+    },
+    {
+      "unite": "pièce",
+      "dimension": "count"
+    },
+    {
+      "unite": "personnes",
+      "dimension": "count"
+    },
+    {
+      "unite": "personne",
+      "dimension": "count"
+    },
+    {
+      "unite": "lignes",
+      "dimension": "count"
+    },
+    {
+      "unite": "ligne",
+      "dimension": "count"
+    },
+    {
+      "unite": "db",
+      "dimension": "sound_level"
+    },
+    {
+      "unite": "dba",
+      "dimension": "sound_level"
+    },
+    {
+      "unite": "db(a)",
+      "dimension": "sound_level"
+    },
+    {
+      "unite": "decibel",
+      "dimension": "sound_level"
+    },
+    {
+      "unite": "kg",
+      "dimension": "mass"
+    },
+    {
+      "unite": "g",
+      "dimension": "mass"
+    },
+    {
+      "unite": "t",
+      "dimension": "mass"
+    },
+    {
+      "unite": "tonne",
+      "dimension": "mass"
+    },
+    {
+      "unite": "tonnes",
+      "dimension": "mass"
+    },
+    {
+      "unite": "mm",
+      "dimension": "length"
+    },
+    {
+      "unite": "cm",
+      "dimension": "length"
+    },
+    {
+      "unite": "m",
+      "dimension": "length"
+    },
+    {
+      "unite": "km",
+      "dimension": "length"
+    },
+    {
+      "unite": "pieds",
+      "dimension": "length"
+    },
+    {
+      "unite": "pied",
+      "dimension": "length"
+    },
+    {
+      "unite": "mètres",
+      "dimension": "length"
+    },
+    {
+      "unite": "pouces",
+      "dimension": "length"
+    },
+    {
+      "unite": "pouce",
+      "dimension": "length"
+    },
+    {
+      "unite": "kg/m³",
+      "dimension": "density"
+    },
+    {
+      "unite": "kg/m3",
+      "dimension": "density"
+    },
+    {
+      "unite": "w",
+      "dimension": "power"
+    },
+    {
+      "unite": "watts",
+      "dimension": "power"
+    },
+    {
+      "unite": "kw",
+      "dimension": "power"
+    },
+    {
+      "unite": "cv",
+      "dimension": "power"
+    },
+    {
+      "unite": "ch",
+      "dimension": "power"
+    },
+    {
+      "unite": "hp",
+      "dimension": "power"
+    },
+    {
+      "unite": "v",
+      "dimension": "voltage"
+    },
+    {
+      "unite": "volts",
+      "dimension": "voltage"
+    },
+    {
+      "unite": "a",
+      "dimension": "current"
+    },
+    {
+      "unite": "rpm",
+      "dimension": "[frequency]"
+    },
+    {
+      "unite": "tr/min",
+      "dimension": "[frequency]"
+    },
+    {
+      "unite": "trs/min",
+      "dimension": "[frequency]"
+    },
+    {
+      "unite": "tours/min",
+      "dimension": "[frequency]"
+    },
+    {
+      "unite": "tour/min",
+      "dimension": "[frequency]"
+    },
+    {
+      "unite": "démarrages/heure",
+      "dimension": "[frequency]"
+    },
+    {
+      "unite": "hz",
+      "dimension": "frequency"
+    },
+    {
+      "unite": "l",
+      "dimension": "volume"
+    },
+    {
+      "unite": "litres",
+      "dimension": "volume"
+    },
+    {
+      "unite": "ml",
+      "dimension": "volume"
+    },
+    {
+      "unite": "m3",
+      "dimension": "volume"
+    },
+    {
+      "unite": "m**3",
+      "dimension": "volume"
+    },
+    {
+      "unite": "°c",
+      "dimension": "temperature"
+    },
+    {
+      "unite": "c",
+      "dimension": "temperature"
+    },
+    {
+      "unite": "k",
+      "dimension": "temperature"
+    },
+    {
+      "unite": "bar",
+      "dimension": "pressure"
+    },
+    {
+      "unite": "pa",
+      "dimension": "pressure"
+    },
+    {
+      "unite": "kpa",
+      "dimension": "pressure"
+    },
+    {
+      "unite": "psi",
+      "dimension": "pressure"
+    },
+    {
+      "unite": "s",
+      "dimension": "time"
+    },
+    {
+      "unite": "sec",
+      "dimension": "time"
+    },
+    {
+      "unite": "min",
+      "dimension": "time"
+    },
+    {
+      "unite": "h",
+      "dimension": "time"
+    },
+    {
+      "unite": "l/min",
+      "dimension": "volume / time"
+    },
+    {
+      "unite": "l/h",
+      "dimension": "volume / time"
+    },
+    {
+      "unite": "m3/h",
+      "dimension": "volume / time"
+    },
+    {
+      "unite": "m³/h",
+      "dimension": "volume / time"
+    },
+    {
+      "unite": "débit",
+      "dimension": "volume / time"
+    },
+    {
+      "unite": "g/min",
+      "dimension": "mass_flow"
+    },
+    {
+      "unite": "kg/min",
+      "dimension": "mass_flow"
+    },
+    {
+      "unite": "kg/h",
+      "dimension": "mass_flow"
+    },
+    {
+      "unite": "pièces/seconde",
+      "dimension": "count_rate"
+    },
+    {
+      "unite": "pieces/seconde",
+      "dimension": "count_rate"
+    },
+    {
+      "unite": "billets/seconde",
+      "dimension": "count_rate"
+    },
+    {
+      "unite": "n",
+      "dimension": "force"
+    },
+    {
+      "unite": "kn",
+      "dimension": "force"
+    },
+    {
+      "unite": "kgf",
+      "dimension": "force"
+    },
+    {
+      "unite": "force",
+      "dimension": "force"
+    },
+    {
+      "unite": "poussée",
+      "dimension": "force"
+    },
+    {
+      "unite": "traction",
+      "dimension": "force"
+    },
+    {
+      "unite": "nm",
+      "dimension": "torque"
+    },
+    {
+      "unite": "couple",
+      "dimension": "torque"
+    },
+    {
+      "unite": "kg/m2",
+      "dimension": "area_density"
+    },
+    {
+      "unite": "kg/m²",
+      "dimension": "area_density"
+    },
+    {
+      "unite": "volume",
+      "dimension": "volume"
+    },
+    {
+      "unite": "cuve",
+      "dimension": "volume"
+    },
+    {
+      "unite": "contenance",
+      "dimension": "volume"
+    },
+    {
+      "unite": "mémoire",
+      "dimension": "information"
+    },
+    {
+      "unite": "stockage",
+      "dimension": "information"
+    },
+    {
+      "unite": "énergie",
+      "dimension": "energy"
+    },
+    {
+      "unite": "kwh",
+      "dimension": "energy"
+    },
+    {
+      "unite": "wh",
+      "dimension": "energy"
+    },
+    {
+      "unite": "kwh/24h",
+      "dimension": "power"
+    },
+    {
+      "unite": "consommation",
+      "dimension": "energy"
+    },
+    {
+      "unite": "surface",
+      "dimension": "area"
+    },
+    {
+      "unite": "superficie",
+      "dimension": "area"
+    },
+    {
+      "unite": "°",
+      "dimension": "angle"
+    },
+    {
+      "unite": "deg",
+      "dimension": "angle"
+    },
+    {
+      "unite": "degré",
+      "dimension": "angle"
+    },
+    {
+      "unite": "degrés",
+      "dimension": "angle"
+    },
+    {
+      "unite": "degre",
+      "dimension": "angle"
+    },
+    {
+      "unite": "degres",
+      "dimension": "angle"
+    },
+    {
+      "unite": "l/cycle",
+      "dimension": "volume"
+    },
+    {
+      "unite": "signal",
+      "dimension": "count"
+    },
+    {
+      "unite": "signaux",
+      "dimension": "count"
+    },
+    {
+      "unite": "plateaux",
+      "dimension": "count"
+    },
+    {
+      "unite": "plateau",
+      "dimension": "count"
+    },
+    {
+      "unite": "lm",
+      "dimension": "luminosity"
+    },
+    {
+      "unite": "lm/w",
+      "dimension": "luminous_efficacy"
+    },
+    {
+      "unite": "ra",
+      "dimension": "dimensionless"
+    },
+    {
+      "unite": "%",
+      "dimension": "ratio"
+    },
+    {
+      "unite": "km/h",
+      "dimension": "speed"
+    },
+    {
+      "unite": "semelles",
+      "dimension": "count"
+    },
+    {
+      "unite": "semelle",
+      "dimension": "count"
+    },
+    {
+      "unite": "plots",
+      "dimension": "count"
+    },
+    {
+      "unite": "plot",
+      "dimension": "count"
+    },
+    {
+      "unite": "bacs",
+      "dimension": "count"
+    },
+    {
+      "unite": "bac",
+      "dimension": "count"
+    },
+    {
+      "unite": "véhicule(s)",
+      "dimension": "count"
+    },
+    {
+      "unite": "véhicules",
+      "dimension": "count"
+    },
+    {
+      "unite": "véhicule",
+      "dimension": "count"
+    },
+    {
+      "unite": "vehicule(s)",
+      "dimension": "count"
+    },
+    {
+      "unite": "vehicules",
+      "dimension": "count"
+    },
+    {
+      "unite": "vehicule",
+      "dimension": "count"
+    },
+    {
+      "unite": "recettes/programmes",
+      "dimension": "count"
+    },
+    {
+      "unite": "coups/min",
+      "dimension": "[frequency]"
+    },
+    {
+      "unite": "coupes/min",
+      "dimension": "[frequency]"
+    },
+    {
+      "unite": "μm",
+      "dimension": "length"
+    },
+    {
+      "unite": "um",
+      "dimension": "length"
+    },
+    {
+      "unite": "minutes",
+      "dimension": "time"
+    },
+    {
+      "unite": "kg/24h",
+      "dimension": "mass_flow"
+    },
+    {
+      "unite": "m²/h",
+      "dimension": "surface_rate"
+    },
+    {
+      "unite": "m2/h",
+      "dimension": "surface_rate"
+    },
+    {
+      "unite": "w/m².k",
+      "dimension": "thermal_transmittance"
+    },
+    {
+      "unite": "w/m2.k",
+      "dimension": "thermal_transmittance"
+    },
+    {
+      "unite": "m².k/w",
+      "dimension": "thermal_resistance"
+    },
+    {
+      "unite": "m2.k/w",
+      "dimension": "thermal_resistance"
+    },
+    {
+      "unite": "t/min",
+      "dimension": "[frequency]"
+    },
+    {
+      "unite": "heures",
+      "dimension": "time"
+    },
+    {
+      "unite": "heure",
+      "dimension": "time"
+    },
+    {
+      "unite": "t/h",
+      "dimension": "mass_flow"
+    },
+    {
+      "unite": "mohs",
+      "dimension": "dimensionless"
+    },
+    {
+      "unite": "go",
+      "dimension": "information"
+    },
+    {
+      "unite": "mo",
+      "dimension": "information"
+    },
+    {
+      "unite": "ko",
+      "dimension": "information"
+    },
+    {
+      "unite": "to",
+      "dimension": "information"
+    },
+    {
+      "unite": "px",
+      "dimension": "count"
+    },
+    {
+      "unite": "pixel",
+      "dimension": "count"
+    },
+    {
+      "unite": "pixels",
+      "dimension": "count"
+    },
+    {
+      "unite": "kn/m²",
+      "dimension": "pressure"
+    },
+    {
+      "unite": "kn/m2",
+      "dimension": "pressure"
+    },
+    {
+      "unite": "m³",
+      "dimension": "volume"
+    },
+    {
+      "unite": "cd/m²",
+      "dimension": "luminance"
+    },
+    {
+      "unite": "cd/m2",
+      "dimension": "luminance"
+    },
+    {
+      "unite": "ah",
+      "dimension": "electric_charge"
+    },
+    {
+      "unite": "a.h",
+      "dimension": "electric_charge"
+    },
+    {
+      "unite": "amperes-heures",
+      "dimension": "electric_charge"
+    },
+    {
+      "unite": "ampere-heure",
+      "dimension": "electric_charge"
+    },
+    {
+      "unite": "ampères-heures",
+      "dimension": "electric_charge"
+    },
+    {
+      "unite": "ampère-heure",
+      "dimension": "electric_charge"
+    },
+    {
+      "unite": "mah",
+      "dimension": "electric_charge"
+    },
+    {
+      "unite": "kilogrammes",
+      "dimension": "mass"
+    },
+    {
+      "unite": "kilogramme",
+      "dimension": "mass"
+    },
+    {
+      "unite": "grammes",
+      "dimension": "mass"
+    },
+    {
+      "unite": "gramme",
+      "dimension": "mass"
+    },
+    {
+      "unite": "millimètres",
+      "dimension": "length"
+    },
+    {
+      "unite": "millimètre",
+      "dimension": "length"
+    },
+    {
+      "unite": "centimètres",
+      "dimension": "length"
+    },
+    {
+      "unite": "centimètre",
+      "dimension": "length"
+    },
+    {
+      "unite": "décibels",
+      "dimension": "sound_level"
+    },
+    {
+      "unite": "décibel",
+      "dimension": "sound_level"
+    },
+    {
+      "unite": "decibels",
+      "dimension": "sound_level"
+    },
+    {
+      "unite": "m²",
+      "dimension": "area"
+    },
+    {
+      "unite": "m2",
+      "dimension": "area"
+    },
+    {
+      "unite": "niveau",
+      "dimension": "count"
+    },
+    {
+      "unite": "niveaux",
+      "dimension": "count"
+    },
+    {
+      "unite": "cycles/jour",
+      "dimension": "[frequency]"
+    },
+    {
+      "unite": "cycles / jour",
+      "dimension": "[frequency]"
+    },
+    {
+      "unite": "kwh/kg",
+      "dimension": "specific_energy"
+    },
+    {
+      "unite": "kwh / kg",
+      "dimension": "specific_energy"
+    },
+    {
+      "unite": "kwc",
+      "dimension": "power"
+    },
+    {
+      "unite": "cycles",
+      "dimension": "count"
+    },
+    {
+      "unite": "cycle",
+      "dimension": "count"
+    },
+    {
+      "unite": "mpa.s",
+      "dimension": "viscosity"
+    },
+    {
+      "unite": "pa.s",
+      "dimension": "viscosity"
+    },
+    {
+      "unite": "cycles par jour",
+      "dimension": "[frequency]"
+    },
+    {
+      "unite": "secondes",
+      "dimension": "time"
+    },
+    {
+      "unite": "seconde",
+      "dimension": "time"
+    }
+  ],
+  "label_dimension": [
+    {
+      "label": "charge au sol",
+      "dimension": "area_density",
+      "priorite": 0
+    },
+    {
+      "label": "charge admissible au sol",
+      "dimension": "area_density",
+      "priorite": 1
+    },
+    {
+      "label": "charge statique",
+      "dimension": "area_density",
+      "priorite": 2
+    },
+    {
+      "label": "classe climatique",
+      "dimension": "count",
+      "priorite": 3
+    },
+    {
+      "label": "régime",
+      "dimension": "[frequency]",
+      "priorite": 4
+    },
+    {
+      "label": "nombre",
+      "dimension": "count",
+      "priorite": 5
+    },
+    {
+      "label": "quantité",
+      "dimension": "count",
+      "priorite": 6
+    },
+    {
+      "label": "segment",
+      "dimension": "count",
+      "priorite": 7
+    },
+    {
+      "label": "segments",
+      "dimension": "count",
+      "priorite": 8
+    },
+    {
+      "label": "sélections",
+      "dimension": "count",
+      "priorite": 9
+    },
+    {
+      "label": "selections",
+      "dimension": "count",
+      "priorite": 10
+    },
+    {
+      "label": "capacité volumique",
+      "dimension": "volume",
+      "priorite": 11
+    },
+    {
+      "label": "capacité volumétrique",
+      "dimension": "volume",
+      "priorite": 12
+    },
+    {
+      "label": "capacité de stockage (masse)",
+      "dimension": "mass",
+      "priorite": 13
+    },
+    {
+      "label": "capacité de stockage",
+      "dimension": "count",
+      "priorite": 14
+    },
+    {
+      "label": "capacité totale de stockage",
+      "dimension": "count",
+      "priorite": 15
+    },
+    {
+      "label": "capacité d'accueil",
+      "dimension": "count",
+      "priorite": 16
+    },
+    {
+      "label": "capacité de la vitrine",
+      "dimension": "count",
+      "priorite": 17
+    },
+    {
+      "label": "capacité de production",
+      "dimension": "mass_flow",
+      "priorite": 18
+    },
+    {
+      "label": "capacité de la batterie",
+      "dimension": "electric_charge",
+      "priorite": 19
+    },
+    {
+      "label": "recycleur",
+      "dimension": "count",
+      "priorite": 20
+    },
+    {
+      "label": "cassette de délestage",
+      "dimension": "count",
+      "priorite": 21
+    },
+    {
+      "label": "bac de trop-plein",
+      "dimension": "count",
+      "priorite": 22
+    },
+    {
+      "label": "passagers",
+      "dimension": "count",
+      "priorite": 23
+    },
+    {
+      "label": "sonore",
+      "dimension": "sound_level",
+      "priorite": 24
+    },
+    {
+      "label": "acoustique",
+      "dimension": "sound_level",
+      "priorite": 25
+    },
+    {
+      "label": "bruit",
+      "dimension": "sound_level",
+      "priorite": 26
+    },
+    {
+      "label": "decibel",
+      "dimension": "sound_level",
+      "priorite": 27
+    },
+    {
+      "label": "poids",
+      "dimension": "mass",
+      "priorite": 28
+    },
+    {
+      "label": "charge",
+      "dimension": "mass",
+      "priorite": 29
+    },
+    {
+      "label": "capacité",
+      "dimension": "mass",
+      "priorite": 30
+    },
+    {
+      "label": "hauteur",
+      "dimension": "length",
+      "priorite": 31
+    },
+    {
+      "label": "largeur",
+      "dimension": "length",
+      "priorite": 32
+    },
+    {
+      "label": "longueur",
+      "dimension": "length",
+      "priorite": 33
+    },
+    {
+      "label": "profondeur",
+      "dimension": "length",
+      "priorite": 34
+    },
+    {
+      "label": "diamètre",
+      "dimension": "length",
+      "priorite": 35
+    },
+    {
+      "label": "dimension",
+      "dimension": "length",
+      "priorite": 36
+    },
+    {
+      "label": "distance",
+      "dimension": "length",
+      "priorite": 37
+    },
+    {
+      "label": "epaisseur",
+      "dimension": "length",
+      "priorite": 38
+    },
+    {
+      "label": "vitesse de rotation",
+      "dimension": "[frequency]",
+      "priorite": 39
+    },
+    {
+      "label": "vitesse d'acceptation",
+      "dimension": "count_rate",
+      "priorite": 40
+    },
+    {
+      "label": "vitesse de distribution",
+      "dimension": "count_rate",
+      "priorite": 41
+    },
+    {
+      "label": "vitesse de nettoyage",
+      "dimension": "surface_rate",
+      "priorite": 42
+    },
+    {
+      "label": "vitesse",
+      "dimension": "speed",
+      "priorite": 43
+    },
+    {
+      "label": "puissance",
+      "dimension": "power",
+      "priorite": 44
+    },
+    {
+      "label": "tension",
+      "dimension": "voltage",
+      "priorite": 45
+    },
+    {
+      "label": "courant",
+      "dimension": "current",
+      "priorite": 46
+    },
+    {
+      "label": "fusible",
+      "dimension": "current",
+      "priorite": 47
+    },
+    {
+      "label": "branchement",
+      "dimension": "voltage",
+      "priorite": 48
+    },
+    {
+      "label": "fréquence d'utilisation",
+      "dimension": "[frequency]",
+      "priorite": 49
+    },
+    {
+      "label": "fréquence",
+      "dimension": "frequency",
+      "priorite": 50
+    },
+    {
+      "label": "tours/minute",
+      "dimension": "[frequency]",
+      "priorite": 51
+    },
+    {
+      "label": "volume",
+      "dimension": "volume",
+      "priorite": 52
+    },
+    {
+      "label": "cuve",
+      "dimension": "volume",
+      "priorite": 53
+    },
+    {
+      "label": "contenance",
+      "dimension": "volume",
+      "priorite": 54
+    },
+    {
+      "label": "température",
+      "dimension": "temperature",
+      "priorite": 55
+    },
+    {
+      "label": "pression",
+      "dimension": "pressure",
+      "priorite": 56
+    },
+    {
+      "label": "temps",
+      "dimension": "time",
+      "priorite": 57
+    },
+    {
+      "label": "duree",
+      "dimension": "time",
+      "priorite": 58
+    },
+    {
+      "label": "delai",
+      "dimension": "time",
+      "priorite": 59
+    },
+    {
+      "label": "mémoire",
+      "dimension": "information",
+      "priorite": 60
+    },
+    {
+      "label": "stockage",
+      "dimension": "information",
+      "priorite": 61
+    },
+    {
+      "label": "débit de vapeur",
+      "dimension": "mass_flow",
+      "priorite": 62
+    },
+    {
+      "label": "consommation d'eau",
+      "dimension": "volume",
+      "priorite": 63
+    },
+    {
+      "label": "consommation électrique",
+      "dimension": "power",
+      "priorite": 64
+    },
+    {
+      "label": "autonomie de la batterie",
+      "dimension": "time",
+      "priorite": 65
+    },
+    {
+      "label": "batterie",
+      "dimension": "energy",
+      "priorite": 66
+    },
+    {
+      "label": "consommation",
+      "dimension": "energy",
+      "priorite": 67
+    },
+    {
+      "label": "débit",
+      "dimension": "volume / time",
+      "priorite": 68
+    },
+    {
+      "label": "force",
+      "dimension": "force",
+      "priorite": 69
+    },
+    {
+      "label": "poussée",
+      "dimension": "force",
+      "priorite": 70
+    },
+    {
+      "label": "traction",
+      "dimension": "force",
+      "priorite": 71
+    },
+    {
+      "label": "couple",
+      "dimension": "torque",
+      "priorite": 72
+    },
+    {
+      "label": "énergie",
+      "dimension": "energy",
+      "priorite": 73
+    },
+    {
+      "label": "surface",
+      "dimension": "area",
+      "priorite": 74
+    },
+    {
+      "label": "superficie",
+      "dimension": "area",
+      "priorite": 75
+    },
+    {
+      "label": "angle",
+      "dimension": "angle",
+      "priorite": 76
+    },
+    {
+      "label": "rotation",
+      "dimension": "angle",
+      "priorite": 77
+    },
+    {
+      "label": "production horaire",
+      "dimension": "volume / time",
+      "priorite": 78
+    },
+    {
+      "label": "déverrouillage",
+      "dimension": "count",
+      "priorite": 79
+    },
+    {
+      "label": "lignes hydrauliques",
+      "dimension": "count",
+      "priorite": 80
+    },
+    {
+      "label": "niveaux desservis",
+      "dimension": "count",
+      "priorite": 81
+    },
+    {
+      "label": "cylindres",
+      "dimension": "count",
+      "priorite": 82
+    },
+    {
+      "label": "plateaux",
+      "dimension": "count",
+      "priorite": 83
+    },
+    {
+      "label": "configuration de la base",
+      "dimension": "count",
+      "priorite": 84
+    },
+    {
+      "label": "catégorie cabine",
+      "dimension": "count",
+      "priorite": 85
+    },
+    {
+      "label": "mémorisation de programmes",
+      "dimension": "count",
+      "priorite": 86
+    },
+    {
+      "label": "cadence",
+      "dimension": "[frequency]",
+      "priorite": 87
+    },
+    {
+      "label": "coefficient de transmission thermique",
+      "dimension": "thermal_transmittance",
+      "priorite": 88
+    },
+    {
+      "label": "résistance thermique",
+      "dimension": "thermal_resistance",
+      "priorite": 89
+    },
+    {
+      "label": "résolution de l'écran",
+      "dimension": "count",
+      "priorite": 90
+    },
+    {
+      "label": "luminosité de l'écran",
+      "dimension": "luminance",
+      "priorite": 91
+    },
+    {
+      "label": "dureté",
+      "dimension": "dimensionless",
+      "priorite": 92
+    },
+    {
+      "label": "mémoire vive",
+      "dimension": "information",
+      "priorite": 93
+    },
+    {
+      "label": "ratio masse/volume",
+      "dimension": "density",
+      "priorite": 94
+    },
+    {
+      "label": "ratio puissance/poids",
+      "dimension": "power",
+      "priorite": 95
+    },
+    {
+      "label": "ratio de compression",
+      "dimension": "pressure",
+      "priorite": 96
+    },
+    {
+      "label": "ratio de réduction",
+      "dimension": "ratio",
+      "priorite": 97
+    },
+    {
+      "label": "ratio",
+      "dimension": "ratio",
+      "priorite": 98
+    }
+  ],
+  "dimension_canonique": [
+    {
+      "dimension": "count",
+      "unite_canonique": "count"
+    },
+    {
+      "dimension": "sound_level",
+      "unite_canonique": "decibel"
+    },
+    {
+      "dimension": "mass",
+      "unite_canonique": "kilogram"
+    },
+    {
+      "dimension": "length",
+      "unite_canonique": "meter"
+    },
+    {
+      "dimension": "speed",
+      "unite_canonique": "meter / second"
+    },
+    {
+      "dimension": "power",
+      "unite_canonique": "watt"
+    },
+    {
+      "dimension": "voltage",
+      "unite_canonique": "volt"
+    },
+    {
+      "dimension": "current",
+      "unite_canonique": "ampere"
+    },
+    {
+      "dimension": "frequency",
+      "unite_canonique": "hertz"
+    },
+    {
+      "dimension": "[frequency]",
+      "unite_canonique": "hertz"
+    },
+    {
+      "dimension": "volume",
+      "unite_canonique": "liter"
+    },
+    {
+      "dimension": "temperature",
+      "unite_canonique": "celsius"
+    },
+    {
+      "dimension": "pressure",
+      "unite_canonique": "bar"
+    },
+    {
+      "dimension": "time",
+      "unite_canonique": "second"
+    },
+    {
+      "dimension": "information",
+      "unite_canonique": "gigabyte"
+    },
+    {
+      "dimension": "volume / time",
+      "unite_canonique": "liter / minute"
+    },
+    {
+      "dimension": "force",
+      "unite_canonique": "newton"
+    },
+    {
+      "dimension": "torque",
+      "unite_canonique": "newton * meter"
+    },
+    {
+      "dimension": "energy",
+      "unite_canonique": "joule"
+    },
+    {
+      "dimension": "area",
+      "unite_canonique": "meter ** 2"
+    },
+    {
+      "dimension": "area_density",
+      "unite_canonique": "kilogram / meter ** 2"
+    },
+    {
+      "dimension": "density",
+      "unite_canonique": "kilogram / meter ** 3"
+    },
+    {
+      "dimension": "angle",
+      "unite_canonique": "degree"
+    },
+    {
+      "dimension": "mass_flow",
+      "unite_canonique": "gram / minute"
+    },
+    {
+      "dimension": "count_rate",
+      "unite_canonique": "count / second"
+    },
+    {
+      "dimension": "luminosity",
+      "unite_canonique": "lumen"
+    },
+    {
+      "dimension": "luminous_efficacy",
+      "unite_canonique": "lumen / watt"
+    },
+    {
+      "dimension": "ratio",
+      "unite_canonique": "count"
+    },
+    {
+      "dimension": "dimensionless",
+      "unite_canonique": "count"
+    },
+    {
+      "dimension": "thermal_transmittance",
+      "unite_canonique": "watt / meter ** 2 / kelvin"
+    },
+    {
+      "dimension": "thermal_resistance",
+      "unite_canonique": "meter ** 2 * kelvin / watt"
+    },
+    {
+      "dimension": "surface_rate",
+      "unite_canonique": "meter ** 2 / hour"
+    },
+    {
+      "dimension": "luminance",
+      "unite_canonique": "candela / meter ** 2"
+    },
+    {
+      "dimension": "electric_charge",
+      "unite_canonique": "ampere_hour"
+    },
+    {
+      "dimension": "specific_energy",
+      "unite_canonique": "joule / kilogram"
+    },
+    {
+      "dimension": "viscosity",
+      "unite_canonique": "pascal * second"
+    }
+  ],
+  "preprocessing": [
+    {
+      "type": "nfkc",
+      "phase": "pre_snapshot",
+      "pattern": null,
+      "remplacement": "",
+      "ordre": 0
+    },
+    {
+      "type": "regex_sub",
+      "phase": "pre_snapshot",
+      "pattern": "\\s*\\([^)]*\\)\\s*$",
+      "remplacement": "",
+      "ordre": 1
+    },
+    {
+      "type": "str_replace",
+      "phase": "pre_snapshot",
+      "pattern": "·",
+      "remplacement": ".",
+      "ordre": 2
+    },
+    {
+      "type": "str_replace",
+      "phase": "post_snapshot",
+      "pattern": "³",
+      "remplacement": "3",
+      "ordre": 3
+    },
+    {
+      "type": "str_replace",
+      "phase": "post_snapshot",
+      "pattern": "²",
+      "remplacement": "2",
+      "ordre": 4
+    }
+  ],
+  "reecriture": [
+    {
+      "unite_source": "db(a)",
+      "kind": "rewrite",
+      "value": "dBA"
+    },
+    {
+      "unite_source": "tr/min",
+      "kind": "rewrite",
+      "value": "rpm"
+    },
+    {
+      "unite_source": "trs/min",
+      "kind": "rewrite",
+      "value": "rpm"
+    },
+    {
+      "unite_source": "m3/h",
+      "kind": "rewrite",
+      "value": "m**3 / hour"
+    },
+    {
+      "unite_source": "m2",
+      "kind": "rewrite",
+      "value": "m**2"
+    },
+    {
+      "unite_source": "m3",
+      "kind": "rewrite",
+      "value": "m**3"
+    },
+    {
+      "unite_source": "kg/m2",
+      "kind": "rewrite",
+      "value": "kilogram / meter ** 2"
+    },
+    {
+      "unite_source": "kg/m3",
+      "kind": "rewrite",
+      "value": "kilogram / meter ** 3"
+    },
+    {
+      "unite_source": "g/min",
+      "kind": "rewrite",
+      "value": "gram / minute"
+    },
+    {
+      "unite_source": "pièces/seconde",
+      "kind": "rewrite",
+      "value": "count / second"
+    },
+    {
+      "unite_source": "pieces/seconde",
+      "kind": "rewrite",
+      "value": "count / second"
+    },
+    {
+      "unite_source": "billets/seconde",
+      "kind": "rewrite",
+      "value": "count / second"
+    },
+    {
+      "unite_source": "tasses/jour",
+      "kind": "rewrite",
+      "value": "count"
+    },
+    {
+      "unite_source": "watts",
+      "kind": "rewrite",
+      "value": "watt"
+    },
+    {
+      "unite_source": "kwh/24h",
+      "kind": "rewrite",
+      "value": "kilowatt_hour / day"
+    },
+    {
+      "unite_source": "l/cycle",
+      "kind": "rewrite",
+      "value": "liter"
+    },
+    {
+      "unite_source": "tonnes",
+      "kind": "rewrite",
+      "value": "tonne"
+    },
+    {
+      "unite_source": "pieds",
+      "kind": "rewrite",
+      "value": "pieds"
+    },
+    {
+      "unite_source": "pied",
+      "kind": "rewrite",
+      "value": "pieds"
+    },
+    {
+      "unite_source": "démarrages/heure",
+      "kind": "rewrite",
+      "value": "1 / hour"
+    },
+    {
+      "unite_source": "tours/min",
+      "kind": "rewrite",
+      "value": "rpm"
+    },
+    {
+      "unite_source": "tour/min",
+      "kind": "rewrite",
+      "value": "rpm"
+    },
+    {
+      "unite_source": "lignes",
+      "kind": "rewrite",
+      "value": "count"
+    },
+    {
+      "unite_source": "ligne",
+      "kind": "rewrite",
+      "value": "count"
+    },
+    {
+      "unite_source": "pouces",
+      "kind": "rewrite",
+      "value": "inch"
+    },
+    {
+      "unite_source": "pouce",
+      "kind": "rewrite",
+      "value": "inch"
+    },
+    {
+      "unite_source": "km/h",
+      "kind": "rewrite",
+      "value": "kilometer / hour"
+    },
+    {
+      "unite_source": "lm/w",
+      "kind": "rewrite",
+      "value": "lumen / watt"
+    },
+    {
+      "unite_source": "%",
+      "kind": "bypass",
+      "value": "count"
+    },
+    {
+      "unite_source": "ra",
+      "kind": "bypass",
+      "value": "count"
+    },
+    {
+      "unite_source": "minutes",
+      "kind": "rewrite",
+      "value": "minute"
+    },
+    {
+      "unite_source": "μm",
+      "kind": "rewrite",
+      "value": "micrometer"
+    },
+    {
+      "unite_source": "kg/24h",
+      "kind": "rewrite",
+      "value": "kilogram / day"
+    },
+    {
+      "unite_source": "m2/h",
+      "kind": "rewrite",
+      "value": "meter ** 2 / hour"
+    },
+    {
+      "unite_source": "w/m2.k",
+      "kind": "rewrite",
+      "value": "watt / (meter ** 2 * kelvin)"
+    },
+    {
+      "unite_source": "m2.k/w",
+      "kind": "rewrite",
+      "value": "meter ** 2 * kelvin / watt"
+    },
+    {
+      "unite_source": "coups/min",
+      "kind": "rewrite",
+      "value": "1 / minute"
+    },
+    {
+      "unite_source": "coupes/min",
+      "kind": "rewrite",
+      "value": "1 / minute"
+    },
+    {
+      "unite_source": "heures",
+      "kind": "rewrite",
+      "value": "hour"
+    },
+    {
+      "unite_source": "heure",
+      "kind": "rewrite",
+      "value": "hour"
+    },
+    {
+      "unite_source": "go",
+      "kind": "rewrite",
+      "value": "gigabyte"
+    },
+    {
+      "unite_source": "mo",
+      "kind": "rewrite",
+      "value": "megabyte"
+    },
+    {
+      "unite_source": "ko",
+      "kind": "rewrite",
+      "value": "kilobyte"
+    },
+    {
+      "unite_source": "to",
+      "kind": "rewrite",
+      "value": "terabyte"
+    },
+    {
+      "unite_source": "mohs",
+      "kind": "bypass",
+      "value": "count"
+    },
+    {
+      "unite_source": "kn/m2",
+      "kind": "rewrite",
+      "value": "kilonewton / meter ** 2"
+    },
+    {
+      "unite_source": "cd/m2",
+      "kind": "rewrite",
+      "value": "candela / meter ** 2"
+    },
+    {
+      "unite_source": "ah",
+      "kind": "rewrite",
+      "value": "ampere_hour"
+    },
+    {
+      "unite_source": "a.h",
+      "kind": "rewrite",
+      "value": "ampere_hour"
+    },
+    {
+      "unite_source": "amperes-heures",
+      "kind": "rewrite",
+      "value": "ampere_hour"
+    },
+    {
+      "unite_source": "ampere-heure",
+      "kind": "rewrite",
+      "value": "ampere_hour"
+    },
+    {
+      "unite_source": "ampères-heures",
+      "kind": "rewrite",
+      "value": "ampere_hour"
+    },
+    {
+      "unite_source": "ampère-heure",
+      "kind": "rewrite",
+      "value": "ampere_hour"
+    },
+    {
+      "unite_source": "mah",
+      "kind": "rewrite",
+      "value": "milliampere_hour"
+    },
+    {
+      "unite_source": "kilogrammes",
+      "kind": "rewrite",
+      "value": "kilogram"
+    },
+    {
+      "unite_source": "kilogramme",
+      "kind": "rewrite",
+      "value": "kilogram"
+    },
+    {
+      "unite_source": "grammes",
+      "kind": "rewrite",
+      "value": "gram"
+    },
+    {
+      "unite_source": "gramme",
+      "kind": "rewrite",
+      "value": "gram"
+    },
+    {
+      "unite_source": "millimètres",
+      "kind": "rewrite",
+      "value": "millimeter"
+    },
+    {
+      "unite_source": "millimètre",
+      "kind": "rewrite",
+      "value": "millimeter"
+    },
+    {
+      "unite_source": "centimètres",
+      "kind": "rewrite",
+      "value": "centimeter"
+    },
+    {
+      "unite_source": "centimètre",
+      "kind": "rewrite",
+      "value": "centimeter"
+    },
+    {
+      "unite_source": "décibels",
+      "kind": "rewrite",
+      "value": "decibel"
+    },
+    {
+      "unite_source": "décibel",
+      "kind": "rewrite",
+      "value": "decibel"
+    },
+    {
+      "unite_source": "decibels",
+      "kind": "rewrite",
+      "value": "decibel"
+    },
+    {
+      "unite_source": "decibel",
+      "kind": "rewrite",
+      "value": "decibel"
+    },
+    {
+      "unite_source": "cycles/jour",
+      "kind": "rewrite",
+      "value": "1 / day"
+    },
+    {
+      "unite_source": "cycles / jour",
+      "kind": "rewrite",
+      "value": "1 / day"
+    },
+    {
+      "unite_source": "kwh/kg",
+      "kind": "rewrite",
+      "value": "kilowatt_hour / kilogram"
+    },
+    {
+      "unite_source": "kwh / kg",
+      "kind": "rewrite",
+      "value": "kilowatt_hour / kilogram"
+    },
+    {
+      "unite_source": "kwc",
+      "kind": "rewrite",
+      "value": "kilowatt"
+    },
+    {
+      "unite_source": "mpa.s",
+      "kind": "rewrite",
+      "value": "millipascal * second"
+    },
+    {
+      "unite_source": "pa.s",
+      "kind": "rewrite",
+      "value": "pascal * second"
+    },
+    {
+      "unite_source": "cycles par jour",
+      "kind": "rewrite",
+      "value": "1 / day"
+    },
+    {
+      "unite_source": "secondes",
+      "kind": "rewrite",
+      "value": "second"
+    },
+    {
+      "unite_source": "seconde",
+      "kind": "rewrite",
+      "value": "second"
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+aio-pika
+httpx
+openai
+tenacity
+pydantic
+pydantic-settings
+prometheus-client
+fastapi
+uvicorn[standard]
