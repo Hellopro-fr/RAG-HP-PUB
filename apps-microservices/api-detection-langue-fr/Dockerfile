@@ -40,6 +40,15 @@ RUN pip install --no-cache-dir -e /opt/libs/common-utils
 # Étape 4: Copier le code source
 COPY apps-microservices/api-detection-langue-fr .
 
+# Modele fastText de detection de langue (lu par language_detector.py dans /app/models). Sur la VM il etait monte depuis
+# l'hote (/mnt/data/models/fasttext) : sans lui, l'analyse NLP est sautee. Empreinte figee sur le fichier de la VM
+# (07/10/2026) : le build echoue si le fichier telecharge differe.
+RUN mkdir -p /app/models && python -c "import hashlib, urllib.request; \
+p = '/app/models/lid.176.bin'; \
+urllib.request.urlretrieve('https://dl.fbaipublicfiles.com/fasttext/supervised-models/lid.176.bin', p); \
+h = hashlib.sha256(open(p, 'rb').read()).hexdigest(); \
+assert h == '7e69ec5451bc261cc7844e49e4792a85d7f09c06789ec800fc4a44aec362764e', 'empreinte lid.176.bin inattendue : ' + h"
+
 # Étape 5: Exposer le port
 EXPOSE 8999
 
