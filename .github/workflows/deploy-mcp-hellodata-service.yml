@@ -1,0 +1,68 @@
+name: 'Deploy — mcp-hellodata-service'
+
+# Wrapper qui appelle deploy-cloud-run.yml pour mcp-hellodata-service
+# (Go, bibliotheque standard seule, MCP HTTP sur 8597).
+#
+# Vague 2 / V2-a4 (07/10) : jumeau Cloud Run de la VM. Le trafic n'y arrive qu'au changement de l'URL du serveur
+# dans mcp-gateway (API admin, jamais en SQL).
+# max_instances = 1 : les liens CSV signes sont gardes en memoire ; plusieurs instances casseraient les telechargements.
+# Sorties : bo.hellopro.fr et www.hellopro.fr (Ecritel) -> all-traffic (IP NAT statique).
+# Securite : l'autorisation repose sur des en-tetes non signes poses par mcp-gateway ; sur la VM la frontiere est le
+# reseau docker services-net, ici c'est le VPC (entree interne). Ecart trace, cf. suivi vague 2.
+
+on:
+  push:
+    branches:
+      - prod
+    paths:
+      - 'apps-microservices/mcp-hellodata-service/**'
+      - '.github/workflows/deploy-mcp-hellodata-service.yml'
+  workflow_dispatch:
+    inputs:
+      cloud_run_region:
+        description: 'Région Cloud Run (override)'
+        required: false
+        type: string
+        default: 'europe-west1'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    name: 'Deploy mcp-hellodata-service'
+    uses: ./.github/workflows/deploy-cloud-run.yml
+    with:
+      service_name: mcp-hellodata-service
+      dockerfile_path: apps-microservices/mcp-hellodata-service/Dockerfile
+      # Build context = racine du repo (le Dockerfile COPY depuis apps-microservices/).
+      build_context: .
+      cloud_run_region: ${{ github.event.inputs.cloud_run_region || 'europe-west1' }}
+      ingress: internal-and-cloud-load-balancing
+      allow_unauthenticated: true
+      # Go stdlib : empreinte memoire tres faible -> 256Mi.
+      cpu: '1'
+      memory: '256Mi'
+      # Etat en memoire (liens CSV) : exactement une instance, toujours chaude.
+      min_instances: 1
+      max_instances: 1
+      container_port: 8597
+      # L'app lit MCP_PORT et non PORT -> on l'aligne sur container_port.
+      health_check_path: /health
+      vpc_connector: vpc-access-connector
+      vpc_egress: all-traffic
+      # HELLODATA_PUBLIC_URL : vide sur la VM, facultatif -> non passe.
+      env_vars_json: |
+        {
+          "MCP_PORT": "8597",
+          "HELLODATA_BASE_URL": "https://bo.hellopro.fr/admin/mcp/hellodata",
+          "HELLODATA_WEBHOOK_URL": "https://www.hellopro.fr/partenaires_externes/mcp/hellodata"
+        }
+      secret_env_vars_json: |
+        {
+          "HELLODATA_TOKEN": "platform-hellodata-token:latest",
+          "HELLODATA_WEBHOOK_TOKEN": "platform-hellodata-webhook-token:latest"
+        }
+    secrets:
+      slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
