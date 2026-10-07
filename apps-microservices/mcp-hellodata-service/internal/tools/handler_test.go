@@ -117,18 +117,21 @@ func TestEchantillon_PlafondDeTaille(t *testing.T) {
 	}
 }
 
-// Sans le droit, une colonne restreinte ne doit meme pas etre demandee au
-// moteur : le refus se prend ici.
-func TestEchantillon_ColonneRestreinteSansDroit(t *testing.T) {
-	appele := false
-	h := handler(t, func(w http.ResponseWriter, r *http.Request) { appele = true })
-	r := h.Traiter(context.Background(), Identite{"alice@example.test", "readonly", true},
-		req("tools/call", `{"name":"echantillon","arguments":{"filtre":{"critere":"a_siret","comparateur":"=","valeur":true},"colonnes":["email"]}}`))
-	if r.Error == nil || !strings.Contains(r.Error.Message, "colonne_restreinte") {
-		t.Fatalf("attendu colonne_restreinte, obtenu %+v", r.Error)
+// Un detenteur de grant obtient les colonnes restreintes : la demande part au
+// moteur avec colonnes_restreintes_autorisees, comme pour un admin.
+func TestEchantillon_ColonneRestreinteAvecGrant(t *testing.T) {
+	var corps []byte
+	h := handler(t, func(w http.ResponseWriter, r *http.Request) {
+		corps, _ = io.ReadAll(r.Body)
+		io.WriteString(w, `{"code":200,"response":{"rows":[],"next_cursor":null,"has_more":false}}`)
+	})
+	r := h.Traiter(context.Background(), Identite{"alice@example.test", "config-only", true},
+		req("tools/call", `{"name":"echantillon","arguments":{"filtre":{"critere":"a_siret","comparateur":"=","valeur":true},"colonnes":["email","mobile"]}}`))
+	if r.Error != nil {
+		t.Fatalf("un grant doit ouvrir email et mobile, obtenu %+v", r.Error)
 	}
-	if appele {
-		t.Error("le moteur ne doit pas etre appele")
+	if !strings.Contains(string(corps), `"colonnes_restreintes_autorisees":true`) {
+		t.Errorf("le moteur doit recevoir l'autorisation des colonnes restreintes: %s", corps)
 	}
 }
 
@@ -157,18 +160,39 @@ func TestExportCSV_LUrlPointeLeWrapper(t *testing.T) {
 	}
 }
 
-// export_csv doit refuser une colonne restreinte AVANT tout appel reseau,
-// tout comme echantillon.
-func TestExportCSV_ColonneRestreinteSansDroit(t *testing.T) {
+// export_csv : meme regle, un grant ouvre mobile.
+func TestExportCSV_ColonneRestreinteAvecGrant(t *testing.T) {
 	appele := false
-	h := handler(t, func(w http.ResponseWriter, r *http.Request) { appele = true })
-	r := h.Traiter(context.Background(), Identite{"alice@example.test", "readonly", true},
+	h := handler(t, func(w http.ResponseWriter, r *http.Request) {
+		appele = true
+		io.WriteString(w, "id_acheteur;mobile\n1;0600000000\n# fin-export;1;\n")
+	})
+	r := h.Traiter(context.Background(), Identite{"alice@example.test", "config-only", true},
 		req("tools/call", `{"name":"export_csv","arguments":{"filtre":{"critere":"a_siret","comparateur":"=","valeur":true},"colonnes":["mobile"]}}`))
-	if r.Error == nil || !strings.Contains(r.Error.Message, "colonne_restreinte") {
-		t.Fatalf("attendu colonne_restreinte, obtenu %+v", r.Error)
+	if r.Error != nil {
+		t.Fatalf("un grant doit ouvrir mobile, obtenu %+v", r.Error)
 	}
-	if appele {
-		t.Error("le moteur ne doit pas etre appele")
+	if !appele {
+		t.Error("le moteur doit etre appele")
+	}
+}
+
+// droitContacts : admin ou grant, et rien d'autre.
+func TestDroitContacts(t *testing.T) {
+	cas := []struct {
+		id   Identite
+		want bool
+	}{
+		{Identite{"a@example.test", "admin", false}, true},
+		{Identite{"g@example.test", "config-only", true}, true},
+		{Identite{"c@example.test", "config-only", false}, false},
+		{Identite{"r@example.test", "read-only", false}, false},
+		{Identite{"", "", false}, false},
+	}
+	for _, c := range cas {
+		if got := droitContacts(c.id); got != c.want {
+			t.Errorf("droitContacts(%+v) = %t, attendu %t", c.id, got, c.want)
+		}
 	}
 }
 

@@ -49,7 +49,7 @@ func (h *Handler) appeler(ctx context.Context, id Identite, rpcID json.RawMessag
 			return mcp.Echec(rpcID, mcp.CodeParamsInvalides, "arguments illisibles: "+err.Error())
 		}
 	}
-	admin := acces.EstAdmin(id.Role)
+	admin := droitContacts(id)
 
 	switch nom {
 	case "compter":
@@ -166,7 +166,7 @@ func (h *Handler) demande(rpcID json.RawMessage, a argsCommuns, admin, avecColon
 		for _, c := range a.Colonnes {
 			if colonnesRestreintes[c] {
 				r := mcp.Echec(rpcID, mcp.CodeParamsInvalides,
-					"colonne_restreinte: '"+c+"' exige le role admin")
+					"colonne_restreinte: '"+c+"' exige le role admin ou un grant hellodata")
 				return hellodata.Demande{}, &r
 			}
 		}
@@ -200,4 +200,13 @@ func erreurMoteur(rpcID json.RawMessage, err error) mcp.Reponse {
 	}
 	log.Printf("[hellodata] appel moteur en echec: %v", err)
 	return mcp.Echec(rpcID, mcp.CodeErreurInterne, "moteur_indisponible: reessayer plus tard")
+}
+
+// droitContacts decide l'acces aux colonnes restreintes (email, mobile) :
+// l'admin, ou le detenteur d'un grant hellodata (X-End-User-Granted). Le grant
+// ouvre les contacts comme il les ouvre deja dans recup_acheteur, dont le CSV
+// prestataire porte le telephone. Le moteur suit ce drapeau
+// (colonnes_restreintes_autorisees) sans le recalculer.
+func droitContacts(id Identite) bool {
+	return acces.EstAdmin(id.Role) || id.Granted
 }
