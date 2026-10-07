@@ -49,13 +49,15 @@ jobs:
       # Build context = racine du repo (le Dockerfile COPY protos/ + libs/ + apps-microservices/).
       build_context: .
       cloud_run_region: ${{ github.event.inputs.cloud_run_region || 'europe-west1' }}
-      ingress: all
+      # Vague 2 / V2-a3 (07/10, F-HP-SEC-030) : entree interne (VM + GKE joignables, internet 404, cible validee le 02/10),
+      # appel anonyme reserve au reseau interne. Doit rester ainsi : un retour a `all` rouvrirait le service a internet.
+      ingress: internal-and-cloud-load-balancing
       allow_unauthenticated: true
       cpu: '1'
       # 1Gi : 2 workers gunicorn + pymilvus/grpc/common_utils (512Mi trop juste au boot).
       memory: '1Gi'
-      # Shadow : pas de trafic route -> scale-to-zero.
-      min_instances: 0
+      # V2-a3 : route la plus chargee de la vague (4 800 a 6 800 appels/jour via la gateway) -> 1 instance chaude.
+      min_instances: 1
       max_instances: 3
       # CMD gunicorn --bind 0.0.0.0:8510 (hardcode dans le Dockerfile).
       container_port: 8510
@@ -104,7 +106,8 @@ jobs:
           "DEEPSEEK_API_KEY": "platform-deepseek-api-key:latest",
           "GEMINI_API_KEY": "platform-gemini-api-key:latest",
           "RABBITMQ_URL": "platform-rabbitmq-url:latest",
-          "KEY_WEBHOOK": "platform-key-webhook:latest"
+          "KEY_WEBHOOK": "platform-key-webhook:latest",
+          "REDIS_URL": "platform-redis-url:latest"
         }
       # Gate Trivy desactive : base python:3.10-slim (CVE HIGH build deps connues). Dette tracee.
       trivy_disable_gate: true
