@@ -2319,6 +2319,28 @@ services:
       - services-net
     logging: *logging_defaults
 
+  # Agents IA (Dust maison) : fiches et journal via l'API v2 PHP, outils natifs des fournisseurs
+  agent-service:
+    build:
+      context: .
+      dockerfile: apps-microservices/agent-service/Dockerfile
+    profiles: ["agent-service"]
+    restart: unless-stopped
+    ports:
+      - "8597:8597"
+    environment:
+      HP_TOKEN: ${HP_TOKEN}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      MCP_GATEWAY_URL: ${MCP_GATEWAY_URL}
+      MCP_CLIENT_ID: ${MCP_CLIENT_ID}
+      MCP_CLIENT_SECRET: ${MCP_CLIENT_SECRET}
+    networks:
+      - services-net
+    logging: *logging_defaults
+
   mcp-api-recherche-service:
     build:
       context: .
@@ -2466,6 +2488,41 @@ services:
       - MCP_PORT=8589
       # Shared secret enabling /admin/users + /admin/teams (consumed by mcp-gateway-service)
       - MCP_LEEXI_ADMIN_TOKEN=${MCP_LEEXI_ADMIN_TOKEN}
+    networks:
+      - services-net
+    logging: *logging_defaults
+
+  # ── MCP HelloData Service ───────────────────────────────────────────────
+  mcp-hellodata-service:
+    build:
+      context: .
+      dockerfile: ./apps-microservices/mcp-hellodata-service/Dockerfile
+    container_name: mcp-hellodata-service
+    profiles: [ "mcp" ]
+    restart: unless-stopped
+    # expose, PAS ports. L'autorisation de ce service repose sur des
+    # en-tetes non signes (X-End-User-Email, X-End-User-Role,
+    # X-End-User-Granted) : si un tiers peut joindre 8597 directement,
+    # X-End-User-Role: admin et X-End-User-Granted: true sont forgeables. La
+    # frontiere reseau EST la garantie (spec design § 7.1). mcp-leexi-service
+    # ci-dessus publie 8589:8589 ; cette divergence est deliberee, pas un
+    # oubli — ne pas "corriger" en ajoutant ports: ici.
+    expose:
+      - "8597"
+    environment:
+      - MCP_PORT=8597
+      - HELLODATA_BASE_URL=${HELLODATA_BASE_URL}
+      - HELLODATA_TOKEN=${HELLODATA_TOKEN}
+      - HELLODATA_PUBLIC_URL=${HELLODATA_PUBLIC_URL}
+      # Webhook FRONT partenaires_externes/mcp/hellodata (reponses de
+      # campagne) : obligatoires au demarrage, valeurs dans le .env.
+      - HELLODATA_WEBHOOK_URL=${HELLODATA_WEBHOOK_URL}
+      - HELLODATA_WEBHOOK_TOKEN=${HELLODATA_WEBHOOK_TOKEN}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8597/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     networks:
       - services-net
     logging: *logging_defaults
