@@ -1,0 +1,67 @@
+name: 'Deploy — agent-service'
+
+# Wrapper qui appelle deploy-cloud-run.yml pour agent-service
+# (Python FastAPI + LangGraph, port 8597, sans etat).
+#
+# Vague 2 / V2-a4 (07/10) : jumeau Cloud Run de la VM. Le trafic n'y arrive qu'au changement de la route
+# SERVICE_AGENT de la gateway VM (.env.url) ; appelant : le BO chez Ecritel via api.hellopro.eu/agent-service/.
+# Sorties : API v2 PHP (api.hellopro.fr, Ecritel) + OpenAI, Anthropic, Gemini, DeepSeek -> all-traffic (IP NAT statique).
+# MCP_GATEWAY_URL / MCP_CLIENT_ID / MCP_CLIENT_SECRET : vides sur la VM (outils MCP non utilises), donc non passes.
+
+on:
+  push:
+    branches:
+      - prod
+    paths:
+      - 'apps-microservices/agent-service/**'
+      - '.github/workflows/deploy-agent-service.yml'
+  workflow_dispatch:
+    inputs:
+      cloud_run_region:
+        description: 'Région Cloud Run (override)'
+        required: false
+        type: string
+        default: 'europe-west1'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    name: 'Deploy agent-service'
+    uses: ./.github/workflows/deploy-cloud-run.yml
+    with:
+      service_name: agent-service
+      dockerfile_path: apps-microservices/agent-service/Dockerfile
+      build_context: .
+      cloud_run_region: ${{ github.event.inputs.cloud_run_region || 'europe-west1' }}
+      # Entree interne (VM + GKE joignables, internet 404), appel anonyme reserve au reseau interne (F-HP-SEC-030, F-HP-SEC-033).
+      ingress: internal-and-cloud-load-balancing
+      allow_unauthenticated: true
+      cpu: '1'
+      # Imports LangChain / LangGraph + 4 SDK de modeles : 1Gi par prudence.
+      memory: '1Gi'
+      # Trafic reel du BO (22 a 109 requetes par jour) : une instance chaude.
+      min_instances: 1
+      max_instances: 3
+      container_port: 8597
+      health_check_path: /health
+      startup_cpu_boost: true
+      # Un appel au modele peut durer TIMEOUT_MODELE_S = 300 s, plus l'API v2 : 600 s.
+      request_timeout: '600'
+      vpc_connector: vpc-access-connector
+      vpc_egress: all-traffic
+      env_vars_json: '{}'
+      secret_env_vars_json: |
+        {
+          "HP_TOKEN": "platform-hp-token:latest",
+          "OPENAI_API_KEY": "platform-openai-api-key:latest",
+          "ANTHROPIC_API_KEY": "platform-anthropic-api-key:latest",
+          "GEMINI_API_KEY": "platform-gemini-api-key:latest",
+          "DEEPSEEK_API_KEY": "platform-deepseek-api-key:latest"
+        }
+      # Base python:3.11-slim -> gate off (dette CVE tracee, comme les autres services Python).
+      trivy_disable_gate: true
+    secrets:
+      slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}

@@ -143,6 +143,11 @@ on:
         required: false
         type: boolean
         default: false
+      request_timeout:
+        description: 'Délai max d''une requête Cloud Run en secondes (ex: "600"). Vide = valeur actuelle du service (300 s à la création).'
+        required: false
+        type: string
+        default: ''
     outputs:
       service_url:
         description: 'URL publique du service Cloud Run déployé'
@@ -348,6 +353,9 @@ jobs:
           fi
           if [ "${{ inputs.startup_cpu_boost }}" = "true" ]; then
             EXTRA_FLAGS+=(--cpu-boost)
+          fi
+          if [ -n "${{ inputs.request_timeout }}" ]; then
+            EXTRA_FLAGS+=(--timeout="${{ inputs.request_timeout }}")
           fi
 
           gcloud run deploy "${{ inputs.service_name }}" \
