@@ -9,7 +9,7 @@ import "strings"
 type colonne struct {
 	Nom        string
 	Libelle    string
-	Restreinte bool // email / mobile : role admin, comme $debloque_tel_mail cote BO
+	Restreinte bool // email / mobile : admin ou grant hellodata (droitContacts)
 }
 
 // catalogueColonnes reflete requete.php, dans l'ordre de l'ecran d'extraction
@@ -76,7 +76,7 @@ func listeColonnes() string {
 	for _, c := range catalogueColonnes {
 		p := c.Libelle + " (" + c.Nom
 		if c.Restreinte {
-			p += ", admin"
+			p += ", admin ou grant"
 		}
 		parts = append(parts, p+")")
 	}

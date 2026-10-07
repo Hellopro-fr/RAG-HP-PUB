@@ -24,7 +24,7 @@ func TestExportCSV_SansColonnesDemandeALUtilisateur(t *testing.T) {
 		if r.Error == nil || !strings.HasPrefix(r.Error.Message, "colonnes_requises:") {
 			t.Fatalf("attendu colonnes_requises, recu %+v", r.Error)
 		}
-		for _, attendu := range []string{"ID societe (id_fiche)", "Email (email, admin)", "Validite email"} {
+		for _, attendu := range []string{"ID societe (id_fiche)", "Email (email, admin ou grant)", "Validite email"} {
 			if !strings.Contains(r.Error.Message, attendu) {
 				t.Errorf("la liste rendue doit contenir %q : %s", attendu, r.Error.Message)
 			}

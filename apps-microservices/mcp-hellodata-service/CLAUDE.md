@@ -120,13 +120,13 @@ Le gateway injecte trois en-têtes non signés : `X-End-User-Email`,
 `X-End-User-Granted: true` (seulement si un grant existe — jamais `false`).
 `internal/acces` refuse sans e-mail, puis accepte `admin` ou `granted` ;
 seule la valeur exacte `true` compte. Chaque appel d'outil accepté est
-journalisé avec l'adresse et la source du droit (`admin` ou `grant`). Un
-titulaire de grant n'est pas admin : il n'a pas accès aux colonnes
-restreintes (`email`, `mobile`) de `echantillon` / `export_csv`. **En
-revanche**, le CSV de `recup_acheteur` porte `telephone_normalise` pour tout
-appelant autorisé : c'est la liste à transmettre au prestataire (spec
-campagnes § 6.1). La précondition 5 (droit aux colonnes téléphone) n'étant
-pas tranchée, ce point reste à valider. Seul `/health` répond sans
+journalisé avec l'adresse et la source du droit (`admin` ou `grant`). Les
+colonnes restreintes (`email`, `mobile`) de `echantillon` / `export_csv` sont
+ouvertes à l'admin **et** au titulaire d'un grant (`droitContacts`,
+`internal/tools/selection.go`) : décision du 2026-10-07 (précondition 5
+tranchée), alignée sur `recup_acheteur`, dont le CSV porte déjà
+`telephone_normalise` pour tout appelant autorisé. Le moteur suit le drapeau
+`colonnes_restreintes_autorisees` envoyé par le wrapper. Seul `/health` répond sans
 identité, et il ne renvoie aucune donnée métier.
 
 Cette re-vérification n'a de sens que si le service n'est **joignable que
