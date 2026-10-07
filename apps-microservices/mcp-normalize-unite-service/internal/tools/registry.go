@@ -8,11 +8,20 @@ import (
 
 	"github.com/hellopro/mcp-normalize-unite/internal/mcp"
 	normalizationpb "github.com/hellopro/mcp-normalize-unite/proto/gen/graph_normalization"
+	unitregistrypb "github.com/hellopro/mcp-normalize-unite/proto/gen/unit_registry"
 )
 
 // Clients holds persistent gRPC connections to backend services.
 type Clients struct {
 	Normalization normalizationpb.GraphNormalizationServiceClient
+	Units         unitregistrypb.UnitRegistryServiceClient
+	// UnitsAdminKey is sent as "authorization: Bearer <key>" on unit-registry writes only.
+	UnitsAdminKey string
+	// Actor is recorded as created_by / updated_by on unit-registry writes.
+	Actor string
+	// WriteToolsEnabled registers the unit/unit-type write tools (UNIT_WRITE_TOOLS_ENABLED).
+	// Reads (get_unit, get_unit_type) are always registered.
+	WriteToolsEnabled bool
 }
 
 // ToolHandler processes a tool call and returns the result.
@@ -30,15 +39,32 @@ type Registry struct {
 	clients *Clients
 }
 
-// NewRegistry creates a tool registry with all tools registered.
+// NewRegistry creates a tool registry. Write tools are registered only when
+// clients.WriteToolsEnabled is true; an unregistered tool answers "unknown tool".
 func NewRegistry(clients *Clients) *Registry {
 	r := &Registry{
 		byName:  make(map[string]*registeredTool),
 		clients: clients,
 	}
+	writes := clients.WriteToolsEnabled
 
 	r.register("normalize_quantity", normalizeQuantityDescription, normalizeQuantityInputSchema, handleNormalizeQuantity)
 	r.register("normalize_range", normalizeRangeDescription, normalizeRangeInputSchema, handleNormalizeRange)
+	if writes {
+		r.register("create_unit", createUnitDescription, createUnitInputSchema, handleCreateUnit)
+		r.register("update_unit", updateUnitDescription, updateUnitInputSchema, handleUpdateUnit)
+		r.register("deactivate_unit", deactivateUnitDescription, unitRefInputSchema, handleDeactivateUnit)
+	}
+	r.register("get_unit", getUnitDescription, unitRefInputSchema, handleGetUnit)
+	if writes {
+		r.register("create_unit_type", createUnitTypeDescription, createUnitTypeInputSchema, handleCreateUnitType)
+		r.register("update_unit_type", updateUnitTypeDescription, updateUnitTypeInputSchema, handleUpdateUnitType)
+		r.register("deactivate_unit_type", deactivateUnitTypeDescription, unitTypeRefInputSchema, handleDeactivateUnitType)
+	}
+	r.register("get_unit_type", getUnitTypeDescription, unitTypeRefInputSchema, handleGetUnitType)
+	if writes {
+		r.register("set_dimension_types", setDimensionTypesDescription, setDimensionTypesInputSchema, handleSetDimensionTypes)
+	}
 
 	return r
 }

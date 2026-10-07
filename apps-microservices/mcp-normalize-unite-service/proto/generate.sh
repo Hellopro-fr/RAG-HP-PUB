@@ -11,6 +11,7 @@ MOD="github.com/hellopro/mcp-normalize-unite/proto/gen"
 
 declare -A PROTOS=(
   [graph_normalization]="graph_normalization.proto"
+  [unit_registry]="unit_registry.proto"
 )
 
 for pkg in "${!PROTOS[@]}"; do

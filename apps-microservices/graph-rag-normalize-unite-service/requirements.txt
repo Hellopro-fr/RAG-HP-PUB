@@ -3,7 +3,7 @@ grpcio-tools
 protobuf
 pydantic
 pydantic-settings
-pint
+pint==0.24.4
+pika==1.3.2
 prometheus-client
-waitress
 waitress

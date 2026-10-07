@@ -1,0 +1,4974 @@
+{
+ "pint_version": "0.24.4",
+ "defines": [
+  "unité = count = unite = Nb = nb",
+  "pieds = foot = pied",
+  "decibel = [sound] = dB = dBA",
+  "cheval = 735.49875 * watt = ch",
+  "chevaux = count",
+  "segments = count = segment",
+  "mètres = meter",
+  "Litres = liter",
+  "Volts = volt",
+  "sélections = count = selections = selection = sélection",
+  "galettes = count = galette = Galettes = Galette",
+  "tasses_par_jour = count",
+  "Watts = watt",
+  "unités = count",
+  "billets = count = billet",
+  "pièces = count = pièce",
+  "personnes = count = personne",
+  "degré = degree = degre = degrés = degres",
+  "Tonnes = tonne",
+  "démarrages = count = démarrage",
+  "lignes = count = ligne",
+  "tours_par_minute_fr = revolutions_per_minute",
+  "pouces = 0.0254 * meter = pouce = inch_fr",
+  "semelles_unit = count = semelles = semelle",
+  "plots_unit = count = plots = plot",
+  "bacs_unit = count = bacs = bac",
+  "vehicules_unit = count = vehicules = vehicule",
+  "recettes_par_programme = count",
+  "coups_par_minute = count / minute",
+  "coupes_par_minute = count / minute",
+  "tonne = 1000 * kilogram = t",
+  "mm = millimeter",
+  "cm = centimeter",
+  "m = meter",
+  "kg = kilogram",
+  "KW = 1000 * watt",
+  "kw = 1000 * watt",
+  "cheval_vapeur = 735.49875 * watt = cv",
+  "CV = cheval_vapeur",
+  "V = volt",
+  "A = ampere",
+  "sec = second",
+  "ph = hertz",
+  "tours_par_minute = revolutions_per_minute = rpm = tr/min = trs/min",
+  "Pa = pascal",
+  "kPa = 1000 * pascal",
+  "L_par_min = liter / minute = l/min",
+  "L_par_h = liter / hour = l/h",
+  "m3_par_h = meter**3 / hour",
+  "m3 = meter**3",
+  "litres = liter",
+  "L = liter",
+  "N = newton",
+  "kgf = 9.80665 * newton",
+  "Nm = newton * meter",
+  "kg_par_m2 = kilogram / meter ** 2 = kg/m² = kg/m2"
+ ],
+ "unit_to_dimension": {
+  "unité": "count",
+  "unités": "count",
+  "unite": "count",
+  "unites": "count",
+  "nb": "count",
+  "chevaux": "count",
+  "segments": "count",
+  "segment": "count",
+  "sélections": "count",
+  "selections": "count",
+  "sélection": "count",
+  "selection": "count",
+  "galettes": "count",
+  "galette": "count",
+  "tasses/jour": "count",
+  "tasses_par_jour": "count",
+  "billets": "count",
+  "billet": "count",
+  "pièces": "count",
+  "pièce": "count",
+  "personnes": "count",
+  "personne": "count",
+  "lignes": "count",
+  "ligne": "count",
+  "db": "sound_level",
+  "dba": "sound_level",
+  "db(a)": "sound_level",
+  "decibel": "sound_level",
+  "kg": "mass",
+  "g": "mass",
+  "t": "mass",
+  "tonne": "mass",
+  "tonnes": "mass",
+  "mm": "length",
+  "cm": "length",
+  "m": "length",
+  "km": "length",
+  "pieds": "length",
+  "pied": "length",
+  "mètres": "length",
+  "pouces": "length",
+  "pouce": "length",
+  "kg/m³": "density",
+  "kg/m3": "density",
+  "w": "power",
+  "watts": "power",
+  "kw": "power",
+  "cv": "power",
+  "ch": "power",
+  "hp": "power",
+  "v": "voltage",
+  "volts": "voltage",
+  "a": "current",
+  "rpm": "[frequency]",
+  "tr/min": "[frequency]",
+  "trs/min": "[frequency]",
+  "tours/min": "[frequency]",
+  "tour/min": "[frequency]",
+  "démarrages/heure": "[frequency]",
+  "hz": "frequency",
+  "l": "volume",
+  "litres": "volume",
+  "ml": "volume",
+  "m3": "volume",
+  "m**3": "volume",
+  "°c": "temperature",
+  "c": "temperature",
+  "k": "temperature",
+  "bar": "pressure",
+  "pa": "pressure",
+  "kpa": "pressure",
+  "psi": "pressure",
+  "s": "time",
+  "sec": "time",
+  "min": "time",
+  "h": "time",
+  "l/min": "volume / time",
+  "l/h": "volume / time",
+  "m3/h": "volume / time",
+  "m³/h": "volume / time",
+  "débit": "volume / time",
+  "g/min": "mass_flow",
+  "kg/min": "mass_flow",
+  "kg/h": "mass_flow",
+  "pièces/seconde": "count_rate",
+  "pieces/seconde": "count_rate",
+  "billets/seconde": "count_rate",
+  "n": "force",
+  "kn": "force",
+  "kgf": "force",
+  "force": "force",
+  "poussée": "force",
+  "traction": "force",
+  "nm": "torque",
+  "couple": "torque",
+  "kg/m2": "area_density",
+  "kg/m²": "area_density",
+  "volume": "volume",
+  "cuve": "volume",
+  "contenance": "volume",
+  "mémoire": "information",
+  "stockage": "information",
+  "énergie": "energy",
+  "kwh": "energy",
+  "wh": "energy",
+  "kwh/24h": "power",
+  "consommation": "energy",
+  "surface": "area",
+  "superficie": "area",
+  "°": "angle",
+  "deg": "angle",
+  "degré": "angle",
+  "degrés": "angle",
+  "degre": "angle",
+  "degres": "angle",
+  "l/cycle": "volume",
+  "signal": "count",
+  "signaux": "count",
+  "plateaux": "count",
+  "plateau": "count",
+  "lm": "luminosity",
+  "lm/w": "luminous_efficacy",
+  "ra": "dimensionless",
+  "%": "ratio",
+  "km/h": "speed",
+  "semelles": "count",
+  "semelle": "count",
+  "plots": "count",
+  "plot": "count",
+  "bacs": "count",
+  "bac": "count",
+  "véhicule(s)": "count",
+  "véhicules": "count",
+  "véhicule": "count",
+  "vehicule(s)": "count",
+  "vehicules": "count",
+  "vehicule": "count",
+  "recettes/programmes": "count",
+  "coups/min": "[frequency]",
+  "coupes/min": "[frequency]",
+  "μm": "length",
+  "um": "length",
+  "minutes": "time",
+  "kg/24h": "mass_flow",
+  "m²/h": "surface_rate",
+  "m2/h": "surface_rate",
+  "w/m².k": "thermal_transmittance",
+  "w/m2.k": "thermal_transmittance",
+  "m².k/w": "thermal_resistance",
+  "m2.k/w": "thermal_resistance",
+  "t/min": "[frequency]",
+  "heures": "time",
+  "heure": "time",
+  "t/h": "mass_flow",
+  "mohs": "dimensionless",
+  "go": "information",
+  "mo": "information",
+  "ko": "information",
+  "to": "information",
+  "px": "count",
+  "pixel": "count",
+  "pixels": "count",
+  "kn/m²": "pressure",
+  "kn/m2": "pressure",
+  "m³": "volume",
+  "cd/m²": "luminance",
+  "cd/m2": "luminance",
+  "ah": "electric_charge",
+  "a.h": "electric_charge",
+  "amperes-heures": "electric_charge",
+  "ampere-heure": "electric_charge",
+  "ampères-heures": "electric_charge",
+  "ampère-heure": "electric_charge",
+  "mah": "electric_charge",
+  "kilogrammes": "mass",
+  "kilogramme": "mass",
+  "grammes": "mass",
+  "gramme": "mass",
+  "millimètres": "length",
+  "millimètre": "length",
+  "centimètres": "length",
+  "centimètre": "length",
+  "décibels": "sound_level",
+  "décibel": "sound_level",
+  "decibels": "sound_level",
+  "m²": "area",
+  "m2": "area",
+  "niveau": "count",
+  "niveaux": "count",
+  "cycles/jour": "[frequency]",
+  "cycles / jour": "[frequency]",
+  "kwh/kg": "specific_energy",
+  "kwh / kg": "specific_energy",
+  "kwc": "power",
+  "cycles": "count",
+  "cycle": "count",
+  "mpa.s": "viscosity",
+  "pa.s": "viscosity",
+  "cycles par jour": "[frequency]",
+  "secondes": "time",
+  "seconde": "time",
+  "mesures": "count",
+  "mesure": "count"
+ },
+ "label_to_dimension": [
+  [
+   "charge au sol",
+   "area_density"
+  ],
+  [
+   "charge admissible au sol",
+   "area_density"
+  ],
+  [
+   "charge statique",
+   "area_density"
+  ],
+  [
+   "classe climatique",
+   "count"
+  ],
+  [
+   "régime",
+   "[frequency]"
+  ],
+  [
+   "nombre",
+   "count"
+  ],
+  [
+   "quantité",
+   "count"
+  ],
+  [
+   "segment",
+   "count"
+  ],
+  [
+   "segments",
+   "count"
+  ],
+  [
+   "sélections",
+   "count"
+  ],
+  [
+   "selections",
+   "count"
+  ],
+  [
+   "capacité volumique",
+   "volume"
+  ],
+  [
+   "capacité volumétrique",
+   "volume"
+  ],
+  [
+   "capacité de stockage (masse)",
+   "mass"
+  ],
+  [
+   "capacité de stockage",
+   "count"
+  ],
+  [
+   "capacité totale de stockage",
+   "count"
+  ],
+  [
+   "capacité d'accueil",
+   "count"
+  ],
+  [
+   "capacité de la vitrine",
+   "count"
+  ],
+  [
+   "capacité de production",
+   "mass_flow"
+  ],
+  [
+   "capacité de la batterie",
+   "electric_charge"
+  ],
+  [
+   "recycleur",
+   "count"
+  ],
+  [
+   "cassette de délestage",
+   "count"
+  ],
+  [
+   "bac de trop-plein",
+   "count"
+  ],
+  [
+   "passagers",
+   "count"
+  ],
+  [
+   "sonore",
+   "sound_level"
+  ],
+  [
+   "acoustique",
+   "sound_level"
+  ],
+  [
+   "bruit",
+   "sound_level"
+  ],
+  [
+   "decibel",
+   "sound_level"
+  ],
+  [
+   "poids",
+   "mass"
+  ],
+  [
+   "charge",
+   "mass"
+  ],
+  [
+   "capacité",
+   "mass"
+  ],
+  [
+   "hauteur",
+   "length"
+  ],
+  [
+   "largeur",
+   "length"
+  ],
+  [
+   "longueur",
+   "length"
+  ],
+  [
+   "profondeur",
+   "length"
+  ],
+  [
+   "diamètre",
+   "length"
+  ],
+  [
+   "dimension",
+   "length"
+  ],
+  [
+   "distance",
+   "length"
+  ],
+  [
+   "epaisseur",
+   "length"
+  ],
+  [
+   "vitesse de rotation",
+   "[frequency]"
+  ],
+  [
+   "vitesse d'acceptation",
+   "count_rate"
+  ],
+  [
+   "vitesse de distribution",
+   "count_rate"
+  ],
+  [
+   "vitesse de nettoyage",
+   "surface_rate"
+  ],
+  [
+   "vitesse",
+   "speed"
+  ],
+  [
+   "puissance",
+   "power"
+  ],
+  [
+   "tension",
+   "voltage"
+  ],
+  [
+   "courant",
+   "current"
+  ],
+  [
+   "fusible",
+   "current"
+  ],
+  [
+   "branchement",
+   "voltage"
+  ],
+  [
+   "fréquence d'utilisation",
+   "[frequency]"
+  ],
+  [
+   "fréquence",
+   "frequency"
+  ],
+  [
+   "tours/minute",
+   "[frequency]"
+  ],
+  [
+   "volume",
+   "volume"
+  ],
+  [
+   "cuve",
+   "volume"
+  ],
+  [
+   "contenance",
+   "volume"
+  ],
+  [
+   "température",
+   "temperature"
+  ],
+  [
+   "pression",
+   "pressure"
+  ],
+  [
+   "temps",
+   "time"
+  ],
+  [
+   "duree",
+   "time"
+  ],
+  [
+   "delai",
+   "time"
+  ],
+  [
+   "mémoire",
+   "information"
+  ],
+  [
+   "stockage",
+   "information"
+  ],
+  [
+   "débit de vapeur",
+   "mass_flow"
+  ],
+  [
+   "consommation d'eau",
+   "volume"
+  ],
+  [
+   "consommation électrique",
+   "power"
+  ],
+  [
+   "autonomie de la batterie",
+   "time"
+  ],
+  [
+   "batterie",
+   "energy"
+  ],
+  [
+   "consommation",
+   "energy"
+  ],
+  [
+   "débit",
+   "volume / time"
+  ],
+  [
+   "force",
+   "force"
+  ],
+  [
+   "poussée",
+   "force"
+  ],
+  [
+   "traction",
+   "force"
+  ],
+  [
+   "couple",
+   "torque"
+  ],
+  [
+   "énergie",
+   "energy"
+  ],
+  [
+   "surface",
+   "area"
+  ],
+  [
+   "superficie",
+   "area"
+  ],
+  [
+   "angle",
+   "angle"
+  ],
+  [
+   "rotation",
+   "angle"
+  ],
+  [
+   "production horaire",
+   "volume / time"
+  ],
+  [
+   "déverrouillage",
+   "count"
+  ],
+  [
+   "lignes hydrauliques",
+   "count"
+  ],
+  [
+   "niveaux desservis",
+   "count"
+  ],
+  [
+   "cylindres",
+   "count"
+  ],
+  [
+   "plateaux",
+   "count"
+  ],
+  [
+   "configuration de la base",
+   "count"
+  ],
+  [
+   "catégorie cabine",
+   "count"
+  ],
+  [
+   "mémorisation de programmes",
+   "count"
+  ],
+  [
+   "cadence",
+   "[frequency]"
+  ],
+  [
+   "coefficient de transmission thermique",
+   "thermal_transmittance"
+  ],
+  [
+   "résistance thermique",
+   "thermal_resistance"
+  ],
+  [
+   "résolution de l'écran",
+   "count"
+  ],
+  [
+   "luminosité de l'écran",
+   "luminance"
+  ],
+  [
+   "dureté",
+   "dimensionless"
+  ],
+  [
+   "mémoire vive",
+   "information"
+  ],
+  [
+   "ratio masse/volume",
+   "density"
+  ],
+  [
+   "ratio puissance/poids",
+   "power"
+  ],
+  [
+   "ratio de compression",
+   "pressure"
+  ],
+  [
+   "ratio de réduction",
+   "ratio"
+  ],
+  [
+   "ratio",
+   "ratio"
+  ]
+ ],
+ "canonical_units": {
+  "count": "count",
+  "sound_level": "decibel",
+  "mass": "kilogram",
+  "length": "meter",
+  "speed": "meter / second",
+  "power": "watt",
+  "voltage": "volt",
+  "current": "ampere",
+  "frequency": "hertz",
+  "[frequency]": "hertz",
+  "volume": "liter",
+  "temperature": "celsius",
+  "pressure": "bar",
+  "time": "second",
+  "information": "gigabyte",
+  "volume / time": "liter / minute",
+  "force": "newton",
+  "torque": "newton * meter",
+  "energy": "joule",
+  "area": "meter ** 2",
+  "area_density": "kilogram / meter ** 2",
+  "density": "kilogram / meter ** 3",
+  "angle": "degree",
+  "mass_flow": "gram / minute",
+  "count_rate": "count / second",
+  "luminosity": "lumen",
+  "luminous_efficacy": "lumen / watt",
+  "ratio": "count",
+  "dimensionless": "count",
+  "thermal_transmittance": "watt / meter ** 2 / kelvin",
+  "thermal_resistance": "meter ** 2 * kelvin / watt",
+  "surface_rate": "meter ** 2 / hour",
+  "luminance": "candela / meter ** 2",
+  "electric_charge": "ampere_hour",
+  "specific_energy": "joule / kilogram",
+  "viscosity": "pascal * second"
+ },
+ "cases": [
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "unité",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "pieds",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 0.762,
+    "unite_canonique": "meter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "decibel",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "decibel"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "cheval",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "chevaux",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "segments",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "mètres",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "meter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "Litres",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "liter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "Volts",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "volt"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "sélections",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "galettes",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "tasses_par_jour",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "Watts",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "watt"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "unités",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "billets",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "pièces",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "personnes",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "degré",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "degree"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "Tonnes",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2500.0,
+    "unite_canonique": "kilogram"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "démarrages",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "lignes",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "tours_par_minute_fr",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "pouces",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 0.0635,
+    "unite_canonique": "meter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "semelles_unit",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "plots_unit",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "bacs_unit",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "vehicules_unit",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "recettes_par_programme",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "coups_par_minute",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "coupes_par_minute",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "tonne",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2500.0,
+    "unite_canonique": "kilogram"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "mm",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 0.0025,
+    "unite_canonique": "meter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "cm",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 0.025,
+    "unite_canonique": "meter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "m",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "meter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "kg",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "kilogram"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "KW",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2500.0,
+    "unite_canonique": "watt"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "kw",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2500.0,
+    "unite_canonique": "watt"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "cheval_vapeur",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "CV",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 1838.75,
+    "unite_canonique": "watt"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "V",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "volt"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "A",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "ampere"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "sec",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "second"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "ph",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "tours_par_minute",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "Pa",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5e-05,
+    "unite_canonique": "bar"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "kPa",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 0.025,
+    "unite_canonique": "bar"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "L_par_min",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "L_par_h",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "m3_par_h",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "m3",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2500.0,
+    "unite_canonique": "liter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "litres",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "liter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "L",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "liter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "N",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "newton"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "kgf",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 24.5166,
+    "unite_canonique": "newton"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "Nm",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "meter * newton"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "kg_par_m2",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "unité",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "unités",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "unite",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "unites",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "nb",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "chevaux",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "segments",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "segment",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "sélections",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "selections",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "sélection",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "selection",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "galettes",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "galette",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "tasses/jour",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "tasses_par_jour",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "billets",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "billet",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "pièces",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "pièce",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "personnes",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "personne",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "lignes",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "ligne",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "db",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "dba",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "db(a)",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "decibel",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "decibel"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "kg",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "kilogram"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "g",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 0.0025,
+    "unite_canonique": "kilogram"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "t",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2500.0,
+    "unite_canonique": "kilogram"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "tonne",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2500.0,
+    "unite_canonique": "kilogram"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "tonnes",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2500.0,
+    "unite_canonique": "kilogram"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "mm",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 0.0025,
+    "unite_canonique": "meter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "cm",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 0.025,
+    "unite_canonique": "meter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "m",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "meter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "km",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2500.0,
+    "unite_canonique": "meter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "pieds",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 0.762,
+    "unite_canonique": "meter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "pied",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 0.762,
+    "unite_canonique": "meter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "mètres",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "meter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "pouces",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 0.0635,
+    "unite_canonique": "meter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "pouce",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 0.0635,
+    "unite_canonique": "meter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "kg/m³",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "kilogram / meter ** 3"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "kg/m3",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "kilogram / meter ** 3"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "w",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "watts",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "watt"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "kw",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2500.0,
+    "unite_canonique": "watt"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "cv",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 1838.75,
+    "unite_canonique": "watt"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "ch",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 1838.75,
+    "unite_canonique": "watt"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "hp",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 1864.25,
+    "unite_canonique": "watt"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "v",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "volts",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "volt"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "a",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "rpm",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 0.261799,
+    "unite_canonique": "hertz"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "tr/min",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 0.261799,
+    "unite_canonique": "hertz"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "trs/min",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 0.261799,
+    "unite_canonique": "hertz"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "tours/min",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 0.261799,
+    "unite_canonique": "hertz"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "tour/min",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 0.261799,
+    "unite_canonique": "hertz"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "démarrages/heure",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 0.000694444,
+    "unite_canonique": "hertz"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "hz",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "l",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "liter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "litres",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "liter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "ml",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 0.0025,
+    "unite_canonique": "liter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "m3",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2500.0,
+    "unite_canonique": "liter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "m**3",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2500.0,
+    "unite_canonique": "liter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "°c",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "c",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "k",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "bar",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "bar"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "pa",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "kpa",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "psi",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 0.172369,
+    "unite_canonique": "bar"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "s",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "second"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "sec",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "second"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "min",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 150.0,
+    "unite_canonique": "second"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "h",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 9000.0,
+    "unite_canonique": "second"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "l/min",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "liter / minute"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "l/h",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 0.0416667,
+    "unite_canonique": "liter / minute"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "m3/h",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 41.6667,
+    "unite_canonique": "liter / minute"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "m³/h",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 41.6667,
+    "unite_canonique": "liter / minute"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "débit",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "g/min",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "gram / minute"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "kg/min",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2500.0,
+    "unite_canonique": "gram / minute"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "kg/h",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 41.6667,
+    "unite_canonique": "gram / minute"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "pièces/seconde",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count / second"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "pieces/seconde",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count / second"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "billets/seconde",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count / second"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "n",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "kn",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "kgf",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 24.5166,
+    "unite_canonique": "newton"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "force",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "poussée",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "traction",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "nm",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "couple",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "kg/m2",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "kilogram / meter ** 2"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "kg/m²",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "kilogram / meter ** 2"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "volume",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "cuve",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "contenance",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "mémoire",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "stockage",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "énergie",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "kwh",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "wh",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "kwh/24h",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 104.167,
+    "unite_canonique": "watt"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "consommation",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "surface",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "superficie",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "°",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "degree"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "deg",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "degree"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "degré",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "degree"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "degrés",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "degree"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "degre",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "degree"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "degres",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "degree"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "l/cycle",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "liter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "signal",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "signaux",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "plateaux",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "plateau",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "lm",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "lumen"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "lm/w",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "lumen / watt"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "ra",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "%",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "km/h",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 0.694444,
+    "unite_canonique": "meter / second"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "semelles",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "semelle",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "plots",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "plot",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "bacs",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "bac",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "véhicule(s)",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "véhicules",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "véhicule",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "vehicule(s)",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "vehicules",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "vehicule",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "recettes/programmes",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "coups/min",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 0.0416667,
+    "unite_canonique": "hertz"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "coupes/min",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 0.0416667,
+    "unite_canonique": "hertz"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "μm",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5e-06,
+    "unite_canonique": "meter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "um",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5e-06,
+    "unite_canonique": "meter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "minutes",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 150.0,
+    "unite_canonique": "second"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "kg/24h",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 1.73611,
+    "unite_canonique": "gram / minute"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "m²/h",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "meter ** 2 / hour"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "m2/h",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "meter ** 2 / hour"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "w/m².k",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "watt / kelvin / meter ** 2"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "w/m2.k",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "watt / kelvin / meter ** 2"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "m².k/w",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "kelvin * meter ** 2 / watt"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "m2.k/w",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "kelvin * meter ** 2 / watt"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "t/min",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 0.261799,
+    "unite_canonique": "hertz"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "heures",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 9000.0,
+    "unite_canonique": "second"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "heure",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 9000.0,
+    "unite_canonique": "second"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "t/h",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 41666.7,
+    "unite_canonique": "gram / minute"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "mohs",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "go",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "gigabyte"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "mo",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 0.0025,
+    "unite_canonique": "gigabyte"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "ko",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5e-06,
+    "unite_canonique": "gigabyte"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "to",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2500.0,
+    "unite_canonique": "gigabyte"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "px",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "pixel",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "pixels",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "kn/m²",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 0.025,
+    "unite_canonique": "bar"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "kn/m2",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 0.025,
+    "unite_canonique": "bar"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "m³",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2500.0,
+    "unite_canonique": "liter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "cd/m²",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "candela / meter ** 2"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "cd/m2",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "candela / meter ** 2"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "ah",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "ampere_hour"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "a.h",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "ampere_hour"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "amperes-heures",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "ampere_hour"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "ampere-heure",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "ampere_hour"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "ampères-heures",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "ampere_hour"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "ampère-heure",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "ampere_hour"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "mah",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 0.0025,
+    "unite_canonique": "ampere_hour"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "kilogrammes",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "kilogram"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "kilogramme",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "kilogram"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "grammes",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 0.0025,
+    "unite_canonique": "kilogram"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "gramme",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 0.0025,
+    "unite_canonique": "kilogram"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "millimètres",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 0.0025,
+    "unite_canonique": "meter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "millimètre",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 0.0025,
+    "unite_canonique": "meter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "centimètres",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 0.025,
+    "unite_canonique": "meter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "centimètre",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 0.025,
+    "unite_canonique": "meter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "décibels",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "decibel"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "décibel",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "decibel"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "decibels",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "decibel"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "m²",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "meter ** 2"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "m2",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "meter ** 2"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "niveau",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "niveaux",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "cycles/jour",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.89352e-05,
+    "unite_canonique": "hertz"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "cycles / jour",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.89352e-05,
+    "unite_canonique": "hertz"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "kwh/kg",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 9000000.0,
+    "unite_canonique": "joule / kilogram"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "kwh / kg",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 9000000.0,
+    "unite_canonique": "joule / kilogram"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "kwc",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2500.0,
+    "unite_canonique": "watt"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "cycles",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "cycle",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "mpa.s",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 0.0025,
+    "unite_canonique": "pascal * second"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "pa.s",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "pascal * second"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "cycles par jour",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.89352e-05,
+    "unite_canonique": "hertz"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "secondes",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "second"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "seconde",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "second"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "mesures",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Caractéristique technique",
+   "unit": "mesure",
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "charge au sol",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "kilogram / meter ** 2"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "charge admissible au sol",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "kilogram / meter ** 2"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "charge statique",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "kilogram / meter ** 2"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "classe climatique",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "régime",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "hertz"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "nombre",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "quantité",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "segment",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "segments",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "sélections",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "selections",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "capacité volumique",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "liter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "capacité volumétrique",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "liter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "capacité de stockage (masse)",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "kilogram"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "capacité de stockage",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "capacité totale de stockage",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "capacité d'accueil",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "capacité de la vitrine",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "capacité de production",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "gram / minute"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "capacité de la batterie",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "ampere_hour"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "recycleur",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "cassette de délestage",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "bac de trop-plein",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "passagers",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "sonore",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "decibel"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "acoustique",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "decibel"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "bruit",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "decibel"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "decibel",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "decibel"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "poids",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "kilogram"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "charge",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "kilogram"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "capacité",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "kilogram"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "hauteur",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "meter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "largeur",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "meter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "longueur",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "meter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "profondeur",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "meter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "diamètre",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "meter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "dimension",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "meter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "distance",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "meter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "epaisseur",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "meter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "vitesse de rotation",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "hertz"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "vitesse d'acceptation",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count / second"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "vitesse de distribution",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count / second"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "vitesse de nettoyage",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "meter ** 2 / hour"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "vitesse",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "meter / second"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "puissance",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "watt"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "tension",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "volt"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "courant",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "ampere"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "fusible",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "ampere"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "branchement",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "volt"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "fréquence d'utilisation",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "hertz"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "fréquence",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "hertz"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "tours/minute",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "hertz"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "volume",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "liter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "cuve",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "liter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "contenance",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "liter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "température",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "celsius"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "pression",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "bar"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "temps",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "second"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "duree",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "second"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "delai",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "second"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "mémoire",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "gigabyte"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "stockage",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "gigabyte"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "débit de vapeur",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "gram / minute"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "consommation d'eau",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "liter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "consommation électrique",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "watt"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "autonomie de la batterie",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "second"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "batterie",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "joule"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "consommation",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "joule"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "débit",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "liter / minute"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "force",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "newton"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "poussée",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "newton"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "traction",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "newton"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "couple",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "newton * meter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "énergie",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "joule"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "surface",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "meter ** 2"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "superficie",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "meter ** 2"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "angle",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "degree"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "rotation",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "degree"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "production horaire",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "liter / minute"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "déverrouillage",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "lignes hydrauliques",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "niveaux desservis",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "cylindres",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "plateaux",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "configuration de la base",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "catégorie cabine",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "mémorisation de programmes",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "cadence",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "hertz"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "coefficient de transmission thermique",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "watt / meter ** 2 / kelvin"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "résistance thermique",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "meter ** 2 * kelvin / watt"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "résolution de l'écran",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "luminosité de l'écran",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "candela / meter ** 2"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "dureté",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "mémoire vive",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "gigabyte"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "ratio masse/volume",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "liter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "ratio puissance/poids",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "kilogram"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "ratio de compression",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "bar"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "ratio de réduction",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "ratio",
+   "unit": null,
+   "value": "2.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Longueur d'onde",
+   "unit": "nm",
+   "value": "532",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 5.32e-07,
+    "unite_canonique": "meter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Couple de serrage",
+   "unit": "nm",
+   "value": "40",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Débit",
+   "unit": "t/min",
+   "value": "2",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2000000.0,
+    "unite_canonique": "gram / minute"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Régime moteur",
+   "unit": "t/min",
+   "value": "1500",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 157.08,
+    "unite_canonique": "hertz"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Niveau sonore",
+   "unit": "dB(A)",
+   "value": "65",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 65.0,
+    "unite_canonique": "decibel"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Niveau sonore",
+   "unit": "Décibels (dB)",
+   "value": "70",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 70.0,
+    "unite_canonique": "decibel"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Débit d'air",
+   "unit": "m³/h",
+   "value": "120",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2000.0,
+    "unite_canonique": "liter / minute"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Débit d'air",
+   "unit": "m3/h",
+   "value": "120",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2000.0,
+    "unite_canonique": "liter / minute"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Surface",
+   "unit": "m²",
+   "value": "3",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 3.0,
+    "unite_canonique": "meter ** 2"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Surface",
+   "unit": "m2",
+   "value": "3",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 3.0,
+    "unite_canonique": "meter ** 2"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Densité",
+   "unit": "kg/m³",
+   "value": "800",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 800.0,
+    "unite_canonique": "kilogram / meter ** 3"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Poids",
+   "unit": "kg",
+   "value": "+/- 2",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.0,
+    "unite_canonique": "kilogram"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Poids",
+   "unit": "kg",
+   "value": "± 3.5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 3.5,
+    "unite_canonique": "kilogram"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Poids",
+   "unit": "kg",
+   "value": "+5",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 5.0,
+    "unite_canonique": "kilogram"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Poids",
+   "unit": "kg",
+   "value": "abc",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Poids",
+   "unit": "kg",
+   "value": "2",
+   "data_type": "text",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Poids",
+   "unit": null,
+   "value": "2",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.0,
+    "unite_canonique": "kilogram"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "",
+   "unit": "kg",
+   "value": "2",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Facteur G",
+   "unit": "G",
+   "value": "3000",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 3000.0,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Champ magnétique",
+   "unit": "G",
+   "value": "3",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "q",
+   "label": "Humidité",
+   "unit": "%",
+   "value": "45",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 45.0,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "IRC",
+   "unit": "Ra",
+   "value": "80",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 80.0,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Dureté",
+   "unit": "Mohs",
+   "value": "7",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 7.0,
+    "unite_canonique": "count"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Epaisseur",
+   "unit": "µm",
+   "value": "25",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5e-05,
+    "unite_canonique": "meter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Epaisseur",
+   "unit": "μm",
+   "value": "25",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2.5e-05,
+    "unite_canonique": "meter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Couple",
+   "unit": "N·m",
+   "value": "12",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 12.0,
+    "unite_canonique": "meter * newton"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Viscosité",
+   "unit": "mPa·s",
+   "value": "300",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 0.3,
+    "unite_canonique": "pascal * second"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Puissance",
+   "unit": "KW",
+   "value": "3",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 3000.0,
+    "unite_canonique": "watt"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Puissance",
+   "unit": "Watts",
+   "value": "1500",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 1500.0,
+    "unite_canonique": "watt"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Volume",
+   "unit": "Litres",
+   "value": "20",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 20.0,
+    "unite_canonique": "liter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Poids",
+   "unit": "Tonnes",
+   "value": "2",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 2000.0,
+    "unite_canonique": "kilogram"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Hauteur",
+   "unit": "Pieds",
+   "value": "3",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 0.9144,
+    "unite_canonique": "meter"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Vitesse de rotation",
+   "unit": "tr/min",
+   "value": "1400",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 146.608,
+    "unite_canonique": "hertz"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Capacité de production",
+   "unit": "kg/24h",
+   "value": "500",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 347.222,
+    "unite_canonique": "gram / minute"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Consommation",
+   "unit": "kWh/24h",
+   "value": "1.2",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 50.0,
+    "unite_canonique": "watt"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Capacité de la batterie",
+   "unit": "mAh",
+   "value": "5000",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 5.0,
+    "unite_canonique": "ampere_hour"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Autonomie de la batterie",
+   "unit": "heures",
+   "value": "8",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 28800.0,
+    "unite_canonique": "second"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Mémoire",
+   "unit": "Go",
+   "value": "16",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 16.0,
+    "unite_canonique": "gigabyte"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Charge",
+   "unit": "décibels",
+   "value": "3",
+   "data_type": "numeric",
+   "out": {
+    "valeur_canonique": 3.0,
+    "unite_canonique": "decibel"
+   }
+  },
+  {
+   "kind": "q",
+   "label": "Inconnu",
+   "unit": "zzz",
+   "value": "1",
+   "data_type": "numeric",
+   "out": {}
+  },
+  {
+   "kind": "r",
+   "label": "Température d'utilisation",
+   "unit": "°C",
+   "min": -10.0,
+   "max": 40.0,
+   "out": {
+    "valeur_min_canonique": -10.0,
+    "unite_canonique": "degree_Celsius",
+    "valeur_max_canonique": 40.0
+   }
+  },
+  {
+   "kind": "r",
+   "label": "Longueur",
+   "unit": "cm",
+   "min": 10.0,
+   "max": 50.0,
+   "out": {
+    "valeur_min_canonique": 0.1,
+    "unite_canonique": "meter",
+    "valeur_max_canonique": 0.5
+   }
+  },
+  {
+   "kind": "r",
+   "label": "Poids",
+   "unit": "kg",
+   "min": null,
+   "max": 5.0,
+   "out": {
+    "valeur_max_canonique": 5.0,
+    "unite_canonique": "kilogram"
+   }
+  },
+  {
+   "kind": "r",
+   "label": "Poids",
+   "unit": "kg",
+   "min": 1.0,
+   "max": null,
+   "out": {
+    "valeur_min_canonique": 1.0,
+    "unite_canonique": "kilogram"
+   }
+  },
+  {
+   "kind": "r",
+   "label": "Inconnu",
+   "unit": "zzz",
+   "min": 1.0,
+   "max": 2.0,
+   "out": {}
+  }
+ ]
+}

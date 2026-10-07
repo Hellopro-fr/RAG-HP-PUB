@@ -1,5 +1,7 @@
 # Dynamic Unit Normalization — Design Spec
 
+> **Superseded in part (2026-10-06):** see `2026-10-06-unit-registry-combined-design.md`. Choices C1–C6 there override this spec on where writes live, the proto, propagation, the database and phasing. The rest still applies by reference.
+
 **Service:** `graph-rag-normalize-unite-service` (+ `protos/`, `libs/grpc-stubs`, `api-gateway` for Phase 2, `graph-rag-normalize-unite-*-processor` for Phase 3)
 **Branch:** `features/normalization-dynamic` (from `origin/features/poc`)
 **Status:** DESIGN — implementation-ready, not code
