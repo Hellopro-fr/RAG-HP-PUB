@@ -37,7 +37,8 @@
 
 ## Prérequis spécifiques au lot
 
-- **Script de bascule d'une ligne `mcp_servers`** (`plan` / `apply` / `check` / `revert`, dump de la ligne avant, `UPDATE … WHERE id=…`, relecture) : **à écrire** sur le modèle de `bascule_route.sh`.
+- **Aiguillage = API / interface d'administration de la gateway MCP, PAS de SQL** (constat du 07/10 dans le code) : `mcp-gateway-service` garde les serveurs **en mémoire** ; seul `PUT /api/v1/servers/{id}` (droits admin, `internal/api/handler.go:608-610`) relance la découverte du serveur (`internal/api/server_handlers.go:116-121`). Un `UPDATE` direct de `mcp_servers` ne serait pas vu avant un redémarrage ou un `discover-all`. Contrôle SSRF côté gateway : une URL `run.app` (publique) passe.
+- **Script `bascule_mcp.sh <nom> plan|backup|check [url]`** (07/10) : `plan` = ligne `mcp_servers` (url, transport, santé, dernière vérification, erreur, nombre d'outils) + joignabilité de la cible ; `backup` = copie de la ligne (fichier 600, en-têtes d'authentification chiffrés) **avant** le changement ; `check` = même lecture après (santé mise à jour toutes les 30 s). Le changement d'URL lui-même se fait par l'interface ou l'API d'administration ; retour arrière = remettre l'ancienne URL de la même façon.
 - Dump daté de `mcp_servers` le matin du lot, conservé.
 - P0 de chaque serveur (code, variables, clés tierces, sortie IP), wrappers au réglage cible.
 - V2-a3 validé (pour `mcp-api-recherche`).
@@ -47,6 +48,26 @@
 | Serveur | Dev testeur | Parcours à jouer après la bascule |
 |---|---|---|
 | chacun des 8 | ⬜ dev MCP | un appel d'outil MCP réel depuis un client (gateway MCP), résultat attendu connu |
+
+## Inventaire réel de `mcp_servers` (07/10, `bascule_mcp.sh inventaire plan`)
+
+| Serveur MCP (nom en base) | URL en base | Lot |
+|---|---|---|
+| RAG Hellopro | `http://mcp-api-recherche-service:8582` | V2-b |
+| Classification Produit | `http://mcp-classification-produit-service:8593` | V2-b |
+| Google Analytics | `http://mcp-google-analytics-service:8583` | V2-b |
+| Google Analytics Minisite | `http://mcp-google-analytics-minisite-service:8594` | V2-b |
+| Google Search Console | `http://mcp-google-search-console-service:8584` | V2-b |
+| Semrush | `http://mcp-semrush-service:8588` | V2-b |
+| Ringover | `http://mcp-ringover-service:8586` | V2-b |
+| Leexi | `http://mcp-leexi-service:8589` | V2-b |
+| Zoho | `http://mcp-zoho-service:8596` | V2-c (bloc gateway) |
+| Neo4j | `http://mcp-neo4j-service:8587` | reste sur la VM (F-HP-SEC-020) |
+| **Hellodata** | `http://mcp-hellodata-service:8597/mcp` | ⚠️ **nouveau, hors inventaire** — à qualifier avec son dev (migrer ou rester sur la VM, décision 4) |
+| **Normalisation Numérique** | `http://mcp-normalize-unite-service:8602/mcp` | ⚠️ **nouveau, hors inventaire** — idem |
+| Data Gouvernement Fr, Hellopro BDD, Zoho CRM | URL externes | rien à migrer |
+
+⚠️ L'URL de Zoho CRM porte une clé d'accès dans son chemin : toute copie de la table `mcp_servers` est **sensible** (ne pas la coller dans un ticket ou un canal).
 
 ## Feuille de lot
 

@@ -18,7 +18,7 @@
 | Lot | Contenu | Aiguillage | Date | Statut | Bascule | Obs. 24 h | Décision J+1 |
 |:--:|---|---|---|---|---|---|---|
 | **V2-a1** | comparaison-texte, optimize, detection-langue, content-extractor (P4) | routes `.env.url` | lun 5/10 → mar 6/10 | 🔄 **4/4 routes basculées** : comparaison 05/10 15:23 (✅ validée), optimize 06/10 09:30, detection 11:18, extractor 11:42 | comparaison : 8 min (attente du scan du catalogue) | | |
-| **V2-a2** | chat-llm, embedding HTTP, graph-rag recherche ×3 (P4) | routes `.env.url` | proposé mer 7/10 | 🔄 P0 fait 05/10 : 0 appel via la gateway en 7 j ; chat-llm = changement de modèle DeepSeek à valider ; wrappers à régler | | | |
+| **V2-a2** | chat-llm, embedding HTTP, graph-rag recherche ×3 (P4) | routes `.env.url` | mer 7/10 | 🔄 **5/5 routes basculées** 07/10 (embedding, graph-rag ×3 à 09:27, chat-llm à 09:38 en `deepseek-v4-flash`), preuves OK ; tests devs en attente | ~1 min par lot (`rescan`) | | |
 | **V2-a3** | recherche, classification, rest-milvus, ingestion, prix-traitement (P4) | routes `.env.url` | proposé jeu 8/10 | ⬜ P0 à faire ; correctif `localhost` rest-milvus (dev) | | | |
 | **V2-b** | 8 serveurs MCP (P5) | lignes `mcp_servers` | après V2-a3 | ⬜ script `mcp_servers` à écrire | | | |
 | **V2-c** | gateway B1 + B3, comparateur d'images (P2, P3, ex-L7) | vhosts nginx `api.`, `mcp.` + routes | sem. du 12/10, journée dédiée | ⬜ script nginx (0.22) à écrire | | | |
@@ -36,13 +36,13 @@ Répartition de la priorité **P4** (16 services) : 14 dans V2-a1 / a2 / a3 ; `i
 |:--:|---|---|---|:--:|:--:|---|---|---|:--:|---|
 | V2-a1 | `api-comparaison-texte-service` | CR `api-comparaison-texte` | `SERVICE_COMPARAISON_TEXTE` | UP | **PROD** | 05/10 12:15 UTC (effectif 12:23:33, scan du catalogue) | ✅ DSO 05/10 (destination prouvée) | ⬜ | ⬜ | P1 ✅ 14:41 ; P2 ✅ 15:15 ; P3 ✅ 15:32 (0 requête sur le jumeau) ; relevé 17h ✅ ; nuit ✅ (18 h : 0 erreur, jumeau 0 requête) ; **GO technique J+1** ; P4 dev ✅ 06/10 (OK ; payload absent des logs = comportement d'origine) |
 | V2-a1 | `optimize-service` | CR `optimize-service` | `SERVICE_OPTIMIZE` | UP | **PROD** | 06/10 06:30 UTC (apply + `rescan`) | ✅ DSO 06/10 (preuve : jumeau 0) | ⬜ | ⬜ | ~1 500 à 5 000 req./jour, 0 erreur sur 24 h côté VM (référence) |
-| V2-a1 | `api-detection-langue-fr-service` | CR `api-detection-langue-fr` | `SERVICE_DETECTION_SITE_FR` | UP | **PROD** | 06/10 08:18 UTC (apply + `rescan`) | ✅ DSO 06/10 (preuve) | ⬜ | ⬜ | code rapatrié 02/10 ; jumeau UP (appelé par `crawler-service`) |
+| V2-a1 | `api-detection-langue-fr-service` | CR `api-detection-langue-fr` | `SERVICE_DETECTION_SITE_FR` | UP | **PROD** (révision `00006-gq8`, modèle inclus) | 06/10 08:18 UTC → rollback 07/10 08:54 → **rebascule 07/10 09:31 UTC** | ✅ DSO 07/10 (parité directe sans cache) | ⬜ | ⬜ | code rapatrié 02/10 ; jumeau UP (appelé par `crawler-service`) |
 | V2-a1 | `content-extractor-api-service` | CR `content-extractor-api-service` | `SERVICE_EXTRACTOR` | UP | **PROD** | 06/10 08:42 UTC (apply + `rescan`) | ✅ DSO 06/10 (preuve) | ⬜ | ⬜ | code + `common_utils` rapatriés 02/10 ; jumeau UP (`crawler-service`) |
-| V2-a2 | `api-chat-llm-service` | CR `api-chat-llm` | `SERVICE_CHAT` | UP | shadow | | | | ⬜ | |
-| V2-a2 | `api-embedding-service` | CR `api-embedding-service` | `SERVICE_EMBEDDING` | UP | shadow | | | | ⬜ | ≠ `embedding-service` (L6) |
-| V2-a2 | `graph-rag-api-recherche-service` | CR `graph-rag-api-recherche-service` | `SERVICE_GRAPH` | UP | shadow | | | | ⬜ | |
-| V2-a2 | `graph-rag-api-recherche-optim-service` | CR `graph-rag-api-recherche-optim-service` | `SERVICE_GRAPHOPTIM` | UP | shadow | | | | ⬜ | |
-| V2-a2 | `graph-rag-api-recherche-rust-service` | CR `graph-rag-api-recherche-rust-service` | `SERVICE_GRAPHRUST` | UP | shadow | | | | ⬜ | sortie NAT statique |
+| V2-a2 | `api-chat-llm-service` | CR `api-chat-llm` | `SERVICE_CHAT` | UP | **PROD** 07/10 06:38 UTC | | | | ⬜ | |
+| V2-a2 | `api-embedding-service` | CR `api-embedding-service` | `SERVICE_EMBEDDING` | UP | **PROD** 07/10 06:27 UTC | | | | ⬜ | ≠ `embedding-service` (L6) |
+| V2-a2 | `graph-rag-api-recherche-service` | CR `graph-rag-api-recherche-service` | `SERVICE_GRAPH` | UP | **PROD** 07/10 06:27 UTC | | | | ⬜ | |
+| V2-a2 | `graph-rag-api-recherche-optim-service` | CR `graph-rag-api-recherche-optim-service` | `SERVICE_GRAPHOPTIM` | UP | **PROD** 07/10 06:27 UTC | | | | ⬜ | |
+| V2-a2 | `graph-rag-api-recherche-rust-service` | CR `graph-rag-api-recherche-rust-service` | `SERVICE_GRAPHRUST` | UP | **PROD** 07/10 06:27 UTC | | | | ⬜ | sortie NAT statique |
 | V2-a3 | `api-recherche-service` | CR `api-recherche` | `SERVICE_SEARCH` | UP | shadow | | | | ⬜ | |
 | V2-a3 | `api-classification-service` | CR `api-classification` | `SERVICE_CLASSIFICATION` | UP | shadow | | | | ⬜ | 10 réplicas VM ; jumeau UP jusqu'à V2-b |
 | V2-a3 | `api-rest-milvus-service` | CR `api-rest-milvus` | `SERVICE_REST_MILVUS` | UP | shadow | | | | ⬜ | correctif `localhost` avant |
@@ -70,13 +70,25 @@ Répartition de la priorité **P4** (16 services) : 14 dans V2-a1 / a2 / a3 ; `i
 | V2-d | `crawler-monitor-backend` | CR `crawler-monitor-backend` | à qualifier | UP | shadow | | | | ⬜ | |
 | V2-d | `redis-client-frontend`, `crawler-monitor-frontend`, `mcp-gateway-frontend` | à créer | vhost `cmf.`, front `mcp.` | UP | — | | | | ⬜ | build racine, `@hellopro/auth` |
 
+**Nouveaux services trouvés sur la VM le 07/10** (présents dans `features/poc`, absents de `prod` et de l'inventaire ; décision user : *s'ils sont déployés sur la VM, ils sont à migrer*, code à rapatrier `poc` → `prod` d'abord) :
+
+| Service | État VM (07/10) | Nature | Cible proposée | Lot | Préalables |
+|---|---|---|---|---|---|
+| `mcp-hellodata-service` | UP 2 h | MCP HTTP (Go, module autonome) | Cloud Run interne, `min=1`, **`max=1`** (liens CSV en mémoire), **sortie `all-traffic`** (BO et www chez Ecritel) | **V2-a4** puis ligne `mcp_servers` | P0 07/10 : `HELLODATA_BASE_URL=https://bo.hellopro.fr/admin/mcp/hellodata`, `HELLODATA_WEBHOOK_URL=https://www.hellopro.fr/partenaires_externes/mcp/hellodata`, `HELLODATA_PUBLIC_URL` **vide** ; 2 secrets à créer en SM (`HELLODATA_TOKEN` `8052386a…`, `HELLODATA_WEBHOOK_TOKEN` `70a717c5…`, 64 car.) ; rapatriement (dossier seul, aucune lib) |
+| `mcp-normalize-unite-service` | UP 4 h | MCP (Go), client gRPC | Cloud Run + connecteur (`/mcp`) | plan standard (décision équipe 07/10) | rapatriement ; **unit-registry reste sur la VM** → nouveau port d'enabler pour `50059` (gRPC) + règle de pare-feu, comme `15055-15058` |
+| `unit-registry-service` | UP 4 h | gRPC + publication RabbitMQ (boucle 1 s), MySQL `normalization_db` | **reste sur la VM** (service temporaire, décision équipe 07/10) | — | code rapatrié dans `prod` quand même |
+| `mcp-template-neo4j-service` | UP 6 j | lanceur de processus MCP (ports 15100-15199) | **reste sur la VM** (service temporaire, décision équipe 07/10) | — | code rapatrié dans `prod` quand même |
+| `agent-service` | UP 45 h, `0.0.0.0:8597` | API LangGraph **sans auth** | **Cloud Run interne**, route de la gateway comme V2-a (**décision user 07/10 : option A**) | **V2-a4** (avec mcp-hellodata) | appelant identifié : **BO chez Ecritel** via `https://api.hellopro.eu/agent-service/agents/{code}/run` (route gateway `agent-service`) ; rapatriement ; F-HP-SEC-033 |
+| `neo4j_new` | UP 3 sem., `0.0.0.0:7476`/`7689` | base Neo4j 5.15 | **reste sur la VM** (service temporaire, décision équipe 07/10) | — | — |
+| `tailscale` (`tailscale-gateway`) | UP 4 sem. | **nœud VPN** sur l'hôte | **reste sur la VM** | — | usage identifié : liaison avec le **VPS OVH qui héberge OpenClaw** ; reste à restreindre les ACL (F-HP-SEC-032) |
+
 **Restent sur la VM pendant la vague** : `dlq-manager-service` (décision 5), `mcp-neo4j-service` (F-HP-SEC-020), `nextjs-formulaire-hp` (décision 3), services P9 / P10 de l'inventaire.
 
 ### Rollbacks
 
 | Date | Lot | Service / route | Déclencheur | Durée | Cause | Reprise |
 |---|---|---|---|---|---|---|
-| | | | | | | |
+| 07/10 11:53 | V2-a1 | detection-langue (`SERVICE_DETECTION_SITE_FR`) | warning dev : modèle fastText absent de l'image Cloud Run | ~1 min (`revert` + `rescan`) | modèle monté depuis l'hôte sur la VM, jamais intégré à l'image ; NLP sauté, décisions dégradées mises en cache | image corrigée (modèle intégré, sha256 figé) puis nouvelle bascule |
 
 ---
 
@@ -230,7 +242,7 @@ Une ligne par modification, **avant** de la faire (valeur d'origine notée = ret
 
 | Date / heure | Enregistrement | Type | Avant | Après | TTL | Par | Motif |
 |---|---|---|---|---|---|---|---|
-| | | | | | | | |
+| 07/10 11:53 | V2-a1 | detection-langue (`SERVICE_DETECTION_SITE_FR`) | warning dev : modèle fastText absent de l'image Cloud Run | ~1 min (`revert` + `rescan`) | modèle monté depuis l'hôte sur la VM, jamais intégré à l'image ; NLP sauté, décisions dégradées mises en cache | image corrigée (modèle intégré, sha256 figé) puis nouvelle bascule | |
 
 ---
 
@@ -274,3 +286,8 @@ Le détail de chaque décision (pourquoi, objectif, options, recommandation, con
 | 06/10 matin | Réponses devs V2-a2 : pas d'appel direct, usage ponctuel. chat-llm : la VM tourne avec `deepseek-chat`, **retiré par DeepSeek le 24/07** (message du commit `f375968e`) → **option A** retenue : bascule avec `deepseek-v4-flash`. IAM : `monitoring.viewer` posé aux 13 comptes devs (onglet Métriques Cloud Run), 13/13. |
 | 06/10 matin | V2-a1 : comparaison-texte **validé** (OK dev) + résumé de chaque comparaison dans les logs (PR DSO mergée, révision `00009-n8z`, vérifié) ; **optimize basculé** 09:30 (`rescan`, preuve OK) ; **detection-langue basculé** 11:18 (référence VM : 20 % de `503`, saturation du jumeau). Catalogue : `failed=1` intermittent = **deadlock MySQL** (`Error 1213`, `internal/repository/endpoint_repo.go:23`) entre scans concurrents — la mise à jour de l'URL (table des services) passe avant l'écriture des endpoints, la route n'est pas affectée ; à remonter aux devs (retry sur 1213 ou concurrence réduite). Crawler : appelle detection-langue et content-extractor en direct (`docker-compose.yml:1410-1411`) → repointage à proposer au dev du crawler après mesure du volume. |
 | 06/10 après-midi | V2-a2 prêt (wrappers en entrée interne mergés, `min_instances` 0 ; correctif Rust : Dockerfile sans `Cargo.lock` → copié ; vérifié : internet 404, VM 200). Relevés de midi et 17h : detection `503` à ~1 % (20-60 % sur la VM) ; les `503` de la gateway sont surtout des **abandons de l'appelant** (extractor : Cloud Run a servi `200`) ; classification appelle optimize en direct ; 2 erreurs d'encodage detection = défaut du code (`language_detector.py:482`). Incident doc : `lots/V2-a1.md` vidé par un script, reconstruit ; écritures désormais atomiques. |
+| 07/10 matin | J+1 V2-a1 : GO technique (nuit propre). V2-a2 : 5/5 routes basculées (embedding, graph-rag ×3 à 09:27, chat-llm à 09:38), preuves OK. `revert` corrigé (reprenait la dernière sauvegarde, sans effet sur une route basculée plus tôt). Tests devs en retard (projet urgent) → **test de parité DSO** VM ↔ Cloud Run : comparaison, detection, embedding **identiques**, chat-llm `OK` des deux côtés (`deepseek-chat` répond encore : correction de l'affirmation du 06/10) → **V2-a1 et V2-a2 validés DSO** ; **feu vert crawler**. P0 V2-a3 : recherche (4,8-6,8 k appels/jour, Redis manquant), ingestion sur broker **dev**, prix-traitement à rapatrier. |
+| 07/10 11:54 | **Rollback detection-langue** : modèle fastText absent de l'image (monté depuis l'hôte sur la VM) → NLP sauté sur Cloud Run, décisions moins sûres écrites dans le cache partagé ; parité detection du matin faussée par ce cache. Route revenue sur la VM ; correctif image en cours. V2-a3 : wrappers mergés (accès `cloudrun-services` au secret de tracking ajouté), déploiement vérifié (404 / 200). Crawler : option B validée par le user, avec contrôle préalable de l'état git de la VM (son `docker-compose.yml` diffère de `origin/features/poc` connu : 35 lignes). |
+| 07/10 12:31 | Correctif image detection (modèle fastText intégré, sha256 figé) déployé (`00006-gq8`), parité **directe et sans cache** identique (`nlp_confirmed` calculé par Cloud Run) → **detection rebasculée** sur Cloud Run (preuve : jumeau 0). Test de parité corrigé : appel direct `run.app`, jamais via la gateway. |
+| 07/10 14:10 | **7 services nouveaux sur la VM** (`features/poc`, absents de `prod`) : mcp-hellodata, mcp-normalize-unite, unit-registry, mcp-template-neo4j, agent-service, neo4j_new, tailscale. **Décisions user** : plan de migration du tableau « Nouveaux services » **validé** ; rapatriement `poc` → `prod` **par lot, avec les bibliothèques et dépendances** du dépôt (hellodata avant V2-b, template-neo4j avant V2-c) ; **Tailscale : option A** (identifier propriétaire et usage, lire les ACL du tailnet, puis restreindre ; à défaut d'usage justifié, arrêt du conteneur) — F-HP-SEC-032. Inventaire réel de `mcp_servers` relevé (15 serveurs, 2 nouveaux). |
+| 07/10 14:30 | **Mise au point équipe** : unit-registry, neo4j_new, tailscale, mcp-template-neo4j **restent sur la VM** (services temporaires ; code rapatrié dans `prod`) ; mcp-hellodata et mcp-normalize-unite suivent le plan standard ; agent-service appelé par le BO (Ecritel) via `api.hellopro.eu/agent-service/…` → migration à décider ; tailscale = liaison VPN avec le VPS OVH d'OpenClaw. |
