@@ -53,8 +53,8 @@ jobs:
       allow_unauthenticated: true
       cpu: '1'
       memory: '512Mi'
-      # Shadow : pas de trafic route -> scale-to-zero.
-      min_instances: 0
+      # V2-a3 (08/10) : trafic reel (7 500 appels/jour) -> une instance chaude, comme sur la VM
+      min_instances: 1
       max_instances: 3
       # CMD uvicorn --port 8517 (hardcode dans le Dockerfile).
       container_port: 8517
