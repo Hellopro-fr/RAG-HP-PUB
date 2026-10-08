@@ -62,8 +62,8 @@ jobs:
       # *** VPC Connector requis : Milvus est sur une IP interne (10.0.1.51) ***
       vpc_connector: vpc-access-connector
       vpc_egress: private-ranges-only
-      # Config non-sensible (URIs/ports/params Milvus+Qdrant). REDIS_URL volontairement
-      # omis au 1er deploy (optionnel cote app, fallback local) pour isoler la variable Milvus.
+      # Config non-sensible (URIs/ports/params Milvus+Qdrant). REDIS_URL : secret ci-dessous (V2-a3, 08/10 :
+      # sans Redis, /global-stats perd son cache et lance un scan complet de siteweb_2 a chaque appel).
       env_vars_json: |
         {
           "ZILLIZ_URI": "milvus-prod.hello.dev.private.com",
@@ -76,10 +76,11 @@ jobs:
           "M_PARAMS": "32",
           "EF_PARAMS": "300"
         }
-      # 7 secrets : 6 platform partages + 1 dedie (KEY_WEBHOOK).
+      # 8 secrets : 7 platform partages + 1 dedie (KEY_WEBHOOK).
       secret_env_vars_json: |
         {
           "ZILLIZ_USER": "platform-zilliz-user:latest",
+          "REDIS_URL": "platform-redis-url:latest",
           "ZILLIZ_PASSWORD": "platform-zilliz-password:latest",
           "RABBITMQ_URL": "platform-rabbitmq-url:latest",
           "OPENAI_API_KEY": "platform-openai-api-key:latest",
