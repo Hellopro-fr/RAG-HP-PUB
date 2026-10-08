@@ -90,6 +90,21 @@ Tous les scripts se lancent du **poste (Git Bash)** ; ceux qui touchent la VM pa
    (`allow_unauthenticated: true`), `min_instances: 1`, connecteur VPC `private-ranges-only` si le service joint une base
    interne, variables manquantes, capacité calée sur la VM. Sortie en IP fixe (`all-traffic`, NAT `35.233.35.8`)
    **seulement** si un tiers filtre par IP.
+   **`SERVICE_NAME` identique à celui de la VM** (ajout du 08/10) : les serveurs gRPC d'embedding et de base de la VM
+   classent les appels par nom de service (`HIGH_PRIORITY_SERVICES`, `MEDIUM_PRIORITY_SERVICES` du compose). Un nom
+   différent sur Cloud Run (ex. `api-recherche` au lieu de `api-recherche-service`) fait tomber le service en priorité
+   BASSE : attentes de près d'une minute, `503` et `500` (recherche, 08/10, corrigé par la PR #876).
+   **Noms des variables identiques à la VM** (ajout du 08/10) : toute variable présente sur le conteneur VM et absente
+   du wrapper doit être justifiée. Une variable « optionnelle » peut changer le comportement : sans `REDIS_URL`,
+   rest-milvus servait encore ses `GET`, mais `POST /global-stats` perdait son cache et relançait un scan complet de
+   Milvus prod à chaque appel (100 % d'échecs pendant la rafale, corrigé par la PR #877). `p0_route.sh` les liste en
+   « VM seulement » : chaque ligne est à lire, pas seulement les `DIFFERENT`.
+5 bis. **Drift juste avant la bascule** (`drift_lot.sh <dossiers>`) : `prod` / `poc` / VM et modifications locales de la
+   VM ; tout commit `poc` absent de `prod` est rapatrié et redéployé avant (services en évolution, CD `poc` non
+   fonctionnels).
+5 ter. **Référence 24 h et profil horaire** de chaque route (`bascule_route.sh … check SINCE=24h`, `gw_fenetre.sh`) :
+   taux de `503` de la VM (seuil de retour arrière = son double) et heures des rafales (le vrai test d'une route en
+   rafale est sa prochaine rafale, pas les 30 min qui suivent la bascule).
 6. **Après le déploiement** : `v2a_verif_deploy.sh` — entrée interne, `min=1`, internet **404**, VM **200**, clients
    Redis si utilisé. Puis `audit_cloud_run.sh` : le CD ne doit pas avoir rouvert un autre service.
 7. **Appelants restés sur la VM** (compose, `.env.url`, `mcp_servers`, défauts du code) : ils gardent le jumeau UP.
