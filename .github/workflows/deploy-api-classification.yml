@@ -64,8 +64,8 @@ jobs:
       cpu: '1'
       # 1Gi : imports lourds (api_recherche_lib + pymilvus + grpc + common_utils).
       memory: '1Gi'
-      # Shadow : pas de trafic route -> scale-to-zero.
-      min_instances: 0
+      # V2-a3 (08/10) : 10 replicas chaudes sur la VM, demarrage a froid 15-21 s -> une instance chaude
+      min_instances: 1
       max_instances: 3
       # CMD uvicorn --port 8577 (hardcode dans le Dockerfile, mono-process).
       container_port: 8577
