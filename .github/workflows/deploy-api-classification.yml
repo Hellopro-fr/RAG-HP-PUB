@@ -84,7 +84,7 @@ jobs:
           "EMBEDDING_SERVICE_URL": "10.11.0.2:15052",
           "RERANKING_SERVICE_URL": "10.11.0.2:15053",
           "DATABASE_SERVICE_URL": "10.11.0.2:15054",
-          "SERVICE_NAME": "api-classification",
+          "SERVICE_NAME": "api-classification-service",
           "ZILLIZ_URI": "milvus-prod.hello.dev.private.com",
           "ZILLIZ_PORT": "19530",
           "ZILLIZ_API_KEY": "none",
