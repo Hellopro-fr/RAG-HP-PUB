@@ -105,6 +105,16 @@ Sous-projet 2 de la fonctionnalité « campagnes acheteurs via Claude ».
 > - Le wrapper rend ce lien au LLM ; `HELLODATA_PUBLIC_URL` n'est plus
 >   nécessaire une fois `download.php` déployé.
 
+> **Amendement du 2026-10-09 — import, colonnes, leads (conception).** Voir
+> `2026-10-09-mcp-hellodata-import-et-leads-design.md`. `recup_acheteur` reste
+> le seul outil qui écrit l'historique (`echantillon` / `export_csv` restent en
+> lecture) et gagne `colonnes` et `simulation` ; nouvel outil
+> `inscrire_contacts` pour les campagnes déjà envoyées (date réelle, numéros
+> inconnus rendus) ; `date_reponse` optionnelle sur `enregistrer_reponses` ;
+> `date_lead_transmis` sur le suivi via `marquer_leads` — pas de 4e valeur de
+> `categorie`. Le § 4 (`date_campagne` = `NOW()`) et le § 8
+> (`date_historique = NOW()`) deviennent des valeurs par défaut.
+
 ---
 
 ## 1. Besoin
