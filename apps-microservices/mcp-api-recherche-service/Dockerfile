@@ -65,7 +65,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /bin/mcp-api-recherche ./cmd/server/
 # ── Stage 3: Minimal runtime ─────────────────────────────────────────────────
 FROM alpine:3.21
 
-RUN apk add --no-cache ca-certificates
+RUN apk upgrade --no-cache && apk add --no-cache ca-certificates
 COPY --from=builder /bin/mcp-api-recherche /bin/mcp-api-recherche
 
 EXPOSE 8580
