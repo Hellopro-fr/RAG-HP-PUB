@@ -1,0 +1,66 @@
+{
+  "file_heure_creuse_ia": {
+    "database_id": 10,
+    "description": "File d'attente des traitements IA reportes en heure creuse DeepSeek. 1 ligne = 1 domaine en attente ; la cle unique uk_fhci_domaine garantit au plus une ligne par domaine, et une nouvelle demande REMPLACE celle en file (la plus recente l'emporte). Ecrite par script_scrapping_produit_ia_V2.php au point de report (type 'v2') et par script_qualification_relance_top_fiche.php sur son code de sortie 76 (type 'relance_tops') ; lue, marquee 'lance' puis supprimee par le cron script_reprise_heure_creuse.php. Table de travail volatile : la ligne disparait des que le traitement relance est constate termine, donc un comptage instantane ne mesure pas le volume traite.",
+    "primary_key": "id_file_heure_creuse_ia",
+    "default_order_by": "date_mise_en_file_fhci ASC, id_file_heure_creuse_ia ASC",
+    "rows": null,
+    "columns": {
+      "id_file_heure_creuse_ia": {
+        "type": "int unsigned",
+        "desc": "Identifiant unique de la ligne de file (PK, auto_increment). Cle du marquage 'lance' et de la suppression par le cron."
+      },
+      "id_domaine_scrapping_produit_ia": {
+        "type": "int",
+        "desc": "Domaine en attente. FK logique vers domaine_scrapping_produit_ia.id_domaine_scrapping_produit_ia (meme base), sans contrainte declaree. Cle UNIQUE uk_fhci_domaine : au plus une ligne par domaine, une nouvelle mise en file ecrase la precedente par INSERT ... ON DUPLICATE KEY UPDATE. Jointure a faire en LEFT JOIN : une ligne dont le domaine a disparu reste visible."
+      },
+      "type_demande_fhci": {
+        "type": "varchar(20)",
+        "desc": "Origine de la demande, deux valeurs seulement : 'v2' (report de script_scrapping_produit_ia_V2.php) et 'relance_tops' (report de script_qualification_relance_top_fiche.php). Determine la forme de la relance : V2 rejoue avec args_fhci, le script de relance rejoue en mode reprise_heure_creuse=1 avec statut_entree_fhci. Toute autre valeur rend la ligne inexploitable : elle est alertee et supprimee sans jamais etre lancee."
+      },
+      "args_fhci": {
+        "type": "varchar(2000)",
+        "desc": "Arguments CLI de la relance, stockes en liste JSON de chaines 'cle=valeur', ex. [\"id_domaine=7340\",\"top_fiche=1\",\"selecteur_top_fiche=1\"]. forcer_heure_pleine en est toujours retire : le forcage ne vaut que pour le lancement qui le porte, jamais pour une reprise. JSON invalide, tronque, objet JSON, ou liste contenant autre chose que des chaines : relu comme liste vide, la ligne devient inexploitable et V2 n'est jamais relance. Longueur bornee a 2000 octets a l'ecriture, sinon la mise en file est refusee. Pour une ligne 'relance_tops' la liste vaut simplement [\"id_domaine=N\"] et n'est pas utilisee au lancement."
+      },
+      "statut_entree_fhci": {
+        "type": "tinyint",
+        "desc": "Statut d'entree memorise a la mise en file, utilise SEULEMENT par les lignes 'relance_tops' : entier de 0 a 14, transmis au script de relance en mode reprise pour sauter PART I et la decision deja jouees. Les valeurs 6 et 13 orientent vers PART III. NULL pour les lignes 'v2'. Valeur non numerique ou hors plage 0-14 : ligne inexploitable, alertee et supprimee."
+      },
+      "id_admin_fhci": {
+        "type": "int",
+        "desc": "Demandeur au moment du report : id_administrateur de la table administrateur (base ANNUAIRE_BO, database_id 1), repris de domaine_scrapping_produit_ia.utilisateur_dspi. Sert a adresser le mail de mise en file et celui de reprise. NULL quand le domaine ne porte pas de demandeur numerique exploitable (utilisateur_dspi vide, NULL ou non numerique)."
+      },
+      "etat_fhci": {
+        "type": "varchar(10)",
+        "desc": "Etat de la ligne, deux valeurs : 'en_file' (defaut, en attente de la prochaine heure creuse) et 'lance' (le cron a lance le traitement). Indexe avec date_mise_en_file_fhci par idx_fhci_etat_date. Une remise en file repasse la ligne a 'en_file'. Piege : la suppression est conditionnee a l'etat lu (DELETE ... AND etat_fhci = ...) pour ne pas effacer une demande re-deposee entre la lecture et le menage ; une suppression peut donc reussir en ne supprimant aucune ligne."
+      },
+      "date_mise_en_file_fhci": {
+        "type": "datetime",
+        "desc": "Horodatage NOW() du serveur MySQL de la mise (ou remise) en file. Donne l'ordre de traitement FIFO du cron : date croissante, puis id croissant. Reecrite a chaque remplacement de la ligne, donc ce n'est pas la date de premiere demande."
+      },
+      "date_lancement_fhci": {
+        "type": "datetime",
+        "desc": "Horodatage NOW() du passage a l'etat 'lance'. NULL tant que la ligne est en file, et remise a NULL par toute remise en file. Le cron s'en sert pour juger qu'un traitement 'lance' est termine ou mort : age d'au moins 120 secondes (HC_REPRISE_DELAI_FIN_S) ET verrou de domaine libre. Un age inconnu (NULL sur une ligne 'lance') est traite comme ancien."
+      },
+      "nb_lancements_fhci": {
+        "type": "int",
+        "desc": "Nombre de lancements deja effectues par le cron pour ce domaine, incremente au marquage 'lance'. CONSERVE lors d'une remise en file : c'est la seule colonne que le remplacement ne reecrit pas, et elle borne les boucles report - reprise - report. A 3 lancements (HC_REPRISE_MAX_LANCEMENTS) ou plus, la ligne n'est plus lancee : elle est alertee par mail puis supprimee."
+      }
+    },
+    "relations": [
+      {
+        "colonne": "id_domaine_scrapping_produit_ia",
+        "cible": "domaine_scrapping_produit_ia.id_domaine_scrapping_produit_ia",
+        "base": "hellopro_ia (database_id 10)",
+        "type": "FK logique, UNIQUE cote file, sans contrainte en base"
+      },
+      {
+        "colonne": "id_admin_fhci",
+        "cible": "administrateur.id_administrateur",
+        "base": "ANNUAIRE_BO (database_id 1)",
+        "type": "FK logique inter-bases, nullable"
+      }
+    ],
+    "notes": "Base hellopro_ia, connexion LINK_MYSQLI_HELLOPRO_IA. Spec : docs/superpowers/specs/2026-10-07-attente-heure-creuse-selecteurs-deepseek-design.md, revision 4 section 4.8. Code : BO/admin/repertoire_test/moulinettes_interne/scrapping_produit_ia/fonctions/fonctions_file_heure_creuse.php (requetes et plan de reprise), BO/script/chatgpt/script_reprise_heure_creuse.php (cron consommateur), BO/script/chatgpt/script_scrapping_produit_ia_V2.php ligne 1878 et BO/script/chatgpt/script_qualification_relance_top_fiche.php ligne 326 (les deux ecrivains). Le report V2 est gate par le flag SELECTEUR_REPORT_HEURE_CREUSE_ENABLED et n'a lieu que verrou de domaine tenu ; le parametre forcer_heure_pleine=1 l'annule. Le cron lance au plus 5 traitements a la fois (HC_REPRISE_MAX_V2). Volumetrie observee le 2026-10-09 : 1 ligne, plancher et non tendance, la table se vidant au fil des reprises. L'historique des mises en file et des reprises vit dans les logs [HC][FILE] et [reprise_heure_creuse], pas dans cette table."
+  }
+}
