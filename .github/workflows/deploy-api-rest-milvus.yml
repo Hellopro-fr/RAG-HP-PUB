@@ -53,8 +53,8 @@ jobs:
       allow_unauthenticated: true
       cpu: '1'
       memory: '512Mi'
-      # V2-a3 (08/10) : trafic reel (7 500 appels/jour) -> une instance chaude, comme sur la VM
-      min_instances: 1
+      # V2-a3 (09/10) : route revenue sur la VM -> scale-to-zero (FinOps) ; repasser a 1 juste avant la rebascule
+      min_instances: 0
       max_instances: 3
       # CMD uvicorn --port 8517 (hardcode dans le Dockerfile).
       container_port: 8517
