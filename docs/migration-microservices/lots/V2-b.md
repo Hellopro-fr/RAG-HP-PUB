@@ -96,6 +96,10 @@
 
 ## Feuille de lot
 
+> **Appels directs de mcp-gateway (12/10)** : en plus de `mcp_servers`, la gateway joint leexi et ringover par `LEEXI_INTERNAL_URL` / `RINGOVER_INTERNAL_URL` (admin + périmètre des jetons à chaque appel). Leurs jumeaux VM restent démarrés tant que ces 2 variables pointent sur la VM. **Avant chaque bascule, chercher les `*_INTERNAL_URL` de la gateway qui visent le serveur.**
+
+> **Repointage de mcp-gateway (à planifier après la maintenance du 12/10)** — *quoi* : passer `LEEXI_INTERNAL_URL` et `RINGOVER_INTERNAL_URL` du `.env` de la VM (`/home/devhp/RAG-HP-PUB/.env`) aux URL Cloud Run, puis **recréer le seul conteneur mcp-gateway-service** (une variable ne change pas sur un conteneur en marche). *Qui* : le **DSO** exécute (cartes : pré-contrôle en lecture → sauvegarde du `.env` → 2 lignes → `docker compose up -d --no-deps mcp-gateway-service` → `docker update --restart unless-stopped` → contrôles) ; le **dev de mcp-gateway** valide la fenêtre (coupure de quelques secondes de tous les MCP) et teste après (admin : sélecteurs Leexi ; un jeton Leexi à périmètre). *Pré-contrôle obligatoire* : la recréation applique **tout** l'état actuel du compose et du `.env` (image, autres variables) → comparer avant (dry-run, image, empreintes des variables). *Retour arrière* : `.env` sauvegardé + nouvelle recréation. *Ensuite* : mise en réserve des jumeaux leexi et ringover.
+
 > **Méthode par serveur (09/10)** : P0 en une carte (`p0_route.sh` parité des variables, `cred_fichier_parite.sh` si fichier d'identifiants, `drift_lot.sh`, **dépendances aval** lues dans le wrapper et le code, `bascule_mcp.sh plan` + `backup`) → consigne au dev (changement d'URL + **test d'un outil en lecture**) → `check` (même nombre d'outils, sinon `mcp_outils.sh`) → `mcp_releve.sh` à 30 min → GO. Seuil : 1 appel d'outil en erreur, `unhealthy` persistant ou outil manquant.
 
 | Étape | Heure | Résultat | Par |
@@ -103,13 +107,13 @@
 | P0 — code, variables, clés tierces, sortie IP (×8) | | | DSO |
 | P0 — script `mcp_servers` prêt et relu | | | DSO |
 | Dump `mcp_servers` | | | DSO |
-| **mcp-api-recherche** — plan / apply / check / test | | | DSO · dev |
+| **mcp-api-recherche** (« RAG Hellopro ») — plan / apply / check / test | 12/10 11:10 UTC | ✅ **GO** : 6 outils testés par le dev (chaîne gateway → Cloud Run → enabler gRPC → GPU), 0 code ≥ 400, jumeau en réserve | DSO · dev |
 | **mcp-classification-produit** — idem | 09/10 08:30 → 08:54 UTC | ❌ **retour arrière** : `404` sur `classify_products_batch` (appelle api-classification Cloud Run en entrée interne, sans VPC ; api-classification revenue sur la VM) → **rattaché à V2-a3-bis** | DSO · dev |
-| **mcp-google-analytics** — idem | 09/10 ~14:00 UTC | ✅ **GO** : test OK, 9 outils (7 de la VM + 2 nouveaux, `analytics-mcp==0.6.0`), 207 × 200 ; 2 × 404 au changement et 1 flux coupé à 300 s à surveiller | DSO · dev |
+| **mcp-google-analytics** — idem | 09/10 ~14:00 UTC | ✅ **GO** (J+1 12/10 OK, jumeau en réserve) : test OK, 9 outils (7 de la VM + 2 nouveaux, `analytics-mcp==0.6.0`), 207 × 200 ; 2 × 404 au changement et 1 flux coupé à 300 s à surveiller | DSO · dev |
 | **mcp-google-analytics-minisite** — idem | | | DSO · dev |
-| **mcp-google-search-console** — idem | | | DSO · dev |
+| **mcp-google-search-console** — idem | 12/10 08:27 UTC | ✅ **GO** : 19 outils identiques (comparés avant), test OK sur `https://www.hellopro.fr/` (`403` sur la propriété domaine = droit Google, hors migration), 0 code ≥ 400, jumeau en réserve | DSO · dev |
 | **mcp-semrush** — idem | | | DSO · dev |
-| **mcp-ringover** — idem | 09/10 ~12:23 UTC | ✅ **GO** : test OK, 319 × 200, 0 avertissement, jumeau VM à 0 | DSO · dev |
-| **mcp-leexi** — idem | 09/10 11:15 UTC | ✅ **GO** : test OK, 12 appels d'outils, 249 × 200, 0 avertissement, jumeau VM à 0 | DSO · dev |
+| **mcp-ringover** — idem | 09/10 ~12:23 UTC | ✅ **GO** (J+1 : 109 appels, 0 erreur ; jumeau **démarré**, appelé en direct par la gateway) : test OK, 319 × 200, 0 avertissement, jumeau VM à 0 | DSO · dev |
+| **mcp-leexi** — idem | 09/10 11:15 UTC | ✅ **GO** (J+1 : 38 appels, 0 erreur ; jumeau **démarré**, appelé en direct par la gateway) : test OK, 12 appels d'outils, 249 × 200, 0 avertissement, jumeau VM à 0 | DSO · dev |
 | Relevé 17h / nuit | | | DSO |
 | **Décision J+1 9h30** (par serveur) | | | LEAD · DSO |
