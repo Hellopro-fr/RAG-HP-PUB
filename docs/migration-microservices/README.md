@@ -84,6 +84,8 @@ que la vague 1 : une procédure commune, une fiche par lot, un tableau de suivi,
 |---|---|
 | [`procedure-bascule-route-http.md`](procedure-bascule-route-http.md) | La procédure commune d'un service HTTP (P0 → P7, rollback R) : on bascule **une adresse**, le jumeau VM reste allumé |
 | [`lots/V2-a1.md`](lots/V2-a1.md) · [`V2-a2`](lots/V2-a2.md) · [`V2-a3`](lots/V2-a3.md) | API HTTP internes (P4), routes de la gateway, 14 services en trois lots |
+| [`lots/V2-a3-bis.md`](lots/V2-a3-bis.md) · [`V2-a4`](lots/V2-a4.md) | Lots **différés** : classification / ingestion / rest-milvus (correctifs DSO) ; agent-service / mcp-hellodata (stabilisation) |
+| [`reports-et-decisions-vague-2.md`](reports-et-decisions-vague-2.md) | **Registre des reports, décisions et traitements différés** de la vague 2 (quoi, pourquoi, preuve, à faire, reprise) |
 | [`lots/V2-b.md`](lots/V2-b.md) | Les 8 serveurs MCP (P5), lignes `mcp_servers` |
 | [`lots/V2-c.md`](lots/V2-c.md) | Bloc gateway (P2, P3, ex-L7), `api.` et `mcp.hellopro.eu` |
 | [`lots/V2-d.md`](lots/V2-d.md) | SSO et fronts publics (P6-P8) : `login.`, `rag.`, `conseils`, `cmf.` |
