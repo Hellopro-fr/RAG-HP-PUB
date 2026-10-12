@@ -69,7 +69,34 @@
 
 ⚠️ L'URL de Zoho CRM porte une clé d'accès dans son chemin : toute copie de la table `mcp_servers` est **sensible** (ne pas la coller dans un ticket ou un canal).
 
+## Consigne au dev responsable de mcp-gateway (changement d'URL d'un serveur) — prête à envoyer
+
+> Bonjour,
+>
+> Pour la migration des serveurs MCP vers Cloud Run (lot V2-b), on a besoin de toi pour le **changement d'URL**, serveur par
+> serveur, dans l'**interface admin de mcp-gateway** (ou `PUT /api/v1/servers/{id}` avec un compte admin). **Pas en SQL** :
+> le registre de la gateway est en mémoire, seul l'admin relance la découverte (`internal/api/server_handlers.go:116-121`).
+>
+> **Premier serveur (pilote) : « Classification Produit »** (id `ac5588e1-4332-40af-ab31-d6ddabbb19c3`).
+>
+> | Champ | Valeur actuelle | Nouvelle valeur |
+> |---|---|---|
+> | URL | `http://mcp-classification-produit-service:8593` | `https://mcp-classification-produit-service-xqksdwdiga-ew.a.run.app` |
+> | URL des messages (si le champ existe) | `http://mcp-classification-produit-service:8593/mcp` | `https://mcp-classification-produit-service-xqksdwdiga-ew.a.run.app/mcp` |
+>
+> Ne change rien d'autre (transport `streamable-http`, en-têtes, rôle minimum, actif).
+>
+> **Quand** : à un moment convenu avec nous (on surveille pendant 30 min). **Après l'enregistrement** : dis-nous l'heure exacte ;
+> on vérifie que le serveur reste `healthy` avec ses 4 outils, et que les appels d'outils partent vers Cloud Run.
+>
+> **Retour arrière** (si on te le demande) : remettre les deux valeurs « actuelles » ci-dessus dans le même écran.
+> Une sauvegarde de la ligne existe côté DSO.
+>
+> Les serveurs suivants (leexi, ringover, GA, search-console, api-recherche, semrush) suivront le même schéma, un par un, après validation du pilote.
+
 ## Feuille de lot
+
+> **Méthode par serveur (09/10)** : P0 en une carte (`p0_route.sh` parité des variables, `cred_fichier_parite.sh` si fichier d'identifiants, `drift_lot.sh`, **dépendances aval** lues dans le wrapper et le code, `bascule_mcp.sh plan` + `backup`) → consigne au dev (changement d'URL + **test d'un outil en lecture**) → `check` (même nombre d'outils, sinon `mcp_outils.sh`) → `mcp_releve.sh` à 30 min → GO. Seuil : 1 appel d'outil en erreur, `unhealthy` persistant ou outil manquant.
 
 | Étape | Heure | Résultat | Par |
 |---|---|---|---|
@@ -77,12 +104,12 @@
 | P0 — script `mcp_servers` prêt et relu | | | DSO |
 | Dump `mcp_servers` | | | DSO |
 | **mcp-api-recherche** — plan / apply / check / test | | | DSO · dev |
-| **mcp-classification-produit** — idem | | | DSO · dev |
-| **mcp-google-analytics** — idem | | | DSO · dev |
+| **mcp-classification-produit** — idem | 09/10 08:30 → 08:54 UTC | ❌ **retour arrière** : `404` sur `classify_products_batch` (appelle api-classification Cloud Run en entrée interne, sans VPC ; api-classification revenue sur la VM) → **rattaché à V2-a3-bis** | DSO · dev |
+| **mcp-google-analytics** — idem | 09/10 ~14:00 UTC | ✅ **GO** : test OK, 9 outils (7 de la VM + 2 nouveaux, `analytics-mcp==0.6.0`), 207 × 200 ; 2 × 404 au changement et 1 flux coupé à 300 s à surveiller | DSO · dev |
 | **mcp-google-analytics-minisite** — idem | | | DSO · dev |
 | **mcp-google-search-console** — idem | | | DSO · dev |
 | **mcp-semrush** — idem | | | DSO · dev |
-| **mcp-ringover** — idem | | | DSO · dev |
-| **mcp-leexi** — idem | | | DSO · dev |
+| **mcp-ringover** — idem | 09/10 ~12:23 UTC | ✅ **GO** : test OK, 319 × 200, 0 avertissement, jumeau VM à 0 | DSO · dev |
+| **mcp-leexi** — idem | 09/10 11:15 UTC | ✅ **GO** : test OK, 12 appels d'outils, 249 × 200, 0 avertissement, jumeau VM à 0 | DSO · dev |
 | Relevé 17h / nuit | | | DSO |
 | **Décision J+1 9h30** (par serveur) | | | LEAD · DSO |
