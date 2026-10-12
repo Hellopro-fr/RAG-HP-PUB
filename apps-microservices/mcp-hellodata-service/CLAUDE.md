@@ -42,7 +42,7 @@ mcp-hellodata-service/
 │   │   ├── registry.go              # Tool definitions (selection + campaign tools)
 │   │   ├── handler.go                # MCP request handler (initialize, tools/list, tools/call)
 │   │   ├── selection.go             # Selection tools (compter, echantillon, export_csv), calls into hellodata.Client
-│   │   ├── campagnes.go             # Campaign tools (recup_acheteur, bilan_campagnes, enregistrer_reponses)
+│   │   ├── campagnes.go             # Campaign tools (recup_acheteur, inscrire_contacts, bilan_campagnes, enregistrer_reponses, marquer_leads)
 │   │   └── jetons.go                 # Download-token issuance/table for the CSV export flow
 │   ├── download/proxy.go            # /download/ HTTP proxy that redeems a token for a CSV
 │   └── transport/http.go            # /mcp Streamable HTTP handler, identity extraction from headers (also used by /download)
@@ -62,9 +62,16 @@ The name below is the one the LLM finally sees.
 | `hellodata_compter` | `compter` | Counts buyers matching a filter tree. Fast approximate mode (capped at 10000) by default; `exact=true` gives the real count but can take over a minute. |
 | `hellodata_echantillon` | `echantillon` | Reads buyers matching the filter, page by page (up to 2000 rows/call, 50 by default, cursor-based pagination). |
 | `hellodata_export_csv` | `export_csv` | **`colonnes` is required**: the user picks the fields. Without it the tool answers `colonnes_requises: …` with the field list to show them (no network call), and the description tells the LLM to ask before calling and never choose for the user. The list is `catalogueColonnes` (`internal/tools/colonnes.go`), which mirrors `requete.php` and uses the labels of the BO extraction screen (`ca_extract_*`); an unknown name is refused before the call (`colonne_inconnue`). Renders one page (≤2000 rows) of the selection as a CSV download URL: the BO's signed `download.php` link (header `X-Hellodata-Lien`, 15 minutes, CSV regenerated on each download). Falls back to a wrapper `/download` token only when the engine sends no link, or a link whose scheme+host differ from `HELLODATA_BASE_URL`. |
-| `hellodata_recup_acheteur` | `recup_acheteur` | BO. Selects `n` (1–2000) buyers for a campaign (created when its `code` is unknown), deduplicated by phone, filter combining `acheteur` criteria and `hist_*` history leaves. Returns counters and `url_csv`: the BO's signed `download.php` link from the engine's `url_csv` field (fallback: a wrapper `/download` token); the CSV itself is never inline. `cree_par` is the caller's `X-End-User-Email`, never an argument. |
-| `hellodata_bilan_campagnes` | `bilan_campagnes` | BO. Lists campaigns with their counters (sent, positive, negative_contactable, negative_stop, no answer); optional `code`. |
-| `hellodata_enregistrer_reponses` | `enregistrer_reponses` | FRONT webhook. Records ≤500 provider responses classified by the LLM (`positive` / `negative_contactable` / `negative_stop`). |
+| `hellodata_recup_acheteur` | `recup_acheteur` | BO. **The only tool that records a campaign at extraction time** — `compter` / `echantillon` / `export_csv` are read-only and say so in their descriptions. Selects `n` (1–2000) buyers for a campaign (created when its `code` is unknown), deduplicated by phone, filter combining `acheteur` criteria and `hist_*` history leaves. Optional `colonnes` (same catalogue and email/mobile rule as `export_csv`; `telephone_normalise` always first; absent = the historical 8-column CSV) and `simulation` (same counters, nothing written, no CSV). If the engine does not echo `simulation: true`, it ignored the flag and **really reserved**: the output then carries `avertissement: simulation_non_supportee…`. Returns counters and `url_csv`: the BO's signed `download.php` link from the engine's `url_csv` field (fallback: a wrapper `/download` token); the CSV itself is never inline. `cree_par` is the caller's `X-End-User-Email`, never an argument. |
+| `hellodata_inscrire_contacts` | `inscrire_contacts` | BO. Records a list **already sent** outside the MCP at its real date (`date_campagne`, refused when later than the next UTC day). ≤2000 contacts per call, each exactly one of `telephone` / `id_acheteur`. No exclusion: a `ne_plus_contacter` number is recorded and flagged. Returns `inscrits`, `deja_dans_campagne`, `doublons_liste` and the lists `inconnus`, `invalides`, `ne_plus_contacter` (never `null`). `cree_par` from the identity. |
+| `hellodata_bilan_campagnes` | `bilan_campagnes` | BO. Lists campaigns with their counters (sent, positive, negative_contactable, negative_stop, no answer, `leads_transmis`); optional `code`. |
+| `hellodata_enregistrer_reponses` | `enregistrer_reponses` | FRONT webhook. Records ≤500 provider responses classified by the LLM (`positive` / `negative_contactable` / `negative_stop`). Optional per-response `date_reponse` (`AAAA-MM-JJ[ HH:MM:SS]`, never future) for answers entered after the fact; absent, the webhook uses `NOW()`. |
+| `hellodata_marquer_leads` | `marquer_leads` | FRONT webhook. Sets `date_lead_transmis` on ≤500 tracking rows (optional `date_transmission`, never future). Only an already-`positive` answer can become a lead; others come back in `non_positifs`. Returns `marques`, `inconnus`, `hors_campagne`, `non_positifs`. |
+
+Design of the last two tools and of `colonnes` / `simulation` / `date_reponse`:
+`docs/superpowers/specs/2026-10-09-mcp-hellodata-import-et-leads-design.md`.
+They need the matching PHP actions on Ecritel; deployed before them, the new
+tools answer the engine's `404`.
 
 There is no `hellodata_export_statut` tool: exports are single-page and
 rendered directly by `hellodata_export_csv` — no async job to poll.
@@ -143,7 +150,7 @@ Raisonnement complet : `docs/superpowers/specs/2026-09-28-mcp-hellodata-server-a
 
 1. Network access to the HelloData engine on Ecritel (`HELLODATA_BASE_URL`) and a valid `HELLODATA_TOKEN`.
 2. The FRONT webhook (`HELLODATA_WEBHOOK_URL`) and its `HELLODATA_WEBHOOK_TOKEN` — the service refuses to start without them.
-3. The four campaign tables (`historique_campagne_*_ia`, database `edgb2b`) — read and written by the BO and the webhook, never by this service.
+3. The four campaign tables (`historique_campagne_*_ia`, database `edgb2b`) — read and written by the BO and the webhook, never by this service. `marquer_leads` and `bilan_campagnes.leads_transmis` also need the column `historique_campagne_suivi_ia.date_lead_transmis` (manual DDL, spec 2026-10-09 § 7).
 4. A `server_authorizations` grant on the hellodata server (gateway `/server-authorizations` screen) for each non-admin caller.
 
 ## What This Provides to Other Services
