@@ -107,6 +107,21 @@ func (c *Client) EnregistrerReponses(ctx context.Context, d DemandeReponses) (Re
 	return out, err
 }
 
+// InscrireContacts (BO) inscrit une liste deja envoyee : jusqu'a 2000
+// recherches indexees et une transaction, d'ou le budget de recup_acheteur.
+func (c *Client) InscrireContacts(ctx context.Context, d DemandeInscription) (Inscription, error) {
+	var out Inscription
+	err := c.poster(ctx, "inscrire_contacts", d, BudgetRecup, &out)
+	return out, err
+}
+
+// MarquerLeads (webhook FRONT) pose date_lead_transmis sur les suivis.
+func (c *Client) MarquerLeads(ctx context.Context, d DemandeLeads) (ResultatLeads, error) {
+	var out ResultatLeads
+	err := c.poster(ctx, "marquer_leads", d, BudgetReponses, &out)
+	return out, err
+}
+
 // ExporterCSV rend le CSV d'UNE page, deja lu en entier, plus le curseur
 // suivant. Une page est plafonnee a 2000 lignes, donc la lire en memoire
 // est borne par construction — et c'est ce qui permet au wrapper de rendre

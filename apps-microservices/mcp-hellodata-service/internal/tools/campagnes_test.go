@@ -86,11 +86,13 @@ const argsRecupValides = `{
 	]}
 }`
 
-func TestDefinitions_SixOutils(t *testing.T) {
+func TestDefinitions_OutilsDeCampagne(t *testing.T) {
 	requis := map[string][]string{
 		"recup_acheteur":       {"campagne", "n", "filtre"},
+		"inscrire_contacts":    {"campagne", "contacts"},
 		"bilan_campagnes":      {},
 		"enregistrer_reponses": {"code_campagne", "reponses"},
+		"marquer_leads":        {"code_campagne", "leads"},
 	}
 	trouves := 0
 	for _, d := range Definitions() {
@@ -111,8 +113,8 @@ func TestDefinitions_SixOutils(t *testing.T) {
 			t.Errorf("%s: description vide", d.Nom)
 		}
 	}
-	if trouves != 3 {
-		t.Fatalf("%d outils de campagne trouves, attendu 3", trouves)
+	if trouves != len(requis) {
+		t.Fatalf("%d outils de campagne trouves, attendu %d", trouves, len(requis))
 	}
 }
 

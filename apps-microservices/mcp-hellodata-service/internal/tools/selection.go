@@ -41,6 +41,10 @@ func (h *Handler) appeler(ctx context.Context, id Identite, rpcID json.RawMessag
 		return h.bilanCampagnes(ctx, rpcID, brut)
 	case "enregistrer_reponses":
 		return h.enregistrerReponses(ctx, id, rpcID, brut)
+	case "inscrire_contacts":
+		return h.inscrireContacts(ctx, id, rpcID, brut)
+	case "marquer_leads":
+		return h.marquerLeads(ctx, id, rpcID, brut)
 	}
 
 	var a argsCommuns
@@ -154,21 +158,9 @@ func (h *Handler) demande(rpcID json.RawMessage, a argsCommuns, admin, avecColon
 		return hellodata.Demande{}, &r
 	}
 	if avecColonnes {
-		for _, c := range a.Colonnes {
-			if !colonneConnue(c) {
-				r := mcp.Echec(rpcID, mcp.CodeParamsInvalides,
-					"colonne_inconnue: '"+c+"'. Colonnes disponibles : "+listeColonnes())
-				return hellodata.Demande{}, &r
-			}
-		}
-	}
-	if avecColonnes && !admin {
-		for _, c := range a.Colonnes {
-			if colonnesRestreintes[c] {
-				r := mcp.Echec(rpcID, mcp.CodeParamsInvalides,
-					"colonne_restreinte: '"+c+"' exige le role admin ou un grant hellodata")
-				return hellodata.Demande{}, &r
-			}
+		if err := validerColonnes(a.Colonnes, admin); err != nil {
+			r := mcp.Echec(rpcID, mcp.CodeParamsInvalides, err.Error())
+			return hellodata.Demande{}, &r
 		}
 	}
 	return hellodata.Demande{

@@ -488,7 +488,7 @@ func (sg *ScopedGateway) findHellodataFallback(name string) (*BackendServer, str
 }
 
 // fetchHellodataTools queries the backend with the caller's identity. The
-// backend returns its six tools to an authorized caller, an empty list
+// backend returns its tools to an authorized caller, an empty list
 // otherwise.
 //
 // DELIBERATE DIVERGENCE from fetchZohoTools: on failure, the fallback is the
