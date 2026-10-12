@@ -33,6 +33,8 @@
 | Crawler | repointé vers detection/extractor Cloud Run (07/10), recreate avec `--no-deps --scale crawler-service=7` | `up -d` simple (aurait supprimé 6 crawlers) |
 | Ordre et méthode V2-b | serveur par serveur, changement d'URL par le dev responsable de mcp-gateway (interface admin), test d'outil réel avant le relevé (09/10) | changement en SQL : registre en mémoire, la gateway ne relirait pas |
 | Google Analytics : 9 outils sur Cloud Run au lieu de 7 | **maintien** (09/10) : les 7 outils de la VM sont présents, 2 ajouts en lecture (`analytics-mcp==0.6.0` figé en `prod`) ; compte de service en lecture seule | retour arrière au seul motif du nombre d'outils |
+| GSC : `403` sur `sc-domain:hellopro.fr` au test après bascule (12/10) | **maintien** : `list_properties` montre une seule propriété (`https://www.hellopro.fr/`, `siteFullUser`), rapport OK dessus → droit Google du compte de service, hors migration | retour arrière sur le critère « 0 `403` dans les logs du jumeau » : non probant, `mcp-proxy` n'écrit pas les erreurs d'outils |
+| Jumeaux VM leexi et ringover | **restent démarrés** (12/10) : mcp-gateway les appelle en direct (`LEEXI_INTERNAL_URL`, `RINGOVER_INTERNAL_URL`) pour l'admin et le périmètre des jetons à chaque appel d'outil ; arrêt = refus des jetons à périmètre | arrêt immédiat après la bascule (ce qu'on fait d'habitude pour un jumeau) |
 
 ## 3. Surveillances et preuves en attente
 
@@ -43,6 +45,12 @@
 | **Maintenance GCE de la VM GPU** (12/10 20:00 → 13/10 00:00 UTC, arrêt + redémarrage) | état identique à la référence ; 62 conteneurs passés `no` → `unless-stopped` (09/10) | `vm_etat.sh snapshot` lundi 18h, `vm_etat.sh compare` mardi matin ; GPU + réservation L4 |
 | MCP basculés (leexi, ringover, Google Analytics) | usage réel sur Cloud Run (leexi 2-114 appels/j, ringover 4-242/j), 0 erreur ; jumeaux VM à 0 | relevé J+1 lundi 12/10, puis mise en réserve des jumeaux (`vm_reserve.sh`) |
 | Google Analytics : 2 × `404` au changement d'URL, 1 flux coupé à 300 s | ne doit pas se répéter en régime établi | relevé lundi 12/10 |
+| ↳ relevé du 12/10 | **clos** : 404 et coupure non répétés depuis le 09/10 14:07 ; leexi 38 et ringover 109 appels d'outils sans erreur | — |
+| mcp-gateway : `LEEXI_INTERNAL_URL` / `RINGOVER_INTERNAL_URL` vers Cloud Run | repointage puis mise en réserve des 2 jumeaux ; recréation de mcp-gateway = coupure courte de tous les MCP | fenêtre à choisir avec le dev de mcp-gateway |
+| GSC : compte de service `mcp-search-console@…` sans droit sur la propriété domaine `sc-domain:hellopro.fr` | ajout du compte sur la propriété domaine si l'équipe en a besoin (propriétaire de la Search Console) | hors migration, à signaler à l'équipe |
+| Ringover : `/admin/users` en `502` (VM et Cloud Run, 12/10) — l'API Ringover refuse `FetchAllUsers` | sélecteurs utilisateurs/équipes Ringover de l'admin de la gateway, et périmètre des jetons Ringover, probablement inopérants depuis avant la migration ; cause à lire puis à signaler au dev | hors migration |
+| ↳ cause (12/10) | API Ringover `403 insufficient permissions` sur la liste des utilisateurs : droit à ajouter à la clé API côté Ringover (dev / admin Ringover) | hors migration |
+| ↳ retour (12/10) | message envoyé au dev ; restriction **probablement intentionnelle** (clé API limitée) → aucune action côté migration | — |
 
 ## 4. Correctifs DSO après migration (rapport aux devs ensuite)
 
