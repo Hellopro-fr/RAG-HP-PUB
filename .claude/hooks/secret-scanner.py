@@ -144,7 +144,8 @@ def is_benign_default(line, finding_name):
 # prefix: the `git -C <dir> <global options>` the invocation runs with.
 # stage: what it takes from the working tree, besides the index (see pending_paths);
 #        None for a call that only feeds `sources` to the object store.
-Target = namedtuple('Target', 'prefix stage sources')
+# fallback: why a wider tree than the call names was scanned (a FALLBACK_HINTS key), or None.
+Target = namedtuple('Target', 'prefix stage sources fallback', defaults=(None,))
 NOTHING = ('none', ())
 TRACKED = ('tracked', ())
 SUPERSET = ('superset', ())
@@ -170,6 +171,19 @@ PS_HERESTRING_OPEN = re.compile(r'@([\'"])\s*$')
 MSYS_DRIVE = re.compile(r'^/([A-Za-z])(?=/|$)')
 ENV_ASSIGNMENT = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*=')
 LEGACY_TRIGGER = re.compile(r'\bgit\b.*\b(add|stage|commit|apply|hash-object|update-index)\b', re.S)
+# Printed with a block the fallback caused: the fix belongs in the message read at
+# failure time, not only in a rule (A257).
+FALLBACK_HINTS = {
+    'location': "the target repository of a git call could not be resolved statically "
+                "(`$VAR`, backtick, or a missing directory in `git -C` / `cd`), so the whole "
+                "working tree of {where} was scanned instead. Write the path literally: "
+                "`git -C <literal path> ...`.",
+    'arguments': "an argument of a git call could not be resolved statically (`$VAR`, "
+                 "backtick), so the whole `git status` of {where} was scanned. "
+                 "Name the paths literally.",
+    'unparsed': "the command could not be parsed, so the whole working tree of {where} "
+                "was scanned. Issue one plain git command per call, with literal paths.",
+}
 
 
 def strip_heredocs(command):
@@ -394,18 +408,24 @@ def git_prefix(cwd):
     return ('git', '-C', cwd)
 
 
+def staging_target(prefix, stage, args):
+    """Target of an add/commit call; flags the superset an unresolved argument forced."""
+    dynamic = stage == SUPERSET and any(is_dynamic(a) for a in args)
+    return Target(prefix, stage, (), 'arguments' if dynamic else None)
+
+
 def target_for_call(cwd, args, hook_cwd):
     options, subcommand, sub_args = split_git_args(args)
     if subcommand not in STAGING_SUBCOMMANDS | SOURCE_SUBCOMMANDS:
         return None
     options = expand_global_options(options)
     if cwd is None or options is None:
-        return Target(git_prefix(hook_cwd), SUPERSET, ())   # former behaviour
+        return Target(git_prefix(hook_cwd), SUPERSET, (), 'location')   # former behaviour
     prefix = git_prefix(cwd) + tuple(options)
     if subcommand in ('add', 'stage'):
-        return Target(prefix, add_stage(sub_args), ())
+        return staging_target(prefix, add_stage(sub_args), sub_args)
     if subcommand == 'commit':
-        return Target(prefix, commit_stage(sub_args), ())
+        return staging_target(prefix, commit_stage(sub_args), sub_args)
     return Target(prefix, None, tuple(source_files(cwd, subcommand, sub_args)))
 
 
@@ -415,7 +435,7 @@ def plan_targets(command, dialect, hook_cwd):
         calls = find_git_calls(command, dialect, hook_cwd)
     except ValueError:
         if LEGACY_TRIGGER.search(command):
-            return [Target(git_prefix(hook_cwd), SUPERSET, ())]
+            return [Target(git_prefix(hook_cwd), SUPERSET, (), 'unparsed')]
         return []
     targets = []
     for cwd, args in calls:
@@ -566,9 +586,12 @@ def main():
 
     dialect = 'powershell' if hook_input.get('tool_name') == 'PowerShell' else 'bash'
     hook_cwd = hook_input.get('cwd') or os.getcwd()
-    all_findings = []
+    all_findings, hints = [], []
     for target in plan_targets(command, dialect, hook_cwd):
-        all_findings.extend(collect_findings(target))
+        findings = collect_findings(target)
+        all_findings.extend(findings)
+        if target.fallback and any(f[3] in ('critical', 'high') for f in findings):
+            hints.append(FALLBACK_HINTS[target.fallback].format(where=target.prefix[2]))
     all_findings = list(dict.fromkeys(all_findings))
 
     if not all_findings:
@@ -580,6 +603,8 @@ def main():
         msg = "🔴 BLOCKED: Potential secrets detected in files about to be committed:\n"
         for filepath, line, name, severity in critical:
             msg += f"  [{severity.upper()}] {filepath}:{line} — {name}\n"
+        for hint in dict.fromkeys(hints):
+            msg += f"\nWider scan than the command names: {hint}\n"
         msg += "\nUse environment variables instead. See .claude/rules/security.md"
         print(msg, file=sys.stderr)
         sys.exit(2)

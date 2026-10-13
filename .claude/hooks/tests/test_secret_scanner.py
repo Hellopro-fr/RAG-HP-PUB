@@ -65,13 +65,29 @@ def make_repo(root, name):
     return repo
 
 
-def run_hook(command, cwd, tool="Bash"):
-    """Exit code of the hook for `command` issued from `cwd`."""
+def run_hook_full(command, cwd, tool="Bash"):
+    """(exit code, stderr) of the hook for `command` issued from `cwd`."""
     payload = json.dumps({"tool_name": tool, "cwd": cwd,
                           "tool_input": {"command": command}})
     res = subprocess.run([sys.executable, HOOK], input=payload.encode("utf-8"),
                          capture_output=True, cwd=cwd, timeout=120)
-    return res.returncode
+    return res.returncode, res.stderr.decode("utf-8", "replace")
+
+
+def run_hook(command, cwd, tool="Bash"):
+    """Exit code of the hook for `command` issued from `cwd`."""
+    return run_hook_full(command, cwd, tool)[0]
+
+
+def hint_of(command, cwd):
+    """(exit code, which fallback hint the block message carries, or None) — A257."""
+    code, err = run_hook_full(command, cwd)
+    for key, marker in (("location", "`git -C <literal path> ...`"),
+                        ("arguments", "Name the paths literally"),
+                        ("unparsed", "could not be parsed")):
+        if marker in err:
+            return code, key
+    return code, None
 
 
 root = tempfile.mkdtemp(prefix="secret_scanner_")
@@ -98,6 +114,20 @@ try:
           run_hook(f"Set-Location {dirty}; git add -A", clean, tool="PowerShell"), 2)
     check("e2e: a quoted `git add` in a grep pattern does not trigger",
           run_hook('grep -n "git add" notes.txt', dirty), 0)
+
+    # --- the block message names a wider scan and its fix (A257, observation #618) ---
+    # The #618 case: a variable set by the command itself is unknown to the hook, so
+    # `git -C $M` fell back to the session repository and blocked on ITS file.
+    check("e2e: `git -C $VAR` from a dirty session repo blocks and says to write it literally",
+          hint_of(f"A257_REPO={clean}; git -C $A257_REPO add ok.txt", dirty), (2, "location"))
+    check("e2e: a dynamic pathspec blocks and says to name the paths literally",
+          hint_of("git add $A257_FILES", dirty), (2, "arguments"))
+    check("e2e: an unparseable command blocks and says so",
+          hint_of("git add -A && git commit -m \"it's", dirty), (2, "unparsed"))
+    check("e2e: a literal command that hits a secret carries no fallback hint",
+          hint_of("git add -A", dirty), (2, None))
+    check("e2e: `$` in a commit message only is no fallback",
+          hint_of('git add -A && git commit -m "$A257_MSG"', dirty), (2, None))
     if E2E_ONLY:
         raise SystemExit
 
@@ -146,6 +176,18 @@ try:
           [(prefix(), ("none", ()))])
     check("plan: unparseable command falls back to the former behaviour",
           stages("git commit -m \"it's"), [(("git", "-C", clean), ("superset", ()))])
+    def fallbacks(command, cwd=clean):
+        return [t.fallback for t in scanner.plan_targets(command, "bash", cwd)]
+
+    check("plan: `git -C $X` is a location fallback", fallbacks("git -C $X add f"), ["location"])
+    check("plan: `cd $X && git add f` is a location fallback",
+          fallbacks("cd $X && git add f"), ["location"])
+    check("plan: `git add $FILES` is an arguments fallback", fallbacks("git add $FILES"),
+          ["arguments"])
+    check("plan: `git add -p` is a superset but no dynamic argument",
+          fallbacks("git add -p"), [None])
+    check("plan: literal calls carry no fallback",
+          fallbacks("git add f && git commit -m wip"), [None, None])
     for cmd in ("git status", "git log --oneline -1", "git diff --cached", 'grep -n "git add" f'):
         check(f"plan: {cmd} -> nothing", stages(cmd), [])
     check("plan: PowerShell keeps backslashes in paths",
