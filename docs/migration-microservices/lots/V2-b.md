@@ -113,7 +113,7 @@
 | **mcp-google-analytics-minisite** — idem | | | DSO · dev |
 | **mcp-google-search-console** — idem | 12/10 08:27 UTC | ✅ **GO** : 19 outils identiques (comparés avant), test OK sur `https://www.hellopro.fr/` (`403` sur la propriété domaine = droit Google, hors migration), 0 code ≥ 400, jumeau en réserve | DSO · dev |
 | **mcp-semrush** — idem | | | DSO · dev |
-| **mcp-ringover** — idem | 09/10 ~12:23 UTC | ✅ **GO** (J+1 : 109 appels, 0 erreur ; jumeau **démarré**, appelé en direct par la gateway) : test OK, 319 × 200, 0 avertissement, jumeau VM à 0 | DSO · dev |
-| **mcp-leexi** — idem | 09/10 11:15 UTC | ✅ **GO** (J+1 : 38 appels, 0 erreur ; jumeau **démarré**, appelé en direct par la gateway) : test OK, 12 appels d'outils, 249 × 200, 0 avertissement, jumeau VM à 0 | DSO · dev |
+| **mcp-ringover** — idem | 09/10 ~12:23 UTC | ✅ **GO** (J+1 : 109 appels, 0 erreur ; gateway repointée le 13/10, jumeau en réserve) : test OK, 319 × 200, 0 avertissement, jumeau VM à 0 | DSO · dev |
+| **mcp-leexi** — idem | 09/10 11:15 UTC | ✅ **GO** (J+1 : 38 appels, 0 erreur ; gateway repointée le 13/10, périmètre testé, jumeau en réserve) : test OK, 12 appels d'outils, 249 × 200, 0 avertissement, jumeau VM à 0 | DSO · dev |
 | Relevé 17h / nuit | | | DSO |
 | **Décision J+1 9h30** (par serveur) | | | LEAD · DSO |
