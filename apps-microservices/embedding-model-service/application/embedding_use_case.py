@@ -508,15 +508,13 @@ class EmbeddingUseCase:
                 f"Requête d'embedding reçue de '{source_service or 'inconnu'}'. Priorité: {priority_label}. [Queues -> H:{len(self.high_queue)}, M:{len(self.medium_queue)}, L:{len(self.low_queue)}]"
             )
 
-            # Notify ciblé pour éviter le thundering herd :
-            # - HAUTE: réveille les high workers + shared workers
-            # - MOYENNE/BASSE: réveille 1 seul worker
-            if priority == 1:
-                self.queue_cond.notify(
-                    self._high_workers_count + self._shared_workers_count
-                )
-            else:
-                self.queue_cond.notify(1)
+            # Réveil de TOUS les workers en attente. Un notify ciblé (n < total)
+            # perd la requête quand le réveil tombe sur un worker qui ne sert pas
+            # cette priorité (HAUTE-only, BASSE-only, ou shared re-parqué derrière
+            # la porte HAUTE) : il se rendort et la requête attend la suivante —
+            # 300 s en prod le 2026-10-13 sur une file `[H:0, M:1, L:0]`. Avec ~10
+            # workers, le « thundering herd » coûte 10 tests de file : négligeable.
+            self.queue_cond.notify_all()
 
         try:
             return await future
