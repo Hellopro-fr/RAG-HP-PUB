@@ -1,0 +1,130 @@
+{
+  "script_crontab": {
+    "database_id": 1,
+    "description": "Registre DÉCLARATIF des scripts planifiés : 1 ligne = 1 script déclaré par un développeur dans le BO (page admin/monitoring_scripts_planifies/form_ajout_modif.php). ⛔ Ce N'EST PAS le crontab : déclarer une ligne ici ne planifie rien — la planification réelle est une ligne du crontab système posée par l'exploitant, et les deux divergent silencieusement (fréquence, heure, actif). Rôle réel : annuaire d'identifiants. id_script_crontab est l'entier codé en dur dans debut_script(N) / fin_script(N) de chaque script, qui journalisent ses lancements dans monitoring_script (monitoring_script.id_script = id_script_crontab). Jamais purgée : 2420 lignes déclarées de 2006 à 2026, dont 1437 sans aucun lancement depuis le 2022-06-22 (début de l'historique de monitoring_script) — mesuré le 2026-10-14. Pour savoir si un script tourne vraiment, interroger monitoring_script, pas cette table. Texte stocké en octets UTF-8 dans des colonnes latin1 : les accents s'affichent « Ã© » (voir description).",
+    "primary_key": "id_script_crontab",
+    "default_order_by": "id_script_crontab DESC",
+    "rows": null,
+    "columns": {
+      "id_script_crontab": {
+        "type": "int",
+        "desc": "Identifiant du script (PK, auto-increment). Clé de jointure avec monitoring_script.id_script : c'est la valeur N passée par le script à debut_script(N) / fin_script(N). Ids à trous (max 2456 pour 2420 lignes au 2026-10-14). ORDER BY id_script_crontab DESC = derniers scripts déclarés."
+      },
+      "url_script": {
+        "type": "varchar(255)",
+        "desc": "URL complète d'appel du script, déclarée (ex. https://script.hellopro.fr/script/annuaire/xxx.php). Hôtes au 2026-10-14 : script.hellopro.fr 1364, bo.hellopro.fr 611, www.hellopro.fr 346, www.edgb2b.com 93 (ancien domaine), plus 6 valeurs malformées (« script », « annuaire », « sccript.hellopro.fr »…). Déclaratif : peut différer de ce que cron appelle réellement (ex. id 2450 déclare un lanceur .sh alors que fichier nomme le .php)."
+      },
+      "fichier": {
+        "type": "varchar(255)",
+        "desc": "Nom du fichier du script, UNIQUE. Le plus souvent le nom de base .php (2236/2420), parfois un chemin relatif (212 lignes contiennent « / »), 3 en .sh. Sert de préfixe aux journaux d'exécution tmp/{fichier}.{AAMMJJ}-{HHMM}.log lus par admin/monitoring_scripts_planifies/ajax_logs.php, et de libellé dans le mail des chevauchements (liste_script_chevauche). Retrouver un script par son nom : WHERE fichier LIKE '%nom_du_script%'."
+      },
+      "frequence": {
+        "type": "varchar(255)",
+        "desc": "Fréquence DÉCLARÉE, code numérique stocké en chaîne : '1' Quotidien (1145), '2' Hebdomadaire (1115), '3' Bimensuel (6), '4' Mensuel (152), '5' Annuel (2) — libellés du formulaire, comptes au 2026-10-14. ⚠ Ne décrit pas la fréquence réelle : un script déclaré Quotidien peut tourner toutes les heures (ex. id 2452). La fréquence réelle se mesure dans monitoring_script (nombre de lignes par jour). Comparer en chaîne : frequence = '1'."
+      },
+      "description": {
+        "type": "text",
+        "desc": "Description libre du script saisie par le développeur (jamais vide). ⚠ Octets UTF-8 dans une colonne latin1 : « é » s'affiche « Ã© ». Pour chercher un mot accentué, écrire la forme affichée (LIKE '%sociÃ©tÃ©%' rend 656 lignes) ou un radical sans accent ; ⛔ LIKE '%société%' ne rend PAS la même population (223 lignes) — mesuré le 2026-10-14."
+      },
+      "duree": {
+        "type": "int",
+        "desc": "Durée d'exécution ESTIMÉE par le développeur, en secondes (libellé « s » du formulaire). 0 à 36000. Valeur saisie, jamais mesurée : la durée réelle d'un lancement est TIMESTAMPDIFF(SECOND, debut, fin) dans monitoring_script (etat = 2)."
+      },
+      "jour": {
+        "type": "int",
+        "desc": "Jour de la semaine déclaré, significatif SEULEMENT si frequence = '2' (Hebdomadaire) : 0 Dimanche, 1 Lundi … 6 Samedi. ⚠ 0 est aussi la valeur des scripts non hebdomadaires (1514 lignes à 0) : ne jamais lire « Dimanche » sans filtrer frequence = '2'. Une ligne vaut 10 (invalide)."
+      },
+      "mois": {
+        "type": "int",
+        "desc": "Mois déclaré (1 Janvier … 12 Décembre), significatif SEULEMENT si frequence = '5' (Annuel). ⚠ Le formulaire envoie 1 même quand le champ est masqué : 2408 lignes sur 2420 valent 1, 12 anciennes valent 0. N'en rien déduire hors frequence = '5'."
+      },
+      "auteur": {
+        "type": "varchar(255)",
+        "desc": "Développeur qui a déclaré le script : prénom (lignes anciennes, ex. « Sagaf ») ou prénom + nom (récentes). Choisi dans la liste des administrateurs BO (prenom_administrateur) par le formulaire ; texte, pas de FK. 92 valeurs distinctes au 2026-10-14."
+      },
+      "date_creation": {
+        "type": "date",
+        "desc": "Date de création DÉCLARÉE (saisie dans le formulaire). Du 2006-09-01 au 2026-10-02 au 2026-10-14, aucune date nulle. Pour « les derniers scripts déclarés », ORDER BY id_script_crontab DESC est plus sûr."
+      },
+      "heure_lancement": {
+        "type": "time",
+        "desc": "Heure de lancement DÉCLARÉE (HH:MM:SS). ⚠ Ce n'est pas l'horaire cron : id 2452 déclare 00:10:00 et tourne toutes les heures ; des valeurs à la seconde près (ex. 17:15:38) existent ; 61 lignes à 00:00:00. Utilisée par ajax_logs.php pour reconstruire le nom du log tmp/{fichier}.{AAMMJJ}-{HHMM}.log. Les heures réelles de lancement sont monitoring_script.debut."
+      },
+      "jour_du_mois": {
+        "type": "smallint",
+        "desc": "Jour du mois déclaré (1 à 26 observés), significatif SEULEMENT si frequence vaut '3' (Bimensuel), '4' (Mensuel) ou '5' (Annuel). ⚠ Vaut 1 par défaut pour les autres fréquences (12 lignes anciennes à 0) : n'en rien déduire hors de ces trois fréquences."
+      },
+      "tables_concernees": {
+        "type": "text",
+        "desc": "Tables touchées par le script, texte libre séparé par « ; » (consigne du formulaire), parfois préfixé d'un verbe SQL (« UPDATE mot_special_rubrique », « INSERT alerte;alerte_rubrique »). Vide pour 323 lignes. Déclaratif, jamais vérifié contre le code. Trouver les scripts qui touchent une table : LIKE '%nom_table%'."
+      },
+      "actif": {
+        "type": "tinyint(1)",
+        "desc": "Case « actif » du formulaire (1 = cochée, 0 sinon ; 79 lignes sur 2420 à 1). ⛔ NE signifie PAS « planifié » ni « en service » : sur les 7 jours précédant le 2026-10-14, 631 scripts se sont lancés avec actif = 0 contre 1 seul avec actif = 1. Aucun lecteur trouvé dans le code versionné hors le formulaire. Pour savoir si un script tourne : ses lignes récentes dans monitoring_script."
+      },
+      "business_sc": {
+        "type": "tinyint(1)",
+        "desc": "Pôle métier du script : 1 Annuaire (682), 2 Lead (182), 3 Comparateur (309), 4 Autres (136), 0 non renseigné (1111, lignes antérieures au champ) — comptes au 2026-10-14. Le mail des chevauchements (liste_script_chevauche) range 0 et 4 ensemble sous « AUTRE ». Indexé."
+      }
+    },
+    "relations": [
+      {
+        "column": "id_script_crontab",
+        "references": "monitoring_script.id_script",
+        "cardinality": "1:N",
+        "note": "Aucune FK en base. Un script déclaré a 0 à N lancements journalisés ; 1437 déclarés n'en ont aucun depuis 2022-06-22. Dans l'autre sens, tous les id_script lancés en 2026 existent ici (1 seul id orphelin sur tout l'historique)."
+      }
+    ],
+    "notes": "Écrivain unique : admin/monitoring_scripts_planifies/form_ajout_modif.php (INSERT et UPDATE, saisie manuelle par un développeur). Lecteurs : ajax_logs.php du même répertoire (fichier et heure_lancement, pour lire les logs tmp/), BO/fonctions/fonctions_script.php liste_script_chevauche (fichier et business_sc, mail des scripts relancés avant la fin du précédent), et les pages PROD liste_script.php / monitoring.php (non versionnées). La table ne pilote AUCUNE exécution. Requête type « ce script tourne-t-il ? » : SELECT s.id_script_crontab, s.fichier, MAX(m.debut) FROM script_crontab s LEFT JOIN monitoring_script m ON m.id_script = s.id_script_crontab WHERE s.fichier LIKE '%nom%' GROUP BY s.id_script_crontab, s.fichier."
+  },
+  "monitoring_script": {
+    "database_id": 1,
+    "description": "Journal des lancements des scripts planifiés : 1 ligne = 1 lancement d'un script instrumenté. debut_script(N) insère la ligne (debut = NOW(), etat = 1) ; fin_script(N, rapport) la complète (fin = NOW(), sortie_err = rapport, etat = 2). id_script = script_crontab.id_script_crontab (jointure pour fichier, description, business_sc). Historique depuis le 2022-06-22, jamais purgé : 1,64 million de lignes, environ 11 300 lancements par semaine (mesuré le 2026-10-14). ⚠ Seuls les scripts qui appellent debut_script / fin_script y figurent : l'absence de ligne ne prouve pas qu'un script n'est pas planifié. ⛔ etat = 1 ne veut PAS dire « en cours » (voir etat). Dates en heure du serveur MySQL (Europe/Paris). Table volumineuse : toujours filtrer par id_script et/ou une plage de debut, et trier par id_monitoring_script DESC.",
+    "primary_key": "id_monitoring_script",
+    "default_order_by": "id_monitoring_script DESC",
+    "rows": null,
+    "columns": {
+      "id_monitoring_script": {
+        "type": "bigint",
+        "desc": "Identifiant du lancement (PK, auto-increment), croissant dans le temps : ORDER BY id_monitoring_script DESC = lancements les plus récents. Aucune ligne supprimée depuis l'origine (nombre de lignes = id max au 2026-10-14)."
+      },
+      "id_script": {
+        "type": "int",
+        "desc": "Script lancé = script_crontab.id_script_crontab. Valeur codée en dur dans l'appel debut_script(N) du script (ex. 2452 = script_verif_error_log_phpfpm.php). 984 id distincts depuis 2022. Indexé seul et avec execution_ms. Dernier lancement d'un script : WHERE id_script = N ORDER BY id_monitoring_script DESC LIMIT 5."
+      },
+      "debut": {
+        "type": "datetime",
+        "desc": "Horodatage du lancement, NOW() du serveur MySQL (heure de Paris), posé par debut_script. Indexé : filtrer par plage (debut BETWEEN '2026-10-01' AND NOW()) sur cette table de plus d'un million de lignes. Plusieurs lignes du même id_script à la même seconde = lancements concurrents (ex. id 452)."
+      },
+      "fin": {
+        "type": "datetime",
+        "desc": "Horodatage de fin, NOW() du serveur, posé par fin_script. Vaut '0000-00-00 00:00:00' exactement quand etat = 1 (100 670 lignes au 2026-10-14). Durée réelle : TIMESTAMPDIFF(SECOND, debut, fin) en filtrant etat = 2 ; 7 lignes ont fin antérieure à debut (cause non établie, probablement le passage à l'heure d'hiver). ⚠ La durée d'une ligne fermée par un AUTRE lancement du même script (voir etat) est fausse."
+      },
+      "sortie_err": {
+        "type": "text",
+        "desc": "Rapport libre passé à fin_script(N, rapport). Malgré le nom, PAS seulement des erreurs : bilans, compteurs, listes (« Livraison leads Kia », « Skip domaine 2666 - … »). Vide pour environ 312 000 lignes. Les adresses mail y sont masquées par le gateway dans les résultats. Encodage mixte : majoritairement des octets UTF-8 dans une colonne latin1 (« é » affiché « Ã© »), minorité latin1. Textes potentiellement longs : ne pas sélectionner sans filtre id_script ni LIMIT ; préférer LEFT(sortie_err, 200)."
+      },
+      "etat": {
+        "type": "tinyint",
+        "desc": "1 = lancé, fin jamais enregistrée ; 2 = terminé (fin_script appelé). ⛔ etat = 1 ne veut PAS dire « en cours » : fin_script ferme la DERNIÈRE ligne de son id_script, pas celle de son propre lancement, et un script qui meurt avant fin_script laisse sa ligne à 1 pour toujours. Au 2026-10-14 : 100 670 lignes à 1, dont 100 629 ne sont pas la plus récente de leur id_script (lancements abandonnés ou chevauchés). Seule une ligne etat = 1 qui est la plus récente de son id_script peut correspondre à un lancement en cours. Pour la dernière fin réussie d'un script : WHERE id_script = N AND etat = 2 ORDER BY id_monitoring_script DESC LIMIT 1."
+      },
+      "dernier_script_ms": {
+        "type": "tinyint",
+        "desc": "⛔ JAMAIS ÉCRITE : 0 sur 100 % des lignes (1 640 430 au 2026-10-14), aucun écrivain dans le code BO ni FRONT versionné. Indexée mais sans information : ne pas filtrer ni conclure dessus."
+      },
+      "execution_ms": {
+        "type": "tinyint(1)",
+        "desc": "⛔ JAMAIS ÉCRITE : 0 sur 100 % des lignes (1 640 430 au 2026-10-14), aucun écrivain dans le code BO ni FRONT versionné. Présente dans l'index (id_script, execution_ms) mais sans information : ne pas filtrer ni conclure dessus."
+      }
+    },
+    "relations": [
+      {
+        "column": "id_script",
+        "references": "script_crontab.id_script_crontab",
+        "cardinality": "N:1",
+        "note": "Aucune FK en base. Tous les id_script lancés en 2026 existent dans script_crontab ; 1 seul id orphelin sur tout l'historique. Joindre pour obtenir fichier (nom du script), description et business_sc."
+      }
+    ],
+    "notes": "Écrivains : trois copies de debut_script / fin_script — BO/include/functions.php (lignes 1064 et 1111 ; cette copie journalise aussi les relances chevauchantes dans script/fichiers/log_script/log_echec_script_{jour}.txt, mailées par liste_script_chevauche), BO/admin/functions/functions.php (858 et 876), FRONT/hellopro_fr/fonctions/fonctions.php (2906 et 2919) — appelées depuis environ 174 fichiers du dépôt. Lecteurs : fin_script et debut_script eux-mêmes (dernière ligne de l'id_script), BO/admin/gest_com/form_recherche/ajax_trait_recherche.php (dernière fin du script 2108, etat = 2), et la page PROD monitoring.php (non versionnée). La page BO « liste des scripts planifiés » n'affiche pas cet historique. Requêtes types : scripts lancés sur 7 jours avec leur nom = SELECT m.id_script, s.fichier, COUNT(*) n, MAX(m.debut) FROM monitoring_script m JOIN script_crontab s ON s.id_script_crontab = m.id_script WHERE m.debut BETWEEN NOW() - INTERVAL 7 DAY AND NOW() GROUP BY m.id_script, s.fichier ORDER BY n DESC ; lancements jamais terminés récents = WHERE etat = 1 AND debut BETWEEN NOW() - INTERVAL 1 DAY AND NOW()."
+  }
+}
