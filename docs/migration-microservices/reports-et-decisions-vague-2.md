@@ -42,15 +42,18 @@
 |---|---|---|
 | Rafale d'embedding de 21h (V2-a2) | VM 8-12 % de `503` ; Cloud Run 17 % (07/10), 15,8 % (08/10) ; **seuil 20 %** | relevé de nuit suivant |
 | Repointage du crawler | jumeaux VM detection/extractor à 0 **et** Cloud Run qui reçoit les appels du crawl | premier crawl (aucun depuis le 07/10) |
-| **Maintenance GCE de la VM GPU** (12/10 20:00 → 13/10 00:00 UTC, arrêt + redémarrage) | état identique à la référence ; 62 conteneurs passés `no` → `unless-stopped` (09/10) | `vm_etat.sh snapshot` lundi 18h, `vm_etat.sh compare` mardi matin ; GPU + réservation L4 |
+| **Maintenance GCE de la VM GPU** (12/10 20:00 → 13/10 00:00 UTC, arrêt + redémarrage) | état identique à la référence ; 62 conteneurs passés `no` → `unless-stopped` (09/10) | **clos le 13/10** : VM redémarrée à 21:04 UTC, état identique à la référence, réservation L4 `READY`, GPU visibles, 5 MCP `healthy` |
 | MCP basculés (leexi, ringover, Google Analytics) | usage réel sur Cloud Run (leexi 2-114 appels/j, ringover 4-242/j), 0 erreur ; jumeaux VM à 0 | relevé J+1 lundi 12/10, puis mise en réserve des jumeaux (`vm_reserve.sh`) |
 | Google Analytics : 2 × `404` au changement d'URL, 1 flux coupé à 300 s | ne doit pas se répéter en régime établi | relevé lundi 12/10 |
 | ↳ relevé du 12/10 | **clos** : 404 et coupure non répétés depuis le 09/10 14:07 ; leexi 38 et ringover 109 appels d'outils sans erreur | — |
-| mcp-gateway : `LEEXI_INTERNAL_URL` / `RINGOVER_INTERNAL_URL` vers Cloud Run | repointage puis mise en réserve des 2 jumeaux ; recréation de mcp-gateway = coupure courte de tous les MCP | fenêtre à choisir avec le dev de mcp-gateway |
+| Recherche après la maintenance (13/10) | 5,6 % d'erreurs en régime établi (02h-06h UTC) ; pics à 21h-00h = arrêt et démarrage à froid | relevé de la nuit du 13 au 14/10 (seuil 15 %) |
+| mcp-gateway : `LEEXI_INTERNAL_URL` / `RINGOVER_INTERNAL_URL` vers Cloud Run | **fait le 13/10** (recréation 08:33 UTC, coupure ~4 s ; périmètre Leexi testé par le dev) ; 2 jumeaux en réserve | clos |
 | GSC : compte de service `mcp-search-console@…` sans droit sur la propriété domaine `sc-domain:hellopro.fr` | ajout du compte sur la propriété domaine si l'équipe en a besoin (propriétaire de la Search Console) | hors migration, à signaler à l'équipe |
 | Ringover : `/admin/users` en `502` (VM et Cloud Run, 12/10) — l'API Ringover refuse `FetchAllUsers` | sélecteurs utilisateurs/équipes Ringover de l'admin de la gateway, et périmètre des jetons Ringover, probablement inopérants depuis avant la migration ; cause à lire puis à signaler au dev | hors migration |
 | ↳ cause (12/10) | API Ringover `403 insufficient permissions` sur la liste des utilisateurs : droit à ajouter à la clé API côté Ringover (dev / admin Ringover) | hors migration |
 | ↳ retour (12/10) | message envoyé au dev ; restriction **probablement intentionnelle** (clé API limitée) → aucune action côté migration | — |
+| « RAG Hellopro » : défauts applicatifs vus au test du dev (13/10) — filtres INT64, `hybrid` sans BM25, ID arrondis, `siteweb_2` lent | **F-HP-DEV-013**, correctif DSO après migration + rapport aux devs ; contournements donnés par le dev (filtrer `devis` sur `categorie`, `id` de premier niveau, `semantic` sur `devis`) | hors migration (même code sur la VM) |
+| `llm-service` → API DeepSeek hébergée (13/10) | **F-HP-SEC-037** : à qualifier par le RSSI (données personnelles possibles dans les prompts) | hors migration |
 
 ## 4. Correctifs DSO après migration (rapport aux devs ensuite)
 
