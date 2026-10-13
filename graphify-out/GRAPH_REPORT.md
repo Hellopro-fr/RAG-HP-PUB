@@ -1,11 +1,11 @@
-# Graph Report - docs (--update, doc pass)  (2026-09-30)
+# Graph Report - scoped rebuild (scope derived from graphify-out/graph.json)  (2026-10-13)
 
 ## Corpus Check
-- 4 files · ~0 words
+- 791 files · ~0 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 12249 nodes · 28973 edges · 236 communities detected
+- 12254 nodes · 28979 edges · 236 communities detected
 - Extraction: 65% EXTRACTED · 35% INFERRED · 0% AMBIGUOUS · INFERRED: 10188 edges (avg confidence: 0.61)
 - Token cost: 0 input · 0 output
 
@@ -401,7 +401,7 @@ Nodes (1): Shared threading lock for pymilvus connection management.  All Milvus
 
 ### Community 32 - "common-utils: OCRDocExtractor"
 Cohesion: 0.06
-Nodes (36): Config, Embedding, _clean_text(), Ajoute une ligne avec le temps d’exécution dans temps_embedding.log, Délègue le chunking au microservice d'embedding., get_embeddings(), get_embedding(), tokenize() (+28 more)
+Nodes (41): Config, Embedding, _clean_text(), Ajoute une ligne avec le temps d’exécution dans temps_embedding.log, Délègue le chunking au microservice d'embedding., get_embeddings(), get_embedding(), tokenize() (+33 more)
 
 ### Community 131 - "common-utils: __init__.py"
 Cohesion: 1.0
@@ -1360,7 +1360,7 @@ Nodes (1): Garde : le driver livré à temps n'est arrêté que par le `finally`
   docs/superpowers/runbooks/examples/tracking_mail2bdd_tables.doc.json · relation: conceptually_related_to
 
 ## Knowledge Gaps
-- **3524 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+3519 more)
+- **3528 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+3523 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **Thin community `graphify-guide-en.md: Limitation: ID collision on sha...`** (1 nodes): `Creates a dictionary of headers for a DLQ message, compatible with both pika and`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
