@@ -1,4 +1,5 @@
 import grpc
+import json
 import os
 import logging
 from typing import List
@@ -17,7 +18,37 @@ GRPC_TIMEOUT = float(os.getenv("GRPC_TIMEOUT", "300.0"))
 # provoquait des CANCELLED à la fermeture + surcoût de handshake). Créé
 # paresseusement DANS la boucle courante — les canaux grpc.aio sont liés à
 # leur event loop, donc pas de création à l'import. Spec 2026-07-03.
+
+# Relance gRPC sur UNAVAILABLE seulement (R20, 2026-10-13). Quand
+# embedding-model-service est recréé, il change d'IP ; le canal partagé garde
+# l'ancienne, et le premier appel de chaque process échoue en « No route to
+# host » avant que gRPC ne ré-résolve le nom (mesuré : une rafale par réplique
+# d'api-classification, puis appels OK). La relance rejoue l'appel après la
+# ré-résolution. Toutes les méthodes du service sont rejouables sans effet de
+# bord. DEADLINE_EXCEEDED et RESOURCE_EXHAUSTED ne sont PAS relancés : le
+# premier signale une file pleine, le second est déterministe. Une requête
+# au-delà de grpc.per_rpc_retry_buffer_size (256 Kio par défaut) n'est pas
+# relancée : comportement d'avant, rien de pire.
+_RETRY_SERVICE_CONFIG = json.dumps(
+    {
+        "methodConfig": [
+            {
+                "name": [{"service": "embedding.EmbeddingService"}],
+                "retryPolicy": {
+                    "maxAttempts": 3,
+                    "initialBackoff": "1s",
+                    "maxBackoff": "2s",
+                    "backoffMultiplier": 2,
+                    "retryableStatusCodes": ["UNAVAILABLE"],
+                },
+            }
+        ]
+    }
+)
+
 _CHANNEL_OPTIONS = [
+    ("grpc.enable_retries", 1),
+    ("grpc.service_config", _RETRY_SERVICE_CONFIG),
     ("grpc.keepalive_time_ms", 30000),
     ("grpc.keepalive_timeout_ms", 10000),
     ("grpc.keepalive_permit_without_calls", 1),
