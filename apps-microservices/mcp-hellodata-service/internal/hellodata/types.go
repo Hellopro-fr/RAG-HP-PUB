@@ -72,6 +72,12 @@ type DemandeRecup struct {
 	N        int             `json:"n"`
 	Filtre   json.RawMessage `json:"filtre"`
 	CreePar  string          `json:"cree_par"`
+	// Colonnes vide : CSV historique a 8 colonnes. Sinon telephone_normalise
+	// puis ces colonnes, lues sur la fiche active du numero.
+	Colonnes    []string `json:"colonnes,omitempty"`
+	Restreintes bool     `json:"colonnes_restreintes_autorisees,omitempty"`
+	// Simulation : meme parcours, aucune ecriture, pas de CSV.
+	Simulation bool `json:"simulation,omitempty"`
 }
 
 // Recuperation est la reponse de recup_acheteur. CSV porte la liste des
@@ -88,6 +94,38 @@ type Recuperation struct {
 	// URLCSV est le lien signe (15 min) de download.php sur le BO qui
 	// regenere ce CSV. Vide sur un moteur plus ancien : repli sur /download.
 	URLCSV string `json:"url_csv"`
+	// Simulation est l'echo du moteur : absent alors qu'on l'a demande, le
+	// moteur ne connait pas le mode et a REELLEMENT reserve.
+	Simulation bool `json:"simulation"`
+}
+
+// Contact est un element de liste deja envoyee : exactement un des deux
+// identifiants (le wrapper le verifie avant le reseau).
+type Contact struct {
+	Telephone  string `json:"telephone,omitempty"`
+	IDAcheteur int    `json:"id_acheteur,omitempty"`
+}
+
+// DemandeInscription est la charge utile de l'action inscrire_contacts du
+// BO : une liste deja envoyee, a la date reelle de la campagne.
+type DemandeInscription struct {
+	Campagne Campagne  `json:"campagne"`
+	Contacts []Contact `json:"contacts"`
+	CreePar  string    `json:"cree_par"`
+}
+
+// Inscription est la reponse de inscrire_contacts. Les listes rendent les
+// valeurs telles que recues, pour que l'utilisateur les retrouve dans son
+// fichier.
+type Inscription struct {
+	IDCampagne       int      `json:"id_campagne"`
+	CampagneCreee    bool     `json:"campagne_creee"`
+	Inscrits         int      `json:"inscrits"`
+	DejaDansCampagne int      `json:"deja_dans_campagne"`
+	DoublonsListe    int      `json:"doublons_liste"`
+	Inconnus         []string `json:"inconnus"`
+	Invalides        []string `json:"invalides"`
+	NePlusContacter  []string `json:"ne_plus_contacter"`
 }
 
 // LigneBilan est une campagne vue par bilan_campagnes.
@@ -102,6 +140,7 @@ type LigneBilan struct {
 	NegativeContactable int    `json:"negative_contactable"`
 	NegativeStop        int    `json:"negative_stop"`
 	SansReponse         int    `json:"sans_reponse"`
+	LeadsTransmis       int    `json:"leads_transmis"`
 }
 
 type Bilan struct {
@@ -113,6 +152,9 @@ type Reponse struct {
 	Telephone    string `json:"telephone"`
 	ReponseBrute string `json:"reponse_brute"`
 	Categorie    string `json:"categorie"`
+	// DateReponse : date reelle de la reponse saisie apres coup ; absente,
+	// le webhook prend NOW().
+	DateReponse string `json:"date_reponse,omitempty"`
 }
 
 // DemandeReponses est la charge utile du webhook FRONT enregistrer_reponses.
@@ -126,4 +168,23 @@ type ResultatReponses struct {
 	Inconnus     []string `json:"inconnus"`
 	HorsCampagne []string `json:"hors_campagne"`
 	StopForce    int      `json:"stop_force"`
+}
+
+// Lead est un contact transmis au client, apres une reponse positive.
+type Lead struct {
+	Telephone        string `json:"telephone"`
+	DateTransmission string `json:"date_transmission,omitempty"`
+}
+
+// DemandeLeads est la charge utile du webhook FRONT marquer_leads.
+type DemandeLeads struct {
+	CodeCampagne string `json:"code_campagne"`
+	Leads        []Lead `json:"leads"`
+}
+
+type ResultatLeads struct {
+	Marques      int      `json:"marques"`
+	Inconnus     []string `json:"inconnus"`
+	HorsCampagne []string `json:"hors_campagne"`
+	NonPositifs  []string `json:"non_positifs"`
 }

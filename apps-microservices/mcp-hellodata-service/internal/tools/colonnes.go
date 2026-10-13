@@ -1,6 +1,9 @@
 package tools
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // colonne est une colonne projetable du moteur. Nom est la cle attendue par
 // requete.php (mcp_hd_sql_catalogue_colonnes) ; Libelle est le nom du champ
@@ -90,4 +93,23 @@ func colonneConnue(nom string) bool {
 		}
 	}
 	return false
+}
+
+// validerColonnes est la regle commune a echantillon, export_csv et
+// recup_acheteur : toutes les colonnes connues d'abord, puis le droit aux
+// colonnes restreintes. Le message est celui que le LLM corrige.
+func validerColonnes(colonnes []string, droit bool) error {
+	for _, c := range colonnes {
+		if !colonneConnue(c) {
+			return fmt.Errorf("colonne_inconnue: '%s'. Colonnes disponibles : %s", c, listeColonnes())
+		}
+	}
+	if !droit {
+		for _, c := range colonnes {
+			if colonnesRestreintes[c] {
+				return fmt.Errorf("colonne_restreinte: '%s' exige le role admin ou un grant hellodata", c)
+			}
+		}
+	}
+	return nil
 }
