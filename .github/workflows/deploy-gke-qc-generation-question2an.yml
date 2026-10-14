@@ -27,3 +27,5 @@ jobs:
       deployment: qc-generation-question2an
       container: qc-generation-question2an
       namespace: apps-microservices
+    secrets:
+      slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
