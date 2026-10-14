@@ -39,6 +39,7 @@ on:
       - 'apps-microservices/mcp-google-search-console-service/**'
       - 'apps-microservices/mcp-leexi-service/**'
       - 'apps-microservices/mcp-ringover-service/**'
+      - 'apps-microservices/mcp-semrush-service/**'
       - 'apps-microservices/nettoyage-bruit-ocr-service/**'
       - 'apps-microservices/optimize-service/**'
       - 'apps-microservices/prix-caracterisation/**'
@@ -93,6 +94,7 @@ on:
       - 'apps-microservices/mcp-google-search-console-service/**'
       - 'apps-microservices/mcp-leexi-service/**'
       - 'apps-microservices/mcp-ringover-service/**'
+      - 'apps-microservices/mcp-semrush-service/**'
       - 'apps-microservices/nettoyage-bruit-ocr-service/**'
       - 'apps-microservices/optimize-service/**'
       - 'apps-microservices/prix-caracterisation/**'
@@ -130,7 +132,7 @@ jobs:
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
-          MIGRES: 'api-chat-llm api-comparaison-texte api-detection-langue-fr api-embedding-service api-question-caracteristique api-recherche content-extractor-api-service deepseek-metrics-collector-service devis-processor-service di-database-qdrant-service document-database-qdrant-service echange-database-qdrant-service echange-processor-service embedding-service graph-rag-api-recherche-optim-service graph-rag-api-recherche-rust-service graph-rag-api-recherche-service graph-rag-categorie-processor graph-rag-etl-processor graph-rag-fournisseur-processor graph-rag-llm-extractor-processor graph-rag-normalize-unite-processor graph-rag-normalize-unite-retry-processor graph-rag-produit-processor graph-rag-semantique-vigil-processor mcp-api-recherche-service mcp-google-analytics-service mcp-google-search-console-service mcp-leexi-service mcp-ringover-service nettoyage-bruit-ocr-service optimize-service prix-caracterisation prix-extraction-devis prix-extraction-message prix-extraction-produits prix-milvus-processor prix-traitement product-database-qdrant-service product-processor-service QC-caracterisation QC-enrichissement QC-equivalence QC-generation-caracteristiques QC-generation-question1 QC-generation-question2aN QC-generation-valeurs template-llm-service webhook-service website-database-qdrant-service website-processor-service'
+          MIGRES: 'api-chat-llm api-comparaison-texte api-detection-langue-fr api-embedding-service api-question-caracteristique api-recherche content-extractor-api-service deepseek-metrics-collector-service devis-processor-service di-database-qdrant-service document-database-qdrant-service echange-database-qdrant-service echange-processor-service embedding-service graph-rag-api-recherche-optim-service graph-rag-api-recherche-rust-service graph-rag-api-recherche-service graph-rag-categorie-processor graph-rag-etl-processor graph-rag-fournisseur-processor graph-rag-llm-extractor-processor graph-rag-normalize-unite-processor graph-rag-normalize-unite-retry-processor graph-rag-produit-processor graph-rag-semantique-vigil-processor mcp-api-recherche-service mcp-google-analytics-service mcp-google-search-console-service mcp-leexi-service mcp-ringover-service mcp-semrush-service nettoyage-bruit-ocr-service optimize-service prix-caracterisation prix-extraction-devis prix-extraction-message prix-extraction-produits prix-milvus-processor prix-traitement product-database-qdrant-service product-processor-service QC-caracterisation QC-enrichissement QC-equivalence QC-generation-caracteristiques QC-generation-question1 QC-generation-question2aN QC-generation-valeurs template-llm-service webhook-service website-database-qdrant-service website-processor-service'
         run: |
           set -uo pipefail
           CHANGES=$(git diff --name-only "$BASE" "$HEAD" 2>/dev/null | cut -d/ -f2 | sort -u)
