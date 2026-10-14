@@ -59,6 +59,9 @@ jobs:
       # V2-a3 : route la plus chargee de la vague (4 800 a 6 800 appels/jour via la gateway) -> 1 instance chaude.
       min_instances: 1
       max_instances: 3
+      # 14/10 : la VM n'imposait aucun delai (gateway sans timeout pour search-service) ; des requetes de nuit (~20 Ko, en boucle)
+      # depassaient les 300 s par defaut de Cloud Run -> 504 toutes les 5 min. 900 s = parite raisonnable, cout = temps de traitement.
+      request_timeout: '900'
       # CMD gunicorn --bind 0.0.0.0:8510 (hardcode dans le Dockerfile).
       container_port: 8510
       # *** Override workers : le Dockerfile lance "gunicorn -w 8" (calibre VM 24 vCPU).
