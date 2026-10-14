@@ -9,6 +9,7 @@ name: 'Deploy — GKE service (réutilisable, shadow)'
 #  - Rollback auto : `kubectl rollout undo` si le rollout échoue
 #  RBAC namespacé requis : Role/RoleBinding `github-deployer-gke-set-image` (ns cible) — cf. manifest/cicd/github-deployer-rbac.yaml
 #  Trivy : volontairement absent au pilote (ajout à la généralisation CD3).
+#  Slack (14/10) : notification de fin de déploiement, comme deploy-cloud-run.yml (skip si le secret est absent).
 
 on:
   workflow_call:
@@ -20,6 +21,10 @@ on:
       container:     { description: 'Nom du container dans le Deployment', required: true, type: string }
       namespace:     { description: 'Namespace K8s', required: false, type: string, default: 'apps-microservices' }
       cluster:       { description: 'Fleet membership / cluster (Connect Gateway)', required: false, type: string, default: 'matching-api-dev-k8s' }
+    secrets:
+      slack_webhook_url:
+        description: 'URL Slack webhook pour notif post-deploy (optionnel)'
+        required: false
 
 permissions:
   id-token: write
@@ -64,6 +69,7 @@ jobs:
             --project "${{ vars.GCP_PROJECT_ID }}"
 
       - name: Set image + rollout (undo si échec)
+        id: rollout
         run: |
           set -euo pipefail
           kubectl set image "deployment/${{ inputs.deployment }}" \
@@ -79,3 +85,32 @@ jobs:
         run: |
           kubectl get "deployment/${{ inputs.deployment }}" -n "${{ inputs.namespace }}" \
             -o jsonpath='{range .spec.template.spec.containers[*]}{.name}={.image}{"\n"}{end}'
+
+      - name: Summary + Slack notification (optionnel - skip si secret absent)
+        if: always()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.slack_webhook_url }}
+          JOB_STATUS: ${{ job.status }}
+          ROLLOUT: ${{ steps.rollout.outcome }}
+        run: |
+          set -euo pipefail
+          if [ "$JOB_STATUS" = "success" ]; then GLOBAL="success"; ICON=":white_check_mark:"
+          elif [ "$ROLLOUT" = "failure" ]; then GLOBAL="rolled-back (rollout KO, undo)"; ICON=":rotating_light:"
+          else GLOBAL="failed"; ICON=":x:"; fi
+          {
+            echo "## ${ICON} Deploy GKE — ${{ inputs.deployment }}"
+            echo ""
+            echo "| Champ | Valeur |"
+            echo "|---|---|"
+            echo "| Deployment | \`${{ inputs.namespace }}/${{ inputs.deployment }}\` |"
+            echo "| Image | \`${IMG:-non construite}\` |"
+            echo "| Rollout | ${ROLLOUT:-skipped} |"
+            echo "| **Statut global** | **${GLOBAL}** |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ -z "${SLACK_WEBHOOK_URL:-}" ]; then
+            echo "Slack webhook URL non configuré, skip notification."
+            exit 0
+          fi
+          TEXT="${ICON} *Deploy GKE ${{ inputs.deployment }}* — ${GLOBAL}\n• Image: \`${IMG:-non construite}\`\n• Namespace: \`${{ inputs.namespace }}\`"
+          PAYLOAD=$(printf '{"text":"%s","blocks":[{"type":"section","text":{"type":"mrkdwn","text":"%s"}}]}' "${ICON} *Deploy GKE ${{ inputs.deployment }}* — ${GLOBAL}" "$TEXT")
+          curl -fsS -X POST -H "Content-Type: application/json" -d "$PAYLOAD" "$SLACK_WEBHOOK_URL"
