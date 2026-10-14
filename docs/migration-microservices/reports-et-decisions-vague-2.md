@@ -19,6 +19,7 @@
 | **V2-a3-bis** : `api-rest-milvus`, `api-classification`, `api-ingestion` | basculés le 08/10, **remis sur la VM** (08/10 16:22 ; 09/10 09:10), lot reporté (09/10) | rest-milvus : `global-stats` en `503` hors rafale ; classification : 97 % d'échecs sur la rafale de nuit (lenteur) ; ingestion : `413` (corps > 32 Mio) | `lots/V2-a3-bis.md`, `lots/V2-a3.md`, logs `data/cutover` du 08-09/10 | 3 correctifs DSO (cf. fiche) | quand la réduction de la VM le rend utile |
 | **V2-a4** : `agent-service`, `mcp-hellodata-service` (+ `mcp-normalize-unite`) | préparé puis **différé** (07/10) ; Cloud Run supprimés | services en stabilisation (correctifs fréquents via `features/poc`) | `lots/V2-a4.md` (check-list du jour J) | drift `poc` → rapatriement, CD, parité, bascule | feu vert des devs « stabilisés » |
 | `unit-registry`, `neo4j_new`, `tailscale`, `mcp-template-neo4j` | **restent sur la VM** (07/10) | services temporaires / liaison VPS OpenClaw | `suivi-vague-2.md` (07/10 14:30) | rapatrier leur code dans `prod` quand même | — |
+| `mcp-google-analytics-minisite-service` (V2-b) | **reste sur la VM, pas d'arrêt** (14/10) | aucun usage depuis le 30/05, mais le projet de mini-sites reprend bientôt avec de nouveaux sites | `lots/V2-b.md` | migrer avec la reprise du projet (même méthode que GA : P0, fichier d'identifiants, outils) | reprise du projet mini-sites |
 | `document-echange-processor-service`, `qc-fabricant-reference`, `prix-extraction-siteweb` | **restent sur la VM** (vague 1) | pas d'équivalent GKE | `inventaire-services-migration-par-lot.md:227`, `correspondance-endpoints-vm-cloud.md:130` | lot à définir | réduction de la VM |
 | `mcp-classification-produit-service` (V2-b) | basculé le 09/10 08:30 UTC, **remis sur la VM** (09/10) et **rattaché à V2-a3-bis** | dépend d'api-classification : sur Cloud Run il appelle l'URL `run.app` d'api-classification, en entrée interne → `404` ; et api-classification est revenue sur la VM | `suivi-vague-2.md` (09/10 ~11:40), `deploy-mcp-classification-produit-service.yml:58`, `deploy-api-classification.yml:62` | à la reprise de V2-a3-bis : VPC Connector sur le MCP **ou** URL interne, après la bascule d'api-classification | avec V2-a3-bis |
 
@@ -47,6 +48,8 @@
 | Google Analytics : 2 × `404` au changement d'URL, 1 flux coupé à 300 s | ne doit pas se répéter en régime établi | relevé lundi 12/10 |
 | ↳ relevé du 12/10 | **clos** : 404 et coupure non répétés depuis le 09/10 14:07 ; leexi 38 et ringover 109 appels d'outils sans erreur | — |
 | Recherche après la maintenance (13/10) | 5,6 % d'erreurs en régime établi (02h-06h UTC) ; pics à 21h-00h = arrêt et démarrage à froid | relevé de la nuit du 13 au 14/10 (seuil 15 %) |
+| ↳ nuit du 13 au 14/10 | jour 0,4 % ; **nuit 39 %** (paquets de `504` par heure, déjà présents la nuit précédente) → diagnostic de l'appelant de nuit en cours ; pas de retour arrière avant d'en connaître la cause | 14/10 |
+| ↳ décision (14/10) | **délai Cloud Run de la recherche porté à 900 s** (PR) : la VM n'avait pas de délai ; coût = temps de traitement, pas de surcoût permanent ; mesure la nuit du 14 au 15/10 | retour immédiat sur la VM (gain de jour perdu : 0,4 % contre 7,7 %) |
 | mcp-gateway : `LEEXI_INTERNAL_URL` / `RINGOVER_INTERNAL_URL` vers Cloud Run | **fait le 13/10** (recréation 08:33 UTC, coupure ~4 s ; périmètre Leexi testé par le dev) ; 2 jumeaux en réserve | clos |
 | GSC : compte de service `mcp-search-console@…` sans droit sur la propriété domaine `sc-domain:hellopro.fr` | ajout du compte sur la propriété domaine si l'équipe en a besoin (propriétaire de la Search Console) | hors migration, à signaler à l'équipe |
 | Ringover : `/admin/users` en `502` (VM et Cloud Run, 12/10) — l'API Ringover refuse `FetchAllUsers` | sélecteurs utilisateurs/équipes Ringover de l'admin de la gateway, et périmètre des jetons Ringover, probablement inopérants depuis avant la migration ; cause à lire puis à signaler au dev | hors migration |
@@ -57,6 +60,8 @@
 
 ## 4. Correctifs DSO après migration (rapport aux devs ensuite)
 
+> **Décision user (14/10)** : les signalements **hors migration** (sécurité, gouvernance, défauts applicatifs, droits d'outils tiers) sont **décidés et traités par le DSO** dans ce lot post-migration, puis rapport à l'équipe ; ils ne bloquent pas la migration.
+
 | Finding | Objet | Statut |
 |---|---|---|
 | F-HP-DEV-010 | `api-detection-langue-fr` : erreur d'encodage sur surrogates isolés (`language_detector.py:~482`) | 🟡 tracé |
@@ -66,4 +71,10 @@
 | F-HP-SEC-035 | gateway VM « fail-open » : service routé sans politique d'autorisation = public | 🟠 ouvert (inventaire possible avant) |
 | F-HP-SEC-036 | mcp-gateway n'écrit plus son journal d'audit (`Field 'event'`) : aucune trace des appels d'outils MCP | 🟠 ouvert |
 | F-HP-SEC-031 / 032 / 033 / 034 | `SYNC_TOKEN` en dur (opti-moteur) ; ACL Tailscale ; agent-service sans auth ; hellodata en-têtes non signés | 🟡/🟠 ouverts |
-| Compose : `restart: unless-stopped` | rendre durable la correction du 09/10 (un `compose up -d` remet `no`) | ⬜ PR à faire |
+| Compose : `restart: unless-stopped` | rendre durable la correction du 09/10 (un `compose up -d` remet `no`) ; mcp-gateway l'a déjà dans le compose | ⬜ PR à faire |
+| **F-HP-SEC-037** | LLM via l'API DeepSeek hébergée (`llm-service`) — **action DSO** : inventaire des flux (services, types de données), puis option retenue avec le RSSI : modèle interne (vLLM sur la VM GPU) ou fournisseur sous contrat UE ; d'ici là, ne pas injecter `echanges` (données personnelles) dans les prompts ; corriger la description « vLLM » de l'outil MCP | 🟠 décidé : post-migration |
+| **F-HP-DEV-013** | mcp-api-recherche : filtres INT64 (`UseNumber` / typage), clés inconnues rejetées, `hybrid` seulement avec BM25, ID non arrondis, index de `siteweb_2` | 🟡 décidé : post-migration |
+| Semrush (retours du dev, 14/10) | `ERROR 50 :: NOTHING FOUND` → résultat vide « aucun mot-clé payant » ; clarifier la description de `keyword_overview` ; `display_limit` par défaut plus bas (ou avertissement) sur les outils de backlinks (40 unités / ligne) | ⬜ post-migration (amélioration) |
+| GSC : propriété domaine `sc-domain:hellopro.fr` | **réglé le 14/10** : l'équipe utilise `https://www.hellopro.fr/` comme `site_url` | ✅ clos, rien à faire |
+| Ringover : `/admin/users` `403` (clé API sans droit « utilisateurs ») | probablement voulu ; si les jetons Ringover à périmètre doivent servir, ajouter le droit de lecture des utilisateurs à la clé (`mcp-ringover-api-key` + variable VM) | ⬜ sur besoin |
+| F-HP-SEC-035 (sondes de scanners vues le 13/10) | gateway VM « fail-open » : refuser les services inconnus, bloquer `/.env`, `/google-key.json`… | 🟠 décidé : post-migration |

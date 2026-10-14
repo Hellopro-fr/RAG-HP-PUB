@@ -41,6 +41,7 @@ Le déploiement ne se déclenche que si votre PR touche le dossier du service (o
 | prix-traitement | `apps-microservices/prix-traitement` | `deploy-prix-traitement.yml` |
 | mcp-leexi-service | `apps-microservices/mcp-leexi-service` | `deploy-mcp-leexi-service.yml` |
 | mcp-ringover-service | `apps-microservices/mcp-ringover-service` | `deploy-mcp-ringover-service.yml` |
+| mcp-semrush-service | `apps-microservices/mcp-semrush-service` | `deploy-mcp-semrush-service.yml` |
 | mcp-google-analytics-service | `apps-microservices/mcp-google-analytics-service` | `deploy-mcp-google-analytics-service.yml` |
 | mcp-google-search-console-service | `apps-microservices/mcp-google-search-console-service` | `deploy-mcp-google-search-console-service.yml` |
 | mcp-api-recherche-service (« RAG Hellopro ») | `apps-microservices/mcp-api-recherche-service` | `deploy-mcp-api-recherche-service.yml` |
@@ -64,7 +65,6 @@ Ces services tournent toujours sur la VM. Continuez à livrer par `features/poc`
 |---|---|
 | api-classification, api-ingestion, api-rest-milvus, mcp-classification-produit-service | lot reporté (correctifs en cours côté DevSecOps) |
 | agent-service, mcp-hellodata-service | en stabilisation |
-| mcp-semrush-service | migration en préparation (prochaine étape) |
 | mcp-google-analytics-minisite-service | migré avec la reprise du projet mini-sites |
 | mcp-gateway-service et mcp-gateway-frontend, mcp-zoho-service, mcp-google-templates-runner | pile de la gateway MCP |
 | dlq-manager-service, graph-rag-dlq-manager, graph-rag-api-admin-service | gestionnaires DLQ et admin GraphRAG |

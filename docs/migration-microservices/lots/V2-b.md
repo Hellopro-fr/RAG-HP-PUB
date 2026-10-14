@@ -110,9 +110,9 @@
 | **mcp-api-recherche** (« RAG Hellopro ») — plan / apply / check / test | 12/10 11:10 UTC | ✅ **GO** : 6 outils testés par le dev (chaîne gateway → Cloud Run → enabler gRPC → GPU), 0 code ≥ 400, jumeau en réserve | DSO · dev |
 | **mcp-classification-produit** — idem | 09/10 08:30 → 08:54 UTC | ❌ **retour arrière** : `404` sur `classify_products_batch` (appelle api-classification Cloud Run en entrée interne, sans VPC ; api-classification revenue sur la VM) → **rattaché à V2-a3-bis** | DSO · dev |
 | **mcp-google-analytics** — idem | 09/10 ~14:00 UTC | ✅ **GO** (J+1 12/10 OK, jumeau en réserve) : test OK, 9 outils (7 de la VM + 2 nouveaux, `analytics-mcp==0.6.0`), 207 × 200 ; 2 × 404 au changement et 1 flux coupé à 300 s à surveiller | DSO · dev |
-| **mcp-google-analytics-minisite** — idem | | | DSO · dev |
+| **mcp-google-analytics-minisite** — idem | — | ⏸️ **reste sur la VM** (14/10) : peu utilisé, projet de mini-sites qui reprend bientôt → migré avec ce projet | DSO · dev |
 | **mcp-google-search-console** — idem | 12/10 08:27 UTC | ✅ **GO** : 19 outils identiques (comparés avant), test OK sur `https://www.hellopro.fr/` (`403` sur la propriété domaine = droit Google, hors migration), 0 code ≥ 400, jumeau en réserve | DSO · dev |
-| **mcp-semrush** — idem | | | DSO · dev |
+| **mcp-semrush** — idem | 14/10 12:48 UTC | ✅ **GO** : code rapatrié de `poc` (PR #896, 58 tests OK), 23 outils identiques, test du dev 16 outils OK, 0 code ≥ 400 | DSO · dev |
 | **mcp-ringover** — idem | 09/10 ~12:23 UTC | ✅ **GO** (J+1 : 109 appels, 0 erreur ; gateway repointée le 13/10, jumeau en réserve) : test OK, 319 × 200, 0 avertissement, jumeau VM à 0 | DSO · dev |
 | **mcp-leexi** — idem | 09/10 11:15 UTC | ✅ **GO** (J+1 : 38 appels, 0 erreur ; gateway repointée le 13/10, périmètre testé, jumeau en réserve) : test OK, 12 appels d'outils, 249 × 200, 0 avertissement, jumeau VM à 0 | DSO · dev |
 | Relevé 17h / nuit | | | DSO |
