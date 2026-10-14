@@ -1,0 +1,31 @@
+name: 'Deploy GKE — prix-milvus-processor'
+
+# CD GKE (14/10, lot « prix ») : consumer migre en vague 1, deploye jusqu'ici a la main (image posee via Cloud Build).
+# Un merge vers `prod` qui touche ce service (ou ce wrapper) reconstruit l'image depuis `prod`, la pousse (tag sha-<commit>),
+# fait `kubectl set image` puis attend le rollout ; en cas d'echec, `rollout undo` (cf. deploy-gke-service.yml).
+# Context build = RACINE (le Dockerfile copie libs/ et le service). Modele : deploy-gke-product-processor.yml.
+
+on:
+  push:
+    branches: [prod]
+    paths:
+      - 'apps-microservices/prix-milvus-processor/**'
+      - '.github/workflows/deploy-gke-prix-milvus-processor.yml'
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/deploy-gke-service.yml
+    with:
+      service_name: prix-milvus-processor
+      dockerfile: apps-microservices/prix-milvus-processor/Dockerfile
+      build_context: .
+      deployment: prix-milvus-processor
+      container: prix-milvus-processor
+      namespace: apps-microservices
+    secrets:
+      slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
