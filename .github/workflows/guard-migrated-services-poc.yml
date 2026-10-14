@@ -1,0 +1,151 @@
+name: 'Garde-fou — service migré modifié sur features/poc'
+
+# 14/10 (migration ticket 001) : ces services sont migrés (Cloud Run / GKE). Leur production se livre par une PR vers `prod`
+# (le merge déclenche leur CD) ; un changement poussé sur `features/poc` ne part PAS en production.
+# Ce workflow ne bloque rien : il signale (annotation + résumé) les dossiers migrés touchés.
+# Guide : docs/runbooks/guide-livraison-services-migres.md. Liste à tenir à jour à chaque migration.
+
+on:
+  pull_request:
+    branches: [features/poc]
+    paths:
+      - 'apps-microservices/api-chat-llm/**'
+      - 'apps-microservices/api-comparaison-texte/**'
+      - 'apps-microservices/api-detection-langue-fr/**'
+      - 'apps-microservices/api-embedding-service/**'
+      - 'apps-microservices/api-question-caracteristique/**'
+      - 'apps-microservices/api-recherche/**'
+      - 'apps-microservices/content-extractor-api-service/**'
+      - 'apps-microservices/deepseek-metrics-collector-service/**'
+      - 'apps-microservices/devis-processor-service/**'
+      - 'apps-microservices/di-database-qdrant-service/**'
+      - 'apps-microservices/document-database-qdrant-service/**'
+      - 'apps-microservices/echange-database-qdrant-service/**'
+      - 'apps-microservices/echange-processor-service/**'
+      - 'apps-microservices/embedding-service/**'
+      - 'apps-microservices/graph-rag-api-recherche-optim-service/**'
+      - 'apps-microservices/graph-rag-api-recherche-rust-service/**'
+      - 'apps-microservices/graph-rag-api-recherche-service/**'
+      - 'apps-microservices/graph-rag-categorie-processor/**'
+      - 'apps-microservices/graph-rag-etl-processor/**'
+      - 'apps-microservices/graph-rag-fournisseur-processor/**'
+      - 'apps-microservices/graph-rag-llm-extractor-processor/**'
+      - 'apps-microservices/graph-rag-normalize-unite-processor/**'
+      - 'apps-microservices/graph-rag-normalize-unite-retry-processor/**'
+      - 'apps-microservices/graph-rag-produit-processor/**'
+      - 'apps-microservices/graph-rag-semantique-vigil-processor/**'
+      - 'apps-microservices/mcp-api-recherche-service/**'
+      - 'apps-microservices/mcp-google-analytics-service/**'
+      - 'apps-microservices/mcp-google-search-console-service/**'
+      - 'apps-microservices/mcp-leexi-service/**'
+      - 'apps-microservices/mcp-ringover-service/**'
+      - 'apps-microservices/nettoyage-bruit-ocr-service/**'
+      - 'apps-microservices/optimize-service/**'
+      - 'apps-microservices/prix-caracterisation/**'
+      - 'apps-microservices/prix-extraction-devis/**'
+      - 'apps-microservices/prix-extraction-message/**'
+      - 'apps-microservices/prix-extraction-produits/**'
+      - 'apps-microservices/prix-milvus-processor/**'
+      - 'apps-microservices/prix-traitement/**'
+      - 'apps-microservices/product-database-qdrant-service/**'
+      - 'apps-microservices/product-processor-service/**'
+      - 'apps-microservices/QC-caracterisation/**'
+      - 'apps-microservices/QC-enrichissement/**'
+      - 'apps-microservices/QC-equivalence/**'
+      - 'apps-microservices/QC-generation-caracteristiques/**'
+      - 'apps-microservices/QC-generation-question1/**'
+      - 'apps-microservices/QC-generation-question2aN/**'
+      - 'apps-microservices/QC-generation-valeurs/**'
+      - 'apps-microservices/template-llm-service/**'
+      - 'apps-microservices/webhook-service/**'
+      - 'apps-microservices/website-database-qdrant-service/**'
+      - 'apps-microservices/website-processor-service/**'
+  push:
+    branches: [features/poc]
+    paths:
+      - 'apps-microservices/api-chat-llm/**'
+      - 'apps-microservices/api-comparaison-texte/**'
+      - 'apps-microservices/api-detection-langue-fr/**'
+      - 'apps-microservices/api-embedding-service/**'
+      - 'apps-microservices/api-question-caracteristique/**'
+      - 'apps-microservices/api-recherche/**'
+      - 'apps-microservices/content-extractor-api-service/**'
+      - 'apps-microservices/deepseek-metrics-collector-service/**'
+      - 'apps-microservices/devis-processor-service/**'
+      - 'apps-microservices/di-database-qdrant-service/**'
+      - 'apps-microservices/document-database-qdrant-service/**'
+      - 'apps-microservices/echange-database-qdrant-service/**'
+      - 'apps-microservices/echange-processor-service/**'
+      - 'apps-microservices/embedding-service/**'
+      - 'apps-microservices/graph-rag-api-recherche-optim-service/**'
+      - 'apps-microservices/graph-rag-api-recherche-rust-service/**'
+      - 'apps-microservices/graph-rag-api-recherche-service/**'
+      - 'apps-microservices/graph-rag-categorie-processor/**'
+      - 'apps-microservices/graph-rag-etl-processor/**'
+      - 'apps-microservices/graph-rag-fournisseur-processor/**'
+      - 'apps-microservices/graph-rag-llm-extractor-processor/**'
+      - 'apps-microservices/graph-rag-normalize-unite-processor/**'
+      - 'apps-microservices/graph-rag-normalize-unite-retry-processor/**'
+      - 'apps-microservices/graph-rag-produit-processor/**'
+      - 'apps-microservices/graph-rag-semantique-vigil-processor/**'
+      - 'apps-microservices/mcp-api-recherche-service/**'
+      - 'apps-microservices/mcp-google-analytics-service/**'
+      - 'apps-microservices/mcp-google-search-console-service/**'
+      - 'apps-microservices/mcp-leexi-service/**'
+      - 'apps-microservices/mcp-ringover-service/**'
+      - 'apps-microservices/nettoyage-bruit-ocr-service/**'
+      - 'apps-microservices/optimize-service/**'
+      - 'apps-microservices/prix-caracterisation/**'
+      - 'apps-microservices/prix-extraction-devis/**'
+      - 'apps-microservices/prix-extraction-message/**'
+      - 'apps-microservices/prix-extraction-produits/**'
+      - 'apps-microservices/prix-milvus-processor/**'
+      - 'apps-microservices/prix-traitement/**'
+      - 'apps-microservices/product-database-qdrant-service/**'
+      - 'apps-microservices/product-processor-service/**'
+      - 'apps-microservices/QC-caracterisation/**'
+      - 'apps-microservices/QC-enrichissement/**'
+      - 'apps-microservices/QC-equivalence/**'
+      - 'apps-microservices/QC-generation-caracteristiques/**'
+      - 'apps-microservices/QC-generation-question1/**'
+      - 'apps-microservices/QC-generation-question2aN/**'
+      - 'apps-microservices/QC-generation-valeurs/**'
+      - 'apps-microservices/template-llm-service/**'
+      - 'apps-microservices/webhook-service/**'
+      - 'apps-microservices/website-database-qdrant-service/**'
+      - 'apps-microservices/website-processor-service/**'
+
+permissions:
+  contents: read
+
+jobs:
+  avertir:
+    name: 'Service migré : livrer par une PR vers prod'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+      - name: Dossiers migrés touchés
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          MIGRES: 'api-chat-llm api-comparaison-texte api-detection-langue-fr api-embedding-service api-question-caracteristique api-recherche content-extractor-api-service deepseek-metrics-collector-service devis-processor-service di-database-qdrant-service document-database-qdrant-service echange-database-qdrant-service echange-processor-service embedding-service graph-rag-api-recherche-optim-service graph-rag-api-recherche-rust-service graph-rag-api-recherche-service graph-rag-categorie-processor graph-rag-etl-processor graph-rag-fournisseur-processor graph-rag-llm-extractor-processor graph-rag-normalize-unite-processor graph-rag-normalize-unite-retry-processor graph-rag-produit-processor graph-rag-semantique-vigil-processor mcp-api-recherche-service mcp-google-analytics-service mcp-google-search-console-service mcp-leexi-service mcp-ringover-service nettoyage-bruit-ocr-service optimize-service prix-caracterisation prix-extraction-devis prix-extraction-message prix-extraction-produits prix-milvus-processor prix-traitement product-database-qdrant-service product-processor-service QC-caracterisation QC-enrichissement QC-equivalence QC-generation-caracteristiques QC-generation-question1 QC-generation-question2aN QC-generation-valeurs template-llm-service webhook-service website-database-qdrant-service website-processor-service'
+        run: |
+          set -uo pipefail
+          CHANGES=$(git diff --name-only "$BASE" "$HEAD" 2>/dev/null | cut -d/ -f2 | sort -u)
+          TOUCHES=""
+          for d in $MIGRES; do echo "$CHANGES" | grep -qx "$d" && TOUCHES="$TOUCHES $d"; done
+          {
+            echo "## ⚠️ Service migré modifié sur features/poc"
+            echo ""
+            echo "Ces services tournent sur Cloud Run / GKE : **ce changement ne part pas en production depuis features/poc**."
+            echo "Pour le livrer, ouvrez la même modification en **PR vers \`prod\`** (le merge déclenche le CD du service)."
+            echo ""
+            for d in $TOUCHES; do echo "- \`apps-microservices/$d\`"; done
+            echo ""
+            echo "Guide : \`docs/runbooks/guide-livraison-services-migres.md\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+          for d in $TOUCHES; do
+            echo "::warning title=Service migré::apps-microservices/$d est migré : ce changement ne part pas en production depuis features/poc. Livrez-le par une PR vers prod (guide docs/runbooks/guide-livraison-services-migres.md)."
+          done
