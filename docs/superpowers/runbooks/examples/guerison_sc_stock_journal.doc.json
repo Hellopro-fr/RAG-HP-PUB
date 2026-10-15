@@ -1,0 +1,53 @@
+{
+  "guerison_sc_stock_journal": {
+    "database_id": 10,
+    "description": "Journal du lot STOCK de la guérison après Safety Catch (chantier A278) : 1 ligne = 1 lancement du mode stock de V2 (script_scrapping_produit_ia_V2.php, paramètres stock=1 stock_cm=...) pour un couple (domaine, crawl_metrics MAJ sorti en Safety Catch). Le mode stock réinitialise les champs des fiches SFPI restés figés sur la valeur de l'ancienne page (titre, description, prix, image, catégorie, livraison, stock) pour qu'ils soient ré-extraits, sans changer le statut DSPI ni envoyer de mail. Cycle de vie : le lanceur CLI script/chatgpt/script_guerison_sc_stock.php insère la ligne en etat='lance' AVANT d'exécuter V2 ; V2 la passe à 'termine' en fin de run ; si V2 sort en code 75 (doublon) ou 77 (refus du mode stock), le lanceur SUPPRIME la ligne. Clé UNIQUE (id_domaine, id_crawl_metrics) : un couple n'est traité qu'une fois ; le lanceur saute tout couple présent ici, 'lance' comme 'termine'. ⚠ Table vide au 2026-10-15 (COUNT(*) = 0) : le lanceur n'a encore jamais été lancé en PROD (lot A278 suspendu sur décision user) — une absence de ligne ne prouve donc pas qu'un domaine a été exclu.",
+    "primary_key": "id_guerison_sc_stock_journal",
+    "default_order_by": "id_guerison_sc_stock_journal DESC",
+    "rows": null,
+    "columns": {
+      "id_guerison_sc_stock_journal": {
+        "type": "int",
+        "desc": "Identifiant unique (PK, auto-incrément). Aucune autre table ne le référence."
+      },
+      "id_domaine": {
+        "type": "int",
+        "desc": "Domaine traité. FK vers domaine_scrapping_produit_ia.id_domaine_scrapping_produit_ia (même valeur que crawl_metrics.id_domaine). 1re colonne de la clé UNIQUE uk_domaine_cm (id_domaine, id_crawl_metrics). Écrit par le lanceur à l'insertion, jamais modifié."
+      },
+      "id_crawl_metrics": {
+        "type": "int",
+        "desc": "Run de MAJ en Safety Catch qui a déclenché la guérison. FK vers crawl_metrics.id_crawl_metric (sans s final côté crawl_metrics) ; c'est le dernier crawl_metrics crawl_type='maj' du domaine (MAX(date_end)) dont error_code est dans selecteurs_invalides, partial_products_undetected, identification_corrompue, no_filter_never_qualified. 2e colonne de la clé UNIQUE : une nouvelle MAJ du domaine produit un nouvel id, donc une nouvelle clé possible."
+      },
+      "statut_entree": {
+        "type": "tinyint",
+        "desc": "Valeur de domaine_scrapping_produit_ia.statut_dspi au moment du lancement. Le lanceur ne prend que les domaines au repos : 6, 13 ou 14 (2, 3, 4, 5 = pipeline en cours, sautés). En mode stock, V2 NE réécrit PAS statut_dspi : le statut du domaine après le run doit donc rester égal à cette valeur. Écrite, jamais relue par le code (sert au contrôle manuel)."
+      },
+      "etat": {
+        "type": "enum",
+        "desc": "Valeurs : 'lance' | 'termine' (défaut 'lance'). 'lance' = ligne insérée par le lanceur, V2 pas (encore) arrivé en fin de run : run en cours, OU sortie anticipée de V2 (pas d'URL, report heure creuse, crash, code retour autre que 0/75/77) — dans ce dernier cas la ligne reste 'lance' indéfiniment et BLOQUE toute relance du couple. Relancer = supprimer la ligne à la main (décision manuelle). 'termine' = V2 a fini et rempli date_fin, nb_fiches, resets_par_type ; une ligne 'termine' n'est jamais supprimée par le code. Indexée (idx_etat)."
+      },
+      "date_lancement": {
+        "type": "datetime",
+        "desc": "Insertion de la ligne par le lanceur, juste avant l'exécution de V2 (NOW() du serveur MySQL ; heure de Paris, constatée le 2026-10-15 par server_date du MCP). Non nulle."
+      },
+      "date_fin": {
+        "type": "datetime",
+        "desc": "Fin du run V2 en mode stock (NOW() du serveur MySQL), écrite au passage à 'termine'. NULL tant que etat='lance'. date_fin - date_lancement = durée du run pour le domaine (indicateur du pilote)."
+      },
+      "nb_fiches": {
+        "type": "int",
+        "desc": "Nombre de fiches SFPI (scrapping_fiche_produit_ia) dont au moins un champ a été réinitialisé par le plan STOCK (hors resets du lot flux, fusionnés par V2 mais non comptés ici). NULL tant que etat='lance' ; 0 possible en 'termine'."
+      },
+      "resets_par_type": {
+        "type": "text",
+        "desc": "JSON objet des couples (fiche, type) réinitialisés par le plan stock, par type de donnée, toujours les 7 clés dans cet ordre, zéros compris : {\"titre\":n,\"description\":n,\"prix\":n,\"image\":n,\"categorie\":n,\"livraison\":n,\"stock\":n} (entiers). La somme peut dépasser nb_fiches (une fiche compte une fois par type). NULL tant que etat='lance'. Lire avec JSON_EXTRACT(resets_par_type, '$.titre')."
+      }
+    },
+    "relations": [
+      {"column": "id_domaine", "references": "domaine_scrapping_produit_ia.id_domaine_scrapping_produit_ia"},
+      {"column": "id_crawl_metrics", "references": "crawl_metrics.id_crawl_metric"},
+      {"columns": ["id_domaine", "id_crawl_metrics"], "unique_key": "uk_domaine_cm", "note": "un seul lancement par couple domaine / run MAJ Safety Catch"}
+    ],
+    "notes": "Écrivains (code Marketplace) : BO/admin/repertoire_test/moulinettes_interne/scrapping_produit_ia/fonctions/fonctions_guerison_sc_journal.php — guerison_sc_journal_lancer (INSERT IGNORE, etat='lance'), appelé par BO/script/chatgpt/script_guerison_sc_stock.php ; guerison_sc_journal_terminer (UPDATE ... WHERE etat='lance', passe à 'termine'), appelé par script_scrapping_produit_ia_V2.php en fin de run stock=1 ; guerison_sc_journal_annuler (DELETE ... WHERE etat='lance'), appelé par le lanceur sur code retour 75 ou 77. Seul lecteur : lire_cles_journal_stock() (fonctions_guerison_sc.php), qui lit id_domaine et id_crawl_metrics pour exclure les couples déjà journalisés. Requêtes utiles : runs restés en cours ou bloqués = WHERE etat='lance' (comparer date_lancement à la durée habituelle d'un run 'termine') ; durée moyenne = AVG(TIMESTAMPDIFF(SECOND, date_lancement, date_fin)) WHERE etat='termine'."
+  }
+}
