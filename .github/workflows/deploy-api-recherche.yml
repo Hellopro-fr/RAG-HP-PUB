@@ -56,8 +56,8 @@ jobs:
       cpu: '1'
       # 1Gi : 2 workers gunicorn + pymilvus/grpc/common_utils (512Mi trop juste au boot).
       memory: '1Gi'
-      # V2-a3 : route la plus chargee de la vague (4 800 a 6 800 appels/jour via la gateway) -> 1 instance chaude.
-      min_instances: 1
+      # 15/10 : route recherche revenue sur la VM (lot de nuit qui sature Cloud Run, cf. rapports/decision-retour-vm-api-recherche-2026-10-15.md) -> scale-to-zero
+      min_instances: 0
       max_instances: 3
       # 14/10 : la VM n'imposait aucun delai (gateway sans timeout pour search-service) ; des requetes de nuit (~20 Ko, en boucle)
       # depassaient les 300 s par defaut de Cloud Run -> 504 toutes les 5 min. 900 s = parite raisonnable, cout = temps de traitement.
