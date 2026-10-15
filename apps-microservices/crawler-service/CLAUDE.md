@@ -941,8 +941,13 @@ is empty — Crawlee no longer pre-throws on status; every status reaches the ha
 | transient | 408, 425, 500, 502, 503, 504, 509, 521-526 | retry (≤ `maxRequestRetries`) |
 | ok | all others (2xx/3xx + unlisted) | proceed to extraction |
 
-Navigation timeouts (no HTTP response at all) are capped in `failedRequestHandler`:
-after `TIMEOUT_MAX_RETRIES`, `request.noRetry` is set.
+Navigation timeouts (no HTTP response at all) are capped in `errorHandler`
+(`errorHandlerNoRetryReason`): once a timeout has been retried `TIMEOUT_MAX_RETRIES`
+times, `request.noRetry` is set ⇒ at most `TIMEOUT_MAX_RETRIES + 1` attempts (3 × 90 s by
+default). It must stay there: `errorHandler` runs before Crawlee's retry decision, while
+`failedRequestHandler` is terminal — the cap lived there until 2026-10-15 and was inert
+(every timeout ran `maxRequestRetries + 1` = 6 × 90 s). The predicate also matches any
+`TimeoutError`, so a `requestHandler timed out` is capped the same way.
 
 **Env vars (optional; defaults baked in, inherited by the Node subprocess):**
 
