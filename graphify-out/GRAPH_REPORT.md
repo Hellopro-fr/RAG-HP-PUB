@@ -1,11 +1,11 @@
-# Graph Report - scoped rebuild (scope derived from graphify-out/graph.json)  (2026-10-13)
+# Graph Report - scoped rebuild (scope derived from graphify-out/graph.json)  (2026-10-16)
 
 ## Corpus Check
 - 791 files · ~0 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 12254 nodes · 28979 edges · 236 communities detected
+- 12256 nodes · 28983 edges · 236 communities detected
 - Extraction: 65% EXTRACTED · 35% INFERRED · 0% AMBIGUOUS · INFERRED: 10188 edges (avg confidence: 0.61)
 - Token cost: 0 input · 0 output
 
@@ -565,7 +565,7 @@ Nodes (16): Archive Pre-flight Disk Space Check (2026-04-18), Rationale: Diagnos
 
 ### Community 1 - "Crawler Engine Core (main/functions)"
 Cohesion: 0.0
-Nodes (963): verify_api_key(), Verifies the API key if API_KEY is configured in settings.     If API_KEY is not, resetContextState(), makeTmpStorage(), classifyFragment(), recordClassification(), maybeCommitDecision(), writeDecisionFile() (+955 more)
+Nodes (964): verify_api_key(), Verifies the API key if API_KEY is configured in settings.     If API_KEY is not, resetContextState(), makeTmpStorage(), classifyFragment(), recordClassification(), maybeCommitDecision(), writeDecisionFile() (+956 more)
 
 ### Community 60 - "Crawler Engine Core (main/functions)"
 Cohesion: 0.31

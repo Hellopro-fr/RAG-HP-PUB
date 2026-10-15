@@ -4923,8 +4923,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\grpc_clients\\embedding_client.py",
       "source_location": "L83",
       "community": 32,
-      "id": "embedding_client_get_embeddings",
-      "norm_label": "get_embeddings()"
+      "norm_label": "get_embeddings()",
+      "id": "embedding_client_get_embeddings"
     },
     {
       "label": "get_embedding()",
@@ -4932,8 +4932,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\grpc_clients\\embedding_client.py",
       "source_location": "L108",
       "community": 32,
-      "id": "embedding_client_get_embedding",
-      "norm_label": "get_embedding()"
+      "norm_label": "get_embedding()",
+      "id": "embedding_client_get_embedding"
     },
     {
       "label": "tokenize()",
@@ -4941,8 +4941,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\grpc_clients\\embedding_client.py",
       "source_location": "L117",
       "community": 32,
-      "id": "embedding_client_tokenize",
-      "norm_label": "tokenize()"
+      "norm_label": "tokenize()",
+      "id": "embedding_client_tokenize"
     },
     {
       "label": "detokenize()",
@@ -4950,8 +4950,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\grpc_clients\\embedding_client.py",
       "source_location": "L136",
       "community": 32,
-      "id": "embedding_client_detokenize",
-      "norm_label": "detokenize()"
+      "norm_label": "detokenize()",
+      "id": "embedding_client_detokenize"
     },
     {
       "label": "chunk_text()",
@@ -4959,8 +4959,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\grpc_clients\\embedding_client.py",
       "source_location": "L160",
       "community": 32,
-      "id": "embedding_client_chunk_text",
-      "norm_label": "chunk_text()"
+      "norm_label": "chunk_text()",
+      "id": "embedding_client_chunk_text"
     },
     {
       "label": "Appelle le service gRPC pour obtenir les embeddings pour une liste de textes.",
@@ -4995,8 +4995,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\grpc_clients\\embedding_client.py",
       "source_location": "L72",
       "community": 32,
-      "id": "embedding_client_rationale_72",
-      "norm_label": "ferme et oublie le canal partage (hermetisme des tests / boucles distinctes)."
+      "norm_label": "ferme et oublie le canal partage (hermetisme des tests / boucles distinctes).",
+      "id": "embedding_client_rationale_72"
     },
     {
       "label": "Appelle le service gRPC pour d\u00e9couper un texte en chunks.",
@@ -14289,8 +14289,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
       "source_location": "L63",
       "community": 1,
-      "norm_label": "getapifyproxyurl()",
-      "id": "functions_getapifyproxyurl"
+      "id": "functions_getapifyproxyurl",
+      "norm_label": "getapifyproxyurl()"
     },
     {
       "label": "maskProxyUrl()",
@@ -14298,8 +14298,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
       "source_location": "L76",
       "community": 1,
-      "norm_label": "maskproxyurl()",
-      "id": "functions_maskproxyurl"
+      "id": "functions_maskproxyurl",
+      "norm_label": "maskproxyurl()"
     },
     {
       "label": "waitAndScroll()",
@@ -14307,8 +14307,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
       "source_location": "L99",
       "community": 1,
-      "norm_label": "waitandscroll()",
-      "id": "functions_waitandscroll"
+      "id": "functions_waitandscroll",
+      "norm_label": "waitandscroll()"
     },
     {
       "label": "processPage()",
@@ -14316,8 +14316,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
       "source_location": "L164",
       "community": 1,
-      "norm_label": "processpage()",
-      "id": "functions_processpage"
+      "id": "functions_processpage",
+      "norm_label": "processpage()"
     },
     {
       "label": "getPageContentWithRetry()",
@@ -14325,8 +14325,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
       "source_location": "L200",
       "community": 1,
-      "norm_label": "getpagecontentwithretry()",
-      "id": "functions_getpagecontentwithretry"
+      "id": "functions_getpagecontentwithretry",
+      "norm_label": "getpagecontentwithretry()"
     },
     {
       "label": "detectChallengePage()",
@@ -14334,8 +14334,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
       "source_location": "L234",
       "community": 1,
-      "norm_label": "detectchallengepage()",
-      "id": "functions_detectchallengepage"
+      "id": "functions_detectchallengepage",
+      "norm_label": "detectchallengepage()"
     },
     {
       "label": "waitForChallengeResolution()",
@@ -14343,8 +14343,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
       "source_location": "L339",
       "community": 1,
-      "norm_label": "waitforchallengeresolution()",
-      "id": "functions_waitforchallengeresolution"
+      "id": "functions_waitforchallengeresolution",
+      "norm_label": "waitforchallengeresolution()"
     },
     {
       "label": "dropDataset()",
@@ -14352,8 +14352,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
       "source_location": "L421",
       "community": 1,
-      "norm_label": "dropdataset()",
-      "id": "functions_dropdataset"
+      "id": "functions_dropdataset",
+      "norm_label": "dropdataset()"
     },
     {
       "label": "startCrawler()",
@@ -14361,188 +14361,188 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
       "source_location": "L460",
       "community": 1,
-      "norm_label": "startcrawler()",
-      "id": "functions_startcrawler"
+      "id": "functions_startcrawler",
+      "norm_label": "startcrawler()"
     },
     {
       "label": "isStoppedManualy()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L989",
+      "source_location": "L986",
       "community": 1,
-      "norm_label": "isstoppedmanualy()",
-      "id": "functions_isstoppedmanualy"
+      "id": "functions_isstoppedmanualy",
+      "norm_label": "isstoppedmanualy()"
     },
     {
       "label": "getUrlsCrawled()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L1019",
+      "source_location": "L1016",
       "community": 1,
-      "norm_label": "geturlscrawled()",
-      "id": "functions_geturlscrawled"
+      "id": "functions_geturlscrawled",
+      "norm_label": "geturlscrawled()"
     },
     {
       "label": "updateUrlsCrawled()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L1177",
+      "source_location": "L1174",
       "community": 1,
-      "norm_label": "updateurlscrawled()",
-      "id": "functions_updateurlscrawled"
+      "id": "functions_updateurlscrawled",
+      "norm_label": "updateurlscrawled()"
     },
     {
       "label": "updateUrlsCrawledStreaming()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L1201",
+      "source_location": "L1198",
       "community": 1,
-      "norm_label": "updateurlscrawledstreaming()",
-      "id": "functions_updateurlscrawledstreaming"
+      "id": "functions_updateurlscrawledstreaming",
+      "norm_label": "updateurlscrawledstreaming()"
     },
     {
       "label": "copyPreviousMethod()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L1372",
+      "source_location": "L1369",
       "community": 1,
-      "norm_label": "copypreviousmethod()",
-      "id": "functions_copypreviousmethod"
+      "id": "functions_copypreviousmethod",
+      "norm_label": "copypreviousmethod()"
     },
     {
       "label": "generateUpdateReport()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L1415",
+      "source_location": "L1412",
       "community": 1,
-      "norm_label": "generateupdatereport()",
-      "id": "functions_generateupdatereport"
+      "id": "functions_generateupdatereport",
+      "norm_label": "generateupdatereport()"
     },
     {
       "label": "getScrapingData()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L1524",
+      "source_location": "L1521",
       "community": 1,
-      "norm_label": "getscrapingdata()",
-      "id": "functions_getscrapingdata"
+      "id": "functions_getscrapingdata",
+      "norm_label": "getscrapingdata()"
     },
     {
       "label": "storeKeyValueStore()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L1581",
+      "source_location": "L1578",
       "community": 1,
-      "norm_label": "storekeyvaluestore()",
-      "id": "functions_storekeyvaluestore"
+      "id": "functions_storekeyvaluestore",
+      "norm_label": "storekeyvaluestore()"
     },
     {
       "label": "getPathAfterDomain()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L1629",
+      "source_location": "L1626",
       "community": 1,
-      "norm_label": "getpathafterdomain()",
-      "id": "functions_getpathafterdomain"
+      "id": "functions_getpathafterdomain",
+      "norm_label": "getpathafterdomain()"
     },
     {
       "label": "rightTrimSlash()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L1660",
+      "source_location": "L1657",
       "community": 1,
-      "norm_label": "righttrimslash()",
-      "id": "functions_righttrimslash"
+      "id": "functions_righttrimslash",
+      "norm_label": "righttrimslash()"
     },
     {
       "label": "attachFSLogger()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L1685",
+      "source_location": "L1682",
       "community": 1,
-      "norm_label": "attachfslogger()",
-      "id": "functions_attachfslogger"
+      "id": "functions_attachfslogger",
+      "norm_label": "attachfslogger()"
     },
     {
       "label": "stripAnsi()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L1782",
+      "source_location": "L1779",
       "community": 1,
-      "norm_label": "stripansi()",
-      "id": "functions_stripansi"
+      "id": "functions_stripansi",
+      "norm_label": "stripansi()"
     },
     {
       "label": "reclaimFailedRequest()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L1811",
+      "source_location": "L1808",
       "community": 1,
-      "norm_label": "reclaimfailedrequest()",
-      "id": "functions_reclaimfailedrequest"
+      "id": "functions_reclaimfailedrequest",
+      "norm_label": "reclaimfailedrequest()"
     },
     {
       "label": "routerDefaultHandler()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L1854",
+      "source_location": "L1851",
       "community": 1,
-      "norm_label": "routerdefaulthandler()",
-      "id": "functions_routerdefaulthandler"
+      "id": "functions_routerdefaulthandler",
+      "norm_label": "routerdefaulthandler()"
     },
     {
       "label": "stopCrawler()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L1882",
+      "source_location": "L1879",
       "community": 1,
-      "norm_label": "stopcrawler()",
-      "id": "functions_stopcrawler"
+      "id": "functions_stopcrawler",
+      "norm_label": "stopcrawler()"
     },
     {
       "label": "escapeRegExp()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L1893",
+      "source_location": "L1890",
       "community": 1,
-      "norm_label": "escaperegexp()",
-      "id": "functions_escaperegexp"
+      "id": "functions_escaperegexp",
+      "norm_label": "escaperegexp()"
     },
     {
       "label": "getAllRequestQueues()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L1910",
+      "source_location": "L1907",
       "community": 1,
-      "norm_label": "getallrequestqueues()",
-      "id": "functions_getallrequestqueues"
+      "id": "functions_getallrequestqueues",
+      "norm_label": "getallrequestqueues()"
     },
     {
       "label": "processUrl()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L2121",
+      "source_location": "L2118",
       "community": 1,
-      "norm_label": "processurl()",
-      "id": "functions_processurl"
+      "id": "functions_processurl",
+      "norm_label": "processurl()"
     },
     {
       "label": "parseJsonFiles()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L2211",
+      "source_location": "L2208",
       "community": 1,
-      "norm_label": "parsejsonfiles()",
-      "id": "functions_parsejsonfiles"
+      "id": "functions_parsejsonfiles",
+      "norm_label": "parsejsonfiles()"
     },
     {
       "label": "manageFrenchDetectionMethod()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L2254",
+      "source_location": "L2251",
       "community": 1,
-      "norm_label": "managefrenchdetectionmethod()",
-      "id": "functions_managefrenchdetectionmethod"
+      "id": "functions_managefrenchdetectionmethod",
+      "norm_label": "managefrenchdetectionmethod()"
     },
     {
       "label": "main.ts",
@@ -20694,8 +20694,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
       "source_location": "L1",
       "community": 1,
-      "norm_label": "functions.ts",
-      "id": "functions_ts"
+      "id": "functions_ts",
+      "norm_label": "functions.ts"
     },
     {
       "label": "main.ts",
@@ -63198,8 +63198,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\httpStatusPolicy.ts",
       "source_location": "L1",
       "community": 1,
-      "norm_label": "httpstatuspolicy.ts",
-      "id": "httpstatuspolicy_ts"
+      "id": "httpstatuspolicy_ts",
+      "norm_label": "httpstatuspolicy.ts"
     },
     {
       "label": "classifyHttpStatus()",
@@ -63207,8 +63207,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\httpStatusPolicy.ts",
       "source_location": "L25",
       "community": 1,
-      "norm_label": "classifyhttpstatus()",
-      "id": "httpstatuspolicy_classifyhttpstatus"
+      "id": "httpstatuspolicy_classifyhttpstatus",
+      "norm_label": "classifyhttpstatus()"
     },
     {
       "label": "resolveNavigationWaitUntil()",
@@ -63216,8 +63216,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\httpStatusPolicy.ts",
       "source_location": "L43",
       "community": 1,
-      "norm_label": "resolvenavigationwaituntil()",
-      "id": "httpstatuspolicy_resolvenavigationwaituntil"
+      "id": "httpstatuspolicy_resolvenavigationwaituntil",
+      "norm_label": "resolvenavigationwaituntil()"
     },
     {
       "label": "resolveTimeoutMaxRetries()",
@@ -63225,8 +63225,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\httpStatusPolicy.ts",
       "source_location": "L49",
       "community": 1,
-      "norm_label": "resolvetimeoutmaxretries()",
-      "id": "httpstatuspolicy_resolvetimeoutmaxretries"
+      "id": "httpstatuspolicy_resolvetimeoutmaxretries",
+      "norm_label": "resolvetimeoutmaxretries()"
     },
     {
       "label": "shouldCapTimeoutRetry()",
@@ -63234,8 +63234,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\httpStatusPolicy.ts",
       "source_location": "L108",
       "community": 1,
-      "norm_label": "shouldcaptimeoutretry()",
-      "id": "httpstatuspolicy_shouldcaptimeoutretry"
+      "id": "httpstatuspolicy_shouldcaptimeoutretry",
+      "norm_label": "shouldcaptimeoutretry()"
     },
     {
       "label": "test_httpStatusPolicy.ts",
@@ -67453,8 +67453,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\httpStatusPolicy.ts",
       "source_location": "L169",
       "community": 1,
-      "norm_label": "classifyfailure()",
-      "id": "httpstatuspolicy_classifyfailure"
+      "id": "httpstatuspolicy_classifyfailure",
+      "norm_label": "classifyfailure()"
     },
     {
       "label": "isRecoverableFailureClass()",
@@ -67462,8 +67462,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\httpStatusPolicy.ts",
       "source_location": "L184",
       "community": 1,
-      "norm_label": "isrecoverablefailureclass()",
-      "id": "httpstatuspolicy_isrecoverablefailureclass"
+      "id": "httpstatuspolicy_isrecoverablefailureclass",
+      "norm_label": "isrecoverablefailureclass()"
     },
     {
       "label": "selectReclaimableIds()",
@@ -67471,8 +67471,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\httpStatusPolicy.ts",
       "source_location": "L194",
       "community": 1,
-      "norm_label": "selectreclaimableids()",
-      "id": "httpstatuspolicy_selectreclaimableids"
+      "id": "httpstatuspolicy_selectreclaimableids",
+      "norm_label": "selectreclaimableids()"
     },
     {
       "label": "resolveRecoverFailedOnRestart()",
@@ -67480,8 +67480,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\httpStatusPolicy.ts",
       "source_location": "L223",
       "community": 1,
-      "norm_label": "resolverecoverfailedonrestart()",
-      "id": "httpstatuspolicy_resolverecoverfailedonrestart"
+      "id": "httpstatuspolicy_resolverecoverfailedonrestart",
+      "norm_label": "resolverecoverfailedonrestart()"
     },
     {
       "label": "shouldRunRecovery()",
@@ -67489,8 +67489,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\httpStatusPolicy.ts",
       "source_location": "L228",
       "community": 1,
-      "norm_label": "shouldrunrecovery()",
-      "id": "httpstatuspolicy_shouldrunrecovery"
+      "id": "httpstatuspolicy_shouldrunrecovery",
+      "norm_label": "shouldrunrecovery()"
     },
     {
       "label": "test_functions.ts",
@@ -67516,8 +67516,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\httpStatusPolicy.ts",
       "source_location": "L246",
       "community": 1,
-      "norm_label": "isdownloaderror()",
-      "id": "httpstatuspolicy_isdownloaderror"
+      "id": "httpstatuspolicy_isdownloaderror",
+      "norm_label": "isdownloaderror()"
     },
     {
       "label": "resolveSkipDownloads()",
@@ -67525,8 +67525,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\httpStatusPolicy.ts",
       "source_location": "L260",
       "community": 1,
-      "norm_label": "resolveskipdownloads()",
-      "id": "httpstatuspolicy_resolveskipdownloads"
+      "id": "httpstatuspolicy_resolveskipdownloads",
+      "norm_label": "resolveskipdownloads()"
     },
     {
       "label": "shouldSkipAsDownload()",
@@ -67534,17 +67534,17 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\httpStatusPolicy.ts",
       "source_location": "L265",
       "community": 1,
-      "norm_label": "shouldskipasdownload()",
-      "id": "httpstatuspolicy_shouldskipasdownload"
+      "id": "httpstatuspolicy_shouldskipasdownload",
+      "norm_label": "shouldskipasdownload()"
     },
     {
       "label": "pdfDatasetName()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\httpStatusPolicy.ts",
-      "source_location": "L270",
+      "source_location": "L289",
       "community": 1,
-      "norm_label": "pdfdatasetname()",
-      "id": "httpstatuspolicy_pdfdatasetname"
+      "id": "httpstatuspolicy_pdfdatasetname",
+      "norm_label": "pdfdatasetname()"
     },
     {
       "label": "httpStatusPolicy.ts",
@@ -69843,10 +69843,10 @@
       "label": "cleanDatasetFragments()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L1928",
+      "source_location": "L1925",
       "community": 1,
-      "norm_label": "cleandatasetfragments()",
-      "id": "functions_cleandatasetfragments"
+      "id": "functions_cleandatasetfragments",
+      "norm_label": "cleandatasetfragments()"
     },
     {
       "label": "resolveMaxConcurrency()",
@@ -69854,8 +69854,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\httpStatusPolicy.ts",
       "source_location": "L62",
       "community": 1,
-      "norm_label": "resolvemaxconcurrency()",
-      "id": "httpstatuspolicy_resolvemaxconcurrency"
+      "id": "httpstatuspolicy_resolvemaxconcurrency",
+      "norm_label": "resolvemaxconcurrency()"
     },
     {
       "label": "resolveRequestHandlerTimeoutSecs()",
@@ -69863,8 +69863,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\httpStatusPolicy.ts",
       "source_location": "L75",
       "community": 1,
-      "norm_label": "resolverequesthandlertimeoutsecs()",
-      "id": "httpstatuspolicy_resolverequesthandlertimeoutsecs"
+      "id": "httpstatuspolicy_resolverequesthandlertimeoutsecs",
+      "norm_label": "resolverequesthandlertimeoutsecs()"
     },
     {
       "label": "resolveBackpressureMaxPending()",
@@ -69872,8 +69872,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\httpStatusPolicy.ts",
       "source_location": "L88",
       "community": 1,
-      "norm_label": "resolvebackpressuremaxpending()",
-      "id": "httpstatuspolicy_resolvebackpressuremaxpending"
+      "id": "httpstatuspolicy_resolvebackpressuremaxpending",
+      "norm_label": "resolvebackpressuremaxpending()"
     },
     {
       "label": "shouldAcceptNewPage()",
@@ -69881,8 +69881,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\httpStatusPolicy.ts",
       "source_location": "L100",
       "community": 1,
-      "norm_label": "shouldacceptnewpage()",
-      "id": "httpstatuspolicy_shouldacceptnewpage"
+      "id": "httpstatuspolicy_shouldacceptnewpage",
+      "norm_label": "shouldacceptnewpage()"
     },
     {
       "label": "isPageClosedError()",
@@ -69890,8 +69890,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\httpStatusPolicy.ts",
       "source_location": "L255",
       "community": 1,
-      "norm_label": "ispageclosederror()",
-      "id": "httpstatuspolicy_ispageclosederror"
+      "id": "httpstatuspolicy_ispageclosederror",
+      "norm_label": "ispageclosederror()"
     },
     {
       "label": "resetQm()",
@@ -72849,10 +72849,10 @@
       "label": "clearDecisionSidecars()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L2091",
+      "source_location": "L2088",
       "community": 1,
-      "norm_label": "cleardecisionsidecars()",
-      "id": "functions_cleardecisionsidecars"
+      "id": "functions_cleardecisionsidecars",
+      "norm_label": "cleardecisionsidecars()"
     },
     {
       "label": "clearDecisionSidecars.test.ts",
@@ -74128,8 +74128,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\httpStatusPolicy.ts",
       "source_location": "L218",
       "community": 1,
-      "norm_label": "resolvestallcountresolved()",
-      "id": "httpstatuspolicy_resolvestallcountresolved"
+      "id": "httpstatuspolicy_resolvestallcountresolved",
+      "norm_label": "resolvestallcountresolved()"
     },
     {
       "label": "drainGuard.test.ts",
@@ -74658,8 +74658,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\grpc_clients\\embedding_client.py",
       "source_location": "L1",
       "community": 32,
-      "id": "embedding_client_py",
-      "norm_label": "embedding_client.py"
+      "norm_label": "embedding_client.py",
+      "id": "embedding_client_py"
     },
     {
       "label": "functions.ts",
@@ -75201,8 +75201,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\grpc_clients\\embedding_client.py",
       "source_location": "L64",
       "community": 32,
-      "id": "embedding_client_get_channel",
-      "norm_label": "_get_channel()"
+      "norm_label": "_get_channel()",
+      "id": "embedding_client_get_channel"
     },
     {
       "label": "_reset_channel_for_tests()",
@@ -75210,8 +75210,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\grpc_clients\\embedding_client.py",
       "source_location": "L71",
       "community": 32,
-      "id": "embedding_client_reset_channel_for_tests",
-      "norm_label": "_reset_channel_for_tests()"
+      "norm_label": "_reset_channel_for_tests()",
+      "id": "embedding_client_reset_channel_for_tests"
     },
     {
       "label": "Ferme et oublie le canal partag\u00e9 (herm\u00e9tisme des tests / boucles distinctes).",
@@ -125674,8 +125674,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\grpc_clients\\embedding_client.py",
       "source_location": "L84",
       "community": 32,
-      "id": "embedding_client_rationale_84",
-      "norm_label": "appelle le service grpc pour obtenir les embeddings pour une liste de textes."
+      "norm_label": "appelle le service grpc pour obtenir les embeddings pour une liste de textes.",
+      "id": "embedding_client_rationale_84"
     },
     {
       "label": "Obtient l'embedding pour un seul texte.     Wrapper pour la fonction de batchin",
@@ -125683,8 +125683,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\grpc_clients\\embedding_client.py",
       "source_location": "L109",
       "community": 32,
-      "id": "embedding_client_rationale_109",
-      "norm_label": "obtient l'embedding pour un seul texte.     wrapper pour la fonction de batchin"
+      "norm_label": "obtient l'embedding pour un seul texte.     wrapper pour la fonction de batchin",
+      "id": "embedding_client_rationale_109"
     },
     {
       "label": "Appelle le service gRPC pour tokenizer une liste de textes.",
@@ -125692,8 +125692,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\grpc_clients\\embedding_client.py",
       "source_location": "L118",
       "community": 32,
-      "id": "embedding_client_rationale_118",
-      "norm_label": "appelle le service grpc pour tokenizer une liste de textes."
+      "norm_label": "appelle le service grpc pour tokenizer une liste de textes.",
+      "id": "embedding_client_rationale_118"
     },
     {
       "label": "Appelle le service gRPC pour d\u00e9tokenizer une liste de listes de tokens.",
@@ -125701,8 +125701,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\grpc_clients\\embedding_client.py",
       "source_location": "L137",
       "community": 32,
-      "id": "embedding_client_rationale_137",
-      "norm_label": "appelle le service grpc pour detokenizer une liste de listes de tokens."
+      "norm_label": "appelle le service grpc pour detokenizer une liste de listes de tokens.",
+      "id": "embedding_client_rationale_137"
     },
     {
       "label": "Appelle le service gRPC pour d\u00e9couper un texte en chunks.",
@@ -125710,8 +125710,26 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\grpc_clients\\embedding_client.py",
       "source_location": "L161",
       "community": 32,
-      "id": "embedding_client_rationale_161",
-      "norm_label": "appelle le service grpc pour decouper un texte en chunks."
+      "norm_label": "appelle le service grpc pour decouper un texte en chunks.",
+      "id": "embedding_client_rationale_161"
+    },
+    {
+      "label": "httpStatusPolicy.test.ts",
+      "file_type": "code",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\httpStatusPolicy.test.ts",
+      "source_location": "L1",
+      "community": 1,
+      "id": "httpstatuspolicy_test_ts",
+      "norm_label": "httpstatuspolicy.test.ts"
+    },
+    {
+      "label": "errorHandlerNoRetryReason()",
+      "file_type": "code",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\httpStatusPolicy.ts",
+      "source_location": "L277",
+      "community": 1,
+      "id": "httpstatuspolicy_errorhandlernoretryreason",
+      "norm_label": "errorhandlernoretryreason()"
     }
   ],
   "links": [
@@ -143371,8 +143389,8 @@
       "source_location": "L113",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "embedding_client_get_embedding",
-      "_tgt": "embedding_client_get_embeddings",
+      "_src": "embedding_client_get_embeddings",
+      "_tgt": "embedding_client_get_embedding",
       "source": "embedding_client_get_embeddings",
       "target": "embedding_client_get_embedding"
     },
@@ -143394,8 +143412,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\grpc_clients\\embedding_client.py",
       "source_location": "L83",
       "weight": 1.0,
-      "_src": "embedding_client_py",
-      "_tgt": "embedding_client_get_embeddings",
+      "_src": "embedding_client_get_embeddings",
+      "_tgt": "embedding_client_py",
       "confidence_score": 1.0,
       "source": "embedding_client_get_embeddings",
       "target": "embedding_client_py"
@@ -143430,11 +143448,11 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\grpc_clients\\embedding_client.py",
       "source_location": "L84",
       "weight": 1.0,
-      "_src": "embedding_client_rationale_84",
-      "_tgt": "embedding_client_get_embeddings",
+      "_src": "embedding_client_get_embeddings",
+      "_tgt": "embedding_client_rationale_84",
+      "confidence_score": 1.0,
       "source": "embedding_client_get_embeddings",
-      "target": "embedding_client_rationale_84",
-      "confidence_score": 1.0
+      "target": "embedding_client_rationale_84"
     },
     {
       "relation": "rationale_for",
@@ -143454,8 +143472,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\grpc_clients\\embedding_client.py",
       "source_location": "L108",
       "weight": 1.0,
-      "_src": "embedding_client_py",
-      "_tgt": "embedding_client_get_embedding",
+      "_src": "embedding_client_get_embedding",
+      "_tgt": "embedding_client_py",
       "confidence_score": 1.0,
       "source": "embedding_client_get_embedding",
       "target": "embedding_client_py"
@@ -143478,11 +143496,11 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\grpc_clients\\embedding_client.py",
       "source_location": "L109",
       "weight": 1.0,
-      "_src": "embedding_client_rationale_109",
-      "_tgt": "embedding_client_get_embedding",
+      "_src": "embedding_client_get_embedding",
+      "_tgt": "embedding_client_rationale_109",
+      "confidence_score": 1.0,
       "source": "embedding_client_get_embedding",
-      "target": "embedding_client_rationale_109",
-      "confidence_score": 1.0
+      "target": "embedding_client_rationale_109"
     },
     {
       "relation": "rationale_for",
@@ -143502,8 +143520,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\grpc_clients\\embedding_client.py",
       "source_location": "L117",
       "weight": 1.0,
-      "_src": "embedding_client_py",
-      "_tgt": "embedding_client_tokenize",
+      "_src": "embedding_client_tokenize",
+      "_tgt": "embedding_client_py",
       "confidence_score": 1.0,
       "source": "embedding_client_tokenize",
       "target": "embedding_client_py"
@@ -143538,11 +143556,11 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\grpc_clients\\embedding_client.py",
       "source_location": "L118",
       "weight": 1.0,
-      "_src": "embedding_client_rationale_118",
-      "_tgt": "embedding_client_tokenize",
+      "_src": "embedding_client_tokenize",
+      "_tgt": "embedding_client_rationale_118",
+      "confidence_score": 1.0,
       "source": "embedding_client_tokenize",
-      "target": "embedding_client_rationale_118",
-      "confidence_score": 1.0
+      "target": "embedding_client_rationale_118"
     },
     {
       "relation": "rationale_for",
@@ -143562,8 +143580,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\grpc_clients\\embedding_client.py",
       "source_location": "L136",
       "weight": 1.0,
-      "_src": "embedding_client_py",
-      "_tgt": "embedding_client_detokenize",
+      "_src": "embedding_client_detokenize",
+      "_tgt": "embedding_client_py",
       "confidence_score": 1.0,
       "source": "embedding_client_detokenize",
       "target": "embedding_client_py"
@@ -143598,11 +143616,11 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\grpc_clients\\embedding_client.py",
       "source_location": "L137",
       "weight": 1.0,
-      "_src": "embedding_client_rationale_137",
-      "_tgt": "embedding_client_detokenize",
+      "_src": "embedding_client_detokenize",
+      "_tgt": "embedding_client_rationale_137",
+      "confidence_score": 1.0,
       "source": "embedding_client_detokenize",
-      "target": "embedding_client_rationale_137",
-      "confidence_score": 1.0
+      "target": "embedding_client_rationale_137"
     },
     {
       "relation": "rationale_for",
@@ -143622,8 +143640,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\grpc_clients\\embedding_client.py",
       "source_location": "L160",
       "weight": 1.0,
-      "_src": "embedding_client_py",
-      "_tgt": "embedding_client_chunk_text",
+      "_src": "embedding_client_chunk_text",
+      "_tgt": "embedding_client_py",
       "confidence_score": 1.0,
       "source": "embedding_client_chunk_text",
       "target": "embedding_client_py"
@@ -143658,11 +143676,11 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\libs\\common-utils\\src\\common_utils\\grpc_clients\\embedding_client.py",
       "source_location": "L161",
       "weight": 1.0,
-      "_src": "embedding_client_rationale_161",
-      "_tgt": "embedding_client_chunk_text",
+      "_src": "embedding_client_chunk_text",
+      "_tgt": "embedding_client_rationale_161",
+      "confidence_score": 1.0,
       "source": "embedding_client_chunk_text",
-      "target": "embedding_client_rationale_161",
-      "confidence_score": 1.0
+      "target": "embedding_client_rationale_161"
     },
     {
       "relation": "rationale_for",
@@ -143672,9 +143690,9 @@
       "weight": 1.0,
       "_src": "embedding_client_rationale_72",
       "_tgt": "embedding_client_reset_channel_for_tests",
+      "confidence_score": 1.0,
       "source": "embedding_client_rationale_72",
-      "target": "embedding_client_reset_channel_for_tests",
-      "confidence_score": 1.0
+      "target": "embedding_client_reset_channel_for_tests"
     },
     {
       "relation": "contains",
@@ -208350,8 +208368,8 @@
       "source_location": "L477",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "functions_getapifyproxyurl",
-      "_tgt": "functions_startcrawler",
+      "_src": "functions_startcrawler",
+      "_tgt": "functions_getapifyproxyurl",
       "source": "functions_getapifyproxyurl",
       "target": "functions_startcrawler"
     },
@@ -208362,8 +208380,8 @@
       "source_location": "L63",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "functions_getapifyproxyurl",
-      "_tgt": "functions_ts",
+      "_src": "functions_ts",
+      "_tgt": "functions_getapifyproxyurl",
       "source": "functions_getapifyproxyurl",
       "target": "functions_ts"
     },
@@ -208398,8 +208416,8 @@
       "source_location": "L76",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "functions_maskproxyurl",
-      "_tgt": "functions_ts",
+      "_src": "functions_ts",
+      "_tgt": "functions_maskproxyurl",
       "source": "functions_maskproxyurl",
       "target": "functions_ts"
     },
@@ -208457,8 +208475,8 @@
       "source_location": "L173",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "functions_waitandscroll",
-      "_tgt": "functions_processpage",
+      "_src": "functions_processpage",
+      "_tgt": "functions_waitandscroll",
       "source": "functions_waitandscroll",
       "target": "functions_processpage"
     },
@@ -208469,8 +208487,8 @@
       "source_location": "L99",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "functions_waitandscroll",
-      "_tgt": "functions_ts",
+      "_src": "functions_ts",
+      "_tgt": "functions_waitandscroll",
       "source": "functions_waitandscroll",
       "target": "functions_ts"
     },
@@ -208541,8 +208559,8 @@
       "source_location": "L164",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "functions_processpage",
-      "_tgt": "functions_ts",
+      "_src": "functions_ts",
+      "_tgt": "functions_processpage",
       "source": "functions_processpage",
       "target": "functions_ts"
     },
@@ -208601,8 +208619,8 @@
       "source_location": "L200",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "functions_getpagecontentwithretry",
-      "_tgt": "functions_ts",
+      "_src": "functions_ts",
+      "_tgt": "functions_getpagecontentwithretry",
       "source": "functions_getpagecontentwithretry",
       "target": "functions_ts"
     },
@@ -208660,8 +208678,8 @@
       "source_location": "L234",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "functions_detectchallengepage",
-      "_tgt": "functions_ts",
+      "_src": "functions_ts",
+      "_tgt": "functions_detectchallengepage",
       "source": "functions_detectchallengepage",
       "target": "functions_ts"
     },
@@ -208672,8 +208690,8 @@
       "source_location": "L371",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "functions_detectchallengepage",
-      "_tgt": "functions_waitforchallengeresolution",
+      "_src": "functions_waitforchallengeresolution",
+      "_tgt": "functions_detectchallengepage",
       "source": "functions_detectchallengepage",
       "target": "functions_waitforchallengeresolution"
     },
@@ -208742,8 +208760,8 @@
       "source_location": "L339",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "functions_waitforchallengeresolution",
-      "_tgt": "functions_ts",
+      "_src": "functions_ts",
+      "_tgt": "functions_waitforchallengeresolution",
       "source": "functions_waitforchallengeresolution",
       "target": "functions_ts"
     },
@@ -208786,11 +208804,11 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L1846",
+      "source_location": "L1843",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "functions_dropdataset",
-      "_tgt": "functions_reclaimfailedrequest",
+      "_src": "functions_reclaimfailedrequest",
+      "_tgt": "functions_dropdataset",
       "source": "functions_dropdataset",
       "target": "functions_reclaimfailedrequest"
     },
@@ -208801,8 +208819,8 @@
       "source_location": "L421",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "functions_dropdataset",
-      "_tgt": "functions_ts",
+      "_src": "functions_ts",
+      "_tgt": "functions_dropdataset",
       "source": "functions_dropdataset",
       "target": "functions_ts"
     },
@@ -208849,8 +208867,8 @@
       "source_location": "L460",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "functions_startcrawler",
-      "_tgt": "functions_ts",
+      "_src": "functions_ts",
+      "_tgt": "functions_startcrawler",
       "source": "functions_startcrawler",
       "target": "functions_ts"
     },
@@ -208906,11 +208924,11 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L989",
+      "source_location": "L986",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "functions_isstoppedmanualy",
-      "_tgt": "functions_ts",
+      "_src": "functions_ts",
+      "_tgt": "functions_isstoppedmanualy",
       "source": "functions_isstoppedmanualy",
       "target": "functions_ts"
     },
@@ -208966,11 +208984,11 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L1019",
+      "source_location": "L1016",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "functions_geturlscrawled",
-      "_tgt": "functions_ts",
+      "_src": "functions_ts",
+      "_tgt": "functions_geturlscrawled",
       "source": "functions_geturlscrawled",
       "target": "functions_ts"
     },
@@ -209014,11 +209032,11 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L1177",
+      "source_location": "L1174",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "functions_updateurlscrawled",
-      "_tgt": "functions_ts",
+      "_src": "functions_ts",
+      "_tgt": "functions_updateurlscrawled",
       "source": "functions_updateurlscrawled",
       "target": "functions_ts"
     },
@@ -209050,11 +209068,11 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L1201",
+      "source_location": "L1198",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "functions_updateurlscrawledstreaming",
-      "_tgt": "functions_ts",
+      "_src": "functions_ts",
+      "_tgt": "functions_updateurlscrawledstreaming",
       "source": "functions_updateurlscrawledstreaming",
       "target": "functions_ts"
     },
@@ -209146,11 +209164,11 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L1372",
+      "source_location": "L1369",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "functions_copypreviousmethod",
-      "_tgt": "functions_ts",
+      "_src": "functions_ts",
+      "_tgt": "functions_copypreviousmethod",
       "source": "functions_copypreviousmethod",
       "target": "functions_ts"
     },
@@ -209216,11 +209234,11 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L1415",
+      "source_location": "L1412",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "functions_generateupdatereport",
-      "_tgt": "functions_ts",
+      "_src": "functions_ts",
+      "_tgt": "functions_generateupdatereport",
       "source": "functions_generateupdatereport",
       "target": "functions_ts"
     },
@@ -209386,11 +209404,11 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L1587",
+      "source_location": "L1584",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "functions_getscrapingdata",
-      "_tgt": "functions_storekeyvaluestore",
+      "_src": "functions_storekeyvaluestore",
+      "_tgt": "functions_getscrapingdata",
       "source": "functions_getscrapingdata",
       "target": "functions_storekeyvaluestore"
     },
@@ -209398,11 +209416,11 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L1524",
+      "source_location": "L1521",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "functions_getscrapingdata",
-      "_tgt": "functions_ts",
+      "_src": "functions_ts",
+      "_tgt": "functions_getscrapingdata",
       "source": "functions_getscrapingdata",
       "target": "functions_ts"
     },
@@ -209434,11 +209452,11 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L1581",
+      "source_location": "L1578",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "functions_storekeyvaluestore",
-      "_tgt": "functions_ts",
+      "_src": "functions_ts",
+      "_tgt": "functions_storekeyvaluestore",
       "source": "functions_storekeyvaluestore",
       "target": "functions_ts"
     },
@@ -209470,11 +209488,11 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L1629",
+      "source_location": "L1626",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "functions_getpathafterdomain",
-      "_tgt": "functions_ts",
+      "_src": "functions_ts",
+      "_tgt": "functions_getpathafterdomain",
       "source": "functions_getpathafterdomain",
       "target": "functions_ts"
     },
@@ -209506,11 +209524,11 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L1660",
+      "source_location": "L1657",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "functions_righttrimslash",
-      "_tgt": "functions_ts",
+      "_src": "functions_ts",
+      "_tgt": "functions_righttrimslash",
       "source": "functions_righttrimslash",
       "target": "functions_ts"
     },
@@ -209554,11 +209572,11 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L1685",
+      "source_location": "L1682",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "functions_attachfslogger",
-      "_tgt": "functions_ts",
+      "_src": "functions_ts",
+      "_tgt": "functions_attachfslogger",
       "source": "functions_attachfslogger",
       "target": "functions_ts"
     },
@@ -209590,11 +209608,11 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L1782",
+      "source_location": "L1779",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "functions_stripansi",
-      "_tgt": "functions_ts",
+      "_src": "functions_ts",
+      "_tgt": "functions_stripansi",
       "source": "functions_stripansi",
       "target": "functions_ts"
     },
@@ -209626,11 +209644,11 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L1811",
+      "source_location": "L1808",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "functions_reclaimfailedrequest",
-      "_tgt": "functions_ts",
+      "_src": "functions_ts",
+      "_tgt": "functions_reclaimfailedrequest",
       "source": "functions_reclaimfailedrequest",
       "target": "functions_ts"
     },
@@ -209651,7 +209669,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L1838",
+      "source_location": "L1822",
       "weight": 1.0,
       "_src": "functions_reclaimfailedrequest",
       "_tgt": "httpstatuspolicy_selectreclaimableids",
@@ -209758,11 +209776,11 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L1854",
+      "source_location": "L1851",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "functions_routerdefaulthandler",
-      "_tgt": "functions_ts",
+      "_src": "functions_ts",
+      "_tgt": "functions_routerdefaulthandler",
       "source": "functions_routerdefaulthandler",
       "target": "functions_ts"
     },
@@ -209841,11 +209859,11 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L1882",
+      "source_location": "L1879",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "functions_stopcrawler",
-      "_tgt": "functions_ts",
+      "_src": "functions_ts",
+      "_tgt": "functions_stopcrawler",
       "source": "functions_stopcrawler",
       "target": "functions_ts"
     },
@@ -209912,11 +209930,11 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L1893",
+      "source_location": "L1890",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "functions_escaperegexp",
-      "_tgt": "functions_ts",
+      "_src": "functions_ts",
+      "_tgt": "functions_escaperegexp",
       "source": "functions_escaperegexp",
       "target": "functions_ts"
     },
@@ -209948,11 +209966,11 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L1910",
+      "source_location": "L1907",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "functions_getallrequestqueues",
-      "_tgt": "functions_ts",
+      "_src": "functions_ts",
+      "_tgt": "functions_getallrequestqueues",
       "source": "functions_getallrequestqueues",
       "target": "functions_ts"
     },
@@ -209996,11 +210014,11 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L2228",
+      "source_location": "L2225",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "functions_processurl",
-      "_tgt": "functions_parsejsonfiles",
+      "_src": "functions_parsejsonfiles",
+      "_tgt": "functions_processurl",
       "source": "functions_processurl",
       "target": "functions_parsejsonfiles"
     },
@@ -210008,11 +210026,11 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L2121",
+      "source_location": "L2118",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "functions_processurl",
-      "_tgt": "functions_ts",
+      "_src": "functions_ts",
+      "_tgt": "functions_processurl",
       "source": "functions_processurl",
       "target": "functions_ts"
     },
@@ -210032,10 +210050,10 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L1953",
+      "source_location": "L1950",
       "weight": 1.0,
-      "_src": "functions_processurl",
-      "_tgt": "functions_cleandatasetfragments",
+      "_src": "functions_cleandatasetfragments",
+      "_tgt": "functions_processurl",
       "confidence_score": 1.0,
       "source": "functions_processurl",
       "target": "functions_cleandatasetfragments"
@@ -210210,11 +210228,11 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L2211",
+      "source_location": "L2208",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "functions_parsejsonfiles",
-      "_tgt": "functions_ts",
+      "_src": "functions_ts",
+      "_tgt": "functions_parsejsonfiles",
       "source": "functions_parsejsonfiles",
       "target": "functions_ts"
     },
@@ -210258,11 +210276,11 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L2254",
+      "source_location": "L2251",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "functions_managefrenchdetectionmethod",
-      "_tgt": "functions_ts",
+      "_src": "functions_ts",
+      "_tgt": "functions_managefrenchdetectionmethod",
       "source": "functions_managefrenchdetectionmethod",
       "target": "functions_ts"
     },
@@ -231706,7 +231724,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L1928",
+      "source_location": "L1925",
       "weight": 1.0,
       "_src": "functions_ts",
       "_tgt": "functions_cleandatasetfragments",
@@ -231778,7 +231796,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\functions.ts",
-      "source_location": "L2091",
+      "source_location": "L2088",
       "weight": 1.0,
       "_src": "functions_ts",
       "_tgt": "functions_cleardecisionsidecars",
@@ -382898,7 +382916,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\httpStatusPolicy.ts",
-      "source_location": "L270",
+      "source_location": "L289",
       "weight": 1.0,
       "_src": "httpstatuspolicy_ts",
       "_tgt": "httpstatuspolicy_pdfdatasetname",
@@ -383003,6 +383021,30 @@
       "target": "httpstatuspolicy_resolvestallcountresolved"
     },
     {
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\httpStatusPolicy.test.ts",
+      "source_location": "L3",
+      "weight": 1.0,
+      "_src": "httpstatuspolicy_test_ts",
+      "_tgt": "httpstatuspolicy_ts",
+      "source": "httpstatuspolicy_ts",
+      "target": "httpstatuspolicy_test_ts",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\httpStatusPolicy.ts",
+      "source_location": "L277",
+      "weight": 1.0,
+      "_src": "httpstatuspolicy_ts",
+      "_tgt": "httpstatuspolicy_errorhandlernoretryreason",
+      "source": "httpstatuspolicy_ts",
+      "target": "httpstatuspolicy_errorhandlernoretryreason",
+      "confidence_score": 1.0
+    },
+    {
       "relation": "references",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
@@ -383068,8 +383110,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\httpStatusPolicy.ts",
       "source_location": "L173",
       "weight": 1.0,
-      "_src": "httpstatuspolicy_classifyhttpstatus",
-      "_tgt": "httpstatuspolicy_classifyfailure",
+      "_src": "httpstatuspolicy_classifyfailure",
+      "_tgt": "httpstatuspolicy_classifyhttpstatus",
       "confidence_score": 1.0,
       "source": "httpstatuspolicy_classifyhttpstatus",
       "target": "httpstatuspolicy_classifyfailure"
@@ -383241,6 +383283,18 @@
       "confidence_score": 1.0,
       "source": "httpstatuspolicy_shouldcaptimeoutretry",
       "target": "crawler_src_httpstatuspolicy_ts"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\httpStatusPolicy.ts",
+      "source_location": "L284",
+      "weight": 1.0,
+      "_src": "httpstatuspolicy_errorhandlernoretryreason",
+      "_tgt": "httpstatuspolicy_shouldcaptimeoutretry",
+      "source": "httpstatuspolicy_shouldcaptimeoutretry",
+      "target": "httpstatuspolicy_errorhandlernoretryreason",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -386224,8 +386278,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\httpStatusPolicy.ts",
       "source_location": "L202",
       "weight": 1.0,
-      "_src": "httpstatuspolicy_isrecoverablefailureclass",
-      "_tgt": "httpstatuspolicy_selectreclaimableids",
+      "_src": "httpstatuspolicy_selectreclaimableids",
+      "_tgt": "httpstatuspolicy_isrecoverablefailureclass",
       "confidence_score": 1.0,
       "source": "httpstatuspolicy_isrecoverablefailureclass",
       "target": "httpstatuspolicy_selectreclaimableids"
@@ -386428,8 +386482,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\httpStatusPolicy.ts",
       "source_location": "L266",
       "weight": 1.0,
-      "_src": "httpstatuspolicy_isdownloaderror",
-      "_tgt": "httpstatuspolicy_shouldskipasdownload",
+      "_src": "httpstatuspolicy_shouldskipasdownload",
+      "_tgt": "httpstatuspolicy_isdownloaderror",
       "confidence_score": 1.0,
       "source": "httpstatuspolicy_isdownloaderror",
       "target": "httpstatuspolicy_shouldskipasdownload"
@@ -386553,6 +386607,18 @@
       "_tgt": "crawler_skip_pdf_errorhandler_fast_fail",
       "source": "httpstatuspolicy_shouldskipasdownload",
       "target": "crawler_skip_pdf_errorhandler_fast_fail"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\httpStatusPolicy.ts",
+      "source_location": "L283",
+      "weight": 1.0,
+      "_src": "httpstatuspolicy_errorhandlernoretryreason",
+      "_tgt": "httpstatuspolicy_shouldskipasdownload",
+      "source": "httpstatuspolicy_shouldskipasdownload",
+      "target": "httpstatuspolicy_errorhandlernoretryreason",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
