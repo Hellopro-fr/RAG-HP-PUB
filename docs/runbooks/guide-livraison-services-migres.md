@@ -37,7 +37,6 @@ Le déploiement ne se déclenche que si votre PR touche le dossier du service (o
 | graph-rag-api-recherche-service | `apps-microservices/graph-rag-api-recherche-service` | `deploy-graph-rag-api-recherche-service.yml` |
 | graph-rag-api-recherche-optim-service | `apps-microservices/graph-rag-api-recherche-optim-service` | `deploy-graph-rag-api-recherche-optim-service.yml` |
 | graph-rag-api-recherche-rust-service | `apps-microservices/graph-rag-api-recherche-rust-service` | `deploy-graph-rag-api-recherche-rust-service.yml` |
-| api-recherche | `apps-microservices/api-recherche` | `deploy-api-recherche.yml` |
 | prix-traitement | `apps-microservices/prix-traitement` | `deploy-prix-traitement.yml` |
 | mcp-leexi-service | `apps-microservices/mcp-leexi-service` | `deploy-mcp-leexi-service.yml` |
 | mcp-ringover-service | `apps-microservices/mcp-ringover-service` | `deploy-mcp-ringover-service.yml` |
@@ -63,7 +62,7 @@ Ces services tournent toujours sur la VM. Continuez à livrer par `features/poc`
 
 | Service | Pourquoi il reste sur la VM |
 |---|---|
-| api-classification, api-ingestion, api-rest-milvus, mcp-classification-produit-service | lot reporté (correctifs en cours côté DevSecOps) |
+| api-classification, api-ingestion, api-rest-milvus, api-recherche, mcp-classification-produit-service | lot reporté (correctifs en cours côté DevSecOps ; api-recherche revenue sur la VM le 15/10) |
 | agent-service, mcp-hellodata-service | en stabilisation |
 | mcp-google-analytics-minisite-service | migré avec la reprise du projet mini-sites |
 | mcp-gateway-service et mcp-gateway-frontend, mcp-zoho-service, mcp-google-templates-runner | pile de la gateway MCP |
