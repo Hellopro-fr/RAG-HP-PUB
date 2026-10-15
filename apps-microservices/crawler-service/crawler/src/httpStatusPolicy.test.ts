@@ -9,6 +9,7 @@ import {
     resolveBackpressureMaxPending,
     shouldAcceptNewPage,
     shouldCapTimeoutRetry,
+    errorHandlerNoRetryReason,
     classifyFailure,
     isRecoverableFailureClass,
     selectReclaimableIds,
@@ -135,6 +136,34 @@ test("shouldCapTimeoutRetry: caps on nav timeout at/above cap", () => {
     assert.equal(shouldCapTimeoutRetry("Navigation timed out", 3, 2), true);
     assert.equal(shouldCapTimeoutRetry("Navigation timed out", 1, 2), false);
     assert.equal(shouldCapTimeoutRetry("other error", 5, 2), false);
+});
+
+// ---------------------------------------------------------------------------
+// errorHandlerNoRetryReason — the decision taken in errorHandler, i.e. BEFORE
+// Crawlee's retryCount++ (retryCount = attempts already retried). The cap used to
+// live in the terminal failedRequestHandler, where it could prevent nothing.
+// ---------------------------------------------------------------------------
+const NAV_TIMEOUT = "TimeoutError: Navigation timed out after 90 seconds.";
+
+test("errorHandlerNoRetryReason: nav timeout retried below the cap, stopped at it", () => {
+    assert.equal(errorHandlerNoRetryReason(true, NAV_TIMEOUT, 0, 2), null);
+    assert.equal(errorHandlerNoRetryReason(true, NAV_TIMEOUT, 1, 2), null);
+    assert.equal(errorHandlerNoRetryReason(true, NAV_TIMEOUT, 2, 2), "timeoutCap");
+    assert.equal(errorHandlerNoRetryReason(true, NAV_TIMEOUT, 3, 2), "timeoutCap");
+});
+
+test("errorHandlerNoRetryReason: cap 0 stops a timeout on the first failure", () => {
+    assert.equal(errorHandlerNoRetryReason(true, NAV_TIMEOUT, 0, 0), "timeoutCap");
+});
+
+test("errorHandlerNoRetryReason: a non-timeout error keeps the full retry budget", () => {
+    assert.equal(errorHandlerNoRetryReason(true, "Error: net::ERR_CONNECTION_RESET", 4, 2), null);
+});
+
+test("errorHandlerNoRetryReason: download stops at once, only when skipping is on", () => {
+    const download = "Error: Download is starting";
+    assert.equal(errorHandlerNoRetryReason(true, download, 0, 2), "download");
+    assert.equal(errorHandlerNoRetryReason(false, download, 0, 2), null);
 });
 
 // ---------------------------------------------------------------------------

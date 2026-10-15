@@ -266,6 +266,25 @@ export function shouldSkipAsDownload(skipDownloads: boolean, errorStr: string): 
     return skipDownloads && isDownloadError(errorStr);
 }
 
+export type NoRetryReason = "download" | "timeoutCap";
+
+/**
+ * Pure errorHandler decision: why this failed attempt must not be retried, or null.
+ * errorHandler is the only hook that runs BEFORE Crawlee's retry decision (and before
+ * retryCount++), so retryCount = attempts already retried and `retryCount >= cap`
+ * allows cap + 1 attempts. failedRequestHandler is terminal: a cap set there is inert.
+ */
+export function errorHandlerNoRetryReason(
+    skipDownloads: boolean,
+    errorStr: string,
+    retryCount: number,
+    timeoutCap: number,
+): NoRetryReason | null {
+    if (shouldSkipAsDownload(skipDownloads, errorStr)) return "download";
+    if (shouldCapTimeoutRetry(errorStr, retryCount, timeoutCap)) return "timeoutCap";
+    return null;
+}
+
 /** Crawlee dataset name for skipped downloads/PDFs (mirrors error-/nfr- naming). */
 export function pdfDatasetName(crawleeStorageName: string | undefined, domain: string): string {
     return crawleeStorageName ? `pdf-${crawleeStorageName}` : `pdf-${domain}`;

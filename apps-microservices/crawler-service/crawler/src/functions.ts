@@ -32,7 +32,7 @@ import {
     REQUEST_HANDLER_TIMEOUT_S,
     BACKPRESSURE_MAX_PENDING,
     shouldAcceptNewPage,
-    shouldCapTimeoutRetry,
+    errorHandlerNoRetryReason,
     PERMANENT_ERROR_MARKERS,
     classifyFailure,
     selectReclaimableIds,
@@ -576,13 +576,20 @@ export const startCrawler = async (
             blockedStatusCodes: [],
         },
 
-        // Fast-fail download/PDF skip: stop retries the moment a download trigger
-        // is seen. errorHandler runs after each failed attempt and BEFORE the retry
-        // decision — failedRequestHandler is terminal and cannot prevent retries.
+        // Fast-fail download/PDF skip + navigation-timeout retry cap: stop retries the
+        // moment a download trigger is seen, or once a timeout has been retried
+        // TIMEOUT_MAX_RETRIES times. errorHandler runs after each failed attempt and
+        // BEFORE the retry decision — failedRequestHandler is terminal and cannot
+        // prevent retries (the cap lived there and let every timeout run 6 × 90 s).
         // Spec: docs/superpowers/specs/2026-06-17-crawler-skip-pdf-design.md
-        errorHandler: async ({ request }, error) => {
-            if (shouldSkipAsDownload(SKIP_DOWNLOADS, String(error))) {
-                request.noRetry = true;
+        // Spec: docs/superpowers/specs/2026-06-09-crawler-http-status-retry-policy-design.md §3.4
+        errorHandler: async ({ request, log }, error) => {
+            const reason = errorHandlerNoRetryReason(
+                SKIP_DOWNLOADS, String(error), request.retryCount, TIMEOUT_MAX_RETRIES,
+            );
+            if (reason) request.noRetry = true;
+            if (reason === "timeoutCap") {
+                log.warning(`Navigation timeout cap reached for ${request.url} (retryCount=${request.retryCount}) — no retry`);
             }
         },
 
@@ -629,16 +636,6 @@ export const startCrawler = async (
             if (isPermanentError) {
                 request.noRetry = true;
                 log.warning(`Permanent error detected for ${request.url} — no retry`);
-            }
-
-            // Navigation-timeout retry cap: a genuinely-unresponsive URL (no HTTP
-            // response at all) would otherwise burn all maxRequestRetries × navigation
-            // timeout. With waitUntil 'domcontentloaded', a real 404 resolves fast and
-            // is handled by the status policy; a true timeout means the server never
-            // responded — cap the retries.
-            if (shouldCapTimeoutRetry(errorStr, request.retryCount, TIMEOUT_MAX_RETRIES)) {
-                request.noRetry = true;
-                log.warning(`Navigation timeout cap reached for ${request.url} (retryCount=${request.retryCount}) — no retry`);
             }
 
             // Accumulate error stats ONLY if the URL is from the previous crawl
