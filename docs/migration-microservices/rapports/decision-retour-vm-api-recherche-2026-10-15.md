@@ -66,6 +66,20 @@ Agrandir Cloud Run coûterait plus cher en permanence, pour un traitement de nui
 4. **Option d'architecture**, si ce lot reste lourd : une route dédiée aux traitements de nuit (VM ou service séparé), pour que les appels interactifs restent sur Cloud Run.
 5. **Rejouer une nuit** sur Cloud Run avec un seuil fixé à l'avance : moins de 7,7 %, et aucun `503` en rafale.
 
+## Avancement des conditions de reprise
+
+| Condition | État | Preuve |
+|---|---|---|
+| 1. Identifier le client de nuit | ✅ **15/10** : `172.20.0.1` est le nginx de la VM ; le vrai client est le **back-office PHP Hellopro chez Ecritel (`213.182.35.29`)**, sans agent HTTP, qui envoie **100 %** des appels de la recherche, de jour comme de nuit (66 483 requêtes depuis le 01/10). Reste à savoir **quelle tâche** PHP envoie les lots de nuit (devs du back-office) ; piste (15/10, en vérification côté devs) : **le moteur de recherche principal du site Hellopro** | `route-sources-search-service-1015-1402.log` |
+| 2. Mesurer la durée réelle sur la VM | 🔄 format de journal nginx `timing` **posé le 15/10 à 13:13 UTC** (durée `rt`, taille `rl`, durée service `urt`) ; lecture de la nuit du 15 au 16/10 : `nginx_timing_log.sh mesure`. **Référence de jour (15/10, VM)** : médiane 0,5-0,8 s, 95e centile ~2,6 s, max 8,9 s ; requêtes de ~20 Ko aussi le jour | `nginx-timing-log-apply-1015-1613.log` |
+| 3. Corriger la cause | ⬜ | — |
+| 4. Option d'architecture | ⬜ | — |
+| 5. Rejouer une nuit | ⬜ | — |
+
+Second client, interactif : l'interface du moteur de recherche RAG (`api-html-recherche-service`, `rag.hellopro.eu`) ouvre depuis le navigateur `wss://api.hellopro.eu/search-service/ws/search` ; peu utilisée (1 connexion `101` sur la période), mais **à tester en V2-a3-bis** (WebSocket sur Cloud Run : connexion coupée au délai maximal du service).
+
+À noter : 4 480 réponses `499` depuis le 01/10 (le client PHP coupe avant la réponse) ; son propre délai d'attente est à connaître.
+
 ## Pièces
 
 Journaux dans `Docs/DevSecOps/TICKETS/001-MIGRATION-ARCHI/data/cutover/` :
