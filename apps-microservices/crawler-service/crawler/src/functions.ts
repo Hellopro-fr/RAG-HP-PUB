@@ -603,6 +603,11 @@ export const startCrawler = async (
                 return;
             }
 
+            // R23 (2): a probe admitted by the non-HTML prefix gate ended terminally (timeout or
+            // error, after the capped retries). Reached only for non-StaleVariantSkip failures:
+            // the marker branch above has already returned. No-op when the gate is null.
+            context.nonHtmlPrefix?.onProbeFailure(request.url);
+
             log.error(`Request ${request.url} failed: ${String(request.errorMessages)}`);
 
             // Détection des erreurs permanentes — inutile de réessayer.
@@ -892,6 +897,18 @@ export const startCrawler = async (
                 if (QM_FACET_ENABLED && target) {
                     recordQmCollapsed(request.url, target, 'filter_on_seen', 'prenav');
                     throw new StaleVariantSkip(request.url, target);
+                }
+            },
+            // R23 (2) b3: non-HTML prefix gate. Drops a request whose parent folder was
+            // learned (or loaded from the previous crawl) as non-HTML-only, BEFORE
+            // page.goto. Only mode "on" returns false from check(); "shadow" only logs.
+            // A thrown StaleVariantSkip is terminal (NonRetryableError) and handled by the
+            // STALE_VARIANT_SKIP_MARKER branch of failedRequestHandler (counts purged_prenav,
+            // returns before onProbeFailure). Zero effect when context.nonHtmlPrefix is null.
+            async ({ request }) => {
+                if (context.nonHtmlPrefix && !context.nonHtmlPrefix.check(request.url, "prenav")) {
+                    if (context.statsManager) await context.statsManager.increment("filtered_nonhtml");
+                    throw new StaleVariantSkip(request.url, request.url);
                 }
             },
         ],
