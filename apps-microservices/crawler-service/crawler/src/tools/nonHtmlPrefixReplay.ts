@@ -13,6 +13,9 @@
  * then file name, then input rank. An mtime reset by a stash/restore flattens the
  * order — then the table is only an approximation.
  *
+ * Learning rule: only pdf rows written by the content-type guard (they carry content_type) feed
+ * recordNonHtml; download-skip rows (content_type null/empty) are decide-only, as in production.
+ *
  * Free instrument: internal data only, no network.
  */
 import * as fs from "node:fs";
@@ -31,6 +34,8 @@ export interface ExportRecord {
     url: string;
     mtime: string;
     file: string;
+    /** false for a pdf row whose export carries a null/empty content_type (download-skip row); absent = true */
+    learnable?: boolean;
 }
 
 export interface ReplayRow {
@@ -39,6 +44,8 @@ export interface ReplayRow {
     mtime: string;
     file: string;
     seq: number;
+    /** only meaningful for non-HTML rows; html rows are true */
+    learnable: boolean;
 }
 
 export interface KResult {
@@ -65,6 +72,10 @@ const toRecord = (x: unknown): ExportRecord | null => {
         url: o.url,
         mtime: typeof o.mtime === "string" ? o.mtime : "",
         file: typeof o.file === "string" ? o.file : "",
+        learnable: !(
+            Object.prototype.hasOwnProperty.call(o, "content_type") &&
+            (o.content_type === null || o.content_type === "")
+        ),
     };
 };
 
@@ -89,8 +100,8 @@ export function extractRecords(input: unknown): ExportRecord[] {
 
 export function buildReplayRows(nonHtml: ExportRecord[], html: ExportRecord[]): ReplayRow[] {
     const rows: ReplayRow[] = [
-        ...nonHtml.map((r, i): ReplayRow => ({ ...r, kind: "nonhtml", seq: i })),
-        ...html.map((r, i): ReplayRow => ({ ...r, kind: "html", seq: nonHtml.length + i })),
+        ...nonHtml.map((r, i): ReplayRow => ({ ...r, kind: "nonhtml", seq: i, learnable: r.learnable !== false })),
+        ...html.map((r, i): ReplayRow => ({ ...r, kind: "html", seq: nonHtml.length + i, learnable: true })),
     ];
     const rank = (r: ReplayRow) => (r.kind === "nonhtml" ? 0 : 1);
     const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
@@ -114,6 +125,7 @@ export function replayForK(rows: ReplayRow[], k: number): KResult {
                 if (!hasIgnoredExtensionForSeed(row.url)) res.avoidedNonHtml++;
                 continue;
             }
+            if (!row.learnable) continue; // download-skip row: production never calls onNonHtml for it
             const ev = recordNonHtml(state, row.url, "1970-01-01T00:00:00.000Z");
             if (ev === "learned") res.keysLearned++;
             else if (ev === "isolated") res.isolated++;
@@ -161,6 +173,7 @@ export function main(argv: string[]): number {
     }
     const rows = buildReplayRows(extractRecords(pdf), extractRecords(mainData));
     console.log(`# rows: ${rows.length} (order: mtime asc, non-HTML first on ties)`);
+    console.log(`# download-skip rows (decide-only, not learnable): ${rows.filter((r) => r.kind === "nonhtml" && !r.learnable).length}`);
     console.log(formatReport(replayAll(rows)).trimEnd());
     return 0;
 }

@@ -118,6 +118,36 @@ test("formatReport prints a header and one line per K", () => {
     assert.match(text, /^\s*3\s+1\s+1\s+3\s+1\s+3\s*$/m);
 });
 
+// --- fix round 1: download-skip rows (content_type null/empty) are decide-only ---
+const pdfRows = (n: number, extra: Record<string, unknown> | null) =>
+    Array.from({ length: n }, (_, i) => ({
+        ...rec(`https://h.test/image/d${i + 1}`, T(String(i + 1).padStart(2, "0"))),
+        ...(extra ?? {}),
+    }));
+
+test("download-skip rows (content_type null) never learn a key, whatever K", () => {
+    const records = pdfRows(8, { content_type: null });
+    const rows = buildReplayRows(extractRecords({ records }), []);
+    assert.equal(rows.filter((r) => !r.learnable).length, 8);
+    for (const r of replayAll(rows, 1, 6)) {
+        assert.equal(r.keysLearned, 0);
+        assert.equal(r.avoidedNonHtml, 0);
+    }
+});
+
+test("content_type present and non-empty replays exactly like the field absent", () => {
+    const withType = buildReplayRows(extractRecords({ records: pdfRows(8, { content_type: "application/pdf" }) }), []);
+    const absent = buildReplayRows(extractRecords({ records: pdfRows(8, null) }), []);
+    assert.ok(withType.every((r) => r.learnable));
+    assert.deepEqual(replayAll(withType), replayAll(absent));
+});
+
+test("extractRecords: learnable is false only for a present null/empty content_type", () => {
+    assert.equal(extractRecords([{ url: "https://h.test/a", content_type: "" }])[0].learnable, false);
+    assert.equal(extractRecords([{ url: "https://h.test/a", content_type: null }])[0].learnable, false);
+    assert.equal(extractRecords([{ url: "https://h.test/a" }])[0].learnable, true);
+});
+
 function capture(fn: () => number): { code: number; out: string; err: string } {
     const log = console.log;
     const error = console.error;

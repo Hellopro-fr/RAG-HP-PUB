@@ -329,6 +329,7 @@ async def dataset_sample(
                       errors="replace") as f:
                 item = json.load(f)
             record["url"] = item.get("url")
+            record["content_type"] = item.get("content_type")
             content = item.get("content") or ""
             record["content_length"] = len(content)
             if content_chars:

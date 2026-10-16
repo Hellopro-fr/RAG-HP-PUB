@@ -58,6 +58,18 @@ def test_kind_pdf_reads_sanitized_pdf_dataset(app_and_storage):
     assert set(body) == {"kind", "total_records", "offset", "returned", "records"}
 
 
+def test_kind_pdf_exports_content_type_or_none(app_and_storage):
+    app, storage = app_and_storage
+    _mk_dataset(storage, "pdf-example-com", [
+        ("a.json", {"url": "https://example.com/g", "content_type": "image/jpeg"}),
+        ("b.json", {"url": "https://example.com/s", "source": "", "status": 200}),
+    ])
+    body = TestClient(app).get("/admin/dataset/9", params={"kind": "pdf"}).json()
+    by_url = {r["url"]: r for r in body["records"]}
+    assert by_url["https://example.com/g"]["content_type"] == "image/jpeg"
+    assert by_url["https://example.com/s"]["content_type"] is None
+
+
 def test_kind_pdf_reads_unsanitized_dir_too(app_and_storage):
     app, storage = app_and_storage
     _mk_dataset(storage, "pdf-example.com", [("a.json", {"url": "https://example.com/d/1"})])

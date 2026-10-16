@@ -1093,6 +1093,8 @@ replay K with `crawler/src/tools/nonHtmlPrefixReplay.ts` on `pdf` + `main` expor
 has a `pdf` kind) → `on` → effect proof: 0 `Navigation timed out` on `/image/` once the key is loaded or
 learned, and `filtered_nonhtml` > 0.
 
+The replay learns only from `pdf` rows written by the content-type guard (they carry `content_type`); rows from the download-skip branch (`content_type` served as `null` by the export) are decide-only, as in production where only the guard calls `onNonHtml`.
+
 Spec: `docs/superpowers/specs/2026-10-16-crawler-nonhtml-prefix-learning-design.md`.
 Plan: `docs/superpowers/plans/2026-10-16-crawler-nonhtml-prefix-learning.md`.
 
