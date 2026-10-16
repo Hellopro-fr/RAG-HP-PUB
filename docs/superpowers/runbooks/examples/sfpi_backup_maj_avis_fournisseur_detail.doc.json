@@ -1,0 +1,124 @@
+{
+  "sfpi_backup_maj": {
+    "database_id": 10,
+    "description": "Sauvegarde temporaire, prise JUSTE AVANT écrasement, des 7 champs extraits (*_sfpi) d'une fiche produit scrapée. Écrite par le pipeline de mise à jour crawling (MAJ), étape 6.3a-bis, avant l'extraction généralisée qui réécrit en écrasement TOTAL les *_sfpi de TOUTES les fiches courantes du domaine (un champ ré-extrait vide écrase l'ancienne valeur). 1 ligne = 1 fiche (PK id_scrapping_fiche_produit_ia) = son DERNIER état pré-écrasement : upsert, chaque nouvelle MAJ du domaine remplace le backup précédent — aucun historique, aucun DELETE. Sert à restaurer À LA MAIN un champ vidé par erreur : AUCUN code ne la relit. Pas d'id de domaine ici : joindre scrapping_fiche_produit_ia. Base HELLOPRO_IA.",
+    "primary_key": "id_scrapping_fiche_produit_ia",
+    "default_order_by": "date_backup DESC",
+    "rows": null,
+    "columns": {
+      "id_scrapping_fiche_produit_ia": {
+        "type": "bigint",
+        "desc": "PK, et FK applicative → scrapping_fiche_produit_ia.id_scrapping_fiche_produit_ia (même base). Au plus une ligne de backup par fiche. Mesuré le 2026-10-16 : 0 orphelin sur 100 002 lignes."
+      },
+      "titre_produit_sfpi": {
+        "type": "longtext",
+        "desc": "Titre de la fiche au moment du backup (copie trimée de scrapping_fiche_produit_ia.titre_produit_sfpi). Jamais NULL en pratique : un champ absent est écrit '' (0 NULL, 14 404 vides le 2026-10-16). Piège d'octets commun aux 7 champs texte : voir notes (comparer par = SQL, jamais par HEX/LENGTH/MD5)."
+      },
+      "description_produit_sfpi": {
+        "type": "longtext",
+        "desc": "Description de la fiche au moment du backup (copie trimée de la colonne homonyme de scrapping_fiche_produit_ia). '' si absente, jamais NULL (14 646 vides le 2026-10-16). Jusqu'à ~100 Ko : ne pas la sélectionner en masse, utiliser LENGTH() ou LEFT()."
+      },
+      "prix_produit_sfpi": {
+        "type": "longtext",
+        "desc": "Prix tel qu'extrait, TEXTE brut (pas un nombre : devise, mentions HT/TTC possibles). '' si absent, jamais NULL — 61 374 vides sur 100 002 (61 %) le 2026-10-16."
+      },
+      "image_produit_sfpi": {
+        "type": "longtext",
+        "desc": "URL(s) d'image de la fiche, plusieurs URLs jointes par la balise HTML br entourée d'espaces (séparateur V2). '' si absente, jamais NULL (15 084 vides le 2026-10-16)."
+      },
+      "categorie_produit_sfpi": {
+        "type": "longtext",
+        "desc": "Catégorie / fil d'Ariane extrait de la page (ex. 'Accueil', 'Produits neufs'… séparés par le caractère supérieur-à). '' si absent, jamais NULL (24 125 vides le 2026-10-16)."
+      },
+      "livraison_produit_sfpi": {
+        "type": "longtext",
+        "desc": "Mention de livraison extraite, texte brut. '' si absente, jamais NULL — 81 164 vides sur 100 002 le 2026-10-16."
+      },
+      "stock_produit_sfpi": {
+        "type": "longtext",
+        "desc": "Mention de stock / disponibilité extraite, texte brut. '' si absente, jamais NULL (0 NULL, 82 123 vides le 2026-10-16)."
+      },
+      "date_backup": {
+        "type": "datetime",
+        "desc": "Horodatage du DERNIER backup de la fiche : DEFAULT CURRENT_TIMESTAMP à l'insertion, puis NOW() à chaque upsert (fuseau du serveur MySQL, non vérifié). C'est le moment où une MAJ du domaine a atteint l'étape 6.3, PAS la date de la valeur sauvegardée (souvent bien plus ancienne). Plage mesurée le 2026-10-16 : 2026-07-07 14:20 → 2026-10-05 15:33 — aucun backup écrit entre le 05/10 et le 16/10."
+      }
+    },
+    "relations": [
+      {
+        "column": "id_scrapping_fiche_produit_ia",
+        "references": "scrapping_fiche_produit_ia.id_scrapping_fiche_produit_ia (HELLOPRO_IA)",
+        "cardinality": "1:1",
+        "note": "Backup de la fiche ; joindre pour obtenir le domaine, l'URL et la valeur COURANTE des champs."
+      }
+    ],
+    "notes": "Écrivain unique : persister_backup_sfpi() — BO/admin/repertoire_test/moulinettes_interne/scrapping_produit_ia/fonctions/fonctions_maj_crawling.php:2081@7f68863 (INSERT … ON DUPLICATE KEY UPDATE :2112), appelée par BO/script/chatgpt/script_process_update_crawling.php:2724@7f68863 (pipeline MAJ) et par le ponctuel pct_rejouer_pipeline_maj.php:331. Le snapshot vient de sauvegarder_donnees_brutes_avant_extraction() (même fichier :2655) et couvre TOUTES les fiches courantes du domaine : une ligne ici ne signifie PAS que la fiche a changé. Lecteurs : aucun (grep BO + FRONT, 2026-10-16) — restauration manuelle seulement. PIÈGE D'OCTETS : les colonnes texte sont à charset mono-octet (LEFT(titre,8) rend 8 octets, é stocké C3A9) alors que scrapping_fiche_produit_ia stocke le même texte en C383C2A9 ; l'égalité SQL entre les deux tables fonctionne (conversion de charset), HEX/LENGTH/MD5 divergent. Les accents s'affichent Ã© dans les sorties MCP. Usage type, mesuré le 2026-10-16 en joignant scrapping_fiche_produit_ia : 18 618 titres diffèrent de la valeur courante, et 71 fiches ont un titre sauvegardé non vide pour un titre courant vide (candidates à restauration) — requête : b.titre_produit_sfpi != '' AND (s.titre_produit_sfpi = '' OR s.titre_produit_sfpi IS NULL)."
+  },
+  "avis_fournisseur_detail": {
+    "database_id": 10,
+    "description": "Avis clients UNITAIRES d'un fournisseur sur une plateforme externe (Google, Trustpilot, Avis Vérifiés), collectés par acteurs Apify. 1 ligne = 1 avis. Table fille d'avis_fournisseur (1 résumé par couple société × source), rattachée par id_avis_fournisseur, avec id_societe et source dénormalisés. C'est un ÉCHANTILLON, pas la population : au plus 20 avis par résumé (les plus récents), remplacés EN BLOC à chaque rafraîchissement (DELETE + INSERT dans une transaction). Les totaux font foi dans avis_fournisseur (nb_avis, note_moyenne) — ne jamais recalculer une note plateforme ici. Exposition MCP partielle : le contenu et l'identité des avis (texte, auteur, titre, réponse, identifiant source, JSON brut) ne sont pas exposés. V1 : lue par le BO seulement, aucun affichage FRONT. Base HELLOPRO_IA.",
+    "primary_key": "id_avis_fournisseur_detail",
+    "default_order_by": "review_date DESC",
+    "rows": null,
+    "columns": {
+      "id_avis_fournisseur_detail": {
+        "type": "bigint",
+        "desc": "PK auto-increment. NON STABLE : chaque rafraîchissement supprime puis réinsère les avis du résumé, qui reçoivent de nouveaux id. Ne pas l'utiliser comme référence durable d'un avis."
+      },
+      "id_avis_fournisseur": {
+        "type": "bigint",
+        "desc": "FK → avis_fournisseur.id_avis_fournisseur (résumé société × source). NOT NULL, indexé. 1re colonne de la clé UNIQUE uq_detail_review (id_avis_fournisseur, review_id) — review_id est hors périmètre MCP, d'où l'index affiché sur une seule colonne. Mesuré le 2026-10-16 : 0 orphelin, id_societe et source toujours égaux à ceux du parent."
+      },
+      "id_societe": {
+        "type": "bigint",
+        "desc": "FK applicative → societe.id_societe (HELLOPRO_IA), copiée du résumé parent pour filtrer directement par fournisseur (index idx_detail_societe). NOT NULL. Clé de lecture de l'onglet Avis du BO."
+      },
+      "source": {
+        "type": "enum",
+        "desc": "Plateforme de l'avis, enum('google','trustpilot','avis_verifies'), NOT NULL, toujours égale à avis_fournisseur.source du parent. Répartition le 2026-10-16 : google 3 953 avis / 343 sociétés, trustpilot 233 / 45, avis_verifies 303 / 16."
+      },
+      "rating": {
+        "type": "tinyint unsigned",
+        "desc": "Note de l'avis, entier de 1 à 5 (0 NULL le 2026-10-16). Google : clé stars de l'acteur, repli rating ; Trustpilot et Avis Vérifiés : rating. Une moyenne calculée ici porte sur l'échantillon de 20 avis récents au plus, PAS sur la note de la plateforme (avis_fournisseur.note_moyenne)."
+      },
+      "review_date": {
+        "type": "datetime",
+        "desc": "Date de publication de l'avis, normalisée en UTC (gmdate) par les adaptateurs. Avis Vérifiés : la source ne donne qu'un jour, minuit heure de Paris converti en UTC ⇒ stocké à 22:00:00 (été, 247 lignes) ou 23:00:00 (hiver, 56) LA VEILLE : DATE(review_date) y est décalé d'un jour. 0 NULL le 2026-10-16 ; plage 2012-06 → 2026-09."
+      },
+      "experience_date": {
+        "type": "date",
+        "desc": "Date de l'expérience déclarée par le client (jour UTC). Trustpilot (219/233 renseignées) et Avis Vérifiés (303/303) ; TOUJOURS NULL pour Google (non fourni par la source)."
+      },
+      "owner_response_date": {
+        "type": "datetime",
+        "desc": "Date UTC de la réponse publique du fournisseur ; NULL = pas de réponse. Google (1 075/3 953) et Trustpilot (75/233) ; TOUJOURS NULL pour Avis Vérifiés (l'adaptateur pose NULL). Le texte de la réponse n'est pas exposé au MCP."
+      },
+      "verified": {
+        "type": "tinyint(1)",
+        "desc": "Avis vérifié : 1 = oui, 0 = non. Trustpilot : isVerified de l'acteur (39/233 à 1) ; Avis Vérifiés : 1 si l'avis est un achat vérifié (303/303 à 1) ; Google : TOUJOURS NULL (notion absente) — NULL ne veut pas dire 0."
+      },
+      "sentiment": {
+        "type": "varchar(16)",
+        "desc": "JAMAIS ÉCRITE : les trois adaptateurs posent NULL (non calculé en v1) — 0 ligne non NULL le 2026-10-16. Ne pas filtrer dessus."
+      },
+      "date_creation": {
+        "type": "datetime",
+        "desc": "Date d'insertion de la ligne (DEFAULT CURRENT_TIMESTAMP, fuseau du serveur, non vérifié — à la différence des dates d'avis, en UTC). Chaque rafraîchissement réinsérant tout, c'est en pratique la date du DERNIER fetch réussi du résumé, pas celle de la première collecte. Plage 2026-07-22 → 2026-09-15 le 2026-10-16."
+      }
+    },
+    "relations": [
+      {
+        "column": "id_avis_fournisseur",
+        "references": "avis_fournisseur.id_avis_fournisseur",
+        "cardinality": "N:1",
+        "note": "Résumé société × source ; porte nb_avis, note_moyenne, status. Un résumé status='done' peut n'avoir aucun détail."
+      },
+      {
+        "column": "id_societe",
+        "references": "societe.id_societe (HELLOPRO_IA)",
+        "cardinality": "N:1",
+        "note": "Dénormalisé depuis le résumé."
+      }
+    ],
+    "notes": "Écrivain unique : replace_details() — BO/script/rag/fournisseur/avis/fonctions_avis_repo.php:521@7f68863 (DELETE :568, INSERT par paquets :606), appelé par le worker CLI BO/script/rag/fournisseur/avis/script_enrich_avis.php:559 (wrapper sh_enrich_avis.sh). Les lignes sont produites par les adaptateurs BO/admin/api_apify/reviews/AvisAdapterGoogle.php, AvisAdapterTrustpilot.php, AvisAdapterAvisVerifies.php ; plafond par run : maxReviews 20 (Google), maxReviewsPerCompany 20 (Trustpilot), maxItems 21 (Avis Vérifiés) — maximum mesuré : 20 avis par résumé. Dédup par review_id avant insertion. Lecteurs : BO/admin/repertoire_test/moulinettes_interne/avis_fournisseur/ajax/ajax_detail_avis.php:49 et BO/admin/repertoire_test/moulinettes_interne/scrapping_produit_ia/ajax/ajax_fetch_avis.php:60 (LIMIT 300, ORDER BY review_date DESC). Colonnes présentes en base mais NON exposées au MCP (exclusion volontaire : données personnelles et contenu) : review_id, author, author_meta, title, texte, owner_response, raw_json. Couverture le 2026-10-16 : avis_verifies compte 18 résumés done pour 16 résumés ayant des détails."
+  }
+}
