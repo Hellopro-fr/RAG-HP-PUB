@@ -102,3 +102,18 @@ Task 9: fix round 1/5 (1 addressed, 0 open; commits 3092221..a8ece3e; re-review 
 Task 9: minor (deferred): main-kind export now also carries content_type (harmless: html rows forced learnable)
 Task 9: complete (commits 4f521b8..a8ece3e, review clean after fix round 1, review file 7367B)
 Session D cut planned after T9 re-review + .tasks.json sync (CONTEXTE 215k at T9 re-review dispatch; final review + wave + finishing ≈45-55k > 240k). Session E prompt: memory/r23_reprise_sessionE.md
+Session E (2026-10-16): launched IN worktree; features/poc = e57409aed (0 new); HEAD 7ec231a58. implementer-common scratchpad repointed to session E.
+Final review: dispatched (general-purpose opus/high, package review-e57409aed..7ec231a58.diff 138976B, sheet final-review-sheet.md) ⇒ <workspace>/final-review.md
+Final review: READ (final-review.md) — ready with fixes; 0 Critical; I-1 confirmed-by-exhaustion key never persisted (no end-of-crawl write); I-2 loaded isolated blocked forever (spec:51); FIX-BEFORE-MERGE: I-1, CLAUDE.md :1032/:1046/:1087, admin.py :229/:233-236, wiring test docstring :16-18; 20 minors DEFER; M-1..M-4 new minors DEFER; q.c flakes untouched by branch
+Ruling: I-1 fixed by addition — gate flush() persisting full state, called once in gracefulShutdown when gate exists (COMPLETED main.ts:1853, OOM_RELAUNCH :361, SIGTERM) — not reviewer option (a) persist in onProbeFailure, which contradicts C3 00-index.md:211 "sans persist" (stop 6) — cost if wrong: SIGKILL between exhaustion and shutdown still loses the key; loadedIsolated now carried every crawl (spec-conformant, sharpens I-2)
+Ruling: I-2 not fixed before merge — prescribed by spec:51/D5, mode off by default; user decides before `on` (registry R23 phase 2) — cost if wrong: none while off/shadow
+Ruling: M-3 (no warning on corrupt/missing sidecar, claim 5 partly refuted) DEFER — spec requires empty state only — cost if wrong: silent sidecar loss in logs
+Ruling: fix-wave tests written TDD by implementer (red then green), oracle not replayed by controller — no exact check block prescribed — cost if wrong: one re-review finding
+Final fix wave: dispatched (BASE 7ec231a58, general-purpose sonnet/medium, brief final-fix-brief.md) ⇒ final-fix-report.md
+Final fix wave: implementer DONE commit 5f632de (numstat CLAUDE.md 5/3, admin.py 3/2, main.ts 3/0, gate.ts 5/0, gate test 25/0, wiring test 15/3; red 3 then 31/31; suite 631/631; trio 21 passed); re-review dispatched (opus/high) ⇒ final-rereview.md
+Final fix wave: re-review READ — I-1 + rows 13/18/22/23 ADDRESSED, 0 Critical/Important; controller re-run at 5f632de: npm test 631/631 fail 0, pytest trio 21 passed
+Final: parked — flush makes M-2 systematic on OOM relaunch (previous-crawl probation keys reload confirmed in relaunched segment) — Ruling: not load-bearing (mode off by default; same class as M-2, already reachable via any event write) ⇒ registry, decide before `on`
+Final: parked — flush removes I-2's accidental eviction (loaded isolated always carried) — Ruling: spec-conformant (spec:51), sharpens the user's I-2 decision before `on` ⇒ registry
+Final: parked — probe exhausted during shutdown awaits is lost; doc names only SIGKILL — Ruling: real, minor, no downstream builder ⇒ DEFER
+Final: parked — gate test 189-202 passes without exhaustion (reload as current forces confirmed); wiring test checks "after guard" not "inside gracefulShutdown/before first await" — Ruling: test hardening, fails without flush() ⇒ DEFER
+Final review: clean after one wave (0 load-bearing residual)
