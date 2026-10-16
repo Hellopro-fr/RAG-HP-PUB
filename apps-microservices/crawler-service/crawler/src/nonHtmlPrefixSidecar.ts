@@ -43,7 +43,9 @@ export function serializeNonHtmlPrefixState(state: NonHtmlPrefixState): string {
         if (!isKeyBlocking(entry, state.params) && !probing) continue;
         prefixes[key] = { nonHtml: entry.nonHtml, confirmedAt: entry.confirmedAt };
     }
-    const urls = [...new Set([...state.isolated, ...state.loadedIsolated])].slice(0, state.params.isolatedMax);
+    // R23 I-2: an isolated URL still in probation stays persisted, like a key in probation.
+    const urls = [...new Set([...state.isolated, ...state.loadedIsolated, ...state.isolatedProbation])]
+        .slice(0, state.params.isolatedMax);
     return JSON.stringify({ version: NONHTML_SIDECAR_VERSION, prefixes, urls });
 }
 
@@ -91,9 +93,13 @@ export function loadSidecarInto(
             });
         added++;
     }
+    // R23 I-2: "previous" URLs go to probation (one probe each), unless "current" already loaded
+    // them as kept; "current" URLs (OOM relaunch) load as kept, like "current" keys load confirmed.
     for (const u of data.urls) {
-        if (state.loadedIsolated.size >= state.params.isolatedMax) break;
-        state.loadedIsolated.add(normalizeUrlIdentity(u));
+        const n = normalizeUrlIdentity(u);
+        if (origin === "previous" && state.loadedIsolated.has(n)) continue;
+        if (state.loadedIsolated.size + state.isolatedProbation.size >= state.params.isolatedMax) break;
+        (origin === "current" ? state.loadedIsolated : state.isolatedProbation).add(n);
     }
     return added;
 }

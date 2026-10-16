@@ -49,6 +49,13 @@ Patron : `src/facetCap.ts` (décisions pures, état passé en argument, sans I/O
 - `decide(state, url, ctx)` : rend `allow | block | probe`.
   - `allow` si la clé est `null`, si l'URL est **exemptée** (`ctx.isExempt(url)`, § 5) ou si `sawHtml` est vrai.
   - `block` si `nonHtml ≥ K` et `!sawHtml`, ou si l'URL fait partie des isolées chargées.
+    > **Amendement 2026-10-16 (R23 I-2, ligne ci-dessus et D5).** Les isolées du sidecar **précédent** ne
+    > sont plus bloquées d'emblée : elles entrent en probation (`isolatedProbation`), chacune sondée
+    > (`probe`) jusqu'à résolution par `resolveIsolatedProbe` — non-HTML ou échec terminal ⇒ conservée
+    > (`loadedIsolated`, bloquée), page HTML `ok` ⇒ libérée (`Non-HTML isolated URL released:`). Seules
+    > les isolées du sidecar **courant** (relance OOM) sont chargées bloquées. Une isolée non résolue reste
+    > persistée (D5 : même sidecar). Détail : `apps-microservices/crawler-service/CLAUDE.md`,
+    > § Non-HTML Prefix Learning.
   - Une clé en probation suit § 3.3.
 - Sidecar : `serialize(state)` et `parse(json)`. Le parse est tolérant : absent ou corrompu ⇒ état vide ;
   `version` inconnue ⇒ ignoré.

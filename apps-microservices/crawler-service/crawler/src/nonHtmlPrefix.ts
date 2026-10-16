@@ -91,10 +91,16 @@ export interface NonHtmlPrefixState {
     prefixes: Map<string, PrefixEntry>;
     isolated: Set<string>;
     loadedIsolated: Set<string>;
+    /**
+     * R23 I-2: isolated URLs loaded from the PREVIOUS crawl's sidecar, not yet re-checked. Each one
+     * is probed (let through) until `resolveIsolatedProbe` moves it to `loadedIsolated` (kept) or
+     * drops it (released). `loadedIsolated` keeps its meaning: kept = blocked.
+     */
+    isolatedProbation: Set<string>;
 }
 
 export function createNonHtmlPrefixState(params: NonHtmlPrefixParams): NonHtmlPrefixState {
-    return { params, prefixes: new Map(), isolated: new Set(), loadedIsolated: new Set() };
+    return { params, prefixes: new Map(), isolated: new Set(), loadedIsolated: new Set(), isolatedProbation: new Set() };
 }
 
 /** A key blocks once confirmed or K non-HTML hits are counted — and never after an HTML page was seen. */
@@ -203,6 +209,26 @@ export function recordProbeFailure(state: NonHtmlPrefixState, url: string): bool
     return true;
 }
 
+export type IsolatedProbeOutcome = "nonhtml" | "html" | "failure";
+
+/**
+ * R23 I-2: resolves the probe of an isolated URL in `isolatedProbation`. `nonhtml` (content-type
+ * guard) and `failure` (`failedRequestHandler`, after the capped retries — a timeout keeps the URL,
+ * as D4) move it to `loadedIsolated` ⇒ "kept"; `html` (an `ok`-class page with a response, same
+ * caller as `recordHtml`) drops it ⇒ "released". A URL not in probation ⇒ null, nothing changes.
+ */
+export function resolveIsolatedProbe(
+    state: NonHtmlPrefixState,
+    url: string,
+    outcome: IsolatedProbeOutcome,
+): "kept" | "released" | null {
+    const n = normalizeUrlIdentity(url);
+    if (!state.isolatedProbation.delete(n)) return null;
+    if (outcome === "html") return "released";
+    state.loadedIsolated.add(n);
+    return "kept";
+}
+
 export type NonHtmlDecision = "allow" | "block" | "probe";
 
 /** Verdict for `url` before it is fetched. May admit a probe (mutates the probation). Order is normative. */
@@ -214,6 +240,9 @@ export function decide(
     const n = normalizeUrlIdentity(url);
     // 1. Absolute exemption (previous dataset, homepage).
     if (isExempt(n)) return "allow";
+    // 1b. R23 I-2: isolated URL of the previous crawl, not yet re-checked: probed on every pass
+    // (enqueue, prenav, retries). No shared slot, no admission count: nothing to mutate.
+    if (state.isolatedProbation.has(n)) return "probe";
     // 2. Isolated URL learned by a previous crawl.
     if (state.loadedIsolated.has(n)) return "block";
     // 3.

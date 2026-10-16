@@ -639,7 +639,7 @@ if (nonHtmlPrefixMode !== "off") {
         persist: (text) => writeSidecarFile(nonHtmlSidecarFile, text),
     });
     context.nonHtmlPrefix.addExempt(site);
-    console.log(`[nonhtml-prefix] mode=${nonHtmlPrefixMode} K=${nonHtmlState.params.minNonHtml} probes=${nonHtmlState.params.probes} loaded current=${fromCurrent} previous=${fromPrevious} isolated=${nonHtmlState.loadedIsolated.size}`);
+    console.log(`[nonhtml-prefix] mode=${nonHtmlPrefixMode} K=${nonHtmlState.params.minNonHtml} probes=${nonHtmlState.params.probes} loaded current=${fromCurrent} previous=${fromPrevious} isolated=${nonHtmlState.loadedIsolated.size} isolated_probation=${nonHtmlState.isolatedProbation.size}`);
 }
 
 // --- HYBRID RESUME STRATEGY ---
