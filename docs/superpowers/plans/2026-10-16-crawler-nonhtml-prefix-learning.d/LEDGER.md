@@ -29,3 +29,24 @@ Task 3: minor (deferred): Step 6 anchor pre-count skipped — numstat 3/0, i/lf 
 Task 3: complete (commits a72dcd6..af2f775, review clean, review file 4816B) — controller re-run: tsc rc 0, npm test 606/606 fail 0
 Session A cut after T3 (context ≈220k; T4 + fix round would pass ~240k). Measured: setup ≈90k (baseline system ≈100k not counted in the 25k estimate), per task ≈5-7k when all delegated. Session B: T4-T10 + final review + finishing; expect cut after ~T7 if setup again ≈90k — re-measure.
 Session B setup artifacts (reuse, do not rebuild): <workspace>/implementer-common.md, reviewer-filled.md, preflight.md. Next BASE = af2f775 (+ controller commit of ledger/tasks.json, read `git -C <WT> log --oneline -1`).
+Session B (2026-10-16 11:29): launched IN worktree; guard NOT armed (`cd <WT> && git log` accepted); features/poc = e57409aed (0 new). implementer-common scratchpad repointed to session B.
+Ruling: multi-pair Edit sections applied by <workspace>/apply-section-edits.py (extracted, count==1 dry run, CRLF-aware) — skill §1 "text carried to the byte" — cost if wrong: none beyond script bug caught by dry run/numstat.
+Task 4: dispatched (BASE 0421e00, general-purpose sonnet/medium); dry run 9 pairs count=1, +49
+Task 4: implementer DONE commit 2a4feb5 (49/0, i/lf, 606/606, tsc 0); review dispatched (opus/high) ⇒ <workspace>/task-4-review.md — NOT YET READ by controller
+Task 5: dispatched in parallel with T4 review (BASE 2a4feb5, sonnet/medium; dry run 3 pairs count=1, +13) ⇒ <workspace>/task-5-report.md. If T4 needs a fix round, run it AFTER T5 commits (shared index).
+Task 6: brief extracted <workspace>/task-6-brief.md; dry run 2 pairs count=1, +17 (= P3 "17 0").
+Session B cut 2026-10-16 (usage limit) after T5 dispatch — resumed same session.
+Task 4: minor (deferred): readStat("filtered_nonhtml") runs in off mode (plan-prescribed, never published)
+Task 4: ⚠️ resolved: b2 probe then b3 prenav on same seed — decide() step 4 "probeUrl === n ⇒ probe" (00-index C1) returns probe without admitted++; seedUrl = enqueued url/uniqueKey ⇒ same n
+Task 4: complete (commits 0421e00..2a4feb5, review clean, review file 5862B)
+Task 5: implementer DONE commit 2f67b50 (13/0, 606/606, tsc 0); review dispatched (opus/high) ⇒ task-5-review.md
+Task 6: dispatched in parallel with T5 review (BASE 2f67b50, sonnet/medium) ⇒ task-6-report.md
+Task 5: minor (deferred): b1 runs per link occurrence before knownUrlsOnPage dedup ⇒ filtered_nonhtml at b1 counts page×link (b2/b3 per request); shadow `would block` lines = occurrences — Ruling: placement plan-imposed (stop 6 if moved), carry "unit = occurrences" into T10 doc dispatch — cost if wrong: misread shadow counts
+Task 5: ⚠️ resolved: site + dataset exemption at b1 = gate Set filled by T4 (addExempt(site) C8, addExempt(consolidatedUrl) F10), T4 review verified C8 line for line
+Task 5: complete (commits 2a4feb5..2f67b50, review clean, review file 5210B)
+Task 6: implementer DONE commit e8cff65 (17/0 P3, i/crlf, bare-LF 0, 606/606, tsc 0); review dispatched (opus/high) ⇒ task-6-review.md
+Task 6: minor (deferred): probe admitted at b1/b2 then dropped by an earlier prenav hook (facet cap, filter-on-seen) exits via STALE_VARIANT_SKIP_MARKER branch before onProbeFailure ⇒ slot held, prefix blocked for the crawl — inside C5 accepted frontier; moving the call = plan change ⇒ final review / user
+Task 6: minor (deferred): shadow logs `would block` at enqueue AND prenav for one URL (same as T3 minor) ⇒ T10 doc: count distinct URLs
+Task 6: ⚠️ resolved: b2 probe then b3 — reviewer confirmed request.url === seedUrl (main.ts:1662, crawlee request.js:215), decide step 4 no admitted++ (nonHtmlPrefix.ts:226)
+Task 6: complete (commits 2f67b50..e8cff65, review clean, review file 7376B)
+Session B cut after T6 (CONTEXTE 225k + T7 ≈12k + handoff > 240k). Session C: P2 commit already done (see git log) ⇒ dispatch T7 (BASE = HEAD), then T8-T10 + final review. T10 dispatch carries: shadow counts = occurrences (T3, T5, T6 minors). Measured session B: setup ≈25k over socle, ≈5-7k per task, parallel review(N) ‖ implement(N+1) worked (disjoint files).
