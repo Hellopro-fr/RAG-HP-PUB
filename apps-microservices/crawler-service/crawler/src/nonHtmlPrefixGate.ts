@@ -5,6 +5,7 @@ import {
     recordHtml,
     recordNonHtml,
     recordProbeFailure,
+    resolveIsolatedProbe,
 } from "./nonHtmlPrefix.js";
 import type { NonHtmlPrefixState } from "./nonHtmlPrefix.js";
 import { serializeNonHtmlPrefixState } from "./nonHtmlPrefixSidecar.js";
@@ -66,6 +67,10 @@ export class NonHtmlPrefixGate {
     }
 
     onNonHtml(url: string): void {
+        // R23 I-2: resolve an isolated probe first; the key path below runs unchanged.
+        if (resolveIsolatedProbe(this.state, url, "nonhtml") === "kept") {
+            this.log(`[nonhtml-prefix] isolated kept by probe: ${url}`);
+        }
         const event = recordNonHtml(this.state, url, this.now());
         const key = prefixKey(url);
         const n = key === null ? 0 : (this.state.prefixes.get(key)?.nonHtml ?? 0);
@@ -81,6 +86,11 @@ export class NonHtmlPrefixGate {
     }
 
     onHtml(url: string): void {
+        // R23 I-2: an isolated probe that served HTML is a false positive of the previous crawl.
+        if (resolveIsolatedProbe(this.state, url, "html") === "released") {
+            this.log(`Non-HTML isolated URL released: ${url}`);
+            this.persist(serializeNonHtmlPrefixState(this.state));
+        }
         const event = recordHtml(this.state, url);
         if (event !== "released") return;
         const key = prefixKey(url);
@@ -90,6 +100,11 @@ export class NonHtmlPrefixGate {
     }
 
     onProbeFailure(url: string): void {
+        // R23 I-2: a failed isolated probe keeps the URL (timeout ⇒ kept, as D4); no persist,
+        // the URL is in the sidecar either way.
+        if (resolveIsolatedProbe(this.state, url, "failure") === "kept") {
+            this.log(`[nonhtml-prefix] isolated probe failed: ${url}`);
+        }
         if (!recordProbeFailure(this.state, url)) return;
         this.log(`[nonhtml-prefix] probe failed: ${url} [${prefixKey(url)}]`);
     }

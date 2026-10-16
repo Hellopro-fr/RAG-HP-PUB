@@ -1048,6 +1048,22 @@ the end-of-crawl flush in `gracefulShutdown` (normal completion, OOM relaunch, S
 before shutdown loses it. The current crawl's own sidecar (OOM
 relaunch) loads already confirmed, and is loaded first.
 
+**Isolated URLs get one probe each (R23 I-2, 2026-10-16).** The previous crawl's `urls` no longer
+load as blocked: they load into `isolatedProbation` and every pass of such a URL (enqueue, prenav,
+retries) is a `probe`, let through in `shadow` and `on` alike — no shared slot, no admission count.
+`resolveIsolatedProbe` (`nonHtmlPrefix.ts`) settles it: a non-HTML response or a terminal failure
+(`failedRequestHandler`, after the capped retries — a timeout keeps the URL) moves it to
+`loadedIsolated` (kept = blocked for the rest of the crawl); an `ok`-class HTML page drops it (log
+`Non-HTML isolated URL released:`, sidecar rewritten). An unresolved URL stays in the sidecar
+(`urls` = isolated ∪ kept ∪ probation) and is probed again next crawl. The current crawl's own `urls`
+(OOM relaunch) load as kept, not in probation — same choice as its keys loading confirmed; a URL kept
+by `current` is skipped by `previous`. `NONHTML_ISOLATED_MAX` caps kept + probation together at load.
+**Cost:** each update crawl re-fetches every isolated URL of the previous sidecar (up to
+`NONHTML_ISOLATED_MAX`), retries included; the count is the `isolated_probation=` field of the
+startup line — read it in `shadow` before `on`. ⚠ A 404 HTML page is not an `ok` page: it reaches
+`failedRequestHandler` (status policy throws `HTTP 404`), so it resolves as a failure and the URL is kept
+for the current crawl — it is still persisted and re-probed at the next crawl.
+
 **Exemption.** A URL of the previous main dataset (`source === 'dataset'` in the `main.ts` consolidation
 loop) and the homepage are never blocked, at any point; the comparison ignores a trailing `/`. The
 set is complete before the crawler starts (`startCrawler` runs after the consolidation).
@@ -1067,7 +1083,9 @@ gate exists** (`shadow` and `on`; absent in `off`). It counts handler passes, li
 | `Non-HTML prefix released:` | a key that was blocking (or on probation) then served HTML — **a false positive**; any occurrence is read before switching to `on` |
 | `Non-HTML prefix learned:` / `… confirmed by probe:` | key learned this crawl / confirmed by a probe |
 | `[nonhtml-prefix] probe (…):` / `probe failed:` / `blocked (…):` | probe let through / probe failure / effective block (`on`) |
-| `[nonhtml-prefix] mode=… K=… probes=… loaded current=… previous=… isolated=…` | startup line: the mode and the loaded state |
+| `Non-HTML isolated URL released:` | an isolated URL of the previous crawl, on probation, served HTML — **a false positive** of the isolated set; read before switching to `on`, like the key release |
+| `[nonhtml-prefix] isolated kept by probe:` / `isolated probe failed:` | isolated probe answered non-HTML / failed terminally — kept (blocked for the rest of the crawl) |
+| `[nonhtml-prefix] mode=… K=… probes=… loaded current=… previous=… isolated=… isolated_probation=…` | startup line: the mode and the loaded state (`isolated` = kept, `isolated_probation` = to probe) |
 
 **These log lines count occurrences, not URLs.** One URL can log `would block` several times: once
 per page that links to it at enqueue (before the per-page link dedup), again at pre-navigation, and

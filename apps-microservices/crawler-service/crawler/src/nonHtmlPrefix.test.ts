@@ -11,6 +11,7 @@ import {
     recordHtml,
     recordNonHtml,
     recordProbeFailure,
+    resolveIsolatedProbe,
     resolveNonHtmlPrefixMode,
     resolveNonHtmlPrefixParams,
     resolvePositiveInt,
@@ -478,4 +479,91 @@ test("lifecycle: learn at K, block, then a later HTML page releases the key for 
     assert.equal(decide(s, img(5), never), "allow");
     assert.equal(recordNonHtml(s, img(6), LATER), "counted");
     assert.equal(decide(s, img(7), never), "allow", "the veto holds");
+});
+
+// ------------------------------------------- R23 I-2: one probe per loaded isolated URL
+
+test("createNonHtmlPrefixState: isolatedProbation starts empty", () => {
+    assert.equal(fresh().isolatedProbation.size, 0);
+});
+
+test("decide I-2: an isolated URL in probation is probed, after the exemption and before loadedIsolated", () => {
+    const s = fresh();
+    s.isolatedProbation.add(bare(1));
+    s.isolatedProbation.add(img(1));
+    assert.equal(decide(s, bare(1), never), "probe");
+    assert.equal(decide(s, `${img(1)}/`, never), "probe", "matched on normalized identity");
+    assert.equal(decide(s, bare(1), () => true), "allow", "the exemption comes first");
+    assert.equal(decide(s, bare(2), never), "allow", "a key-less URL not in probation");
+});
+
+test("decide I-2: every pass (enqueue, prenav, retries) probes again and takes no key admission", () => {
+    const s = withEntry(entry({ nonHtml: 5, probation: probation() }));
+    s.isolatedProbation.add(img(1));
+    for (let i = 0; i < 4; i++) assert.equal(decide(s, img(1), never), "probe");
+    assert.deepEqual(got(s).probation, probation(), "the key's probe slot is not shared");
+    assert.ok(s.isolatedProbation.has(img(1)), "deciding never resolves");
+});
+
+test("resolveIsolatedProbe nonhtml: kept, moved from probation to loadedIsolated, then blocked", () => {
+    const s = fresh();
+    s.isolatedProbation.add(bare(1));
+    assert.equal(resolveIsolatedProbe(s, bare(1), "nonhtml"), "kept");
+    assert.equal(s.isolatedProbation.has(bare(1)), false);
+    assert.equal(s.loadedIsolated.has(bare(1)), true);
+    assert.equal(decide(s, bare(1), never), "block");
+});
+
+test("resolveIsolatedProbe html: released, removed everywhere, then allowed", () => {
+    const s = fresh();
+    s.isolatedProbation.add(bare(1));
+    assert.equal(resolveIsolatedProbe(s, bare(1), "html"), "released");
+    assert.equal(s.isolatedProbation.has(bare(1)), false);
+    assert.equal(s.loadedIsolated.has(bare(1)), false);
+    assert.equal(decide(s, bare(1), never), "allow");
+});
+
+test("resolveIsolatedProbe failure: kept (a timeout keeps the URL, as D4), then blocked", () => {
+    const s = fresh();
+    s.isolatedProbation.add(img(1));
+    assert.equal(resolveIsolatedProbe(s, img(1), "failure"), "kept");
+    assert.equal(s.isolatedProbation.has(img(1)), false);
+    assert.equal(s.loadedIsolated.has(img(1)), true);
+    assert.equal(decide(s, img(1), never), "block");
+});
+
+test("resolveIsolatedProbe: matched on normalized identity", () => {
+    const s = fresh();
+    s.isolatedProbation.add(bare(1));
+    assert.equal(resolveIsolatedProbe(s, `${bare(1)}/`, "html"), "released");
+    assert.equal(s.isolatedProbation.size, 0);
+});
+
+test("resolveIsolatedProbe: a URL absent from isolatedProbation is null and changes nothing", () => {
+    const s = fresh();
+    s.loadedIsolated.add(bare(2));
+    for (const outcome of ["nonhtml", "html", "failure"] as const) {
+        assert.equal(resolveIsolatedProbe(s, bare(1), outcome), null);
+        assert.equal(resolveIsolatedProbe(s, bare(2), outcome), null, "loadedIsolated alone is not a probation");
+    }
+    assert.deepEqual([...s.loadedIsolated], [bare(2)]);
+    assert.equal(s.isolatedProbation.size, 0);
+});
+
+test("resolveIsolatedProbe: a second resolution of the same URL is null", () => {
+    const s = fresh();
+    s.isolatedProbation.add(bare(1));
+    assert.equal(resolveIsolatedProbe(s, bare(1), "html"), "released");
+    assert.equal(resolveIsolatedProbe(s, bare(1), "nonhtml"), null);
+    assert.equal(s.loadedIsolated.has(bare(1)), false);
+});
+
+test("I-2: a 404 HTML page resolves nothing (no html outcome): the URL stays in probation and is probed again", () => {
+    const s = fresh();
+    s.isolatedProbation.add(bare(1));
+    assert.equal(decide(s, bare(1), never), "probe");
+    // a 404 never reaches the html outcome (routes.ts calls onHtml for an `ok`-class page only)
+    assert.equal(recordHtml(s, bare(1)), "none", "key-less: the prefix path is untouched");
+    assert.ok(s.isolatedProbation.has(bare(1)));
+    assert.equal(decide(s, bare(1), never), "probe");
 });

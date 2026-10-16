@@ -356,3 +356,60 @@ test("readSidecarFile: returns the exact text written by writeSidecarFile", () =
         assert.equal(readSidecarFile(file), EMPTY_BYTES);
     });
 });
+
+// ------------------------------------------- R23 I-2: isolated URL probation (load, serialize)
+
+const URLS = (urls: string[]) => parseNonHtmlPrefixSidecar(JSON.stringify({ version: 1, prefixes: {}, urls }));
+
+test("loadSidecarInto previous (I-2): urls go to isolatedProbation (normalised), not to loadedIsolated", () => {
+    const s = stateWith(10);
+    loadSidecarInto(s, DATA(), "previous");
+    assert.deepEqual([...s.isolatedProbation], ["https://h/x", "https://h/y"]);
+    assert.equal(s.loadedIsolated.size, 0);
+});
+
+test("loadSidecarInto current (I-2): urls go to loadedIsolated, isolatedProbation stays empty", () => {
+    const s = stateWith(10);
+    loadSidecarInto(s, DATA(), "current");
+    assert.deepEqual([...s.loadedIsolated], ["https://h/x", "https://h/y"]);
+    assert.equal(s.isolatedProbation.size, 0);
+});
+
+test("loadSidecarInto order (I-2): current then previous => a URL in both stays in loadedIsolated, new ones go to probation", () => {
+    const s = stateWith(10);
+    loadSidecarInto(s, DATA(), "current");
+    loadSidecarInto(s, URLS(["https://h/y/", "https://h/z"]), "previous");
+    assert.deepEqual([...s.loadedIsolated], ["https://h/x", "https://h/y"]);
+    assert.deepEqual([...s.isolatedProbation], ["https://h/z"]);
+});
+
+test("loadSidecarInto (I-2): the cap is loadedIsolated + isolatedProbation combined", () => {
+    const s = stateWith(3);
+    loadSidecarInto(s, DATA(), "current");
+    loadSidecarInto(s, URLS(["https://h/a", "https://h/b", "https://h/c"]), "previous");
+    assert.deepEqual([...s.loadedIsolated], ["https://h/x", "https://h/y"]);
+    assert.deepEqual([...s.isolatedProbation], ["https://h/a"]);
+    const p = stateWith(1);
+    loadSidecarInto(p, DATA(), "previous");
+    assert.deepEqual([...p.isolatedProbation], ["https://h/x"]);
+});
+
+test("serialize (I-2): urls = isolated, loadedIsolated, then isolatedProbation, deduplicated, truncated", () => {
+    const s = stateWith(4);
+    s.isolated.add("https://h/a");
+    s.loadedIsolated.add("https://h/b");
+    s.isolatedProbation.add("https://h/a"); // duplicate
+    s.isolatedProbation.add("https://h/c");
+    s.isolatedProbation.add("https://h/d");
+    s.isolatedProbation.add("https://h/e"); // 5th distinct => cut by isolatedMax=4
+    assert.deepEqual(JSON.parse(serializeNonHtmlPrefixState(s)).urls,
+        ["https://h/a", "https://h/b", "https://h/c", "https://h/d"]);
+});
+
+test("serialize (I-2): an unresolved probation round-trips to the next crawl's probation", () => {
+    const s = stateWith(10);
+    loadSidecarInto(s, DATA(), "previous");
+    const next = stateWith(10);
+    loadSidecarInto(next, parseNonHtmlPrefixSidecar(serializeNonHtmlPrefixState(s)), "previous");
+    assert.deepEqual([...next.isolatedProbation], ["https://h/x", "https://h/y"]);
+});

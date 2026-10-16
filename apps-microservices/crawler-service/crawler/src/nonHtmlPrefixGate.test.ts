@@ -231,3 +231,76 @@ test("default now() yields an ISO timestamp", () => {
     gate.onNonHtml(U1);
     assert.match(persisted[persisted.length - 1], /"confirmedAt":"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
 });
+
+// ------------------------------------------- R23 I-2: one probe per loaded isolated URL
+
+// An isolated URL loaded from the previous crawl's sidecar, in probation.
+function withIsolatedProbation(mode: "shadow" | "on", url: string = ISOLATED) {
+    const g = makeGate(mode);
+    loadSidecarInto(g.state, parseNonHtmlPrefixSidecar(JSON.stringify({ version: 1, prefixes: {}, urls: [url] })), "previous");
+    return g;
+}
+
+test("I-2 check: an isolated URL in probation passes in shadow and in on, logged as a probe", () => {
+    for (const mode of ["shadow", "on"] as const) {
+        const g = withIsolatedProbation(mode);
+        assert.equal(g.gate.check(ISOLATED, "enqueue"), true);
+        assert.equal(g.gate.check(ISOLATED, "prenav"), true, "the retry/prenav pass is probed again");
+        assert.equal(g.logs.length, 2);
+        assert.ok(g.logs[0].startsWith(`[nonhtml-prefix] probe (enqueue): ${ISOLATED}`));
+        assert.equal(g.persisted.length, 0);
+    }
+});
+
+test("I-2 onNonHtml: kept is logged, then the URL is blocked in on and only would-blocked in shadow", () => {
+    const on = withIsolatedProbation("on");
+    on.gate.onNonHtml(ISOLATED);
+    assert.equal(on.logs[0], `[nonhtml-prefix] isolated kept by probe: ${ISOLATED}`);
+    assert.equal(on.gate.check(ISOLATED, "enqueue"), false);
+    const shadow = withIsolatedProbation("shadow");
+    shadow.gate.onNonHtml(ISOLATED);
+    shadow.logs.length = 0;
+    assert.equal(shadow.gate.check(ISOLATED, "enqueue"), true, "shadow lets it through");
+    assert.ok(shadow.logs[0].startsWith(`[nonhtml-prefix] would block (enqueue): ${ISOLATED}`));
+});
+
+test("I-2 onHtml: released is logged and persisted; the URL leaves the sidecar and passes silently", () => {
+    const g = withIsolatedProbation("on");
+    g.gate.onHtml(ISOLATED);
+    assert.deepEqual(g.logs, [`Non-HTML isolated URL released: ${ISOLATED}`]);
+    assert.equal(g.persisted.length, 1);
+    assert.deepEqual(JSON.parse(g.persisted[0]).urls, []);
+    assert.equal(g.gate.check(ISOLATED, "enqueue"), true);
+    assert.equal(g.logs.length, 1, "allow logs nothing");
+});
+
+test("I-2 onProbeFailure: kept is logged (no persist), then the URL is blocked in on", () => {
+    const g = withIsolatedProbation("on");
+    g.gate.onProbeFailure(ISOLATED);
+    assert.deepEqual(g.logs, [`[nonhtml-prefix] isolated probe failed: ${ISOLATED}`]);
+    assert.equal(g.persisted.length, 0);
+    assert.equal(g.gate.check(ISOLATED, "enqueue"), false);
+});
+
+test("I-2: an isolated non-HTML URL under a key in probation also confirms the key (key behaviour intact)", () => {
+    const g = withProbation("on");
+    g.state.isolatedProbation.add(U1);
+    assert.equal(g.gate.check(U1, "enqueue"), true);
+    assert.deepEqual(g.state.prefixes.get(KEY)?.probation, { admitted: 0, probeUrl: null, resolved: false },
+        "the isolated probe takes no key admission");
+    g.logs.length = 0;
+    g.gate.onNonHtml(U1);
+    assert.deepEqual(g.logs, [
+        `[nonhtml-prefix] isolated kept by probe: ${U1}`,
+        `Non-HTML prefix confirmed by probe: ${KEY} (n=6)`,
+    ]);
+    assert.equal(g.state.prefixes.get(KEY)?.confirmed, true);
+});
+
+test("I-2: a URL not in isolated probation logs nothing new in the three handlers", () => {
+    const g = makeGate("on");
+    g.gate.onHtml(ISOLATED);
+    g.gate.onProbeFailure(ISOLATED);
+    assert.deepEqual(g.logs, []);
+    assert.equal(g.persisted.length, 0);
+});
