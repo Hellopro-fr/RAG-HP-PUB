@@ -1,0 +1,84 @@
+{
+  "avis_fournisseur": {
+    "database_id": 10,
+    "description": "Synthèse de réputation d'un fournisseur sur UNE plateforme d'avis externe : 1 ligne par couple (société, source), clé UNIQUE uq_avis_societe_source. Trois sources via des acteurs Apify : Google (résolution d'un place_id puis récupération des avis), Trustpilot et Avis Vérifiés (interrogés par domaine). Porte la note moyenne et le volume d'avis de la plateforme ; les avis unitaires vivent dans la table fille avis_fournisseur_detail (exposée au MCP sans le contenu ni l'identité des avis). Lue par le BO (inspection) ET par deux consommateurs aval, sur les seules lignes status='done' : l'API V2 fournisseur_listing destinée au FRONT, et le calcul de l'ordre des fournisseurs sur les feuilles. Stockée dans HELLOPRO_IA.",
+    "primary_key": "id_avis_fournisseur",
+    "default_order_by": "date_fetch DESC",
+    "rows": null,
+    "columns": {
+      "id_avis_fournisseur": {
+        "type": "bigint",
+        "desc": "Identifiant unique de la ligne (PK, auto-increment). Référencé par avis_fournisseur_detail.id_avis_fournisseur (avis unitaires, table exposée au MCP sans le contenu ni l'identité des avis)."
+      },
+      "id_societe": {
+        "type": "bigint",
+        "desc": "FK applicative → societe.id_societe (HELLOPRO_IA), même espace d'ID que societe_datagouv. NOT NULL, indexé. 1re colonne de la clé UNIQUE."
+      },
+      "source": {
+        "type": "enum",
+        "desc": "Plateforme d'avis, enum('google','trustpilot','avis_verifies'). NOT NULL. 2e colonne de la clé UNIQUE : une ligne par plateforme et par fournisseur, y compris quand la plateforme n'a rien (status absent)."
+      },
+      "place_id": {
+        "type": "varchar(128)",
+        "desc": "Identifiant de lieu Google (forme 'ChIJ…'). GOOGLE UNIQUEMENT — toujours NULL pour trustpilot et avis_verifies, qui sont interrogés par domaine. Sert de cache : sa présence permet à un rafraîchissement de sauter la phase de résolution. NULLable."
+      },
+      "source_url": {
+        "type": "varchar(1024)",
+        "desc": "URL publique du profil réellement utilisée. Google : lien Maps avec query_place_id · Trustpilot : page /review/{domaine} · Avis Vérifiés : URL du site ou du certificat. NULL quand la source n'a pas été atteinte. Tronquée à 1024."
+      },
+      "note_moyenne": {
+        "type": "decimal(3,2)",
+        "desc": "Note moyenne de la plateforme, SUR 5 pour les trois sources (précision au centième). NULL sauf status='done'."
+      },
+      "nb_avis": {
+        "type": "int",
+        "desc": "Nombre TOTAL d'avis annoncé par la plateforme — PAS le nombre de lignes stockées dans avis_fournisseur_detail (au plus ~20 avis détaillés récupérés par run). Ne jamais recalculer une moyenne à partir de la table fille. NULL sauf done."
+      },
+      "match_method": {
+        "type": "enum",
+        "desc": "Manière dont le fournisseur a été rattaché au profil, enum('domain','place_resolved','name') : 'domain' = interrogation par nom de domaine (trustpilot, avis_verifies) · 'place_resolved' = lieu Google résolu et validé · 'name' = valeur prévue à l'enum mais AUCUN code ne l'émet (morte). NULL quand le worker a conclu sans passer par l'analyse du résultat — utile au diagnostic : status='absent' AVEC match_method='domain' = plateforme interrogée mais sans page ; status='absent' avec match_method NULL = jamais interrogée (pas de domaine/nom) ou échec 4xx de l'acteur."
+      },
+      "match_confidence": {
+        "type": "tinyint unsigned",
+        "desc": "Score de résolution 0–100, SIGNAL GOOGLE UNIQUEMENT : round(similarité_nom × 100 − min(30, distance_km × 10)) ; 100 = nom normalisé identique à moins de ~50 m. Mesuré le 2026-10-16 : google 'done' de 57 à 100 (38 valeurs distinctes sur 343 lignes) ; renseigné AUSSI sur des lignes google 'absent' (53 à 100) ; NULL sur les 320 google 'no_match'. TOUJOURS NULL pour trustpilot et avis_verifies (le domaine correspond ou non, il n'y a pas de croyance partielle à scorer)."
+      },
+      "status": {
+        "type": "enum",
+        "desc": "Issue de la tentative, NOT NULL défaut 'pending', indexé. enum : 'done' = profil trouvé, note et volume récupérés · 'no_match' = GOOGLE uniquement, des candidats ont été vus puis REFUSÉS par le triple garde-fou (distance ≤ 2 km, similarité de nom ≥ 0.6, au moins un mot distinctif commun) — ou fournisseur sans géolocalisation / nom trop générique · 'absent' = trois causes fusionnées : non interrogeable (ni domaine ni nom), acteur renvoyant un jeu vide (la plateforme n'a pas de page), ou échec terminal 4xx de l'acteur · 'error' = notre côté a échoué (service d'acteurs indisponible, exception) — seul statut appelant un retry immédiat · 'pending' = jamais observé (tous les chemins d'écriture posent un statut terminal ; 0 ligne le 2026-10-16)."
+      },
+      "date_fetch": {
+        "type": "datetime",
+        "desc": "Horodatage de la DERNIÈRE TENTATIVE, posé à NOW() sur TOUTES les issues, y compris les échecs. Pilote la sélection de rafraîchissement (--refresh-months, défaut 6) : les échecs redeviennent éligibles au TTL au lieu d'être martelés ou exclus à vie. NULLable en base mais toujours renseigné en pratique."
+      },
+      "date_creation": {
+        "type": "datetime",
+        "desc": "Date de première insertion (DEFAULT CURRENT_TIMESTAMP). NOT NULL."
+      },
+      "date_maj": {
+        "type": "datetime",
+        "desc": "Date de dernière modification (ON UPDATE CURRENT_TIMESTAMP). NULL tant que la ligne n'a jamais été réécrite depuis sa création — c'est le cas de la quasi-totalité des lignes issues du lot pilote (2 127 sur 2 172 le 2026-10-16)."
+      }
+    },
+    "relations": [
+      {
+        "column": "id_societe",
+        "references": "societe.id_societe (HELLOPRO_IA)",
+        "cardinality": "N:1",
+        "note": "Fournisseur. Une ligne par plateforme."
+      },
+      {
+        "column": "id_societe",
+        "references": "societe_datagouv.id_societe",
+        "cardinality": "N:1",
+        "note": "PRÉ-REQUIS DUR pour l'adaptateur Google : raison_sociale, commune, latitude et longitude de societe_datagouv servent d'entrée à la résolution du lieu. Sans enrichissement data.gouv, pas de résolution Google possible."
+      },
+      {
+        "column": "id_avis_fournisseur",
+        "referenced_by": "avis_fournisseur_detail.id_avis_fournisseur",
+        "cardinality": "1:N",
+        "note": "Avis unitaires (avec charge brute), remplacés en bloc dans une transaction. Table exposée au MCP sans le contenu ni l'identité des avis (texte, auteur, titre, réponse, identifiant source, JSON brut)."
+      }
+    ],
+    "notes": "Writer unique : worker CLI script_enrich_avis.php (BO/script/rag/fournisseur/avis/), via upsert_resume() — UPSERT sur la clé unique (fonctions_avis_repo.php:461@7f68863) — et set_status(), un chemin qui ne pose que le statut (:660), ce qui explique les lignes à match_method/place_id NULL. Périmètre identique au worker data.gouv : statut_dspi IN (13, 14) ET est_archiver=1 ET est_retire_dspi=0 ET systeme_dspi=1 — le statut 6 est EXCLU (select_eligible(), fonctions_avis_repo.php:203@7f68863) ; l'option --ignorer-gate-pipeline lève ces quatre filtres. Rafraîchissement : ligne absente OU pending OU date_fetch plus vieux que --refresh-months (défaut 6) ; --id-societe rejoue en ignorant la fraîcheur. Trois adaptateurs Apify (aucun appel direct aux API Google Places) ; disjoncteur à 5 échecs consécutifs ; verrou de concurrence. Flag AVIS_ENRICH_ENABLED : variable d'environnement lue UNIQUEMENT par le wrapper shell — lancer le PHP directement le contourne. Lecteurs BO : onglet Avis de la fiche société, page de suivi de couverture dédiée, filtres de la liste fournisseurs. Lecteurs aval, tous filtrés sur status='done' : fl_scores() de BO/api/v2/fournisseur_listing.php (API V2 pour le FRONT : AVG SIMPLE de note_moyenne et SUM de nb_avis toutes sources confondues) et ofrn_repo_avis() de BO/script/annuaire/ordre_fournisseur_feuille/fonctions_ordre_fournisseur_repo.php (ordre des fournisseurs : une ligne par source, nb_avis supérieur à 0, consolidée en moyenne PONDÉRÉE par le module pur) — les deux fichiers sont déployés en PROD ; l'affichage effectif côté FRONT n'est pas vérifié ici. AVG(note_moyenne) toutes sources est une moyenne SIMPLE des plateformes, qui s'écarte de la pondérée (société 6365 : Trustpilot 2,4 sur 39 avis + Google 4,2 sur 348 ⇒ AVG 3,30, pondérée 4,10 — commentaire de ofrn_repo_avis()).Répartition le 2026-10-16 (2 172 lignes) : google 343 done / 320 no_match / 61 absent ; trustpilot 45 done / 679 absent ; avis_verifies 18 done / 705 absent / 1 error. Avis Vérifiés ne couvre que les marques abonnées, donc un 'absent' massif est attendu, MAIS le mapping des échecs 4xx vers 'absent' ne permet pas de distinguer « marque non abonnée » d'un défaut d'abonnement ou d'authentification de notre côté (angle mort d'observabilité). Dernier date_fetch : 2026-09-15. Pas de DDL versionnée dans le dépôt. DB = LINK_MYSQLI_HELLOPRO_IA."
+  }
+}
