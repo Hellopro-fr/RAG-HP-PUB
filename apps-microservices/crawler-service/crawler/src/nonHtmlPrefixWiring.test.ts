@@ -13,9 +13,10 @@ import path from "node:path";
  * counts, and ORDER at each anchor point. The gate's own logic is covered by
  * nonHtmlPrefixGate.test.ts.
  *
- * Counts run on the source with `//` comment lines blanked to equal length, so a comment that
- * quotes a literal cannot satisfy or break a count; offsets stay comparable with the raw
- * source, where the comment markers are read.
+ * Counts run on the source with full-line `//` comments blanked to equal length (a trailing
+ * `//` comment after code is NOT blanked), so a full-line comment that quotes a literal cannot
+ * satisfy or break a count; offsets stay comparable with the raw source, where the comment
+ * markers are read.
  */
 const raw = (f: string) =>
     fs.readFileSync(path.join(import.meta.dirname, f), "utf-8");
@@ -121,6 +122,17 @@ test("filtered_nonhtml: payload carries it only through the conditional spread (
         at(code, 'readStat("filtered_nonhtml")') < at(code, spread),
         "main.ts: readStat must precede the payload that uses it",
     );
+});
+
+test("main.ts: gracefulShutdown flushes the prefix state exactly once, after the re-entrance guard", () => {
+    const code = blankComments(raw("main.ts"));
+    const start = at(code, "const gracefulShutdown = async (");
+    const guard = code.indexOf("if (isShuttingDown) return;", start);
+    assert.notEqual(guard, -1, "gracefulShutdown re-entrance guard not found");
+    const rest = code.slice(start);
+    assert.equal(count(rest, "context.nonHtmlPrefix?.flush()"), 1, "expected exactly one flush() in gracefulShutdown");
+    assert.equal(count(code, "context.nonHtmlPrefix?.flush()"), 1, "main.ts: flush() must appear nowhere else");
+    assert.ok(guard < code.indexOf("context.nonHtmlPrefix?.flush()"), "flush must come after the re-entrance guard");
 });
 
 test("routes.ts: order at the anchors (learn before skip log, html before breaker, b1 between the two queue-purge blocks)", () => {

@@ -1207,6 +1207,9 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
     try { redisMonitor?.stop(); } catch (e) { /* ignore */ }
     try { progressMonitor?.stop(); } catch (e) { /* ignore */ }
 
+    // R23 (2): persist the prefix state at end of crawl — keys confirmed by probe exhaustion have no event write (spec 3.3).
+    try { context.nonHtmlPrefix?.flush(); } catch (e) { console.warn(`[nonhtml-prefix] flush failed: ${e instanceof Error ? e.message : String(e)}`); }
+
     // Timing instrumentation: stop sampler + flush JSONL/summary before exit.
     // Synchronous-ish: finalize() is fast and fire-and-await before any exit.
     if (typeof finalizeTimingOnce === 'function') {

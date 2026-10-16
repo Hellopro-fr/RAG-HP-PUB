@@ -1030,7 +1030,7 @@ page releases nothing). A key blocks once `nonHtml ≥ K` with no HTML seen, or 
 **Sidecar `__nonhtml_prefixes.json`.** Location: `storage/datasets/<domain>/__nonhtml_prefixes.json`
 (relative to the job's storage path, i.e. the main dataset directory). Format: one JSON line,
 `{"version":1,"prefixes":{"<key>":{"nonHtml":n,"confirmedAt":…}},"urls":[…]}`. Written through
-`__nonhtml_prefixes.json.tmp` + rename on every learned / confirmed / isolated event, never raising
+`__nonhtml_prefixes.json.tmp` + rename on every learned / confirmed / isolated / released event, never raising
 into the crawl (a failure is a `console.warn`). A missing, corrupt or other-version file reads as
 empty. It is **invisible to the dataset readers by design**: `_count_files_in_dir`
 (`app/core/crawler_manager.py:146`) skips every name starting with `__` (`:155`), and the
@@ -1043,7 +1043,9 @@ restart (`dropData`) and kept across an OOM relaunch; nothing is created at star
 the first `NONHTML_PREFIX_PROBES` URLs of the key pass, one at a time. Any non-HTML response confirms
 the key; one HTML page releases it (log `Non-HTML prefix released:`); a probe that fails
 (`failedRequestHandler`, i.e. after the capped retries) does not release it, and when all probes are
-spent with no signal the key is confirmed and stays persisted. The current crawl's own sidecar (OOM
+spent with no signal the key is confirmed; that confirmation fires no event, so it is persisted by
+the end-of-crawl flush in `gracefulShutdown` (normal completion, OOM relaunch, SIGTERM) — a SIGKILL
+before shutdown loses it. The current crawl's own sidecar (OOM
 relaunch) loads already confirmed, and is loaded first.
 
 **Exemption.** A URL of the previous main dataset (`source === 'dataset'` in the `main.ts` consolidation
@@ -1084,7 +1086,7 @@ match `_ENV_WHITELIST_PREFIXES` (`NONHTML_` does).
 
 **Checking the mode without a shell:** `GET /admin/config` lists the Node env whose name starts with a
 whitelisted prefix; `NONHTML_` is in `_ENV_WHITELIST_PREFIXES` (`app/router/admin.py`), so the raw
-`NONHTML_PREFIX_MODE` (absent ⇒ `off`) appears under `env`. The older line of the endpoint table above
+`NONHTML_PREFIX_MODE` (absent ⇒ `off`) appears under `env`. The older line of the endpoint table below
 (`DIEZ_/QM_/TIMING_…`) is an example list, not the full whitelist.
 
 **Rollout (outside the code plan, tracked in the registry, entry R23):** merge `features/poc`, push,

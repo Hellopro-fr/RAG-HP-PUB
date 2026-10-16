@@ -93,4 +93,9 @@ export class NonHtmlPrefixGate {
         if (!recordProbeFailure(this.state, url)) return;
         this.log(`[nonhtml-prefix] probe failed: ${url} [${prefixKey(url)}]`);
     }
+
+    /** Writes the current state to the sidecar; called once at end of crawl (see main.ts). */
+    flush(): void {
+        this.persist(serializeNonHtmlPrefixState(this.state));
+    }
 }

@@ -225,14 +225,15 @@ async def effective_config():
     return {"settings": cfg, "env": env}
 
 
+# pdf-: crawler pdfDatasetName (non-HTML responses skipped by routes.ts)
 _DATASET_PREFIXES = {"main": "", "error": "error-", "nfr": "nfr-", "update": "update-",
-                     "pdf": "pdf-"}  # pdf-: crawler pdfDatasetName (non-HTML responses skipped by routes.ts)
+                     "pdf": "pdf-"}
 _DATASET_MAX_PARSE_BYTES = 20_000_000  # skip parsing pathological items; metadata still listed
 
 
 def _dataset_dir(job_info: dict, kind: str) -> Optional[str]:
     """Mirror crawler_manager._dataset_dir_for_job (crawler_manager.py:1742),
-    generalized to the error-/nfr-/update- dataset variants. Same
+    generalized to the error-/nfr-/update-/pdf- dataset variants. Same
     {domain} -> {domain with . -> -} sanitized fallback."""
     storage_path = job_info.get("storage_path")
     domain = job_info.get("domain")

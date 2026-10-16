@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { NonHtmlPrefixGate } from "./nonHtmlPrefixGate.js";
 import type { GatePoint } from "./nonHtmlPrefixGate.js";
 import { createNonHtmlPrefixState, NONHTML_PREFIX_DEFAULTS } from "./nonHtmlPrefix.js";
+import { loadSidecarInto, parseNonHtmlPrefixSidecar } from "./nonHtmlPrefixSidecar.js";
 
 const NOW = "2026-10-16T00:00:00.000Z";
 const KEY = "h.fr/image";
@@ -183,6 +184,30 @@ test("onProbeFailure: logs without persisting; unrelated URL is silent", () => {
     assert.equal(g.persisted.length, 0);
     g.gate.onProbeFailure(U2); // not the admitted probe
     assert.equal(g.logs.length, 1);
+});
+
+test("flush: persists a key confirmed by probe exhaustion (no event write before)", () => {
+    const g = withProbation("on");
+    for (const u of [U1, U2, U3]) {
+        assert.equal(g.gate.check(u, "enqueue"), true); // admits u as the in-flight probe
+        g.gate.onProbeFailure(u);
+    }
+    assert.equal(g.persisted.length, 0); // exhaustion alone never writes
+    g.gate.flush();
+    assert.equal(g.persisted.length, 1);
+    const fresh = createNonHtmlPrefixState({ ...NONHTML_PREFIX_DEFAULTS, minNonHtml: 2 });
+    assert.equal(loadSidecarInto(fresh, parseNonHtmlPrefixSidecar(g.persisted[0]), "current"), 1);
+    const reloaded = new NonHtmlPrefixGate({ mode: "on", state: fresh, log: () => {}, persist: () => {} });
+    assert.equal(reloaded.check("https://h.fr/image/a9", "enqueue"), false);
+});
+
+test("flush: empty state persists once a parseable payload", () => {
+    const g = makeGate("on");
+    g.gate.flush();
+    assert.equal(g.persisted.length, 1);
+    const data = parseNonHtmlPrefixSidecar(g.persisted[0]);
+    assert.equal(data.prefixes.size, 0);
+    assert.deepEqual(data.urls, []);
 });
 
 test("injected now() stamps confirmedAt in the persisted sidecar", () => {
