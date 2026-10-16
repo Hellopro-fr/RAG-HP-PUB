@@ -50,3 +50,5 @@ Task 6: minor (deferred): shadow logs `would block` at enqueue AND prenav for on
 Task 6: ⚠️ resolved: b2 probe then b3 — reviewer confirmed request.url === seedUrl (main.ts:1662, crawlee request.js:215), decide step 4 no admitted++ (nonHtmlPrefix.ts:226)
 Task 6: complete (commits 2f67b50..e8cff65, review clean, review file 7376B)
 Session B cut after T6 (CONTEXTE 225k + T7 ≈12k + handoff > 240k). Session C: P2 commit already done (see git log) ⇒ dispatch T7 (BASE = HEAD), then T8-T10 + final review. T10 dispatch carries: shadow counts = occurrences (T3, T5, T6 minors). Measured session B: setup ≈25k over socle, ≈5-7k per task, parallel review(N) ‖ implement(N+1) worked (disjoint files).
+Session C (2026-10-16): launched IN worktree; guard ARMED (sed with $D variable refused) ⇒ literal paths only; features/poc = e57409aed (0 new). implementer-common scratchpad repointed to session C.
+Task 7: dispatched (BASE 74604c4, general-purpose sonnet/medium); P1 carried (needle .onHtml(request.url) at T07:107,:193; mutation fail count re-measured)
