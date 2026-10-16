@@ -11,6 +11,7 @@ import { PlaywrightCrawler } from "crawlee";
 // Type-only: qmConsumptionSkip.ts imports `context` at the value level, so a value-level
 // import here would be circular. `import type` is erased at compile time — no cycle.
 import type { CollapseOrigin, CollapseGate } from "./qmConsumptionSkip.js";
+import type { NonHtmlPrefixGate } from "./nonHtmlPrefixGate.js";
 
 export const context = {
     dedupManager: null as DedupManager | null,
@@ -179,6 +180,8 @@ export const context = {
     qmCollapsedOtherKeys: new Set<string>(),
     // Queue-purge #1: per-base distinct query-signature counter (facet cap). In-memory.
     facetVariantCount: new Map<string, Set<string>>(),
+    // R23 (2): non-HTML prefix learning gate. null when NONHTML_PREFIX_MODE=off (default) — zero effect.
+    nonHtmlPrefix: null as NonHtmlPrefixGate | null,
     // Queue-purge #2: normalized bases (baseKeyAbsent) already crawled — the seen oracle.
     seenBases: new Set<string>(),
     // Stored language query param for session-based i18n sites (e.g., ?lang=fr)

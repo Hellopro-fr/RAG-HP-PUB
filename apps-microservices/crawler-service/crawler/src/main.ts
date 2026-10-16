@@ -63,6 +63,9 @@ import { canonicalDedupEnabled } from "./canonicalBase.js";
 import { isFilterParam } from "./filterOnSeen.js";
 import { facetParamsForCms } from "./cmsFacetLists.js";
 import { hasIgnoredExtensionForSeed } from "./seedExtensionFilter.js";
+import { resolveNonHtmlPrefixMode, resolveNonHtmlPrefixParams, createNonHtmlPrefixState } from "./nonHtmlPrefix.js";
+import { currentSidecarPath, loadSidecarInto, parseNonHtmlPrefixSidecar, readSidecarFile, resolvePreviousSidecarPath, writeSidecarFile } from "./nonHtmlPrefixSidecar.js";
+import { NonHtmlPrefixGate } from "./nonHtmlPrefixGate.js";
 
 const now = new Date().toISOString().replace(/:/g, "-");
 
@@ -618,6 +621,27 @@ if (dropData) {
 // distinction survives a SIGKILL. Never clobbers an OOM relaunch's entries.
 ensureUnjudgedSidecar(domain);
 
+// R23 (2): non-HTML prefix learning. Loaded AFTER the dropData block (a clean restart dropped
+// this crawl's dataset dir, sidecar included; an OOM relaunch keeps it). Previous crawl's
+// sidecar (update mode) enters probation. Absent file = empty state; nothing created at startup.
+const nonHtmlPrefixMode = resolveNonHtmlPrefixMode(process.env.NONHTML_PREFIX_MODE);
+if (nonHtmlPrefixMode !== "off") {
+    const nonHtmlState = createNonHtmlPrefixState(resolveNonHtmlPrefixParams(process.env));
+    const nonHtmlSidecarFile = currentSidecarPath(domain);
+    const fromCurrent = loadSidecarInto(nonHtmlState, parseNonHtmlPrefixSidecar(readSidecarFile(nonHtmlSidecarFile)), "current");
+    const fromPrevious = (crawlMode === 'update' && previousCrawlId)
+        ? loadSidecarInto(nonHtmlState, parseNonHtmlPrefixSidecar(readSidecarFile(resolvePreviousSidecarPath(previousCrawlId, domain))), "previous")
+        : 0;
+    context.nonHtmlPrefix = new NonHtmlPrefixGate({
+        mode: nonHtmlPrefixMode,
+        state: nonHtmlState,
+        log: (m) => console.log(m),
+        persist: (text) => writeSidecarFile(nonHtmlSidecarFile, text),
+    });
+    context.nonHtmlPrefix.addExempt(site);
+    console.log(`[nonhtml-prefix] mode=${nonHtmlPrefixMode} K=${nonHtmlState.params.minNonHtml} probes=${nonHtmlState.params.probes} loaded current=${fromCurrent} previous=${fromPrevious} isolated=${nonHtmlState.loadedIsolated.size}`);
+}
+
 // --- HYBRID RESUME STRATEGY ---
 // Check if Redis already has data (Hot Resume)
 const redisCount = await context.dedupManager.getCount();
@@ -960,7 +984,12 @@ if (crawlMode === 'update') {
     // Collect remaining URLs for Phase 2 (all consolidated URLs except the homepage)
     for await (const { url: consolidatedUrl, source } of allUrls) {
         if (matchesMainSite(consolidatedUrl, site)) continue; // Already seeded as homepage
+        if (source === 'dataset') context.nonHtmlPrefix?.addExempt(consolidatedUrl);
         remainingUrls.push({ url: consolidatedUrl, source });
+    }
+
+    if (context.nonHtmlPrefix) {
+        console.log(`[nonhtml-prefix] exempt URLs: ${context.nonHtmlPrefix.exemptCount()}`);
     }
 
     const totalConsolidated = remainingUrls.length + 1; // +1 for homepage
@@ -1178,6 +1207,9 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
     try { redisMonitor?.stop(); } catch (e) { /* ignore */ }
     try { progressMonitor?.stop(); } catch (e) { /* ignore */ }
 
+    // R23 (2): persist the prefix state at end of crawl — keys confirmed by probe exhaustion have no event write (spec 3.3).
+    try { context.nonHtmlPrefix?.flush(); } catch (e) { console.warn(`[nonhtml-prefix] flush failed: ${e instanceof Error ? e.message : String(e)}`); }
+
     // Timing instrumentation: stop sampler + flush JSONL/summary before exit.
     // Synchronous-ish: finalize() is fast and fire-and-await before any exit.
     if (typeof finalizeTimingOnce === 'function') {
@@ -1258,6 +1290,7 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
     const filtered_qm = await readStat("filtered_qm");
     const filtered_hash = await readStat("filtered_hash");
     const filtered_ext = await readStat("filtered_ext");
+    const filtered_nonhtml = await readStat("filtered_nonhtml");
     const filtered_nonfr = await readStat("filtered_nonfr");
     // Detection outage made countable: pages that got NO linguistic verdict. Distinct from
     // filtered_nonfr by construction (routes.ts increments them on mutually exclusive
@@ -1292,6 +1325,7 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         filtered_qm,
         filtered_hash,
         filtered_ext,
+        ...(context.nonHtmlPrefix ? { filtered_nonhtml } : {}),
         filtered_nonfr,
         verdict_unavailable,
         filtered_duplicate,
@@ -1558,6 +1592,7 @@ if (typeCrawling == "sitemap") {
             let seedCount = 0;
             let skippedCount = 0;
             let skippedExtCount = 0;
+            let skippedNonHtmlCount = 0;
             for (const { url, source } of remainingUrls) {
                 if (excluded.length > 0 && DetectionLangueClient.isExcludedRegionalPath(url, excluded)) {
                     skippedCount++;
@@ -1603,6 +1638,20 @@ if (typeCrawling == "sitemap") {
                         { toKeep: context.config.toKeep, toRemove: context.config.toRemove },
                     );
                 }
+                // R23 (2) b2: test the identity actually enqueued (seedUrl, after stripActionAnchor and
+                // the queue-purge re-clean). A dataset URL is exempted under that same form, or b3
+                // would test it under a string absent from the exemption Set.
+                if (context.nonHtmlPrefix) {
+                    if (source === 'dataset') context.nonHtmlPrefix.addExempt(seedUrl);
+                    if (!context.nonHtmlPrefix.check(seedUrl, "seed")) {
+                        skippedNonHtmlCount++;
+                        if (context.statsManager) {
+                            await context.statsManager.increment("filtered_nonhtml");
+                        }
+                        continue;
+                    }
+                }
+
                 // Épinglage de l'identité de file, comme Phase 1 (:952) et l'amorce standard
                 // (:1033). Sans lui, Crawlee calcule un uniqueKey NORMALISÉ (il retire le /
                 // final) alors que routes.ts:1277 épingle les liens découverts sur l'URL BRUTE :
@@ -1625,6 +1674,9 @@ if (typeCrawling == "sitemap") {
             console.log(`[PHASE 2] Finished seeding ${seedCount} URLs (${skippedCount} excluded as regional variants).`);
             if (skippedExtCount > 0) {
                 console.log(`[seed-filter] skipped ${skippedExtCount} ignored-extension baseline URL(s) (filtered_ext)`);
+            }
+            if (skippedNonHtmlCount > 0) {
+                console.log(`[seed-filter] skipped ${skippedNonHtmlCount} non-HTML-prefix baseline URL(s) (filtered_nonhtml)`);
             }
             context.phase2SeedingComplete = true;
         };

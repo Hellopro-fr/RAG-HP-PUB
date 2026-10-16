@@ -383,6 +383,7 @@ router.addDefaultHandler(
                     content_type: contentType,
                     timestamp: new Date().toISOString(),
                 });
+                context.nonHtmlPrefix?.onNonHtml(request.url);
                 log.warning(`Skipping non-HTML response: ${url} (Content-Type: ${contentType})`);
                 return;
             }
@@ -443,6 +444,10 @@ router.addDefaultHandler(
                 throw new Error(`HTTP ${status}`);
             }
         }
+
+        // R23 (2): learn HTML. Reached by an `ok`-class response AND by a missing response
+        // (response is optional): the guard keeps "no response" from vetoing a prefix.
+        if (response) context.nonHtmlPrefix?.onHtml(request.url);
 
         // --- Circuit Breaker Check (Dual-Mode) ---
         if (context.statsManager) {
@@ -1243,6 +1248,14 @@ router.addDefaultHandler(
                         // Queue-purge #1: facet cap — drop discovered variants once the base is saturated.
                         if (QM_FACET_ENABLED && isOverCap(context.facetVariantCount, request.url, QM_FACET_CAP_K)) {
                             logBlocked('facet-cap', request.url);
+                            return false;
+                        }
+
+                        // R23 (2): non-HTML prefix gate (b1). Synchronous on purpose: the counter
+                        // is fire-and-forget (void … .catch) so transformRequestFunction stays sync.
+                        if (context.nonHtmlPrefix && !context.nonHtmlPrefix.check(request.url, "enqueue")) {
+                            logBlocked('nonhtml-prefix', request.url);
+                            if (context.statsManager) void context.statsManager.increment("filtered_nonhtml").catch(() => {});
                             return false;
                         }
 
