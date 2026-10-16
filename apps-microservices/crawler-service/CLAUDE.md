@@ -996,6 +996,106 @@ for completed crawls (the queue-health `exit(0)` ran before it).
 
 Spec: `docs/superpowers/specs/2026-06-16-crawler-failure-recovery-design.md`.
 
+## Non-HTML Prefix Learning (R23 (2), `NONHTML_PREFIX_MODE`)
+
+Stops the crawler from replaying extension-less non-HTML URLs (measured case: `marsaleix.fr`
+`/image/…`, every attempt a 90 s `Navigation timed out`). R23 (1) capped the retries
+(`TIMEOUT_MAX_RETRIES`, see "HTTP Status & Navigation Retry Policy"); this feature stops the
+URLs being queued and navigated at all. The unit is the **parent folder** of the URL path
+(`prefixKey`: `https://www.marsaleix.fr/image/_1AAAB-x?y=1#z` ⇒ `www.marsaleix.fr/image`; a root-level
+URL has no key and is only tracked as an *isolated* URL).
+
+**Mode — `NONHTML_PREFIX_MODE` (Node, read once at startup by `main.ts`):**
+
+| Value | Behaviour |
+|---|---|
+| `off` (**default**; also `""` and any unknown value) | zero effect: `context.nonHtmlPrefix` stays `null`, no sidecar read or written, no counter, **no `filtered_nonhtml` key in the payload** |
+| `shadow` | learns, persists and logs, **never blocks** and never increments `filtered_nonhtml`; the measure is in the logs (below) |
+| `on` | blocks at the three points (enqueue, seed re-queue, pre-navigation) and counts `filtered_nonhtml` |
+
+**Tunables (Node env, inherited like the others; an empty, non-integer or ≤ 0 value falls back to the
+default — never to 0):**
+
+| Variable | Default | Effect |
+|---|---|---|
+| `NONHTML_PREFIX_MIN` | `5` | non-HTML responses under one key (with no HTML seen) before it blocks (K) |
+| `NONHTML_PREFIX_PROBES` | `3` | URLs of a loaded key let through per crawl to re-check it |
+| `NONHTML_ISOLATED_MAX` | `10000` | cap on remembered key-less / under-K URLs in the sidecar |
+
+**What counts, and the veto.** Only a response that failed the `text/html` content-type guard
+(`routes.ts`, log `Skipping non-HTML response:`) counts, and only if the URL has no ignored
+extension. **One HTML page of class `ok` under a key vetoes it for the rest of the crawl** (a 404 HTML
+page releases nothing). A key blocks once `nonHtml ≥ K` with no HTML seen, or once confirmed.
+
+**Sidecar `__nonhtml_prefixes.json`.** Location: `storage/datasets/<domain>/__nonhtml_prefixes.json`
+(relative to the job's storage path, i.e. the main dataset directory). Format: one JSON line,
+`{"version":1,"prefixes":{"<key>":{"nonHtml":n,"confirmedAt":…}},"urls":[…]}`. Written through
+`__nonhtml_prefixes.json.tmp` + rename on every learned / confirmed / isolated event, never raising
+into the crawl (a failure is a `console.warn`). A missing, corrupt or other-version file reads as
+empty. It is **invisible to the dataset readers by design**: `_count_files_in_dir`
+(`app/core/crawler_manager.py:146`) skips every name starting with `__` (`:155`), and the
+previous-dataset reader in `functions.ts` (`:1310`) requires `.json` AND no `__` prefix — the `.tmp`
+name fails both. Same lifecycle as `__unjudged_urls.json`: it is dropped with the dataset on a clean
+restart (`dropData`) and kept across an OOM relaunch; nothing is created at startup.
+
+**Probation at the next crawl (update mode only).** The previous crawl's sidecar (looked up under
+`<previousId>/storage/datasets/<domain>`, then the dots→hyphens name) loads each key **unconfirmed**:
+the first `NONHTML_PREFIX_PROBES` URLs of the key pass, one at a time. Any non-HTML response confirms
+the key; one HTML page releases it (log `Non-HTML prefix released:`); a probe that fails
+(`failedRequestHandler`, i.e. after the capped retries) does not release it, and when all probes are
+spent with no signal the key is confirmed and stays persisted. The current crawl's own sidecar (OOM
+relaunch) loads already confirmed, and is loaded first.
+
+**Exemption.** A URL of the previous main dataset (`source === 'dataset'` in the `main.ts` consolidation
+loop) and the homepage are never blocked, at any point; the comparison ignores a trailing `/`. The
+set is complete before the crawler starts (`startCrawler` runs after the consolidation).
+
+**Counter `filtered_nonhtml`.** Incremented only when a block is effective (mode `on`): enqueue
+(`routes.ts`), pre-navigation (`functions.ts`, which also counts `purged_prenav` through
+`StaleVariantSkip` — the overlap is intended, `failed` stays correct) and seed re-queue (`main.ts`).
+It is read by `readStat("filtered_nonhtml")` and shipped in `_callback_payload.json` **only when the
+gate exists** (`shadow` and `on`; absent in `off`). It counts handler passes, like `filtered_nonfr`
+(an OOM relaunch resumes the same `stats:{id}` hash). BO does not persist it (spec § 7).
+
+**Logs to count in `shadow`** (`GET /admin/logs/{crawl_id}?grep=…`):
+
+| Log | Meaning |
+|---|---|
+| `[nonhtml-prefix] would block (enqueue\|prenav\|seed):` | what `on` would have filtered — the gain |
+| `Non-HTML prefix released:` | a key that was blocking (or on probation) then served HTML — **a false positive**; any occurrence is read before switching to `on` |
+| `Non-HTML prefix learned:` / `… confirmed by probe:` | key learned this crawl / confirmed by a probe |
+| `[nonhtml-prefix] probe (…):` / `probe failed:` / `blocked (…):` | probe let through / probe failure / effective block (`on`) |
+| `[nonhtml-prefix] mode=… K=… probes=… loaded current=… previous=… isolated=…` | startup line: the mode and the loaded state |
+
+**These log lines count occurrences, not URLs.** One URL can log `would block` several times: once
+per page that links to it at enqueue (before the per-page link dedup), again at pre-navigation, and
+again on each retry; a probe is logged again on each retry. `filtered_nonhtml` at enqueue counts the
+same way (link × page). When reading a `shadow` run, count distinct URLs (`sort -u` on the URL)
+before comparing against `pdf-<name>` or deriving K.
+
+**How the variable reaches the container.** `docker-compose.yml` has **no `NONHTML_*` line**: the
+`crawler-service` block (`:1392`) takes the shared `.env` through `env_file: - .env` (`:1416-1417`), so
+the mode is set on the VM by adding `NONHTML_PREFIX_MODE=shadow` to that `.env` and recreating the
+container (a plain restart does not re-read `.env`). The Python orchestrator spawns the Node crawler
+with `create_subprocess_exec` and no `env=` (`crawler_manager.py:794`), so Node inherits it. **It is
+global to the VM — every domain; no per-domain switch exists.** If a `NONHTML_*` line is ever added to
+the compose `environment:` block, `tests/test_admin_config.py::test_compose_env_parity` requires it to
+match `_ENV_WHITELIST_PREFIXES` (`NONHTML_` does).
+
+**Checking the mode without a shell:** `GET /admin/config` lists the Node env whose name starts with a
+whitelisted prefix; `NONHTML_` is in `_ENV_WHITELIST_PREFIXES` (`app/router/admin.py`), so the raw
+`NONHTML_PREFIX_MODE` (absent ⇒ `off`) appears under `env`. The older line of the endpoint table above
+(`DIEZ_/QM_/TIMING_…`) is an example list, not the full whitelist.
+
+**Rollout (outside the code plan, tracked in the registry, entry R23):** merge `features/poc`, push,
+rebuild with the mode `off` → `shadow` on a few update crawls (count `would block` and `released`) →
+replay K with `crawler/src/tools/nonHtmlPrefixReplay.ts` on `pdf` + `main` exports (`_DATASET_PREFIXES`
+has a `pdf` kind) → `on` → effect proof: 0 `Navigation timed out` on `/image/` once the key is loaded or
+learned, and `filtered_nonhtml` > 0.
+
+Spec: `docs/superpowers/specs/2026-10-16-crawler-nonhtml-prefix-learning-design.md`.
+Plan: `docs/superpowers/plans/2026-10-16-crawler-nonhtml-prefix-learning.md`.
+
 ## Phase-2 limitDiez (zero-touch)
 
 Auto-decides skipDiez vs bypassDiez from content evidence; never escalates limitDiez to a human. Tier-1 (URL heuristic) produces a *hypothesis*; tier-2 verifies it with real content.
