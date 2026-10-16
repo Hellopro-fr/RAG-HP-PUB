@@ -197,6 +197,9 @@ _ENV_WHITELIST_PREFIXES = (
     # the resolved setting is how an operator tells "compose default" from
     # "someone's .env override" before arming it.
     "ARCHIVED_",
+    # NONHTML_PREFIX_MODE/MIN/PROBES + NONHTML_ISOLATED_MAX (R23 (2)): lets an
+    # operator read the learning mode on the VM without a shell. No secret here.
+    "NONHTML_",
 )
 # Compose env vars deliberately NOT exposed by /admin/config. Add here ONLY
 # with a justification comment; anything diagnostic belongs in the whitelist.
@@ -222,7 +225,8 @@ async def effective_config():
     return {"settings": cfg, "env": env}
 
 
-_DATASET_PREFIXES = {"main": "", "error": "error-", "nfr": "nfr-", "update": "update-"}
+_DATASET_PREFIXES = {"main": "", "error": "error-", "nfr": "nfr-", "update": "update-",
+                     "pdf": "pdf-"}  # pdf-: crawler pdfDatasetName (non-HTML responses skipped by routes.ts)
 _DATASET_MAX_PARSE_BYTES = 20_000_000  # skip parsing pathological items; metadata still listed
 
 
@@ -245,7 +249,7 @@ def _dataset_dir(job_info: dict, kind: str) -> Optional[str]:
 
 @router.get("/dataset/{crawl_id}", dependencies=[Depends(verify_api_key)])
 async def dataset_sample(
-    kind: str = Query("main", pattern="^(main|error|nfr|update)$"),
+    kind: str = Query("main", pattern="^(main|error|nfr|update|pdf)$"),
     offset: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     content_chars: int = Query(0, ge=0, le=5000),
