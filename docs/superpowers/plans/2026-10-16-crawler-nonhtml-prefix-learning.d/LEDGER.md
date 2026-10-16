@@ -52,3 +52,28 @@ Task 6: complete (commits 2f67b50..e8cff65, review clean, review file 7376B)
 Session B cut after T6 (CONTEXTE 225k + T7 ≈12k + handoff > 240k). Session C: P2 commit already done (see git log) ⇒ dispatch T7 (BASE = HEAD), then T8-T10 + final review. T10 dispatch carries: shadow counts = occurrences (T3, T5, T6 minors). Measured session B: setup ≈25k over socle, ≈5-7k per task, parallel review(N) ‖ implement(N+1) worked (disjoint files).
 Session C (2026-10-16): launched IN worktree; guard ARMED (sed with $D variable refused) ⇒ literal paths only; features/poc = e57409aed (0 new). implementer-common scratchpad repointed to session C.
 Task 7: dispatched (BASE 74604c4, general-purpose sonnet/medium); P1 carried (needle .onHtml(request.url) at T07:107,:193; mutation fail count re-measured)
+Task 7: implementer DONE_WITH_CONCERNS commit 13209ed (194/0, i/lf, wiring 9/9, suite 615/615, mutation fail 2); review dispatched (opus/high) ⇒ task-7-review.md
+Task 7: concern — first full npm test 600/597/3 (DedupManager.monitor, DedupManager, ProgressMonitor), rerun 606/606 ⇒ timing flake under load; controller re-run queued
+Task 7: concern — guard refused env -u NONHTML_PREFIX_MODE + redirection; plain npm test with variable verified unset
+Task 8: dispatched in parallel with T7 review (BASE 13209ed, sonnet/medium); Ruling: 3 admin.py edits applied by extraction script, not Edit — skill §1 three pairs = extracted — cost if wrong: none beyond numstat 6/2 catch
+Ruling: T09 Step 8 [contrôleur] real replay deferred to registry phase 2 — kind=pdf exists only after T8 is deployed on the VM, and export = admin API calls with key on the VM — cost if wrong: K not measured inside the plan (already a hors-plan phase per index § Phases)
+Task 7: ⚠️ resolved: full suite 615/615 fail 0 by controller re-run at 13209ed (under T8 load); mutation fail 2 per implementer report (names match brief); env -u equivalence — no .env* sets NONHTML_PREFIX_MODE (reviewer)
+Task 7: minor (deferred): blankComments blanks only full-line // comments, docstring claims more (test:25-32)
+Task 7: minor (deferred): bare-key regex catches only the comma form (test:124-128)
+Task 7: minor (deferred): 500/600-char windows prove proximity not containment (tight today)
+Task 7: open point — DedupManager.monitor/DedupManager/ProgressMonitor failed once on first full run before T7 test existed, green on 2 reruns — Ruling: pre-existing timing flake at BASE, recorded not fixed; blocks none
+Task 7: complete (commits feb9bd9..13209ed, review clean, review file 6892B)
+Task 8: implementer DONE_WITH_CONCERNS commit 4f521b8 (admin.py 6/2 i/lf, trio 20 passed = 12+8); review dispatched (opus/high) ⇒ task-8-review.md
+Task 8: minor (deferred): Step 2 red run skipped (one script wrote test + edits together)
+Task 8: concern — service suite (-x) stopped at tests/test_archive_mock_e2e.py::test_daemon_logic TimeoutExpired (bash daemon 5 s), file untouched by branch; controller full run without -x queued
+Task 9: dispatched in parallel with T8 review (BASE 4f521b8, sonnet/medium); Step 8 skipped per ruling
+Ruling: T10 doc gets one added paragraph after the shadow-logs table (<workspace>/task-10-addition.md: counts = occurrences, not URLs) — carries T3/T5/T6 minors; addition only, 0 deletions kept — cost if wrong: one paragraph to reword
+Task 10: dry run apply-section-edits 1 pair count=1 (+100 lines), target CRLF
+Session C plan (CONTEXTE 210k at T9 dispatch): finish T8-T10 here (~15k), cut BEFORE final review; session D = final review + fix wave + finishing
+Task 8: open point — service pytest (no -x) 458 passed 1 failed: test_archive_mock_e2e.py::test_daemon_logic TimeoutExpired; test file and tools/ untouched since e57409aed — Ruling: pre-existing at BASE (Windows bash daemon timing), recorded not fixed; blocks none
+Task 8: ⚠️ resolved: full service suite by controller = 458 passed, 1 failed (pre-existing daemon timeout, open point above)
+Task 8: minor (deferred): 25 pytest warnings pre-existing (admin.py:322 utcfromtimestamp, crawler.py:24 utcnow, pytest-asyncio loop scope)
+Task 8: minor (deferred): _dataset_dir docstring (admin.py:233-235) omits pdf-; comment admin.py:229 ~108 chars > 88 — fixing breaks plan numstat 6/2 ⇒ final review
+Task 8: complete (commits 13209ed..4f521b8, review clean, review file 5665B)
+Task 9: implementer DONE commit 9ebe363 (344/0, red ERR_MODULE_NOT_FOUND seen, 10/10, suite 625/625, usage exit 2); review dispatched (opus/high) ⇒ task-9-review.md
+Task 10: P2 controller commit (ledger + .tasks.json T7,T8 completed) then dispatch (sonnet/medium) in parallel with T9 review; ledger appends held in <scratchpad>/ledger-pending.txt until T10 commits
