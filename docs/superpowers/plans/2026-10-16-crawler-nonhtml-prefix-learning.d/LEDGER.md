@@ -77,3 +77,28 @@ Task 8: minor (deferred): _dataset_dir docstring (admin.py:233-235) omits pdf-; 
 Task 8: complete (commits 13209ed..4f521b8, review clean, review file 5665B)
 Task 9: implementer DONE commit 9ebe363 (344/0, red ERR_MODULE_NOT_FOUND seen, 10/10, suite 625/625, usage exit 2); review dispatched (opus/high) ⇒ task-9-review.md
 Task 10: P2 controller commit (ledger + .tasks.json T7,T8 completed) then dispatch (sonnet/medium) in parallel with T9 review; ledger appends held in <scratchpad>/ledger-pending.txt until T10 commits
+Task 10: implementer DONE_WITH_CONCERNS commit 3092221 (CLAUDE.md +100/-0, i/lf w/crlf, TS 625/625, trio 20 passed); Steps 6-7 [contrôleur] pending
+Task 10: concern — apply-section-edits.py mis-paired T10 pair (new_string marker line lacks ':'), --write reverted by checkout; implementer inserted section + addition by own byte script (scratchpad t10_add.py, brief lines 66-158) ⇒ T10 reviewer must diff inserted text vs brief block
+Task 10: deviation — functions.ts previous-dataset reader cited :1293 moved to :1310 (fixed in inserted text); brief check NONHTML_PREFIX_MODE count >=5 gives 4 on verbatim text (brief miscount)
+Task 9: review dispatched before cut; result in task-9-review.md (NOT YET READ by controller)
+Session C cut 2026-10-16 (CONTEXTE 243k IMMINENTE) after T10 implementer. Session D: read task-9-review.md ⇒ complete/fix T9; T10 review (BASE 8c535b8, HEAD 3092221); T10 Step 7 graphify; final review; finishing (merge = stop 3). T10 Step 6 registry line written in session C.
+Task 9: review READ (7367B): spec ✅, 1 Important [plan] — replay learns from download-skip rows (functions.ts:623-637 writes pdf dataset, onNonHtml only at routes.ts:387) and T8 export lacks content_type ⇒ learned/avoided overstated; fix = addition (export content_type) ⇒ session D: rule (addition = controller ruling) then fix round 1; 3 Minor [plan]: dataset url = post-redirect vs request.url; html_blocked/released ignore exemption; parse_error rows dropped uncounted
+Session D (2026-10-16 ~12:30): launched IN worktree; guard partly armed (`cd <WT> && git log` accepted, awk program refused); features/poc = e57409aed (0 new). implementer-common scratchpad repointed to session D.
+Ruling: T9 Important #1 fixed by addition — admin.py serves content_type (key always present, None if absent); replay: field present & null/"" ⇒ decide-only (no recordNonHtml), absent ⇒ unchanged; CLAUDE.md +1 paragraph — spec: production learns only at content-type guard (routes.ts onNonHtml) — cost if wrong: one more fix round; not stop 6 (no plan-imposed assertion changed, absent-field behaviour kept)
+Task 9: minor (deferred): dataset url = post-redirect (request.loadedUrl) vs C1 identity request.url
+Task 9: minor (deferred): html_blocked/released follow shadow semantics (recordHtml even when blocked; MAJ exemption ignored)
+Task 9: minor (deferred): parse_error/unparseable rows dropped without a count
+Task 9: fix round 1 dispatched (BASE 3092221, sonnet/medium, brief task-9-fix1-brief.md) ‖ Task 10 review dispatched (opus/high, package review-8c535b8e2..30922211e.diff)
+Task 10: ⚠️ resolved: inserted text = brief 66-158 + addition except :1293→:1310 (verified); NONHTML_PREFIX_MODE = 4 in brief block (plan miscount); "BO does not persist" = spec line 75; "before per-page link dedup" = T5 review (ledger T5 minor)
+Task 10: minor (deferred): CLAUDE.md:1087 "endpoint table above" — row is at :1174, below
+Task 10: minor (deferred): CLAUDE.md:1032 persist events omit `released` (onHtml persists, nonHtmlPrefixGate.ts:88-89)
+Task 10: open point — probe exhaustion confirms the key in decide/recordProbeFailure without persisting it; no end-of-crawl write in main.ts ⇒ key lost for next update crawl unless a later event writes the sidecar (contradicts CLAUDE.md:1046) — Ruling: carried to final review as specific question, not T10 fix loop (code of T1-T6) — cost if wrong: confirmed keys re-learned each crawl
+Task 10: complete (commits 8c535b8..3092221, review clean, review file 6195B)
+Task 9: fix round 1 implementer DONE_WITH_CONCERNS commit a8ece3e (numstat CLAUDE.md 2/0, admin.py 1/0, replay.ts 15/2, tests +30/+12; red 3 TS + 1 py seen; npm test 628/628, tsc 0, pytest trio 21 passed)
+Ruling: ExportRecord.learnable optional (absent ⇒ true) instead of required — required breaks tsc on existing fixtures that may not be edited — cost if wrong: none (ReplayRow.learnable required)
+Task 9: open point — first full npm test 624 with 3 whole-file failures (UpdateChecker.checkedSet.separation, pushedSet, redirectRepeat), alone 7/7, rerun 628/628 — Ruling: load flake (re-review ran concurrently), same class as T7 open point; blocks none
+Ruling: T10 Step 7 graphify deferred to after merge on features/poc — planner rc=1: crawler-service (15 code, 1 doc, LLM pass) + docs (15 docs, LLM pass); context at 215k cannot hold the passes, and the graph is tracked on the integration branch — cost if wrong: graph stale until session E runs it
+Task 9: fix round 1/5 (1 addressed, 0 open; commits 3092221..a8ece3e; re-review file task-9-rereview-1.md)
+Task 9: minor (deferred): main-kind export now also carries content_type (harmless: html rows forced learnable)
+Task 9: complete (commits 4f521b8..a8ece3e, review clean after fix round 1, review file 7367B)
+Session D cut planned after T9 re-review + .tasks.json sync (CONTEXTE 215k at T9 re-review dispatch; final review + wave + finishing ≈45-55k > 240k). Session E prompt: memory/r23_reprise_sessionE.md
