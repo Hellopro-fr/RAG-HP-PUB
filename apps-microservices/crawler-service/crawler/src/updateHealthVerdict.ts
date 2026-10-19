@@ -120,9 +120,11 @@ export function effectiveMinSample(stats: UpdateHealthStats, cfg: UpdateHealthCo
  * off-book half was never in the denominator at all, so the ratio was not a
  * rate. Measured on the 2026-08 guard-blocked runs: 6105%, 2446%, and two more
  * above 100% — arithmetically impossible for a proportion, and the number a
- * CRITICAL verdict was pronounced on. Same formula as errorRateBreaker.ts:53-54,
- * and for the same reason stated there: `processed + errors` would double-count
- * the on-book half.
+ * CRITICAL verdict was pronounced on. Same DENOMINATOR as shouldTripErrorRateBreaker()
+ * (errorRateBreaker.ts), for the same reason stated there: `processed + errors` would
+ * double-count the on-book half. The NUMERATORS differ since A8: the breaker excludes
+ * not_eligible from its HTTP numerator and judges it in a separate decision; this
+ * verdict still divides the combined `errors`.
  *
  * INVARIANT — errorRate cannot exceed 1. Every on-book error is a URL already
  * inside `processed`, so `errors <= processed + errorsUnprocessed`. A rate above
@@ -181,12 +183,13 @@ export function decideUpdateHealth(
             + `(sample gate ${minSample})`;
     } else if (cfg.maxErrorRate > 0 && errorRate > cfg.maxErrorRate && errors >= cfg.maxAbsErrors) {
         status = "CRITICAL";
-        // ⚠ Deliberately NOT the words "Error rate too high (" — errorRateBreaker.ts:73 emits that
+        // ⚠ Deliberately NOT the words "Error rate too high (" — shouldTripErrorRateBreaker() (errorRateBreaker.ts) emits that
         // exact prefix and production logs are grepped on it (the 69-run measurement of the
         // 2026-08-10 batch was taken that way).
-        // ⚠⚠ THE TWO FORMULAS NOW AGREE, AND THE WORDINGS MUST STILL NOT. An earlier version of
-        // this comment made the distinction conditional on the formulas differing; they no longer
-        // do, and that is NOT a licence to merge the prefixes. These remain two different
+        // ⚠⚠ THE TWO FORMULAS SHARE THE DENOMINATOR BUT, SINCE A8, NO LONGER THE NUMERATOR, AND THE
+        // WORDINGS MUST STILL DIFFER. An earlier version of this comment made the distinction
+        // conditional on the formulas differing; whether they agree or not, that is NOT a licence
+        // to merge the prefixes. These remain two different
         // decisions — a breaker that stops a crawl mid-run, and a health verdict on a finished
         // one — and every existing grep of production logs separates them by this prefix. Merging
         // them would silently fold two populations into one count.

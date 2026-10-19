@@ -89,3 +89,58 @@ test("`errors` keeps exactly its two live writers in UpdateChecker", () => {
         "`errors` feeds the BO health guard and both deletion caps — this lot must not change its count",
     );
 });
+
+test("not_eligible is written ONCE, in CASE 3, right after `errors` and before the deleted JSONL write", () => {
+    const checker = src("class/UpdateChecker.ts");
+
+    const increments = checker.match(/increment\("not_eligible"\)/g) ?? [];
+    assert.equal(
+        increments.length,
+        1,
+        "expected exactly one `not_eligible` writer — CASE 3 (2xx, dataset URL, no longer eligible)",
+    );
+
+    const case3 = checker.indexOf("CASE 3: Success");
+    assert.ok(case3 !== -1, "the CASE 3 marker comment must still exist");
+    const errorsWrite = checker.indexOf('increment("errors")', case3);
+    const notEligible = checker.indexOf('increment("not_eligible")');
+    const deletedWrite = checker.indexOf("UpdateChecker.DELETED_FILE", case3);
+    assert.ok(errorsWrite > case3, "CASE 3 must still write `errors`");
+    assert.ok(notEligible > errorsWrite, "`not_eligible` must follow `errors` in CASE 3");
+    assert.ok(notEligible < deletedWrite, "`not_eligible` must precede the deleted JSONL write");
+});
+
+test("not_eligible: routes.ts reads the counter and forwards it into the breaker call", () => {
+    const routes = src("routes.ts");
+
+    assert.match(
+        routes,
+        /const\s+notEligible\s*=\s*await[^;]*getValue\("not_eligible"\)/,
+        'the notEligible binding passed to the breaker must itself resolve to context.statsManager.getValue("not_eligible") — a renamed read paired with a hardcoded notEligible would revert decision 2 to the old combined numerator',
+    );
+    assert.match(
+        routes,
+        /shouldTripErrorRateBreaker\(\s*\{[^}]*\bnotEligible\b\s*[,}]/s,
+        "routes.ts must pass notEligible as a property INTO the shouldTripErrorRateBreaker(...) call — reading the counter and not forwarding it leaves the not_eligible decision dead",
+    );
+});
+
+test("maxNotEligibleRate: context default, CLI argument and circuitBreaker field agree", () => {
+    assert.match(
+        src("context.ts"),
+        /maxNotEligibleRate:\s*0\.50\b/,
+        "context.ts must default circuitBreaker.maxNotEligibleRate to 0.50",
+    );
+
+    const main = src("main.ts");
+    assert.match(
+        main,
+        /const\s+maxNotEligibleRate\s*=\s*parseNumericArg\('maxNotEligibleRate',\s*'npm_config_maxnoteligiblerate',\s*0\.50\)/,
+        "main.ts must parse --maxNotEligibleRate (npm key npm_config_maxnoteligiblerate, default 0.50) — the Python mapper sends exactly this name",
+    );
+    assert.match(
+        main,
+        /maxNotEligibleRate:\s*maxNotEligibleRate\s*,/,
+        "main.ts must copy the parsed value into context.config.circuitBreaker — a parsed-but-unassigned argument is silently ignored",
+    );
+});

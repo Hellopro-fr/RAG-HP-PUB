@@ -1439,6 +1439,10 @@ export const generateUpdateReport = async (domain: string) => {
         // (errorRateBreaker.ts). Reporting only `processed` leaves the number that decided a stop
         // unreproducible once the dataset is archived — the state /admin/dataset returns 404 on.
         const errorsUnprocessed = await context.statsManager.getValue("errors_unprocessed");
+        // `errors` mixes HTTP errors with URLs that were 2xx but no longer eligible; the breaker
+        // splits them with this counter (errorRateBreaker.ts). Reported for the same reason as
+        // errorsUnprocessed: the numbers that decided a stop must outlive the dataset.
+        const notEligible = await context.statsManager.getValue("not_eligible");
 
         const cb = context.config.circuitBreaker;
 
@@ -1469,6 +1473,7 @@ export const generateUpdateReport = async (domain: string) => {
                 new_urls: newUrls,
                 accounted,
                 errors_unprocessed: errorsUnprocessed,
+                not_eligible: notEligible,
                 previous_total: cb.previousTotal
             },
             rates: {
@@ -1481,6 +1486,7 @@ export const generateUpdateReport = async (domain: string) => {
                 min_sample: cb.minSample,
                 min_coverage: cb.minCoverage,
                 max_error_rate: cb.maxErrorRate,
+                max_not_eligible_rate: cb.maxNotEligibleRate,
                 max_redirect_rate: cb.maxRedirectRate,
                 max_growth_rate: cb.maxGrowthRate,
                 max_abs_errors: cb.maxAbsErrors,

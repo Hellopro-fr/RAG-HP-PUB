@@ -361,6 +361,9 @@ export class UpdateChecker {
             } else {
                 // No longer eligible → mark as deleted
                 await this.statsManager.increment("errors");
+                // `errors` reste le compteur combiné ; `not_eligible` isole ce sous-ensemble
+                // (2xx inéligible) pour que le disjoncteur le juge à son propre seuil.
+                await this.statsManager.increment("not_eligible");
                 const result: CheckUrlResult = {
                     action: 'deleted',
                     url: originalUrl,

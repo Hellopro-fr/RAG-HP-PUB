@@ -169,3 +169,36 @@ test("the breaker and the health verdict do not share a message prefix", () => {
         );
     }
 });
+
+/**
+ * `not_eligible` splits the breaker's numerator (errorRateBreaker.ts: HTTP errors = errors minus
+ * not_eligible) and, like `errors_unprocessed` above, only survives archiving if the report
+ * carries it. crawler_manager.py forwards `metrics` wholesale to the BO webhook and the PHP reads
+ * BY STRING KEY: a rename is tsc-clean, suite-green and silently inert downstream. The threshold
+ * is pinned for the same reason — it is the number that decided a `not_eligible` stop.
+ *
+ * Source-text assertions, same anchors as the `errors_unprocessed` test: the reported value must
+ * come from the counter itself, in `metrics`, with its threshold in `thresholds`.
+ */
+test("generateUpdateReport: not_eligible reaches report.metrics and its threshold reaches report.thresholds", () => {
+    const functions = src("functions.ts");
+    const report = reportLiteral(functions);
+    const metricsStart = report.indexOf("metrics: {");
+    const metrics = report.slice(metricsStart, report.indexOf("}", metricsStart));
+
+    assert.match(
+        metrics,
+        /\bnot_eligible:\s*notEligible\b/,
+        "report.metrics.not_eligible — without it the HTTP / not_eligible split of `errors` is unreproducible once the dataset is archived",
+    );
+    assert.match(
+        functions,
+        /const\s+notEligible\s*=\s*await[^;]*getValue\("not_eligible"\)/,
+        "the reported value must come from the counter itself, not from a literal or a stale local",
+    );
+    assert.match(
+        report,
+        /\bmax_not_eligible_rate:\s*cb\.maxNotEligibleRate,/,
+        "report.thresholds.max_not_eligible_rate — the threshold that decided a not_eligible stop",
+    );
+});

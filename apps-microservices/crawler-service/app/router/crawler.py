@@ -291,6 +291,8 @@ async def start_new_crawl(payload: CrawlRequest):
                  params["minSample"] = payload.update_thresholds.min_sample
              if payload.update_thresholds.max_error_rate is not None:
                  params["maxErrorRate"] = payload.update_thresholds.max_error_rate
+             if payload.update_thresholds.max_not_eligible_rate is not None:
+                 params["maxNotEligibleRate"] = payload.update_thresholds.max_not_eligible_rate
              if payload.update_thresholds.max_redirect_rate is not None:
                  params["maxRedirectRate"] = payload.update_thresholds.max_redirect_rate
              if payload.update_thresholds.max_growth_rate is not None:

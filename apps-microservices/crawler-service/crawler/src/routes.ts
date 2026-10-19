@@ -463,6 +463,7 @@ router.addDefaultHandler(
                 const newUrls = await context.statsManager.getValue("new_urls");
                 const processed = await context.statsManager.getValue("processed");
                 const errorsUnprocessed = await context.statsManager.getValue("errors_unprocessed");
+                const notEligible = await context.statsManager.getValue("not_eligible");
 
                 let abortReason = "";
 
@@ -483,7 +484,7 @@ router.addDefaultHandler(
                         // that counter. See errorRateBreaker.ts — 12 of 69 stopped runs
                         // in the 2026-08-10 batch reported a rate above 100%.
                         const errorBreaker = shouldTripErrorRateBreaker(
-                            { errors, processed, errorsUnprocessed },
+                            { errors, processed, errorsUnprocessed, notEligible },
                             cb,
                         );
                         // Left inline on purpose: this branch is disabled in production
