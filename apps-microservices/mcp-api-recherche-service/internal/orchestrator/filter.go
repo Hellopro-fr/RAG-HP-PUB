@@ -95,7 +95,9 @@ func NewFilterBuilder(dbClient databasepb.DatabaseSearchServiceClient, cache *Sc
 }
 
 // Build constructs filter clauses for a given source and filters.
-func (fb *FilterBuilder) Build(ctx context.Context, filtre map[string]any, source string) (string, error) {
+// Each exclude entry is built like a filter, then negated on its own:
+// {"a": x, "b": y} excludes a == x and, separately, b == y.
+func (fb *FilterBuilder) Build(ctx context.Context, filtre, exclude map[string]any, source string) (string, error) {
 	fieldTypes, err := fb.GetFieldTypes(ctx, source)
 	if err != nil {
 		log.Printf("[filter] could not get schema for %s: %v", source, err)
@@ -105,6 +107,14 @@ func (fb *FilterBuilder) Build(ctx context.Context, filtre map[string]any, sourc
 		return "", nil
 	}
 
+	clauses := buildClauses(filtre, fieldTypes, source)
+	for _, c := range buildClauses(exclude, fieldTypes, source) {
+		clauses = append(clauses, "not ("+c+")")
+	}
+	return strings.Join(clauses, " and "), nil
+}
+
+func buildClauses(filtre map[string]any, fieldTypes map[string]string, source string) []string {
 	var clauses []string
 	for key, val := range filtre {
 		dtype := fieldTypes[key]
@@ -139,8 +149,7 @@ func (fb *FilterBuilder) Build(ctx context.Context, filtre map[string]any, sourc
 			clauses = append(clauses, clause)
 		}
 	}
-
-	return strings.Join(clauses, " and "), nil
+	return clauses
 }
 
 // GetFieldTypes returns the field name→type map for a collection, using cache.
