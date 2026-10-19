@@ -27,6 +27,10 @@ const classicSearchInputSchema = `{
 			"type": "object",
 			"description": "Filtres clé-valeur à appliquer (ex. {\"fournisseur\": \"ACME\", \"categorie\": \"Pompes\"}). Appelez get_collection_schema au préalable pour connaître les champs filtrables."
 		},
+		"exclude_filters": {
+			"type": "object",
+			"description": "Filtres d'exclusion, même format que filters : chaque clé est niée séparément (ex. {\"fournisseur\": [\"ACME\", \"FOO\"], \"categorie\": \"Pompes\"} exclut ACME, FOO et la catégorie Pompes). Appelez get_collection_schema au préalable pour connaître les champs filtrables."
+		},
 		"top_k": {
 			"type": "integer",
 			"description": "Nombre maximum de résultats à retourner",
@@ -38,7 +42,7 @@ const classicSearchInputSchema = `{
 			"description": "Champs spécifiques à inclure dans les résultats (obligatoire : appelez get_collection_schema au préalable pour connaître les champs disponibles, puis ne demandez que ceux dont vous avez besoin). Ne pas renseigner ce champ retourne tous les champs, ce qui est déconseillé."
 		}
 	},
-	"required": ["collection", "filters"]
+	"required": ["collection"]
 }`
 
 func handleClassicSearch(ctx context.Context, clients *Clients, args map[string]any) (*mcp.CallToolResult, error) {
@@ -47,9 +51,10 @@ func handleClassicSearch(ctx context.Context, clients *Clients, args map[string]
 		return errorResult("'collection' parameter is required and must be a non-empty string"), nil
 	}
 
-	filters, ok := args["filters"].(map[string]any)
-	if !ok || len(filters) == 0 {
-		return errorResult("'filters' parameter is required and must be a non-empty object"), nil
+	filters, _ := args["filters"].(map[string]any)
+	exclude, _ := args["exclude_filters"].(map[string]any)
+	if len(filters) == 0 && len(exclude) == 0 {
+		return errorResult("'filters' or 'exclude_filters' must be a non-empty object"), nil
 	}
 
 	topK := 10
@@ -71,7 +76,7 @@ func handleClassicSearch(ctx context.Context, clients *Clients, args map[string]
 		TopK:       topK,
 		SearchType: "keyword",
 		Sources: []orchestrator.SourceFilter{
-			{Source: collection, Filters: filters},
+			{Source: collection, Filters: filters, ExcludeFilters: exclude},
 		},
 		OutputFields: outputFields,
 		UseReranker:  false,
