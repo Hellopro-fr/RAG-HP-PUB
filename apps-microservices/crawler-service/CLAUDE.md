@@ -1167,6 +1167,7 @@ Auto-decides skipDiez vs bypassDiez from content evidence; never escalates limit
 |---|---|---|
 | `DIEZ_TIER2_ENABLED` | `false` | Gates the tier-2 verification engine. Off = zero-touch floor only (bypassDiez). |
 | `DIEZ_PERCLASS_ENABLED` | `false` | Per-fragment-class `#` strip: anchor → strip, spa/ambiguous → keep (resolves mixed domains: cosmetic anchors dropped, real SPA routes kept). Applied at enqueue (`processUrl`) and on the loaded URL (`routes.ts`). Kill-switch; off = legacy global skip/bypass. Read at call time (not memoized). See spec `docs/superpowers/specs/2026-06-25-limitdiez-perclass-strip-design.md`. |
+| `STRIP_ACTION_ANCHORS` | `false` | Strips a `#…` fragment that is an action-anchor (`#ce-action=…`, `#action=…`, `#elementor-action:action=…`) at the 4 call sites (links found by `routes.ts`, the homepage seed and the standard seed of `main.ts`, the phase-2 MAJ seeds): the URL is enqueued without its fragment. Kill-switch; off = such fragments are enqueued as distinct URLs. Read at call time (not memoized). Visible in `GET /admin/config` (`env.STRIP_ACTION_ANCHORS`) through the `STRIP_` prefix. Turn it on with `STRIP_ACTION_ANCHORS=true` in the VM `.env`. |
 | `CONTENT_EXTRACTOR_API_URL` | `http://content-extractor-api-service:8600` | Base URL for the content-extractor `/clean` endpoint. |
 | `CONTENT_EXTRACTOR_TIMEOUT_S` | `20` | Per-call HTTP timeout (seconds). |
 | `CONTENT_EXTRACTOR_MAX_CONCURRENCY` | `4` | Max concurrent `/clean` calls per crawl. |

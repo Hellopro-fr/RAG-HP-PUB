@@ -200,6 +200,9 @@ _ENV_WHITELIST_PREFIXES = (
     # NONHTML_PREFIX_MODE/MIN/PROBES + NONHTML_ISOLATED_MAX (R23 (2)): lets an
     # operator read the learning mode on the VM without a shell. No secret here.
     "NONHTML_",
+    # STRIP_ACTION_ANCHORS (A347): kill-switch of the action-anchor fragment
+    # filter; lets an operator read the raw flag on the VM without a shell. No secret here.
+    "STRIP_",
 )
 # Compose env vars deliberately NOT exposed by /admin/config. Add here ONLY
 # with a justification comment; anything diagnostic belongs in the whitelist.
