@@ -856,7 +856,7 @@ grep -n "maxNotEligibleRate\|notEligible" apps-microservices/crawler-service/cra
 
 - [ ] **Step 2: Écrire les deux tests de parité (ils doivent échouer)**
 
-Lire la fin de `apps-microservices/crawler-service/crawler/src/errorsUnprocessedParity.test.ts` (outil Read, offset proche de la fin ; la fin est le test de T1 après celui `` `errors` keeps exactly its two live writers ``). Outil Edit : `old_string` = les trois dernières lignes du fichier telles que lues (dernière assertion de T1 + `    );` + `});`), `new_string` = ces mêmes trois lignes, une ligne vide, puis le bloc ci-dessous. Si l'`old_string` n'est pas unique, Edit refuse : remonter d'une ligne et recommencer. Aucun test existant n'est modifié.
+Lire la fin de `apps-microservices/crawler-service/crawler/src/errorsUnprocessedParity.test.ts` (outil Read, offset proche de la fin ; la fin est le test de T1 après celui `` `errors` keeps exactly its two live writers ``). Outil Edit : `old_string` = les trois dernières lignes du fichier telles que lues (après T1 : ses deux dernières lignes `assert.ok(…);` sur une ligne chacune, puis `});` — aucune ligne `    );`), `new_string` = ces mêmes trois lignes, une ligne vide, puis le bloc ci-dessous. Si l'`old_string` n'est pas unique, Edit refuse : remonter d'une ligne et recommencer. Aucun test existant n'est modifié.
 
 ```ts
 test("not_eligible: routes.ts reads the counter and forwards it into the breaker call", () => {
@@ -1055,7 +1055,7 @@ git show --stat HEAD
 - [ ] `functions.ts` contient exactement une lecture `const notEligible = await context.statsManager.getValue("not_eligible");` placée juste après la lecture `errors_unprocessed`.
 - [ ] Le littéral `report.metrics` contient `not_eligible: notEligible,` après `errors_unprocessed: errorsUnprocessed,` et avant `previous_total: cb.previousTotal` ; aucun `}` n'est ajouté dans `metrics` (les tranches de `statNameParity.test.ts` s'arrêtent au premier `}`).
 - [ ] Le littéral `report.thresholds` contient `max_not_eligible_rate: cb.maxNotEligibleRate,` juste après `max_error_rate: cb.maxErrorRate,`.
-- [ ] `git diff --numstat -- apps-microservices/crawler-service/crawler/src/functions.ts` ⇒ `3	0` ; contrôle d'EOL ⇒ LF = CRLF (2318 = 2318).
+- [ ] `git diff --numstat -- apps-microservices/crawler-service/crawler/src/functions.ts` ⇒ `6	0` (cumul des Steps 4-6) ; contrôle d'EOL ⇒ LF = CRLF (2321 = 2321).
 - [ ] `statNameParity.test.ts` : 7 `test(` (6 + 1), le test neuf contient 3 `assert.match` (lecture, `metrics`, `thresholds`) ; `git diff --numstat` ⇒ suppressions `0` ; contrôle d'EOL ⇒ LF = CRLF.
 - [ ] Le test neuf est ROUGE avant l'édition de `functions.ts` et VERT après ; les 6 tests existants du fichier restent verts sans modification.
 - [ ] `git show --stat HEAD` liste exactement 2 fichiers : `functions.ts` et `statNameParity.test.ts`.
@@ -1174,7 +1174,7 @@ Contrôle : EOL ⇒ LF = CRLF ; numstat ⇒ `6	0` (6 ajouts, 0 suppression).
 - [ ] **Step 7: Vérifier vert**
 
 1. Commande « Un fichier de test TS » sur `statNameParity.test.ts` ⇒ `tests 7 / pass 7 / fail 0`, rc 0.
-2. `grep -c -F "not_eligible" apps-microservices/crawler-service/crawler/src/functions.ts` ⇒ compter les occurrences lues (à ce stade : le littéral `"not_eligible"` de la lecture, la clé `metrics`, et le commentaire de `functions.ts:786` `deleted (not_eligible)` préexistant ; le dire dans le rapport sans en déduire d'unicité).
+2. `grep -c -F "not_eligible" apps-microservices/crawler-service/crawler/src/functions.ts` ⇒ compter les occurrences lues (nombre informatif, sans attendu ; à ce stade il compte au moins le littéral `"not_eligible"` de la lecture, la clé `metrics`, la clé `thresholds` `max_not_eligible_rate`, toute ligne de commentaire ajoutée au Step 4 qui contient le mot, et le commentaire de `functions.ts:786` `deleted (not_eligible)` préexistant ; le dire dans le rapport sans en déduire d'unicité).
 3. Commande « Build TS » de l'index ⇒ rc 0, sans erreur `tsc`.
 
 - [ ] **Step 8: Commit**
