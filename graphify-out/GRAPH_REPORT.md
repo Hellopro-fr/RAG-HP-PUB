@@ -5,7 +5,7 @@
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 12530 nodes · 29870 edges · 236 communities detected
+- 12530 nodes · 29887 edges · 236 communities detected
 - Extraction: 65% EXTRACTED · 35% INFERRED · 0% AMBIGUOUS · INFERRED: 10472 edges (avg confidence: 0.61)
 - Token cost: 0 input · 0 output
 
@@ -249,9 +249,9 @@
 
 ## God Nodes (most connected - your core abstractions)
 1. `CrawlerManager` - 550 edges
-2. `IncludeInArchive` - 396 edges
-3. `ReindexResponse` - 396 edges
-4. `CrawlStatus` - 396 edges
+2. `IncludeInArchive` - 397 edges
+3. `ReindexResponse` - 397 edges
+4. `CrawlStatus` - 397 edges
 5. `DomainFR` - 334 edges
 6. `DetectionMode` - 300 edges
 7. `DetectionResponse` - 227 edges
