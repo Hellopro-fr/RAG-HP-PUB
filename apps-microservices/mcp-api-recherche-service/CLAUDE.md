@@ -58,7 +58,8 @@ mcp-api-recherche-service/
 
 | Tool | Description |
 |------|-------------|
-| `search` | Full search pipeline: embedding → vector/hybrid/keyword search → reranking |
+| `search` | Full search pipeline: embedding → vector/hybrid/keyword search → reranking. `filters` / `exclude_filters` global and per source |
+| `classic_search` | Filter-only search on one collection (no embedding, no rerank). Needs `filters` or `exclude_filters` |
 | `get_collection_schema` | Retrieve Milvus collection field names and types |
 | `rerank` | Re-rank documents by relevance using cross-encoder model |
 | `embed_text` | Generate CamemBERT-large embeddings (1024-dim vectors) |
@@ -97,5 +98,7 @@ mcp-api-recherche-service/
 - gRPC connections are persistent (established at startup, not per-request)
 - Schema cache with 1-hour TTL to avoid repeated gRPC calls
 - Filter expression builder ported from Python `api-recherche` service
+- `exclude_filters` is MCP-only (api-recherche has no equivalent): same shape as `filters`, each key negated separately as `not (<clause>)`
+- Tests: `go test ./internal/orchestrator/` (needs `proto/gen`, so run inside the Dockerfile `protogen` stage)
 - Parallel source search via goroutines
 - Graceful degradation: reranking errors fall back to original order
