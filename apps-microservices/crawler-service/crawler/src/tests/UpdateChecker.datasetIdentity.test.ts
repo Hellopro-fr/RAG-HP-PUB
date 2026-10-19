@@ -147,6 +147,24 @@ test('a folded match on an eligible 200 stays confirmed but no longer credits ac
     assert.deepEqual(stats._calls, [], 'la repliee ne credite plus accounted');
 });
 
+// TEST 9 — CASE 3, variante repliée NON éligible : l'événement `deleted` s'écrit pour les deux
+// orthographes (jugement sur le contenu), `errors` puis `not_eligible` s'incrémentent, mais
+// `accounted` reste réservé à l'orthographe exacte.
+test('a folded match on a non-eligible 200 is deleted and counts errors + not_eligible, no accounted', async () => {
+    const stored = 'https://www.example.fr/a';
+    const consolidator = makeConsolidator([stored]);
+    const stats = makeStats();
+    const writer = makeWriter();
+    const r = await makeChecker(consolidator, stats, writer)
+        .checkUrl(stored + '/', stored + '/', 'discovered', 200, false);
+
+    assert.equal(r.action, 'deleted');
+    assert.equal(r.reason, 'not_eligible');
+    assert.deepEqual(stats._calls, ['errors', 'not_eligible']);
+    assert.equal(writer._calls.length, 1);
+    assert.equal(writer._calls[0][0], UpdateChecker.DELETED_FILE);
+});
+
 // TEST 8 — CASE 2, variante repliée redirigeant hors dataset : l'événement REDIRECTED
 // s'écrit toujours et `redirects` s'incrémente toujours (signal repeatable pour le BO),
 // mais `accounted` reste à zéro — même garde, sur la branche redirection de CASE 2.

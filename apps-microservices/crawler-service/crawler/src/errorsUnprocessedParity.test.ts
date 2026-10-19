@@ -89,3 +89,23 @@ test("`errors` keeps exactly its two live writers in UpdateChecker", () => {
         "`errors` feeds the BO health guard and both deletion caps — this lot must not change its count",
     );
 });
+
+test("not_eligible is written ONCE, in CASE 3, right after `errors` and before the deleted JSONL write", () => {
+    const checker = src("class/UpdateChecker.ts");
+
+    const increments = checker.match(/increment\("not_eligible"\)/g) ?? [];
+    assert.equal(
+        increments.length,
+        1,
+        "expected exactly one `not_eligible` writer — CASE 3 (2xx, dataset URL, no longer eligible)",
+    );
+
+    const case3 = checker.indexOf("CASE 3: Success");
+    assert.ok(case3 !== -1, "the CASE 3 marker comment must still exist");
+    const errorsWrite = checker.indexOf('increment("errors")', case3);
+    const notEligible = checker.indexOf('increment("not_eligible")');
+    const deletedWrite = checker.indexOf("UpdateChecker.DELETED_FILE", case3);
+    assert.ok(errorsWrite > case3, "CASE 3 must still write `errors`");
+    assert.ok(notEligible > errorsWrite, "`not_eligible` must follow `errors` in CASE 3");
+    assert.ok(notEligible < deletedWrite, "`not_eligible` must precede the deleted JSONL write");
+});
