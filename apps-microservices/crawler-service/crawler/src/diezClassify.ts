@@ -59,13 +59,17 @@ export const perClassEnabled = (): boolean =>
     (process.env.DIEZ_PERCLASS_ENABLED ?? "false").toLowerCase() === "true";
 
 /**
- * Action-anchor shape: a leading token, ':', then a 'key=' payload — e.g.
+ * Action-anchor shapes (A347: two forms). Form 1: a leading token, ':', then a 'key=' payload — e.g.
  * "elementor-action:action=off_canvas:toggle&settings=…". These are cosmetic
  * client-side UI triggers (Elementor/WP builders), never content routes, yet
  * crawled as distinct requests → duplicate origin fetches. Distinct from real
  * SPA hash-routes ("#/path", start with '/') and bare anchors ("#section", no ':'/'=').
+ *
+ * Form 2 (A347): a bare 'action=' key, optionally prefixed by words joined with '-' or '_', any case,
+ * e.g. "ce-action=addToCart", "Action=x", "my_action=1". Words that merely end in "action"
+ * ("transaction=1", "faction=1") are kept, and so is "tab:overview" (no '=').
  */
-const ACTION_ANCHOR_RE = /^[\w-]+:[^=]*=/;
+const ACTION_ANCHOR_RE = /^(?:[\w-]+:[^=]*|(?:[\w-]*[-_])?action)=/i;
 
 /**
  * Strip "#…" iff the (decoded) fragment is an action-anchor. Pure; the call site
