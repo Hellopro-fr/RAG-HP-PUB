@@ -35,6 +35,10 @@ const searchInputSchema = `{
 					"filters": {
 						"type": "object",
 						"description": "Filtres clé-valeur appliqués à cette source (ex. {\"fournisseur\": \"ACME\"})"
+					},
+					"exclude_filters": {
+						"type": "object",
+						"description": "Filtres d'exclusion appliqués à cette source, même format que filters (ex. {\"fournisseur\": \"ACME\"})"
 					}
 				},
 				"required": ["source"]
@@ -49,6 +53,10 @@ const searchInputSchema = `{
 		"filters": {
 			"type": "object",
 			"description": "Filtres globaux appliqués à toutes les sources (ex. {\"fournisseur\": \"ACME\", \"avec_prix\": true})"
+		},
+		"exclude_filters": {
+			"type": "object",
+			"description": "Filtres d'exclusion globaux appliqués à toutes les sources, même format que filters : chaque clé est niée séparément (ex. {\"fournisseur\": [\"ACME\", \"FOO\"], \"categorie\": \"Pompes\"} exclut ACME, FOO et la catégorie Pompes). Appelez get_collection_schema au préalable pour connaître les champs filtrables."
 		},
 		"output_fields": {
 			"type": "array",
@@ -104,6 +112,9 @@ func handleSearch(ctx context.Context, clients *Clients, args map[string]any) (*
 				if f, ok := sm["filters"].(map[string]any); ok {
 					sf.Filters = f
 				}
+				if f, ok := sm["exclude_filters"].(map[string]any); ok {
+					sf.ExcludeFilters = f
+				}
 				params.Sources = append(params.Sources, sf)
 			}
 		}
@@ -115,6 +126,10 @@ func handleSearch(ctx context.Context, clients *Clients, args map[string]any) (*
 
 	if filters, ok := args["filters"].(map[string]any); ok {
 		params.Filters = filters
+	}
+
+	if exclude, ok := args["exclude_filters"].(map[string]any); ok {
+		params.ExcludeFilters = exclude
 	}
 
 	if fields, ok := args["output_fields"].([]any); ok {
