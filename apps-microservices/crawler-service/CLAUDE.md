@@ -91,11 +91,12 @@ and `est_domaine_deja_en_cours()` tests `status IN ('PENDING','RUNNING','FAILED'
 **no date bound** — so a trip locks its domain out of every future update. Do not treat this
 breaker as a soft signal.
 
-**Three thresholds, from `job.params`:**
+**Four thresholds, from `job.params`:**
 
 | Param | Production value | Effect |
 |---|---|---|
-| `maxErrorRate` | `0.15` | the **only** live branch |
+| `maxErrorRate` | `0.15` | live branch — HTTP errors (`errors − not_eligible`) |
+| `maxNotEligibleRate` | not sent by the BO — default `0.5` (`context.ts`, CLI `main.ts`; Python field `max_not_eligible_rate`) | live branch, **separate** from `maxErrorRate` — URLs of the dataset that are 2xx but no longer eligible; a `0` (or absent) disables this branch alone |
 | `maxRedirectRate` | `0.0` | **disabled** — a `0` disables its branch (`> 0` guards) |
 | `maxGrowthRate` | `0.0` | **disabled**, same reason |
 
@@ -119,12 +120,37 @@ counter (HTTP error → throw) with URLs already inside it (2xx, no longer eligi
 computed in the pure `errorRateBreaker.ts` over `processed + errors_unprocessed`. Spec:
 `docs/superpowers/specs/2026-08-24-circuit-breaker-error-rate-design.md`.
 
+**Two numerators, one denominator.** `errors` stays the combined counter (no reader of `errors` changed).
+CASE 3 of `UpdateChecker.checkUrl()` — a 2xx URL that is no longer eligible — also increments
+`not_eligible`, right after `errors`. `errorRateBreaker.ts` then takes two decisions over the same
+denominator `processed + errors_unprocessed`, behind the same sample gate, both with a strict `>`:
+
+- **HTTP:** `max(0, errors − not_eligible) / denominator > maxErrorRate` → reason prefix
+  `Error rate too high (`, kept byte for byte; the suffix now reads `N HTTP errors / M attempts`.
+- **Not eligible:** `not_eligible / denominator > maxNotEligibleRate` (only if `maxNotEligibleRate > 0`)
+  → reason prefix `Not-eligible rate too high (`. Grep production logs on each prefix to tell the
+  two signals apart.
+
+⚠ **Relaxation property.** `httpRate + notEligibleRate` equals the old rate, so for
+`maxNotEligibleRate = 0` or `maxNotEligibleRate >= maxErrorRate` the new breaker trips only where
+the old one tripped. A value strictly between `0` and `maxErrorRate` breaks it (a 10 % non-FR run
+would be stopped that was not before): the default `0.5` respects it while `maxErrorRate <= 0.5` (the BO sends `0.15`), and any value the BO sends
+later must too. Written in the header comment of `errorRateBreaker.ts`.
+
+⚠ **`max_error_rate = 0` (`?bypasscberrors=1`) disables BOTH signals** — the `maxErrorRate > 0` guard
+comes before both decisions. `maxNotEligibleRate = 0` (CLI `--maxNotEligibleRate=0`) disables the
+second one alone. The update report `_update_report.json` carries `metrics.not_eligible` and
+`thresholds.max_not_eligible_rate` (additive keys; no reader today). Spec:
+`docs/superpowers/specs/2026-10-19-not-eligible-breaker-design.md`.
+
 ⚠ **`updateHealthVerdict.ts` still computes `errors / processed`** for the report the BO reads.
 Same arithmetic, opposite stakes — deliberately out of scope, see §8.1 of that spec.
-`updateHealthVerdict.ts` also emits the same `Error rate too high (` prefix as the fixed path in
-`errorRateBreaker.ts` — one occurrence in each file. That prefix is no longer a unique
-fingerprint of the corrected formula: grepping production logs for it, the exact method behind
-this lot's 69-run measurement, now silently mixes results from both formulas.
+`updateHealthVerdict.ts` does **not** emit the `Error rate too high (` prefix: its CRITICAL message
+deliberately avoids those words (comment at `updateHealthVerdict.ts:184@3cd3b7af`, pinned by the test
+`the breaker and the health verdict do not share a message prefix`, `statNameParity.test.ts:147@3cd3b7af`).
+The prefix therefore stays a unique fingerprint of the breaker's HTTP decision — one occurrence, in
+`errorRateBreaker.ts` — and grepping production logs for it, the method behind the 69-run measurement,
+still isolates that formula. The not-eligible decision has its own prefix (`Not-eligible rate too high (`).
 
 ⚠ **Micro mode is dead code.** `cb.isMicroMode` is never set true (`main.ts`, the assignment is
 commented out), so `maxAbsErrors` / `maxAbsRedirects` / `maxAbsNew` are inert here. Do not wake it
