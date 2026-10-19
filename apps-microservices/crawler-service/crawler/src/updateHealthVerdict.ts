@@ -181,7 +181,7 @@ export function decideUpdateHealth(
             + `(sample gate ${minSample})`;
     } else if (cfg.maxErrorRate > 0 && errorRate > cfg.maxErrorRate && errors >= cfg.maxAbsErrors) {
         status = "CRITICAL";
-        // ⚠ Deliberately NOT the words "Error rate too high (" — errorRateBreaker.ts:73 emits that
+        // ⚠ Deliberately NOT the words "Error rate too high (" — shouldTripErrorRateBreaker() (errorRateBreaker.ts) emits that
         // exact prefix and production logs are grepped on it (the 69-run measurement of the
         // 2026-08-10 batch was taken that way).
         // ⚠⚠ THE TWO FORMULAS NOW AGREE, AND THE WORDINGS MUST STILL NOT. An earlier version of
