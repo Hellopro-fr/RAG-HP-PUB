@@ -1474,7 +1474,7 @@ Rappel de lieu : cwd = racine du worktree ; **ne jamais `Read` ce fichier** depu
   ```
   ```text
   | `maxErrorRate` | `0.15` | live branch — HTTP errors (`errors − not_eligible`) |
-  | `maxNotEligibleRate` | not sent by the BO — default `0.5` (`context.ts`, CLI `main.ts`; Python field `max_not_eligible_rate`) | live branch, **separate** from `maxErrorRate` — URLs of the dataset that are 2xx but no longer eligible; a `0` (or absent) disables this branch alone |
+  | `maxNotEligibleRate` | not sent by the BO — default `0.5` (`context.ts`, CLI `main.ts`; Python field `max_not_eligible_rate`) | live branch, **separate** from `maxErrorRate` — URLs of the dataset that are 2xx but no longer eligible; absent from `job.params` ⇒ default `0.5`, branch live; only an explicit `0` disables this branch alone |
   ```
   Le paragraphe « Confirmed on production via `GET /admin/job/{crawl_id}` (2026-08-24) » reste tel quel : il date une mesure sur trois seuils, antérieure à `maxNotEligibleRate`.
 
@@ -1500,7 +1500,7 @@ Rappel de lieu : cwd = racine du worktree ; **ne jamais `Read` ce fichier** depu
   ⚠ **Relaxation property.** `httpRate + notEligibleRate` equals the old rate, so for
   `maxNotEligibleRate = 0` or `maxNotEligibleRate >= maxErrorRate` the new breaker trips only where
   the old one tripped. A value strictly between `0` and `maxErrorRate` breaks it (a 10 % non-FR run
-  would be stopped that was not before): the default `0.5` respects it, and any value the BO sends
+  would be stopped that was not before): the default `0.5` respects it while `maxErrorRate <= 0.5` (the BO sends `0.15`), and any value the BO sends
   later must too. Written in the header comment of `errorRateBreaker.ts`.
 
   ⚠ **`max_error_rate = 0` (`?bypasscberrors=1`) disables BOTH signals** — the `maxErrorRate > 0` guard
