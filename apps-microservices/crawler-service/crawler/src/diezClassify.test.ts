@@ -70,6 +70,41 @@ test("stripActionAnchor: does not throw on malformed percent-encoding", () => {
     const url = aaBase + "#elementor-action:action=x&bad=%E0%A4%A";
     assert.doesNotThrow(() => stripActionAnchor(url));
 });
+test("stripActionAnchor: strips ce-action fragments (addToCart, buyNow, braces, quickview)", () => {
+    for (const frag of ["ce-action=addToCart", "ce-action=buyNow", "ce-action=addToCart{}", "ce-action=quickview"]) {
+        assert.equal(stripActionAnchor(aaBase + "#" + frag), aaBase, frag);
+    }
+});
+test("stripActionAnchor: strips a bare or prefixed action= key, any case", () => {
+    for (const frag of ["action=register", "Action=x", "my_action=1"]) {
+        assert.equal(stripActionAnchor(aaBase + "#" + frag), aaBase, frag);
+    }
+});
+test("stripActionAnchor: still strips elementor-action forms, raw and encoded", () => {
+    for (const frag of ["elementor-action:action=popup:open", "elementor-action%3Aaction%3Dpopup%3Aopen"]) {
+        assert.equal(stripActionAnchor(aaBase + "#" + frag), aaBase, frag);
+    }
+});
+test("stripActionAnchor: keeps SPA routes, named anchors and words merely ending in action", () => {
+    for (const frag of ["/route/x", "section", "tab:overview", "transaction=1", "faction=1"]) {
+        const url = aaBase + "#" + frag;
+        assert.equal(stripActionAnchor(url), url, frag);
+    }
+});
+test("action anchors: flag OFF leaves the url intact, ON strips it (call-site gate shape)", () => {
+    const url = aaBase + "#ce-action=addToCart";
+    const gated = (u: string): string => (actionAnchorStripEnabled() ? stripActionAnchor(u) : u);
+    const saved = process.env.STRIP_ACTION_ANCHORS;
+    try {
+        delete process.env.STRIP_ACTION_ANCHORS;
+        assert.equal(gated(url), url);
+        process.env.STRIP_ACTION_ANCHORS = "true";
+        assert.equal(gated(url), aaBase);
+    } finally {
+        if (saved === undefined) delete process.env.STRIP_ACTION_ANCHORS;
+        else process.env.STRIP_ACTION_ANCHORS = saved;
+    }
+});
 test("actionAnchorStripEnabled: reads env at call time, default false, true only for 'true'", () => {
     delete process.env.STRIP_ACTION_ANCHORS;
     assert.equal(actionAnchorStripEnabled(), false);
