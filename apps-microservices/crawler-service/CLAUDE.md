@@ -96,7 +96,7 @@ breaker as a soft signal.
 | Param | Production value | Effect |
 |---|---|---|
 | `maxErrorRate` | `0.15` | live branch — HTTP errors (`errors − not_eligible`) |
-| `maxNotEligibleRate` | not sent by the BO — default `0.5` (`context.ts`, CLI `main.ts`; Python field `max_not_eligible_rate`) | live branch, **separate** from `maxErrorRate` — URLs of the dataset that are 2xx but no longer eligible; a `0` (or absent) disables this branch alone |
+| `maxNotEligibleRate` | not sent by the BO — default `0.5` (`context.ts`, CLI `main.ts`; Python field `max_not_eligible_rate`) | live branch, **separate** from `maxErrorRate` — URLs of the dataset that are 2xx but no longer eligible; absent from `job.params` ⇒ default `0.5`, branch live; only an explicit `0` disables this branch alone |
 | `maxRedirectRate` | `0.0` | **disabled** — a `0` disables its branch (`> 0` guards) |
 | `maxGrowthRate` | `0.0` | **disabled**, same reason |
 
