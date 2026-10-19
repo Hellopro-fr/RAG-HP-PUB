@@ -1497,19 +1497,24 @@ Rappel de lieu : cwd = racine du worktree ; **ne jamais `Read` ce fichier** depu
     → reason prefix `Not-eligible rate too high (`. Grep production logs on each prefix to tell the
     two signals apart.
 
-  ⚠ **Relaxation property.** `httpRate + notEligibleRate` equals the old rate, so for
-  `maxNotEligibleRate = 0` or `maxNotEligibleRate >= maxErrorRate` the new breaker trips only where
+  ⚠ **Relaxation property.** `httpRate + notEligibleRate` equals the old rate (while
+  `errors >= notEligible`), so for `maxNotEligibleRate = 0` or `maxNotEligibleRate >= maxErrorRate`
+  the new breaker trips only where
   the old one tripped. A value strictly between `0` and `maxErrorRate` breaks it (a 10 % non-FR run
-  would be stopped that was not before): the default `0.5` respects it while `maxErrorRate <= 0.5` (the BO sends `0.15`), and any value the BO sends
-  later must too. Written in the header comment of `errorRateBreaker.ts`.
+  would be stopped that was not before): the default `0.5` respects it while `maxErrorRate <= 0.5`.
+  The BO sends `referentiel_seuils_cb.error_rate / 100` (fallback `0.15`, `shell.php`), a value no code
+  bounds to `0.5`, and any value the BO sends later must respect it too. Written in the header comment
+  of `errorRateBreaker.ts`.
 
   ⚠ **`max_error_rate = 0` (`?bypasscberrors=1`) disables BOTH signals** — the `maxErrorRate > 0` guard
   comes before both decisions. `maxNotEligibleRate = 0` (CLI `--maxNotEligibleRate=0`) disables the
   second one alone. The update report `_update_report.json` carries `metrics.not_eligible` and
-  `thresholds.max_not_eligible_rate` (additive keys; no reader today). Spec:
+  `thresholds.max_not_eligible_rate` (additive keys; no BO reader today: `crawler_manager.py` forwards `metrics`/`thresholds` into
+  the success webhook, but the BO reads named keys only). Spec:
   `docs/superpowers/specs/2026-10-19-not-eligible-breaker-design.md`.
 
-  ⚠ **`updateHealthVerdict.ts` still computes `errors / processed`** for the report the BO reads.
+  ⚠ **`updateHealthVerdict.ts` still divides the combined `errors` by `processed + errorsUnprocessed`**
+  for the report the BO reads.
   ```
   Si l'Edit multi-ligne est refusé ou casse les fins de ligne, passer au Step 5.
 
