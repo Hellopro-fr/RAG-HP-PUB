@@ -49,6 +49,7 @@ class UpdateThresholds(BaseModel):
     # New V1 Circuit Breaker Params
     min_sample: Optional[int] = Field(None, description="Standard Mode: Minimum processed URLs before checking percentages (default: 50).")
     max_error_rate: Optional[float] = Field(None, description="Standard Mode: Abort if error rate exceeds this ratio (e.g. 0.15 for 15%).")
+    max_not_eligible_rate: Optional[float] = Field(None, description="Standard Mode: Abort if the share of dataset URLs no longer eligible (2xx but not French) exceeds this ratio (e.g. 0.50 for 50%). 0 disables this branch; omitted = crawler default (0.50).")
     max_redirect_rate: Optional[float] = Field(None, description="Standard Mode: Abort if redirect rate exceeds this ratio (e.g. 0.30 for 30%).")
     max_growth_rate: Optional[float] = Field(None, description="Standard Mode: Abort if new URLs exceed this ratio relative to previous total (e.g. 0.50 for 50%).")
     
