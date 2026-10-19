@@ -945,8 +945,8 @@
       "source_file": "",
       "source_location": "",
       "community": 3,
-      "id": "str",
-      "norm_label": "str"
+      "norm_label": "str",
+      "id": "str"
     },
     {
       "label": "Enum",
@@ -954,8 +954,8 @@
       "source_file": "",
       "source_location": "",
       "community": 21,
-      "id": "enum",
-      "norm_label": "enum"
+      "norm_label": "enum",
+      "id": "enum"
     },
     {
       "label": "CollectionNameGraph",
@@ -1566,8 +1566,8 @@
       "source_file": "",
       "source_location": "",
       "community": 11,
-      "id": "basemodel",
-      "norm_label": "basemodel"
+      "norm_label": "basemodel",
+      "id": "basemodel"
     },
     {
       "label": "BaseTrafilaturaReponse",
@@ -13920,8 +13920,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\schemas\\crawler.py",
       "source_location": "L6",
       "community": 0,
-      "id": "crawler_includeinarchive",
-      "norm_label": "includeinarchive"
+      "norm_label": "includeinarchive",
+      "id": "crawler_includeinarchive"
     },
     {
       "label": "CrawlMode",
@@ -13929,8 +13929,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\schemas\\crawler.py",
       "source_location": "L16",
       "community": 0,
-      "id": "crawler_crawlmode",
-      "norm_label": "crawlmode"
+      "norm_label": "crawlmode",
+      "id": "crawler_crawlmode"
     },
     {
       "label": "CapacityResponse",
@@ -13938,8 +13938,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\schemas\\crawler.py",
       "source_location": "L21",
       "community": 0,
-      "id": "crawler_capacityresponse",
-      "norm_label": "capacityresponse"
+      "norm_label": "capacityresponse",
+      "id": "crawler_capacityresponse"
     },
     {
       "label": "ReindexResponse",
@@ -13947,8 +13947,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\schemas\\crawler.py",
       "source_location": "L29",
       "community": 0,
-      "id": "crawler_reindexresponse",
-      "norm_label": "reindexresponse"
+      "norm_label": "reindexresponse",
+      "id": "crawler_reindexresponse"
     },
     {
       "label": "PruneResponse",
@@ -13956,8 +13956,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\schemas\\crawler.py",
       "source_location": "L36",
       "community": 0,
-      "id": "crawler_pruneresponse",
-      "norm_label": "pruneresponse"
+      "norm_label": "pruneresponse",
+      "id": "crawler_pruneresponse"
     },
     {
       "label": "UpdateThresholds",
@@ -13965,8 +13965,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\schemas\\crawler.py",
       "source_location": "L43",
       "community": 0,
-      "id": "crawler_updatethresholds",
-      "norm_label": "updatethresholds"
+      "norm_label": "updatethresholds",
+      "id": "crawler_updatethresholds"
     },
     {
       "label": "CrawlRequest",
@@ -13974,8 +13974,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\schemas\\crawler.py",
       "source_location": "L60",
       "community": 0,
-      "id": "crawler_crawlrequest",
-      "norm_label": "crawlrequest"
+      "norm_label": "crawlrequest",
+      "id": "crawler_crawlrequest"
     },
     {
       "label": "CrawlResponse",
@@ -13983,8 +13983,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\schemas\\crawler.py",
       "source_location": "L97",
       "community": 0,
-      "id": "crawler_crawlresponse",
-      "norm_label": "crawlresponse"
+      "norm_label": "crawlresponse",
+      "id": "crawler_crawlresponse"
     },
     {
       "label": "StopResponse",
@@ -13992,8 +13992,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\schemas\\crawler.py",
       "source_location": "L101",
       "community": 0,
-      "id": "crawler_stopresponse",
-      "norm_label": "stopresponse"
+      "norm_label": "stopresponse",
+      "id": "crawler_stopresponse"
     },
     {
       "label": "ArchiveResponse",
@@ -14001,8 +14001,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\schemas\\crawler.py",
       "source_location": "L105",
       "community": 0,
-      "id": "crawler_archiveresponse",
-      "norm_label": "archiveresponse"
+      "norm_label": "archiveresponse",
+      "id": "crawler_archiveresponse"
     },
     {
       "label": "RetrieveResponse",
@@ -14010,8 +14010,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\schemas\\crawler.py",
       "source_location": "L131",
       "community": 0,
-      "id": "crawler_retrieveresponse",
-      "norm_label": "retrieveresponse"
+      "norm_label": "retrieveresponse",
+      "id": "crawler_retrieveresponse"
     },
     {
       "label": "FailedCallback",
@@ -14019,8 +14019,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\schemas\\crawler.py",
       "source_location": "L137",
       "community": 0,
-      "id": "crawler_failedcallback",
-      "norm_label": "failedcallback"
+      "norm_label": "failedcallback",
+      "id": "crawler_failedcallback"
     },
     {
       "label": "PendingCallbacksResponse",
@@ -14028,8 +14028,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\schemas\\crawler.py",
       "source_location": "L145",
       "community": 0,
-      "id": "crawler_pendingcallbacksresponse",
-      "norm_label": "pendingcallbacksresponse"
+      "norm_label": "pendingcallbacksresponse",
+      "id": "crawler_pendingcallbacksresponse"
     },
     {
       "label": "CrawlStatus",
@@ -14037,8 +14037,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\schemas\\crawler.py",
       "source_location": "L149",
       "community": 0,
-      "id": "crawler_crawlstatus",
-      "norm_label": "crawlstatus"
+      "norm_label": "crawlstatus",
+      "id": "crawler_crawlstatus"
     },
     {
       "label": "Enumeration of components that can be included in the results archive.",
@@ -14046,8 +14046,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\schemas\\crawler.py",
       "source_location": "L7",
       "community": 0,
-      "id": "crawler_rationale_7",
-      "norm_label": "enumeration of components that can be included in the results archive."
+      "norm_label": "enumeration of components that can be included in the results archive.",
+      "id": "crawler_rationale_7"
     },
     {
       "label": "Mode of operation for the crawler.",
@@ -14055,8 +14055,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\schemas\\crawler.py",
       "source_location": "L17",
       "community": 0,
-      "id": "crawler_rationale_17",
-      "norm_label": "mode of operation for the crawler."
+      "norm_label": "mode of operation for the crawler.",
+      "id": "crawler_rationale_17"
     },
     {
       "label": "Summary of the re-indexing operation.",
@@ -37859,8 +37859,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\schemas\\crawler.py",
       "source_location": "L111",
       "community": 0,
-      "id": "crawler_stashresponse",
-      "norm_label": "stashresponse"
+      "norm_label": "stashresponse",
+      "id": "crawler_stashresponse"
     },
     {
       "label": "UnstashResponse",
@@ -37868,8 +37868,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\schemas\\crawler.py",
       "source_location": "L119",
       "community": 0,
-      "id": "crawler_unstashresponse",
-      "norm_label": "unstashresponse"
+      "norm_label": "unstashresponse",
+      "id": "crawler_unstashresponse"
     },
     {
       "label": "Response for POST /stash/{crawl_id} \u2014 202 Accepted shape.",
@@ -71798,8 +71798,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\diezClassify.ts",
       "source_location": "L27",
       "community": 1,
-      "norm_label": "classifyfragment()",
-      "id": "diezclassify_classifyfragment"
+      "id": "diezclassify_classifyfragment",
+      "norm_label": "classifyfragment()"
     },
     {
       "label": "applyPerClassStrip()",
@@ -71807,8 +71807,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\diezClassify.ts",
       "source_location": "L51",
       "community": 1,
-      "norm_label": "applyperclassstrip()",
-      "id": "diezclassify_applyperclassstrip"
+      "id": "diezclassify_applyperclassstrip",
+      "norm_label": "applyperclassstrip()"
     },
     {
       "label": "perClassEnabled()",
@@ -71816,8 +71816,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\diezClassify.ts",
       "source_location": "L58",
       "community": 1,
-      "norm_label": "perclassenabled()",
-      "id": "diezclassify_perclassenabled"
+      "id": "diezclassify_perclassenabled",
+      "norm_label": "perclassenabled()"
     },
     {
       "label": "functions.perclass.test.ts",
@@ -72804,10 +72804,10 @@
       "label": "fingerprint()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\diezClassify.ts",
-      "source_location": "L127",
+      "source_location": "L131",
       "community": 1,
-      "norm_label": "fingerprint()",
-      "id": "diezclassify_fingerprint"
+      "id": "diezclassify_fingerprint",
+      "norm_label": "fingerprint()"
     },
     {
       "label": "cleanDatasetContentCollision.test.ts",
@@ -72833,8 +72833,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\diezClassify.test.ts",
       "source_location": "L1",
       "community": 1,
-      "norm_label": "diezclassify.test.ts",
-      "id": "crawler_src_diezclassify_test_ts"
+      "id": "crawler_src_diezclassify_test_ts",
+      "norm_label": "diezclassify.test.ts"
     },
     {
       "label": "diezClassify.ts",
@@ -72842,8 +72842,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\diezClassify.ts",
       "source_location": "L1",
       "community": 1,
-      "norm_label": "diezclassify.ts",
-      "id": "crawler_src_diezclassify_ts"
+      "id": "crawler_src_diezclassify_ts",
+      "norm_label": "diezclassify.ts"
     },
     {
       "label": "clearDecisionSidecars()",
@@ -73993,8 +73993,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\schemas\\crawler.py",
       "source_location": "L1",
       "community": 0,
-      "id": "crawler_py",
-      "norm_label": "crawler.py"
+      "norm_label": "crawler.py",
+      "id": "crawler_py"
     },
     {
       "label": "Stops a currently running crawl job.",
@@ -74108,19 +74108,19 @@
       "label": "stripActionAnchor()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\diezClassify.ts",
-      "source_location": "L74",
+      "source_location": "L78",
       "community": 1,
-      "norm_label": "stripactionanchor()",
-      "id": "diezclassify_stripactionanchor"
+      "id": "diezclassify_stripactionanchor",
+      "norm_label": "stripactionanchor()"
     },
     {
       "label": "actionAnchorStripEnabled()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\diezClassify.ts",
-      "source_location": "L87",
+      "source_location": "L91",
       "community": 1,
-      "norm_label": "actionanchorstripenabled()",
-      "id": "diezclassify_actionanchorstripenabled"
+      "id": "diezclassify_actionanchorstripenabled",
+      "norm_label": "actionanchorstripenabled()"
     },
     {
       "label": "resolveStallCountResolved()",
@@ -75163,19 +75163,19 @@
       "label": "provenDiezOverrideEnabled()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\diezClassify.ts",
-      "source_location": "L91",
+      "source_location": "L95",
       "community": 1,
-      "norm_label": "provendiezoverrideenabled()",
-      "id": "diezclassify_provendiezoverrideenabled"
+      "id": "diezclassify_provendiezoverrideenabled",
+      "norm_label": "provendiezoverrideenabled()"
     },
     {
       "label": "isProvenDiezStrip()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\diezClassify.ts",
-      "source_location": "L112",
+      "source_location": "L116",
       "community": 1,
-      "norm_label": "isprovendiezstrip()",
-      "id": "diezclassify_isprovendiezstrip"
+      "id": "diezclassify_isprovendiezstrip",
+      "norm_label": "isprovendiezstrip()"
     },
     {
       "label": "getCommittedSource()",
@@ -75444,8 +75444,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\schemas\\crawler.py",
       "source_location": "L30",
       "community": 0,
-      "id": "crawler_rationale_30",
-      "norm_label": "summary of the re-indexing operation."
+      "norm_label": "summary of the re-indexing operation.",
+      "id": "crawler_rationale_30"
     },
     {
       "label": "Response for the archive cleanup operation.",
@@ -75453,8 +75453,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\schemas\\crawler.py",
       "source_location": "L37",
       "community": 0,
-      "id": "crawler_rationale_37",
-      "norm_label": "response for the archive cleanup operation."
+      "norm_label": "response for the archive cleanup operation.",
+      "id": "crawler_rationale_37"
     },
     {
       "label": "Thresholds for aborting an update job.",
@@ -75462,8 +75462,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\schemas\\crawler.py",
       "source_location": "L44",
       "community": 0,
-      "id": "crawler_rationale_44",
-      "norm_label": "thresholds for aborting an update job."
+      "norm_label": "thresholds for aborting an update job.",
+      "id": "crawler_rationale_44"
     },
     {
       "label": "Response for POST /unstash/{crawl_id} \u2014 200 OK shape.",
@@ -78203,8 +78203,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
       "source_location": "L30",
       "community": 9,
-      "norm_label": "_count_by()",
-      "id": "admin_count_by"
+      "id": "admin_count_by",
+      "norm_label": "_count_by()"
     },
     {
       "label": "_project_sample()",
@@ -78212,8 +78212,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
       "source_location": "L34",
       "community": 9,
-      "norm_label": "_project_sample()",
-      "id": "admin_project_sample"
+      "id": "admin_project_sample",
+      "norm_label": "_project_sample()"
     },
     {
       "label": "_pool_stats()",
@@ -78221,8 +78221,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
       "source_location": "L40",
       "community": 9,
-      "norm_label": "_pool_stats()",
-      "id": "admin_pool_stats"
+      "id": "admin_pool_stats",
+      "norm_label": "_pool_stats()"
     },
     {
       "label": "redis_debug()",
@@ -78230,8 +78230,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
       "source_location": "L54",
       "community": 9,
-      "norm_label": "redis_debug()",
-      "id": "admin_redis_debug"
+      "id": "admin_redis_debug",
+      "norm_label": "redis_debug()"
     },
     {
       "label": "recent_logs()",
@@ -78239,8 +78239,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
       "source_location": "L91",
       "community": 9,
-      "norm_label": "recent_logs()",
-      "id": "admin_recent_logs"
+      "id": "admin_recent_logs",
+      "norm_label": "recent_logs()"
     },
     {
       "label": "crawl_log_tail()",
@@ -78248,8 +78248,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
       "source_location": "L114",
       "community": 9,
-      "norm_label": "crawl_log_tail()",
-      "id": "admin_crawl_log_tail"
+      "id": "admin_crawl_log_tail",
+      "norm_label": "crawl_log_tail()"
     },
     {
       "label": "job_dump()",
@@ -78257,71 +78257,71 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
       "source_location": "L155",
       "community": 9,
-      "norm_label": "job_dump()",
-      "id": "admin_job_dump"
+      "id": "admin_job_dump",
+      "norm_label": "job_dump()"
     },
     {
       "label": "effective_config()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
-      "source_location": "L214",
+      "source_location": "L217",
       "community": 9,
-      "norm_label": "effective_config()",
-      "id": "admin_effective_config"
+      "id": "admin_effective_config",
+      "norm_label": "effective_config()"
     },
     {
       "label": "_dataset_dir()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
-      "source_location": "L234",
+      "source_location": "L237",
       "community": 9,
-      "norm_label": "_dataset_dir()",
-      "id": "admin_dataset_dir"
+      "id": "admin_dataset_dir",
+      "norm_label": "_dataset_dir()"
     },
     {
       "label": "dataset_sample()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
-      "source_location": "L252",
+      "source_location": "L255",
       "community": 9,
-      "norm_label": "dataset_sample()",
-      "id": "admin_dataset_sample"
+      "id": "admin_dataset_sample",
+      "norm_label": "dataset_sample()"
     },
     {
       "label": "sidecar_file()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
-      "source_location": "L363",
+      "source_location": "L366",
       "community": 9,
-      "norm_label": "sidecar_file()",
-      "id": "admin_sidecar_file"
+      "id": "admin_sidecar_file",
+      "norm_label": "sidecar_file()"
     },
     {
       "label": "_daemon_dirs()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
-      "source_location": "L392",
+      "source_location": "L395",
       "community": 9,
-      "norm_label": "_daemon_dirs()",
-      "id": "admin_daemon_dirs"
+      "id": "admin_daemon_dirs",
+      "norm_label": "_daemon_dirs()"
     },
     {
       "label": "_describe_dir()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
-      "source_location": "L409",
+      "source_location": "L412",
       "community": 9,
-      "norm_label": "_describe_dir()",
-      "id": "admin_describe_dir"
+      "id": "admin_describe_dir",
+      "norm_label": "_describe_dir()"
     },
     {
       "label": "daemon_state()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
-      "source_location": "L455",
+      "source_location": "L458",
       "community": 9,
-      "norm_label": "daemon_state()",
-      "id": "admin_daemon_state"
+      "id": "admin_daemon_state",
+      "norm_label": "daemon_state()"
     },
     {
       "label": "Admin/operator endpoints. Authenticated. Not user-facing.",
@@ -78329,8 +78329,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
       "source_location": "L1",
       "community": 9,
-      "norm_label": "admin/operator endpoints. authenticated. not user-facing.",
-      "id": "admin_rationale_1"
+      "id": "admin_rationale_1",
+      "norm_label": "admin/operator endpoints. authenticated. not user-facing."
     },
     {
       "label": "Whitelist sampled client fields so future redis-py additions cannot     silentl",
@@ -78516,10 +78516,10 @@
       "label": "provenOverrideMinCompared()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\diezClassify.ts",
-      "source_location": "L100",
+      "source_location": "L104",
       "community": 1,
-      "norm_label": "provenoverridemincompared()",
-      "id": "diezclassify_provenoverridemincompared"
+      "id": "diezclassify_provenoverridemincompared",
+      "norm_label": "provenoverridemincompared()"
     },
     {
       "label": "diezProvenOverride.test.ts",
@@ -81618,19 +81618,19 @@
       "label": "_dir_size_bytes()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
-      "source_location": "L469",
+      "source_location": "L472",
       "community": 9,
-      "norm_label": "_dir_size_bytes()",
-      "id": "admin_dir_size_bytes"
+      "id": "admin_dir_size_bytes",
+      "norm_label": "_dir_size_bytes()"
     },
     {
       "label": "storage_dirs()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
-      "source_location": "L485",
+      "source_location": "L488",
       "community": 9,
-      "norm_label": "storage_dirs()",
-      "id": "admin_storage_dirs"
+      "id": "admin_storage_dirs",
+      "norm_label": "storage_dirs()"
     },
     {
       "label": "Recursive byte size of a tree (regular files only, symlinks not     followed).",
@@ -96834,8 +96834,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
       "source_location": "L1",
       "community": 9,
-      "norm_label": "admin.py",
-      "id": "app_router_admin_py"
+      "id": "app_router_admin_py",
+      "norm_label": "admin.py"
     },
     {
       "label": "auditSidecars.canonical.test.ts",
@@ -107141,10 +107141,10 @@
       "label": "archived_status_repair_dry_run()",
       "file_type": "code",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
-      "source_location": "L582",
+      "source_location": "L585",
       "community": 3,
-      "norm_label": "archived_status_repair_dry_run()",
-      "id": "admin_archived_status_repair_dry_run"
+      "id": "admin_archived_status_repair_dry_run",
+      "norm_label": "archived_status_repair_dry_run()"
     },
     {
       "label": "Whitelist sampled client fields so future redis-py additions cannot     silentl",
@@ -107152,8 +107152,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
       "source_location": "L35",
       "community": 9,
-      "norm_label": "whitelist sampled client fields so future redis-py additions cannot     silentl",
-      "id": "admin_rationale_35"
+      "id": "admin_rationale_35",
+      "norm_label": "whitelist sampled client fields so future redis-py additions cannot     silentl"
     },
     {
       "label": "Operator-only snapshot of this replica's Redis pool + global CLIENT LIST.     S",
@@ -107161,8 +107161,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
       "source_location": "L55",
       "community": 9,
-      "norm_label": "operator-only snapshot of this replica's redis pool + global client list.     s",
-      "id": "admin_rationale_55"
+      "id": "admin_rationale_55",
+      "norm_label": "operator-only snapshot of this replica's redis pool + global client list.     s"
     },
     {
       "label": "Last N orchestrator log lines of THIS replica (in-memory ring buffer).     Cove",
@@ -107170,8 +107170,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
       "source_location": "L96",
       "community": 9,
-      "norm_label": "last n orchestrator log lines of this replica (in-memory ring buffer).     cove",
-      "id": "admin_rationale_96"
+      "id": "admin_rationale_96",
+      "norm_label": "last n orchestrator log lines of this replica (in-memory ring buffer).     cove"
     },
     {
       "label": "Tail of the per-crawl Node log ({storage_path}/crawler.log). Read-only \u2014     un",
@@ -107179,8 +107179,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
       "source_location": "L119",
       "community": 9,
-      "norm_label": "tail of the per-crawl node log ({storage_path}/crawler.log). read-only \u2014     un",
-      "id": "admin_rationale_119"
+      "id": "admin_rationale_119",
+      "norm_label": "tail of the per-crawl node log ({storage_path}/crawler.log). read-only \u2014     un"
     },
     {
       "label": "Raw crawl_job blob (secrets redacted) + held ownership locks with TTLs +     th",
@@ -107188,8 +107188,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
       "source_location": "L156",
       "community": 9,
-      "norm_label": "raw crawl_job blob (secrets redacted) + held ownership locks with ttls +     th",
-      "id": "admin_rationale_156"
+      "id": "admin_rationale_156",
+      "norm_label": "raw crawl_job blob (secrets redacted) + held ownership locks with ttls +     th"
     },
     {
       "label": "Effective runtime configuration: pydantic Settings (secrets masked to     '<set",
@@ -107246,13 +107246,13 @@
       "id": "admin_rationale_445"
     },
     {
-      "label": "Recursive byte size of a tree (regular files only, symlinks not     followed).",
+      "label": "Liveness/backlog view of the GCS daemons' shared marker directories.     Heartb",
       "file_type": "rationale",
-      "source_file": "apps-microservices/crawler-service/app/router/admin.py",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
       "source_location": "L459",
       "community": 9,
-      "norm_label": "recursive byte size of a tree (regular files only, symlinks not     followed).",
-      "id": "admin_rationale_459"
+      "id": "admin_rationale_459",
+      "norm_label": "liveness/backlog view of the gcs daemons' shared marker directories.     heartb"
     },
     {
       "label": "Per-crawl directory inventory of CRAWLER_STORAGE_PATH (the 384G volume).     Li",
@@ -128131,8 +128131,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\schemas\\crawler.py",
       "source_location": "L112",
       "community": 0,
-      "id": "crawler_rationale_112",
-      "norm_label": "response for post /stash/{crawl_id} \u2014 202 accepted shape."
+      "norm_label": "response for post /stash/{crawl_id} \u2014 202 accepted shape.",
+      "id": "crawler_rationale_112"
     },
     {
       "label": "Response for POST /unstash/{crawl_id} \u2014 200 OK shape.",
@@ -128140,8 +128140,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\schemas\\crawler.py",
       "source_location": "L120",
       "community": 0,
-      "id": "crawler_rationale_120",
-      "norm_label": "response for post /unstash/{crawl_id} \u2014 200 ok shape."
+      "norm_label": "response for post /unstash/{crawl_id} \u2014 200 ok shape.",
+      "id": "crawler_rationale_120"
     },
     {
       "label": "errorRateBreaker.test.ts",
@@ -128196,6 +128196,87 @@
       "community": 1,
       "norm_label": "updatehealthverdict.ts",
       "id": "crawler_src_updatehealthverdict_ts"
+    },
+    {
+      "label": "Effective runtime configuration: pydantic Settings (secrets masked to     '<set",
+      "file_type": "rationale",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
+      "source_location": "L218",
+      "community": 9,
+      "id": "admin_rationale_218",
+      "norm_label": "effective runtime configuration: pydantic settings (secrets masked to     '<set"
+    },
+    {
+      "label": "Mirror crawler_manager._dataset_dir_for_job (crawler_manager.py:1742),     gene",
+      "file_type": "rationale",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
+      "source_location": "L238",
+      "community": 9,
+      "id": "admin_rationale_238",
+      "norm_label": "mirror crawler_manager._dataset_dir_for_job (crawler_manager.py:1742),     gene"
+    },
+    {
+      "label": "List/sample a crawl's dataset records WITHOUT downloading the /results     tar",
+      "file_type": "rationale",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
+      "source_location": "L262",
+      "community": 9,
+      "id": "admin_rationale_262",
+      "norm_label": "list/sample a crawl's dataset records without downloading the /results     tar"
+    },
+    {
+      "label": "One per-crawl diagnostic sidecar, parsed as JSON when possible.     `name` is m",
+      "file_type": "rationale",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
+      "source_location": "L370",
+      "community": 9,
+      "id": "admin_rationale_370",
+      "norm_label": "one per-crawl diagnostic sidecar, parsed as json when possible.     `name` is m"
+    },
+    {
+      "label": "Shared flow dirs (already bind-mounted, config.py:22-53). Read at call     time",
+      "file_type": "rationale",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
+      "source_location": "L396",
+      "community": 9,
+      "id": "admin_rationale_396",
+      "norm_label": "shared flow dirs (already bind-mounted, config.py:22-53). read at call     time"
+    },
+    {
+      "label": "Recursive byte size of a tree (regular files only, symlinks not     followed).",
+      "file_type": "rationale",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
+      "source_location": "L473",
+      "community": 9,
+      "id": "admin_rationale_473",
+      "norm_label": "recursive byte size of a tree (regular files only, symlinks not     followed)."
+    },
+    {
+      "label": "Per-crawl directory inventory of CRAWLER_STORAGE_PATH (the 384G volume).     Li",
+      "file_type": "rationale",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
+      "source_location": "L493",
+      "community": 9,
+      "id": "admin_rationale_493",
+      "norm_label": "per-crawl directory inventory of crawler_storage_path (the 384g volume).     li"
+    },
+    {
+      "label": "Dry-run of the archived-status repair pass: what it WOULD flip, and why     eac",
+      "file_type": "rationale",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
+      "source_location": "L594",
+      "community": 3,
+      "id": "admin_rationale_594",
+      "norm_label": "dry-run of the archived-status repair pass: what it would flip, and why     eac"
+    },
+    {
+      "label": "gated()",
+      "file_type": "code",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\diezClassify.test.ts",
+      "source_location": "L96",
+      "community": 1,
+      "id": "diezclassify_test_gated",
+      "norm_label": "gated()"
     }
   ],
   "links": [
@@ -128946,8 +129027,8 @@
       "source_location": "L16",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "crawler_crawlmode",
-      "_tgt": "str",
+      "_src": "str",
+      "_tgt": "crawler_crawlmode",
       "source": "str",
       "target": "crawler_crawlmode"
     },
@@ -128958,8 +129039,8 @@
       "source_location": "L6",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "crawler_includeinarchive",
-      "_tgt": "str",
+      "_src": "str",
+      "_tgt": "crawler_includeinarchive",
       "source": "str",
       "target": "crawler_includeinarchive"
     },
@@ -131664,8 +131745,8 @@
       "source_location": "L16",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "crawler_crawlmode",
-      "_tgt": "enum",
+      "_src": "enum",
+      "_tgt": "crawler_crawlmode",
       "source": "enum",
       "target": "crawler_crawlmode"
     },
@@ -131676,8 +131757,8 @@
       "source_location": "L6",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "crawler_includeinarchive",
-      "_tgt": "enum",
+      "_src": "enum",
+      "_tgt": "crawler_includeinarchive",
       "source": "enum",
       "target": "crawler_includeinarchive"
     },
@@ -131906,11 +131987,11 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\schemas\\crawler.py",
       "source_location": "L1",
       "weight": 1.0,
-      "_src": "crawler_py",
-      "_tgt": "enum",
+      "_src": "enum",
+      "_tgt": "crawler_py",
+      "confidence_score": 1.0,
       "source": "enum",
-      "target": "crawler_py",
-      "confidence_score": 1.0
+      "target": "crawler_py"
     },
     {
       "relation": "rationale_for",
@@ -133695,8 +133776,8 @@
       "source_location": "L105",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "crawler_archiveresponse",
-      "_tgt": "basemodel",
+      "_src": "basemodel",
+      "_tgt": "crawler_archiveresponse",
       "source": "basemodel",
       "target": "crawler_archiveresponse"
     },
@@ -133707,8 +133788,8 @@
       "source_location": "L21",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "crawler_capacityresponse",
-      "_tgt": "basemodel",
+      "_src": "basemodel",
+      "_tgt": "crawler_capacityresponse",
       "source": "basemodel",
       "target": "crawler_capacityresponse"
     },
@@ -133719,8 +133800,8 @@
       "source_location": "L60",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "crawler_crawlrequest",
-      "_tgt": "basemodel",
+      "_src": "basemodel",
+      "_tgt": "crawler_crawlrequest",
       "source": "basemodel",
       "target": "crawler_crawlrequest"
     },
@@ -133731,8 +133812,8 @@
       "source_location": "L97",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "crawler_crawlresponse",
-      "_tgt": "basemodel",
+      "_src": "basemodel",
+      "_tgt": "crawler_crawlresponse",
       "source": "basemodel",
       "target": "crawler_crawlresponse"
     },
@@ -133743,8 +133824,8 @@
       "source_location": "L149",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "crawler_crawlstatus",
-      "_tgt": "basemodel",
+      "_src": "basemodel",
+      "_tgt": "crawler_crawlstatus",
       "source": "basemodel",
       "target": "crawler_crawlstatus"
     },
@@ -133755,8 +133836,8 @@
       "source_location": "L137",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "crawler_failedcallback",
-      "_tgt": "basemodel",
+      "_src": "basemodel",
+      "_tgt": "crawler_failedcallback",
       "source": "basemodel",
       "target": "crawler_failedcallback"
     },
@@ -133767,8 +133848,8 @@
       "source_location": "L145",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "crawler_pendingcallbacksresponse",
-      "_tgt": "basemodel",
+      "_src": "basemodel",
+      "_tgt": "crawler_pendingcallbacksresponse",
       "source": "basemodel",
       "target": "crawler_pendingcallbacksresponse"
     },
@@ -133779,8 +133860,8 @@
       "source_location": "L36",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "crawler_pruneresponse",
-      "_tgt": "basemodel",
+      "_src": "basemodel",
+      "_tgt": "crawler_pruneresponse",
       "source": "basemodel",
       "target": "crawler_pruneresponse"
     },
@@ -133791,8 +133872,8 @@
       "source_location": "L29",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "crawler_reindexresponse",
-      "_tgt": "basemodel",
+      "_src": "basemodel",
+      "_tgt": "crawler_reindexresponse",
       "source": "basemodel",
       "target": "crawler_reindexresponse"
     },
@@ -133803,8 +133884,8 @@
       "source_location": "L131",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "crawler_retrieveresponse",
-      "_tgt": "basemodel",
+      "_src": "basemodel",
+      "_tgt": "crawler_retrieveresponse",
       "source": "basemodel",
       "target": "crawler_retrieveresponse"
     },
@@ -133815,8 +133896,8 @@
       "source_location": "L111",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "crawler_stashresponse",
-      "_tgt": "basemodel",
+      "_src": "basemodel",
+      "_tgt": "crawler_stashresponse",
       "source": "basemodel",
       "target": "crawler_stashresponse"
     },
@@ -133827,8 +133908,8 @@
       "source_location": "L101",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "crawler_stopresponse",
-      "_tgt": "basemodel",
+      "_src": "basemodel",
+      "_tgt": "crawler_stopresponse",
       "source": "basemodel",
       "target": "crawler_stopresponse"
     },
@@ -133839,8 +133920,8 @@
       "source_location": "L119",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "crawler_unstashresponse",
-      "_tgt": "basemodel",
+      "_src": "basemodel",
+      "_tgt": "crawler_unstashresponse",
       "source": "basemodel",
       "target": "crawler_unstashresponse"
     },
@@ -133851,8 +133932,8 @@
       "source_location": "L43",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "crawler_updatethresholds",
-      "_tgt": "basemodel",
+      "_src": "basemodel",
+      "_tgt": "crawler_updatethresholds",
       "source": "basemodel",
       "target": "crawler_updatethresholds"
     },
@@ -193160,8 +193241,8 @@
       "source_location": "L7",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "crawler_rationale_7",
-      "_tgt": "crawler_includeinarchive",
+      "_src": "crawler_includeinarchive",
+      "_tgt": "crawler_rationale_7",
       "source": "crawler_includeinarchive",
       "target": "crawler_rationale_7"
     },
@@ -196363,11 +196444,11 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\schemas\\crawler.py",
       "source_location": "L6",
       "weight": 1.0,
-      "_src": "crawler_py",
-      "_tgt": "crawler_includeinarchive",
+      "_src": "crawler_includeinarchive",
+      "_tgt": "crawler_py",
+      "confidence_score": 1.0,
       "source": "crawler_includeinarchive",
-      "target": "crawler_py",
-      "confidence_score": 1.0
+      "target": "crawler_py"
     },
     {
       "relation": "rationale_for",
@@ -196376,8 +196457,8 @@
       "source_location": "L17",
       "weight": 1.0,
       "confidence_score": 1.0,
-      "_src": "crawler_rationale_17",
-      "_tgt": "crawler_crawlmode",
+      "_src": "crawler_crawlmode",
+      "_tgt": "crawler_rationale_17",
       "source": "crawler_crawlmode",
       "target": "crawler_rationale_17"
     },
@@ -196411,11 +196492,11 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\schemas\\crawler.py",
       "source_location": "L16",
       "weight": 1.0,
-      "_src": "crawler_py",
-      "_tgt": "crawler_crawlmode",
+      "_src": "crawler_crawlmode",
+      "_tgt": "crawler_py",
+      "confidence_score": 1.0,
       "source": "crawler_crawlmode",
-      "target": "crawler_py",
-      "confidence_score": 1.0
+      "target": "crawler_py"
     },
     {
       "relation": "uses",
@@ -197215,11 +197296,11 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\schemas\\crawler.py",
       "source_location": "L21",
       "weight": 1.0,
-      "_src": "crawler_py",
-      "_tgt": "crawler_capacityresponse",
+      "_src": "crawler_capacityresponse",
+      "_tgt": "crawler_py",
+      "confidence_score": 1.0,
       "source": "crawler_capacityresponse",
-      "target": "crawler_py",
-      "confidence_score": 1.0
+      "target": "crawler_py"
     },
     {
       "relation": "uses",
@@ -200479,8 +200560,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\schemas\\crawler.py",
       "source_location": "L30",
       "weight": 1.0,
-      "_src": "crawler_rationale_30",
-      "_tgt": "crawler_reindexresponse",
+      "_src": "crawler_reindexresponse",
+      "_tgt": "crawler_rationale_30",
       "confidence_score": 1.0,
       "source": "crawler_reindexresponse",
       "target": "crawler_rationale_30"
@@ -201415,11 +201496,11 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\schemas\\crawler.py",
       "source_location": "L29",
       "weight": 1.0,
-      "_src": "crawler_py",
-      "_tgt": "crawler_reindexresponse",
+      "_src": "crawler_reindexresponse",
+      "_tgt": "crawler_py",
+      "confidence_score": 1.0,
       "source": "crawler_reindexresponse",
-      "target": "crawler_py",
-      "confidence_score": 1.0
+      "target": "crawler_py"
     },
     {
       "relation": "uses",
@@ -202051,8 +202132,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\schemas\\crawler.py",
       "source_location": "L37",
       "weight": 1.0,
-      "_src": "crawler_rationale_37",
-      "_tgt": "crawler_pruneresponse",
+      "_src": "crawler_pruneresponse",
+      "_tgt": "crawler_rationale_37",
       "confidence_score": 1.0,
       "source": "crawler_pruneresponse",
       "target": "crawler_rationale_37"
@@ -202243,11 +202324,11 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\schemas\\crawler.py",
       "source_location": "L36",
       "weight": 1.0,
-      "_src": "crawler_py",
-      "_tgt": "crawler_pruneresponse",
+      "_src": "crawler_pruneresponse",
+      "_tgt": "crawler_py",
+      "confidence_score": 1.0,
       "source": "crawler_pruneresponse",
-      "target": "crawler_py",
-      "confidence_score": 1.0
+      "target": "crawler_py"
     },
     {
       "relation": "rationale_for",
@@ -202291,8 +202372,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\schemas\\crawler.py",
       "source_location": "L44",
       "weight": 1.0,
-      "_src": "crawler_rationale_44",
-      "_tgt": "crawler_updatethresholds",
+      "_src": "crawler_updatethresholds",
+      "_tgt": "crawler_rationale_44",
       "confidence_score": 1.0,
       "source": "crawler_updatethresholds",
       "target": "crawler_rationale_44"
@@ -202303,11 +202384,11 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\schemas\\crawler.py",
       "source_location": "L43",
       "weight": 1.0,
-      "_src": "crawler_py",
-      "_tgt": "crawler_updatethresholds",
+      "_src": "crawler_updatethresholds",
+      "_tgt": "crawler_py",
+      "confidence_score": 1.0,
       "source": "crawler_updatethresholds",
-      "target": "crawler_py",
-      "confidence_score": 1.0
+      "target": "crawler_py"
     },
     {
       "relation": "uses",
@@ -203107,11 +203188,11 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\schemas\\crawler.py",
       "source_location": "L60",
       "weight": 1.0,
-      "_src": "crawler_py",
-      "_tgt": "crawler_crawlrequest",
+      "_src": "crawler_crawlrequest",
+      "_tgt": "crawler_py",
+      "confidence_score": 1.0,
       "source": "crawler_crawlrequest",
-      "target": "crawler_py",
-      "confidence_score": 1.0
+      "target": "crawler_py"
     },
     {
       "relation": "uses",
@@ -203911,11 +203992,11 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\schemas\\crawler.py",
       "source_location": "L97",
       "weight": 1.0,
-      "_src": "crawler_py",
-      "_tgt": "crawler_crawlresponse",
+      "_src": "crawler_crawlresponse",
+      "_tgt": "crawler_py",
+      "confidence_score": 1.0,
       "source": "crawler_crawlresponse",
-      "target": "crawler_py",
-      "confidence_score": 1.0
+      "target": "crawler_py"
     },
     {
       "relation": "uses",
@@ -204715,11 +204796,11 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\schemas\\crawler.py",
       "source_location": "L101",
       "weight": 1.0,
-      "_src": "crawler_py",
-      "_tgt": "crawler_stopresponse",
+      "_src": "crawler_stopresponse",
+      "_tgt": "crawler_py",
+      "confidence_score": 1.0,
       "source": "crawler_stopresponse",
-      "target": "crawler_py",
-      "confidence_score": 1.0
+      "target": "crawler_py"
     },
     {
       "relation": "uses",
@@ -205519,11 +205600,11 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\schemas\\crawler.py",
       "source_location": "L105",
       "weight": 1.0,
-      "_src": "crawler_py",
-      "_tgt": "crawler_archiveresponse",
+      "_src": "crawler_archiveresponse",
+      "_tgt": "crawler_py",
+      "confidence_score": 1.0,
       "source": "crawler_archiveresponse",
-      "target": "crawler_py",
-      "confidence_score": 1.0
+      "target": "crawler_py"
     },
     {
       "relation": "contains",
@@ -205555,11 +205636,11 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\schemas\\crawler.py",
       "source_location": "L131",
       "weight": 1.0,
-      "_src": "crawler_py",
-      "_tgt": "crawler_retrieveresponse",
+      "_src": "crawler_retrieveresponse",
+      "_tgt": "crawler_py",
+      "confidence_score": 1.0,
       "source": "crawler_retrieveresponse",
-      "target": "crawler_py",
-      "confidence_score": 1.0
+      "target": "crawler_py"
     },
     {
       "relation": "contains",
@@ -205591,11 +205672,11 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\schemas\\crawler.py",
       "source_location": "L137",
       "weight": 1.0,
-      "_src": "crawler_py",
-      "_tgt": "crawler_failedcallback",
+      "_src": "crawler_failedcallback",
+      "_tgt": "crawler_py",
+      "confidence_score": 1.0,
       "source": "crawler_failedcallback",
-      "target": "crawler_py",
-      "confidence_score": 1.0
+      "target": "crawler_py"
     },
     {
       "relation": "uses",
@@ -206395,11 +206476,11 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\schemas\\crawler.py",
       "source_location": "L145",
       "weight": 1.0,
-      "_src": "crawler_py",
-      "_tgt": "crawler_pendingcallbacksresponse",
+      "_src": "crawler_pendingcallbacksresponse",
+      "_tgt": "crawler_py",
+      "confidence_score": 1.0,
       "source": "crawler_pendingcallbacksresponse",
-      "target": "crawler_py",
-      "confidence_score": 1.0
+      "target": "crawler_py"
     },
     {
       "relation": "uses",
@@ -210595,11 +210676,11 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\schemas\\crawler.py",
       "source_location": "L149",
       "weight": 1.0,
-      "_src": "crawler_py",
-      "_tgt": "crawler_crawlstatus",
+      "_src": "crawler_crawlstatus",
+      "_tgt": "crawler_py",
+      "confidence_score": 1.0,
       "source": "crawler_crawlstatus",
-      "target": "crawler_py",
-      "confidence_score": 1.0
+      "target": "crawler_py"
     },
     {
       "relation": "contains",
@@ -338168,8 +338249,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\schemas\\crawler.py",
       "source_location": "L112",
       "weight": 1.0,
-      "_src": "crawler_rationale_112",
-      "_tgt": "crawler_stashresponse",
+      "_src": "crawler_stashresponse",
+      "_tgt": "crawler_rationale_112",
       "confidence_score": 1.0,
       "source": "crawler_stashresponse",
       "target": "crawler_rationale_112"
@@ -338360,11 +338441,11 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\schemas\\crawler.py",
       "source_location": "L111",
       "weight": 1.0,
-      "_src": "crawler_py",
-      "_tgt": "crawler_stashresponse",
+      "_src": "crawler_stashresponse",
+      "_tgt": "crawler_py",
+      "confidence_score": 1.0,
       "source": "crawler_stashresponse",
-      "target": "crawler_py",
-      "confidence_score": 1.0
+      "target": "crawler_py"
     },
     {
       "relation": "rationale_for",
@@ -338828,8 +338909,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\schemas\\crawler.py",
       "source_location": "L120",
       "weight": 1.0,
-      "_src": "crawler_rationale_120",
-      "_tgt": "crawler_unstashresponse",
+      "_src": "crawler_unstashresponse",
+      "_tgt": "crawler_rationale_120",
       "confidence_score": 1.0,
       "source": "crawler_unstashresponse",
       "target": "crawler_rationale_120"
@@ -339020,11 +339101,11 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\schemas\\crawler.py",
       "source_location": "L119",
       "weight": 1.0,
-      "_src": "crawler_py",
-      "_tgt": "crawler_unstashresponse",
+      "_src": "crawler_unstashresponse",
+      "_tgt": "crawler_py",
+      "confidence_score": 1.0,
       "source": "crawler_unstashresponse",
-      "target": "crawler_py",
-      "confidence_score": 1.0
+      "target": "crawler_py"
     },
     {
       "relation": "contains",
@@ -358655,8 +358736,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
       "source_location": "L11",
       "weight": 1.0,
-      "_src": "fastapi",
-      "_tgt": "app_router_admin_py",
+      "_src": "app_router_admin_py",
+      "_tgt": "fastapi",
       "confidence_score": 1.0,
       "source": "fastapi",
       "target": "app_router_admin_py"
@@ -358991,8 +359072,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\schemas\\crawler.py",
       "source_location": "L4",
       "weight": 1.0,
-      "_src": "crawler_py",
-      "_tgt": "datetime",
+      "_src": "datetime",
+      "_tgt": "crawler_py",
       "confidence_score": 1.0,
       "source": "datetime",
       "target": "crawler_py"
@@ -359003,8 +359084,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
       "source_location": "L8",
       "weight": 1.0,
-      "_src": "datetime",
-      "_tgt": "app_router_admin_py",
+      "_src": "app_router_admin_py",
+      "_tgt": "datetime",
       "confidence_score": 1.0,
       "source": "datetime",
       "target": "app_router_admin_py"
@@ -398747,8 +398828,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\diezClassify.ts",
       "source_location": "L54",
       "weight": 1.0,
-      "_src": "diezclassify_classifyfragment",
-      "_tgt": "diezclassify_applyperclassstrip",
+      "_src": "diezclassify_applyperclassstrip",
+      "_tgt": "diezclassify_classifyfragment",
       "confidence_score": 1.0,
       "source": "diezclassify_classifyfragment",
       "target": "diezclassify_applyperclassstrip"
@@ -398771,8 +398852,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\diezClassify.ts",
       "source_location": "L27",
       "weight": 1.0,
-      "_src": "diezclassify_classifyfragment",
-      "_tgt": "crawler_src_diezclassify_ts",
+      "_src": "crawler_src_diezclassify_ts",
+      "_tgt": "diezclassify_classifyfragment",
       "confidence_score": 1.0,
       "source": "diezclassify_classifyfragment",
       "target": "crawler_src_diezclassify_ts"
@@ -398807,8 +398888,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\diezClassify.ts",
       "source_location": "L51",
       "weight": 1.0,
-      "_src": "diezclassify_applyperclassstrip",
-      "_tgt": "crawler_src_diezclassify_ts",
+      "_src": "crawler_src_diezclassify_ts",
+      "_tgt": "diezclassify_applyperclassstrip",
       "confidence_score": 1.0,
       "source": "diezclassify_applyperclassstrip",
       "target": "crawler_src_diezclassify_ts"
@@ -398843,8 +398924,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\diezClassify.ts",
       "source_location": "L58",
       "weight": 1.0,
-      "_src": "diezclassify_perclassenabled",
-      "_tgt": "crawler_src_diezclassify_ts",
+      "_src": "crawler_src_diezclassify_ts",
+      "_tgt": "diezclassify_perclassenabled",
       "confidence_score": 1.0,
       "source": "diezclassify_perclassenabled",
       "target": "crawler_src_diezclassify_ts"
@@ -399189,10 +399270,10 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\diezClassify.ts",
-      "source_location": "L127",
+      "source_location": "L131",
       "weight": 1.0,
-      "_src": "diezclassify_fingerprint",
-      "_tgt": "crawler_src_diezclassify_ts",
+      "_src": "crawler_src_diezclassify_ts",
+      "_tgt": "diezclassify_fingerprint",
       "confidence_score": 1.0,
       "source": "diezclassify_fingerprint",
       "target": "crawler_src_diezclassify_ts"
@@ -399224,8 +399305,20 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\diezClassify.test.ts",
+      "source_location": "L96",
+      "weight": 1.0,
+      "_src": "crawler_src_diezclassify_test_ts",
+      "_tgt": "diezclassify_test_gated",
+      "source": "crawler_src_diezclassify_test_ts",
+      "target": "diezclassify_test_gated",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\diezClassify.ts",
-      "source_location": "L74",
+      "source_location": "L78",
       "weight": 1.0,
       "_src": "crawler_src_diezclassify_ts",
       "_tgt": "diezclassify_stripactionanchor",
@@ -399237,7 +399330,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\diezClassify.ts",
-      "source_location": "L87",
+      "source_location": "L91",
       "weight": 1.0,
       "_src": "crawler_src_diezclassify_ts",
       "_tgt": "diezclassify_actionanchorstripenabled",
@@ -399249,7 +399342,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\diezClassify.ts",
-      "source_location": "L91",
+      "source_location": "L95",
       "weight": 1.0,
       "_src": "crawler_src_diezclassify_ts",
       "_tgt": "diezclassify_provendiezoverrideenabled",
@@ -399261,7 +399354,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\diezClassify.ts",
-      "source_location": "L100",
+      "source_location": "L104",
       "weight": 1.0,
       "_src": "crawler_src_diezclassify_ts",
       "_tgt": "diezclassify_provenoverridemincompared",
@@ -399273,7 +399366,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\diezClassify.ts",
-      "source_location": "L112",
+      "source_location": "L116",
       "weight": 1.0,
       "_src": "crawler_src_diezclassify_ts",
       "_tgt": "diezclassify_isprovendiezstrip",
@@ -400024,6 +400117,30 @@
       "confidence_score": 1.0,
       "source": "class_progressmonitor_test_ts",
       "target": "progressmonitor_test_readresolved"
+    },
+    {
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\diezClassify.test.ts",
+      "source_location": "L96",
+      "weight": 1.0,
+      "_src": "diezclassify_test_gated",
+      "_tgt": "diezclassify_stripactionanchor",
+      "source": "diezclassify_stripactionanchor",
+      "target": "diezclassify_test_gated"
+    },
+    {
+      "relation": "calls",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\crawler\\src\\diezClassify.test.ts",
+      "source_location": "L96",
+      "weight": 1.0,
+      "_src": "diezclassify_test_gated",
+      "_tgt": "diezclassify_actionanchorstripenabled",
+      "source": "diezclassify_actionanchorstripenabled",
+      "target": "diezclassify_test_gated"
     },
     {
       "relation": "imports_from",
@@ -406415,8 +406532,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
       "source_location": "L78",
       "weight": 1.0,
-      "_src": "admin_count_by",
-      "_tgt": "admin_redis_debug",
+      "_src": "admin_redis_debug",
+      "_tgt": "admin_count_by",
       "confidence_score": 1.0,
       "source": "admin_count_by",
       "target": "admin_redis_debug"
@@ -406439,8 +406556,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
       "source_location": "L30",
       "weight": 1.0,
-      "_src": "admin_count_by",
-      "_tgt": "app_router_admin_py",
+      "_src": "app_router_admin_py",
+      "_tgt": "admin_count_by",
       "confidence_score": 1.0,
       "source": "admin_count_by",
       "target": "app_router_admin_py"
@@ -406463,8 +406580,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
       "source_location": "L80",
       "weight": 1.0,
-      "_src": "admin_project_sample",
-      "_tgt": "admin_redis_debug",
+      "_src": "admin_redis_debug",
+      "_tgt": "admin_project_sample",
       "confidence_score": 1.0,
       "source": "admin_project_sample",
       "target": "admin_redis_debug"
@@ -406499,8 +406616,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
       "source_location": "L34",
       "weight": 1.0,
-      "_src": "admin_project_sample",
-      "_tgt": "app_router_admin_py",
+      "_src": "app_router_admin_py",
+      "_tgt": "admin_project_sample",
       "confidence_score": 1.0,
       "source": "admin_project_sample",
       "target": "app_router_admin_py"
@@ -406511,8 +406628,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
       "source_location": "L35",
       "weight": 1.0,
-      "_src": "admin_project_sample",
-      "_tgt": "admin_rationale_35",
+      "_src": "admin_rationale_35",
+      "_tgt": "admin_project_sample",
       "confidence_score": 1.0,
       "source": "admin_project_sample",
       "target": "admin_rationale_35"
@@ -406535,8 +406652,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
       "source_location": "L81",
       "weight": 1.0,
-      "_src": "admin_pool_stats",
-      "_tgt": "admin_redis_debug",
+      "_src": "admin_redis_debug",
+      "_tgt": "admin_pool_stats",
       "confidence_score": 1.0,
       "source": "admin_pool_stats",
       "target": "admin_redis_debug"
@@ -406547,8 +406664,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
       "source_location": "L40",
       "weight": 1.0,
-      "_src": "admin_pool_stats",
-      "_tgt": "app_router_admin_py",
+      "_src": "app_router_admin_py",
+      "_tgt": "admin_pool_stats",
       "confidence_score": 1.0,
       "source": "admin_pool_stats",
       "target": "app_router_admin_py"
@@ -406619,8 +406736,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
       "source_location": "L54",
       "weight": 1.0,
-      "_src": "admin_redis_debug",
-      "_tgt": "app_router_admin_py",
+      "_src": "app_router_admin_py",
+      "_tgt": "admin_redis_debug",
       "confidence_score": 1.0,
       "source": "admin_redis_debug",
       "target": "app_router_admin_py"
@@ -406631,8 +406748,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
       "source_location": "L55",
       "weight": 1.0,
-      "_src": "admin_redis_debug",
-      "_tgt": "admin_rationale_55",
+      "_src": "admin_rationale_55",
+      "_tgt": "admin_redis_debug",
       "confidence_score": 1.0,
       "source": "admin_redis_debug",
       "target": "admin_rationale_55"
@@ -406691,8 +406808,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
       "source_location": "L91",
       "weight": 1.0,
-      "_src": "admin_recent_logs",
-      "_tgt": "app_router_admin_py",
+      "_src": "app_router_admin_py",
+      "_tgt": "admin_recent_logs",
       "confidence_score": 1.0,
       "source": "admin_recent_logs",
       "target": "app_router_admin_py"
@@ -406703,8 +406820,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
       "source_location": "L96",
       "weight": 1.0,
-      "_src": "admin_recent_logs",
-      "_tgt": "admin_rationale_96",
+      "_src": "admin_rationale_96",
+      "_tgt": "admin_recent_logs",
       "confidence_score": 1.0,
       "source": "admin_recent_logs",
       "target": "admin_rationale_96"
@@ -406775,8 +406892,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
       "source_location": "L114",
       "weight": 1.0,
-      "_src": "admin_crawl_log_tail",
-      "_tgt": "app_router_admin_py",
+      "_src": "app_router_admin_py",
+      "_tgt": "admin_crawl_log_tail",
       "confidence_score": 1.0,
       "source": "admin_crawl_log_tail",
       "target": "app_router_admin_py"
@@ -406787,8 +406904,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
       "source_location": "L119",
       "weight": 1.0,
-      "_src": "admin_crawl_log_tail",
-      "_tgt": "admin_rationale_119",
+      "_src": "admin_rationale_119",
+      "_tgt": "admin_crawl_log_tail",
       "confidence_score": 1.0,
       "source": "admin_crawl_log_tail",
       "target": "admin_rationale_119"
@@ -406847,8 +406964,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
       "source_location": "L155",
       "weight": 1.0,
-      "_src": "admin_job_dump",
-      "_tgt": "app_router_admin_py",
+      "_src": "app_router_admin_py",
+      "_tgt": "admin_job_dump",
       "confidence_score": 1.0,
       "source": "admin_job_dump",
       "target": "app_router_admin_py"
@@ -406859,8 +406976,8 @@
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
       "source_location": "L156",
       "weight": 1.0,
-      "_src": "admin_job_dump",
-      "_tgt": "admin_rationale_156",
+      "_src": "admin_rationale_156",
+      "_tgt": "admin_job_dump",
       "confidence_score": 1.0,
       "source": "admin_job_dump",
       "target": "admin_rationale_156"
@@ -406956,10 +407073,10 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
-      "source_location": "L214",
+      "source_location": "L217",
       "weight": 1.0,
-      "_src": "admin_effective_config",
-      "_tgt": "app_router_admin_py",
+      "_src": "app_router_admin_py",
+      "_tgt": "admin_effective_config",
       "confidence_score": 1.0,
       "source": "admin_effective_config",
       "target": "app_router_admin_py"
@@ -407062,13 +407179,25 @@
       "target": "nhp_t08_doc"
     },
     {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
+      "source_location": "L218",
+      "weight": 1.0,
+      "_src": "admin_rationale_218",
+      "_tgt": "admin_effective_config",
+      "source": "admin_effective_config",
+      "target": "admin_rationale_218",
+      "confidence_score": 1.0
+    },
+    {
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
-      "source_location": "L262",
+      "source_location": "L265",
       "weight": 1.0,
-      "_src": "admin_dataset_dir",
-      "_tgt": "admin_dataset_sample",
+      "_src": "admin_dataset_sample",
+      "_tgt": "admin_dataset_dir",
       "confidence_score": 1.0,
       "source": "admin_dataset_dir",
       "target": "admin_dataset_sample"
@@ -407101,10 +407230,10 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
-      "source_location": "L234",
+      "source_location": "L237",
       "weight": 1.0,
-      "_src": "admin_dataset_dir",
-      "_tgt": "app_router_admin_py",
+      "_src": "app_router_admin_py",
+      "_tgt": "admin_dataset_dir",
       "confidence_score": 1.0,
       "source": "admin_dataset_dir",
       "target": "app_router_admin_py"
@@ -407161,6 +407290,18 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
+      "source_location": "L238",
+      "weight": 1.0,
+      "_src": "admin_rationale_238",
+      "_tgt": "admin_dataset_dir",
+      "source": "admin_dataset_dir",
+      "target": "admin_rationale_238",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
       "source_location": "L248",
       "weight": 1.0,
       "_src": "admin_dataset_sample",
@@ -407197,10 +407338,10 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
-      "source_location": "L252",
+      "source_location": "L255",
       "weight": 1.0,
-      "_src": "admin_dataset_sample",
-      "_tgt": "app_router_admin_py",
+      "_src": "app_router_admin_py",
+      "_tgt": "admin_dataset_sample",
       "confidence_score": 1.0,
       "source": "admin_dataset_sample",
       "target": "app_router_admin_py"
@@ -407268,6 +407409,18 @@
     {
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
+      "source_location": "L262",
+      "weight": 1.0,
+      "_src": "admin_rationale_262",
+      "_tgt": "admin_dataset_sample",
+      "source": "admin_dataset_sample",
+      "target": "admin_rationale_262",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
       "source_file": "apps-microservices\\crawler-service\\app\\router\\admin.py",
       "source_location": "L352",
       "weight": 1.0,
@@ -407329,10 +407482,10 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
-      "source_location": "L363",
+      "source_location": "L366",
       "weight": 1.0,
-      "_src": "admin_sidecar_file",
-      "_tgt": "app_router_admin_py",
+      "_src": "app_router_admin_py",
+      "_tgt": "admin_sidecar_file",
       "confidence_score": 1.0,
       "source": "admin_sidecar_file",
       "target": "app_router_admin_py"
@@ -407398,13 +407551,25 @@
       "target": "admin_rationale_367"
     },
     {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
+      "source_location": "L370",
+      "weight": 1.0,
+      "_src": "admin_rationale_370",
+      "_tgt": "admin_sidecar_file",
+      "source": "admin_sidecar_file",
+      "target": "admin_rationale_370",
+      "confidence_score": 1.0
+    },
+    {
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
-      "source_location": "L460",
+      "source_location": "L463",
       "weight": 1.0,
-      "_src": "admin_daemon_dirs",
-      "_tgt": "admin_daemon_state",
+      "_src": "admin_daemon_state",
+      "_tgt": "admin_daemon_dirs",
       "confidence_score": 1.0,
       "source": "admin_daemon_dirs",
       "target": "admin_daemon_state"
@@ -407449,10 +407614,10 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
-      "source_location": "L392",
+      "source_location": "L395",
       "weight": 1.0,
-      "_src": "admin_daemon_dirs",
-      "_tgt": "app_router_admin_py",
+      "_src": "app_router_admin_py",
+      "_tgt": "admin_daemon_dirs",
       "confidence_score": 1.0,
       "source": "admin_daemon_dirs",
       "target": "app_router_admin_py"
@@ -407518,13 +407683,25 @@
       "target": "admin_rationale_393"
     },
     {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
+      "source_location": "L396",
+      "weight": 1.0,
+      "_src": "admin_rationale_396",
+      "_tgt": "admin_daemon_dirs",
+      "source": "admin_daemon_dirs",
+      "target": "admin_rationale_396",
+      "confidence_score": 1.0
+    },
+    {
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
-      "source_location": "L460",
+      "source_location": "L463",
       "weight": 1.0,
-      "_src": "admin_describe_dir",
-      "_tgt": "admin_daemon_state",
+      "_src": "admin_daemon_state",
+      "_tgt": "admin_describe_dir",
       "confidence_score": 1.0,
       "source": "admin_describe_dir",
       "target": "admin_daemon_state"
@@ -407533,10 +407710,10 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
-      "source_location": "L409",
+      "source_location": "L412",
       "weight": 1.0,
-      "_src": "admin_describe_dir",
-      "_tgt": "app_router_admin_py",
+      "_src": "app_router_admin_py",
+      "_tgt": "admin_describe_dir",
       "confidence_score": 1.0,
       "source": "admin_describe_dir",
       "target": "app_router_admin_py"
@@ -407605,10 +407782,10 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
-      "source_location": "L455",
+      "source_location": "L458",
       "weight": 1.0,
-      "_src": "admin_daemon_state",
-      "_tgt": "app_router_admin_py",
+      "_src": "app_router_admin_py",
+      "_tgt": "admin_daemon_state",
       "confidence_score": 1.0,
       "source": "admin_daemon_state",
       "target": "app_router_admin_py"
@@ -407708,6 +407885,18 @@
       "confidence_score": 1.0,
       "source": "admin_daemon_state",
       "target": "admin_rationale_456"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
+      "source_location": "L459",
+      "weight": 1.0,
+      "_src": "admin_rationale_459",
+      "_tgt": "admin_daemon_state",
+      "source": "admin_daemon_state",
+      "target": "admin_rationale_459",
+      "confidence_score": 1.0
     },
     {
       "relation": "rationale_for",
@@ -413161,10 +413350,10 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
-      "source_location": "L550",
+      "source_location": "L553",
       "weight": 1.0,
-      "_src": "admin_dir_size_bytes",
-      "_tgt": "admin_storage_dirs",
+      "_src": "admin_storage_dirs",
+      "_tgt": "admin_dir_size_bytes",
       "confidence_score": 1.0,
       "source": "admin_dir_size_bytes",
       "target": "admin_storage_dirs"
@@ -413221,10 +413410,10 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
-      "source_location": "L469",
+      "source_location": "L472",
       "weight": 1.0,
-      "_src": "admin_dir_size_bytes",
-      "_tgt": "app_router_admin_py",
+      "_src": "app_router_admin_py",
+      "_tgt": "admin_dir_size_bytes",
       "confidence_score": 1.0,
       "source": "admin_dir_size_bytes",
       "target": "app_router_admin_py"
@@ -413292,6 +413481,18 @@
     {
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
+      "source_location": "L473",
+      "weight": 1.0,
+      "_src": "admin_rationale_473",
+      "_tgt": "admin_dir_size_bytes",
+      "source": "admin_dir_size_bytes",
+      "target": "admin_rationale_473",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
       "source_file": "apps-microservices\\crawler-service\\app\\router\\admin.py",
       "source_location": "L475",
       "weight": 1.0,
@@ -413353,10 +413554,10 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
-      "source_location": "L485",
+      "source_location": "L488",
       "weight": 1.0,
-      "_src": "admin_storage_dirs",
-      "_tgt": "app_router_admin_py",
+      "_src": "app_router_admin_py",
+      "_tgt": "admin_storage_dirs",
       "confidence_score": 1.0,
       "source": "admin_storage_dirs",
       "target": "app_router_admin_py"
@@ -413444,6 +413645,18 @@
       "confidence_score": 1.0,
       "source": "admin_storage_dirs",
       "target": "admin_rationale_490"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
+      "source_location": "L493",
+      "weight": 1.0,
+      "_src": "admin_rationale_493",
+      "_tgt": "admin_storage_dirs",
+      "source": "admin_storage_dirs",
+      "target": "admin_rationale_493",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -440320,7 +440533,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
-      "source_location": "L582",
+      "source_location": "L585",
       "weight": 1.0,
       "_src": "app_router_admin_py",
       "_tgt": "admin_archived_status_repair_dry_run",
@@ -455495,6 +455708,18 @@
       "confidence_score": 1.0,
       "source": "admin_archived_status_repair_dry_run",
       "target": "admin_rationale_591"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "D:\\DevHellopro\\Workspaces\\RAG-HP-PUB\\apps-microservices\\crawler-service\\app\\router\\admin.py",
+      "source_location": "L594",
+      "weight": 1.0,
+      "_src": "admin_rationale_594",
+      "_tgt": "admin_archived_status_repair_dry_run",
+      "source": "admin_archived_status_repair_dry_run",
+      "target": "admin_rationale_594",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
