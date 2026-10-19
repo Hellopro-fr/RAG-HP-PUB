@@ -130,6 +130,7 @@ const maxNewUrls = parseNumericArg('maxNewUrls', 'npm_config_maxnewurls', 0);
 // V1 Circuit Breaker / Update Logic Params (with defaults)
 const minSample = parseNumericArg('minSample', 'npm_config_minsample', 50);
 const maxErrorRate = parseNumericArg('maxErrorRate', 'npm_config_maxerrorrate', 0.15);
+const maxNotEligibleRate = parseNumericArg('maxNotEligibleRate', 'npm_config_maxnoteligiblerate', 0.50);
 const maxRedirectRate = parseNumericArg('maxRedirectRate', 'npm_config_maxredirectrate', 0.30);
 const maxGrowthRate = parseNumericArg('maxGrowthRate', 'npm_config_maxgrowthrate', 0.50);
 const maxAbsErrors = parseNumericArg('maxAbsErrors', 'npm_config_maxabserrors', 5);
@@ -166,6 +167,7 @@ context.config = {
         minSample: minSample,
         minCoverage: 0.8,
         maxErrorRate: maxErrorRate,
+        maxNotEligibleRate: maxNotEligibleRate,
         maxRedirectRate: maxRedirectRate,
         maxGrowthRate: maxGrowthRate,
         maxAbsErrors: maxAbsErrors,
@@ -1019,7 +1021,7 @@ if (crawlMode === 'update') {
     if (context.config.circuitBreaker.isMicroMode) {
         console.log(`   - Limits: MaxErrors=${context.config.circuitBreaker.maxAbsErrors}, MaxRedirects=${context.config.circuitBreaker.maxAbsRedirects}, MaxNew=${context.config.circuitBreaker.maxAbsNew}`);
     } else {
-        console.log(`   - Limits: MinSample=${context.config.circuitBreaker.minSample}, ErrorRate=${(context.config.circuitBreaker.maxErrorRate * 100).toFixed(1)}%, RedirectRate=${(context.config.circuitBreaker.maxRedirectRate * 100).toFixed(1)}%, GrowthRate=${(context.config.circuitBreaker.maxGrowthRate * 100).toFixed(1)}%`);
+        console.log(`   - Limits: MinSample=${context.config.circuitBreaker.minSample}, ErrorRate=${(context.config.circuitBreaker.maxErrorRate * 100).toFixed(1)}%, NotEligibleRate=${(context.config.circuitBreaker.maxNotEligibleRate * 100).toFixed(1)}%, RedirectRate=${(context.config.circuitBreaker.maxRedirectRate * 100).toFixed(1)}%, GrowthRate=${(context.config.circuitBreaker.maxGrowthRate * 100).toFixed(1)}%`);
     }
     console.log(`----------------------------------------\n`);
 

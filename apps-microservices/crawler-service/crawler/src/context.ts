@@ -63,6 +63,7 @@ export const context = {
             minSample: 50,
             minCoverage: 0.8,
             maxErrorRate: 0.15,     // 15%
+            maxNotEligibleRate: 0.50, // 50% — CASE 3 non-eligible, own decision (errorRateBreaker.ts)
             maxRedirectRate: 0.30,  // 30%
             maxGrowthRate: 0.50,    // 50%
             
