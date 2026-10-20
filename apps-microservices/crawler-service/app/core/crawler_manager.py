@@ -22,6 +22,7 @@ from redis.exceptions import ConnectionError as RedisConnectionError, TimeoutErr
 
 from app.core.config import settings
 from app.core import archived_status_repair
+from app.core.known_urls import prepare_known_urls_file
 from common_utils.redis import cache_service
 from app.schemas.crawler import CrawlStatus, IncludeInArchive, ReindexResponse
 
@@ -429,7 +430,7 @@ class CrawlerManager:
         except Exception as e:
             logger.error(f"Failed to publish update for job '{crawl_id}': {e}", exc_info=True)
 
-    async def start_crawl(self, domain: str, start_url: str, crawl_id: str, callback_url: str, failure_callback_url: Optional[str], params: Dict[str, Any], is_restart: bool = False, oom_restart_count: int = 0) -> str:
+    async def start_crawl(self, domain: str, start_url: str, crawl_id: str, callback_url: str, failure_callback_url: Optional[str], params: Dict[str, Any], is_restart: bool = False, oom_restart_count: int = 0, known_urls_gz: Optional[str] = None, known_urls_count: Optional[int] = None) -> str:
         # Check if a crawl with this ID is already running on this instance
         if crawl_id in self.local_processes:
             proc = self.local_processes[crawl_id]
@@ -657,6 +658,9 @@ class CrawlerManager:
             # old _completion_marker.json survives makedirs, reconciler then declares
             # the new running crawl finished and skips its success webhook.
             await self._cleanup_stale_state_for_relaunch(crawl_id, job_storage_path)
+            # A312 : <job>/known_urls.json écrit, conservé (relance OOM) ou supprimé ; jamais via `params`
+            known_urls_path = prepare_known_urls_file(
+                job_storage_path, known_urls_gz, known_urls_count, is_restart)
         except OSError as e:
             await _rollback_claim(decrement_counter=True)
             logger.error(f"Failed to create/access storage directory for crawl '{crawl_id}': {e}")
@@ -778,6 +782,9 @@ class CrawlerManager:
         for key, value in params.items():
             if value is not None:
                 command.append(f"--{key}={value}")
+        # A312 : entrée d'argv dédiée, le base64 n'entre jamais dans `params` (donc ni Redis ni argv)
+        if known_urls_path:
+            command.append(f"--knownUrlsFile={known_urls_path}")
 
         safe_command = []
         for arg in command:

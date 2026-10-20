@@ -94,6 +94,10 @@ class CrawlRequest(BaseModel):
     # CMS Facet Denylist (QMF-T4)
     cms: Optional[str] = Field("", description="CMS label detected for the domain (e.g. 'wordpress', 'prestashop', 'shopify'). Best-effort: empty/unknown/null means the crawler applies no CMS facet-param denylist.")
 
+    # A312 : ensemble SFPI actif fourni par le BO (mode update), base64(gzip(JSON liste de str))
+    known_urls_gz: Optional[str] = Field(None, description="Active SFPI URL set from the BO: base64(gzip(JSON list of strings)). Update mode only; goes with known_urls_count.")
+    known_urls_count: Optional[int] = Field(None, description="Number of URLs in known_urls_gz; the decoded list must match it.")
+
 class CrawlResponse(BaseModel):
     message: str
     crawl_id: str
