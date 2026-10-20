@@ -66,6 +66,7 @@ import { hasIgnoredExtensionForSeed } from "./seedExtensionFilter.js";
 import { resolveNonHtmlPrefixMode, resolveNonHtmlPrefixParams, createNonHtmlPrefixState } from "./nonHtmlPrefix.js";
 import { currentSidecarPath, loadSidecarInto, parseNonHtmlPrefixSidecar, readSidecarFile, resolvePreviousSidecarPath, writeSidecarFile } from "./nonHtmlPrefixSidecar.js";
 import { NonHtmlPrefixGate } from "./nonHtmlPrefixGate.js";
+import { readKnownUrlsFile, seedBoKnown } from "./boKnownSeed.js";
 
 const now = new Date().toISOString().replace(/:/g, "-");
 
@@ -121,6 +122,8 @@ const toRemove = (getArg('toremove', 'npm_config_toremove') || '').split(";").fi
 const crawlMode = getArg('crawlMode', 'npm_config_crawlmode') || 'standard';
 const camoufoxEnabled = (getArg('camoufox', 'npm_config_camoufox') || 'true').toLowerCase() !== 'false';
 const previousCrawlId = getArg('previousCrawlId', 'npm_config_previouscrawlid');
+// A312: path of the BO-known active SFPI list written by crawler-service (update mode only).
+const knownUrlsFile = getArg('knownUrlsFile', 'npm_config_knownurlsfile');
 // Queue-purge CMS denylist: coarse CMS label from BO (e.g. "WordPress"), '' if unset/unknown.
 const cms = getArg('cms', 'npm_config_cms') || '';
 const maxErrors = parseNumericArg('maxErrors', 'npm_config_maxerrors', 0);
@@ -919,6 +922,8 @@ const queueStatsInterval = setInterval(async () => {
 // --- SEEDING LOGIC (Update Mode Support) ---
 // Declared at outer scope so Phase 2 seeding (before startCrawler) can access it
 let remainingUrls: { url: string; source: string }[] = [];
+// A312: bo_known URLs injected in Phase 1, seeded by Phase 2 in their own block.
+let boKnownUrls: string[] = [];
 
 if (crawlMode === 'update') {
     if (!previousCrawlId) {
@@ -953,6 +958,21 @@ if (crawlMode === 'update') {
         previousRequestUrlsGenerator,
         cleanUrlFn
     );
+
+    // --- A312 PHASE 1: BO-KNOWN ACTIVE SFPI SET (identity class bo_known) ---
+    // Raw URLs from --knownUrlsFile. Dataset matches (exact or trailing-slash fold) are left
+    // to the native path; the others go to the separate SET update_bo_known:<id>, never to
+    // update_dataset:<id>. Fails open: unreadable file or Redis error => 0 bo_known.
+    const boKnownRaw = readKnownUrlsFile(knownUrlsFile);
+    if (boKnownRaw.length > 0) {
+        const boKnownPhase1 = await consolidator.addBoKnown(boKnownRaw);
+        boKnownUrls = boKnownPhase1.injected;
+        if (context.statsManager) {
+            await context.statsManager.increment("bo_known_injected", boKnownPhase1.injected.length);
+            await context.statsManager.increment("bo_known_ignored_dataset", boKnownPhase1.ignoredDataset);
+        }
+        console.log(`[bo_known] Phase 1: read=${boKnownRaw.length} injected=${boKnownPhase1.injected.length} ignored_dataset=${boKnownPhase1.ignoredDataset} failed=${boKnownPhase1.failed}`);
+    }
 
     // --- TWO-PHASE SEEDING (Regional Path Exclusion) ---
     // Phase 1: Seed only the homepage so it gets processed first.
@@ -1674,6 +1694,25 @@ if (typeCrawling == "sitemap") {
                 }
             }
             console.log(`[PHASE 2] Finished seeding ${seedCount} URLs (${skippedCount} excluded as regional variants).`);
+            // A312 Phase 2 (bo_known): own block, after the dataset loop. URL enqueued RAW (no
+            // action-anchor strip, no queue-purge re-clean: the BO matches SFPI by exact key),
+            // uniqueKey prefixed bo_known:, regional and extension filters as for dataset,
+            // nonHtml exempted and never checked. Counters: bo_known_* only.
+            if (boKnownUrls.length > 0) {
+                const boKnownGate = context.nonHtmlPrefix;
+                const boKnownSeedResult = await seedBoKnown(boKnownUrls, {
+                    addRequest: (req) => requestQueue.addRequest(req),
+                    isExcludedRegional: (u) => excluded.length > 0 && DetectionLangueClient.isExcludedRegionalPath(u, excluded),
+                    hasIgnoredExtension: hasIgnoredExtensionForSeed,
+                    addExempt: boKnownGate ? boKnownGate.addExempt.bind(boKnownGate) : undefined,
+                });
+                const boKnownSkipped = boKnownSeedResult.skippedRegional + boKnownSeedResult.skippedExt + boKnownSeedResult.rejected;
+                if (context.statsManager) {
+                    await context.statsManager.increment("bo_known_seeded", boKnownSeedResult.seeded);
+                    await context.statsManager.increment("bo_known_seed_skipped", boKnownSkipped);
+                }
+                console.log(`[PHASE 2] bo_known: seeded=${boKnownSeedResult.seeded} skipped_regional=${boKnownSeedResult.skippedRegional} skipped_ext=${boKnownSeedResult.skippedExt} rejected=${boKnownSeedResult.rejected}`);
+            }
             if (skippedExtCount > 0) {
                 console.log(`[seed-filter] skipped ${skippedExtCount} ignored-extension baseline URL(s) (filtered_ext)`);
             }
