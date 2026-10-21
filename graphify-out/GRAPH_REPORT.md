@@ -1,12 +1,12 @@
-# Graph Report - scoped rebuild (scope derived from graphify-out/graph.json)  (2026-10-20)
+# Graph Report - scoped rebuild (scope derived from graphify-out/graph.json)  (2026-10-21)
 
 ## Corpus Check
 - 816 files · ~0 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 12539 nodes · 29899 edges · 236 communities detected
-- Extraction: 65% EXTRACTED · 35% INFERRED · 0% AMBIGUOUS · INFERRED: 10474 edges (avg confidence: 0.61)
+- 12606 nodes · 30333 edges · 236 communities detected
+- Extraction: 64% EXTRACTED · 36% INFERRED · 0% AMBIGUOUS · INFERRED: 10818 edges (avg confidence: 0.61)
 - Token cost: 0 input · 0 output
 
 ## Community Hubs (Navigation)
@@ -248,10 +248,10 @@
 - [[_COMMUNITY_On-Time Driver Teardown Guard (test)|On-Time Driver Teardown Guard (test)]]
 
 ## God Nodes (most connected - your core abstractions)
-1. `CrawlerManager` - 550 edges
-2. `IncludeInArchive` - 397 edges
-3. `ReindexResponse` - 397 edges
-4. `CrawlStatus` - 397 edges
+1. `CrawlerManager` - 551 edges
+2. `IncludeInArchive` - 477 edges
+3. `ReindexResponse` - 477 edges
+4. `CrawlStatus` - 477 edges
 5. `DomainFR` - 334 edges
 6. `DetectionMode` - 300 edges
 7. `DetectionResponse` - 227 edges
@@ -465,7 +465,7 @@ Nodes (290): Sets a dictionary for a key, serializing it to JSON., set_json(), P
 
 ### Community 0 - "CrawlerManager Schemas, Archive & Reconcile"
 Cohesion: 0.0
-Nodes (1656): Gets a dictionary for a key, deserializing it from JSON., _count_files_in_dir(), _map_error_to_message(), Safely counts files in a directory, excluding Crawlee metadata., Read isError from _callback_payload.json in the crawl storage dir.     Returns, Flatten a dict/list payload into a list of (key, value) tuples using     PHP-st, Safely counts files in a directory, excluding Crawlee metadata., Publie une mise à jour du statut d'un job sur le canal Pub/Sub de Redis. (+1648 more)
+Nodes (1720): Gets a dictionary for a key, deserializing it from JSON., _count_files_in_dir(), _map_error_to_message(), Safely counts files in a directory, excluding Crawlee metadata., Read isError from _callback_payload.json in the crawl storage dir.     Returns, Flatten a dict/list payload into a list of (key, value) tuples using     PHP-st, Safely counts files in a directory, excluding Crawlee metadata., Publie une mise à jour du statut d'un job sur le canal Pub/Sub de Redis. (+1712 more)
 
 ### Community 58 - "common-utils: TestLuaScripts"
 Cohesion: 0.22
@@ -1360,7 +1360,7 @@ Nodes (1): Garde : le driver livré à temps n'est arrêté que par le `finally`
   docs/superpowers/runbooks/examples/tracking_mail2bdd_tables.doc.json · relation: conceptually_related_to
 
 ## Knowledge Gaps
-- **3580 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+3575 more)
+- **3568 isolated node(s):** `Enum for the possible collection names.     The values correspond to the string`, `Enum for the possible collection names.     The values correspond to the string`, `DLQProperties`, `Creates a dictionary of headers for a DLQ message, compatible with both pika and`, `Creates pika.BasicProperties for a DLQ message. For backward compatibility with` (+3563 more)
   These have ≤1 connection - possible missing edges or undocumented components.
 - **Thin community `graphify-guide-en.md: Limitation: ID collision on sha...`** (1 nodes): `Creates a dictionary of headers for a DLQ message, compatible with both pika and`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
