@@ -1,0 +1,58 @@
+{
+  "domaine_fr_retry": {
+    "database_id": 10,
+    "description": "File de reprise de la détection de langue FR du tool « Identification domaine de catégorie ». 1 ligne = 1 URL de domaine dont la détection FR a échoué (erreur réseau, job incomplet, saturation, absence de verdict) dans 1 lot d'upload. Unicité (url_dfr_retry, id_upload_dfr_retry) assurée par le code (enfiler_url_retry_fr fait SELECT puis UPDATE ou INSERT), PAS par une contrainte : 4106 couples distincts pour 4106 lignes au 2026-10-21. Un cron (script_retry_identifier_site_fr.php, 200 URLs max par passage) reprend les lignes statut 0 ; en succès il écrit le verdict dans domaine_francais (upsert_domaine_francais) et relance l'identification de prospects du lot. Stockée dans HELLOPRO_IA. Suffixe colonnes _dfr_retry.",
+    "primary_key": "id_dfr_retry",
+    "default_order_by": "id_dfr_retry DESC",
+    "rows": null,
+    "columns": {
+      "id_dfr_retry": {
+        "type": "int",
+        "desc": "Identifiant unique de la ligne (PK, auto-increment)."
+      },
+      "id_upload_dfr_retry": {
+        "type": "int",
+        "desc": "FK applicative (sans contrainte) → upload_variante_top_categorie.id_upload_variante_top_categorie : lot d'upload d'où vient l'URL. Même espace que domaine_francais.id_upload_df. Le cron groupe ses envois par lot et relance script_lancer_identification_prospect_ia.php pour chaque lot ayant eu au moins 1 succès. 75 lots distincts au 2026-10-21."
+      },
+      "url_dfr_retry": {
+        "type": "varchar(500)",
+        "desc": "URL soumise à la détection FR (forme homepage, ex. 'https://www.cnfpt.fr', sans slash final ; 72 caractères max observés). C'est l'URL SOUMISE (submitted_url), pas l'URL résolue après redirection : le cron apparie les résultats sur elle. Piège : les enfilements 'admission_rejected' passent l'URL renvoyée par l'API, qui peut différer de l'URL soumise. Une même URL peut figurer dans plusieurs lots (3366 URL distinctes pour 4106 lignes). Indexée avec id_upload (idx_url_upload)."
+      },
+      "nb_tentatives_dfr_retry": {
+        "type": "int",
+        "desc": "Compteur de tentatives (défaut 0), MIXTE : à l'enfilement, la valeur passée par l'appelant (1 pour un échec d'appel ou un job incomplet, 0 pour 'admission_rejected') ; puis +1 par passage du cron qui brûle une tentative (échec ou succès). Les passages 'admission_rejected' et 'job incomplet' du cron ne l'incrémentent PAS. Le cron ne reprend que nb_tentatives inférieur à 3 et passe statut à 2 quand il atteint 3. Piège : un ré-enfilement d'une URL déjà présente ADDITIONNE la valeur et remet statut à 0 sans plafond — d'où des lignes statut 0 avec nb_tentatives=3 que le cron ne reprendra jamais (2 lignes au 2026-10-21, ids 89 et 92, lot 140, depuis mai)."
+      },
+      "derniere_erreur_dfr_retry": {
+        "type": "text",
+        "desc": "Dernière erreur enregistrée ; NULL quand statut=1 (le succès l'efface). Valeurs observées : 'failed' et 'timeout' (statut final du job async), 'admission_rejected' (service saturé), 'sans_verdict:{method}' (API sans verdict de langue : challenge_page, http_error_transient, error, fetch_failed, fetch_empty_content), message d'exception (ex. 'detect-batch-async submit échec: HTTP 0'), 'Aucun résultat retourné par detect-batch pour l'URL'. Piège : les passages du cron qui laissent la ligne en attente (admission_rejected, job incomplet) ne la réécrivent pas — sur une ligne statut 0 elle peut dater de l'enfilement. Piège d'encodage : les accents sont stockés en double encodage UTF-8 (lus 'Ã©') ; filtrer par fragment sans accent (LIKE '%chec%')."
+      },
+      "statut_dfr_retry": {
+        "type": "tinyint",
+        "desc": "État de la ligne (défaut 0) : 0 = en attente de reprise par le cron · 1 = détection réussie (verdict écrit dans domaine_francais) · 2 = abandonnée (3 tentatives atteintes). Comptes au 2026-10-21 : 1 = 3851, 0 = 172, 2 = 83. Un backfill ponctuel (script_backfill_crossdomain_fr.php) a repassé en 1 des lignes 2 abandonnées à cause d'un bug d'appariement cross-domaine. Indexé (idx_statut_upload, avec id_upload)."
+      },
+      "date_creation_dfr_retry": {
+        "type": "datetime",
+        "desc": "Date du premier enfilement (DEFAULT CURRENT_TIMESTAMP, jamais écrite par le code ; un ré-enfilement ne la change pas). Ordre de reprise du cron (plus anciennes d'abord). Fuseau Europe/Paris (heure du serveur MySQL). Première ligne : 2026-05-13."
+      },
+      "date_derniere_tentative_dfr_retry": {
+        "type": "datetime",
+        "desc": "Dernier passage sur la ligne (NOW() à l'enfilement, à chaque passage du cron, y compris ceux qui ne brûlent pas de tentative). Jamais NULL en pratique. Sert à voir si le cron tourne : une ligne statut 0 avec une date récente mais nb_tentatives inchangé = cron qui repasse sans obtenir de résultat (ex. 100 lignes du lot 247 touchées le 2026-10-20 sans incrément). Fuseau Europe/Paris."
+      }
+    },
+    "relations": [
+      {
+        "column": "id_upload_dfr_retry",
+        "references": "upload_variante_top_categorie.id_upload_variante_top_categorie",
+        "cardinality": "N:1",
+        "note": "FK applicative sans contrainte : lot d'upload du tool d'identification de catégorie."
+      },
+      {
+        "column": "url_dfr_retry",
+        "references": "domaine_francais (homepage_df / domaine_df, même id_upload)",
+        "cardinality": "jointure lâche",
+        "note": "En succès, le cron upserte le verdict dans domaine_francais via upsert_domaine_francais(homepage résolue, recupere_domaine(url soumise), est_fr, id_upload). Joindre sur domaine_df = domaine de l'URL et id_upload_df = id_upload_dfr_retry."
+      }
+    ],
+    "notes": "Écrivains : enfiler_url_retry_fr() — fonctions_scrapping.php:10055@4bc93cd6 (appelée par script_find_variante_categorie_v2.php:1261-1323 et pct_recheck_site_non_fr.php ; script_identifier_site_fr_v2.php l'appelle aussi mais n'a plus de lanceur) ; cron script_retry_identifier_site_fr.php (marquer_echec_retry :42, marquer_succes_retry :64, touches de date :189 et :228), lancé par lancer_script_retry_identifier_site_fr.php, cron journalier selon l'en-tête du script ; backfill ponctuel script_backfill_crossdomain_fr.php:108. Lecteurs : le cron (:95, WHERE statut=0 AND nb_tentatives inférieur à 3 ORDER BY date_creation LIMIT 200) et le backfill (:47). Aucun écran BO ne lit la table. Mail de fin de cron : '[SCRIPT][SCRAPPING] - Retry identification domaines FR'."
+  }
+}

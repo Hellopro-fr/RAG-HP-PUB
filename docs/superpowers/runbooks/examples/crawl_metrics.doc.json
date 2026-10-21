@@ -1,0 +1,133 @@
+{
+  "crawl_metrics": {
+    "database_id": 10,
+    "description": "Métriques agrégées d'un crawl de domaine (initial ou MAJ), écrites à la fin du crawl par le webhook BO. 1 ligne = 1 crawl terminé : 1 par MAJ (update_crawling_history) ; pour l'initial, 1 par TENTATIVE (chaque relance crée une ligne initial_crawl_history, donc une nouvelle ligne ici). UPSERT via enregistrer_crawl_metrics() sur la clé UNIQUE (crawl_type, id_crawl_source) : un second appel pour le même crawl ÉCRASE toutes les colonnes. Stocke durée, statut, code/classe d'erreur et les compteurs d'URLs. Une des tables d'observabilité crawling (HELLOPRO_IA) avec crawl_events, initial_crawl_history, domaine_funnel_state. Comptes au 2026-10-21 : initial 3479 (FAILED 2233, STOPPED 631, FINISHED 615), maj 2236 (FINISHED 2034, FAILED 202) ; aucune ligne RUNNING. Dates en Europe/Paris.",
+    "primary_key": "id_crawl_metric",
+    "default_order_by": "date_enregistrement DESC",
+    "rows": null,
+    "columns": {
+      "id_crawl_metric": {
+        "type": "int",
+        "desc": "PK auto-increment de la ligne de métriques."
+      },
+      "crawl_type": {
+        "type": "enum",
+        "desc": "Type de crawl : 'initial' (crawl initial) ou 'maj' (mise à jour). Partie de la clé UNIQUE (crawl_type, id_crawl_source). Toujours filtrer dessus avant de joindre id_crawl_source."
+      },
+      "id_crawl_source": {
+        "type": "int",
+        "desc": "ID du crawl source, dans un espace qui dépend de crawl_type : 'maj' → update_crawling_history.id_history (1 ligne par MAJ) ; 'initial' → initial_crawl_history.id_history_initial (1 ligne par tentative). Clé UNIQUE avec crawl_type."
+      },
+      "id_domaine": {
+        "type": "int",
+        "desc": "FK applicative → domaine_scrapping_produit_ia.id_domaine_scrapping_produit_ia (DSPI). Indexé avec date_start (idx_domaine_date). Un domaine a typiquement plusieurs lignes (tentatives initiales + MAJ successives)."
+      },
+      "date_start": {
+        "type": "datetime",
+        "desc": "Début du crawl, envoyé par le crawler-service en UTC et converti en Europe/Paris à l'écriture. NULL quand le webhook ne le porte pas : 1026 lignes sur 5715 au 2026-10-21, dont 937 sur les 2233 initial FAILED et 69 sur les 202 MAJ FAILED ; rare sur FINISHED et STOPPED (32 lignes). Pour trier ou fenêtrer, préférer date_end ou date_enregistrement."
+      },
+      "date_end": {
+        "type": "datetime",
+        "desc": "Fin du crawl (Europe/Paris) : date du webhook, sinon NOW() côté PHP au moment de l'écriture. Jamais NULL en pratique (0 ligne). Mise à NOW() par script_reconcile_stuck_crawls.php quand il clôt une ligne RUNNING orpheline."
+      },
+      "duration_seconds": {
+        "type": "int",
+        "desc": "Durée en secondes = date_end - date_start (calculée en PHP, les deux en Europe/Paris). NULL si date_start est NULL. Valeurs aberrantes possibles (max observé 622906 s, soit ~7 jours, sur un initial) : filtrer les extrêmes avant une moyenne."
+      },
+      "status": {
+        "type": "enum",
+        "desc": "Statut final du crawl : FINISHED, FAILED, STOPPED (enum autorise aussi RUNNING). Piège : RUNNING n'est écrit par aucun appelant (0 ligne au 2026-10-21) — script_reconcile_stuck_crawls.php ne trouve donc rien à réconcilier. 'maj' n'a aucune ligne STOPPED à ce jour. FINISHED ne veut pas dire sans alerte : voir error_code."
+      },
+      "error_code": {
+        "type": "varchar(50)",
+        "desc": "Code d'erreur ou d'alerte. Piège : NON NULL aussi sur des MAJ FINISHED (635 lignes au 2026-10-21) — ce sont des alertes 'warning' du BO (selecteurs_invalides, partial_products_undetected, identification_corrompue, no_filter_never_qualified, contenu_sfpi_rafraichi). Toujours renseigné sur FAILED et STOPPED. Valeurs : codes du crawler ('insufficientData', 'limitQueue', 'limitQuestionMark', 'limitDiez', 'circuitBreaker', 'not_french', 'empty_dataset', 'interruptedShutdown', 'stoppedManually'), codes BO ('no_product_detected_auto', 'no_product_detected_manual', 'recrawl_products_missing', 'sync_502'), et codes numériques ('-1', '6', '7', '-9', '1', '-6') = exit_code du process crawler reçu par le webhook. 'failure_webhook' / 'not_finished' / 'missing_webhook' sont des valeurs prévues par le code, absentes des données."
+      },
+      "error_classification": {
+        "type": "varchar(20)",
+        "desc": "Classe de l'erreur, renseignée UNIQUEMENT pour crawl_type='maj' (toujours NULL pour 'initial'). Valeurs : 'warning' (alerte sur une MAJ FINISHED), 'transient_exhausted' (recrawl_products_missing, sync_502). 'blocking' est prévu par script_reconcile_stuck_crawls.php mais absent des données. NULL sur la majorité des lignes."
+      },
+      "urls_crawled": {
+        "type": "int",
+        "desc": "Nombre d'URLs crawlées (défaut 0). MAJ : metrics.processed du webhook ; initial : success + failed de Crawlee."
+      },
+      "urls_success": {
+        "type": "int",
+        "desc": "Nombre d'URLs crawlées avec succès (défaut 0) : success_extracted si présent, sinon success de Crawlee."
+      },
+      "urls_error": {
+        "type": "int",
+        "desc": "Nombre d'URLs en erreur (défaut 0). MAJ : metrics.errors ; initial : failed. Piège MAJ : depuis le 2026-10-19 (A8, crawler-service) ce total inclut les URLs 2xx devenues inéligibles (voir urls_not_eligible) ; erreurs HTTP seules = urls_error - urls_not_eligible."
+      },
+      "urls_not_eligible": {
+        "type": "int",
+        "desc": "Part de urls_error faite d'URLs 2xx devenues inéligibles (extension ignorée, paramètre interdit, non-FR) : metrics.not_eligible du rapport MAJ. NULL = part inconnue (crawl initial, rapport sans ce champ, MAJ antérieure au 2026-10-19). Piège : 0 ligne non NULL au 2026-10-21 (colonne ajoutée par A352 ; dernière MAJ enregistrée le 2026-10-19 14:20). Lue par script_revue_seuils_cb.php pour calibrer le taux d'erreur HTTP."
+      },
+      "urls_filtered_qm": {
+        "type": "int",
+        "desc": "URLs filtrées pour paramètres '?' (mécanisme limitQuestionMark). Défaut 0."
+      },
+      "urls_filtered_hash": {
+        "type": "int",
+        "desc": "URLs filtrées pour ancre '#' (mécanisme limitDiez). Défaut 0."
+      },
+      "urls_filtered_ext": {
+        "type": "int",
+        "desc": "URLs filtrées par extension de fichier (non-HTML). Défaut 0. Toujours 0 sur 'initial' au 2026-10-21 (non remonté par le crawl initial)."
+      },
+      "urls_filtered_nonfr": {
+        "type": "int",
+        "desc": "URLs filtrées car non françaises. Défaut 0."
+      },
+      "urls_filtered_duplicate": {
+        "type": "int",
+        "desc": "URLs filtrées comme doublons. Défaut 0. Toujours 0 sur 'initial' au 2026-10-21 ; non nul sur presque toutes les MAJ."
+      },
+      "urls_dropped_cb": {
+        "type": "int",
+        "desc": "URLs abandonnées par le circuit-breaker du crawler. Défaut 0. Toujours 0 sur 'initial' au 2026-10-21."
+      },
+      "urls_timeout_individual": {
+        "type": "int",
+        "desc": "URLs en timeout individuel. Piège : toujours 0 sur les 5715 lignes au 2026-10-21 (champ jamais alimenté par le webhook) : ne pas en conclure qu'il n'y a pas de timeout."
+      },
+      "urls_new": {
+        "type": "int",
+        "desc": "Nombre d'URLs nouvelles (delta MAJ). NULL sur tous les 'initial' ; renseigné sur les MAJ FINISHED et une partie des MAJ FAILED."
+      },
+      "urls_deleted": {
+        "type": "int",
+        "desc": "Nombre d'URLs supprimées (delta MAJ). Renseigné uniquement sur les MAJ FINISHED ; NULL sinon."
+      },
+      "urls_redirected": {
+        "type": "int",
+        "desc": "Nombre d'URLs redirigées (delta MAJ). Renseigné uniquement sur les MAJ FINISHED ; NULL sinon."
+      },
+      "taux_changement": {
+        "type": "decimal(5,2)",
+        "desc": "Piège : colonne JAMAIS écrite — aucun appelant ne passe taux_changement à enregistrer_crawl_metrics(), 0 ligne non NULL sur 5715 au 2026-10-21. Prévue pour un taux de changement de contenu en MAJ (pourcentage). Ne pas l'utiliser ; recalculer depuis urls_new / urls_deleted / urls_crawled si besoin."
+      },
+      "date_enregistrement": {
+        "type": "datetime",
+        "desc": "Date d'insertion de la ligne (DEFAULT CURRENT_TIMESTAMP, NOT NULL, Europe/Paris). Non modifiée par un UPSERT ultérieur. Champ de tri fiable pour « les plus récents »."
+      }
+    },
+    "relations": [
+      {
+        "column": "id_domaine",
+        "references": "domaine_scrapping_produit_ia.id_domaine_scrapping_produit_ia",
+        "note": "Domaine concerné (DSPI)."
+      },
+      {
+        "column": "id_crawl_source",
+        "references": "update_crawling_history.id_history (si crawl_type=maj) | initial_crawl_history.id_history_initial (si crawl_type=initial)",
+        "note": "Crawl source ; la cible dépend de crawl_type."
+      },
+      {
+        "column": "id_domaine",
+        "references": "crawl_events.id_domaine",
+        "note": "Chaque écriture de fin de crawl émet aussi un événement maj_succeeded/maj_failed ou initial_succeeded/initial_failed dans crawl_events."
+      }
+    ],
+    "notes": "Écrivain unique de l'INSERT : enregistrer_crawl_metrics() — fonctions_crawl_metrics.php:92@4bc93cd6, via enregistrer_metriques_fin_maj() (:250, appelé par script_process_update_crawling.php) et enregistrer_metriques_fin_initial() (:285, appelé par script_process_detect_fiche_produit.php). UPDATE directs : script_reconcile_stuck_crawls.php:70 (RUNNING → FAILED 'missing_webhook', sans effet faute de lignes RUNNING) et le ponctuel pct_corriger_timezone_date_start.php:245. Backfill ponctuel MAJ : script_backfill_crawl_metrics_maj.php. Lecteurs : ajax_observabilite_data.php (page observabilite_crawling.php), script_rapport_crawling.php, script_revue_seuils_cb.php (calibration CB : MAJ FINISHED, utilise urls_not_eligible), fonctions_guerison_sc*.php, pct_audit_maj.php (seul lecteur de taux_changement). Les compteurs urls_filtered_* / urls_dropped_cb sont les raisons d'exclusion d'URL côté crawler."
+  }
+}
