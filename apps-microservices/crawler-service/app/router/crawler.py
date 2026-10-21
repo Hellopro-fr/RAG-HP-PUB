@@ -312,6 +312,8 @@ async def start_new_crawl(payload: CrawlRequest):
             crawl_id=payload.id,
             callback_url=str(payload.callback_url),
             failure_callback_url=str(payload.failure_callback_url) if payload.failure_callback_url else None,
+            known_urls_gz=payload.known_urls_gz,
+            known_urls_count=payload.known_urls_count,
             params=params
         )
         

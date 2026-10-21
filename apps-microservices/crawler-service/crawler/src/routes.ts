@@ -38,6 +38,7 @@ import { trackQmHashStatsForUrl } from "./qmHashTracker.js";
 import { classifyHttpStatus, pdfDatasetName, isPageClosedError } from "./httpStatusPolicy.js";
 import { shouldTripProxyWall, proxyWallConfig, terminalFailureDetectEnabled } from "./terminalFailure.js";
 import { recordUnjudgedUrls } from "./unjudgedUrls.js";
+import { BO_KNOWN_SOURCE } from "./boKnownSeed.js";
 import type { PageTimingEntry } from "./timing/types.js";
 
 export const router = createPlaywrightRouter();
@@ -320,8 +321,12 @@ router.addDefaultHandler(
             log.warning(`Blocked external redirect: ${url} (Target: ${targetDomain})`);
             const isHomepageRedirect = matchesMainSite(request.url, site);
             // Set structured error message for "1 seul URL crawlé" case: domain change
-            if (isHomepageRedirect) {
+            if (isHomepageRedirect && request.userData.source !== BO_KNOWN_SOURCE) {
                 context.crawlErrorMessage = "L'URL après la page d'accueil change de domaine";
+            }
+            // A312 (spec D2): a bo_known redirect leaves no native trace (no external_redirects, no breaker).
+            if (request.userData.source === BO_KNOWN_SOURCE) {
+                if (context.updateChecker) await context.updateChecker.recordBoKnownUnjudged();
             }
 
             // --- External-Redirect Breaker (update mode only) ---
@@ -330,7 +335,7 @@ router.addDefaultHandler(
             // relocated domain. Abort + fail (exit 7) instead of wasting a full
             // re-crawl and reporting a misleading success. See spec 2026-06-09.
             const cb = context.config?.circuitBreaker;
-            if (context.updateChecker && context.statsManager && cb?.externalRedirectBreakerEnabled) {
+            if (context.updateChecker && context.statsManager && cb?.externalRedirectBreakerEnabled && request.userData.source !== BO_KNOWN_SOURCE) {
                 const external = await context.statsManager.increment("external_redirects");
 
                 // Homepage fast-path: homepage off-domain ⇒ whole site moved.
@@ -370,20 +375,27 @@ router.addDefaultHandler(
                 // count under filtered_pdf + record in the pdf-{domain} dataset so inline
                 // (rendered) PDFs are tracked the same as download-triggering ones. This guard
                 // already skips inline non-HTML today, so accounting is independent of SKIP_DOWNLOADS.
-                if (context.statsManager) {
-                    await context.statsManager.increment("filtered_pdf");
+                // A312 (spec D2): a bo_known non-HTML response leaves no native trace (no filtered_pdf,
+                // no pdf- row, no prefix learning).
+                if (request.userData.source === BO_KNOWN_SOURCE) {
+                    if (context.updateChecker) await context.updateChecker.recordBoKnownUnjudged();
                 }
-                const pdfDataset = await Dataset.open(
-                    pdfDatasetName(context.config.crawleeStorageName, targetDomain),
-                );
-                await pdfDataset.pushData({
-                    url,
-                    source: request.userData.source ?? "",
-                    status: response.status(),
-                    content_type: contentType,
-                    timestamp: new Date().toISOString(),
-                });
-                context.nonHtmlPrefix?.onNonHtml(request.url);
+                if (request.userData.source !== BO_KNOWN_SOURCE) {
+                    if (context.statsManager) {
+                        await context.statsManager.increment("filtered_pdf");
+                    }
+                    const pdfDataset = await Dataset.open(
+                        pdfDatasetName(context.config.crawleeStorageName, targetDomain),
+                    );
+                    await pdfDataset.pushData({
+                        url,
+                        source: request.userData.source ?? "",
+                        status: response.status(),
+                        content_type: contentType,
+                        timestamp: new Date().toISOString(),
+                    });
+                    context.nonHtmlPrefix?.onNonHtml(request.url);
+                }
                 log.warning(`Skipping non-HTML response: ${url} (Content-Type: ${contentType})`);
                 return;
             }
@@ -423,18 +435,23 @@ router.addDefaultHandler(
                 } else if (statusClass === "block") {
                     session?.retire();
                     log.warning(`🚫 BLOCKED HTTP ${status} on ${url} — retire session, retry`);
-                    context.blockedCount = (context.blockedCount ?? 0) + 1;
-                    if (terminalFailureDetectEnabled() && context.statsManager) {
-                        const processedOk = await context.statsManager.getValue("processed");
-                        // processed counts only requests that passed the status check (blocked ones
-                        // throw before increment("processed") at ~L431), so the ratio denominator is
-                        // total attempts = blocked + processed-ok, matching shouldTripProxyWall's contract.
-                        const wall = shouldTripProxyWall(context.blockedCount, context.blockedCount + processedOk, proxyWallConfig());
-                        if (wall.trip) {
-                            context.stopReason = "proxyBlocked";
-                            context.fatalExitCode = 8;
-                            log.error(`⛔ PROXY WALL — ${wall.reason} — terminating (exit 8)`);
-                            await stopCrawler(crawler, `Proxy wall: ${wall.reason}`);
+                    // A312 (spec D2): a bo_known block stays out of the proxy-wall ratio (processed excludes
+                    // bo_known). No recordBoKnownUnjudged() here: the request is retried, and its verdict comes
+                    // from failedRequestHandler's final checkUrl once retries are exhausted.
+                    if (request.userData.source !== BO_KNOWN_SOURCE) {
+                        context.blockedCount = (context.blockedCount ?? 0) + 1;
+                        if (terminalFailureDetectEnabled() && context.statsManager) {
+                            const processedOk = await context.statsManager.getValue("processed");
+                            // processed counts only requests that passed the status check (blocked ones
+                            // throw before increment("processed") at ~L431), so the ratio denominator is
+                            // total attempts = blocked + processed-ok, matching shouldTripProxyWall's contract.
+                            const wall = shouldTripProxyWall(context.blockedCount, context.blockedCount + processedOk, proxyWallConfig());
+                            if (wall.trip) {
+                                context.stopReason = "proxyBlocked";
+                                context.fatalExitCode = 8;
+                                log.error(`⛔ PROXY WALL — ${wall.reason} — terminating (exit 8)`);
+                                await stopCrawler(crawler, `Proxy wall: ${wall.reason}`);
+                            }
                         }
                     }
                 } else {
@@ -453,7 +470,9 @@ router.addDefaultHandler(
         if (context.statsManager) {
             // Track total processed for percentages (Increment for every handled page)
             // Note: This metric is cumulative across restarts via StatsManager
-            await context.statsManager.increment("processed");
+            if (request.userData.source !== BO_KNOWN_SOURCE) {
+                await context.statsManager.increment("processed");
+            }
             
             const cb = context.config.circuitBreaker;
             
@@ -533,7 +552,7 @@ router.addDefaultHandler(
         // --- Deduplication & "Double Check" (Redis) ---
         let isDoublon = false;
         const source = request.userData.source || '';
-        const isExisting = request.userData.is_existing || (source === 'dataset');
+        const isExisting = request.userData.is_existing || (source === 'dataset') || (source === BO_KNOWN_SOURCE);
 
         // Skip Redis check for "Existing" URLs to allow re-verification in Update Mode
         if (context.dedupManager && !isExisting) {
@@ -565,7 +584,7 @@ router.addDefaultHandler(
             // --- REDIRECT LOOP CLOSURE (Important Fix) ---
             // If we ended up at a different URL than requested (redirect), make sure the
             // final URL is also marked as known in Redis to prevent future re-crawling.
-            if (context.dedupManager && request.url !== request.loadedUrl) {
+            if (context.dedupManager && request.url !== request.loadedUrl && source !== BO_KNOWN_SOURCE) {
                 await context.dedupManager.addUrl(request.loadedUrl);
             }
 
@@ -979,6 +998,11 @@ router.addDefaultHandler(
                         true // Page is French (since isEnqueuingLinks = true)
                     );
                     log.info(`[UpdateChecker] ${result.action}: ${result.url} (${result.reason || ''})`);
+                    // A312 D7 : une page bo_known n'est vérifiée que pour son verdict — ni facettes,
+                    // ni écriture dataset (routerDefaultHandler), ni enqueueLinks.
+                    if (source === BO_KNOWN_SOURCE) {
+                        return;
+                    }
                 } else if (context.dedupManager && !isExisting) {
                     // Legacy: Count as NEW URL only if not existing AND passed validation
                     if (context.statsManager) {
@@ -1340,7 +1364,9 @@ router.addDefaultHandler(
                 // HTTP …`, `Site protégé par … (challenge non résolu)`, or the homepage's own
                 // `Détection indisponible : …`). A per-crawl count is the right shape for a
                 // per-crawl field; the message stays owned by the homepage sites.
-                if (context.statsManager) await context.statsManager.increment("verdict_unavailable");
+                if (context.statsManager && source !== BO_KNOWN_SOURCE) await context.statsManager.increment("verdict_unavailable");
+                // A312 D2 : une URL bo_known sans verdict ne compte que dans bo_known_errors, ni verdict_unavailable ni sidecar.
+                if (source === BO_KNOWN_SOURCE && context.updateChecker) await context.updateChecker.recordBoKnownUnjudged();
                 // ...but writing nothing is not enough: the BO's second pass subtracts
                 // "URLs Milvus holds" minus "URLs in the new dataset" and deactivates the
                 // remainder, so a page with no verdict is an orphan BY CONSTRUCTION.
@@ -1360,12 +1386,12 @@ router.addDefaultHandler(
                 // BO stops at `insufficientData` (`stored_files_count <= 1`) long before
                 // the orphan pass — this sidecar is `__`-prefixed precisely so it cannot
                 // disturb that count.
-                recordUnjudgedUrls(targetDomain, [request.url, url]);
+                if (source !== BO_KNOWN_SOURCE) recordUnjudgedUrls(targetDomain, [request.url, url]);
             } else {
                 log.warning(`Le site ${url} n'est pas en Français.`);
                 // Revive the (previously dead) filtered_nonfr counter → the terminal webhook
                 // carries a machine-readable non-French signal that the BO turns into isError='not_french'.
-                if (context.statsManager) await context.statsManager.increment("filtered_nonfr");
+                if (context.statsManager && source !== BO_KNOWN_SOURCE) await context.statsManager.increment("filtered_nonfr");
 
                 // --- UPDATE MODE: Non-French page = not eligible ---
                 if (context.updateChecker && source) {
@@ -1378,6 +1404,11 @@ router.addDefaultHandler(
                         false // NOT French
                     );
                     log.info(`[UpdateChecker] ${result.action}: ${result.url} (not_french)`);
+                    // A312 D7 : ni écriture nfr-, ni tryClaim(url) brut sur pushedSet (pushed:), qui priverait
+                    // la copie native de la même URL de sa ligne nfr- (son verdict passe par checked:).
+                    if (source === BO_KNOWN_SOURCE) {
+                        return;
+                    }
                 }
 
                 if (!content) content = await processPage(page, request.loadedUrl, log);

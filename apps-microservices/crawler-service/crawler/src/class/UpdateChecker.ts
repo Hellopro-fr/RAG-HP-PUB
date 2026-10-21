@@ -4,6 +4,8 @@ import { JsonlWriter } from './JsonlWriter.js';
 import { PushedSet } from './PushedSet.js';
 import { rightTrimSlash, processUrl } from '../functions.js';
 import { hasIgnoredExtensionForSeed } from '../seedExtensionFilter.js';
+import { matchDatasetIdentity } from './datasetIdentity.js';
+import { BO_KNOWN_SOURCE, BO_KNOWN_UNIQUE_KEY_PREFIX, BO_KNOWN_ORIGIN, BO_KNOWN_REASON_NOT_ELIGIBLE } from '../boKnownSeed.js';
 
 /**
  * Result returned by checkUrl for each processed page.
@@ -14,6 +16,8 @@ export interface CheckUrlResult {
     source: string;
     reason?: string;
     destination?: string;
+    /** Provenance du verdict : 'bo_known' (URL injectée par le BO, A312) ; absent pour les voies natives. */
+    origin?: string;
 }
 
 /**
@@ -169,14 +173,59 @@ export class UpdateChecker {
      * sur une orthographe n'établit rien sur l'autre. Voir le commentaire à l'appel dans CASE 1.
      */
     private async datasetMatch(url: string): Promise<'exact' | 'folded' | 'none'> {
-        if (await this.consolidator.isInDataset(url)) {
-            return 'exact';
+        return matchDatasetIdentity(url, (u) => this.consolidator.isInDataset(u));
+    }
+
+    /**
+     * Verdicts d'une URL injectée par le BO (source 'bo_known', A312). Le BO l'a vue active en
+     * base ; le crawl dit si elle l'est encore. Une 404 ou une 410 la retire, un 200 devenu
+     * inéligible la retire, une redirection la déplace, un 200 éligible ne produit AUCUN événement
+     * (et surtout aucune écriture dataset) ; un 403, 429, 5xx ou 0 n'établit rien.
+     *
+     * ⚠ Aucun compteur de D2 (`errors`, `processed`, `errors_unprocessed`, `not_eligible`,
+     * `redirects`, `new_urls`, `accounted`) ne s'incrémente ici : ils alimentent le disjoncteur
+     * et les plafonds de suppression, qui ne doivent pas bouger pour une URL que le dataset
+     * n'a jamais portée. Seuls quatre compteurs `bo_known_*` s'écrivent (deleted, errors,
+     * redirected, alive), en cinq sites d'incrément (deleted deux fois).
+     *
+     * ⚠ `url` est l'`originalUrl` reçue, brute à l'octet : le BO apparie la fiche SFPI par clé
+     * exacte, une URL nettoyée ne retirerait jamais la fiche.
+     */
+    private async checkBoKnown(
+        originalUrl: string,
+        loadedUrl: string,
+        httpStatus: number,
+        isFrenchContent: boolean,
+    ): Promise<CheckUrlResult> {
+        const identity = { url: originalUrl, source: BO_KNOWN_SOURCE, origin: BO_KNOWN_ORIGIN };
+
+        if (httpStatus >= 400 || httpStatus === 0) {
+            if (httpStatus === 404 || httpStatus === 410) {
+                await this.statsManager.increment("bo_known_deleted");
+                const gone: CheckUrlResult = { action: 'deleted', ...identity, reason: `http_error_${httpStatus}` };
+                await this.writeJsonl(UpdateChecker.DELETED_FILE, gone);
+                return gone;
+            }
+            await this.statsManager.increment("bo_known_errors");
+            return { action: 'ignored', ...identity, reason: `unverified_http_error_${httpStatus}` };
         }
-        const alt = url.endsWith('/') ? url.slice(0, -1) : url + '/';
-        if (await this.consolidator.isInDataset(alt)) {
-            return 'folded';
+
+        if (rightTrimSlash(originalUrl) !== rightTrimSlash(loadedUrl)) {
+            await this.statsManager.increment("bo_known_redirected");
+            const moved: CheckUrlResult = { action: 'redirected', ...identity, destination: loadedUrl };
+            await this.writeJsonl(UpdateChecker.REDIRECTED_FILE, moved);
+            return moved;
         }
-        return 'none';
+
+        if (this.isEligible(loadedUrl, isFrenchContent)) {
+            await this.statsManager.increment("bo_known_alive");
+            return { action: 'confirmed', ...identity };
+        }
+
+        await this.statsManager.increment("bo_known_deleted");
+        const ineligible: CheckUrlResult = { action: 'deleted', ...identity, reason: BO_KNOWN_REASON_NOT_ELIGIBLE };
+        await this.writeJsonl(UpdateChecker.DELETED_FILE, ineligible);
+        return ineligible;
     }
 
     /**
@@ -197,8 +246,19 @@ export class UpdateChecker {
     ): Promise<CheckUrlResult> {
         // PushedSet guard — if a prior attempt already emitted for this URL,
         // skip all side effects (writeJsonl + statsManager.increment).
-        if (this.pushedSet && !(await this.pushedSet.tryClaim(originalUrl))) {
+        // A312 : une requête bo_known réclame sous une clé préfixée par sa classe, sinon la copie
+        // native découverte de la même URL et la copie bo_known se volent le verdict l'une de
+        // l'autre ; la déduplication des relances reste ainsi par classe.
+        const claimKey = source === BO_KNOWN_SOURCE ? BO_KNOWN_UNIQUE_KEY_PREFIX + originalUrl : originalUrl;
+        if (this.pushedSet && !(await this.pushedSet.tryClaim(claimKey))) {
             return { action: 'ignored', url: originalUrl, source, reason: 'already_pushed' };
+        }
+
+        // A312 : une URL injectée par le BO n'est pas une URL du dataset. Elle a ses propres
+        // verdicts et ses propres compteurs (checkBoKnown) et ne passe ni par datasetMatch
+        // ni par les cas 1 à 3 ci-dessous, dont les compteurs nourrissent le disjoncteur.
+        if (source === BO_KNOWN_SOURCE) {
+            return await this.checkBoKnown(originalUrl, loadedUrl, httpStatus, isFrenchContent);
         }
 
         // La provenance ne peut PAS reposer sur userData.source : la copie DÉCOUVERTE d'une
@@ -397,6 +457,15 @@ export class UpdateChecker {
     }
 
     /**
+     * URL bo_known restée sans verdict linguistique (branche `verdictUnavailable` de routes.ts, A312 D2) :
+     * aucun événement, aucune écriture, seul `bo_known_errors` compte — ni `verdict_unavailable`, ni
+     * sidecar des non jugées, qui sont des mécanismes natifs.
+     */
+    async recordBoKnownUnjudged(): Promise<void> {
+        await this.statsManager.increment("bo_known_errors");
+    }
+
+    /**
      * Write a JSONL line if the writer is available.
      */
     private async writeJsonl(filename: string, data: CheckUrlResult): Promise<void> {
@@ -408,6 +477,7 @@ export class UpdateChecker {
                     action: data.action,
                     reason: data.reason || undefined,
                     destination: data.destination || undefined,
+                    origin: data.origin || undefined,
                     timestamp: new Date().toISOString(),
                 });
             } catch (e) {

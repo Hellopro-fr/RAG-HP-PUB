@@ -673,7 +673,25 @@ the BO's orphan pass can put the page back on the recrawled side — `__`-prefix
 
 Non-regression outranks the feature. A genuinely non-French site (`Check_nok_v2`) keeps its
 counter, its `nfr-` write and its update-mode `checkUrl(..., false)` — the terminal `else`
-body was not touched.
+body is unchanged for native sources (`bo_known` exceptions below).
+
+**`bo_known` exceptions (A312, spec D2 "own counters").** A URL seeded by the BO
+(`request.userData.source === BO_KNOWN_SOURCE`) leaves no native trace in either branch, so
+that seeded `bo_known` equals the sum of the `bo_known_*` counters. In the `verdictUnavailable`
+branch it increments neither `verdict_unavailable` nor appends to `__unjudged_urls.json` (both
+native-orphan mechanisms); it counts in `bo_known_errors` instead, through
+`updateChecker.recordBoKnownUnjudged()`. In the terminal `else` it does not increment
+`filtered_nonfr` (the BO reads it as a whole-site `isError='not_french'`), keeps its
+`checkUrl(..., false)` verdict (`bo_known_deleted`), and stops right after that verdict (D7):
+no `nfr-` write, no `pushedSet.tryClaim(url)`. Before its verdict, an off-domain redirect or a
+non-HTML response of a `bo_known` URL leaves no native trace either (no `external_redirects` and
+no external-redirect breaker; no `filtered_pdf`, no `pdf-{domain}` row) and counts in
+`bo_known_errors` through the same `recordBoKnownUnjudged()`; the non-HTML case covers both the
+Content-Type guard in `routes.ts` (which also skips non-HTML prefix learning) and the
+download-triggered skip in `failedRequestHandler` (`functions.ts`). A block-class status of a
+`bo_known` URL is not counted in the proxy-wall ratio (`blockedCount`) and never feeds its exit 8;
+its verdict comes from the final classification once retries are exhausted.
+Native sources are unaffected by these guards.
 
 ### Exit 10 — an unjudged homepage is a failed crawl, not a finished one
 

@@ -1,6 +1,7 @@
 import { createClient, RedisClientType } from 'redis';
 import fs from 'fs';
 import path from 'path';
+import { matchDatasetIdentity } from './datasetIdentity.js';
 
 /**
  * Represents a URL tagged with its origin source for priority-based deduplication.
@@ -37,6 +38,7 @@ export class UrlConsolidator {
     private datasetKey: string;
     private requestQueueKey: string;
     private requestUrlKey: string;
+    private boKnownKey: string;
     private ttl: number;
     private ttlSet: boolean = false;
     private ownsClient: boolean;
@@ -54,6 +56,7 @@ export class UrlConsolidator {
         this.datasetKey = `update_dataset:${crawlId}`;
         this.requestQueueKey = `update_rq:${crawlId}`;
         this.requestUrlKey = `update_ru:${crawlId}`;
+        this.boKnownKey = `update_bo_known:${crawlId}`;
         this.previousCrawlId = previousCrawlId;
         this.domain = domain;
         this.ttl = ttlSeconds;
@@ -84,6 +87,44 @@ export class UrlConsolidator {
         }
     }
 
+    /**
+     * A312 Phase 1 « bo_known » : écrit dans le SET `update_bo_known:<crawlId>` les URLs SFPI
+     * actives que le BO fournit au crawler, hors dataset. Une URL qui correspond au dataset
+     * (exacte ou repliée au `/` final, règle `matchDatasetIdentity`) est écartée : le dataset
+     * l'arbitre déjà.
+     *
+     * ⚠ N'écrit JAMAIS `update_dataset:<crawlId>` : ce SET est scanné pour amorcer et arbitre
+     * le dédoublonnage des phases 2 et 3.
+     * ⚠ `isInDataset` échoue OUVERT (catch → false) : un Redis mort fait traiter des URLs du
+     * dataset comme candidates ; `failed` ne couvre que l'écriture dans le SET `bo_known`.
+     */
+    async addBoKnown(rawUrls: string[]): Promise<{ injected: string[]; ignoredDataset: number; failed: boolean }> {
+        let ignoredDataset = 0;
+        try {
+            const candidates: string[] = [];
+            for (const raw of Array.from(new Set(rawUrls))) {
+                const match = await matchDatasetIdentity(raw, (u) => this.isInDataset(u));
+                if (match !== 'none') {
+                    ignoredDataset++;
+                } else {
+                    candidates.push(raw);
+                }
+            }
+            const CHUNK_SIZE = 1000;
+            for (let i = 0; i < candidates.length; i += CHUNK_SIZE) {
+                await this.redis.sAdd(this.boKnownKey, candidates.slice(i, i + CHUNK_SIZE));
+            }
+            // ensureTtl() ne joue qu'une fois (ttlSet) : consolidate() l'a déjà consommé avant
+            // l'existence de cette clé. On le ré-arme pour que la 4ᵉ clé reçoive son expire.
+            this.ttlSet = false;
+            await this.ensureTtl();
+            return { injected: candidates, ignoredDataset, failed: false };
+        } catch (e) {
+            console.error(`[UrlConsolidator] addBoKnown Error: ${e}`);
+            return { injected: [], ignoredDataset, failed: true };
+        }
+    }
+
     private async ensureTtl(): Promise<void> {
         if (this.ttlSet) return;
         this.ttlSet = true; // Set immediately to prevent concurrent calls
@@ -91,6 +132,7 @@ export class UrlConsolidator {
             await this.redis.expire(this.datasetKey, this.ttl);
             await this.redis.expire(this.requestQueueKey, this.ttl);
             await this.redis.expire(this.requestUrlKey, this.ttl);
+            await this.redis.expire(this.boKnownKey, this.ttl);
         } catch (e) {
             this.ttlSet = false; // Reset on failure so it retries
             console.warn(`Failed to set TTL: ${e}`);
@@ -347,6 +389,7 @@ export class UrlConsolidator {
     async fullCleanup(): Promise<void> {
         try {
             await this.redis.del(this.datasetKey);
+            await this.redis.del(this.boKnownKey);
             await this.redis.del(this.requestQueueKey);
             await this.redis.del(this.requestUrlKey);
             await this.disconnect();

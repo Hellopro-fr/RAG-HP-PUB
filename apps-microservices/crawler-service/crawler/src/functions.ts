@@ -23,6 +23,7 @@ import {
     UrlParameters,
 } from "./interfaces/queue.js";
 import { context } from "./context.js";
+import { BO_KNOWN_SOURCE } from "./boKnownSeed.js";
 import { launchOptions as camoufoxLaunchOptions } from 'camoufox-js';
 import { buildCamoufoxLaunchInput } from './camoufoxLaunchInput.js';
 import {
@@ -621,18 +622,25 @@ export const startCrawler = async (
             // written to error-{domain} (so reclaimFailedRequest never re-crawls it).
             // Spec: docs/superpowers/specs/2026-06-17-crawler-skip-pdf-design.md
             if (shouldSkipAsDownload(SKIP_DOWNLOADS, errorStr)) {
-                if (context.statsManager) {
-                    await context.statsManager.increment("filtered_pdf");
+                // A312 (spec D2): a bo_known download leaves no native trace (no filtered_pdf, no pdf- row);
+                // it counts in bo_known_errors only.
+                if (request.userData.source === BO_KNOWN_SOURCE) {
+                    if (context.updateChecker) await context.updateChecker.recordBoKnownUnjudged();
                 }
-                const pdfDataset = await Dataset.open(
-                    pdfDatasetName(context.config.crawleeStorageName, domain),
-                );
-                await pdfDataset.pushData({
-                    url: request.url,
-                    source: request.userData.source ?? "",
-                    status: response?.status() ?? 0,
-                    timestamp: new Date().toISOString(),
-                });
+                if (request.userData.source !== BO_KNOWN_SOURCE) {
+                    if (context.statsManager) {
+                        await context.statsManager.increment("filtered_pdf");
+                    }
+                    const pdfDataset = await Dataset.open(
+                        pdfDatasetName(context.config.crawleeStorageName, domain),
+                    );
+                    await pdfDataset.pushData({
+                        url: request.url,
+                        source: request.userData.source ?? "",
+                        status: response?.status() ?? 0,
+                        timestamp: new Date().toISOString(),
+                    });
+                }
                 log.info(`Skipped download/PDF (no retry): ${request.url}`);
                 return;
             }
@@ -1443,6 +1451,15 @@ export const generateUpdateReport = async (domain: string) => {
         // splits them with this counter (errorRateBreaker.ts). Reported for the same reason as
         // errorsUnprocessed: the numbers that decided a stop must outlive the dataset.
         const notEligible = await context.statsManager.getValue("not_eligible");
+        // A312 : compteurs bo_known publiés tels quels (T03 écrit les 4 premiers, T04 les 4 suivants) ; jamais lus par le disjoncteur.
+        const boKnownInjected = await context.statsManager.getValue("bo_known_injected");
+        const boKnownIgnoredDataset = await context.statsManager.getValue("bo_known_ignored_dataset");
+        const boKnownSeeded = await context.statsManager.getValue("bo_known_seeded");
+        const boKnownSeedSkipped = await context.statsManager.getValue("bo_known_seed_skipped");
+        const boKnownDeleted = await context.statsManager.getValue("bo_known_deleted");
+        const boKnownRedirected = await context.statsManager.getValue("bo_known_redirected");
+        const boKnownAlive = await context.statsManager.getValue("bo_known_alive");
+        const boKnownErrors = await context.statsManager.getValue("bo_known_errors");
 
         const cb = context.config.circuitBreaker;
 
@@ -1474,6 +1491,14 @@ export const generateUpdateReport = async (domain: string) => {
                 accounted,
                 errors_unprocessed: errorsUnprocessed,
                 not_eligible: notEligible,
+                bo_known_injected: boKnownInjected,
+                bo_known_ignored_dataset: boKnownIgnoredDataset,
+                bo_known_seeded: boKnownSeeded,
+                bo_known_seed_skipped: boKnownSeedSkipped,
+                bo_known_deleted: boKnownDeleted,
+                bo_known_redirected: boKnownRedirected,
+                bo_known_alive: boKnownAlive,
+                bo_known_errors: boKnownErrors,
                 previous_total: cb.previousTotal
             },
             rates: {
