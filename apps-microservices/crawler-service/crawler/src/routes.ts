@@ -321,8 +321,12 @@ router.addDefaultHandler(
             log.warning(`Blocked external redirect: ${url} (Target: ${targetDomain})`);
             const isHomepageRedirect = matchesMainSite(request.url, site);
             // Set structured error message for "1 seul URL crawlé" case: domain change
-            if (isHomepageRedirect) {
+            if (isHomepageRedirect && request.userData.source !== BO_KNOWN_SOURCE) {
                 context.crawlErrorMessage = "L'URL après la page d'accueil change de domaine";
+            }
+            // A312 (spec D2): a bo_known redirect leaves no native trace (no external_redirects, no breaker).
+            if (request.userData.source === BO_KNOWN_SOURCE) {
+                if (context.updateChecker) await context.updateChecker.recordBoKnownUnjudged();
             }
 
             // --- External-Redirect Breaker (update mode only) ---
@@ -331,7 +335,7 @@ router.addDefaultHandler(
             // relocated domain. Abort + fail (exit 7) instead of wasting a full
             // re-crawl and reporting a misleading success. See spec 2026-06-09.
             const cb = context.config?.circuitBreaker;
-            if (context.updateChecker && context.statsManager && cb?.externalRedirectBreakerEnabled) {
+            if (context.updateChecker && context.statsManager && cb?.externalRedirectBreakerEnabled && request.userData.source !== BO_KNOWN_SOURCE) {
                 const external = await context.statsManager.increment("external_redirects");
 
                 // Homepage fast-path: homepage off-domain ⇒ whole site moved.
@@ -371,20 +375,27 @@ router.addDefaultHandler(
                 // count under filtered_pdf + record in the pdf-{domain} dataset so inline
                 // (rendered) PDFs are tracked the same as download-triggering ones. This guard
                 // already skips inline non-HTML today, so accounting is independent of SKIP_DOWNLOADS.
-                if (context.statsManager) {
-                    await context.statsManager.increment("filtered_pdf");
+                // A312 (spec D2): a bo_known non-HTML response leaves no native trace (no filtered_pdf,
+                // no pdf- row, no prefix learning).
+                if (request.userData.source === BO_KNOWN_SOURCE) {
+                    if (context.updateChecker) await context.updateChecker.recordBoKnownUnjudged();
                 }
-                const pdfDataset = await Dataset.open(
-                    pdfDatasetName(context.config.crawleeStorageName, targetDomain),
-                );
-                await pdfDataset.pushData({
-                    url,
-                    source: request.userData.source ?? "",
-                    status: response.status(),
-                    content_type: contentType,
-                    timestamp: new Date().toISOString(),
-                });
-                context.nonHtmlPrefix?.onNonHtml(request.url);
+                if (request.userData.source !== BO_KNOWN_SOURCE) {
+                    if (context.statsManager) {
+                        await context.statsManager.increment("filtered_pdf");
+                    }
+                    const pdfDataset = await Dataset.open(
+                        pdfDatasetName(context.config.crawleeStorageName, targetDomain),
+                    );
+                    await pdfDataset.pushData({
+                        url,
+                        source: request.userData.source ?? "",
+                        status: response.status(),
+                        content_type: contentType,
+                        timestamp: new Date().toISOString(),
+                    });
+                    context.nonHtmlPrefix?.onNonHtml(request.url);
+                }
                 log.warning(`Skipping non-HTML response: ${url} (Content-Type: ${contentType})`);
                 return;
             }

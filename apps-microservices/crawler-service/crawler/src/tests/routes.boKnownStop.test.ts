@@ -118,7 +118,7 @@ test('fix2 item 2: verdictUnavailable increments verdict_unavailable and records
 
 test('fix2 item 2: verdictUnavailable counts a bo_known request through updateChecker.recordBoKnownUnjudged()', () => {
     const [start, end] = verdictUnavailableBranch();
-    const p = only('recordBoKnownUnjudged(');
+    const p = src.indexOf('recordBoKnownUnjudged(', start);
     assert.ok(p > start && p < end, 'the call must sit in the verdictUnavailable branch');
     const g = guardText(p);
     assert.match(g, /source === BO_KNOWN_SOURCE/, `the call must be guarded by source === BO_KNOWN_SOURCE; guards: ${g}`);
@@ -127,4 +127,80 @@ test('fix2 item 2: verdictUnavailable counts a bo_known request through updateCh
 
 test('fix2 item 3: the redirect loop closure marks loadedUrl known only for native sources', () => {
     assertNativeOnly('context.dedupManager.addUrl(request.loadedUrl)');
+});
+
+// A312 Final Review fix 3 (spec D2, décision user 2026-10-21) — avant son verdict, une requête bo_known
+// redirigée hors domaine (O1) ou servie en non-HTML (O2) ne laisse aucune trace native et compte dans
+// bo_known_errors via updateChecker.recordBoKnownUnjudged(). Lecture bornée à la tranche de la branche.
+function branchSlice(startNeedle: string, endNeedle: string): [number, number] {
+    const start = only(startNeedle);
+    const end = src.indexOf(endNeedle, start);
+    assert.notEqual(end, -1, `"${endNeedle}" must follow "${startNeedle}"`);
+    return [start, end];
+}
+
+function offDomainSlice(): [number, number] {
+    return branchSlice('if (!isInternal) {', 'let enqueueLinksExcludePath');
+}
+
+function nonHtmlSlice(): [number, number] {
+    const [start, log] = branchSlice(
+        "if (contentType && !contentType.includes('text/html')",
+        'Skipping non-HTML response:',
+    );
+    const end = src.indexOf('return;', log);
+    assert.notEqual(end, -1, 'the non-HTML guard must end with its return;');
+    return [start, end];
+}
+
+function assertNativeOnlyIn([start, end]: [number, number], needle: string) {
+    const hits: number[] = [];
+    for (let p = src.indexOf(needle, start); p !== -1 && p < end; p = src.indexOf(needle, p + 1)) hits.push(p);
+    assert.ok(hits.length > 0, `effect "${needle}" must still sit in the branch`);
+    for (const p of hits) {
+        const g = guardText(p);
+        assert.match(g, /source !== BO_KNOWN_SOURCE/, `"${needle}" must be reachable only when source !== BO_KNOWN_SOURCE; guards: ${g}`);
+    }
+}
+
+function assertBoKnownUnjudgedIn([start, end]: [number, number]) {
+    const p = src.indexOf('recordBoKnownUnjudged(', start);
+    assert.ok(p !== -1 && p < end, 'the branch must count a bo_known request through recordBoKnownUnjudged()');
+    const g = guardText(p);
+    assert.match(g, /source === BO_KNOWN_SOURCE/, `the call must be guarded by source === BO_KNOWN_SOURCE; guards: ${g}`);
+    assert.match(src.slice(p - 60, p), /await context\.updateChecker(\?)?\.$/, 'the call must be awaited on context.updateChecker');
+}
+
+test('fix3 item 1 (O1): an off-domain redirect feeds external_redirects and the breaker only for native sources', () => {
+    const slice = offDomainSlice();
+    for (const needle of [
+        'context.crawlErrorMessage =',
+        'increment("external_redirects")',
+        'shouldTripExternalRedirectBreaker(',
+        'context.stopReason =',
+        'context.fatalExitCode = 7',
+        'stopCrawler(crawler',
+    ]) {
+        assertNativeOnlyIn(slice, needle);
+    }
+});
+
+test('fix3 item 1 (O1): an off-domain redirect of a bo_known request counts through recordBoKnownUnjudged()', () => {
+    assertBoKnownUnjudgedIn(offDomainSlice());
+});
+
+test('fix3 item 2 (O2): a non-HTML response feeds filtered_pdf, the pdf- dataset and prefix learning only for native sources', () => {
+    const slice = nonHtmlSlice();
+    for (const needle of [
+        'increment("filtered_pdf")',
+        'pdfDatasetName(',
+        'pdfDataset.pushData(',
+        'onNonHtml(',
+    ]) {
+        assertNativeOnlyIn(slice, needle);
+    }
+});
+
+test('fix3 item 2 (O2): a non-HTML response of a bo_known request counts through recordBoKnownUnjudged()', () => {
+    assertBoKnownUnjudgedIn(nonHtmlSlice());
 });
