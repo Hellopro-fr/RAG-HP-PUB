@@ -5,7 +5,7 @@ import { PushedSet } from './PushedSet.js';
 import { rightTrimSlash, processUrl } from '../functions.js';
 import { hasIgnoredExtensionForSeed } from '../seedExtensionFilter.js';
 import { matchDatasetIdentity } from './datasetIdentity.js';
-import { BO_KNOWN_SOURCE, BO_KNOWN_ORIGIN, BO_KNOWN_REASON_NOT_ELIGIBLE } from '../boKnownSeed.js';
+import { BO_KNOWN_SOURCE, BO_KNOWN_UNIQUE_KEY_PREFIX, BO_KNOWN_ORIGIN, BO_KNOWN_REASON_NOT_ELIGIBLE } from '../boKnownSeed.js';
 
 /**
  * Result returned by checkUrl for each processed page.
@@ -185,7 +185,8 @@ export class UpdateChecker {
      * ⚠ Aucun compteur de D2 (`errors`, `processed`, `errors_unprocessed`, `not_eligible`,
      * `redirects`, `new_urls`, `accounted`) ne s'incrémente ici : ils alimentent le disjoncteur
      * et les plafonds de suppression, qui ne doivent pas bouger pour une URL que le dataset
-     * n'a jamais portée. Seuls les quatre compteurs `bo_known_*` s'écrivent.
+     * n'a jamais portée. Seuls quatre compteurs `bo_known_*` s'écrivent (deleted, errors,
+     * redirected, alive), en cinq sites d'incrément (deleted deux fois).
      *
      * ⚠ `url` est l'`originalUrl` reçue, brute à l'octet : le BO apparie la fiche SFPI par clé
      * exacte, une URL nettoyée ne retirerait jamais la fiche.
@@ -245,7 +246,11 @@ export class UpdateChecker {
     ): Promise<CheckUrlResult> {
         // PushedSet guard — if a prior attempt already emitted for this URL,
         // skip all side effects (writeJsonl + statsManager.increment).
-        if (this.pushedSet && !(await this.pushedSet.tryClaim(originalUrl))) {
+        // A312 : une requête bo_known réclame sous une clé préfixée par sa classe, sinon la copie
+        // native découverte de la même URL et la copie bo_known se volent le verdict l'une de
+        // l'autre ; la déduplication des relances reste ainsi par classe.
+        const claimKey = source === BO_KNOWN_SOURCE ? BO_KNOWN_UNIQUE_KEY_PREFIX + originalUrl : originalUrl;
+        if (this.pushedSet && !(await this.pushedSet.tryClaim(claimKey))) {
             return { action: 'ignored', url: originalUrl, source, reason: 'already_pushed' };
         }
 

@@ -982,6 +982,11 @@ router.addDefaultHandler(
                         true // Page is French (since isEnqueuingLinks = true)
                     );
                     log.info(`[UpdateChecker] ${result.action}: ${result.url} (${result.reason || ''})`);
+                    // A312 D7 : une page bo_known n'est vérifiée que pour son verdict — ni facettes,
+                    // ni écriture dataset (routerDefaultHandler), ni enqueueLinks.
+                    if (source === BO_KNOWN_SOURCE) {
+                        return;
+                    }
                 } else if (context.dedupManager && !isExisting) {
                     // Legacy: Count as NEW URL only if not existing AND passed validation
                     if (context.statsManager) {
@@ -1381,6 +1386,11 @@ router.addDefaultHandler(
                         false // NOT French
                     );
                     log.info(`[UpdateChecker] ${result.action}: ${result.url} (not_french)`);
+                    // A312 D7 : ni écriture nfr-, ni tryClaim(url) brut, qui bloquerait le verdict
+                    // de la copie native de la même URL.
+                    if (source === BO_KNOWN_SOURCE) {
+                        return;
+                    }
                 }
 
                 if (!content) content = await processPage(page, request.loadedUrl, log);

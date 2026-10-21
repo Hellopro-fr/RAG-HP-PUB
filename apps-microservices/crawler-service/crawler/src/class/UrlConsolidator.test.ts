@@ -52,7 +52,7 @@ test('injected client: cleanup dels rq+ru, KEEPS datasetKey, does NOT disconnect
     assert.equal(calls.disconnect, 0, 'cleanup() must not disconnect the shared client');
 });
 
-test('injected client: fullCleanup dels all three keys, does NOT disconnect', async () => {
+test('injected client: fullCleanup dels all four keys, does NOT disconnect', async () => {
     const { client, calls } = makeFakeClient();
     const uc = new UrlConsolidator(client, 'job-3', 'prev-3', 'example.com');
     await uc.fullCleanup();
