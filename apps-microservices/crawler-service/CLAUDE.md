@@ -675,6 +675,16 @@ Non-regression outranks the feature. A genuinely non-French site (`Check_nok_v2`
 counter, its `nfr-` write and its update-mode `checkUrl(..., false)` — the terminal `else`
 body was not touched.
 
+**`bo_known` exceptions (A312, spec D2 "own counters").** A URL seeded by the BO
+(`request.userData.source === BO_KNOWN_SOURCE`) leaves no native trace in either branch, so
+that seeded `bo_known` equals the sum of the `bo_known_*` counters. In the `verdictUnavailable`
+branch it increments neither `verdict_unavailable` nor appends to `__unjudged_urls.json` (both
+native-orphan mechanisms); it counts in `bo_known_errors` instead, through
+`updateChecker.recordBoKnownUnjudged()`. In the terminal `else` it does not increment
+`filtered_nonfr` (the BO reads it as a whole-site `isError='not_french'`), keeps its
+`checkUrl(..., false)` verdict (`bo_known_deleted`), and stops right after that verdict (D7):
+no `nfr-` write, no `pushedSet.tryClaim(url)`. Native sources are unaffected by these guards.
+
 ### Exit 10 — an unjudged homepage is a failed crawl, not a finished one
 
 An initial crawl whose **homepage** got no verdict enqueues nothing and stores nothing, yet it

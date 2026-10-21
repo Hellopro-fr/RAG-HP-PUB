@@ -568,7 +568,7 @@ router.addDefaultHandler(
             // --- REDIRECT LOOP CLOSURE (Important Fix) ---
             // If we ended up at a different URL than requested (redirect), make sure the
             // final URL is also marked as known in Redis to prevent future re-crawling.
-            if (context.dedupManager && request.url !== request.loadedUrl) {
+            if (context.dedupManager && request.url !== request.loadedUrl && source !== BO_KNOWN_SOURCE) {
                 await context.dedupManager.addUrl(request.loadedUrl);
             }
 
@@ -1348,7 +1348,9 @@ router.addDefaultHandler(
                 // HTTP …`, `Site protégé par … (challenge non résolu)`, or the homepage's own
                 // `Détection indisponible : …`). A per-crawl count is the right shape for a
                 // per-crawl field; the message stays owned by the homepage sites.
-                if (context.statsManager) await context.statsManager.increment("verdict_unavailable");
+                if (context.statsManager && source !== BO_KNOWN_SOURCE) await context.statsManager.increment("verdict_unavailable");
+                // A312 D2 : une URL bo_known sans verdict ne compte que dans bo_known_errors, ni verdict_unavailable ni sidecar.
+                if (source === BO_KNOWN_SOURCE && context.updateChecker) await context.updateChecker.recordBoKnownUnjudged();
                 // ...but writing nothing is not enough: the BO's second pass subtracts
                 // "URLs Milvus holds" minus "URLs in the new dataset" and deactivates the
                 // remainder, so a page with no verdict is an orphan BY CONSTRUCTION.
@@ -1368,12 +1370,12 @@ router.addDefaultHandler(
                 // BO stops at `insufficientData` (`stored_files_count <= 1`) long before
                 // the orphan pass — this sidecar is `__`-prefixed precisely so it cannot
                 // disturb that count.
-                recordUnjudgedUrls(targetDomain, [request.url, url]);
+                if (source !== BO_KNOWN_SOURCE) recordUnjudgedUrls(targetDomain, [request.url, url]);
             } else {
                 log.warning(`Le site ${url} n'est pas en Français.`);
                 // Revive the (previously dead) filtered_nonfr counter → the terminal webhook
                 // carries a machine-readable non-French signal that the BO turns into isError='not_french'.
-                if (context.statsManager) await context.statsManager.increment("filtered_nonfr");
+                if (context.statsManager && source !== BO_KNOWN_SOURCE) await context.statsManager.increment("filtered_nonfr");
 
                 // --- UPDATE MODE: Non-French page = not eligible ---
                 if (context.updateChecker && source) {
@@ -1386,8 +1388,8 @@ router.addDefaultHandler(
                         false // NOT French
                     );
                     log.info(`[UpdateChecker] ${result.action}: ${result.url} (not_french)`);
-                    // A312 D7 : ni écriture nfr-, ni tryClaim(url) brut, qui bloquerait le verdict
-                    // de la copie native de la même URL.
+                    // A312 D7 : ni écriture nfr-, ni tryClaim(url) brut sur pushedSet (pushed:), qui priverait
+                    // la copie native de la même URL de sa ligne nfr- (son verdict passe par checked:).
                     if (source === BO_KNOWN_SOURCE) {
                         return;
                     }

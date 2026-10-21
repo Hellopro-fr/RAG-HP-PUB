@@ -61,3 +61,70 @@ test('I1 non-French branch: bo_known returns after its verdict, before the nfr- 
 test('I1: exactly two bo_known early returns in routes.ts (one per update-mode verdict)', () => {
     assert.equal(src.match(GUARD)?.length ?? 0, 2);
 });
+
+// A312 Final Review fix 2 (spec D2, « Compteurs propres ») — avant son verdict, une requête bo_known
+// ne laisse aucune trace native : ni `filtered_nonfr`, ni `verdict_unavailable` + sidecar, ni
+// clôture de boucle de redirection. Garde lue sur l'instruction de l'effet et sur les en-têtes des
+// blocs `{` qui l'englobent.
+function guardText(p: number): string {
+    let start = p;
+    while (start > 0 && !';{}'.includes(src[start - 1])) start--;
+    const parts = [src.slice(start, p)];
+    let depth = 0;
+    for (let i = p - 1; i >= 0; i--) {
+        const c = src[i];
+        if (c === '}') depth++;
+        else if (c === '{') {
+            if (depth > 0) { depth--; continue; }
+            let h = i;
+            while (h > 0 && !';{}'.includes(src[h - 1])) h--;
+            parts.push(src.slice(h, i));
+        }
+    }
+    return parts.join(' | ');
+}
+
+function only(needle: string): number {
+    const p = src.indexOf(needle);
+    assert.notEqual(p, -1, `effect "${needle}" must exist`);
+    assert.equal(src.indexOf(needle, p + 1), -1, `effect "${needle}" must exist exactly once`);
+    return p;
+}
+
+function assertNativeOnly(needle: string) {
+    const g = guardText(only(needle));
+    assert.match(g, /source !== BO_KNOWN_SOURCE/, `"${needle}" must be reachable only when source !== BO_KNOWN_SOURCE; guards: ${g}`);
+}
+
+function verdictUnavailableBranch(): [number, number] {
+    const start = only('} else if (verdictUnavailable) {');
+    const end = src.indexOf('} else {', start);
+    assert.notEqual(end, -1, 'the not-French terminal else must follow the verdictUnavailable branch');
+    return [start, end];
+}
+
+test('fix2 item 1: the not-French else increments filtered_nonfr only for native sources', () => {
+    assertNativeOnly('increment("filtered_nonfr")');
+});
+
+test('fix2 item 2: verdictUnavailable increments verdict_unavailable and records the sidecar only for native sources', () => {
+    const [start, end] = verdictUnavailableBranch();
+    for (const needle of ['increment("verdict_unavailable")', 'recordUnjudgedUrls(']) {
+        const p = only(needle);
+        assert.ok(p > start && p < end, `"${needle}" must stay in the verdictUnavailable branch`);
+        assertNativeOnly(needle);
+    }
+});
+
+test('fix2 item 2: verdictUnavailable counts a bo_known request through updateChecker.recordBoKnownUnjudged()', () => {
+    const [start, end] = verdictUnavailableBranch();
+    const p = only('recordBoKnownUnjudged(');
+    assert.ok(p > start && p < end, 'the call must sit in the verdictUnavailable branch');
+    const g = guardText(p);
+    assert.match(g, /source === BO_KNOWN_SOURCE/, `the call must be guarded by source === BO_KNOWN_SOURCE; guards: ${g}`);
+    assert.match(src.slice(p - 60, p), /await context\.updateChecker(\?)?\.$/, 'the call must be awaited on context.updateChecker');
+});
+
+test('fix2 item 3: the redirect loop closure marks loadedUrl known only for native sources', () => {
+    assertNativeOnly('context.dedupManager.addUrl(request.loadedUrl)');
+});

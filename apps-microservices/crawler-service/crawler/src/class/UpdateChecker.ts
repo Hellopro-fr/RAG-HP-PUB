@@ -457,6 +457,15 @@ export class UpdateChecker {
     }
 
     /**
+     * URL bo_known restée sans verdict linguistique (branche `verdictUnavailable` de routes.ts, A312 D2) :
+     * aucun événement, aucune écriture, seul `bo_known_errors` compte — ni `verdict_unavailable`, ni
+     * sidecar des non jugées, qui sont des mécanismes natifs.
+     */
+    async recordBoKnownUnjudged(): Promise<void> {
+        await this.statsManager.increment("bo_known_errors");
+    }
+
+    /**
      * Write a JSONL line if the writer is available.
      */
     private async writeJsonl(filename: string, data: CheckUrlResult): Promise<void> {

@@ -219,3 +219,12 @@ test('§3.5 source : checkBoKnown n\'incrémente que bo_known_*, et la branche s
     assert.ok(claim !== -1 && branch !== -1 && native !== -1, 'les trois repères doivent exister');
     assert.ok(claim < branch && branch < native, 'ordre attendu : garde PushedSet, branche bo_known, voie native');
 });
+
+test('fix2 recordBoKnownUnjudged : une URL bo_known sans verdict linguistique compte bo_known_errors, une fois, sans écriture', async () => {
+    const { checker, stats, writer, consolidator } = makeChecker();
+    assert.equal(typeof (checker as any).recordBoKnownUnjudged, 'function', 'UpdateChecker.recordBoKnownUnjudged must exist');
+    await (checker as any).recordBoKnownUnjudged();
+    assert.deepEqual(stats._calls, ['bo_known_errors']);
+    assert.equal(writer._calls.length, 0);
+    assert.equal(consolidator._calls.length, 0);
+});
