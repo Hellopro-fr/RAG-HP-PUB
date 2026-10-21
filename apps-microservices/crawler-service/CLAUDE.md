@@ -685,8 +685,12 @@ native-orphan mechanisms); it counts in `bo_known_errors` instead, through
 `checkUrl(..., false)` verdict (`bo_known_deleted`), and stops right after that verdict (D7):
 no `nfr-` write, no `pushedSet.tryClaim(url)`. Before its verdict, an off-domain redirect or a
 non-HTML response of a `bo_known` URL leaves no native trace either (no `external_redirects` and
-no external-redirect breaker; no `filtered_pdf`, no `pdf-{domain}` row, no non-HTML prefix
-learning) and counts in `bo_known_errors` through the same `recordBoKnownUnjudged()`.
+no external-redirect breaker; no `filtered_pdf`, no `pdf-{domain}` row) and counts in
+`bo_known_errors` through the same `recordBoKnownUnjudged()`; the non-HTML case covers both the
+Content-Type guard in `routes.ts` (which also skips non-HTML prefix learning) and the
+download-triggered skip in `failedRequestHandler` (`functions.ts`). A block-class status of a
+`bo_known` URL is not counted in the proxy-wall ratio (`blockedCount`) and never feeds its exit 8;
+its verdict comes from the final classification once retries are exhausted.
 Native sources are unaffected by these guards.
 
 ### Exit 10 — an unjudged homepage is a failed crawl, not a finished one

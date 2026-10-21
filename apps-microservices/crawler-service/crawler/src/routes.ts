@@ -435,18 +435,23 @@ router.addDefaultHandler(
                 } else if (statusClass === "block") {
                     session?.retire();
                     log.warning(`🚫 BLOCKED HTTP ${status} on ${url} — retire session, retry`);
-                    context.blockedCount = (context.blockedCount ?? 0) + 1;
-                    if (terminalFailureDetectEnabled() && context.statsManager) {
-                        const processedOk = await context.statsManager.getValue("processed");
-                        // processed counts only requests that passed the status check (blocked ones
-                        // throw before increment("processed") at ~L431), so the ratio denominator is
-                        // total attempts = blocked + processed-ok, matching shouldTripProxyWall's contract.
-                        const wall = shouldTripProxyWall(context.blockedCount, context.blockedCount + processedOk, proxyWallConfig());
-                        if (wall.trip) {
-                            context.stopReason = "proxyBlocked";
-                            context.fatalExitCode = 8;
-                            log.error(`⛔ PROXY WALL — ${wall.reason} — terminating (exit 8)`);
-                            await stopCrawler(crawler, `Proxy wall: ${wall.reason}`);
+                    // A312 (spec D2): a bo_known block stays out of the proxy-wall ratio (processed excludes
+                    // bo_known). No recordBoKnownUnjudged() here: the request is retried, and its verdict comes
+                    // from failedRequestHandler's final checkUrl once retries are exhausted.
+                    if (request.userData.source !== BO_KNOWN_SOURCE) {
+                        context.blockedCount = (context.blockedCount ?? 0) + 1;
+                        if (terminalFailureDetectEnabled() && context.statsManager) {
+                            const processedOk = await context.statsManager.getValue("processed");
+                            // processed counts only requests that passed the status check (blocked ones
+                            // throw before increment("processed") at ~L431), so the ratio denominator is
+                            // total attempts = blocked + processed-ok, matching shouldTripProxyWall's contract.
+                            const wall = shouldTripProxyWall(context.blockedCount, context.blockedCount + processedOk, proxyWallConfig());
+                            if (wall.trip) {
+                                context.stopReason = "proxyBlocked";
+                                context.fatalExitCode = 8;
+                                log.error(`⛔ PROXY WALL — ${wall.reason} — terminating (exit 8)`);
+                                await stopCrawler(crawler, `Proxy wall: ${wall.reason}`);
+                            }
                         }
                     }
                 } else {

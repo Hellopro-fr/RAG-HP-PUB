@@ -23,6 +23,7 @@ import {
     UrlParameters,
 } from "./interfaces/queue.js";
 import { context } from "./context.js";
+import { BO_KNOWN_SOURCE } from "./boKnownSeed.js";
 import { launchOptions as camoufoxLaunchOptions } from 'camoufox-js';
 import { buildCamoufoxLaunchInput } from './camoufoxLaunchInput.js';
 import {
@@ -621,18 +622,25 @@ export const startCrawler = async (
             // written to error-{domain} (so reclaimFailedRequest never re-crawls it).
             // Spec: docs/superpowers/specs/2026-06-17-crawler-skip-pdf-design.md
             if (shouldSkipAsDownload(SKIP_DOWNLOADS, errorStr)) {
-                if (context.statsManager) {
-                    await context.statsManager.increment("filtered_pdf");
+                // A312 (spec D2): a bo_known download leaves no native trace (no filtered_pdf, no pdf- row);
+                // it counts in bo_known_errors only.
+                if (request.userData.source === BO_KNOWN_SOURCE) {
+                    if (context.updateChecker) await context.updateChecker.recordBoKnownUnjudged();
                 }
-                const pdfDataset = await Dataset.open(
-                    pdfDatasetName(context.config.crawleeStorageName, domain),
-                );
-                await pdfDataset.pushData({
-                    url: request.url,
-                    source: request.userData.source ?? "",
-                    status: response?.status() ?? 0,
-                    timestamp: new Date().toISOString(),
-                });
+                if (request.userData.source !== BO_KNOWN_SOURCE) {
+                    if (context.statsManager) {
+                        await context.statsManager.increment("filtered_pdf");
+                    }
+                    const pdfDataset = await Dataset.open(
+                        pdfDatasetName(context.config.crawleeStorageName, domain),
+                    );
+                    await pdfDataset.pushData({
+                        url: request.url,
+                        source: request.userData.source ?? "",
+                        status: response?.status() ?? 0,
+                        timestamp: new Date().toISOString(),
+                    });
+                }
                 log.info(`Skipped download/PDF (no retry): ${request.url}`);
                 return;
             }

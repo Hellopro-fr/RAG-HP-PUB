@@ -66,28 +66,28 @@ test('I1: exactly two bo_known early returns in routes.ts (one per update-mode v
 // ne laisse aucune trace native : ni `filtered_nonfr`, ni `verdict_unavailable` + sidecar, ni
 // clôture de boucle de redirection. Garde lue sur l'instruction de l'effet et sur les en-têtes des
 // blocs `{` qui l'englobent.
-function guardText(p: number): string {
+function guardText(p: number, text: string = src): string {
     let start = p;
-    while (start > 0 && !';{}'.includes(src[start - 1])) start--;
-    const parts = [src.slice(start, p)];
+    while (start > 0 && !';{}'.includes(text[start - 1])) start--;
+    const parts = [text.slice(start, p)];
     let depth = 0;
     for (let i = p - 1; i >= 0; i--) {
-        const c = src[i];
+        const c = text[i];
         if (c === '}') depth++;
         else if (c === '{') {
             if (depth > 0) { depth--; continue; }
             let h = i;
-            while (h > 0 && !';{}'.includes(src[h - 1])) h--;
-            parts.push(src.slice(h, i));
+            while (h > 0 && !';{}'.includes(text[h - 1])) h--;
+            parts.push(text.slice(h, i));
         }
     }
     return parts.join(' | ');
 }
 
-function only(needle: string): number {
-    const p = src.indexOf(needle);
+function only(needle: string, text: string = src): number {
+    const p = text.indexOf(needle);
     assert.notEqual(p, -1, `effect "${needle}" must exist`);
-    assert.equal(src.indexOf(needle, p + 1), -1, `effect "${needle}" must exist exactly once`);
+    assert.equal(text.indexOf(needle, p + 1), -1, `effect "${needle}" must exist exactly once`);
     return p;
 }
 
@@ -132,9 +132,9 @@ test('fix2 item 3: the redirect loop closure marks loadedUrl known only for nati
 // A312 Final Review fix 3 (spec D2, décision user 2026-10-21) — avant son verdict, une requête bo_known
 // redirigée hors domaine (O1) ou servie en non-HTML (O2) ne laisse aucune trace native et compte dans
 // bo_known_errors via updateChecker.recordBoKnownUnjudged(). Lecture bornée à la tranche de la branche.
-function branchSlice(startNeedle: string, endNeedle: string): [number, number] {
-    const start = only(startNeedle);
-    const end = src.indexOf(endNeedle, start);
+function branchSlice(startNeedle: string, endNeedle: string, text: string = src): [number, number] {
+    const start = only(startNeedle, text);
+    const end = text.indexOf(endNeedle, start);
     assert.notEqual(end, -1, `"${endNeedle}" must follow "${startNeedle}"`);
     return [start, end];
 }
@@ -153,22 +153,22 @@ function nonHtmlSlice(): [number, number] {
     return [start, end];
 }
 
-function assertNativeOnlyIn([start, end]: [number, number], needle: string) {
+function assertNativeOnlyIn([start, end]: [number, number], needle: string, text: string = src) {
     const hits: number[] = [];
-    for (let p = src.indexOf(needle, start); p !== -1 && p < end; p = src.indexOf(needle, p + 1)) hits.push(p);
+    for (let p = text.indexOf(needle, start); p !== -1 && p < end; p = text.indexOf(needle, p + 1)) hits.push(p);
     assert.ok(hits.length > 0, `effect "${needle}" must still sit in the branch`);
     for (const p of hits) {
-        const g = guardText(p);
+        const g = guardText(p, text);
         assert.match(g, /source !== BO_KNOWN_SOURCE/, `"${needle}" must be reachable only when source !== BO_KNOWN_SOURCE; guards: ${g}`);
     }
 }
 
-function assertBoKnownUnjudgedIn([start, end]: [number, number]) {
-    const p = src.indexOf('recordBoKnownUnjudged(', start);
+function assertBoKnownUnjudgedIn([start, end]: [number, number], text: string = src) {
+    const p = text.indexOf('recordBoKnownUnjudged(', start);
     assert.ok(p !== -1 && p < end, 'the branch must count a bo_known request through recordBoKnownUnjudged()');
-    const g = guardText(p);
+    const g = guardText(p, text);
     assert.match(g, /source === BO_KNOWN_SOURCE/, `the call must be guarded by source === BO_KNOWN_SOURCE; guards: ${g}`);
-    assert.match(src.slice(p - 60, p), /await context\.updateChecker(\?)?\.$/, 'the call must be awaited on context.updateChecker');
+    assert.match(text.slice(p - 60, p), /await context\.updateChecker(\?)?\.$/, 'the call must be awaited on context.updateChecker');
 }
 
 test('fix3 item 1 (O1): an off-domain redirect feeds external_redirects and the breaker only for native sources', () => {
@@ -203,4 +203,53 @@ test('fix3 item 2 (O2): a non-HTML response feeds filtered_pdf, the pdf- dataset
 
 test('fix3 item 2 (O2): a non-HTML response of a bo_known request counts through recordBoKnownUnjudged()', () => {
     assertBoKnownUnjudgedIn(nonHtmlSlice());
+});
+
+// A312 Final Review fix 4 (spec D2, décision user 2026-10-21 option a) — une réponse bloquée (classe
+// `block`) d'une requête bo_known n'entre pas dans le ratio du mur de proxy (`blockedCount`), et le saut
+// download/PDF de failedRequestHandler (functions.ts) ne laisse aucune trace native. Pas d'appel à
+// recordBoKnownUnjudged() dans la branche `block` : la requête est relancée, son verdict vient de la
+// classification finale (checkUrl → checkBoKnown) une fois les relances épuisées.
+function blockSlice(): [number, number] {
+    return branchSlice('} else if (statusClass === "block") {', '} else {');
+}
+
+test('fix4 item 1: a blocked response feeds blockedCount and the proxy wall only for native sources', () => {
+    const slice = blockSlice();
+    for (const needle of [
+        'context.blockedCount =',
+        'shouldTripProxyWall(',
+        'context.stopReason =',
+        'context.fatalExitCode = 8',
+        'stopCrawler(crawler',
+    ]) {
+        assertNativeOnlyIn(slice, needle);
+    }
+    const [start, end] = slice;
+    assert.equal(
+        src.slice(start, end).includes('recordBoKnownUnjudged('),
+        false,
+        'the block branch must not count a bo_known request (its verdict comes once retries are exhausted)',
+    );
+});
+
+// functions.ts n'est pas importable par le runner (skipDownload.handler.test.ts:6-9) : même lecture du
+// texte source, commentaires pleine ligne blanchis (fichier CRLF : `.` et `$` s'arrêtent avant `\r`).
+const fsrc = fs
+    .readFileSync(path.join(import.meta.dirname, '..', 'functions.ts'), 'utf-8')
+    .replace(/^[ \t]*\/\/.*$/gm, (m) => ' '.repeat(m.length));
+
+function downloadSkipSlice(): [number, number] {
+    return branchSlice('if (shouldSkipAsDownload(SKIP_DOWNLOADS, errorStr)) {', 'return;', fsrc);
+}
+
+test('fix4 item 2: the download/PDF skip feeds filtered_pdf and the pdf- dataset only for native sources', () => {
+    const slice = downloadSkipSlice();
+    for (const needle of ['increment("filtered_pdf")', 'pdfDatasetName(', 'pushData(']) {
+        assertNativeOnlyIn(slice, needle, fsrc);
+    }
+});
+
+test('fix4 item 2: the download/PDF skip of a bo_known request counts through recordBoKnownUnjudged()', () => {
+    assertBoKnownUnjudgedIn(downloadSkipSlice(), fsrc);
 });
