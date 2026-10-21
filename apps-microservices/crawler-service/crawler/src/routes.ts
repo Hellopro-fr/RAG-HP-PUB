@@ -38,6 +38,7 @@ import { trackQmHashStatsForUrl } from "./qmHashTracker.js";
 import { classifyHttpStatus, pdfDatasetName, isPageClosedError } from "./httpStatusPolicy.js";
 import { shouldTripProxyWall, proxyWallConfig, terminalFailureDetectEnabled } from "./terminalFailure.js";
 import { recordUnjudgedUrls } from "./unjudgedUrls.js";
+import { BO_KNOWN_SOURCE } from "./boKnownSeed.js";
 import type { PageTimingEntry } from "./timing/types.js";
 
 export const router = createPlaywrightRouter();
@@ -453,7 +454,9 @@ router.addDefaultHandler(
         if (context.statsManager) {
             // Track total processed for percentages (Increment for every handled page)
             // Note: This metric is cumulative across restarts via StatsManager
-            await context.statsManager.increment("processed");
+            if (request.userData.source !== BO_KNOWN_SOURCE) {
+                await context.statsManager.increment("processed");
+            }
             
             const cb = context.config.circuitBreaker;
             
@@ -533,7 +536,7 @@ router.addDefaultHandler(
         // --- Deduplication & "Double Check" (Redis) ---
         let isDoublon = false;
         const source = request.userData.source || '';
-        const isExisting = request.userData.is_existing || (source === 'dataset');
+        const isExisting = request.userData.is_existing || (source === 'dataset') || (source === BO_KNOWN_SOURCE);
 
         // Skip Redis check for "Existing" URLs to allow re-verification in Update Mode
         if (context.dedupManager && !isExisting) {

@@ -1443,6 +1443,15 @@ export const generateUpdateReport = async (domain: string) => {
         // splits them with this counter (errorRateBreaker.ts). Reported for the same reason as
         // errorsUnprocessed: the numbers that decided a stop must outlive the dataset.
         const notEligible = await context.statsManager.getValue("not_eligible");
+        // A312 : compteurs bo_known publiés tels quels (T03 écrit les 4 premiers, T04 les 4 suivants) ; jamais lus par le disjoncteur.
+        const boKnownInjected = await context.statsManager.getValue("bo_known_injected");
+        const boKnownIgnoredDataset = await context.statsManager.getValue("bo_known_ignored_dataset");
+        const boKnownSeeded = await context.statsManager.getValue("bo_known_seeded");
+        const boKnownSeedSkipped = await context.statsManager.getValue("bo_known_seed_skipped");
+        const boKnownDeleted = await context.statsManager.getValue("bo_known_deleted");
+        const boKnownRedirected = await context.statsManager.getValue("bo_known_redirected");
+        const boKnownAlive = await context.statsManager.getValue("bo_known_alive");
+        const boKnownErrors = await context.statsManager.getValue("bo_known_errors");
 
         const cb = context.config.circuitBreaker;
 
@@ -1474,6 +1483,14 @@ export const generateUpdateReport = async (domain: string) => {
                 accounted,
                 errors_unprocessed: errorsUnprocessed,
                 not_eligible: notEligible,
+                bo_known_injected: boKnownInjected,
+                bo_known_ignored_dataset: boKnownIgnoredDataset,
+                bo_known_seeded: boKnownSeeded,
+                bo_known_seed_skipped: boKnownSeedSkipped,
+                bo_known_deleted: boKnownDeleted,
+                bo_known_redirected: boKnownRedirected,
+                bo_known_alive: boKnownAlive,
+                bo_known_errors: boKnownErrors,
                 previous_total: cb.previousTotal
             },
             rates: {
