@@ -41,6 +41,7 @@ jobs:
             --scanners vuln,misconfig,secret \
             --severity CRITICAL \
             --ignore-unfixed \
+            --ignorefile .trivyignore.yaml \
             --exit-code 1 \
             --no-progress \
             .
