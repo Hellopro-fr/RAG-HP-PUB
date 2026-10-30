@@ -4,6 +4,28 @@
 > Procédure commune : [`../procedure-bascule-route-http.md`](../procedure-bascule-route-http.md) pour les routes ; ce lot a en plus ses gestes propres (ci-dessous) · plan : [`../plan-vague-2.md`](../plan-vague-2.md) § 3 V2-c et § 1bis · suivi : [`../suivi-vague-2.md`](../suivi-vague-2.md).
 > Reprend l'ancien lot [`L7.md`](L7.md) (non joué le 25/09 : ces services basculent **avec leur trafic**). Priorités **P2 / P3** de l'[inventaire](../inventaire-services-migration-par-lot.md).
 
+> **Mise à jour du 15/10 (décisions user + équipe)** : jour J = **lundi 19/10** ; **image-comparison-service non migré** ; **services dépendant des MySQL de la VM non migrés pour l'instant** (mcp-gateway-service → `gateway_db`, mcp-zoho-service) ; **services à fort risque de casser les flux** (api-gateway-go, gestionnaires DLQ) : **analyse préalable validée avant toute bascule**. Drift `poc` → `prod` (15/10) : seul mcp-gateway (+ frontend) a du code à rapatrier — exclu pour l'instant.
+
+> **Décision du 15/10 : option B validée** — pas de bascule V2-c le 19/10 ; tous les services du lot restent sur la VM. Les shadows GKE inactifs de ces services seront réduits à 0 réplica après mesure de leurs ressources.
+
+## Analyse de risque du 15/10 (validée : option B)
+
+> Relevés en lecture seule du 15/10 (`data/cutover/`) : `v2c-perimetre-1015-0935.log`, `v2c-appelants-1015-0943.log`, `v2c-gw-graphadmin-1015-0955.log`, `secu-sources-graph-1015-1054.log`.
+
+| Service | Ce que montrent les relevés | Risque pour les flux | Gain | Proposition |
+|---|---|---|---|---|
+| `api-gateway-go-service` | **2 connexions MySQL `:3307`** (`gateway_db`) ; arrêt au démarrage sans la base ; porte toutes les routes | très fort | — | **hors lot** (MySQL VM, décision équipe) |
+| `mcp-gateway-service` + frontend | **5 connexions MySQL `:3307`** | fort | — | **hors lot** (MySQL VM) |
+| `mcp-zoho-service` | **1 connexion MySQL `:3307`** ; aucun appel direct en 7 j | moyen | — | **hors lot** (MySQL VM) |
+| `mcp-google-templates-runner` | aucun trafic hors contrôle de santé ; tire ses instances de mcp-gateway ; comptes Google déchiffrés sur un seul hôte | lié à mcp-gateway | — | **suit mcp-gateway** |
+| `image-comparison-service` | — | — | — | **hors lot** (décision équipe) |
+| `graph-rag-api-admin-service` | **client unique : Ecritel `213.182.35.29`** via `api.hellopro.eu` : ~2 800 lectures `batch/get` / jour (08h et 14h UTC), écritures `admin/cypher` (10 / jour à 18h, ~900 le dimanche à 02h) ; dépend de Neo4j `10.0.1.218` et de 4 serveurs gRPC **de la VM** (enabler 15052 / 15055 / 15056 / 15057) | **fort** : écrit dans Neo4j ; sur GKE, chaque appel ferait VM → GKE → VM (gRPC) ; Service interne à créer | **aucun** : la VM et ses serveurs gRPC restent | **ne migre pas le 19/10** ; suit ses serveurs gRPC |
+| `graph-rag-dlq-manager` | **aucun usage réel en 7 j** (scans du catalogue) ; historique depuis mars : 54 `requeue`, 31 lectures ; RabbitMQ prod `10.0.1.216` ; shadow GKE branché sur le broker **DEV** | faible | quasi nul : un conteneur inactif de moins sur la VM ; il faut **exposer** le shadow à la VM (Service interne ou `NodePort`) | **option A** ci-dessous |
+
+**Option A — jouer le 19/10 avec `graph-rag-dlq-manager` seul.** Gestes : secret broker prod, Service interne pour la route `SERVICE_GRAPHDLQ`, bascule de la route, jumeau VM en réserve. Risque faible, gain quasi nul ; une nouvelle exposition interne et, avec un Service `LoadBalancer` interne, une règle de transfert facturée (de l'ordre de 18 $ / mois) : **contraire à l'objectif de coût**.
+
+**Option B (recommandée) — pas de bascule V2-c le 19/10.** Tous les services du lot sont soit hors lot par décision (MySQL VM, image-comparison), soit sans gain (graph-rag-api-admin, graph-rag-dlq-manager). La journée du 19/10 sert à un lot qui réduit les coûts ou le risque : **V2-a3-bis** (recherche : identifier et corriger le lot de nuit) ou les **correctifs sécurité post-migration** (F-HP-SEC-035 : politique par route et gateway fermée par défaut ; F-HP-SEC-032 : ACL du tailnet). En parallèle : **réduire à 0 réplica les shadows GKE inactifs** des services hors lot (api-gateway-go, mcp-gateway, mcp-zoho, templates-runner, graph-rag-api-admin, dlq-manager-service), après mesure de leurs ressources réservées (registre § 4, « shadows GKE B1 / B3 »).
+
 ## Composition
 
 | Service (nom `docker-compose`) | Cible (nom exact) | Aiguillage | Jumeau VM après bascule |

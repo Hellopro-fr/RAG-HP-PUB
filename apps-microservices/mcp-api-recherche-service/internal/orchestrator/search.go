@@ -25,12 +25,16 @@ type SearchParams struct {
 	OutputFields []string
 	SearchType   string // "semantic", "keyword", "hybrid"
 	UseReranker  bool
+
+	// ExcludeFilters: same shape as Filters, each entry negated (not (...)).
+	ExcludeFilters map[string]any
 }
 
 // SourceFilter represents a source collection with optional filters.
 type SourceFilter struct {
-	Source  string         `json:"source"`
-	Filters map[string]any `json:"filters,omitempty"`
+	Source         string         `json:"source"`
+	Filters        map[string]any `json:"filters,omitempty"`
+	ExcludeFilters map[string]any `json:"exclude_filters,omitempty"`
 }
 
 // SearchResult holds the result of a search operation.
@@ -143,8 +147,9 @@ func (so *SearchOrchestrator) Search(ctx context.Context, params *SearchParams) 
 
 			// Merge global filters with source-specific filters
 			mergedFilters := mergeFilters(params.Filters, sf.Filters)
+			mergedExclude := mergeFilters(params.ExcludeFilters, sf.ExcludeFilters)
 
-			filterExpr, err := so.filterBuilder.Build(ctx, mergedFilters, sf.Source)
+			filterExpr, err := so.filterBuilder.Build(ctx, mergedFilters, mergedExclude, sf.Source)
 			if err != nil {
 				log.Printf("[search] filter build error for %s: %v", sf.Source, err)
 			}

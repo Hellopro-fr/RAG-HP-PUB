@@ -1,0 +1,11 @@
+# Targeted, dated exceptions read by the prod PR gate (trivy fs --ignorefile .trivyignore.yaml).
+# Each entry is scoped to one file and expires: after expired_at Trivy ignores the entry and the gate fails again.
+vulnerabilities:
+  - id: CVE-2026-115905
+    paths:
+      - "apps-microservices/graph-rag-api-recherche-rust-service/Cargo.lock"
+    expired_at: 2026-11-30
+    statement: >-
+      Build-time dependency of utoipa-swagger-ui 8.1.0 (build.rs uses ZipArchive with
+      enclosed_name, not ZipStreamReader); not linked into the shipped binary.
+      Lifted by upgrading to utoipa 6 / utoipa-swagger-ui 10.
