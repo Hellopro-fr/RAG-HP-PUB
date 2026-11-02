@@ -473,6 +473,13 @@ class CrawlerManager:
             "replica_id": os.uname().nodename
         }
 
+        # A456 (spec 4.9): a dropData start is a clean restart, so any
+        # crawls/<crawl_id>.tar.gz already in GCS belongs to a previous generation
+        # (the tar uploaded before the 13 -> 14 switch). Flag the blob so
+        # archive_crawl does not take that tar for this crawl's own archive.
+        if params.get("dropdata"):
+            job_data["gcs_tar_stale"] = True
+
         # Preserve stashed_at into the fresh record so the write below does not
         # clear it before the resume-on-start unstash runs: unstash_crawl
         # re-validates stashed_at against Redis (TOCTOU) and would 409 NOT_STASHED
@@ -2649,6 +2656,12 @@ class CrawlerManager:
                 # This handles legacy crawls stuck at 'finished' due to a previous bug where
                 # _mark_as_archived was never called, but the archive was created and uploaded.
                 try:
+                    if job_info.get("gcs_tar_stale"):
+                        # A456 (spec 4.9): crawls/<id> predates this dropData start; do
+                        # not answer already_in_gcs, re-tar (the upload daemon's cp
+                        # overwrites the old object).
+                        logger.warning(f"Archive for '{crawl_id}': GCS tar is from a previous generation (gcs_tar_stale); forcing a fresh archive.")
+                        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="stale GCS tar skipped")
                     download_path = await self._retrieve_from_gcs_daemon(crawl_id)
                     # Archive exists in GCS — this crawl was already archived. Just fix the status.
                     archive_size = os.path.getsize(download_path) if os.path.exists(download_path) else None
@@ -2804,6 +2817,7 @@ class CrawlerManager:
             return
         fresh_job_info["status"] = "archived"
         fresh_job_info["archived_at"] = datetime.utcnow().isoformat()
+        fresh_job_info.pop("gcs_tar_stale", None)
         await cache_service.set_json(job_key, fresh_job_info)
         await self._publish_update(crawl_id, "archived")
         logger.info(f"Marked crawl '{crawl_id}' as 'archived' in Redis.")

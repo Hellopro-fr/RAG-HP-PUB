@@ -209,6 +209,8 @@ Prevents crawling duplicate French regional variants (e.g., `/fr-BE/`, `/fr-CA/`
 
 The GCS fallback (step 2) handles legacy crawls stuck at `finished` due to a previous bug where `_mark_as_archived` was never called.
 
+**A456 exception (step 2 skipped).** A crawl started with `dropdata` carries `gcs_tar_stale = true` in its Redis blob (`start_crawl`). `archive_crawl` then skips the GCS fallback: `crawls/{crawl_id}.tar.gz` in GCS is the previous generation's tar (uploaded before the domain went to status 14), and `already_in_gcs` would leave it as the crawl's archive — `_restore_archived_crawl` would later restore the OLD site for the next update crawl. The fresh tar is uploaded by the upload daemon (`gcloud storage cp` overwrites the object); `_mark_as_archived` clears the flag. There is no deletion entry point for the `crawls/` prefix (the 2-phase delete of `_request_stash_tar_deletion` targets `stash/` only). Spec: `docs/superpowers/specs/2026-10-31-a456-bascule-13-14-design.md` § 4.9 (Marketplace repo).
+
 ### Tmp file isolation via `.staging/`
 
 Archives are first written to `/app/archives/.staging/{crawl_id}.tar.gz` and only moved to `/app/archives/{crawl_id}.tar.gz` after size and integrity checks pass. The upload daemon (`tools/upload_daemon.sh`) uses `find -maxdepth 1`, which ignores subdirectories — so it only sees completed archives.
