@@ -430,7 +430,7 @@ class CrawlerManager:
         except Exception as e:
             logger.error(f"Failed to publish update for job '{crawl_id}': {e}", exc_info=True)
 
-    async def start_crawl(self, domain: str, start_url: str, crawl_id: str, callback_url: str, failure_callback_url: Optional[str], params: Dict[str, Any], is_restart: bool = False, oom_restart_count: int = 0, known_urls_gz: Optional[str] = None, known_urls_count: Optional[int] = None, carry_gcs_tar_stale: bool = False) -> str:
+    async def start_crawl(self, domain: str, start_url: str, crawl_id: str, callback_url: str, failure_callback_url: Optional[str], params: Dict[str, Any], is_restart: bool = False, oom_restart_count: int = 0, carry_gcs_tar_stale: bool = False, known_urls_gz: Optional[str] = None, known_urls_count: Optional[int] = None) -> str:
         # Check if a crawl with this ID is already running on this instance
         if crawl_id in self.local_processes:
             proc = self.local_processes[crawl_id]
