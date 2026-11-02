@@ -162,3 +162,67 @@ async def test_mark_as_archived_clears_flag(monkeypatch, tmp_path):
     written = cache.set_json.await_args.args[1]
     assert written["status"] == "archived"
     assert "gcs_tar_stale" not in written
+
+
+def _relaunch_manager(monkeypatch, job_info):
+    cache = MagicMock()
+    cache.get_json = AsyncMock(return_value=dict(job_info, status="restarting_oom"))
+    monkeypatch.setattr(crawler_manager, "cache_service", cache)
+    monkeypatch.setattr(crawler_manager.asyncio, "sleep", AsyncMock())
+    m = CrawlerManager()
+    m.start_crawl = AsyncMock()
+    return m
+
+
+def _oom_job(**extra):
+    job = {"crawl_id": "900", "status": "restarting_oom", "domain": "x.fr",
+           "start_url": "https://x.fr/", "callback_url": "https://cb",
+           "oom_restart_count": 0, "params": {"dropdata": True}}
+    job.update(extra)
+    return job
+
+
+@pytest.mark.asyncio
+async def test_oom_relaunch_carries_gcs_tar_stale(monkeypatch):
+    job = _oom_job(gcs_tar_stale=True)
+    m = _relaunch_manager(monkeypatch, job)
+    await m._relaunch_oom_crawl(job)
+    kwargs = m.start_crawl.await_args.kwargs
+    assert kwargs["params"]["dropdata"] is False
+    assert kwargs["carry_gcs_tar_stale"] is True
+
+
+@pytest.mark.asyncio
+async def test_oom_relaunch_without_flag_does_not_carry(monkeypatch):
+    """Negative control: a relaunch of a job never flagged carries nothing."""
+    job = _oom_job()
+    m = _relaunch_manager(monkeypatch, job)
+    await m._relaunch_oom_crawl(job)
+    assert m.start_crawl.await_args.kwargs["carry_gcs_tar_stale"] is False
+
+
+@pytest.mark.asyncio
+async def test_start_restart_with_carry_writes_flag(monkeypatch, tmp_path):
+    manager, cache_mocks = _setup(monkeypatch, tmp_path, None)
+    with pytest.raises(_Sentinel):
+        await manager.start_crawl(
+            domain="x.fr", start_url="https://x.fr/", crawl_id="900",
+            callback_url="https://cb", failure_callback_url=None,
+            params={"dropdata": False}, is_restart=True,
+            oom_restart_count=1, carry_gcs_tar_stale=True)
+    written = _written_job_data(cache_mocks)
+    assert written
+    assert any(d.get("gcs_tar_stale") is True for d in written)
+
+
+@pytest.mark.asyncio
+async def test_start_restart_without_carry_writes_no_flag(monkeypatch, tmp_path):
+    manager, cache_mocks = _setup(monkeypatch, tmp_path, None)
+    with pytest.raises(_Sentinel):
+        await manager.start_crawl(
+            domain="x.fr", start_url="https://x.fr/", crawl_id="900",
+            callback_url="https://cb", failure_callback_url=None,
+            params={"dropdata": False}, is_restart=True, oom_restart_count=1)
+    written = _written_job_data(cache_mocks)
+    assert written
+    assert all("gcs_tar_stale" not in d for d in written)

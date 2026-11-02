@@ -430,7 +430,7 @@ class CrawlerManager:
         except Exception as e:
             logger.error(f"Failed to publish update for job '{crawl_id}': {e}", exc_info=True)
 
-    async def start_crawl(self, domain: str, start_url: str, crawl_id: str, callback_url: str, failure_callback_url: Optional[str], params: Dict[str, Any], is_restart: bool = False, oom_restart_count: int = 0, known_urls_gz: Optional[str] = None, known_urls_count: Optional[int] = None) -> str:
+    async def start_crawl(self, domain: str, start_url: str, crawl_id: str, callback_url: str, failure_callback_url: Optional[str], params: Dict[str, Any], is_restart: bool = False, oom_restart_count: int = 0, known_urls_gz: Optional[str] = None, known_urls_count: Optional[int] = None, carry_gcs_tar_stale: bool = False) -> str:
         # Check if a crawl with this ID is already running on this instance
         if crawl_id in self.local_processes:
             proc = self.local_processes[crawl_id]
@@ -478,6 +478,10 @@ class CrawlerManager:
         # (the tar uploaded before the 13 -> 14 switch). Flag the blob so
         # archive_crawl does not take that tar for this crawl's own archive.
         if params.get("dropdata"):
+            job_data["gcs_tar_stale"] = True
+        elif carry_gcs_tar_stale:
+            # A456 (spec 4.9): an OOM relaunch rebuilds the blob with dropdata=False;
+            # keep the flag the original dropData start set.
             job_data["gcs_tar_stale"] = True
 
         # Preserve stashed_at into the fresh record so the write below does not
@@ -908,7 +912,8 @@ class CrawlerManager:
                 failure_callback_url=job_info.get("failure_callback_url"),
                 params=params,
                 is_restart=True, # Critical: bypass concurrency check and decrement
-                oom_restart_count=restart_count + 1
+                oom_restart_count=restart_count + 1,
+                carry_gcs_tar_stale=bool(job_info.get("gcs_tar_stale")),
             )
         except Exception as e:
             logger.error(f"Failed to relaunch OOM job '{crawl_id}': {e}", exc_info=True)
