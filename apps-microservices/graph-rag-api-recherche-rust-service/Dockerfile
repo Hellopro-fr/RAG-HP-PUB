@@ -16,6 +16,8 @@ COPY libs/rust-common-utils /app/libs/rust-common-utils
 
 # Copy manifests first for dependency caching
 COPY apps-microservices/graph-rag-api-recherche-rust-service/Cargo.toml ./service/Cargo.toml
+# Lockfile versionne : sans lui, cargo prend les dernieres versions publiees (uuid 1.27 exige rustc 1.89, build casse le 06/10)
+COPY apps-microservices/graph-rag-api-recherche-rust-service/Cargo.lock ./service/Cargo.lock
 COPY apps-microservices/graph-rag-api-recherche-rust-service/build.rs ./service/build.rs
 
 # Patch the path dependency to match Docker layout
