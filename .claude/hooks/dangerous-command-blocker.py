@@ -4,6 +4,7 @@ Adapted from claude-code-templates/dangerous-command-blocker for RAG-HP-PUB.
 """
 import json
 import re
+import shlex
 import sys
 
 # Level 1: Catastrophic — always block
@@ -59,6 +60,33 @@ FORCE_PUSH = [
 WHITELIST = [
     r'\bgit\s+rm\b',
 ]
+
+# A consumed resume prompt is retired by a MOVE into reprises/clos/ (rules-ondemand/
+# actions-a-faire-champs.md, § Reprise). The agent memory lives under
+# ~/.claude/projects/<p>/memory/, so the `.claude/` rule refused every such move
+# spelled with a literal path (A513). Allowed: mv / Move-Item whose operands ALL stay
+# inside a reprises/ directory. A removal there stays refused.
+REPRISES_DIR = r'\.claude/projects/[^/\s]+/memory/reprises/'
+
+
+def is_reprises_move(fragment):
+    """True when the fragment only moves files within a memory reprises/ directory."""
+    try:
+        tokens = shlex.split(fragment)
+    except ValueError:
+        return False
+    if not tokens or tokens[0].lower() not in ('mv', 'move-item'):
+        return False
+    operands = [t for t in tokens[1:] if not t.startswith('-')]
+    return bool(operands) and all(
+        re.search(REPRISES_DIR, t, re.IGNORECASE) and '..' not in t for t in operands
+    )
+
+
+def is_whitelisted(fragment):
+    """Recoverable operation on a critical path: allowed despite CRITICAL_PATHS."""
+    return (any(re.search(wp, fragment, re.IGNORECASE) for wp in WHITELIST)
+            or is_reprises_move(fragment))
 
 # Level 2: Critical path protection — block
 CRITICAL_PATHS = [
@@ -153,7 +181,7 @@ def main():
     for pattern in CRITICAL_PATHS:
         for fragment in fragments(command):
             if re.search(pattern, fragment, re.IGNORECASE):
-                if any(re.search(wp, fragment, re.IGNORECASE) for wp in WHITELIST):
+                if is_whitelisted(fragment):
                     continue
                 deny(f"BLOCKED: Command targets critical path: {fragment.strip()}")
 

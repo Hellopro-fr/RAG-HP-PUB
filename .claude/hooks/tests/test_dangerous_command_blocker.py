@@ -32,7 +32,7 @@ def decide(command):
     for pattern in blocker.CRITICAL_PATHS:
         for fragment in blocker.fragments(command):
             if re.search(pattern, fragment, re.IGNORECASE):
-                if any(re.search(wp, fragment, re.IGNORECASE) for wp in blocker.WHITELIST):
+                if blocker.is_whitelisted(fragment):
                     continue
                 return "critical_path"
     return "allow"
@@ -110,6 +110,33 @@ CASES = [
     ("git rm README.md && rm -rf .claude/", "critical_path"),
     ("git rm foo && rm -rf protos/", "critical_path"),
     ("echo ok; git rm a; rm libs/common-utils/x.py", "critical_path"),
+    # --- retiring a consumed resume prompt: a move INSIDE memory/reprises/ (A513) ---
+    # The memory lives under ~/.claude/projects/, which the `.claude/` rule caught.
+    ("mv C:/Users/USER/.claude/projects/d--DevHellopro-Workspaces-RAG-HP-PUB/memory/reprises/A1-spec.md"
+     " C:/Users/USER/.claude/projects/d--DevHellopro-Workspaces-RAG-HP-PUB/memory/reprises/clos/A1-spec.md",
+     "allow"),
+    ("mv ~/.claude/projects/p/memory/reprises/A1.md ~/.claude/projects/p/memory/reprises/clos/", "allow"),
+    ("Move-Item C:/Users/U/.claude/projects/p/memory/reprises/A1.md"
+     " C:/Users/U/.claude/projects/p/memory/reprises/clos/", "allow"),
+    ("Move-Item -Path ~/.claude/projects/p/memory/reprises/A1.md"
+     " -Destination ~/.claude/projects/p/memory/reprises/clos/", "allow"),
+    ("mv ~/.claude/projects/p/memory/reprises/A1.md ~/.claude/projects/p/memory/reprises/clos/;"
+     " mv ~/.claude/projects/p/memory/reprises/A2.md ~/.claude/projects/p/memory/reprises/clos/", "allow"),
+    # ...a removal there stays refused: only the move is recoverable by design
+    ("rm ~/.claude/projects/p/memory/reprises/A1.md", "critical_path"),
+    ("Remove-Item ~/.claude/projects/p/memory/reprises/clos/A1.md", "critical_path"),
+    # ...every operand must stay inside reprises/: no way out, no way in
+    ("mv ~/.claude/projects/p/memory/reprises/A1.md /tmp/", "critical_path"),
+    ("mv .claude/settings.json ~/.claude/projects/p/memory/reprises/clos/", "critical_path"),
+    ("mv ~/.claude/projects/p/memory/ACTIONS.md ~/.claude/projects/p/memory/reprises/clos/", "critical_path"),
+    ("mv ~/.claude/projects/p/memory/reprises/A1.md ~/.claude/projects/p/memory/reprises/clos/"
+     " ~/.claude/settings.json", "critical_path"),
+    # ...no climbing out with `..`
+    ("mv ~/.claude/projects/p/memory/reprises/../ACTIONS.md ~/.claude/projects/p/memory/reprises/clos/",
+     "critical_path"),
+    # ...and an allowed move does not excuse the next command
+    ("mv ~/.claude/projects/p/memory/reprises/A1.md ~/.claude/projects/p/memory/reprises/clos/"
+     " && rm -rf .claude/hooks", "critical_path"),
     # --- literal blocks are data, not commands ---
     ("git commit -m 'fix: the rm -rf / regex was too broad'", "allow"),
     ("git commit -m @'\nfix: mkfs pattern reworded\n'@", "allow"),
