@@ -28,8 +28,9 @@ reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-feature
 neo4rs = "0.8"
 
 # OpenAPI / Swagger
-utoipa = { version = "5", features = ["actix_extras"] }
-utoipa-swagger-ui = { version = "8", features = ["actix-web"] }
+utoipa = { version = "6", features = ["actix_extras"] }
+# vendored : archive Swagger UI embarquee dans le crate, pas de telechargement au build (FIX-008-01 / EXC-008-01)
+utoipa-swagger-ui = { version = "10", features = ["actix-web", "vendored"] }
 
 # Configuration
 dotenvy = "0.15"
