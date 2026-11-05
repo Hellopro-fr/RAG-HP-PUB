@@ -1,0 +1,45 @@
+name: 'Deploy GKE — opti-moteur-front (PROD, approbation requise)'
+
+# CD de opti-moteur-front (ns moteur-recherche) : recherche réelle de www.hellopro.fr (pages 2-4).
+# Contrairement aux wrappers shadow, ce service est en PROD visible : le job `approval` porte
+# l'Environment GitHub `production` (relecteurs obligatoires, branche `prod` seule) et le
+# déploiement n'est lancé qu'après approbation. Le réutilisable deploy-gke-service.yml est
+# appelé tel quel (build sur le runner, tag sha-<commit>, `kubectl set image`, rollout,
+# `rollout undo` si échec). RBAC : Role `github-deployer-gke-set-image` du ns moteur-recherche.
+# Path-filter = ce service + ce wrapper (JAMAIS le réutilisable -> pas de déclenchement de masse).
+# Éviter d'approuver vers 19h UTC : le service redémarre souvent à cette heure (tâche lourde).
+
+on:
+  push:
+    branches: [prod]
+    paths:
+      - 'apps-microservices/opti-moteur-front/**'
+      - '.github/workflows/deploy-gke-opti-moteur-front.yml'
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-gke-opti-moteur-front
+  cancel-in-progress: false
+
+jobs:
+  approval:
+    name: 'Approbation production'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - run: echo "Deploiement opti-moteur-front approuve (commit ${GITHUB_SHA::7}, branche ${GITHUB_REF_NAME})"
+
+  deploy:
+    needs: approval
+    uses: ./.github/workflows/deploy-gke-service.yml
+    with:
+      service_name: opti-moteur-front
+      dockerfile: apps-microservices/opti-moteur-front/Dockerfile
+      build_context: .
+      deployment: opti-moteur-front
+      container: opti-moteur-front
+      namespace: moteur-recherche
