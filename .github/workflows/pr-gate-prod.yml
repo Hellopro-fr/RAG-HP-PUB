@@ -2,9 +2,11 @@ name: 'PR gate — prod (sécurité + CI)'
 
 # Required check sur les PR `features/poc → prod` (branch protection). Bloque le merge — donc le CD —
 # si vulnérabilité CRITICAL. Gate sécu de CD2.b (le CD ne se déclenche qu'au merge sur prod).
-# ⚠️ Trivy via CLI direct (install.sh) et NON via aquasecurity/trivy-action : la v0.29.0 du composite
+# ⚠️ Trivy via CLI direct (archive de release) et NON via aquasecurity/trivy-action : la v0.29.0 du composite
 #    référence setup-trivy@v0.2.2 (tag supprimé upstream fin 2024) -> "Unable to resolve action". Le CLI
-#    est self-contained et immunisé. (Dette mineure : install.sh non épinglé -> pin possible à une release trivy.)
+#    est self-contained et immunisé. Version épinglée, archive vérifiée par une empreinte SHA-256 écrite ici
+#    (pas par le checksums.txt de la même release). Montée de version : changer TRIVY_VERSION et TRIVY_SHA256
+#    ensemble, empreinte lue dans trivy_<version>_checksums.txt de la release officielle.
 
 on:
   pull_request:
@@ -30,8 +32,19 @@ jobs:
           restore-keys: |
             trivy-db-${{ runner.os }}-
 
-      - name: Install Trivy CLI
-        run: curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b "$RUNNER_TEMP/bin"
+      - name: Install Trivy CLI (pinned, checksum verified)
+        env:
+          TRIVY_VERSION: 0.76.1
+          TRIVY_SHA256: c7cbe3137fb8a48a17574bede3dd6beb16742d1e9772929940fc90082c39d9c0
+        run: |
+          set -euo pipefail
+          archive="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          cd "$RUNNER_TEMP"
+          curl -sSfLO "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${archive}"
+          echo "${TRIVY_SHA256}  ${archive}" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/bin"
+          tar -xzf "${archive}" -C "$RUNNER_TEMP/bin" trivy
+          "$RUNNER_TEMP/bin/trivy" --version
 
       - name: Trivy filesystem scan (CRITICAL bloquant)
         env:
