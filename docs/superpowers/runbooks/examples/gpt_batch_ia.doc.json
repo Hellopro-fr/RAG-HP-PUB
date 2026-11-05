@@ -1,0 +1,56 @@
+{
+  "gpt_batch_ia": {
+    "database_id": 1,
+    "description": "Registre des batchs OpenAI (Batch API) soumis par les scripts BO. 1 ligne = 1 batch OpenAI (id_batch_gbi = identifiant rendu par OpenAI). Deux familles via type_batch_gbi : 1 = caracterisation_produit (classe Batch de gpt_batch.php, par rubrique ; DORMANT, dernière ligne le 2024-12-10, 7 lignes) ; 2 = optimisation_formulaire_fa (script_create_batch_optim_formulaire_fa.php, un batch par soir vers 18:07, relu le lendemain 06:00 par script_traite_batch_optim_formulaire_fa.php ; 321 lignes depuis 2025-04-22). Cycle : création etat 0, puis 1 (résultat récupéré) ou 2 (annulé / arrêté sur échec OpenAI) ou 3 (expiré, type 1 seulement). Les résultats eux-mêmes ne sont PAS ici (fichiers .jsonl sur disque et tables métier, ex. fa_question_reponse_precoche). Dates en heure serveur (Europe/Paris). Piège : les dates non renseignées valent '0000-00-00 00:00:00', jamais NULL.",
+    "primary_key": "id_gpt_batch_ia",
+    "default_order_by": "id_gpt_batch_ia DESC",
+    "rows": null,
+    "columns": {
+      "id_gpt_batch_ia": {
+        "type": "bigint",
+        "desc": "Identifiant interne auto-incrémenté (PK). Clé utilisée par le script FA pour marquer son batch (UPDATE ... WHERE id_gpt_batch_ia)."
+      },
+      "id_batch_gbi": {
+        "type": "varchar(255)",
+        "desc": "Identifiant du batch chez OpenAI, forme 'batch_' + 32 hex (ex. batch_6721881b2e4c819091cfdb9f92e1b5bd). Écrit à la création (gpt_batch.php:216, script_create_batch_optim_formulaire_fa.php:374) ; sert de clé aux UPDATE de la classe Batch (récupération, expiration). Indexé, non unique en base."
+      },
+      "id_rubrique_gbi": {
+        "type": "bigint",
+        "desc": "Rubrique Hellopro (ANNUAIRE_BO) dont les produits ont été soumis — type 1 seulement (2 rubriques observées : 2005584, 2016829). Vaut TOUJOURS 0 pour le type 2 (formulaire FA, pas de rubrique). Lu pour sauter une rubrique qui a déjà un batch type 1 en cours (script_alimentation_produit_landing_page_ia.php:51) et pour l'annulation par rubrique (gpt_batch.php:342)."
+      },
+      "type_batch_gbi": {
+        "type": "tinyint(1)",
+        "desc": "Famille de batch : 1 = caracterisation_produit (map list_type_batch de gpt_batch.php, prompt id 18) ; 2 = optimisation_formulaire_fa (valeur en dur dans le script FA). Aucune autre valeur observée. Toujours filtrer sur ce champ : les deux familles ont des cycles et des lecteurs distincts."
+      },
+      "libelle_batch_gbi": {
+        "type": "varchar(100)",
+        "desc": "Libellé redondant avec type_batch_gbi : 'caracterisation_produit' (type 1) ou 'optimisation_formulaire_fa' (type 2). Le script FA le filtre en plus du type."
+      },
+      "date_creation_batch_gbi": {
+        "type": "datetime",
+        "desc": "Date de soumission du batch (NOW() à l'INSERT). Type 2 : chaque soir vers 18:06-18:07. Le script FA en tire la date de relance proposée dans le mail d'échec (substr 0-10)."
+      },
+      "date_recuperation_batch_gbi": {
+        "type": "datetime",
+        "desc": "Date de récupération du résultat, posée avec etat_batch_gbi = 1 (gpt_batch.php:268, script_traite_batch_optim_formulaire_fa.php:129). '0000-00-00 00:00:00' tant que non récupéré, et pour tout batch annulé/arrêté (etat 2) ou expiré (etat 3)."
+      },
+      "date_suppression_batch_gbi": {
+        "type": "datetime",
+        "desc": "Date d'annulation / arrêt, posée avec etat_batch_gbi = 2 (gpt_batch.php:341 annuler_batch_en_cours, script_traite_batch_optim_formulaire_fa.php:154 sur échec OpenAI). '0000-00-00 00:00:00' sinon. Piège : l'expiration (etat 3, desactive_batch) ne la renseigne PAS."
+      },
+      "etat_batch_gbi": {
+        "type": "tinyint(1)",
+        "desc": "État du batch : 0 = soumis, en attente de relecture (seul état que les lecteurs reprennent) ; 1 = résultat récupéré et traité ; 2 = annulé (annuler_batch_en_cours, par rubrique) ou arrêté sur échec définitif OpenAI (script FA, décision 'arreter', mail '[TRACE][OPTIM FORMULAIRE FA] - Batch en échec, arrêté') ; 3 = expiré (desactive_batch, type 1, jamais observé). Observé au 2026-11-05 : 1 (320 lignes), 2 (8 lignes, toutes type 2), 0 (aucune)."
+      },
+      "est_supprime_batch_gbi": {
+        "type": "tinyint(1)",
+        "desc": "Drapeau de retrait : 1 accompagne toujours etat_batch_gbi 2 ou 3, 0 sinon. Les lecteurs du type 1 exigent etat 0 ET est_supprime 0 ; le lecteur FA ne filtre que etat_batch_gbi = 0."
+      }
+    },
+    "relations": [
+      {"colonne": "id_rubrique_gbi", "cible": "rubrique Hellopro (ANNUAIRE_BO), type 1 seulement ; 0 pour le type 2"},
+      {"colonne": "id_batch_gbi", "cible": "batch OpenAI (Batch API), hors base"}
+    ],
+    "notes": "Écrivains : classe Batch BO/fichiers_communs_bo_front/hellopro_fr/chatgpt/gpt_batch.php (create_batch:215, get_file_batch_output_result:266, desactive_batch:281, annuler_batch_en_cours:338), appelée par BO/script/chatgpt/caracteristique_ia_produits_rubrique_batch.php:537 et script_recup_caracteristique_ia_produit_rubrique_batch.php:707/1052 ; BO/script/annuaire/optimisation_formulaire_fa/script_create_batch_optim_formulaire_fa.php:372 (INSERT type 2) et script_traite_batch_optim_formulaire_fa.php:126/150 (UPDATE). Lien de connexion : LINK_MYSQLI_ANNUAIRE_BO. Pour juger la santé du flux FA : SELECT etat_batch_gbi, date_creation_batch_gbi FROM gpt_batch_ia WHERE type_batch_gbi = 2 ORDER BY id_gpt_batch_ia DESC LIMIT 10 — une suite d'etat 2 signifie que les formulaires FA ne sont plus recalculés."
+  }
+}

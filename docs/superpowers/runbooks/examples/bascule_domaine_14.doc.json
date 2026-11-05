@@ -1,0 +1,120 @@
+{
+  "bascule_domaine_14": {
+    "database_id": 10,
+    "description": "Registre des bascules d'un domaine scrappé vers le statut 14 « sans fiche produits » (chantier A456). 1 ligne = 1 aller (ou 1 rattrapage) d'UN domaine ; un domaine peut avoir plusieurs lignes dans le temps, au plus une 'en_cours' (index unique sur la colonne générée en_cours_domaine). L'aller : l'opérateur confirme dans le BO (modale qui affiche les comptes N/M/R/D), statut_dspi passe à 14, puis le script de fond script_bascule_14_retrait.php retire les fiches (Milvus produits_3, nœuds GraphRAG, SFPI, PSI) en écrivant d'abord leur état 'avant' dans bascule_domaine_14_manifeste. Le retour (14 vers 13) rejoue ce manifeste (script_bascule_14_inverse.php). La ligne la plus récente non 'annule' d'un domaine alimente le badge de la liste des domaines. Dates en heure serveur (Europe/Paris).",
+    "primary_key": "id",
+    "default_order_by": "id DESC",
+    "rows": null,
+    "columns": {
+      "id": {
+        "type": "bigint",
+        "desc": "Identifiant de la bascule (PK). Référencé par bascule_domaine_14_manifeste.id_bascule et passé au script de fond (argument id_bascule)."
+      },
+      "id_domaine": {
+        "type": "bigint",
+        "desc": "Domaine basculé = domaine_scrapping_produit_ia.id_domaine_scrapping_produit_ia (même base). Index (id_domaine, etat)."
+      },
+      "etat": {
+        "type": "enum",
+        "desc": "ENUM 'en_cours','termine','echoue','interrompu','annule'. en_cours = aller lancé, battement vivant attendu ; termine = retrait fini (ou rien à retirer : comptes tous à 0) ; echoue = erreur du retrait, ou refus binlog_row_image (sortie 'arret' du script, enregistrée 'echoue'), ou battement périmé constaté à l'ouverture d'un nouvel aller ; interrompu = retrait arrêté (verrou du domaine, état du domaine changé en cours de route), et état initial d'une ligne de rattrapage ; annule = le passage en 14 a été refusé (statut changé ou MAJ démarrée entre lecture et écriture), rien n'a été retiré. echoue / interrompu / en_cours périmé sont reprenables (même ligne remise 'en_cours'). Piège : un 'en_cours' dont date_battement a plus de 30 min est traité comme échoué par le code, sans que la colonne ait changé."
+      },
+      "comptes_affiches": {
+        "type": "text",
+        "desc": "JSON {\"N\":int,\"M\":int,\"R\":int,\"D\":int} des comptes montrés à l'opérateur dans la modale au moment de confirmer : N = fiches actives (SFPI est_dernier = 1 non retirées par MAJ), M = produits actifs (PSI est_actif = 1), R = produits au RAG (id_produit_milvus renseigné), D = produits portant un devis. Écrit à l'INSERT ; jamais relu en base (trace d'audit)."
+      },
+      "comptes_recomptes": {
+        "type": "text",
+        "desc": "Même JSON N/M/R/D, recompté côté serveur juste avant l'INSERT ; l'aller est refusé si un compte a augmenté depuis l'affichage. En rattrapage, identique à comptes_affiches (un seul calcul). Jamais relu en base."
+      },
+      "user_bo": {
+        "type": "varchar(100)",
+        "desc": "Login BO de l'opérateur qui a confirmé l'aller (session). Valeur fixe 'rattrapage' pour une ligne créée par le mode rattrapage du script de retrait (domaines déjà à 14). Relu par le script de retrait."
+      },
+      "date_debut": {
+        "type": "datetime",
+        "desc": "Création de la ligne (NOW() à l'INSERT). Jamais modifiée, y compris lors d'une reprise."
+      },
+      "date_battement": {
+        "type": "datetime",
+        "desc": "Dernier signe de vie du retrait : NOW() à l'INSERT, puis à chaque lot traité et à chaque reprise. Sert à décider la péremption : plus de 1800 s sans battement sur un 'en_cours' = retrait mort (BASCULE14_BATTEMENT_PERIME_S). Sur une ligne finie, vaut souvent date_fin."
+      },
+      "date_fin": {
+        "type": "datetime",
+        "desc": "Fin de l'aller : posée pour termine, echoue, interrompu, annule ; NULL tant que 'en_cours', remise à NULL par une reprise."
+      },
+      "message": {
+        "type": "text",
+        "desc": "Motif lisible de la fin ou de l'échec (tronqué à 250 octets par le script de retrait), ex. 'battement périmé', 'flip refused by the database', 'retrait deja en cours (verrou du domaine)', 'rattrapage : ligne creee avant reprise'. NULL sur un succès ; remis à NULL à chaque reprise. Écrit, jamais relu par le code."
+      },
+      "en_cours_domaine": {
+        "type": "bigint",
+        "desc": "Colonne GÉNÉRÉE (STORED) = id_domaine si etat = 'en_cours', NULL sinon ; index UNIQUE uniq_en_cours_domaine : c'est le verrou « au plus un retrait en cours par domaine » (un 2e INSERT échoue en 1062). Jamais écrite directement. Pour lister les retraits en cours : WHERE en_cours_domaine IS NOT NULL."
+      }
+    },
+    "relations": [
+      {"colonne": "id_domaine", "cible": "domaine_scrapping_produit_ia.id_domaine_scrapping_produit_ia"},
+      {"colonne": "id", "cible": "bascule_domaine_14_manifeste.id_bascule (1 bascule, N lignes de manifeste)"}
+    ],
+    "notes": "Créée par BO/admin/repertoire_test/moulinettes_rindra/script_divers/ponctuel/roadmap_v1/script_migration_a456_bascule_14.php (lien LINK_MYSQLI_HELLOPRO_IA). Écrivains : BO/admin/repertoire_test/moulinettes_interne/scrapping_produit_ia/ajax/ajax_domaine_sans_fp.php (INSERT de l'aller :91, annule :111, termine :123, péremption :84, reprise :179/182) ; BO/script/chatgpt/script_bascule_14_retrait.php (reprise :190, état final :203, battement :209, INSERT rattrapage :648). Lecteurs : fonctions/fonctions_bascule_14.php:59/89 (dernier aller, péremption), ajax/ajax_scrapping_v2.php:927 (badge de la liste des domaines), script_bascule_14_inverse.php:238. Au 2026-11-05 : 1 ligne (domaine 1650, rattrapage, termine)."
+  },
+  "bascule_domaine_14_manifeste": {
+    "database_id": 10,
+    "description": "Photographie 'avant retrait' des fiches d'un domaine basculé en 14 (chantier A456) : 1 ligne = 1 fiche scrappée (SFPI) touchée par UNE bascule, clé unique (id_bascule, id_sfpi). Écrite en une transaction par script_bascule_14_retrait.php AVANT toute suppression, puis relue et comparée (un manifeste incohérent est effacé) ; une reprise relit le manifeste existant sans le réécrire. Population : toutes les SFPI est_dernier_sfpi = 1 du domaine, fiches déjà retirées par MAJ comprises. Sert au retour 14 vers 13 (script_bascule_14_inverse.php restaure SFPI, PSI, Milvus, file GraphRAG à partir des colonnes *_avant) et au compte de fiches restaurables affiché dans le BO.",
+    "primary_key": "id_manifeste",
+    "default_order_by": "id_manifeste DESC",
+    "rows": null,
+    "columns": {
+      "id_manifeste": {
+        "type": "bigint",
+        "desc": "Identifiant technique auto-incrémenté (PK)."
+      },
+      "id_bascule": {
+        "type": "bigint",
+        "desc": "Bascule à laquelle appartient la ligne = bascule_domaine_14.id. Premier membre de la clé unique uniq_bascule_sfpi ; toujours filtrer dessus."
+      },
+      "id_sfpi": {
+        "type": "bigint",
+        "desc": "Fiche scrappée = scrapping_fiche_produit_ia.id_scrapping_fiche_produit_ia (même base). Unique par bascule."
+      },
+      "est_dernier_avant": {
+        "type": "tinyint",
+        "desc": "Valeur de scrapping_fiche_produit_ia.est_dernier_sfpi avant retrait. Vaut 1 par construction (seules les SFPI est_dernier = 1 sont prises) ; le badge du BO compte les lignes à 1 comme fiches restaurables."
+      },
+      "est_supprime_avant": {
+        "type": "tinyint",
+        "desc": "Valeur de scrapping_fiche_produit_ia.est_supprime_maj_sfpi avant retrait (1 = fiche déjà retirée par une MAJ). Restaurée telle quelle par le retour."
+      },
+      "origine_avant": {
+        "type": "varchar(255)",
+        "desc": "Valeur de scrapping_fiche_produit_ia.origine_retrait_sfpi avant retrait ; NULL si la fiche n'avait pas d'origine de retrait (cas de toutes les lignes observées)."
+      },
+      "updated_at_avant": {
+        "type": "datetime",
+        "desc": "Valeur de scrapping_fiche_produit_ia.updated_at_sfpi avant retrait (date de dernière mise à jour de la fiche, PAS la date de la bascule ; celle-ci est dans bascule_domaine_14)."
+      },
+      "id_psi": {
+        "type": "bigint",
+        "desc": "Produit publié lié = produit_scrapping_ia.id_produit_scrapping_psi. Piège : la jointure se fait sur id_produit_scrapping_psi = id_scrapping_fiche_produit_ia, donc id_psi vaut id_sfpi ou NULL (fiche sans produit publié)."
+      },
+      "est_actif_psi_avant": {
+        "type": "tinyint",
+        "desc": "Valeur de produit_scrapping_ia.est_actif_psi avant retrait ; NULL quand id_psi est NULL. Le retour ne réactive la PSI que si elle valait 1."
+      },
+      "id_produit_milvus_avant": {
+        "type": "varchar(64)",
+        "desc": "Valeur de produit_scrapping_ia.id_produit_milvus avant retrait (identifiant du vecteur dans la collection Milvus produits_3) ; NULL ou vide = produit absent du RAG. Le retrait supprime ces vecteurs ; le retour s'en sert pour réindexer."
+      },
+      "present_graf_avant": {
+        "type": "tinyint",
+        "desc": "1 si la fiche était dans la file enqueue_produit_graf_ia (GraphRAG) avant retrait, 0 sinon (défaut 0, NOT NULL). Le retrait purge cette file ; le retour la reconstitue."
+      }
+    },
+    "relations": [
+      {"colonne": "id_bascule", "cible": "bascule_domaine_14.id"},
+      {"colonne": "id_sfpi", "cible": "scrapping_fiche_produit_ia.id_scrapping_fiche_produit_ia"},
+      {"colonne": "id_psi", "cible": "produit_scrapping_ia.id_produit_scrapping_psi (égal à id_sfpi quand renseigné)"},
+      {"colonne": "present_graf_avant", "cible": "enqueue_produit_graf_ia.id_produit_scrapping_epgi"}
+    ],
+    "notes": "Créée par script_migration_a456_bascule_14.php (lien LINK_MYSQLI_HELLOPRO_IA). Écrivain unique : BO/script/chatgpt/script_bascule_14_retrait.php, b14r_manifeste_ecrire() :316 (INSERT par lots de 500 en transaction) et DELETE :360 si la relecture diffère. Lecteurs : script_bascule_14_retrait.php:291 (reprise), script_bascule_14_inverse.php:248 (retour), BO/admin/repertoire_test/moulinettes_interne/scrapping_produit_ia/ajax/ajax_scrapping_v2.php:1178 (compte restaurable). Au 2026-11-05 : 1 360 lignes, toutes id_bascule = 1 (domaine 1650, fiches sans PSI ni vecteur)."
+  }
+}
