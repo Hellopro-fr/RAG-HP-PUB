@@ -688,6 +688,27 @@ services:
       start_period: 30s
     logging: *logging_defaults
 
+  # Databasus: backups MySQL/Postgres pilotes depuis l'UI (port 4005, localhost uniquement).
+  databasus:
+    image: databasus/databasus:v3.64.0
+    container_name: databasus
+    profiles: [ "app", "mcp" ]
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:4005:4005"
+    volumes:
+      - databasus_data:/databasus-data
+    networks:
+      - services-net
+      - meps-app-net # mep-db (meps-app), cree hors de ce compose
+    healthcheck:
+      test: [ "CMD", "databasus", "healthcheck" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    logging: *logging_defaults
+
   # CUTOVER 2026-05-07: Python api-gateway commented out, replaced by api-gateway-go-service.
   # Restore by uncommenting + setting Go port back to 8501.
   api-gateway-service:
@@ -2841,6 +2862,9 @@ networks:
     driver: bridge
     name: global-services-net
     external: true
+  meps-app-net:
+    name: meps-app_mep-network
+    external: true
 volumes:
   elasticsearch-data:
     driver: local
@@ -2853,3 +2877,4 @@ volumes:
   gr_neo4j_data:
   gr_neo4j_logs:
   gateway_mysql_data:
+  databasus_data:
