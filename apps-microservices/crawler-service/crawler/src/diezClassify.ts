@@ -47,16 +47,56 @@ export const classifyFragment = (fragment: string): Classification => {
  * Per-class fragment strip: remove `#...` iff the fragment classifies as a cosmetic
  * `anchor` (incl. an empty trailing `#`); keep `spa`/`ambiguous` (routes). Pure
  * string op so the empty-`#` case is reliable.
+ * A517: with DIEZ_FACET_STRIP_ENABLED=true, also remove a layered-navigation filter
+ * fragment (isLayeredFilterFragment) that the classification keeps as spa/ambiguous.
+ * Flag off -> same output as the anchor-only strip.
  */
 export const applyPerClassStrip = (url: string): string => {
     const i = url.indexOf("#");
     if (i === -1) return url;
-    return classifyFragment(url.slice(i + 1)) === "anchor" ? url.slice(0, i) : url;
+    const fragment = url.slice(i + 1);
+    if (classifyFragment(fragment) === "anchor") return url.slice(0, i);
+    if (facetFragmentStripEnabled() && isLayeredFilterFragment(fragment)) return url.slice(0, i);
+    return url;
 };
 
 /** Kill-switch, read at call time (testable). */
 export const perClassEnabled = (): boolean =>
     (process.env.DIEZ_PERCLASS_ENABLED ?? "false").toLowerCase() === "true";
+
+/**
+ * A517 — PrestaShop 1.6 "blocklayered" filter fragment, recognised by its SHAPE, e.g.
+ * "categories-caves_a_vin/fabricant-sayl_barcelona-casselin" (no leading '/'). Every
+ * '/'-separated segment is "<group>-<value>[-<value>…]" as Tools::link_rewrite writes it
+ * (lowercase ASCII, '_' inside a value, '.' in a price), starts with a letter (the group
+ * name), and at least one segment is not "page-N" (a filter + page-N is still a filter).
+ * Deliberately NOT matched (measured on the product-sheet base on 2026-11-06):
+ *   - anything starting with '/' (or '!/'): "#/page-7" pagination, "#/produits/42" SPA
+ *     routes, PrestaShop product combinations "#/10-couleur-rouge" (25 225 product sheets);
+ *   - a segment starting with a digit: combination anchors "#1009_25-couleur-gris_7016/…".
+ * Pure; the call site (applyPerClassStrip) gates on facetFragmentStripEnabled().
+ */
+const LAYERED_FILTER_SEGMENT_RE = /^[a-z][a-z0-9_]*(?:-[a-z0-9_.]+)+$/;
+const LAYERED_PAGE_SEGMENT_RE = /^page-\d+$/;
+
+export const isLayeredFilterFragment = (fragment: string): boolean => {
+    let frag: string;
+    try {
+        frag = decodeURIComponent(fragment);
+    } catch {
+        // Malformed encoding — match against the raw fragment.
+        frag = fragment;
+    }
+    if (frag.startsWith("!")) frag = frag.slice(1);
+    if (frag.length === 0 || frag.startsWith("/")) return false;
+    const segments = frag.split("/");
+    if (!segments.every((s) => LAYERED_FILTER_SEGMENT_RE.test(s))) return false;
+    return segments.some((s) => !LAYERED_PAGE_SEGMENT_RE.test(s));
+};
+
+/** Kill-switch (A517), read at call time (testable). Default OFF. */
+export const facetFragmentStripEnabled = (): boolean =>
+    (process.env.DIEZ_FACET_STRIP_ENABLED ?? "false").toLowerCase() === "true";
 
 /**
  * Action-anchor shapes (A347: two forms). Form 1: a leading token, ':', then a 'key=' payload — e.g.
