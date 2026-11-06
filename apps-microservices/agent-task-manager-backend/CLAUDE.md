@@ -24,7 +24,8 @@ Frontend: `apps-microservices/agent-task-manager-frontend`.
 
 ## Run / test
 ```bash
-docker compose up -d --build          # full stack, see README
+docker compose up -d --build          # dev stack from this directory (smoke.sh, demo)
+# deployment: repo root, `docker compose --profile agent-task-manager up -d --build`, ATB_* in root .env
 bash scripts/test-pg.sh               # integration tests (needs Docker), AC-1.x per file
 cargo test -p atb-core                # domain table + proptest
 cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings

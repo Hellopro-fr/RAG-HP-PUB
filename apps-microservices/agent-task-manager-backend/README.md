@@ -9,15 +9,46 @@ decisions and deviations: [`docs/DECISIONS.md`](docs/DECISIONS.md) · completion
 
 ## Run the whole stack
 
+### Deployment: root compose (profile `agent-task-manager`)
+
+From the repository root, like every other service. Set in the root `.env`:
+
+| Variable | Required | Purpose |
+|---|---|---|
+| `ATB_POSTGRES_PASSWORD` | yes | Postgres superuser |
+| `ATB_OWNER_PASSWORD` | yes | `atb_owner` role (migrations) |
+| `ATB_APP_PASSWORD` | yes | `atb_app` runtime role (no UPDATE/DELETE on events) |
+| `ATB_BOOTSTRAP_ADMIN_PASSWORD` | yes | first human admin (`ATB_BOOTSTRAP_ADMIN_LOGIN`, default `admin`) |
+| `ATB_GATEWAY_SHARED_SECRET` | behind the gateway | same value as the gateway's static header `X-Agent-Gateway-Secret` |
+| `ATB_MCP_ALLOWED_HOSTS` | behind the gateway | add the host name the gateway uses to reach this service |
+| `ATB_PORT` | no | published port of `agent-task-manager-lb` (default `8620`; `127.0.0.1:8620` to keep it local) |
+
+Optional tuning, same names prefixed `ATB_`: `LEASE_TTL_SECS`, `PREFERRED_GRACE_SECS`,
+`SWEEP_INTERVAL_SECS`, `MAX_REPORTS_PER_MIN`, `CORS_ORIGINS`, `COOKIE_SECURE`, `RUST_LOG`.
+
 ```bash
-cp .env.example .env          # set every password (POSTGRES_, ATB_OWNER_, ATB_APP_, ATB_BOOTSTRAP_ADMIN_)
+docker compose --profile agent-task-manager up -d --build --wait agent-task-manager-lb
+docker compose --profile agent-task-manager ps   # postgres, server, web, lb healthy; migrate exited 0
+```
+
+Containers: `agent-task-manager-{postgres,migrate,server,web,lb}` on `services-net`. Postgres is
+not published (`expose` only).
+
+### Development and tests: this directory's compose
+
+```bash
+# .env here: POSTGRES_PASSWORD, ATB_OWNER_PASSWORD, ATB_APP_PASSWORD, ATB_BOOTSTRAP_ADMIN_PASSWORD
 docker compose up -d --build  # postgres, migrate, server, web, ingress
 open http://localhost:8620    # log in with ATB_BOOTSTRAP_ADMIN_LOGIN / _PASSWORD
 scripts/demo                  # two agents work, ask and answer through MCP while you watch
 ```
 
+`scripts/smoke.sh` drives this compose. `scripts/demo --base <url>` works against either stack.
+
 One origin (Caddy, `deploy/Caddyfile`): `/api/*` and `/mcp` go to the Rust server (SSE unbuffered,
-uncompressed), everything else to Next.js. Postgres is also published on `127.0.0.1:5440`.
+uncompressed), everything else to Next.js. Upstreams come from `ATB_SERVER_UPSTREAM` /
+`ATB_WEB_UPSTREAM` (defaults `server:8621` / `web:3020` for this compose). In this compose,
+Postgres is also published on `127.0.0.1:5440`.
 
 ## Connect an agent (MCP)
 
