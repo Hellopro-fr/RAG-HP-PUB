@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE leases SET paused = false,\n                           expires_at = COALESCE($2, expires_at), updated_at = $3\n                       WHERE task_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Timestamptz",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d6fb1280ee5a4261fc20bf8c22cee9ccc83a6ae8f278560303d4c6c3b910a4c8"
+}

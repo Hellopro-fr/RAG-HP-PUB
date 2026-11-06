@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE tasks SET spec_version = $2, spec_outdated = false, version = version + 1,\n                       updated_at = $3\n                   WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3196004b302da960b78694712637bfca3e19c527f7b877d132ebc39999d77b55"
+}

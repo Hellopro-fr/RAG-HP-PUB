@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE actors SET last_seen_at = $2\n               WHERE id = $1\n                 AND (last_seen_at IS NULL OR last_seen_at < $2::timestamptz - interval '5 seconds')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "30ee69cb8316bd638fd792877c5165d40dee873f56e996c10246a5c9a1b386e4"
+}

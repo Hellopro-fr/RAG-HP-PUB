@@ -1,0 +1,160 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT at.id, at.n, at.actor_id, a.name AS actor_name, at.actor_model, at.started_at,\n               at.ended_at, at.outcome, at.commit_sha, at.branch, at.handoff_note, at.trace_id\n           FROM attempts at JOIN actors a ON a.id = at.actor_id\n           WHERE at.task_id = $1 ORDER BY at.n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "attempts",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "n",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "attempts",
+            "name": "n"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "actor_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "attempts",
+            "name": "actor_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "actor_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "actors",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "actor_model",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "attempts",
+            "name": "actor_model"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "started_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "attempts",
+            "name": "started_at"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "ended_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "attempts",
+            "name": "ended_at"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "outcome",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "attempts",
+            "name": "outcome"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "commit_sha",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "attempts",
+            "name": "commit_sha"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "branch",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "attempts",
+            "name": "branch"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "handoff_note",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "attempts",
+            "name": "handoff_note"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "trace_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "attempts",
+            "name": "trace_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "f9c82bece9d1783a2883842403420c0384ec05e8c318ca9a2795e89a221233b9"
+}

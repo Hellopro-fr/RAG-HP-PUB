@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT at.n, a.name, at.outcome, at.handoff_note FROM attempts at\n               JOIN actors a ON a.id = at.actor_id WHERE at.task_id = $1 ORDER BY at.n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "n",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "attempts",
+            "name": "n"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "actors",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "outcome",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "attempts",
+            "name": "outcome"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "handoff_note",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "attempts",
+            "name": "handoff_note"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "080f5e9546b0091620adbf653d2f58f2ab6101d11c5aabb618a5be170d744183"
+}

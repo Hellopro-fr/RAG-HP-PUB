@@ -1,0 +1,222 @@
+#!/usr/bin/env python3
+"""Agent Task Board demo (§11 phase 1 deliverable).
+
+Creates a project and simulates two agents (alice, bob) working, asking and answering through the
+real MCP endpoint, while you watch the board in the browser.
+
+    scripts/demo                 # against http://localhost:8620 (docker compose up), 1.5 s pauses
+    scripts/demo --pause 0       # fast
+    scripts/demo --assert        # fast + verify the outcome; prints ATB_DEMO_OK
+
+Needs only Python 3 (stdlib). Reads the admin credentials from .env.
+"""
+
+import argparse
+import http.cookiejar
+import json
+import os
+import pathlib
+import sys
+import time
+import urllib.error
+import urllib.request
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+
+
+def load_env() -> dict:
+    env = {}
+    path = ROOT / ".env"
+    if path.exists():
+        for line in path.read_text().splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, v = line.split("=", 1)
+                env[k.strip()] = v.strip()
+    env.update({k: v for k, v in os.environ.items() if k.startswith("ATB_")})
+    return env
+
+
+class Rest:
+    """Human admin over REST (session cookie)."""
+
+    def __init__(self, base: str):
+        self.base = base
+        self.opener = urllib.request.build_opener(
+            urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar())
+        )
+
+    def call(self, method: str, path: str, body=None):
+        data = None if body is None else json.dumps(body).encode()
+        req = urllib.request.Request(self.base + path, data=data, method=method)
+        req.add_header("content-type", "application/json")
+        try:
+            with self.opener.open(req) as res:
+                raw = res.read()
+                return json.loads(raw) if raw else None
+        except urllib.error.HTTPError as e:
+            sys.exit(f"{method} {path} -> {e.code}: {e.read().decode()}")
+
+
+class Agent:
+    """An agent speaking MCP (JSON-RPC over Streamable HTTP) with its bearer token."""
+
+    def __init__(self, base: str, name: str, token: str):
+        self.url = base + "/mcp"
+        self.name = name
+        self.token = token
+        self.next_id = 0
+        self.protocol = None
+        init = self.rpc(
+            "initialize",
+            {
+                "protocolVersion": "2025-06-18",
+                "capabilities": {},
+                "clientInfo": {"name": f"demo-{name}", "version": "0.1.0"},
+            },
+        )
+        self.protocol = init.get("protocolVersion")
+        self.instructions = init.get("instructions", "")
+
+    def rpc(self, method: str, params: dict) -> dict:
+        self.next_id += 1
+        payload = {"jsonrpc": "2.0", "id": self.next_id, "method": method, "params": params}
+        req = urllib.request.Request(self.url, data=json.dumps(payload).encode(), method="POST")
+        req.add_header("authorization", f"Bearer {self.token}")
+        req.add_header("content-type", "application/json")
+        req.add_header("accept", "application/json, text/event-stream")
+        if self.protocol:
+            req.add_header("mcp-protocol-version", self.protocol)
+        try:
+            with urllib.request.urlopen(req, timeout=40) as res:
+                raw = res.read().decode()
+                kind = res.headers.get("content-type", "")
+        except urllib.error.HTTPError as e:
+            sys.exit(f"[{self.name}] MCP {method} -> {e.code}: {e.read().decode()}")
+        if "text/event-stream" in kind:
+            messages = [json.loads(l[5:]) for l in raw.splitlines() if l.startswith("data:") and l[5:].strip()]
+            msg = next(m for m in reversed(messages) if m.get("id") == self.next_id)
+        else:
+            msg = json.loads(raw)
+        if "error" in msg:
+            sys.exit(f"[{self.name}] MCP {method} error: {msg['error']}")
+        return msg["result"]
+
+    def tool(self, name: str, **args):
+        result = self.rpc("tools/call", {"name": name, "arguments": args})
+        text = result["content"][0]["text"]
+        summary, _, body = text.partition("\n")
+        print(f"  [{self.name}] {name}: {summary}")
+        if result.get("isError"):
+            sys.exit(f"[{self.name}] {name} failed: {text}")
+        return json.loads(body) if body else {}
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--base", default=None, help="ingress URL (default http://localhost:$ATB_PORT)")
+    parser.add_argument("--pause", type=float, default=1.5, help="seconds between steps")
+    parser.add_argument("--assert", dest="check", action="store_true", help="verify the outcome")
+    args = parser.parse_args()
+    env = load_env()
+    base = args.base or f"http://localhost:{env.get('ATB_PORT', '8620')}"
+    pause = 0.0 if args.check and args.pause == 1.5 else args.pause
+
+    def step(msg: str) -> None:
+        print(f"\n== {msg}")
+        time.sleep(pause)
+
+    admin = Rest(base)
+    admin.call("POST", "/api/auth/login", {
+        "login": env.get("ATB_BOOTSTRAP_ADMIN_LOGIN", "admin"),
+        "password": env["ATB_BOOTSTRAP_ADMIN_PASSWORD"],
+    })
+    step("project, approved spec and three tasks (one blocked by another)")
+    project = admin.call("POST", "/api/projects", {
+        "name": f"Démo {time.strftime('%H:%M:%S')}",
+        "workflow": {"spec_gate": True, "test_gate": "none", "review_gate": "none",
+                     "require_different_model": False, "max_rejections": 3,
+                     "lease_ttl_secs": 600, "preferred_grace_secs": 120},
+    })["id"]
+    spec = admin.call("POST", f"/api/projects/{project}/specs", {
+        "title": "Export des devis",
+        "body_md": "Exporter les devis du jour dans un fichier.",
+        "acceptance_criteria": [
+            {"id": "AC-1", "text": "WHEN l'export tourne THE SYSTEM SHALL écrire un fichier",
+             "verify": {"kind": "human"}},
+        ],
+    })["spec_id"]
+    admin.call("POST", f"/api/specs/{spec}/versions/1/approve", {})
+    parser_task = admin.call("POST", f"/api/projects/{project}/tasks",
+                             {"title": "Parser les devis", "spec_id": spec, "priority": 2})["task_id"]
+    writer_task = admin.call("POST", f"/api/projects/{project}/tasks",
+                             {"title": "Écrire le fichier", "spec_id": spec, "priority": 1})["task_id"]
+    admin.call("POST", f"/api/projects/{project}/tasks",
+               {"title": "Planifier l'export", "spec_id": spec, "blocked_by": [parser_task]})
+    print(f"  board: {base}/projects/{project}")
+
+    step("two agents")
+    alice_tok = admin.call("POST", "/api/actors", {"kind": "agent", "name": f"alice-{project[-4:]}",
+                                                   "model": "model-a", "roles": ["implementer"]})["token"]
+    bob_tok = admin.call("POST", "/api/actors", {"kind": "agent", "name": f"bob-{project[-4:]}",
+                                                 "model": "model-b", "roles": ["implementer", "planner"]})["token"]
+    alice = Agent(base, "alice", alice_tok)
+    bob = Agent(base, "bob", bob_tok)
+    assert "list_ready" in alice.instructions
+
+    step("alice looks for work and claims the best task")
+    alice.tool("list_ready", project_id=project)
+    a = alice.tool("claim", project_id=project, trace_id="demo-trace-alice")
+    alice_task, alice_lease = a["task_id"], a["lease_token"]
+    step("alice reports progress")
+    alice.tool("report", task_id=alice_task, lease_token=alice_lease, kind="progress",
+               body="Lecture des devis : 12 lignes analysées.")
+    alice.tool("heartbeat", task_id=alice_task, lease_token=alice_lease)
+    step("bob claims the next task and reports an assumption")
+    b = bob.tool("claim", project_id=project, trace_id="demo-trace-bob")
+    bob_task, bob_lease = b["task_id"], b["lease_token"]
+    bob.tool("report", task_id=bob_task, lease_token=bob_lease, kind="assumption",
+             body="Je suppose un séparateur point-virgule.")
+    step("alice is unsure: blocking question with a handoff note")
+    q = alice.tool("ask", task_id=alice_task, lease_token=alice_lease, question="CSV ou JSON pour l'export ?",
+                   blocking=True, options=["csv", "json"],
+                   handoff_note="Parsing fait ; reste le format de sortie (src/export.rs).")
+    step("bob answers alice's question")
+    bob.tool("answer", question_id=q["question_id"], answer="CSV, séparateur point-virgule.")
+    step("alice sees the answer and takes the task back")
+    updates = alice.tool("wait_for_updates", project_id=project, cursor=0, timeout_s=5)
+    assert any(e["type"] == "question.answered" for e in updates["events"]), updates
+    a = alice.tool("claim", project_id=project, task_id=alice_task)
+    alice_lease = a["lease_token"]
+    alice.tool("report", task_id=alice_task, lease_token=alice_lease, kind="action",
+               body="Export CSV implémenté.")
+    alice.tool("submit_for_test", task_id=alice_task, lease_token=alice_lease, commit_sha="a1b2c3d",
+               branch="feat/export-csv")
+    step("bob releases his task with a handoff note")
+    bob.tool("release", task_id=bob_task, lease_token=bob_lease,
+             handoff_note="Squelette en place dans src/writer.rs ; tests à écrire.")
+
+    if args.check:
+        board = admin.call("GET", f"/api/projects/{project}/board")
+        states = {t["id"]: t["state"] for t in board["tasks"]}
+        assert states[alice_task] == "done", states
+        assert states[bob_task] == "ready", states
+        blocked = [t for t in board["tasks"] if t["blocked"]]
+        assert not blocked, "the parser task is done, so nothing is blocked any more"
+        events = admin.call("GET", f"/api/projects/{project}/events?after=0&limit=1000")
+        types = [e["type"] for e in events]
+        for needed in ("lease.claimed", "activity.reported", "question.asked", "question.answered",
+                       "lease.released", "attempt.ended"):
+            assert needed in types, f"missing {needed}"
+        seqs = [e["seq"] for e in events]
+        assert seqs == list(range(1, len(seqs) + 1)), "gapless per-project sequence"
+        rebuild = admin.call("GET", f"/api/projects/{project}/rebuild-check")
+        assert rebuild["ok"], rebuild
+        print(f"\n{len(events)} events, projections rebuilt identically from the log.")
+        print("ATB_DEMO_OK")
+    else:
+        print(f"\nDone. Board: {base}/projects/{project}")
+
+
+if __name__ == "__main__":
+    main()

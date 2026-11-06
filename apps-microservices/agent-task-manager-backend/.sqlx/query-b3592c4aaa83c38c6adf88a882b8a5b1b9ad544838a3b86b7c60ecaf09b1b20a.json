@@ -1,0 +1,302 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT t.id, t.project_id, t.parent_id, t.title, t.state, t.priority, t.version, t.spec_id,\n               t.spec_version, t.spec_outdated, t.preferred_actor_id, t.preferred_until,\n               t.attempt_count, t.rejection_count, t.created_at, t.updated_at,\n               EXISTS (SELECT 1 FROM task_links bl JOIN tasks b ON b.id = bl.from_id\n                       WHERE bl.to_id = t.id AND bl.kind = 'blocks' AND b.state <> 'done') AS \"blocked!\",\n               (SELECT count(*) FROM questions q WHERE q.task_id = t.id AND q.status = 'open') AS \"open_questions!\",\n               (SELECT count(*) FROM questions q\n                 WHERE q.task_id = t.id AND q.status = 'open' AND q.blocking) AS \"blocking_questions!\",\n               l.actor_id AS \"lease_actor_id?\", a.name AS \"lease_actor_name?\", l.kind AS \"lease_kind?\",\n               l.expires_at AS \"lease_expires_at?\", l.paused AS \"lease_paused?\",\n               l.last_heartbeat_at AS \"lease_heartbeat_at?\"\n           FROM tasks t\n           LEFT JOIN leases l ON l.task_id = t.id\n           LEFT JOIN actors a ON a.id = l.actor_id\n           WHERE ($1::uuid IS NULL OR t.project_id = $1) AND ($2::uuid IS NULL OR t.id = $2)\n           ORDER BY t.priority DESC, t.created_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "tasks",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "project_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "tasks",
+            "name": "project_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "parent_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "tasks",
+            "name": "parent_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "title",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tasks",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "state",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tasks",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "priority",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "tasks",
+            "name": "priority"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "version",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "tasks",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "spec_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "tasks",
+            "name": "spec_id"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "spec_version",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "tasks",
+            "name": "spec_version"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "spec_outdated",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "tasks",
+            "name": "spec_outdated"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "preferred_actor_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "tasks",
+            "name": "preferred_actor_id"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "preferred_until",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "tasks",
+            "name": "preferred_until"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "attempt_count",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "tasks",
+            "name": "attempt_count"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "rejection_count",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "tasks",
+            "name": "rejection_count"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "tasks",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "updated_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "tasks",
+            "name": "updated_at"
+          }
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "blocked!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 17,
+        "name": "open_questions!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 18,
+        "name": "blocking_questions!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 19,
+        "name": "lease_actor_id?",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "leases",
+            "name": "actor_id"
+          }
+        }
+      },
+      {
+        "ordinal": 20,
+        "name": "lease_actor_name?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "actors",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 21,
+        "name": "lease_kind?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "leases",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "ordinal": 22,
+        "name": "lease_expires_at?",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "leases",
+            "name": "expires_at"
+          }
+        }
+      },
+      {
+        "ordinal": 23,
+        "name": "lease_paused?",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "leases",
+            "name": "paused"
+          }
+        }
+      },
+      {
+        "ordinal": 24,
+        "name": "lease_heartbeat_at?",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "leases",
+            "name": "last_heartbeat_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      null,
+      null,
+      null,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "b3592c4aaa83c38c6adf88a882b8a5b1b9ad544838a3b86b7c60ecaf09b1b20a"
+}

@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT task_id, asked_by, blocking, status FROM questions WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "task_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "questions",
+            "name": "task_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "asked_by",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "questions",
+            "name": "asked_by"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "blocking",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "questions",
+            "name": "blocking"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "status",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "questions",
+            "name": "status"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "b13e06b49ba968153677b5a6ce0b9cc34dc8b697a741f973407dd65fbed1978b"
+}

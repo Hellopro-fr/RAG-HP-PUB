@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT t.id FROM tasks t\n               WHERE t.project_id = $1 AND t.state = 'ready' AND NOT t.spec_outdated\n                 AND NOT EXISTS (\n                   SELECT 1 FROM task_links l JOIN tasks b ON b.id = l.from_id\n                   WHERE l.to_id = t.id AND l.kind = 'blocks' AND b.state <> 'done')\n                 AND (t.preferred_actor_id IS NULL OR t.preferred_until < $3 OR t.preferred_actor_id = $2)\n               ORDER BY t.priority DESC, t.created_at\n               FOR UPDATE OF t SKIP LOCKED\n               LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "tasks",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "2b69c1e8ef32af3af850cdd3bd8335c11d89a601b48b7fe02f34fe8a5b47305c"
+}

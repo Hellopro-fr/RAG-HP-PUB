@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO leases (task_id, actor_id, kind, token_hash, expires_at, paused,\n                       last_heartbeat_at, created_at, updated_at)\n                   VALUES ($1, $2, $3, $4, $5, false, $6, $6, $6)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Timestamptz",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e97cadab3d45f150c75bb41b3290032b2e0a016631c6484f1b8eb66180a83741"
+}

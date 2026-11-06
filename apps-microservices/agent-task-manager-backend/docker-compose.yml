@@ -1,0 +1,114 @@
+# Agent Task Board — full stack for development and VM testing.
+#   docker compose up --build        → http://localhost:8620 (single origin via Caddy)
+# Postgres is also published on 127.0.0.1:5440 for `cargo test` / sqlx prepare.
+name: agent-task-board
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "3"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      ATB_OWNER_PASSWORD: ${ATB_OWNER_PASSWORD:?set ATB_OWNER_PASSWORD in .env}
+      ATB_APP_PASSWORD: ${ATB_APP_PASSWORD:?set ATB_APP_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./deploy/postgres-init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "127.0.0.1:5440:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d atb"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    logging: *logging
+
+  # One-shot: apply migrations with the owner role, then exit.
+  migrate:
+    build: .
+    image: agent-task-board-server:local
+    command: ["migrate"]
+    environment:
+      DATABASE_URL: postgres://atb_owner:${ATB_OWNER_PASSWORD}@postgres:5432/atb
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    logging: *logging
+
+  server:
+    image: agent-task-board-server:local
+    command: ["serve"]
+    environment:
+      # Runtime role: no UPDATE/DELETE on events (migrations/0008).
+      DATABASE_URL: postgres://atb_app:${ATB_APP_PASSWORD}@postgres:5432/atb
+      BIND_ADDR: 0.0.0.0:8621
+      ATB_BOOTSTRAP_ADMIN_LOGIN: ${ATB_BOOTSTRAP_ADMIN_LOGIN:-admin}
+      ATB_BOOTSTRAP_ADMIN_PASSWORD: ${ATB_BOOTSTRAP_ADMIN_PASSWORD:?set ATB_BOOTSTRAP_ADMIN_PASSWORD in .env}
+      GATEWAY_SHARED_SECRET: ${GATEWAY_SHARED_SECRET:-}
+      MCP_ALLOWED_HOSTS: ${MCP_ALLOWED_HOSTS:-localhost,127.0.0.1,server}
+      LEASE_TTL_SECS: ${LEASE_TTL_SECS:-600}
+      PREFERRED_GRACE_SECS: ${PREFERRED_GRACE_SECS:-120}
+      SWEEP_INTERVAL_SECS: ${SWEEP_INTERVAL_SECS:-5}
+      MAX_REPORTS_PER_MIN: ${MAX_REPORTS_PER_MIN:-60}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      RUST_LOG: ${RUST_LOG:-info}
+    expose:
+      - "8621"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8621/readyz"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+    logging: *logging
+
+  web:
+    build: ../agent-task-manager-frontend
+    image: agent-task-board-web:local
+    environment:
+      BACKEND_INTERNAL_URL: http://server:8621
+    expose:
+      - "3020"
+    depends_on:
+      server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3020/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+    logging: *logging
+
+  # Single origin: /api/*, /mcp -> server (unbuffered for SSE), everything else -> web.
+  ingress:
+    image: caddy:2.10-alpine
+    ports:
+      - "${ATB_PORT:-8620}:8620"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      server:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8620/healthz"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+    logging: *logging
+
+volumes:
+  pgdata:

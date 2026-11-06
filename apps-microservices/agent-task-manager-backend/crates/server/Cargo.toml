@@ -1,0 +1,39 @@
+[package]
+name = "atb-server"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "atb-server"
+path = "src/main.rs"
+
+[dependencies]
+atb-core = { path = "../core" }
+anyhow = "1"
+argon2 = "0.5"
+axum = { version = "0.8", features = ["macros"] }
+futures = "0.3"
+hex = "0.4"
+rand = "0.9"
+rmcp = { version = "3.8", features = ["server", "macros", "transport-streamable-http-server"] }
+schemars = { version = "1", features = ["uuid1"] }
+serde.workspace = true
+serde_json.workspace = true
+sha2 = "0.10"
+sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "postgres", "uuid", "time", "json", "macros", "migrate"] }
+thiserror.workspace = true
+time.workspace = true
+tokio = { version = "1.54", features = ["full"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
+tower = "0.5"
+tower-http = { version = "0.7", features = ["trace", "cors", "limit", "request-id", "util"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
+utoipa = { version = "6", features = ["uuid", "time"] }
+uuid.workspace = true
+
+[dev-dependencies]
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
+rmcp = { version = "3.8", features = ["client", "transport-streamable-http-client-reqwest"] }

@@ -1,0 +1,53 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT l.from_id, l.to_id, l.kind FROM task_links l JOIN tasks t ON t.id = l.to_id\n           WHERE ($1::uuid IS NULL OR t.project_id = $1)\n             AND ($2::uuid IS NULL OR l.from_id = $2 OR l.to_id = $2)\n           ORDER BY l.created_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "from_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "task_links",
+            "name": "from_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "to_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "task_links",
+            "name": "to_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "kind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "task_links",
+            "name": "kind"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "f051cbcc4bde174fa348506a5facfe1cf9bb1a5c9568e972267f788218d25fb8"
+}

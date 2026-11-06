@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO events (project_id, seq, task_id, type, actor_id, payload, trace_id, created_at)\n               VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int8",
+        "Uuid",
+        "Text",
+        "Uuid",
+        "Jsonb",
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8a0a31b91ef3f4712f1a7d24c2531dac289f95962222ffb3c26c895f68b56876"
+}

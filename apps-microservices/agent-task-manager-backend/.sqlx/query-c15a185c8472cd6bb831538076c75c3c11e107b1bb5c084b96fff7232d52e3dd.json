@@ -1,0 +1,149 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT spec_id, version, body_md, acceptance_criteria, protected_paths, test_ref, status,\n               author_id, approved_by, approved_at, created_at\n           FROM spec_versions WHERE spec_id = $1 AND ($2::int IS NULL OR version = $2)\n           ORDER BY version",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "spec_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "spec_versions",
+            "name": "spec_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "version",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "spec_versions",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "body_md",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "spec_versions",
+            "name": "body_md"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "acceptance_criteria",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "spec_versions",
+            "name": "acceptance_criteria"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "protected_paths",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "spec_versions",
+            "name": "protected_paths"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "test_ref",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "spec_versions",
+            "name": "test_ref"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "status",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "spec_versions",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "author_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "spec_versions",
+            "name": "author_id"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "approved_by",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "spec_versions",
+            "name": "approved_by"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "approved_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "spec_versions",
+            "name": "approved_at"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "spec_versions",
+            "name": "created_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "c15a185c8472cd6bb831538076c75c3c11e107b1bb5c084b96fff7232d52e3dd"
+}
