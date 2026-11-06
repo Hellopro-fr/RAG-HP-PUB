@@ -87,8 +87,8 @@ class TraitementDonnees:
         return prompt
 
     def fix_json_quotes(self, resp: str) -> str:
-        # Corrige les "" en "
-        resp = resp.replace('""', '"')
+        # Corrige les "" en " — sauf après un antislash : \"" = pouce échappé + guillemet fermant (A511)
+        resp = re.sub(r'(?<!\\)""', '"', resp)
         
         # Optionnel : si jamais le texte contient des guillemets dans la valeur, les échapper
         # Exemple: 1"1/2 doit devenir 1\"1/2
