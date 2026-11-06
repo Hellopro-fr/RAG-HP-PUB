@@ -72,6 +72,10 @@ Ces services tournent toujours sur la VM. Continuez à livrer par `features/poc`
 
 Attention : **graph-rag-api-admin-service**, **graph-rag-dlq-manager**, **api-html-recherche** et **image-comparison-service** ont un CD vers `prod`, mais il ne met à jour qu'une copie de test (GKE ou Cloud Run). **Leur production reste sur la VM** : livrez-les par `features/poc`.
 
+## Ajouter un pipeline à un nouveau service
+
+Le standard (gate, workflows réutilisables, modèles de wrapper Cloud Run et GKE, check-list) est dans [`standard-cicd-deploiement.md`](standard-cicd-deploiement.md). Un dev ou un assistant peut écrire le wrapper lui-même en copiant le modèle ; l'équipe DevSecOps relit avant le merge.
+
 ## En cas de problème
 
 - Le CD a échoué ou a fait un retour arrière : l'email de GitHub et le résumé du job dans *Actions* disent à quelle étape. Rien n'est cassé en production, l'ancienne version tourne toujours.
