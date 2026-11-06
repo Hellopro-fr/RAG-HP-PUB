@@ -1,0 +1,663 @@
+{
+ "_source": "A511. echecs : CSV d'erreurs des runs 739 (04/11) et 740 (05/11), trace/AAAA/MM/JJ/produit_source_erreur<N>_<JJ-MM-AAAA>.csv ; 'lu' = texte apres clean_json_response (prod f444e3901), 'modele' = 'lu' + guillemet fermant restitue. succes_avec_pouce : titres enregistres contenant un guillemet (CSV de succes des memes runs). reponse_brute_13951 : 'Reponse brute LLM' (optimize.py:52) lue dans Cloud Logging, runs 740 et 741, identique les deux nuits.",
+ "reponse_brute_13951": "{\"Titre\": \"Poignée de douchette MONOLITH Premium lg 225 - noir, raccord 1/2\\\"\"}",
+ "echecs": [
+  {
+   "run": "739",
+   "id": 13951,
+   "lu": "{\"Titre\": \"Poignée de douchette MONOLITH Premium lg 225 - noir, raccord 1/2\\\"}",
+   "modele": "{\"Titre\": \"Poignée de douchette MONOLITH Premium lg 225 - noir, raccord 1/2\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 47485,
+   "lu": "{\"Titre\": \"Shaftcam 360 - Caméra d'inspection sur perche télescopique avec tête axiale ou rotative et écran TFT 7\\\"}",
+   "modele": "{\"Titre\": \"Shaftcam 360 - Caméra d'inspection sur perche télescopique avec tête axiale ou rotative et écran TFT 7\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1792107,
+   "lu": "{\"Titre\": \"Niveau radar FCS Brewtools - Capteur de niveau pour cuves de fermentation, distance de mesure 0-3 m, bride TC34mm ou TC 1,5\\\"}",
+   "modele": "{\"Titre\": \"Niveau radar FCS Brewtools - Capteur de niveau pour cuves de fermentation, distance de mesure 0-3 m, bride TC34mm ou TC 1,5\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1631814,
+   "lu": "{\"Titre\": \"Coupleur cames plastique 25 x taraudé 1\\\" - Raccord à came femelle Ø25 taraudé 1\\\"}",
+   "modele": "{\"Titre\": \"Coupleur cames plastique 25 x taraudé 1\\\" - Raccord à came femelle Ø25 taraudé 1\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1631850,
+   "lu": "{\"Titre\": \"Raccord à cames mâle ø 25 x 1\\\" femelle - Adaptateur acier ø 25 taraudé 1\\\"}",
+   "modele": "{\"Titre\": \"Raccord à cames mâle ø 25 x 1\\\" femelle - Adaptateur acier ø 25 taraudé 1\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1542482,
+   "lu": "{\"Titre\": \"Montage pierre poreuse de bullage pour ozone - Acier inoxydable, 2 microns, entrée 1/4\\\" et sortie 1/2\\\"}",
+   "modele": "{\"Titre\": \"Montage pierre poreuse de bullage pour ozone - Acier inoxydable, 2 microns, entrée 1/4\\\" et sortie 1/2\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1775682,
+   "lu": "{\"Titre\": \"Porte quad Lider - PTAC 500 kg, charge utile 300 kg, 1 essieu, jantes 13\\\"}",
+   "modele": "{\"Titre\": \"Porte quad Lider - PTAC 500 kg, charge utile 300 kg, 1 essieu, jantes 13\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1429367,
+   "lu": "{\"Titre\": \"Chaînes à neige pour autoportées TS138L, TS138, TC138L, TC138, TC238T et TC242T Husqvarna - roues 18x8,5-8\\\"}",
+   "modele": "{\"Titre\": \"Chaînes à neige pour autoportées TS138L, TS138, TC138L, TC138, TC238T et TC242T Husqvarna - roues 18x8,5-8\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1429370,
+   "lu": "{\"Titre\": \"Chaînes à neige pour autoportées TS142L, TC238TX et TC242TX Husqvarna - roues 18x9,5-8\\\"}",
+   "modele": "{\"Titre\": \"Chaînes à neige pour autoportées TS142L, TC238TX et TC242TX Husqvarna - roues 18x9,5-8\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1563202,
+   "lu": "{\"Titre\": \"Vanne FF à visser pour réservoir aérien - 1/2\\\" à 2\\\"}",
+   "modele": "{\"Titre\": \"Vanne FF à visser pour réservoir aérien - 1/2\\\" à 2\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1563216,
+   "lu": "{\"Titre\": \"Vanne FF à visser pour réservoir aérien - 1/2\\\" à 2\\\"}",
+   "modele": "{\"Titre\": \"Vanne FF à visser pour réservoir aérien - 1/2\\\" à 2\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1563357,
+   "lu": "{\"Titre\": \"Passage de paroi vertical pour réservoir aérien - Quick joint en PP, montage par l'extérieur, 1/2\\\" à 2\\\"}",
+   "modele": "{\"Titre\": \"Passage de paroi vertical pour réservoir aérien - Quick joint en PP, montage par l'extérieur, 1/2\\\" à 2\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1563478,
+   "lu": "{\"Titre\": \"Passage de paroi vertical pour réservoir aérien - Quick joint en PP, montage par l'extérieur, 1/2\\\" à 2\\\"}",
+   "modele": "{\"Titre\": \"Passage de paroi vertical pour réservoir aérien - Quick joint en PP, montage par l'extérieur, 1/2\\\" à 2\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1213699,
+   "lu": "{\"Titre\": \"Vanne à eau pressostatique HP - Johnson Controls - V46 AB 9510 - 3/8\\\"}",
+   "modele": "{\"Titre\": \"Vanne à eau pressostatique HP - Johnson Controls - V46 AB 9510 - 3/8\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1361258,
+   "lu": "{\"Titre\": \"Thermomètre inox à aiguille pour cuve - Cadran sec en inox, se visse sur piquage femelle 1/2\\\"}",
+   "modele": "{\"Titre\": \"Thermomètre inox à aiguille pour cuve - Cadran sec en inox, se visse sur piquage femelle 1/2\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1372876,
+   "lu": "{\"Titre\": \"K 314 RONDSON - Pied micro trépied avec perche orientable et télescopique en acier chromé, hauteur réglable 100 à 170 cm, filetage 3/8\\\" / 5/8\\\"}",
+   "modele": "{\"Titre\": \"K 314 RONDSON - Pied micro trépied avec perche orientable et télescopique en acier chromé, hauteur réglable 100 à 170 cm, filetage 3/8\\\" / 5/8\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1121611,
+   "lu": "{\"Titre\": \"Clé à cliquet 12 V Li-Ion WR100DZ - 47,5 Nm, produit seul, emmanchement 1/4\\\" et 3/8\\\"}",
+   "modele": "{\"Titre\": \"Clé à cliquet 12 V Li-Ion WR100DZ - 47,5 Nm, produit seul, emmanchement 1/4\\\" et 3/8\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1125808,
+   "lu": "{\"Titre\": \"Vacuomètre AS00XP808M - Accessoire pour gonfleurs, souffleurs et pompes à vide, filetage 1/8\\\"}",
+   "modele": "{\"Titre\": \"Vacuomètre AS00XP808M - Accessoire pour gonfleurs, souffleurs et pompes à vide, filetage 1/8\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1114247,
+   "lu": "{\"Titre\": \"ZNLE18 Rohde & Schwarz - Analyseur de réseau vectoriel 1 MHz à 18 GHz, 2 ports, écran tactile 10,1\\\"}",
+   "modele": "{\"Titre\": \"ZNLE18 Rohde & Schwarz - Analyseur de réseau vectoriel 1 MHz à 18 GHz, 2 ports, écran tactile 10,1\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1114252,
+   "lu": "{\"Titre\": \"S331E Anritsu reNEWed by Leasametric - Testeur d'antennes et câbles 2 MHz à 4 GHz, écran tactile 8.4\\\"}",
+   "modele": "{\"Titre\": \"S331E Anritsu reNEWed by Leasametric - Testeur d'antennes et câbles 2 MHz à 4 GHz, écran tactile 8.4\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1114780,
+   "lu": "{\"Titre\": \"804 QuantumData - Générateur de test vidéo série 804, 4 sorties HDMI, écran tactile, montable en rack 19\\\"}",
+   "modele": "{\"Titre\": \"804 QuantumData - Générateur de test vidéo série 804, 4 sorties HDMI, écran tactile, montable en rack 19\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1114781,
+   "lu": "{\"Titre\": \"804B QuantumData - Générateur de test vidéo HDMI 2.0 600 MHz, 4 sorties HDMI, écran tactile couleur, montable en rack 19\\\"}",
+   "modele": "{\"Titre\": \"804B QuantumData - Générateur de test vidéo HDMI 2.0 600 MHz, 4 sorties HDMI, écran tactile couleur, montable en rack 19\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1115305,
+   "lu": "{\"Titre\": \"6269B Keysight / Agilent - Alimentation DC stabilisée 0-40V 0-50A, montage rack 19\\\"}",
+   "modele": "{\"Titre\": \"6269B Keysight / Agilent - Alimentation DC stabilisée 0-40V 0-50A, montage rack 19\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1115339,
+   "lu": "{\"Titre\": \"SM7020 Delta Elektronika - Alimentation DC Autorange 700W 70V 20A, 2U 19\\\"}",
+   "modele": "{\"Titre\": \"SM7020 Delta Elektronika - Alimentation DC Autorange 700W 70V 20A, 2U 19\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1115442,
+   "lu": "{\"Titre\": \"3150AFX Pacific Power source - Alimentation AC/DC 3 phases 15 kW, USB, LAN & RS232, 0-330 VAC et 0-425 Vdc, écran LCD couleur, 4 U 19\\\"}",
+   "modele": "{\"Titre\": \"3150AFX Pacific Power source - Alimentation AC/DC 3 phases 15 kW, USB, LAN & RS232, 0-330 VAC et 0-425 Vdc, écran LCD couleur, 4 U 19\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1115692,
+   "lu": "{\"Titre\": \"Alimentation DC compacte GENH150-5 TDK-LAMBDA - 750 W, 0 à 150 V, 5 A, demi rack 19\\\"}",
+   "modele": "{\"Titre\": \"Alimentation DC compacte GENH150-5 TDK-LAMBDA - 750 W, 0 à 150 V, 5 A, demi rack 19\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1115693,
+   "lu": "{\"Titre\": \"GENH300-2,5 TDK-LAMBDA - Alimentation DC compacte 750 W, 0 à 300 V, 2,5 A, demi rack 19\\\"}",
+   "modele": "{\"Titre\": \"GENH300-2,5 TDK-LAMBDA - Alimentation DC compacte 750 W, 0 à 300 V, 2,5 A, demi rack 19\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1115968,
+   "lu": "{\"Titre\": \"DAS50T Sefram - Enregistreur d'acquisition de données portable 2 à 6 voies analogiques, écran tactile LCD TFT 10\\\"}",
+   "modele": "{\"Titre\": \"DAS50T Sefram - Enregistreur d'acquisition de données portable 2 à 6 voies analogiques, écran tactile LCD TFT 10\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1115982,
+   "lu": "{\"Titre\": \"Oscilloscope DPO Tektronix TDS7104 - 4 voies x 1 GHz, 10 Gs/s, écran couleur 10,4\\\"}",
+   "modele": "{\"Titre\": \"Oscilloscope DPO Tektronix TDS7104 - 4 voies x 1 GHz, 10 Gs/s, écran couleur 10,4\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1116197,
+   "lu": "{\"Titre\": \"Oscilloscope numérique T3DSO1104HD TELEDYNE LeCroy - 4 canaux 100 MHz, 12 bits, écran tactile 10.1\\\"}",
+   "modele": "{\"Titre\": \"Oscilloscope numérique T3DSO1104HD TELEDYNE LeCroy - 4 canaux 100 MHz, 12 bits, écran tactile 10.1\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1116205,
+   "lu": "{\"Titre\": \"Oscilloscope numérique GDS-1102B Instek - 2 x 100 MHz, 1 GEch/s, mémoire 10 Mpts, écran TFT 7\\\"}",
+   "modele": "{\"Titre\": \"Oscilloscope numérique GDS-1102B Instek - 2 x 100 MHz, 1 GEch/s, mémoire 10 Mpts, écran TFT 7\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1116236,
+   "lu": "{\"Titre\": \"Oscilloscope numérique LeCroy WP7300A/DFP2/JLITE/USB2 - 4 voies 3 GHz, 20 Gé/s, écran tactile 10.4\\\"}",
+   "modele": "{\"Titre\": \"Oscilloscope numérique LeCroy WP7300A/DFP2/JLITE/USB2 - 4 voies 3 GHz, 20 Gé/s, écran tactile 10.4\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1116248,
+   "lu": "{\"Titre\": \"Oscilloscope numérique Rigol DHO5108 - 8 voies, 1 GHz, 500 Mpts, 12/16 bits, écran tactile 10,1\\\"}",
+   "modele": "{\"Titre\": \"Oscilloscope numérique Rigol DHO5108 - 8 voies, 1 GHz, 500 Mpts, 12/16 bits, écran tactile 10,1\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1116261,
+   "lu": "{\"Titre\": \"Oscilloscope numérique Teledyne LeCroy 4104HD WaveSurfer HD - 4 canaux, 1 GHz, 12,5 Mpts/voie, écran tactile 12,1\\\"}",
+   "modele": "{\"Titre\": \"Oscilloscope numérique Teledyne LeCroy 4104HD WaveSurfer HD - 4 canaux, 1 GHz, 12,5 Mpts/voie, écran tactile 12,1\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1116273,
+   "lu": "{\"Titre\": \"Générateur de fonctions et arbitraire Keysight 33512B - 20 MHz, 2 voies, TrueForm, écran TFT 4.3\\\"}",
+   "modele": "{\"Titre\": \"Générateur de fonctions et arbitraire Keysight 33512B - 20 MHz, 2 voies, TrueForm, écran TFT 4.3\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1116403,
+   "lu": "{\"Titre\": \"Oscilloscope DPO Tektronix TDS7704B - 4x7 GHz, 20 Géch/s, mémoire 400 Ko à 64 Mo, écran 10,4\\\"}",
+   "modele": "{\"Titre\": \"Oscilloscope DPO Tektronix TDS7704B - 4x7 GHz, 20 Géch/s, mémoire 400 Ko à 64 Mo, écran 10,4\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1116415,
+   "lu": "{\"Titre\": \"Oscilloscope temps réel DSOX95004Q Keysight / Agilent - Série Infiniium, 50 GHz, 160 GS/s, écran tactile 15,4\\\"}",
+   "modele": "{\"Titre\": \"Oscilloscope temps réel DSOX95004Q Keysight / Agilent - Série Infiniium, 50 GHz, 160 GS/s, écran tactile 15,4\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1116448,
+   "lu": "{\"Titre\": \"Oscilloscope TDS6124C Tektronix - DPO 4 voies 12 GHz, 40 Géch/s, mémoire jusqu'à 64 Mo, écran 10,4\\\"}",
+   "modele": "{\"Titre\": \"Oscilloscope TDS6124C Tektronix - DPO 4 voies 12 GHz, 40 Géch/s, mémoire jusqu'à 64 Mo, écran 10,4\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1117646,
+   "lu": "{\"Titre\": \"Siglent SHA851A - Analyseur de spectre portable 9 kHz à 3,6 GHz avec testeur de câbles et antennes, écran tactile 8,4\\\"}",
+   "modele": "{\"Titre\": \"Siglent SHA851A - Analyseur de spectre portable 9 kHz à 3,6 GHz avec testeur de câbles et antennes, écran tactile 8,4\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1117875,
+   "lu": "{\"Titre\": \"Analyseur de réseau vectoriel PNA-X Keysight N5242B/423 - 4 ports, 900 Hz/10 MHz à 26,5 GHz, écran tactile 12,1\\\"}",
+   "modele": "{\"Titre\": \"Analyseur de réseau vectoriel PNA-X Keysight N5242B/423 - 4 ports, 900 Hz/10 MHz à 26,5 GHz, écran tactile 12,1\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1117973,
+   "lu": "{\"Titre\": \"Oscilloscope numérique MXO3 Rohde & Schwarz - 100 MHz à 1 GHz, 4 ou 8 voies, écran Full HD 11,6\\\"}",
+   "modele": "{\"Titre\": \"Oscilloscope numérique MXO3 Rohde & Schwarz - 100 MHz à 1 GHz, 4 ou 8 voies, écran Full HD 11,6\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1118549,
+   "lu": "{\"Titre\": \"Oscilloscope numérique HDO6054 LeCroy - 4 voies 500 MHz, 2,5 Gs/s, 12 bits HD4096, écran tactile 12,1\\\"}",
+   "modele": "{\"Titre\": \"Oscilloscope numérique HDO6054 LeCroy - 4 voies 500 MHz, 2,5 Gs/s, 12 bits HD4096, écran tactile 12,1\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1118606,
+   "lu": "{\"Titre\": \"DS4022 Rigol - Oscilloscope digital 2 x 200 MHz, 4 Gs/s, 140 Mpts, écran 9\\\"}",
+   "modele": "{\"Titre\": \"DS4022 Rigol - Oscilloscope digital 2 x 200 MHz, 4 Gs/s, 140 Mpts, écran 9\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1118609,
+   "lu": "{\"Titre\": \"Oscilloscope numérique DS4054 Rigol - 4 voies 500 MHz, 4 Gs/s, 140 Mpts, écran 9\\\"}",
+   "modele": "{\"Titre\": \"Oscilloscope numérique DS4054 Rigol - 4 voies 500 MHz, 4 Gs/s, 140 Mpts, écran 9\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1118612,
+   "lu": "{\"Titre\": \"Oscilloscope numérique Rohde & Schwarz RTB2004/B243/K1/K2/K3 - 4 x 300 MHz, 1,25 Gs/s, écran tactile 10,1\\\"}",
+   "modele": "{\"Titre\": \"Oscilloscope numérique Rohde & Schwarz RTB2004/B243/K1/K2/K3 - 4 x 300 MHz, 1,25 Gs/s, écran tactile 10,1\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1118619,
+   "lu": "{\"Titre\": \"Oscilloscope numérique RTB2004 Rohde & Schwarz - 4 voies 70 MHz upgradable 300 MHz, 1,25 Gs/s, écran tactile 10,1\\\"}",
+   "modele": "{\"Titre\": \"Oscilloscope numérique RTB2004 Rohde & Schwarz - 4 voies 70 MHz upgradable 300 MHz, 1,25 Gs/s, écran tactile 10,1\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1645543,
+   "lu": "{\"Titre\": \"Compteur Eau Froide + Radio B-Meters R100 - L.110mm - 3/4\\\"}",
+   "modele": "{\"Titre\": \"Compteur Eau Froide + Radio B-Meters R100 - L.110mm - 3/4\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1393108,
+   "lu": "{\"Titre\": \"Équilibreuse poids lourds REDATS WT-200 avec lève-roue pneumatique – 230V, 150 kg, jantes 10\\\" à 30\\\"}",
+   "modele": "{\"Titre\": \"Équilibreuse poids lourds REDATS WT-200 avec lève-roue pneumatique – 230V, 150 kg, jantes 10\\\" à 30\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1393118,
+   "lu": "{\"Titre\": \"Masses d'Équilibrage Camion 50g - Plomb Argenté à Frapper - Jantes Acier 22,5\\\" à 26\\\"}",
+   "modele": "{\"Titre\": \"Masses d'Équilibrage Camion 50g - Plomb Argenté à Frapper - Jantes Acier 22,5\\\" à 26\\\"\"}"
+  },
+  {
+   "run": "739",
+   "id": 1738519,
+   "lu": "{\"Titre\": \"Clé à filtres 1/2\\\" et 3/8\\\" - Ø63-Ø102mm - serrage/desserrage - avec augmentateur 3/8\\\"-1/2\\\"}",
+   "modele": "{\"Titre\": \"Clé à filtres 1/2\\\" et 3/8\\\" - Ø63-Ø102mm - serrage/desserrage - avec augmentateur 3/8\\\"-1/2\\\"\"}"
+  },
+  {
+   "run": "740",
+   "id": 13951,
+   "lu": "{\"Titre\": \"Poignée de douchette MONOLITH Premium lg 225 - noir, raccord 1/2\\\"}",
+   "modele": "{\"Titre\": \"Poignée de douchette MONOLITH Premium lg 225 - noir, raccord 1/2\\\"\"}"
+  },
+  {
+   "run": "740",
+   "id": 47485,
+   "lu": "{\"Titre\": \"Shaftcam 360 - Caméra d'inspection sur perche télescopique avec tête axiale ou rotative et écran TFT 7\\\"}",
+   "modele": "{\"Titre\": \"Shaftcam 360 - Caméra d'inspection sur perche télescopique avec tête axiale ou rotative et écran TFT 7\\\"\"}"
+  },
+  {
+   "run": "740",
+   "id": 1792107,
+   "lu": "{\"Titre\": \"Niveau radar FCS Brewtools - Capteur de niveau pour cuves de fermentation, distance 0-3 m, bride TC34mm ou TC 1,5\\\"}",
+   "modele": "{\"Titre\": \"Niveau radar FCS Brewtools - Capteur de niveau pour cuves de fermentation, distance 0-3 m, bride TC34mm ou TC 1,5\\\"\"}"
+  },
+  {
+   "run": "740",
+   "id": 1631814,
+   "lu": "{\"Titre\": \"Coupleur cames plastique 25 x taraudé 1\\\" - Raccord à came femelle Ø25 taraudé 1\\\"}",
+   "modele": "{\"Titre\": \"Coupleur cames plastique 25 x taraudé 1\\\" - Raccord à came femelle Ø25 taraudé 1\\\"\"}"
+  },
+  {
+   "run": "740",
+   "id": 1631850,
+   "lu": "{\"Titre\": \"Raccord à cames mâle ø 25 x 1\\\" femelle - Adaptateur acier ø 25 taraudé 1\\\"}",
+   "modele": "{\"Titre\": \"Raccord à cames mâle ø 25 x 1\\\" femelle - Adaptateur acier ø 25 taraudé 1\\\"\"}"
+  },
+  {
+   "run": "740",
+   "id": 1542482,
+   "lu": "{\"Titre\": \"Montage pierre poreuse de bullage pour ozone - acier inoxydable, 2 microns, entrée 1/4\\\" et sortie 1/2\\\"}",
+   "modele": "{\"Titre\": \"Montage pierre poreuse de bullage pour ozone - acier inoxydable, 2 microns, entrée 1/4\\\" et sortie 1/2\\\"\"}"
+  },
+  {
+   "run": "740",
+   "id": 1775682,
+   "lu": "{\"Titre\": \"Porte quad Lider - PTAC 500 kg, charge utile 300 kg, 1 essieu, jantes 13\\\"}",
+   "modele": "{\"Titre\": \"Porte quad Lider - PTAC 500 kg, charge utile 300 kg, 1 essieu, jantes 13\\\"\"}"
+  },
+  {
+   "run": "740",
+   "id": 1429367,
+   "lu": "{\"Titre\": \"Chaînes à neige pour autoportées TS138L, TS138, TC138L, TC138, TC238T et TC242T Husqvarna - roues 18x8,5-8\\\"}",
+   "modele": "{\"Titre\": \"Chaînes à neige pour autoportées TS138L, TS138, TC138L, TC138, TC238T et TC242T Husqvarna - roues 18x8,5-8\\\"\"}"
+  },
+  {
+   "run": "740",
+   "id": 1429370,
+   "lu": "{\"Titre\": \"Chaînes à neige pour autoportées TS142L, TC238TX et TC242TX Husqvarna - roues 18x9,5-8\\\"}",
+   "modele": "{\"Titre\": \"Chaînes à neige pour autoportées TS142L, TC238TX et TC242TX Husqvarna - roues 18x9,5-8\\\"\"}"
+  },
+  {
+   "run": "740",
+   "id": 1563202,
+   "lu": "{\"Titre\": \"Vanne FF à visser pour réservoir aérien - 1/2\\\" à 2\\\"}",
+   "modele": "{\"Titre\": \"Vanne FF à visser pour réservoir aérien - 1/2\\\" à 2\\\"\"}"
+  },
+  {
+   "run": "740",
+   "id": 1563216,
+   "lu": "{\"Titre\": \"Vanne FF à visser pour réservoir aérien - 1/2\\\" à 2\\\"}",
+   "modele": "{\"Titre\": \"Vanne FF à visser pour réservoir aérien - 1/2\\\" à 2\\\"\"}"
+  },
+  {
+   "run": "740",
+   "id": 1563357,
+   "lu": "{\"Titre\": \"Passage de paroi vertical pour réservoir aérien - Quick joint en PP, montage par l'extérieur, 1/2\\\" à 2\\\"}",
+   "modele": "{\"Titre\": \"Passage de paroi vertical pour réservoir aérien - Quick joint en PP, montage par l'extérieur, 1/2\\\" à 2\\\"\"}"
+  },
+  {
+   "run": "740",
+   "id": 1563478,
+   "lu": "{\"Titre\": \"Passage de paroi vertical pour réservoir aérien - Quick joint en PP, montage par l'extérieur, 1/2\\\" à 2\\\"}",
+   "modele": "{\"Titre\": \"Passage de paroi vertical pour réservoir aérien - Quick joint en PP, montage par l'extérieur, 1/2\\\" à 2\\\"\"}"
+  },
+  {
+   "run": "740",
+   "id": 1213699,
+   "lu": "{\"Titre\": \"Vanne à eau pressostatique HP - Johnson Controls - V46 AB 9510 - 3/8\\\"}",
+   "modele": "{\"Titre\": \"Vanne à eau pressostatique HP - Johnson Controls - V46 AB 9510 - 3/8\\\"\"}"
+  },
+  {
+   "run": "740",
+   "id": 1372876,
+   "lu": "{\"Titre\": \"K 314 RONDSON - Pied micro trépied avec perche orientable et télescopique en acier chromé, hauteur réglable 100 à 170 cm, filetage 3/8\\\" / 5/8\\\"}",
+   "modele": "{\"Titre\": \"K 314 RONDSON - Pied micro trépied avec perche orientable et télescopique en acier chromé, hauteur réglable 100 à 170 cm, filetage 3/8\\\" / 5/8\\\"\"}"
+  },
+  {
+   "run": "740",
+   "id": 1121611,
+   "lu": "{\"Titre\": \"Clé à cliquet 12 V Li-Ion WR100DZ - 47,5 Nm, produit seul, emmanchement 1/4\\\" et 3/8\\\"}",
+   "modele": "{\"Titre\": \"Clé à cliquet 12 V Li-Ion WR100DZ - 47,5 Nm, produit seul, emmanchement 1/4\\\" et 3/8\\\"\"}"
+  },
+  {
+   "run": "740",
+   "id": 1125808,
+   "lu": "{\"Titre\": \"Vacuomètre AS00XP808M - Accessoire pour gonfleurs, souffleurs et pompes à vide, filetage 1/8\\\"}",
+   "modele": "{\"Titre\": \"Vacuomètre AS00XP808M - Accessoire pour gonfleurs, souffleurs et pompes à vide, filetage 1/8\\\"\"}"
+  },
+  {
+   "run": "740",
+   "id": 1114247,
+   "lu": "{\"Titre\": \"Rohde & Schwarz ZNLE18 - Analyseur de réseau vectoriel 1 MHz à 18 GHz, 2 ports, écran tactile 10,1\\\"}",
+   "modele": "{\"Titre\": \"Rohde & Schwarz ZNLE18 - Analyseur de réseau vectoriel 1 MHz à 18 GHz, 2 ports, écran tactile 10,1\\\"\"}"
+  },
+  {
+   "run": "740",
+   "id": 1114252,
+   "lu": "{\"Titre\": \"S331E Anritsu reNEWed by Leasametric - Testeur d'antennes et câbles 2 MHz à 4 GHz, écran tactile 8.4\\\"}",
+   "modele": "{\"Titre\": \"S331E Anritsu reNEWed by Leasametric - Testeur d'antennes et câbles 2 MHz à 4 GHz, écran tactile 8.4\\\"\"}"
+  },
+  {
+   "run": "740",
+   "id": 1114780,
+   "lu": "{\"Titre\": \"804 QuantumData - Générateur de test vidéo série 804, 4 sorties HDMI, écran tactile couleur, montable en rack 19\\\"}",
+   "modele": "{\"Titre\": \"804 QuantumData - Générateur de test vidéo série 804, 4 sorties HDMI, écran tactile couleur, montable en rack 19\\\"\"}"
+  },
+  {
+   "run": "740",
+   "id": 1114781,
+   "lu": "{\"Titre\": \"804B QuantumData - Générateur de test vidéo HDMI 2.0 600 MHz, 4 sorties HDMI, écran tactile couleur, montable en rack 19\\\"}",
+   "modele": "{\"Titre\": \"804B QuantumData - Générateur de test vidéo HDMI 2.0 600 MHz, 4 sorties HDMI, écran tactile couleur, montable en rack 19\\\"\"}"
+  },
+  {
+   "run": "740",
+   "id": 1115305,
+   "lu": "{\"Titre\": \"6269B Keysight / Agilent - Alimentation DC stabilisée 0-40V 0-50A, montage rack 19\\\"}",
+   "modele": "{\"Titre\": \"6269B Keysight / Agilent - Alimentation DC stabilisée 0-40V 0-50A, montage rack 19\\\"\"}"
+  },
+  {
+   "run": "740",
+   "id": 1115339,
+   "lu": "{\"Titre\": \"SM7020 Delta Elektronika - Alimentation DC Autorange 700W, 0-70V, 20A, 2U 19\\\"}",
+   "modele": "{\"Titre\": \"SM7020 Delta Elektronika - Alimentation DC Autorange 700W, 0-70V, 20A, 2U 19\\\"\"}"
+  },
+  {
+   "run": "740",
+   "id": 1115692,
+   "lu": "{\"Titre\": \"Alimentation DC compacte TDK-LAMBDA GENH150-5 - 750 W, 0 à 150 V, 5 A, demi rack 19\\\"}",
+   "modele": "{\"Titre\": \"Alimentation DC compacte TDK-LAMBDA GENH150-5 - 750 W, 0 à 150 V, 5 A, demi rack 19\\\"\"}"
+  },
+  {
+   "run": "740",
+   "id": 1115693,
+   "lu": "{\"Titre\": \"GENH300-2,5 TDK-LAMBDA - Alimentation DC compacte 750 W, 0 à 300 V, 2,5 A, demi rack 19\\\"}",
+   "modele": "{\"Titre\": \"GENH300-2,5 TDK-LAMBDA - Alimentation DC compacte 750 W, 0 à 300 V, 2,5 A, demi rack 19\\\"\"}"
+  },
+  {
+   "run": "740",
+   "id": 1115968,
+   "lu": "{\"Titre\": \"DAS50T Sefram - Enregistreur d'acquisition de données portable 2 à 6 voies analogiques, écran tactile LCD TFT 10\\\"}",
+   "modele": "{\"Titre\": \"DAS50T Sefram - Enregistreur d'acquisition de données portable 2 à 6 voies analogiques, écran tactile LCD TFT 10\\\"\"}"
+  },
+  {
+   "run": "740",
+   "id": 1116197,
+   "lu": "{\"Titre\": \"Oscilloscope numérique T3DSO1104HD TELEDYNE LeCroy - 4 canaux 100 MHz, 12 bits, 2 GS/s, écran tactile 10.1\\\"}",
+   "modele": "{\"Titre\": \"Oscilloscope numérique T3DSO1104HD TELEDYNE LeCroy - 4 canaux 100 MHz, 12 bits, 2 GS/s, écran tactile 10.1\\\"\"}"
+  },
+  {
+   "run": "740",
+   "id": 1116236,
+   "lu": "{\"Titre\": \"Oscilloscope numérique LeCroy WP7300A/DFP2/JLITE/USB2 - 4 voies 3 GHz, 20 Gé/s, écran tactile 10.4\\\"}",
+   "modele": "{\"Titre\": \"Oscilloscope numérique LeCroy WP7300A/DFP2/JLITE/USB2 - 4 voies 3 GHz, 20 Gé/s, écran tactile 10.4\\\"\"}"
+  },
+  {
+   "run": "740",
+   "id": 1116248,
+   "lu": "{\"Titre\": \"Oscilloscope numérique Rigol DHO5108 - 8 voies, 1 GHz, 500 Mpts, 12/16 bits, écran tactile 10,1\\\"}",
+   "modele": "{\"Titre\": \"Oscilloscope numérique Rigol DHO5108 - 8 voies, 1 GHz, 500 Mpts, 12/16 bits, écran tactile 10,1\\\"\"}"
+  },
+  {
+   "run": "740",
+   "id": 1116261,
+   "lu": "{\"Titre\": \"Oscilloscope numérique Teledyne LeCroy 4104HD - 4 canaux, 1 GHz, 12 bits, écran tactile 12,1\\\"}",
+   "modele": "{\"Titre\": \"Oscilloscope numérique Teledyne LeCroy 4104HD - 4 canaux, 1 GHz, 12 bits, écran tactile 12,1\\\"\"}"
+  },
+  {
+   "run": "740",
+   "id": 1116273,
+   "lu": "{\"Titre\": \"Générateur de fonctions et arbitraire Keysight 33512B - 20 MHz, 2 voies, TrueForm, écran TFT 4.3\\\"}",
+   "modele": "{\"Titre\": \"Générateur de fonctions et arbitraire Keysight 33512B - 20 MHz, 2 voies, TrueForm, écran TFT 4.3\\\"\"}"
+  },
+  {
+   "run": "740",
+   "id": 1116403,
+   "lu": "{\"Titre\": \"Oscilloscope DPO Tektronix TDS7704B - 4x7 GHz, 20 Géch/s, mémoire 400 Ko à 64 Mo, écran 10,4\\\"}",
+   "modele": "{\"Titre\": \"Oscilloscope DPO Tektronix TDS7704B - 4x7 GHz, 20 Géch/s, mémoire 400 Ko à 64 Mo, écran 10,4\\\"\"}"
+  },
+  {
+   "run": "740",
+   "id": 1116415,
+   "lu": "{\"Titre\": \"Oscilloscope temps réel DSOX95004Q Keysight / Agilent - série Infiniium, 50 GHz, 160 GS/s, écran tactile 15,4\\\"}",
+   "modele": "{\"Titre\": \"Oscilloscope temps réel DSOX95004Q Keysight / Agilent - série Infiniium, 50 GHz, 160 GS/s, écran tactile 15,4\\\"\"}"
+  },
+  {
+   "run": "740",
+   "id": 1116448,
+   "lu": "{\"Titre\": \"TDS6124C Tektronix - Oscilloscope DPO 4 voies 12 GHz, 40 Géch/s, écran 10,4\\\"}",
+   "modele": "{\"Titre\": \"TDS6124C Tektronix - Oscilloscope DPO 4 voies 12 GHz, 40 Géch/s, écran 10,4\\\"\"}"
+  },
+  {
+   "run": "740",
+   "id": 1117875,
+   "lu": "{\"Titre\": \"Analyseur de réseau vectoriel PNA-X Keysight N5242B/423 - 4 ports, 900 Hz/10 MHz à 26,5 GHz, écran tactile 12,1\\\"}",
+   "modele": "{\"Titre\": \"Analyseur de réseau vectoriel PNA-X Keysight N5242B/423 - 4 ports, 900 Hz/10 MHz à 26,5 GHz, écran tactile 12,1\\\"\"}"
+  },
+  {
+   "run": "740",
+   "id": 1117973,
+   "lu": "{\"Titre\": \"Oscilloscope numérique MXO3 Rohde & Schwarz - 100 MHz à 1 GHz, 4 ou 8 voies, écran Full HD 11,6\\\"}",
+   "modele": "{\"Titre\": \"Oscilloscope numérique MXO3 Rohde & Schwarz - 100 MHz à 1 GHz, 4 ou 8 voies, écran Full HD 11,6\\\"\"}"
+  },
+  {
+   "run": "740",
+   "id": 1118549,
+   "lu": "{\"Titre\": \"Oscilloscope numérique HDO6054 LeCroy - 4 voies 500 MHz, 2,5 Gs/s, 12 bits, écran tactile 12,1\\\"}",
+   "modele": "{\"Titre\": \"Oscilloscope numérique HDO6054 LeCroy - 4 voies 500 MHz, 2,5 Gs/s, 12 bits, écran tactile 12,1\\\"\"}"
+  },
+  {
+   "run": "740",
+   "id": 1118606,
+   "lu": "{\"Titre\": \"Oscilloscope digital Rigol DS4022 - 2 x 200 MHz, 4 Gs/s, 140 Mpts, écran 9\\\"}",
+   "modele": "{\"Titre\": \"Oscilloscope digital Rigol DS4022 - 2 x 200 MHz, 4 Gs/s, 140 Mpts, écran 9\\\"\"}"
+  },
+  {
+   "run": "740",
+   "id": 1118609,
+   "lu": "{\"Titre\": \"Oscilloscope numérique DS4054 Rigol - 4 voies 500 MHz, 4 Gs/s, 140 Mpts, écran 9\\\"}",
+   "modele": "{\"Titre\": \"Oscilloscope numérique DS4054 Rigol - 4 voies 500 MHz, 4 Gs/s, 140 Mpts, écran 9\\\"\"}"
+  },
+  {
+   "run": "740",
+   "id": 1118612,
+   "lu": "{\"Titre\": \"Oscilloscope numérique Rohde & Schwarz RTB2004/B243/K1/K2/K3 - 4 x 300 MHz, 1,25 Gs/s, écran tactile 10,1\\\"}",
+   "modele": "{\"Titre\": \"Oscilloscope numérique Rohde & Schwarz RTB2004/B243/K1/K2/K3 - 4 x 300 MHz, 1,25 Gs/s, écran tactile 10,1\\\"\"}"
+  },
+  {
+   "run": "740",
+   "id": 1118619,
+   "lu": "{\"Titre\": \"Oscilloscope numérique RTB2004 Rohde & Schwarz - 4 voies 70 MHz upgradable 300 MHz, 1,25 Gs/s, écran tactile 10,1\\\"}",
+   "modele": "{\"Titre\": \"Oscilloscope numérique RTB2004 Rohde & Schwarz - 4 voies 70 MHz upgradable 300 MHz, 1,25 Gs/s, écran tactile 10,1\\\"\"}"
+  },
+  {
+   "run": "740",
+   "id": 1645543,
+   "lu": "{\"Titre\": \"Compteur Eau Froide + Radio B-Meters R100 - L.110mm - 3/4\\\"}",
+   "modele": "{\"Titre\": \"Compteur Eau Froide + Radio B-Meters R100 - L.110mm - 3/4\\\"\"}"
+  },
+  {
+   "run": "740",
+   "id": 1393108,
+   "lu": "{\"Titre\": \"Équilibreuse poids lourds REDATS WT-200 avec lève-roue pneumatique - 230V, 150 kg, jantes 10\\\" à 30\\\"}",
+   "modele": "{\"Titre\": \"Équilibreuse poids lourds REDATS WT-200 avec lève-roue pneumatique - 230V, 150 kg, jantes 10\\\" à 30\\\"\"}"
+  },
+  {
+   "run": "740",
+   "id": 1738519,
+   "lu": "{\"Titre\": \"Clé à filtres 1/2\\\" et 3/8\\\" - Ø63-Ø102mm - serrage/desserrage - livrée avec augmentateur 3/8\\\"-1/2\\\"}",
+   "modele": "{\"Titre\": \"Clé à filtres 1/2\\\" et 3/8\\\" - Ø63-Ø102mm - serrage/desserrage - livrée avec augmentateur 3/8\\\"-1/2\\\"\"}"
+  },
+  {
+   "run": "740",
+   "id": 1740673,
+   "lu": "{\"Titre\": \"Tête d'application Micro HB 11-Bille BUEHNEN - module étroit 18 mm, vanne électromagnétique 24 V, filetage UNF 3/8\\\"}",
+   "modele": "{\"Titre\": \"Tête d'application Micro HB 11-Bille BUEHNEN - module étroit 18 mm, vanne électromagnétique 24 V, filetage UNF 3/8\\\"\"}"
+  }
+ ],
+ "succes_avec_pouce": [
+  {
+   "run": "739",
+   "id": 1378483,
+   "titre": "RIDGID KJ-3100 - Déboucheuse à moteur à essence 11,8kW/16cv, pression 205 bars, débit 21 l/min, flexible 61m 3/8\", pour canalisations Ø50 à Ø250mm"
+  },
+  {
+   "run": "739",
+   "id": 47490,
+   "titre": "Axplorer Mini - Caméra d'inspection vidéo miniature 7mm avec enrouleur de jonc 20 à 40m, écran TFT 9\" et enregistrement sur carte SD"
+  },
+  {
+   "run": "739",
+   "id": 47547,
+   "titre": "DeviXplorer 50 HSP - Système d'inspection vidéo avec écran 7\", caméra Ø 50mm et enrouleur 60 ou 120m"
+  },
+  {
+   "run": "739",
+   "id": 1253737,
+   "titre": "Raccord inox ver fileté F DN 50 2\" - Raccord spécifique pour tonne à lisier"
+  },
+  {
+   "run": "739",
+   "id": 1254082,
+   "titre": "Étrier de retenue avec collier pour tuyau à visser 6\" - Buse d'épandage - Finition nue"
+  },
+  {
+   "run": "739",
+   "id": 1728430,
+   "titre": "Robinet vanne noire pour palonnier type EM4 - Robinet d'isolement pour ventouses 1/4\" - Lot de 4 pièces - Réf. CC10-00269"
+  },
+  {
+   "run": "739",
+   "id": 1728433,
+   "titre": "Raccord rapide femelle G1/4\" F ICS 403V pour circuit de vide - Réf. CC10-00113"
+  },
+  {
+   "run": "739",
+   "id": 1728435,
+   "titre": "Robinet vanne rouge pour palonnier type EM4 - 1/4\" - Lot de 4 pièces - Réf. CC10-00264"
+  },
+  {
+   "run": "739",
+   "id": 1731134,
+   "titre": "Borne de commande pour restaurant - écrans 21\" et 32\", paiement, multisites et multilingue"
+  },
+  {
+   "run": "739",
+   "id": 1731141,
+   "titre": "Borne de commande pour restaurant - écrans 21\" et 32\", multisites, paiement et douchette"
+  },
+  {
+   "run": "740",
+   "id": 1116205,
+   "titre": "Oscilloscope numérique GDS-1102B Instek - 2 x 100 MHz, 1 GEch/s, mémoire 10 Mpts, écran TFT 7\", USB"
+  },
+  {
+   "run": "740",
+   "id": 1146688,
+   "titre": "Surveillance vidéo bébé et enfant sans fil 2,4 GHz - Caméra CMOS 640 x 480, 9 LED IR, moniteur TFT-LCD 2,36\" (6 cm), fonction VOX et musique"
+  },
+  {
+   "run": "740",
+   "id": 1146752,
+   "titre": "Interphone vidéo couleur sans fil digital - écran LCD 7\" et lecteur carte SD, portée 200 m"
+  },
+  {
+   "run": "740",
+   "id": 1146844,
+   "titre": "Portier vidéo couleur avec combiné et caméra - Vision nocturne, écran LCD TFT 2.4\" et ouverture à distance"
+  },
+  {
+   "run": "740",
+   "id": 1269059,
+   "titre": "ARROW - Cabine de sablage modele S990 - 990 L, jantes 30\", 1210W, 220V triphasé"
+  },
+  {
+   "run": "740",
+   "id": 1393118,
+   "titre": "Masses d'Équilibrage Camion 50g - Plomb Argenté - Jantes Acier 22,5\" à 26\" - À Frapper"
+  },
+  {
+   "run": "740",
+   "id": 1882109,
+   "titre": "Caméra RiCubio Fluid - Caméra hydro propulsée avec câble 80 m, tête rotative béquillable 56 mm et moniteur LED 5,6\" HD"
+  }
+ ]
+}
