@@ -112,6 +112,20 @@ func InjectInstructionsIntoToolsFromContext(ctx context.Context) bool {
 // it to resolve filter mode "self" at request time.
 const EndUserEmailContextKey = "scope_end_user_email"
 
+// ClientIDContextKey carries the OAuth2 client_id of the bearer token (all
+// grants, including client_credentials). Read by ScopedGateway to forward an
+// agent identity to backends tagged "agent-identity".
+const ClientIDContextKey = "scope_client_id"
+
+// ClientIDFromContext returns the OAuth2 client_id of the caller, if any.
+func ClientIDFromContext(ctx context.Context) (string, bool) {
+	v, ok := ctx.Value(ClientIDContextKey).(string)
+	if !ok || v == "" {
+		return "", false
+	}
+	return v, true
+}
+
 // EndUserEmailFromContext returns the end-user email captured during OAuth2
 // login, plus a boolean to distinguish "missing" from "explicitly empty". A
 // non-string stored value is treated as missing — defensive in depth.

@@ -604,6 +604,9 @@ func (sg *ScopedGateway) requestHeadersFor(ctx context.Context, backend *Backend
 	for k, v := range backend.AuthHeaders {
 		headers[k] = v
 	}
+	// Identity forwarding is independent of every filter step below, so it
+	// also applies under a server-level full-access grant.
+	injectAgentIdentity(ctx, headers, backend)
 
 	// Step 0 — server-level full-access grant. When the end-user is granted
 	// unfiltered access on this specific server, skip every filter header

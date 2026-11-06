@@ -244,6 +244,7 @@ func CombinedMiddleware(
 				if userEmail != "" {
 					ctx = context.WithValue(ctx, scopetoken.EndUserEmailContextKey, userEmail)
 				}
+				ctx = context.WithValue(ctx, scopetoken.ClientIDContextKey, clientID)
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}
