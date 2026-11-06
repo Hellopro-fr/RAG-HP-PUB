@@ -28,6 +28,8 @@
 
 ## 2. Décisions techniques et options écartées
 
+> **06/11 — Pause de la migration (décision user).** La VM a libéré assez de place pour les nouveaux projets (dev sur la VM ; prod à l'étude sur GKE ou Cloud Run). 51 services restent servis hors VM, les règles de livraison (PR vers `prod`), le garde-fou `poc` et les mesures en place ne changent pas. V2-a3-bis suspendu (devs sans possibilité d'ajuster, D-06), V2-c option B, V2-a4 / V2-d / V2-e non commencés. État global et conditions de reprise : [`etat-global-migration-2026-11-06.md`](etat-global-migration-2026-11-06.md). Reste à produire : le standard CI/CD documenté (`docs/runbooks/standard-cicd-deploiement.md`).
+
 | Sujet | Décision (date) | Option écartée et raison |
 |---|---|---|
 | rest-milvus, `global-stats` | correctif de code DSO (09/10) | **CPU toujours alloué** (`--no-cpu-throttling`) : +35-40 €/mois estimés pour des échecs ponctuels |

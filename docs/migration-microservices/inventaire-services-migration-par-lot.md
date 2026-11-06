@@ -18,6 +18,8 @@
 
 ## Comment lire ce document
 
+> **Au 6/11/2026** : la colonne « Migré ? » indique qu'une **copie** existe sur Cloud Run ou GKE, pas qu'elle sert la production. L'état réel par service (migré, migrable sans préalable, avec préalable, reste sur la VM) est dans [`etat-global-migration-2026-11-06.md`](etat-global-migration-2026-11-06.md) § 7.
+
 **Cherche ton service dans le sommaire ci-dessous**, il te renvoie à son lot. Le lot dit *quand* ta migration se joue
 et *ce que tu as à vérifier*.
 
