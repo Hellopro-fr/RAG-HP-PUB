@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE leases SET paused = true, updated_at = $2 WHERE task_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "52e22226bed14bfc3af481375902b16e1ef2d79e8ff9b8b28fcde3e16f63350d"
+}

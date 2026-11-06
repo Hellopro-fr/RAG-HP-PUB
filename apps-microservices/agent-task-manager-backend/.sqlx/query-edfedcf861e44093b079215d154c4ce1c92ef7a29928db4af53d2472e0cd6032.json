@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO projects (id, name, workflow, event_seq, created_at, updated_at)\n               VALUES ($1, $2, $3, 0, $4, $4)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Jsonb",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "edfedcf861e44093b079215d154c4ce1c92ef7a29928db4af53d2472e0cd6032"
+}

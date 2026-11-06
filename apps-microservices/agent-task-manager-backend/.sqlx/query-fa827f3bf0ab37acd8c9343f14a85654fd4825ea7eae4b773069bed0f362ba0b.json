@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE attempts SET commit_sha = $2, branch = $3, updated_at = $4\n                       WHERE task_id = $1 AND ended_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "fa827f3bf0ab37acd8c9343f14a85654fd4825ea7eae4b773069bed0f362ba0b"
+}

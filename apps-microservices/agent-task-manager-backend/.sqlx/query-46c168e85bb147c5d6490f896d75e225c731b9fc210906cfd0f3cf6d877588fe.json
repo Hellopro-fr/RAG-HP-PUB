@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO tasks (id, project_id, parent_id, title, spec_id, spec_version, state,\n                       priority, version, spec_outdated, attempt_count, rejection_count, created_by,\n                       created_at, updated_at)\n                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1, false, 0, 0, $9, $10, $10)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Uuid",
+        "Int4",
+        "Text",
+        "Int4",
+        "Uuid",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "46c168e85bb147c5d6490f896d75e225c731b9fc210906cfd0f3cf6d877588fe"
+}

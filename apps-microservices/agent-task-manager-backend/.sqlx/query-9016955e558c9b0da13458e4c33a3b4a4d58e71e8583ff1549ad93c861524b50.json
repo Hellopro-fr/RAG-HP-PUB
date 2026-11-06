@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE tasks SET rejection_count = rejection_count + 1, updated_at = $2\n                       WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9016955e558c9b0da13458e4c33a3b4a4d58e71e8583ff1549ad93c861524b50"
+}

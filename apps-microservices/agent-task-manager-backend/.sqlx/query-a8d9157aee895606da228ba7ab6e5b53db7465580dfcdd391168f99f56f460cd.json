@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT t.id FROM tasks t\n               WHERE t.project_id = $1 AND t.state = 'in_review'\n                 AND NOT EXISTS (SELECT 1 FROM leases l WHERE l.task_id = t.id)\n                 AND NOT EXISTS (SELECT 1 FROM attempts a\n                                 WHERE a.task_id = t.id AND a.ended_at IS NULL AND a.actor_id = $2)\n               ORDER BY t.priority DESC, t.created_at\n               FOR UPDATE OF t SKIP LOCKED\n               LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "tasks",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "a8d9157aee895606da228ba7ab6e5b53db7465580dfcdd391168f99f56f460cd"
+}
