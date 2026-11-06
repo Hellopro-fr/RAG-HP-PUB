@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 98f57cf2d78f1a8c8b89df8b350b6153f79faae612373ceb81ac4355ebb5ee13 # shrinks to wf = WorkflowConfig { spec_gate: false, test_gate: Command, review_gate: None, require_different_model: false, max_rejections: 1, lease_ttl_secs: 600, preferred_grace_secs: 120 }, approved_at_start = false, ops = [Claim { who: 0, review: false }, Submit { who: 0, good: true }]

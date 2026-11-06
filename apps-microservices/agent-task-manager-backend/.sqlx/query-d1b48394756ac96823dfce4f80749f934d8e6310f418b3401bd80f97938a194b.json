@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE spec_versions SET status = 'superseded', updated_at = $2\n                   WHERE spec_id = $1 AND status = 'approved'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d1b48394756ac96823dfce4f80749f934d8e6310f418b3401bd80f97938a194b"
+}

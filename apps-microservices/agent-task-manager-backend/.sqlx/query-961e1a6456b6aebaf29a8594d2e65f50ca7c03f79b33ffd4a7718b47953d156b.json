@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT b.state FROM task_links l JOIN tasks b ON b.id = l.from_id\n           WHERE l.to_id = $1 AND l.kind = 'blocks'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "state",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tasks",
+            "name": "state"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "961e1a6456b6aebaf29a8594d2e65f50ca7c03f79b33ffd4a7718b47953d156b"
+}

@@ -1,0 +1,187 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT q.id, q.task_id, t.title AS task_title, t.project_id, q.asked_by,\n               a.name AS asked_by_name, q.body, q.options, q.blocking, q.status, q.answered_by,\n               q.answer, q.answered_at, q.created_at\n           FROM questions q JOIN tasks t ON t.id = q.task_id JOIN actors a ON a.id = q.asked_by\n           WHERE ($1::uuid IS NULL OR t.project_id = $1)\n             AND ($2::uuid IS NULL OR q.task_id = $2)\n             AND ($3::text IS NULL OR q.status = $3)\n           ORDER BY (q.status = 'open') DESC, q.blocking DESC, q.created_at\n           LIMIT $4",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "questions",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "task_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "questions",
+            "name": "task_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "task_title",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tasks",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "project_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "tasks",
+            "name": "project_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "asked_by",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "questions",
+            "name": "asked_by"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "asked_by_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "actors",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "body",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "questions",
+            "name": "body"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "options",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "questions",
+            "name": "options"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "blocking",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "questions",
+            "name": "blocking"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "status",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "questions",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "answered_by",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "questions",
+            "name": "answered_by"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "answer",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "questions",
+            "name": "answer"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "answered_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "questions",
+            "name": "answered_at"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "questions",
+            "name": "created_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "6a1046d534ad2dced7e2639031d492bf5eb063e097743564cb02b1e1d7d4d4d4"
+}

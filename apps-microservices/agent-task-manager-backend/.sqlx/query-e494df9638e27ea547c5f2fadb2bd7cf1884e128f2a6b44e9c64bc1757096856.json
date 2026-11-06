@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO task_links (from_id, to_id, kind, created_at) VALUES ($1, $2, $3, $4)\n                   ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e494df9638e27ea547c5f2fadb2bd7cf1884e128f2a6b44e9c64bc1757096856"
+}

@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT approved_version FROM specs WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "approved_version",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "specs",
+            "name": "approved_version"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "4b60b8a6c54aeb8db0fa1e6bb2d83e5864896bd666c363980d87934fcf7a968b"
+}

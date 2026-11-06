@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE attempts SET ended_at = $2, outcome = $3, handoff_note = $4, updated_at = $2\n                   WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Timestamptz",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f5be2b7f2fb6ea159b11d310d68263aad73f33fbfba1b76e17d4f0bd09aea6c7"
+}

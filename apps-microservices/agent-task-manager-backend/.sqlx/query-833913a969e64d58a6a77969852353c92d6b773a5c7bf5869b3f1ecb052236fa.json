@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT acceptance_criteria FROM spec_versions WHERE spec_id = $1 AND version = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "acceptance_criteria",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "spec_versions",
+            "name": "acceptance_criteria"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "833913a969e64d58a6a77969852353c92d6b773a5c7bf5869b3f1ecb052236fa"
+}

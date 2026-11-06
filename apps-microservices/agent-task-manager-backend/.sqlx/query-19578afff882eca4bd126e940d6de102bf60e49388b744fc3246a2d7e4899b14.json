@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO spec_versions (spec_id, version, body_md, acceptance_criteria,\n                       protected_paths, test_ref, status, author_id, created_at, updated_at)\n                   VALUES ($1, $2, $3, $4, $5, $6, 'draft', $7, $8, $8)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4",
+        "Text",
+        "Jsonb",
+        "TextArray",
+        "Text",
+        "Uuid",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "19578afff882eca4bd126e940d6de102bf60e49388b744fc3246a2d7e4899b14"
+}
