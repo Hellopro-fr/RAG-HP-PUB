@@ -3002,6 +3002,136 @@ services:
     restart: unless-stopped
     logging: *logging_defaults
 
+  # ── Agent Task Board (agent-task-manager-backend + -frontend) ──────────────────
+  # docker compose --profile agent-task-manager up -d --build  → http://<host>:${ATB_PORT:-8620}
+  # Variables ATB_* dans le .env racine. Dev/tests du service : son propre compose
+  # (apps-microservices/agent-task-manager-backend/docker-compose.yml, scripts/smoke.sh, scripts/demo).
+  agent-task-manager-postgres:
+    image: postgres:16-alpine
+    container_name: agent-task-manager-postgres
+    profiles: [ "agent-task-manager" ]
+    environment:
+      - POSTGRES_PASSWORD=${ATB_POSTGRES_PASSWORD:?set ATB_POSTGRES_PASSWORD in .env}
+      - ATB_OWNER_PASSWORD=${ATB_OWNER_PASSWORD:?set ATB_OWNER_PASSWORD in .env}
+      - ATB_APP_PASSWORD=${ATB_APP_PASSWORD:?set ATB_APP_PASSWORD in .env}
+    volumes:
+      - agent_task_manager_pgdata:/var/lib/postgresql/data
+      - ./apps-microservices/agent-task-manager-backend/deploy/postgres-init:/docker-entrypoint-initdb.d:ro
+    expose:
+      - "5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d atb" ]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    networks:
+      - services-net
+    restart: unless-stopped
+    logging: *logging_defaults
+
+  # One-shot : applique les migrations avec le rôle propriétaire, puis s'arrête.
+  agent-task-manager-migrate:
+    build:
+      context: ./apps-microservices/agent-task-manager-backend
+    image: agent-task-board-server:local
+    container_name: agent-task-manager-migrate
+    profiles: [ "agent-task-manager" ]
+    command: [ "migrate" ]
+    environment:
+      - DATABASE_URL=postgres://atb_owner:${ATB_OWNER_PASSWORD}@agent-task-manager-postgres:5432/atb
+    depends_on:
+      agent-task-manager-postgres:
+        condition: service_healthy
+    networks:
+      - services-net
+    restart: "no"
+    logging: *logging_defaults
+
+  agent-task-manager-server:
+    image: agent-task-board-server:local
+    container_name: agent-task-manager-server
+    profiles: [ "agent-task-manager" ]
+    command: [ "serve" ]
+    environment:
+      # Rôle runtime : pas d'UPDATE/DELETE sur events (migrations/0008).
+      - DATABASE_URL=postgres://atb_app:${ATB_APP_PASSWORD}@agent-task-manager-postgres:5432/atb
+      - BIND_ADDR=0.0.0.0:8621
+      - ATB_BOOTSTRAP_ADMIN_LOGIN=${ATB_BOOTSTRAP_ADMIN_LOGIN:-admin}
+      - ATB_BOOTSTRAP_ADMIN_PASSWORD=${ATB_BOOTSTRAP_ADMIN_PASSWORD:?set ATB_BOOTSTRAP_ADMIN_PASSWORD in .env}
+      - GATEWAY_SHARED_SECRET=${ATB_GATEWAY_SHARED_SECRET:-}
+      - MCP_ALLOWED_HOSTS=${ATB_MCP_ALLOWED_HOSTS:-localhost,127.0.0.1,agent-task-manager-server,agent-task-manager-lb}
+      - LEASE_TTL_SECS=${ATB_LEASE_TTL_SECS:-600}
+      - PREFERRED_GRACE_SECS=${ATB_PREFERRED_GRACE_SECS:-120}
+      - SWEEP_INTERVAL_SECS=${ATB_SWEEP_INTERVAL_SECS:-5}
+      - MAX_REPORTS_PER_MIN=${ATB_MAX_REPORTS_PER_MIN:-60}
+      - CORS_ORIGINS=${ATB_CORS_ORIGINS:-}
+      - COOKIE_SECURE=${ATB_COOKIE_SECURE:-false}
+      - RUST_LOG=${ATB_RUST_LOG:-info}
+    expose:
+      - "8621"
+    depends_on:
+      agent-task-manager-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [ "CMD", "curl", "-fsS", "http://localhost:8621/readyz" ]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    networks:
+      - services-net
+    restart: unless-stopped
+    logging: *logging_defaults
+
+  agent-task-manager-web:
+    build:
+      context: ./apps-microservices/agent-task-manager-frontend
+    image: agent-task-board-web:local
+    container_name: agent-task-manager-web
+    profiles: [ "agent-task-manager" ]
+    environment:
+      - BACKEND_INTERNAL_URL=http://agent-task-manager-server:8621
+    expose:
+      - "3020"
+    depends_on:
+      agent-task-manager-server:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "node", "-e", "fetch('http://localhost:3020/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" ]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    networks:
+      - services-net
+    restart: unless-stopped
+    logging: *logging_defaults
+
+  # Origine unique : /api/*, /mcp -> server (SSE non bufferisé), le reste -> web.
+  agent-task-manager-lb:
+    image: caddy:2.10-alpine
+    container_name: agent-task-manager-lb
+    profiles: [ "agent-task-manager" ]
+    environment:
+      - ATB_SERVER_UPSTREAM=agent-task-manager-server:8621
+      - ATB_WEB_UPSTREAM=agent-task-manager-web:3020
+    ports:
+      - "${ATB_PORT:-8620}:8620"
+    volumes:
+      - ./apps-microservices/agent-task-manager-backend/deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      agent-task-manager-server:
+        condition: service_healthy
+      agent-task-manager-web:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "wget", "-q", "-O", "-", "http://localhost:8620/healthz" ]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    networks:
+      - services-net
+    restart: unless-stopped
+    logging: *logging_defaults
+
 networks:
   services-net:
     driver: bridge
@@ -3031,3 +3161,4 @@ volumes:
   gateway_mysql_data:
   tailscale_state:
   databasus_data:
+  agent_task_manager_pgdata:

@@ -1,6 +1,8 @@
 # Single origin (§2): /api/*, /mcp and health go to the Rust server, everything else to Next.js.
 # No `encode` directive: SSE must not be compressed. `flush_interval -1` disables buffering so
 # every event reaches the browser immediately.
+# Upstreams default to this service's own compose (server, web); the root compose sets
+# ATB_SERVER_UPSTREAM / ATB_WEB_UPSTREAM to its prefixed container names.
 {
 	admin off
 }
@@ -8,11 +10,11 @@
 :8620 {
 	@backend path /api/* /mcp /mcp/* /healthz /readyz
 	handle @backend {
-		reverse_proxy server:8621 {
+		reverse_proxy {$ATB_SERVER_UPSTREAM:server:8621} {
 			flush_interval -1
 		}
 	}
 	handle {
-		reverse_proxy web:3020
+		reverse_proxy {$ATB_WEB_UPSTREAM:web:3020}
 	}
 }
