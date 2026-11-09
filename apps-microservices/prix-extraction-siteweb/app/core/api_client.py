@@ -358,7 +358,8 @@ class HelloProAPIClient:
         origine: str,
         etat: int = 1,
         retour_erreur: str = "",
-        temperature: float = 0.9
+        temperature: float = 0.9,
+        cache_hit_token: int = 0,
     ) -> Optional[Dict[str, Any]]:
         """
         Enregistre l'utilisation LLM (coûts et tokens) dans la base de données
@@ -373,6 +374,7 @@ class HelloProAPIClient:
             etat: 1 pour succès, 2 pour erreur
             retour_erreur: Message d'erreur si etat=2
             temperature: Température utilisée
+            cache_hit_token: Tokens d'entrée lus en cache (DeepSeek : usage.prompt_cache_hit_tokens)
             
         Returns:
             La réponse de l'API ou None en cas d'erreur
@@ -387,7 +389,8 @@ class HelloProAPIClient:
             "origine": origine,
             "etat": etat,
             "retour_erreur": retour_erreur,
-            "temperature": temperature
+            "temperature": temperature,
+            "cache_hit_token": cache_hit_token,
         }
         
         try:
