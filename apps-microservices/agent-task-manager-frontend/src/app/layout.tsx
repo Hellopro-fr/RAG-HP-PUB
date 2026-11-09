@@ -30,6 +30,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
                 <Link href="/projects">{fr.nav.projects}</Link>
                 <Link href="/questions">{fr.nav.questions}</Link>
                 {can('agents.view') && <Link href="/agents">{fr.nav.agents}</Link>}
+                {can('users.view') && <Link href="/users">{fr.nav.users}</Link>}
                 {can('access.manage') && <Link href="/access">{fr.nav.access}</Link>}
                 <span className="ml-auto flex items-center gap-2 text-slate-600" data-testid="current-user">
                   {me.name}

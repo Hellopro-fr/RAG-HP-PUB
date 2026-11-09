@@ -21,6 +21,7 @@ export const fr = {
     questions: 'Questions',
     agents: 'Agents',
     access: 'Accès',
+    users: 'Utilisateurs',
     logout: 'Déconnexion',
   },
   level: { admin: 'Admin', classic: 'Classique' } as Record<string, string>,
@@ -49,15 +50,112 @@ export const fr = {
       sso_state: 'La connexion a expiré. Recommencez.',
       sso_exchange: 'Le compte HelloPro n’a pas pu confirmer votre identité. Recommencez.',
       sso_not_allowed: 'Votre compte HelloPro est bloqué. Contactez un administrateur.',
+      sso_board_disabled:
+        'Votre accès à l’Agent Task Board est désactivé. Contactez un administrateur.',
       sso_internal: 'Erreur pendant la connexion. Recommencez dans un instant.',
     } as Record<string, string>,
   },
   projects: {
     title: 'Projets',
     empty: 'Aucun projet pour le moment.',
+    emptyFilter: 'Aucun projet ne correspond à ce filtre.',
     create: 'Créer un projet',
     name: 'Nom du projet',
     open: 'Ouvrir le tableau',
+    filters: { all: 'Tous', member: 'Mes projets', public: 'Publics' } as Record<string, string>,
+    visibility: {
+      private: ['Privé', 'Seuls les membres et les équipes invitées le voient.'] as [string, string],
+      public: ['Public', 'Tout compte HelloPro peut le consulter en lecture seule.'] as [
+        string,
+        string,
+      ],
+    },
+    invitation: (project: string, role: string, by: string | null | undefined) =>
+      `${by ? `${by} vous invite` : 'Vous êtes invité·e'} sur « ${project} » comme ${role}.`,
+    accept: 'Accepter',
+    decline: 'Refuser',
+    members: 'Membres et accès',
+  },
+  role: { owner: 'Propriétaire', editor: 'Éditeur', viewer: 'Lecteur' } as Record<string, string>,
+  members: {
+    title: 'Membres et accès',
+    back: 'Retour au tableau',
+    visibility: 'Visibilité',
+    give: 'Donner l’accès',
+    kindTeam: 'Une équipe',
+    kindPerson: 'Une personne',
+    team: 'Équipe',
+    email: 'E-mail de la personne',
+    role: 'Rôle',
+    grantTeam: 'Donner l’accès à l’équipe',
+    invite: 'Inviter',
+    teamHint:
+      'Tous les membres de l’équipe, actuels et futurs, ont ce rôle sur le projet. La liste des membres se gère dans account-service.',
+    personHint:
+      'La personne se connecte avec son compte HelloPro et accepte l’invitation depuis la page Projets.',
+    teams: (n: number) => `Équipes (${n})`,
+    noTeams: 'Aucune équipe n’a accès à ce projet.',
+    noTeamLeft: 'Toutes les équipes ont déjà un accès.',
+    people: (n: number) => `Personnes ayant accès (${n})`,
+    pending: 'Invitation en attente',
+    notSignedIn: 'pas encore connecté·e',
+    noAccess: 'Pas d’accès',
+    remove: (name: string) => `Retirer l’accès de ${name}`,
+    removeTeam: (name: string) => `Retirer l’accès de l’équipe ${name}`,
+    individual: (role: string, replaced: boolean) =>
+      `Individuel : ${role}${replaced ? ' (prioritaire)' : ''}`,
+    viaTeam: (team: string, role: string, replaced: boolean) =>
+      `via ${team} : ${role}${replaced ? ' (remplacé)' : ''}`,
+    source: {
+      admin: 'Niveau Admin',
+      public: 'Projet public (lecture)',
+    } as Record<string, string>,
+    agents: (names: string[]) => (names.length ? `Agents : ${names.join(', ')}` : ''),
+    readOnly: 'Seuls les propriétaires du projet gèrent la visibilité et les membres.',
+    rules: [
+      ['1. Individuel', 'S’il existe et qu’il est accepté, il s’applique, même s’il est plus bas que celui d’une équipe.'],
+      ['2. Équipes', 'Sinon, le plus élevé des rôles donnés par ses équipes.'],
+      ['Admin', 'Accès complet à tous les projets, quel que soit son rôle ici.'],
+      ['Équipe', 'Éditeur ou Lecteur. Le rôle Propriétaire se donne seulement à une personne.'],
+      ['Agents', 'Un agent a le rôle de la personne qui l’a connecté (au plus Éditeur).'],
+    ] as [string, string][],
+  },
+  users: {
+    title: 'Utilisateurs',
+    filters: { all: 'Tous', admin: 'Admins', pending: 'Invités', disabled: 'Désactivés' } as Record<string, string>,
+    status: { active: 'Actif', disabled: 'Désactivé', pending: 'Invité' } as Record<string, string>,
+    you: '(vous)',
+    never: 'Jamais connecté·e',
+    seen: (when: string) => `Vu : ${when}`,
+    usage: (p: number, a: number) =>
+      `${p} projet${p > 1 ? 's' : ''} · ${a} agent${a > 1 ? 's' : ''}`,
+    select: 'Sélectionnez un utilisateur.',
+    empty: 'Aucun utilisateur ne correspond.',
+    email: 'E-mail',
+    source: 'Source',
+    sourceValue: 'account-service (compte HelloPro)',
+    teams: 'Équipes',
+    none: 'Aucune',
+    first: 'Première connexion',
+    last: 'Dernière activité',
+    level: 'Niveau',
+    manageAccess: 'Gérer ses accès',
+    projects: (n: number) => `Projets (${n})`,
+    agents: (n: number) => `Agents (${n})`,
+    noProject: 'Aucun projet.',
+    noAgent: 'Aucun agent.',
+    invitation: '(invitation)',
+    disable: 'Désactiver l’accès',
+    enable: 'Réactiver l’accès',
+    disableHint:
+      'Désactiver bloque l’Agent Task Board sans toucher au compte HelloPro. Ses agents sont refusés ; leurs tâches en cours reviennent dans « Prête » à l’expiration du bail.',
+    disabledHint:
+      'Accès désactivé : la personne ne peut plus se connecter au tableau, et ses agents ne prennent plus de tâche.',
+    adminHint: 'Un Admin ne peut pas être désactivé : passez-le d’abord en Classique (page Accès).',
+    revoke: 'Révoquer les sessions',
+    revoked: 'Sessions révoquées.',
+    isMe: 'Vous ne pouvez ni désactiver votre propre accès ni retirer votre propre niveau Admin.',
+    confirmDisable: (name: string) => `Désactiver l’accès de ${name} au tableau ?`,
   },
   board: {
     live: 'En direct',
@@ -192,4 +290,9 @@ export function formatRemaining(ms: number): string {
 export function formatDate(iso: string | null | undefined): string {
   if (!iso) return '—';
   return new Date(iso).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'medium' });
+}
+
+/** Label and description of a project visibility coming from the API (`public` / `private`). */
+export function visibilityText(v: string): [string, string] {
+  return v === 'public' || v === 'private' ? fr.projects.visibility[v] : [v, ''];
 }

@@ -2,6 +2,7 @@
 
 pub mod auth;
 pub mod dto;
+pub mod guard;
 pub mod mcp;
 pub mod openapi;
 pub mod rest;
@@ -101,8 +102,37 @@ pub fn router(st: AppState) -> Router {
             "/api/access/teams/{id}/permissions/{permission}",
             put(rest::access_set_team_permission),
         )
+        .route(
+            "/api/projects/{id}/members",
+            get(rest::project_members).post(rest::project_add_member),
+        )
+        .route(
+            "/api/projects/{id}/members/{kind}/{subject}",
+            put(rest::project_set_member_role).delete(rest::project_remove_member),
+        )
+        .route(
+            "/api/projects/{id}/visibility",
+            put(rest::project_set_visibility),
+        )
+        .route("/api/invitations", get(rest::my_invitations))
+        .route(
+            "/api/invitations/{project_id}/accept",
+            post(rest::accept_invitation),
+        )
+        .route(
+            "/api/invitations/{project_id}/decline",
+            post(rest::decline_invitation),
+        )
+        .route("/api/users", get(rest::list_users))
+        .route("/api/users/{id}/status", put(rest::set_user_status))
+        .route(
+            "/api/users/{id}/revoke-sessions",
+            post(rest::revoke_user_sessions),
+        )
         .route("/api/stream", get(sse::global_stream))
         .nest_service("/mcp", mcp::service(st.clone()))
+        // Inner: the project check (needs the Actor and Scope put by the outer auth layer).
+        .route_layer(from_fn_with_state(st.clone(), guard::project_guard))
         .layer(from_fn_with_state(st.clone(), auth::require_actor));
 
     let x_request_id = HeaderName::from_static("x-request-id");
@@ -152,6 +182,7 @@ pub fn router(st: AppState) -> Router {
                     Method::POST,
                     Method::PUT,
                     Method::PATCH,
+                    Method::DELETE,
                     Method::OPTIONS,
                 ])
                 .allow_headers([

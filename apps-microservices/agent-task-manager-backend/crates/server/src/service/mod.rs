@@ -4,12 +4,14 @@
 pub mod access;
 pub mod auth;
 pub mod commands;
+pub mod project_access;
 pub mod queries;
 pub mod ratelimit;
 pub mod rebuild;
 pub mod sweeper;
 pub mod tx;
 pub mod updates;
+pub mod users;
 
 use time::OffsetDateTime;
 

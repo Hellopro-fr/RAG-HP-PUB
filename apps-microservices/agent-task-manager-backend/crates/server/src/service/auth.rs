@@ -131,7 +131,18 @@ pub async fn create_actor(
                 .into(),
         ));
     }
-    insert_actor(conn, input).await
+    let created = insert_actor(conn, input).await?;
+    // The person who connects an agent owns it: the agent sees the projects they see.
+    if by.is_human() && created.kind != NewActorKind::Human {
+        sqlx::query!(
+            "UPDATE actors SET owner_id = $2 WHERE id = $1",
+            created.id,
+            by.id
+        )
+        .execute(&mut *conn)
+        .await?;
+    }
+    Ok(created)
 }
 
 async fn insert_actor(conn: &mut PgConnection, input: NewActorInput) -> AppResult<CreatedActor> {

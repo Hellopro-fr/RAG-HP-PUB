@@ -16,8 +16,13 @@ use crate::service::access::{
 };
 use crate::service::auth::{CreatedActor, NewActorInput, NewActorKind};
 use crate::service::commands::{ClaimRole, CommandResult, NewTaskInput, SpecInput};
+use crate::service::project_access::{
+    InvitationView, MemberInput, PersonAccess, ProjectMembers, RoleInput, TeamGrant, TeamRoleRef,
+    VisibilityInput,
+};
 use crate::service::queries::{Board, TaskContext};
 use crate::service::rebuild::{RebuildReport, TableDiff};
+use crate::service::users::{UserProject, UserStatusInput, UserView};
 
 #[derive(OpenApi)]
 #[openapi(
@@ -39,6 +44,10 @@ use crate::service::rebuild::{RebuildReport, TableDiff};
         rest::list_actors, rest::create_actor,
         rest::access_overview, rest::access_user, rest::access_set_level,
         rest::access_set_user_permission, rest::access_team, rest::access_set_team_permission,
+        rest::project_members, rest::project_set_visibility, rest::project_add_member,
+        rest::project_set_member_role, rest::project_remove_member, rest::my_invitations,
+        rest::accept_invitation, rest::decline_invitation,
+        rest::list_users, rest::set_user_status, rest::revoke_user_sessions,
         sse::project_stream, sse::global_stream,
     ),
     components(schemas(
@@ -52,11 +61,12 @@ use crate::service::rebuild::{RebuildReport, TableDiff};
         dto::AnswerInput, dto::AuthMethods,
         AccessOverview, AccessUser, AccessTeam, PermissionInfo, TeamRef, UserAccess,
         EffectiveAccess, SourceView, TeamAccess, TeamMember, TeamPermission, SettingInput,
-        LevelInput,
+        LevelInput, ProjectMembers, TeamGrant, TeamRoleRef, PersonAccess, VisibilityInput,
+        MemberInput, RoleInput, InvitationView, UserView, UserProject, UserStatusInput,
     )),
     tags(
         (name = "auth"), (name = "projects"), (name = "tasks"), (name = "specs"),
-        (name = "questions"), (name = "actors"), (name = "access"), (name = "realtime"), (name = "ops")
+        (name = "questions"), (name = "actors"), (name = "access"), (name = "members"), (name = "users"), (name = "realtime"), (name = "ops")
     )
 )]
 pub struct ApiDoc;

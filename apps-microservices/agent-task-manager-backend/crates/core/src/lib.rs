@@ -13,6 +13,7 @@ pub mod event;
 pub mod graph;
 pub mod invariants;
 pub mod model;
+pub mod project_access;
 pub mod workflow;
 
 pub use apply::{apply, apply_all};

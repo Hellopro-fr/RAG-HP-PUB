@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, name, workflow, event_seq, created_at FROM projects ORDER BY created_at",
+  "query": "SELECT id, name, workflow, event_seq, created_at, visibility, NULL::text AS \"my_role\"\n           FROM projects WHERE id = $1",
   "describe": {
     "columns": [
       {
@@ -57,18 +57,39 @@
             "name": "created_at"
           }
         }
+      },
+      {
+        "ordinal": 5,
+        "name": "visibility",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "projects",
+            "name": "visibility"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "my_role",
+        "type_info": "Text",
+        "origin": "Expression"
       }
     ],
     "parameters": {
-      "Left": []
+      "Left": [
+        "Uuid"
+      ]
     },
     "nullable": [
       false,
       false,
       false,
       false,
-      false
+      false,
+      false,
+      null
     ]
   },
-  "hash": "417c05926642b653f50289a0d005f5e990db4d3a958466d59596d73872196818"
+  "hash": "a3694d01a9c02592fdf424d33b67ecad2c6629f9519cf0d9f337400c7921d768"
 }

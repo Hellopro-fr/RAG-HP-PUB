@@ -19,6 +19,10 @@ export type AccessOverview = Schemas['AccessOverview'];
 export type UserAccess = Schemas['UserAccess'];
 export type TeamAccess = Schemas['TeamAccess'];
 export type SourceView = Schemas['SourceView'];
+export type InvitationView = Schemas['InvitationView'];
+export type ProjectMembers = Schemas['ProjectMembers'];
+export type PersonAccess = Schemas['PersonAccess'];
+export type UserView = Schemas['UserView'];
 
 export const api = createClient<paths>({ baseUrl: '', credentials: 'include' });
 
@@ -63,6 +67,9 @@ export const keys = {
   actors: ['actors'] as const,
   projects: ['projects'] as const,
   access: ['access'] as const,
+  invitations: ['invitations'] as const,
+  members: (projectId: string) => ['members', projectId] as const,
+  users: ['users'] as const,
   accessUser: (id: string) => ['access', 'user', id] as const,
   accessTeam: (id: string) => ['access', 'team', id] as const,
 };

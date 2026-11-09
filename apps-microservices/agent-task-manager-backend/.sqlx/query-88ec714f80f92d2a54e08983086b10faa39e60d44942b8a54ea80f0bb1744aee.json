@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT count(*) AS \"n!\" FROM project_members\n           WHERE project_id = $1 AND subject_kind = 'user' AND role = 'owner'\n             AND accepted_at IS NOT NULL AND subject_id <> $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "n!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "88ec714f80f92d2a54e08983086b10faa39e60d44942b8a54ea80f0bb1744aee"
+}

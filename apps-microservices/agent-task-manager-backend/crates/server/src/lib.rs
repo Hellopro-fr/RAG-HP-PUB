@@ -16,6 +16,7 @@ pub mod error;
 pub mod metrics;
 pub mod realtime;
 pub mod repository;
+pub mod scope;
 pub mod service;
 pub mod state;
 

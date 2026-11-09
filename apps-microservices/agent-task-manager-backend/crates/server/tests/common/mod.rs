@@ -149,6 +149,16 @@ impl TestApp {
         (status, res.json().await.unwrap_or(Value::Null))
     }
 
+    pub async fn delete(&self, who: As<'_>, path: &str) -> (StatusCode, Value) {
+        let res = self
+            .req(who, reqwest::Method::DELETE, path)
+            .send()
+            .await
+            .unwrap();
+        let status = res.status();
+        (status, res.json().await.unwrap_or(Value::Null))
+    }
+
     pub async fn put(&self, who: As<'_>, path: &str, body: Value) -> (StatusCode, Value) {
         let res = self
             .req(who, reqwest::Method::PUT, path)

@@ -43,6 +43,8 @@ pub struct CreateProjectInput {
     /// Workflow config (§5). Defaults: every gate on, LEASE_TTL_SECS / PREFERRED_GRACE_SECS.
     #[schema(value_type = Option<Object>)]
     pub workflow: Option<Value>,
+    /// `private` (default: members only) or `public` (everyone reads).
+    pub visibility: Option<String>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]

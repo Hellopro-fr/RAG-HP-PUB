@@ -129,6 +129,20 @@ else refused if one refuses) > refused. Teams are account-service groups. Permis
 `users.view`, `access.manage` (Admin only, cannot be set). Agents keep their role checks.
 The first human signing in on an empty board becomes Admin; an admin cannot change their own level
 and the last admin cannot be demoted.
+
+## Projects: visibility and members ("Membres et accès")
+
+A project is **private** (members and invited teams only; default for new projects) or **public**
+(every signed-in person reads it). Projects that existed before migration 0010 became public.
+Roles: `owner` (members and visibility), `editor` (all work), `viewer` (read). Rule in
+`atb_core::project_access`: Admin = owner everywhere > accepted individual role (wins even when lower)
+> highest team role > public read > invisible (404). Teams get editor/viewer only. A person is
+invited by email (pending until they accept on the Projects page); a project keeps one owner.
+Every project-scoped REST route goes through `api/guard.rs` (GET = viewer, other = editor) and every
+MCP tool through `BoardMcp::guard`. Agents created by a person (`actors.owner_id`) see what their
+owner sees, capped at editor; agents created by an admin or from the CLI are unrestricted.
+"Utilisateurs" (`users.view`): people and invitees; admins disable board access (sessions deleted,
+their agents refused) without touching the HelloPro account.
 Project workflow values override the lease/grace defaults.
 
 ## Ops

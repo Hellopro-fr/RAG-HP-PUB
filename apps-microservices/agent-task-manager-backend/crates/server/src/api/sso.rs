@@ -169,6 +169,8 @@ enum SsoError {
     BadState,
     Exchange,
     NotAllowed,
+    /// Board access disabled by an admin (the HelloPro account is fine).
+    Disabled,
     Internal,
 }
 
@@ -179,6 +181,7 @@ impl SsoError {
             SsoError::BadState => "sso_state",
             SsoError::Exchange => "sso_exchange",
             SsoError::NotAllowed => "sso_not_allowed",
+            SsoError::Disabled => "sso_board_disabled",
             SsoError::Internal => "sso_internal",
         }
     }
@@ -265,6 +268,15 @@ async fn finish(
         Some(a) => a,
         None => create_human(&mut tx, &email, display_name.as_deref()).await?,
     };
+    let disabled = sqlx::query_scalar!(
+        r#"SELECT disabled_at IS NOT NULL AS "d!" FROM actors WHERE id = $1"#,
+        actor.id
+    )
+    .fetch_one(&mut *tx)
+    .await?;
+    if disabled {
+        return Err(SsoError::Disabled);
+    }
     let token = random_token();
     let expires_at = now() + time::Duration::hours(st.cfg.session_ttl_hours);
     store::insert_session(&mut tx, &sha256_hex(&token), actor.id, expires_at).await?;

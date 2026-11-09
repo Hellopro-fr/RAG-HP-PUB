@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE project_members SET accepted_at = $3\n               WHERE project_id = $1 AND subject_kind = 'user' AND subject_id = $2\n                 AND accepted_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b803f3c2fd279f604f07ca2ca6267143382e288b88c3ae3750e399da35909cde"
+}

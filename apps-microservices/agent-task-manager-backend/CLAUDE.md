@@ -25,6 +25,12 @@ Frontend: `apps-microservices/agent-task-manager-frontend`.
   must run BEFORE `tx::run` (it may call account-service). Permissions apply to humans only.
   Teams come from account-service `GET /internal/directory` (cached `DIRECTORY_TTL_SECS`, last copy
   served on failure). `access_rules` is configuration, not event-sourced.
+- Project access: the rule is `atb_core::project_access` (pure). The caller's `Scope` is resolved
+  once in `api/auth.rs` (also refuses disabled users and agents of disabled owners). A new
+  project-scoped REST route needs no code: `api/guard.rs` derives the project from the route
+  (`/api/{projects,tasks,specs,questions}/{id}`). A new MCP tool MUST call `self.guard(..)`.
+  Cross-project lists (`/api/projects`, `/api/questions`, `/api/actors`, `/api/stream`) filter
+  with `visible_projects` / `role_in`. Invisible = 404, visible but too low = 403.
 
 ## Run / test
 ```bash

@@ -443,6 +443,90 @@
         }
       }
     },
+    "/api/invitations": {
+      "get": {
+        "tags": [
+          "members"
+        ],
+        "operationId": "my_invitations",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/InvitationView"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/invitations/{project_id}/accept": {
+      "post": {
+        "tags": [
+          "members"
+        ],
+        "operationId": "accept_invitation",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {},
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/invitations/{project_id}/decline": {
+      "post": {
+        "tags": [
+          "members"
+        ],
+        "operationId": "decline_invitation",
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {},
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects": {
       "get": {
         "tags": [
@@ -673,6 +757,213 @@
                   "items": {
                     "$ref": "#/components/schemas/StoredEvent"
                   }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/members": {
+      "get": {
+        "tags": [
+          "members"
+        ],
+        "operationId": "project_members",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectMembers"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "members"
+        ],
+        "operationId": "project_add_member",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemberInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/members/{kind}/{subject}": {
+      "put": {
+        "tags": [
+          "members"
+        ],
+        "operationId": "project_set_member_role",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "subject",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoleInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "members"
+        ],
+        "operationId": "project_remove_member",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "subject",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {},
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
                 }
               }
             }
@@ -919,6 +1210,56 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CommandResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/visibility": {
+      "put": {
+        "tags": [
+          "members"
+        ],
+        "operationId": "project_set_visibility",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VisibilityInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
                 }
               }
             }
@@ -1758,6 +2099,109 @@
           }
         }
       }
+    },
+    "/api/users": {
+      "get": {
+        "tags": [
+          "users"
+        ],
+        "operationId": "list_users",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UserView"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/users/{id}/revoke-sessions": {
+      "post": {
+        "tags": [
+          "users"
+        ],
+        "operationId": "revoke_user_sessions",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {},
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/users/{id}/status": {
+      "put": {
+        "tags": [
+          "users"
+        ],
+        "operationId": "set_user_status",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserStatusInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2211,6 +2655,13 @@
           "name": {
             "type": "string"
           },
+          "visibility": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`private` (default: members only) or `public` (everyone reads)."
+          },
           "workflow": {
             "type": [
               "object",
@@ -2344,6 +2795,32 @@
             "type": "object"
           },
           "message": {
+            "type": "string"
+          }
+        }
+      },
+      "InvitationView": {
+        "type": "object",
+        "required": [
+          "project_id",
+          "project_name",
+          "role"
+        ],
+        "properties": {
+          "invited_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "project_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "project_name": {
+            "type": "string"
+          },
+          "role": {
             "type": "string"
           }
         }
@@ -2512,6 +2989,28 @@
           }
         }
       },
+      "MemberInput": {
+        "type": "object",
+        "required": [
+          "kind",
+          "id",
+          "role"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "description": "`user` (an email / login: the person is invited) or `team` (an account-service group id)."
+          },
+          "role": {
+            "type": "string",
+            "description": "`owner` (people only), `editor` or `viewer`."
+          }
+        },
+        "additionalProperties": false
+      },
       "NewActorInput": {
         "type": "object",
         "required": [
@@ -2664,6 +3163,120 @@
           }
         }
       },
+      "PersonAccess": {
+        "type": "object",
+        "required": [
+          "subject",
+          "name",
+          "invitation_pending",
+          "via_teams",
+          "agents"
+        ],
+        "properties": {
+          "agents": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Names of the person's agents."
+          },
+          "effective_role": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Effective role (`owner`, `editor`, `viewer`), absent = no access yet."
+          },
+          "individual_role": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Individual role, when set (pending or accepted)."
+          },
+          "invitation_pending": {
+            "type": "boolean",
+            "description": "The individual grant is an invitation not accepted yet."
+          },
+          "name": {
+            "type": "string"
+          },
+          "source": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`admin`, `individual`, `team`, `public`."
+          },
+          "subject": {
+            "type": "string",
+            "description": "Lower-cased login / email."
+          },
+          "user_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "The board account, absent until the first sign-in."
+          },
+          "via_teams": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TeamRoleRef"
+            },
+            "description": "Teams giving a role on this project."
+          }
+        }
+      },
+      "ProjectMembers": {
+        "type": "object",
+        "required": [
+          "project_id",
+          "visibility",
+          "my_role",
+          "can_manage",
+          "teams",
+          "people",
+          "available_teams"
+        ],
+        "properties": {
+          "available_teams": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TeamGrant"
+            },
+            "description": "Teams that can still be given a role (owners only; empty otherwise)."
+          },
+          "can_manage": {
+            "type": "boolean",
+            "description": "Owners (and admins) manage visibility and members."
+          },
+          "my_role": {
+            "type": "string",
+            "description": "The caller's role on the project."
+          },
+          "people": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PersonAccess"
+            }
+          },
+          "project_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "teams": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TeamGrant"
+            }
+          },
+          "visibility": {
+            "type": "string"
+          }
+        }
+      },
       "ProjectView": {
         "type": "object",
         "required": [
@@ -2671,7 +3284,8 @@
           "name",
           "workflow",
           "event_seq",
-          "created_at"
+          "created_at",
+          "visibility"
         ],
         "properties": {
           "created_at": {
@@ -2686,8 +3300,19 @@
             "type": "string",
             "format": "uuid"
           },
+          "my_role": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The caller's role (`owner`, `editor`, `viewer`); filled by the API."
+          },
           "name": {
             "type": "string"
+          },
+          "visibility": {
+            "type": "string",
+            "description": "`public` (everyone reads) or `private` (members only)."
           },
           "workflow": {
             "type": "object"
@@ -2857,6 +3482,18 @@
               "string",
               "null"
             ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "RoleInput": {
+        "type": "object",
+        "required": [
+          "role"
+        ],
+        "properties": {
+          "role": {
+            "type": "string"
           }
         },
         "additionalProperties": false
@@ -3416,6 +4053,31 @@
           }
         }
       },
+      "TeamGrant": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "member_count",
+          "role"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "member_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "description": "`editor` or `viewer`."
+          }
+        }
+      },
       "TeamMember": {
         "type": "object",
         "required": [
@@ -3478,6 +4140,21 @@
           }
         }
       },
+      "TeamRoleRef": {
+        "type": "object",
+        "required": [
+          "name",
+          "role"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          }
+        }
+      },
       "UserAccess": {
         "type": "object",
         "required": [
@@ -3495,6 +4172,124 @@
             "$ref": "#/components/schemas/AccessUser"
           }
         }
+      },
+      "UserProject": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "role",
+          "pending"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "pending": {
+            "type": "boolean",
+            "description": "An invitation not accepted yet."
+          },
+          "role": {
+            "type": "string"
+          }
+        }
+      },
+      "UserStatusInput": {
+        "type": "object",
+        "required": [
+          "disabled"
+        ],
+        "properties": {
+          "disabled": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "UserView": {
+        "type": "object",
+        "required": [
+          "name",
+          "login",
+          "level",
+          "status",
+          "teams",
+          "projects",
+          "agents"
+        ],
+        "properties": {
+          "agents": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "first_seen_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Absent for a person invited who never signed in."
+          },
+          "last_seen_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "level": {
+            "type": "string",
+            "description": "`admin` or `classic`."
+          },
+          "login": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "projects": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserProject"
+            }
+          },
+          "status": {
+            "type": "string",
+            "description": "`active`, `disabled` or `pending` (invited, never signed in)."
+          },
+          "teams": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "VisibilityInput": {
+        "type": "object",
+        "required": [
+          "visibility"
+        ],
+        "properties": {
+          "visibility": {
+            "type": "string",
+            "description": "`public` or `private`."
+          }
+        },
+        "additionalProperties": false
       }
     }
   },
@@ -3519,6 +4314,12 @@
     },
     {
       "name": "access"
+    },
+    {
+      "name": "members"
+    },
+    {
+      "name": "users"
     },
     {
       "name": "realtime"
