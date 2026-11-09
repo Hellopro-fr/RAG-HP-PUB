@@ -310,6 +310,7 @@ class InfoCaracteristiquesGenerator:
             max_retries=10
         )
         result = await asyncio.to_thread(gemini.chat, prompt_text)
+        self._log(f"Retour LLM complet : {result}")
         
         # Enregistrer l'utilisation LLM (coûts et tokens)        
         usage_metadata = result.get("api_response", {}).get("usage_metadata", {})
@@ -317,7 +318,8 @@ class InfoCaracteristiquesGenerator:
             type_ia=3,  # Gemini
             model=self.GEMINI_MODEL,
             input_token=usage_metadata.get("prompt_token_count", 0),
-            output_token=usage_metadata.get("candidates_token_count", 0) + usage_metadata.get("thoughtsTokenCount", 0),
+            output_token=usage_metadata.get("candidates_token_count", 0) + (usage_metadata.get("thoughts_token_count") or 0),
+            cache_hit_token=(usage_metadata.get("cached_content_token_count") or 0),
             id_process=self.ID_PROCESS,
             origine="qc-generation-valeurs",
             etat=1 if "code" not in result else 2,

@@ -176,6 +176,7 @@ class HelloProAPIClient:
         etat: int = 1,
         retour_erreur: str = "",
         temperature: float = 0.1,
+        cache_hit_token: int = 0,
     ) -> Optional[Dict[str, Any]]:
         """Enregistre l'utilisation LLM (coûts + tokens) dans historique_exec_chatgpt."""
         data = {
@@ -189,6 +190,7 @@ class HelloProAPIClient:
             "etat": etat,
             "retour_erreur": retour_erreur,
             "temperature": temperature,
+            "cache_hit_token": cache_hit_token,
         }
         try:
             return await self.post(etape="llm_tracking", field="", action="insert", data=data)

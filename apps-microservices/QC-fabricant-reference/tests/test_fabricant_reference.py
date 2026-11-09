@@ -511,3 +511,32 @@ class TestRun:
         assert resultat.status == "completed_with_errors"
         mails = [d for e, f, a, d in client._calls if f == "mail"]
         assert mails, "un mail de compte rendu doit partir"
+
+
+class TestSuiviLLM:
+    def test_tokens_en_cache_deepseek_transmis_au_suivi(self, monkeypatch):
+        """usage.prompt_cache_hit_tokens (DeepSeek) → cache_hit_token de llm_tracking : tarif cache_hit
+        de deepseek.php au lieu du tarif input plein."""
+        import types
+        import app.core.fabricant_reference as module
+
+        usage = types.SimpleNamespace(prompt_tokens=1000, completion_tokens=50, prompt_cache_hit_tokens=800)
+
+        class FauxDeepSeek:
+            MODEL = "deepseek-v4-flash"
+
+            def __init__(self, temperature=0):
+                pass
+
+            def chat(self, prompt):
+                return {"content": "[]", "response": types.SimpleNamespace(usage=usage)}
+
+        monkeypatch.setattr(module, "DeepSeek", FauxDeepSeek)
+        client = _make_api_client()
+        gen = FabricantReferenceGenerator(client)
+        gen.prompt_extraction = dict(PROMPT)
+
+        asyncio.run(gen._call_llm("prompt", "42", 1))
+
+        appel = client.log_llm_usage.call_args.kwargs
+        assert appel["input_token"] == 1000 and appel["cache_hit_token"] == 800
