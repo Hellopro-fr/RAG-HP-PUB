@@ -4,6 +4,102 @@
  */
 
 export interface paths {
+    "/api/access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["access_overview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/access/teams/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["access_team"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/access/teams/{id}/permissions/{permission}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["access_set_team_permission"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/access/users/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["access_user"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/access/users/{id}/level": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["access_set_level"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/access/users/{id}/permissions/{permission}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["access_set_user_permission"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/actors": {
         parameters: {
             query?: never;
@@ -62,6 +158,70 @@ export interface paths {
         get: operations["me"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/methods": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["auth_methods"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/invitations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["my_invitations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/invitations/{project_id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["accept_invitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/invitations/{project_id}/decline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["decline_invitation"];
         delete?: never;
         options?: never;
         head?: never;
@@ -148,6 +308,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{id}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["project_members"];
+        put?: never;
+        post: operations["project_add_member"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/members/{kind}/{subject}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["project_set_member_role"];
+        post?: never;
+        delete: operations["project_remove_member"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{id}/ready": {
         parameters: {
             query?: never;
@@ -222,6 +414,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["create_task"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{id}/visibility": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["project_set_visibility"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -504,10 +712,84 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_users"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/{id}/revoke-sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["revoke_user_sessions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["set_user_status"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AccessOverview: {
+            /** @description false when account-service is not configured (no teams). */
+            directory_enabled: boolean;
+            permissions: components["schemas"]["PermissionInfo"][];
+            teams: components["schemas"]["AccessTeam"][];
+            users: components["schemas"]["AccessUser"][];
+        };
+        AccessTeam: {
+            description: string;
+            id: string;
+            member_count: number;
+            name: string;
+            /** @description Number of team settings. */
+            settings: number;
+        };
+        AccessUser: {
+            /** Format: uuid */
+            id: string;
+            /** @description `admin` or `classic`. */
+            level: string;
+            login?: string | null;
+            name: string;
+            /** @description Number of individual settings. */
+            settings: number;
+            teams: components["schemas"]["TeamRef"][];
+        };
         /** @description Actor with presence (§8, §10 /agents). */
         ActorView: {
             /** Format: date-time */
@@ -557,6 +839,12 @@ export interface components {
             started_at: string;
             trace_id?: string | null;
         };
+        AuthMethods: {
+            /** @description Local login/password. */
+            password: boolean;
+            /** @description Sign in with the HelloPro account (account-service). */
+            sso: boolean;
+        };
         /**
          * @description Board snapshot. `seq` is the project event counter at read time: open the SSE stream with
          *     `after=seq` to receive exactly the changes that happen after this snapshot.
@@ -602,6 +890,8 @@ export interface components {
         };
         CreateProjectInput: {
             name: string;
+            /** @description `private` (default: members only) or `public` (everyone reads). */
+            visibility?: string | null;
             /** @description Workflow config (§5). Defaults: every gate on, LEASE_TTL_SECS / PREFERRED_GRACE_SECS. */
             workflow?: Record<string, unknown> | null;
         };
@@ -628,11 +918,25 @@ export interface components {
             task_id: string;
             task_title: string;
         };
+        EffectiveAccess: {
+            allowed: boolean;
+            permission: string;
+            /** @description The individual setting: `allow`, `deny`, or absent (inherit from teams). */
+            setting?: string | null;
+            source: components["schemas"]["SourceView"];
+        };
         /** @description Error body of every REST response (§8). */
         ErrorBody: {
             code: string;
             details: Record<string, unknown>;
             message: string;
+        };
+        InvitationView: {
+            invited_by?: string | null;
+            /** Format: uuid */
+            project_id: string;
+            project_name: string;
+            role: string;
         };
         LeaseInput: {
             lease_token?: string | null;
@@ -647,6 +951,10 @@ export interface components {
             /** Format: date-time */
             last_heartbeat_at?: string | null;
             paused: boolean;
+        };
+        LevelInput: {
+            /** @description `admin` or `classic`. */
+            level: string;
         };
         LinkInput: {
             /** @description blocks | discovered_from | related */
@@ -669,9 +977,20 @@ export interface components {
             /** Format: uuid */
             id: string;
             kind: string;
+            /** @description Humans: `admin` or `classic`. */
+            level?: string | null;
             model?: string | null;
             name: string;
+            /** @description Humans: permissions allowed right now (see the Accès page). */
+            permissions: string[];
             roles: string[];
+        };
+        MemberInput: {
+            id: string;
+            /** @description `user` (an email / login: the person is invited) or `team` (an account-service group id). */
+            kind: string;
+            /** @description `owner` (people only), `editor` or `viewer`. */
+            role: string;
         };
         NewActorInput: {
             /** @description Identity forwarded by the MCP gateway: `client:<oauth client id>` or `email:<address>`. */
@@ -713,6 +1032,46 @@ export interface components {
             priority?: number | null;
             title?: string | null;
         };
+        PermissionInfo: {
+            /** @description Only the Admin level has it; it cannot be set. */
+            admin_only: boolean;
+            key: string;
+        };
+        PersonAccess: {
+            /** @description Names of the person's agents. */
+            agents: string[];
+            /** @description Effective role (`owner`, `editor`, `viewer`), absent = no access yet. */
+            effective_role?: string | null;
+            /** @description Individual role, when set (pending or accepted). */
+            individual_role?: string | null;
+            /** @description The individual grant is an invitation not accepted yet. */
+            invitation_pending: boolean;
+            name: string;
+            /** @description `admin`, `individual`, `team`, `public`. */
+            source?: string | null;
+            /** @description Lower-cased login / email. */
+            subject: string;
+            /**
+             * Format: uuid
+             * @description The board account, absent until the first sign-in.
+             */
+            user_id?: string | null;
+            /** @description Teams giving a role on this project. */
+            via_teams: components["schemas"]["TeamRoleRef"][];
+        };
+        ProjectMembers: {
+            /** @description Teams that can still be given a role (owners only; empty otherwise). */
+            available_teams: components["schemas"]["TeamGrant"][];
+            /** @description Owners (and admins) manage visibility and members. */
+            can_manage: boolean;
+            /** @description The caller's role on the project. */
+            my_role: string;
+            people: components["schemas"]["PersonAccess"][];
+            /** Format: uuid */
+            project_id: string;
+            teams: components["schemas"]["TeamGrant"][];
+            visibility: string;
+        };
         ProjectView: {
             /** Format: date-time */
             created_at: string;
@@ -720,7 +1079,11 @@ export interface components {
             event_seq: number;
             /** Format: uuid */
             id: string;
+            /** @description The caller's role (`owner`, `editor`, `viewer`); filled by the API. */
+            my_role?: string | null;
             name: string;
+            /** @description `public` (everyone reads) or `private` (members only). */
+            visibility: string;
             workflow: Record<string, unknown>;
         };
         QuestionView: {
@@ -769,6 +1132,21 @@ export interface components {
             /** @description thought | action | progress | assumption */
             kind: string;
             lease_token?: string | null;
+        };
+        RoleInput: {
+            role: string;
+        };
+        SettingInput: {
+            /** @description `allow`, `deny`, or null to remove the setting. */
+            effect?: string | null;
+        };
+        SourceView: {
+            /** @description `admin_level`, `admin_only`, `individual`, `teams`, `default`. */
+            kind: string;
+            /** @description Teams that decide `teams_outcome`. */
+            teams: string[];
+            /** @description What the teams say: `allowed`, `denied` or `unset` (absent for admin_level/admin_only). */
+            teams_outcome?: string | null;
         };
         SpecDetail: {
             spec: components["schemas"]["SpecView"];
@@ -916,6 +1294,81 @@ export interface components {
             /** Format: int32 */
             version: number;
         };
+        TeamAccess: {
+            members: components["schemas"]["TeamMember"][];
+            permissions: components["schemas"]["TeamPermission"][];
+            team: components["schemas"]["AccessTeam"];
+        };
+        TeamGrant: {
+            id: string;
+            member_count: number;
+            name: string;
+            /** @description `editor` or `viewer`. */
+            role: string;
+        };
+        TeamMember: {
+            email: string;
+            name: string;
+            /**
+             * Format: uuid
+             * @description The board account, when the member has signed in once.
+             */
+            user_id?: string | null;
+        };
+        TeamPermission: {
+            /** @description Members with an individual setting for this permission (it overrides the team's). */
+            exceptions: number;
+            permission: string;
+            /** @description The team setting: `allow`, `deny`, or absent (not set). */
+            setting?: string | null;
+        };
+        TeamRef: {
+            id: string;
+            name: string;
+        };
+        TeamRoleRef: {
+            name: string;
+            role: string;
+        };
+        UserAccess: {
+            permissions: components["schemas"]["EffectiveAccess"][];
+            user: components["schemas"]["AccessUser"];
+        };
+        UserProject: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** @description An invitation not accepted yet. */
+            pending: boolean;
+            role: string;
+        };
+        UserStatusInput: {
+            disabled: boolean;
+        };
+        UserView: {
+            agents: string[];
+            /** Format: date-time */
+            first_seen_at?: string | null;
+            /**
+             * Format: uuid
+             * @description Absent for a person invited who never signed in.
+             */
+            id?: string | null;
+            /** Format: date-time */
+            last_seen_at?: string | null;
+            /** @description `admin` or `classic`. */
+            level: string;
+            login: string;
+            name: string;
+            projects: components["schemas"]["UserProject"][];
+            /** @description `active`, `disabled` or `pending` (invited, never signed in). */
+            status: string;
+            teams: string[];
+        };
+        VisibilityInput: {
+            /** @description `public` or `private`. */
+            visibility: string;
+        };
     };
     responses: never;
     parameters: never;
@@ -925,6 +1378,226 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    access_overview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessOverview"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    access_team: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamAccess"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    access_set_team_permission: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                permission: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SettingInput"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    access_user: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserAccess"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    access_set_level: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LevelInput"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    access_set_user_permission: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                permission: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SettingInput"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     list_actors: {
         parameters: {
             query?: never;
@@ -1038,6 +1711,98 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MeView"];
+                };
+            };
+        };
+    };
+    auth_methods: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthMethods"];
+                };
+            };
+        };
+    };
+    my_invitations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationView"][];
+                };
+            };
+        };
+    };
+    accept_invitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    decline_invitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };
@@ -1208,6 +1973,152 @@ export interface operations {
             };
         };
     };
+    project_members: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectMembers"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    project_add_member: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MemberInput"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    project_set_member_role: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                kind: string;
+                subject: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoleInput"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    project_remove_member: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                kind: string;
+                subject: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     ready: {
         parameters: {
             query?: {
@@ -1361,6 +2272,45 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CommandResult"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    project_set_visibility: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VisibilityInput"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
             422: {
@@ -1915,6 +2865,91 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StoredEvent"][];
+                };
+            };
+        };
+    };
+    list_users: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserView"][];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    revoke_user_sessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    set_user_status: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserStatusInput"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };

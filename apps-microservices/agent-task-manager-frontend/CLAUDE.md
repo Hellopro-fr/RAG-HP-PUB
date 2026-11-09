@@ -18,6 +18,9 @@ backend in `apps-microservices/agent-task-manager-backend`.
 - No optimistic workflow transitions: the server decides; show "pending" until the event arrives.
 - All UI copy goes through `src/lib/i18n/fr.ts` (French); code and identifiers stay English.
 - Next.js never touches the database: everything goes through the Rust API.
+- Permissions: read `/api/auth/me` (`level`, `permissions`) through `currentUser()` in Server
+  Components to hide menus/forms (`NoAccess` for a page). This is display only: the Rust server
+  enforces every permission and returns 403 (`errorMessage()` shows it in French).
 
 ## Run / test
 ```bash

@@ -332,12 +332,17 @@ pub struct ProjectView {
     pub event_seq: i64,
     #[serde(with = "time::serde::rfc3339")]
     pub created_at: OffsetDateTime,
+    /// `public` (everyone reads) or `private` (members only).
+    pub visibility: String,
+    /// The caller's role (`owner`, `editor`, `viewer`); filled by the API.
+    pub my_role: Option<String>,
 }
 
 pub async fn projects(conn: &mut PgConnection) -> Result<Vec<ProjectView>, sqlx::Error> {
     sqlx::query_as!(
         ProjectView,
-        "SELECT id, name, workflow, event_seq, created_at FROM projects ORDER BY created_at"
+        r#"SELECT id, name, workflow, event_seq, created_at, visibility, NULL::text AS "my_role"
+           FROM projects ORDER BY created_at"#
     )
     .fetch_all(&mut *conn)
     .await
@@ -349,7 +354,8 @@ pub async fn project(
 ) -> Result<Option<ProjectView>, sqlx::Error> {
     sqlx::query_as!(
         ProjectView,
-        "SELECT id, name, workflow, event_seq, created_at FROM projects WHERE id = $1",
+        r#"SELECT id, name, workflow, event_seq, created_at, visibility, NULL::text AS "my_role"
+           FROM projects WHERE id = $1"#,
         id
     )
     .fetch_optional(&mut *conn)

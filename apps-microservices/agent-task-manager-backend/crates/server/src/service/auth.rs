@@ -104,15 +104,45 @@ pub struct CreatedActor {
     pub token: Option<String>,
 }
 
+/// An agent without the admin role (what a Classique user with `agents.manage` may create).
+/// Roles a Classique user may give the agents they connect. `reviewer` (review leases) and
+/// `planner` stay with Admins: a user must not review their own agents' work.
+pub const SELF_SERVICE_AGENT_ROLES: [&str; 1] = ["implementer"];
+
+pub fn is_plain_agent(input: &NewActorInput) -> bool {
+    input.kind == NewActorKind::Agent
+        && input
+            .roles
+            .iter()
+            .all(|r| SELF_SERVICE_AGENT_ROLES.contains(&r.as_str()))
+}
+
+/// Admins create any actor; `may_create_agents` (checked by the caller against `agents.manage`)
+/// lets a non-admin create a plain agent.
 pub async fn create_actor(
     conn: &mut PgConnection,
     by: &Actor,
     input: NewActorInput,
+    may_create_agents: bool,
 ) -> AppResult<CreatedActor> {
-    if !by.is_admin() {
-        return Err(AppError::Forbidden("only admins create actors".into()));
+    if !(by.is_admin() || may_create_agents && is_plain_agent(&input)) {
+        return Err(AppError::Forbidden(
+            "only admins create actors; connecting an agent needs the agents.manage permission"
+                .into(),
+        ));
     }
-    insert_actor(conn, input).await
+    let created = insert_actor(conn, input).await?;
+    // The person who connects an agent owns it: the agent sees the projects they see.
+    if by.is_human() && created.kind != NewActorKind::Human {
+        sqlx::query!(
+            "UPDATE actors SET owner_id = $2 WHERE id = $1",
+            created.id,
+            by.id
+        )
+        .execute(&mut *conn)
+        .await?;
+    }
+    Ok(created)
 }
 
 async fn insert_actor(conn: &mut PgConnection, input: NewActorInput) -> AppResult<CreatedActor> {

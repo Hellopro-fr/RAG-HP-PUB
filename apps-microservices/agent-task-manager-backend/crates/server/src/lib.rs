@@ -11,10 +11,12 @@
 pub mod actor;
 pub mod api;
 pub mod config;
+pub mod directory;
 pub mod error;
 pub mod metrics;
 pub mod realtime;
 pub mod repository;
+pub mod scope;
 pub mod service;
 pub mod state;
 

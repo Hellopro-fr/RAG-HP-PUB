@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO project_members\n               (project_id, subject_kind, subject_id, role, invited_by, accepted_at)\n           VALUES ($1, $2, $3, $4, $5, $6)\n           ON CONFLICT (project_id, subject_kind, subject_id) DO UPDATE SET role = EXCLUDED.role",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Uuid",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "fe75f246930915cfa56f7e7a20586eba81ccaff4c1ad9dcb4903c35c1cb36e74"
+}

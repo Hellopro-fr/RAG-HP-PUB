@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, name, workflow, event_seq, created_at FROM projects WHERE id = $1",
+  "query": "SELECT id, name, login, roles FROM actors WHERE kind = 'human' AND id = $1",
   "describe": {
     "columns": [
       {
@@ -9,7 +9,7 @@
         "type_info": "Uuid",
         "origin": {
           "Table": {
-            "table": "projects",
+            "table": "actors",
             "name": "id"
           }
         }
@@ -20,41 +20,30 @@
         "type_info": "Text",
         "origin": {
           "Table": {
-            "table": "projects",
+            "table": "actors",
             "name": "name"
           }
         }
       },
       {
         "ordinal": 2,
-        "name": "workflow",
-        "type_info": "Jsonb",
+        "name": "login",
+        "type_info": "Text",
         "origin": {
           "Table": {
-            "table": "projects",
-            "name": "workflow"
+            "table": "actors",
+            "name": "login"
           }
         }
       },
       {
         "ordinal": 3,
-        "name": "event_seq",
-        "type_info": "Int8",
+        "name": "roles",
+        "type_info": "TextArray",
         "origin": {
           "Table": {
-            "table": "projects",
-            "name": "event_seq"
-          }
-        }
-      },
-      {
-        "ordinal": 4,
-        "name": "created_at",
-        "type_info": "Timestamptz",
-        "origin": {
-          "Table": {
-            "table": "projects",
-            "name": "created_at"
+            "table": "actors",
+            "name": "roles"
           }
         }
       }
@@ -67,10 +56,9 @@
     "nullable": [
       false,
       false,
-      false,
-      false,
+      true,
       false
     ]
   },
-  "hash": "8d2b144938b803f4e36a8bb54e7c03524090d0ad87220b369986f51d1dc7fa52"
+  "hash": "0fa18c05cd84aa058624b2bf973a8592aa9bdee25d56c1480e0ecca88c6761f5"
 }

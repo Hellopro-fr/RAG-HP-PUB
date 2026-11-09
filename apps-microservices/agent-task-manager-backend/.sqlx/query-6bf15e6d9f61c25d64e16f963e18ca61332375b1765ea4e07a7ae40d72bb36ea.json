@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT role = 'owner' AS \"o!\" FROM project_members\n               WHERE project_id = $1 AND subject_kind = 'user' AND subject_id = $2\n                 AND accepted_at IS NOT NULL",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "o!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "6bf15e6d9f61c25d64e16f963e18ca61332375b1765ea4e07a7ae40d72bb36ea"
+}

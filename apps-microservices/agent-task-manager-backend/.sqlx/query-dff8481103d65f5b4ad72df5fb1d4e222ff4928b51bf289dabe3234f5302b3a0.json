@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO project_members\n               (project_id, subject_kind, subject_id, role, invited_by, accepted_at)\n           VALUES ($1, 'user', $2, 'owner', $3, $4)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Uuid",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "dff8481103d65f5b4ad72df5fb1d4e222ff4928b51bf289dabe3234f5302b3a0"
+}

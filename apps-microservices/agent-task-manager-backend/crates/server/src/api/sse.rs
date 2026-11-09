@@ -149,6 +149,7 @@ async fn refill(
     responses((status = 200, description = "text/event-stream of StoredEvent", content_type = "text/event-stream")))]
 pub async fn global_stream(
     State(st): State<AppState>,
+    axum::Extension(scope): axum::Extension<crate::scope::Scope>,
     Query(q): Query<GlobalStreamQuery>,
 ) -> AppResult<Response> {
     let topics = q.topics.unwrap_or_else(|| "questions,reviews".into());
@@ -167,6 +168,10 @@ pub async fn global_stream(
     let mut hub = st.hub.subscribe();
     let (tx, rx) = mpsc::channel(256);
     let metrics = st.metrics.clone();
+    // Cross-project stream: only events of projects the caller may see. Decisions are cached per
+    // project for the life of the connection (a membership change applies on reconnect).
+    let pool = st.pool.clone();
+    let mut visible: std::collections::HashMap<uuid::Uuid, bool> = std::collections::HashMap::new();
     tokio::spawn(async move {
         let _guard = SseGuard::new(metrics);
         loop {
@@ -174,6 +179,26 @@ pub async fn global_stream(
                 _ = tx.closed() => return,
                 msg = hub.recv() => match msg {
                     Ok(ev) if prefixes.iter().any(|p| ev.event_type.starts_with(p)) => {
+                        let ok = match visible.get(&ev.project_id) {
+                            Some(ok) => *ok,
+                            None => {
+                                let ok = match pool.acquire().await {
+                                    Ok(mut c) => crate::service::project_access::role_in(
+                                        &mut c, &scope, ev.project_id,
+                                    )
+                                    .await
+                                    .ok()
+                                    .flatten()
+                                    .is_some(),
+                                    Err(_) => false,
+                                };
+                                visible.insert(ev.project_id, ok);
+                                ok
+                            }
+                        };
+                        if !ok {
+                            continue;
+                        }
                         let id = format!("{}:{}", ev.project_id, ev.seq);
                         if tx.send(to_sse(&ev, id)).await.is_err() {
                             return;

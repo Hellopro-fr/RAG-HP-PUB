@@ -75,6 +75,7 @@ dependencies = [
  "argon2",
  "atb-core",
  "axum",
+ "base64 0.22.1",
  "futures",
  "hex",
  "rand 0.9.5",

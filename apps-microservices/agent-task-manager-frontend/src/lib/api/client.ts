@@ -14,6 +14,15 @@ export type ActorView = Schemas['ActorView'];
 export type ProjectView = Schemas['ProjectView'];
 export type CommandResult = Schemas['CommandResult'];
 export type ErrorBody = Schemas['ErrorBody'];
+export type MeView = Schemas['MeView'];
+export type AccessOverview = Schemas['AccessOverview'];
+export type UserAccess = Schemas['UserAccess'];
+export type TeamAccess = Schemas['TeamAccess'];
+export type SourceView = Schemas['SourceView'];
+export type InvitationView = Schemas['InvitationView'];
+export type ProjectMembers = Schemas['ProjectMembers'];
+export type PersonAccess = Schemas['PersonAccess'];
+export type UserView = Schemas['UserView'];
 
 export const api = createClient<paths>({ baseUrl: '', credentials: 'include' });
 
@@ -44,6 +53,12 @@ export async function unwrap<T>(
   return data;
 }
 
+/** User-facing message: refusals get a French explanation, other API errors their message. */
+export function errorMessage(e: unknown, fallback: string, forbidden: string): string {
+  if (e instanceof ApiError) return e.status === 403 ? forbidden : e.message;
+  return fallback;
+}
+
 export const keys = {
   board: (projectId: string) => ['board', projectId] as const,
   task: (taskId: string) => ['task', taskId] as const,
@@ -51,4 +66,10 @@ export const keys = {
   questions: (status: string) => ['questions', status] as const,
   actors: ['actors'] as const,
   projects: ['projects'] as const,
+  access: ['access'] as const,
+  invitations: ['invitations'] as const,
+  members: (projectId: string) => ['members', projectId] as const,
+  users: ['users'] as const,
+  accessUser: (id: string) => ['access', 'user', id] as const,
+  accessTeam: (id: string) => ['access', 'team', id] as const,
 };

@@ -22,6 +22,18 @@ pub struct MeView {
     pub name: String,
     pub roles: Vec<String>,
     pub model: Option<String>,
+    /// Humans: `admin` or `classic`.
+    pub level: Option<String>,
+    /// Humans: permissions allowed right now (see the Accès page).
+    pub permissions: Vec<String>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct AuthMethods {
+    /// Sign in with the HelloPro account (account-service).
+    pub sso: bool,
+    /// Local login/password.
+    pub password: bool,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -31,6 +43,8 @@ pub struct CreateProjectInput {
     /// Workflow config (§5). Defaults: every gate on, LEASE_TTL_SECS / PREFERRED_GRACE_SECS.
     #[schema(value_type = Option<Object>)]
     pub workflow: Option<Value>,
+    /// `private` (default: members only) or `public` (everyone reads).
+    pub visibility: Option<String>,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]

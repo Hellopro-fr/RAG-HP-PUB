@@ -213,6 +213,7 @@ import {
   HorizontalDots,
   ListIcon,
   PlugInIcon,
+  UserGroupIcon,
 } from "../../icons";
 import { useSidebar } from "@/composables/useSidebar";
 import { useAuthStore } from "@/stores/auth";
@@ -245,6 +246,7 @@ const menuGroups = computed(() => {
       title: "Administration",
       items: [
         { icon: UserCircleIcon, name: "Utilisateurs", path: "/admin/users" },
+        { icon: UserGroupIcon, name: "Groupes", path: "/admin/groups" },
         { icon: ListIcon, name: "Journal d'audit", path: "/admin/audit" },
       ],
     });

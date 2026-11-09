@@ -13,7 +13,7 @@ const T = '2026-11-05T10:00:00Z';
 function board(seq = 0): Board {
   return {
     seq,
-    project: { id: P, name: 'p', workflow: {}, event_seq: seq, created_at: T },
+    project: { id: P, name: 'p', workflow: {}, event_seq: seq, created_at: T, visibility: 'private' },
     tasks: [],
     links: [],
   };

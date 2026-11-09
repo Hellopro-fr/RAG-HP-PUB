@@ -29,10 +29,13 @@ pub async fn require_actor(
         .await?
         .ok_or(AppError::Unauthorized)?;
     tracing::Span::current().record("actor_id", tracing::field::display(actor.id));
-    if let Ok(mut conn) = st.pool.acquire().await {
-        let _ = store::touch_actor(&mut conn, actor.id, now()).await;
-    }
+    let mut conn = st.pool.acquire().await?;
+    // Projects the caller may see (and refusal of disabled people and their agents).
+    let scope = crate::scope::resolve(&st, &mut conn, &actor).await?;
+    let _ = store::touch_actor(&mut conn, actor.id, now()).await;
+    drop(conn);
     req.extensions_mut().insert(actor);
+    req.extensions_mut().insert(scope);
     Ok(next.run(req).await)
 }
 

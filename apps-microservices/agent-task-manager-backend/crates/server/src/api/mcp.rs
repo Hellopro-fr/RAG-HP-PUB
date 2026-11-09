@@ -6,6 +6,9 @@
 //! summary plus compact JSON (long fields truncated, ids always included). Errors are tool-level
 //! results that tell the agent what to do next.
 
+use crate::scope::Scope;
+use crate::service::project_access::{self, Target};
+use atb_core::project_access::ProjectRole;
 use std::sync::Arc;
 
 use atb_core::{ActivityKind, LinkKind};
@@ -278,6 +281,23 @@ fn command_body(r: &CommandResult) -> Value {
 }
 
 impl BoardMcp {
+    /// The project check of every tool (the REST routes get it from `api::guard`).
+    async fn guard(
+        &self,
+        ctx: &RequestContext<RoleServer>,
+        target: Target,
+        min: ProjectRole,
+    ) -> Result<(), AppError> {
+        let scope = ctx
+            .extensions
+            .get::<Parts>()
+            .and_then(|p| p.extensions.get::<Scope>())
+            .cloned()
+            .ok_or(AppError::Unauthorized)?;
+        project_access::require_pooled(&self.st, &scope, target, min).await?;
+        Ok(())
+    }
+
     async fn task_cmd(
         &self,
         ctx: &RequestContext<RoleServer>,
@@ -287,6 +307,8 @@ impl BoardMcp {
         cmd: TaskCmd,
     ) -> Result<CommandResult, AppError> {
         let actor = actor_of(ctx)?;
+        self.guard(ctx, Target::Task(task_id), ProjectRole::Editor)
+            .await?;
         let st = self.st.clone();
         let a = actor.clone();
         tx::run(&self.st, &actor, key.as_deref(), move |c| {
@@ -314,6 +336,8 @@ impl BoardMcp {
     ) -> Result<CallToolResult, ErrorData> {
         let run = async {
             let actor = actor_of(&ctx)?;
+            self.guard(&ctx, Target::Project(a.project_id), ProjectRole::Viewer)
+                .await?;
             let mut conn = self.st.pool.acquire().await?;
             let role = a.role.map(Into::into).unwrap_or(ClaimRole::Implementer);
             queries::list_ready(&mut conn, &actor, a.project_id, role, a.limit.unwrap_or(10)).await
@@ -341,10 +365,10 @@ impl BoardMcp {
         Parameters(a): Parameters<GetTaskArgs>,
         ctx: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, ErrorData> {
-        if let Err(e) = actor_of(&ctx) {
-            return fail(e);
-        }
         let run = async {
+            actor_of(&ctx)?;
+            self.guard(&ctx, Target::Task(a.task_id), ProjectRole::Viewer)
+                .await?;
             let mut conn = self.st.pool.acquire().await?;
             queries::task_context(&mut conn, a.task_id).await
         };
@@ -370,6 +394,8 @@ impl BoardMcp {
     ) -> Result<CallToolResult, ErrorData> {
         let run = async {
             let actor = actor_of(&ctx)?;
+            self.guard(&ctx, Target::Project(a.project_id), ProjectRole::Editor)
+                .await?;
             let st = self.st.clone();
             let ac = actor.clone();
             let role = a.role.map(Into::into).unwrap_or(ClaimRole::Implementer);
@@ -499,6 +525,14 @@ impl BoardMcp {
     ) -> Result<CallToolResult, ErrorData> {
         let run = async {
             let actor = actor_of(&ctx)?;
+            self.guard(&ctx, Target::Question(a.question_id), ProjectRole::Editor)
+                .await?;
+            crate::service::access::require(
+                &self.st,
+                &actor,
+                atb_core::access::Permission::QuestionsAnswer,
+            )
+            .await?;
             let st = self.st.clone();
             let ac = actor.clone();
             tx::run(&self.st, &actor, a.idempotency_key.as_deref(), move |c| {
@@ -524,6 +558,8 @@ impl BoardMcp {
     ) -> Result<CallToolResult, ErrorData> {
         let run = async {
             let actor = actor_of(&ctx)?;
+            self.guard(&ctx, Target::Project(a.project_id), ProjectRole::Viewer)
+                .await?;
             updates::wait_for_updates(
                 &self.st,
                 &actor,
@@ -556,6 +592,8 @@ impl BoardMcp {
     ) -> Result<CallToolResult, ErrorData> {
         let run = async {
             let actor = actor_of(&ctx)?;
+            self.guard(&ctx, Target::Project(a.project_id), ProjectRole::Editor)
+                .await?;
             let st = self.st.clone();
             let ac = actor.clone();
             let input = NewTaskInput {
@@ -597,6 +635,16 @@ impl BoardMcp {
     ) -> Result<CallToolResult, ErrorData> {
         let run = async {
             let actor = actor_of(&ctx)?;
+            let target = match (a.spec_id, a.project_id) {
+                (Some(spec), _) => Target::Spec(spec),
+                (None, Some(project)) => Target::Project(project),
+                (None, None) => {
+                    return Err(AppError::BadRequest(
+                        "spec_id or project_id is required".into(),
+                    ));
+                }
+            };
+            self.guard(&ctx, target, ProjectRole::Editor).await?;
             let st = self.st.clone();
             let ac = actor.clone();
             let input = SpecInput {
@@ -719,6 +767,10 @@ impl BoardMcp {
     ) -> Result<CallToolResult, ErrorData> {
         let run = async {
             let actor = actor_of(&ctx)?;
+            self.guard(&ctx, Target::Task(a.from_id), ProjectRole::Editor)
+                .await?;
+            self.guard(&ctx, Target::Task(a.to_id), ProjectRole::Editor)
+                .await?;
             let kind = LinkKind::parse(&a.kind).ok_or_else(|| {
                 AppError::BadRequest("kind must be blocks, discovered_from or related".into())
             })?;

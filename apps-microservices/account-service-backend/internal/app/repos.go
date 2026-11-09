@@ -16,6 +16,7 @@ type Repos struct {
 	Refresh  *repository.RefreshRepo
 	Logout   *repository.LogoutEventRepo
 	Audit    *repository.AuditRepo
+	Group    *repository.GroupRepo
 }
 
 // BuildRepos wires every GORM-backed repository against a single *gorm.DB.
@@ -30,5 +31,6 @@ func BuildRepos(g *gorm.DB, adminEmails []string) Repos {
 		Refresh:  repository.NewRefreshRepo(g),
 		Logout:   repository.NewLogoutEventRepo(g),
 		Audit:    repository.NewAuditRepo(g),
+		Group:    repository.NewGroupRepo(g),
 	}
 }

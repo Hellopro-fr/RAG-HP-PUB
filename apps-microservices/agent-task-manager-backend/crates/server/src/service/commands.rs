@@ -559,6 +559,7 @@ pub async fn create_project(
     actor: &Actor,
     name: &str,
     workflow: Option<WorkflowConfig>,
+    visibility: atb_core::project_access::Visibility,
 ) -> AppResult<ProjectView> {
     if !(actor.is_human() || actor.is_admin()) {
         return Err(AppError::Forbidden(
@@ -579,6 +580,16 @@ pub async fn create_project(
     workflow.validate().map_err(AppError::Domain)?;
     let id = Uuid::now_v7();
     store::insert_project(conn, id, name, &serde_json::to_value(&workflow)?, now()).await?;
+    sqlx::query!(
+        "UPDATE projects SET visibility = $2 WHERE id = $1",
+        id,
+        visibility.as_str()
+    )
+    .execute(&mut *conn)
+    .await?;
+    if actor.is_human() {
+        crate::service::project_access::add_creator(conn, id, actor).await?;
+    }
     reads::project(conn, id)
         .await?
         .ok_or_else(|| AppError::not_found("project"))

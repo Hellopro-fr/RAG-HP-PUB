@@ -2,15 +2,17 @@
 
 pub mod auth;
 pub mod dto;
+pub mod guard;
 pub mod mcp;
 pub mod openapi;
 pub mod rest;
 pub mod sse;
+pub mod sso;
 
 use axum::Router;
 use axum::http::{HeaderName, HeaderValue, Method, Request, header};
 use axum::middleware::from_fn_with_state;
-use axum::routing::{get, post};
+use axum::routing::{get, post, put};
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer};
@@ -36,7 +38,10 @@ pub fn router(st: AppState) -> Router {
             }),
         )
         .route("/api/auth/login", post(rest::login))
-        .route("/api/auth/logout", post(rest::logout));
+        .route("/api/auth/logout", post(rest::logout))
+        .route("/api/auth/methods", get(rest::auth_methods))
+        .route("/api/auth/sso/start", get(sso::start))
+        .route("/api/auth/sso/callback", get(sso::callback));
 
     let protected = Router::new()
         .route("/api/auth/me", get(rest::me))
@@ -85,8 +90,49 @@ pub fn router(st: AppState) -> Router {
             "/api/actors",
             get(rest::list_actors).post(rest::create_actor),
         )
+        .route("/api/access", get(rest::access_overview))
+        .route("/api/access/users/{id}", get(rest::access_user))
+        .route("/api/access/users/{id}/level", put(rest::access_set_level))
+        .route(
+            "/api/access/users/{id}/permissions/{permission}",
+            put(rest::access_set_user_permission),
+        )
+        .route("/api/access/teams/{id}", get(rest::access_team))
+        .route(
+            "/api/access/teams/{id}/permissions/{permission}",
+            put(rest::access_set_team_permission),
+        )
+        .route(
+            "/api/projects/{id}/members",
+            get(rest::project_members).post(rest::project_add_member),
+        )
+        .route(
+            "/api/projects/{id}/members/{kind}/{subject}",
+            put(rest::project_set_member_role).delete(rest::project_remove_member),
+        )
+        .route(
+            "/api/projects/{id}/visibility",
+            put(rest::project_set_visibility),
+        )
+        .route("/api/invitations", get(rest::my_invitations))
+        .route(
+            "/api/invitations/{project_id}/accept",
+            post(rest::accept_invitation),
+        )
+        .route(
+            "/api/invitations/{project_id}/decline",
+            post(rest::decline_invitation),
+        )
+        .route("/api/users", get(rest::list_users))
+        .route("/api/users/{id}/status", put(rest::set_user_status))
+        .route(
+            "/api/users/{id}/revoke-sessions",
+            post(rest::revoke_user_sessions),
+        )
         .route("/api/stream", get(sse::global_stream))
         .nest_service("/mcp", mcp::service(st.clone()))
+        // Inner: the project check (needs the Actor and Scope put by the outer auth layer).
+        .route_layer(from_fn_with_state(st.clone(), guard::project_guard))
         .layer(from_fn_with_state(st.clone(), auth::require_actor));
 
     let x_request_id = HeaderName::from_static("x-request-id");
@@ -131,7 +177,14 @@ pub fn router(st: AppState) -> Router {
             CorsLayer::new()
                 .allow_origin(AllowOrigin::list(origins))
                 .allow_credentials(true)
-                .allow_methods([Method::GET, Method::POST, Method::PATCH, Method::OPTIONS])
+                .allow_methods([
+                    Method::GET,
+                    Method::POST,
+                    Method::PUT,
+                    Method::PATCH,
+                    Method::DELETE,
+                    Method::OPTIONS,
+                ])
                 .allow_headers([
                     header::CONTENT_TYPE,
                     header::AUTHORIZATION,
