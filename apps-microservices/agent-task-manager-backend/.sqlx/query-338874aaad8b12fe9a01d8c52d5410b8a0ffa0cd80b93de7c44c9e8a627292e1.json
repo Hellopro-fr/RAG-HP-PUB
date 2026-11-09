@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM access_rules WHERE subject_kind = $1 AND subject_id = $2 AND permission = $3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "338874aaad8b12fe9a01d8c52d5410b8a0ffa0cd80b93de7c44c9e8a627292e1"
+}

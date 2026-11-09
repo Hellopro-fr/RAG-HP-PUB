@@ -59,6 +59,14 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       RUST_LOG: ${RUST_LOG:-info}
+      # HelloPro sign-in (account-service) and teams. Empty = local login only.
+      ACCOUNT_SERVICE_INTERNAL_URL: ${ACCOUNT_SERVICE_INTERNAL_URL:-}
+      ACCOUNT_SERVICE_PUBLIC_URL: ${ACCOUNT_SERVICE_PUBLIC_URL:-}
+      ACCOUNT_SERVICE_ADMIN_TOKEN: ${ACCOUNT_SERVICE_ADMIN_TOKEN:-}
+      ATB_OAUTH_CLIENT_ID: ${ATB_OAUTH_CLIENT_ID:-}
+      ATB_OAUTH_CLIENT_SECRET: ${ATB_OAUTH_CLIENT_SECRET:-}
+      ATB_PUBLIC_URL: ${ATB_PUBLIC_URL:-}
+      PASSWORD_LOGIN: ${PASSWORD_LOGIN:-}
     expose:
       - "8621"
     depends_on:

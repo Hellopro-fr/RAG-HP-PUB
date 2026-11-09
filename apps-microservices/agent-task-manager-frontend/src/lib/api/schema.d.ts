@@ -4,6 +4,102 @@
  */
 
 export interface paths {
+    "/api/access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["access_overview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/access/teams/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["access_team"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/access/teams/{id}/permissions/{permission}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["access_set_team_permission"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/access/users/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["access_user"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/access/users/{id}/level": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["access_set_level"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/access/users/{id}/permissions/{permission}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["access_set_user_permission"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/actors": {
         parameters: {
             query?: never;
@@ -60,6 +156,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["me"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/methods": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["auth_methods"];
         put?: never;
         post?: never;
         delete?: never;
@@ -508,6 +620,32 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AccessOverview: {
+            /** @description false when account-service is not configured (no teams). */
+            directory_enabled: boolean;
+            permissions: components["schemas"]["PermissionInfo"][];
+            teams: components["schemas"]["AccessTeam"][];
+            users: components["schemas"]["AccessUser"][];
+        };
+        AccessTeam: {
+            description: string;
+            id: string;
+            member_count: number;
+            name: string;
+            /** @description Number of team settings. */
+            settings: number;
+        };
+        AccessUser: {
+            /** Format: uuid */
+            id: string;
+            /** @description `admin` or `classic`. */
+            level: string;
+            login?: string | null;
+            name: string;
+            /** @description Number of individual settings. */
+            settings: number;
+            teams: components["schemas"]["TeamRef"][];
+        };
         /** @description Actor with presence (§8, §10 /agents). */
         ActorView: {
             /** Format: date-time */
@@ -556,6 +694,12 @@ export interface components {
             /** Format: date-time */
             started_at: string;
             trace_id?: string | null;
+        };
+        AuthMethods: {
+            /** @description Local login/password. */
+            password: boolean;
+            /** @description Sign in with the HelloPro account (account-service). */
+            sso: boolean;
         };
         /**
          * @description Board snapshot. `seq` is the project event counter at read time: open the SSE stream with
@@ -628,6 +772,13 @@ export interface components {
             task_id: string;
             task_title: string;
         };
+        EffectiveAccess: {
+            allowed: boolean;
+            permission: string;
+            /** @description The individual setting: `allow`, `deny`, or absent (inherit from teams). */
+            setting?: string | null;
+            source: components["schemas"]["SourceView"];
+        };
         /** @description Error body of every REST response (§8). */
         ErrorBody: {
             code: string;
@@ -647,6 +798,10 @@ export interface components {
             /** Format: date-time */
             last_heartbeat_at?: string | null;
             paused: boolean;
+        };
+        LevelInput: {
+            /** @description `admin` or `classic`. */
+            level: string;
         };
         LinkInput: {
             /** @description blocks | discovered_from | related */
@@ -669,8 +824,12 @@ export interface components {
             /** Format: uuid */
             id: string;
             kind: string;
+            /** @description Humans: `admin` or `classic`. */
+            level?: string | null;
             model?: string | null;
             name: string;
+            /** @description Humans: permissions allowed right now (see the Accès page). */
+            permissions: string[];
             roles: string[];
         };
         NewActorInput: {
@@ -712,6 +871,11 @@ export interface components {
             /** Format: int32 */
             priority?: number | null;
             title?: string | null;
+        };
+        PermissionInfo: {
+            /** @description Only the Admin level has it; it cannot be set. */
+            admin_only: boolean;
+            key: string;
         };
         ProjectView: {
             /** Format: date-time */
@@ -769,6 +933,18 @@ export interface components {
             /** @description thought | action | progress | assumption */
             kind: string;
             lease_token?: string | null;
+        };
+        SettingInput: {
+            /** @description `allow`, `deny`, or null to remove the setting. */
+            effect?: string | null;
+        };
+        SourceView: {
+            /** @description `admin_level`, `admin_only`, `individual`, `teams`, `default`. */
+            kind: string;
+            /** @description Teams that decide `teams_outcome`. */
+            teams: string[];
+            /** @description What the teams say: `allowed`, `denied` or `unset` (absent for admin_level/admin_only). */
+            teams_outcome?: string | null;
         };
         SpecDetail: {
             spec: components["schemas"]["SpecView"];
@@ -916,6 +1092,35 @@ export interface components {
             /** Format: int32 */
             version: number;
         };
+        TeamAccess: {
+            members: components["schemas"]["TeamMember"][];
+            permissions: components["schemas"]["TeamPermission"][];
+            team: components["schemas"]["AccessTeam"];
+        };
+        TeamMember: {
+            email: string;
+            name: string;
+            /**
+             * Format: uuid
+             * @description The board account, when the member has signed in once.
+             */
+            user_id?: string | null;
+        };
+        TeamPermission: {
+            /** @description Members with an individual setting for this permission (it overrides the team's). */
+            exceptions: number;
+            permission: string;
+            /** @description The team setting: `allow`, `deny`, or absent (not set). */
+            setting?: string | null;
+        };
+        TeamRef: {
+            id: string;
+            name: string;
+        };
+        UserAccess: {
+            permissions: components["schemas"]["EffectiveAccess"][];
+            user: components["schemas"]["AccessUser"];
+        };
     };
     responses: never;
     parameters: never;
@@ -925,6 +1130,226 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    access_overview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessOverview"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    access_team: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamAccess"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    access_set_team_permission: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                permission: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SettingInput"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    access_user: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserAccess"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    access_set_level: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LevelInput"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    access_set_user_permission: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                permission: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SettingInput"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     list_actors: {
         parameters: {
             query?: never;
@@ -1038,6 +1463,25 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MeView"];
+                };
+            };
+        };
+    };
+    auth_methods: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthMethods"];
                 };
             };
         };

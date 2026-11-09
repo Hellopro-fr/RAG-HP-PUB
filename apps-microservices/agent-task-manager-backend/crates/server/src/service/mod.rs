@@ -1,6 +1,7 @@
 //! APPLICATION tier: one transaction per command, decision via `atb-core`, persistence via the
 //! repository, wake-up via the notifier. REST handlers and MCP tools call the same functions.
 
+pub mod access;
 pub mod auth;
 pub mod commands;
 pub mod queries;

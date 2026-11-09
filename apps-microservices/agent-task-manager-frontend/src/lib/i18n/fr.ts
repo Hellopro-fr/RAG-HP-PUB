@@ -16,7 +16,14 @@ export type TaskState = (typeof STATE_ORDER)[number];
 
 export const fr = {
   app: 'Agent Task Board',
-  nav: { projects: 'Projets', questions: 'Questions', agents: 'Agents', logout: 'Déconnexion' },
+  nav: {
+    projects: 'Projets',
+    questions: 'Questions',
+    agents: 'Agents',
+    access: 'Accès',
+    logout: 'Déconnexion',
+  },
+  level: { admin: 'Admin', classic: 'Classique' } as Record<string, string>,
   state: {
     draft: 'Brouillon',
     ready: 'Prête',
@@ -34,6 +41,16 @@ export const fr = {
     password: 'Mot de passe',
     submit: 'Se connecter',
     failed: 'Identifiant ou mot de passe incorrect.',
+    sso: 'Se connecter avec le compte HelloPro',
+    local: 'Connexion locale (compte de secours)',
+    errors: {
+      sso_disabled: 'La connexion HelloPro n’est pas configurée sur ce serveur.',
+      sso_denied: 'Connexion annulée.',
+      sso_state: 'La connexion a expiré. Recommencez.',
+      sso_exchange: 'Le compte HelloPro n’a pas pu confirmer votre identité. Recommencez.',
+      sso_not_allowed: 'Votre compte HelloPro est bloqué. Contactez un administrateur.',
+      sso_internal: 'Erreur pendant la connexion. Recommencez dans un instant.',
+    } as Record<string, string>,
   },
   projects: {
     title: 'Projets',
@@ -111,8 +128,55 @@ export const fr = {
     'review.submitted': 'Revue soumise',
     'attempt.ended': 'Tentative terminée',
   } as Record<string, string>,
+  noAccess: {
+    title: 'Accès refusé',
+    body: 'Vous n’avez pas l’accès à cette page. Un administrateur peut vous le donner depuis la page Accès.',
+  },
+  access: {
+    title: 'Accès',
+    users: 'Utilisateurs',
+    teams: 'Équipes',
+    priority:
+      'Priorité : l’accès individuel l’emporte sur celui des équipes ; sans réglage, l’accès est refusé. Les Admins ont tous les accès.',
+    noDirectory:
+      'Le compte HelloPro n’est pas configuré : pas d’équipes. Seuls les réglages individuels s’appliquent.',
+    select: 'Sélectionnez un utilisateur ou une équipe.',
+    level: 'Niveau',
+    levelHint: 'Un Admin a tous les accès, les réglages ci-dessous ne s’appliquent pas.',
+    levelSelf: 'Vous ne pouvez pas changer votre propre niveau.',
+    permission: 'Autorisation',
+    setting: 'Réglage',
+    effective: 'Accès effectif',
+    inherit: 'Hériter des équipes',
+    unset: 'Non défini',
+    allow: 'Autorisé',
+    deny: 'Refusé',
+    adminOnly: 'Admins uniquement',
+    members: (n: number) => `${n} membre${n > 1 ? 's' : ''}`,
+    exceptions: (n: number) =>
+      n === 0 ? '' : `${n} exception${n > 1 ? 's' : ''} individuelle${n > 1 ? 's' : ''}`,
+    noTeam: 'Aucune équipe',
+    notSignedIn: 'pas encore connecté·e',
+    perms: {
+      'projects.create': ['Créer des projets', ''],
+      'questions.answer': ['Répondre aux questions', 'Questions posées par les agents'],
+      'agents.manage': ['Connecter ses agents', 'Créer un agent et son jeton'],
+      'agents.view': ['Voir la page Agents', ''],
+      'users.view': ['Voir la page Utilisateurs', ''],
+      'access.manage': ['Gérer les accès', 'Niveaux et autorisations'],
+    } as Record<string, [string, string]>,
+    source: {
+      admin_level: 'Niveau Admin',
+      admin_only: 'Réservé aux Admins',
+      default: 'Aucun réglage',
+      individual: (teams: string) => `Individuel, prioritaire${teams ? ` (l’équipe donnerait : ${teams})` : ''}`,
+      teamsAllowed: (names: string) => `via ${names}`,
+      teamsDenied: (names: string) => `refusé par ${names}`,
+    },
+  },
   errors: {
     generic: 'Une erreur est survenue.',
+    forbidden: 'Vous n’avez pas l’accès pour faire cela. Demandez-le à un administrateur (page Accès).',
   },
 };
 

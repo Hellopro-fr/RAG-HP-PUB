@@ -22,6 +22,18 @@ pub struct MeView {
     pub name: String,
     pub roles: Vec<String>,
     pub model: Option<String>,
+    /// Humans: `admin` or `classic`.
+    pub level: Option<String>,
+    /// Humans: permissions allowed right now (see the Accès page).
+    pub permissions: Vec<String>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct AuthMethods {
+    /// Sign in with the HelloPro account (account-service).
+    pub sso: bool,
+    /// Local login/password.
+    pub password: bool,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]

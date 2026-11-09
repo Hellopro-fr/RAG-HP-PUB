@@ -3,6 +3,7 @@
 //! No IO, no async, no database. The server loads a [`TaskSnapshot`] and a [`Ctx`], calls
 //! [`decide`], persists the returned [`DomainEvent`]s and their projections in one transaction.
 
+pub mod access;
 pub mod apply;
 pub mod command;
 pub mod ctx;

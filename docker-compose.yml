@@ -3068,6 +3068,16 @@ services:
       - CORS_ORIGINS=${ATB_CORS_ORIGINS:-}
       - COOKIE_SECURE=${ATB_COOKIE_SECURE:-false}
       - RUST_LOG=${ATB_RUST_LOG:-info}
+      # Connexion HelloPro (account-service) + équipes. Vide = connexion locale seulement.
+      # Le client OAuth2 « agent-task-board » se crée dans account-service (page Services),
+      # redirect URI = ${ATB_PUBLIC_URL}/api/auth/sso/callback.
+      - ACCOUNT_SERVICE_INTERNAL_URL=${ATB_ACCOUNT_INTERNAL_URL:-}
+      - ACCOUNT_SERVICE_PUBLIC_URL=${ACCOUNT_PUBLIC_URL:-}
+      - ACCOUNT_SERVICE_ADMIN_TOKEN=${ACCOUNT_INTERNAL_TOKEN:-}
+      - ATB_OAUTH_CLIENT_ID=${ATB_OAUTH_CLIENT_ID:-}
+      - ATB_OAUTH_CLIENT_SECRET=${ATB_OAUTH_CLIENT_SECRET:-}
+      - ATB_PUBLIC_URL=${ATB_PUBLIC_URL:-}
+      - PASSWORD_LOGIN=${ATB_PASSWORD_LOGIN:-}
     expose:
       - "8621"
     depends_on:

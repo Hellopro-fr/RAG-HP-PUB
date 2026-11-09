@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE actors SET roles = $2, updated_at = now() WHERE id = $1 AND kind = 'human'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c913a7212a7ef5748b6a6561d7b5e2e335cc4e991be9e41988a4ce940f4bf28a"
+}

@@ -6,11 +6,12 @@ pub mod mcp;
 pub mod openapi;
 pub mod rest;
 pub mod sse;
+pub mod sso;
 
 use axum::Router;
 use axum::http::{HeaderName, HeaderValue, Method, Request, header};
 use axum::middleware::from_fn_with_state;
-use axum::routing::{get, post};
+use axum::routing::{get, post, put};
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer};
@@ -36,7 +37,10 @@ pub fn router(st: AppState) -> Router {
             }),
         )
         .route("/api/auth/login", post(rest::login))
-        .route("/api/auth/logout", post(rest::logout));
+        .route("/api/auth/logout", post(rest::logout))
+        .route("/api/auth/methods", get(rest::auth_methods))
+        .route("/api/auth/sso/start", get(sso::start))
+        .route("/api/auth/sso/callback", get(sso::callback));
 
     let protected = Router::new()
         .route("/api/auth/me", get(rest::me))
@@ -85,6 +89,18 @@ pub fn router(st: AppState) -> Router {
             "/api/actors",
             get(rest::list_actors).post(rest::create_actor),
         )
+        .route("/api/access", get(rest::access_overview))
+        .route("/api/access/users/{id}", get(rest::access_user))
+        .route("/api/access/users/{id}/level", put(rest::access_set_level))
+        .route(
+            "/api/access/users/{id}/permissions/{permission}",
+            put(rest::access_set_user_permission),
+        )
+        .route("/api/access/teams/{id}", get(rest::access_team))
+        .route(
+            "/api/access/teams/{id}/permissions/{permission}",
+            put(rest::access_set_team_permission),
+        )
         .route("/api/stream", get(sse::global_stream))
         .nest_service("/mcp", mcp::service(st.clone()))
         .layer(from_fn_with_state(st.clone(), auth::require_actor));
@@ -131,7 +147,13 @@ pub fn router(st: AppState) -> Router {
             CorsLayer::new()
                 .allow_origin(AllowOrigin::list(origins))
                 .allow_credentials(true)
-                .allow_methods([Method::GET, Method::POST, Method::PATCH, Method::OPTIONS])
+                .allow_methods([
+                    Method::GET,
+                    Method::POST,
+                    Method::PUT,
+                    Method::PATCH,
+                    Method::OPTIONS,
+                ])
                 .allow_headers([
                     header::CONTENT_TYPE,
                     header::AUTHORIZATION,

@@ -499,6 +499,12 @@ impl BoardMcp {
     ) -> Result<CallToolResult, ErrorData> {
         let run = async {
             let actor = actor_of(&ctx)?;
+            crate::service::access::require(
+                &self.st,
+                &actor,
+                atb_core::access::Permission::QuestionsAnswer,
+            )
+            .await?;
             let st = self.st.clone();
             let ac = actor.clone();
             tx::run(&self.st, &actor, a.idempotency_key.as_deref(), move |c| {

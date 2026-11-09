@@ -1,6 +1,7 @@
 //! DATA tier. Every function takes `&mut PgConnection` (never the pool) so the service layer owns
 //! the transaction boundary (§4: one transaction per command).
 
+pub mod access;
 pub mod projector;
 pub mod reads;
 

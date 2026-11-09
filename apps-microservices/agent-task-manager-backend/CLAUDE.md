@@ -21,12 +21,18 @@ Frontend: `apps-microservices/agent-task-manager-frontend`.
   only things written outside events (heartbeats, presence).
 - Lease tokens are stored and evented as SHA-256 only; fencing checks (actor, token hash).
 - `DomainError → HTTP / MCP` mapping lives only in `src/error.rs`.
+- Access: the rule is `atb_core::access` (pure); `service::access::require` loads its inputs and
+  must run BEFORE `tx::run` (it may call account-service). Permissions apply to humans only.
+  Teams come from account-service `GET /internal/directory` (cached `DIRECTORY_TTL_SECS`, last copy
+  served on failure). `access_rules` is configuration, not event-sourced.
 
 ## Run / test
 ```bash
 docker compose up -d --build          # dev stack from this directory (smoke.sh, demo)
 # deployment: repo root, `docker compose --profile agent-task-manager up -d --build`, ATB_* in root .env
 bash scripts/test-pg.sh               # integration tests (needs Docker), AC-1.x per file
+# access_levels.rs / sso_login.rs: levels, priority rule, sign-in against a fake account-service
+# Low disk? CARGO_TARGET_DIR=/dev/shm/atb-target CARGO_INCREMENTAL=0 (clippy + tests ≈ 5 GB)
 cargo test -p atb-core                # domain table + proptest
 cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings
 ```
@@ -35,6 +41,7 @@ After any endpoint change: `cargo run -p atb-server -- dump-openapi > openapi.js
 `npm run gen:api` in the frontend; `scripts/check-openapi-drift.sh` fails CI otherwise.
 
 ## Phase status
-Phase 1 implemented. `TODO(phase-2)`: verifier, test_runs/reviews tables, submit_review endpoint,
+Phase 1 implemented, plus Admin/Classique levels, per-user/per-team permissions ("Accès") and
+HelloPro sign-in (`api/sso.rs`, OAuth2 code + PKCE against account-service). `TODO(phase-2)`: verifier, test_runs/reviews tables, submit_review endpoint,
 spec editor. `TODO(phase-3)`: Redis notifier, reservations, DAG view, time travel, k8s.
 Deviations from the build spec: `docs/DECISIONS.md`.

@@ -22,6 +22,13 @@ From the repository root, like every other service. Set in the root `.env`:
 | `ATB_GATEWAY_SHARED_SECRET` | behind the gateway | same value as the gateway's static header `X-Agent-Gateway-Secret` |
 | `ATB_MCP_ALLOWED_HOSTS` | behind the gateway | add the host name the gateway uses to reach this service |
 | `ATB_PORT` | no | published port of `agent-task-manager-lb` (default `8620`; `127.0.0.1:8620` to keep it local) |
+| `ATB_ACCOUNT_INTERNAL_URL` | HelloPro sign-in | account-service from the server, e.g. `http://account-service-backend:8600` (empty = local login only, no teams) |
+| `ATB_OAUTH_CLIENT_ID` / `ATB_OAUTH_CLIENT_SECRET` | HelloPro sign-in | OAuth2 client created in account-service (page Services), redirect URI `${ATB_PUBLIC_URL}/api/auth/sso/callback` |
+| `ATB_PUBLIC_URL` | HelloPro sign-in | public URL of the board, e.g. `https://atb.example.com` |
+| `ATB_PASSWORD_LOGIN` | no | keep the local login form (default: on only when HelloPro sign-in is not configured) |
+
+HelloPro sign-in also reuses the root `ACCOUNT_PUBLIC_URL` (browser side of `/authorize`) and
+`ACCOUNT_INTERNAL_TOKEN` (`X-Admin-Token` for `GET /internal/directory`: users and teams).
 
 Optional tuning, same names prefixed `ATB_`: `LEASE_TTL_SECS`, `PREFERRED_GRACE_SECS`,
 `SWEEP_INTERVAL_SECS`, `MAX_REPORTS_PER_MIN`, `CORS_ORIGINS`, `COOKIE_SECURE`, `RUST_LOG`.
@@ -108,6 +115,20 @@ migrations/      Postgres schema, roles' grants (events append-only for atb_app)
 `MAX_REPORTS_PER_MIN` (60), `MAX_WAITS_PER_MIN` (120), `NOTIFIER` (pg), `CORS_ORIGINS`,
 `GATEWAY_SHARED_SECRET`, `MCP_ALLOWED_HOSTS`, `SESSION_TTL_HOURS` (12), `COOKIE_SECURE`,
 `ATB_BOOTSTRAP_ADMIN_LOGIN` / `_PASSWORD` (first human admin, created once), `RUST_LOG`.
+HelloPro sign-in and teams: `ACCOUNT_SERVICE_INTERNAL_URL`, `ACCOUNT_SERVICE_PUBLIC_URL` (defaults
+to the internal one), `ACCOUNT_SERVICE_ADMIN_TOKEN`, `ATB_OAUTH_CLIENT_ID`, `ATB_OAUTH_CLIENT_SECRET`,
+`ATB_PUBLIC_URL`, `DIRECTORY_TTL_SECS` (30), `PASSWORD_LOGIN` (default: on only without sign-in).
+
+## Levels and access ("Accès" page)
+
+Humans are **Admin** (the `admin` role: everything, settings ignored, only they see "Accès") or
+**Classique**. A Classique user's permission is decided by `atb_core::access::resolve`:
+individual setting (wins even when more restrictive) > teams (allowed as soon as one team allows,
+else refused if one refuses) > refused. Teams are account-service groups. Permissions:
+`projects.create`, `questions.answer`, `agents.manage` (create plain agents only), `agents.view`,
+`users.view`, `access.manage` (Admin only, cannot be set). Agents keep their role checks.
+The first human signing in on an empty board becomes Admin; an admin cannot change their own level
+and the last admin cannot be demoted.
 Project workflow values override the lease/grace defaults.
 
 ## Ops

@@ -10,6 +10,294 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/api/access": {
+      "get": {
+        "tags": [
+          "access"
+        ],
+        "operationId": "access_overview",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessOverview"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/access/teams/{id}": {
+      "get": {
+        "tags": [
+          "access"
+        ],
+        "operationId": "access_team",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamAccess"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/access/teams/{id}/permissions/{permission}": {
+      "put": {
+        "tags": [
+          "access"
+        ],
+        "operationId": "access_set_team_permission",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "permission",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/access/users/{id}": {
+      "get": {
+        "tags": [
+          "access"
+        ],
+        "operationId": "access_user",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserAccess"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/access/users/{id}/level": {
+      "put": {
+        "tags": [
+          "access"
+        ],
+        "operationId": "access_set_level",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LevelInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/access/users/{id}/permissions/{permission}": {
+      "put": {
+        "tags": [
+          "access"
+        ],
+        "operationId": "access_set_user_permission",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "permission",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/actors": {
       "get": {
         "tags": [
@@ -129,6 +417,25 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/MeView"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/methods": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "auth_methods",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthMethods"
                 }
               }
             }
@@ -1455,6 +1762,109 @@
   },
   "components": {
     "schemas": {
+      "AccessOverview": {
+        "type": "object",
+        "required": [
+          "permissions",
+          "users",
+          "teams",
+          "directory_enabled"
+        ],
+        "properties": {
+          "directory_enabled": {
+            "type": "boolean",
+            "description": "false when account-service is not configured (no teams)."
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PermissionInfo"
+            }
+          },
+          "teams": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccessTeam"
+            }
+          },
+          "users": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccessUser"
+            }
+          }
+        }
+      },
+      "AccessTeam": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "description",
+          "member_count",
+          "settings"
+        ],
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "member_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string"
+          },
+          "settings": {
+            "type": "integer",
+            "description": "Number of team settings.",
+            "minimum": 0
+          }
+        }
+      },
+      "AccessUser": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "level",
+          "teams",
+          "settings"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "level": {
+            "type": "string",
+            "description": "`admin` or `classic`."
+          },
+          "login": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "settings": {
+            "type": "integer",
+            "description": "Number of individual settings.",
+            "minimum": 0
+          },
+          "teams": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TeamRef"
+            }
+          }
+        }
+      },
       "ActorView": {
         "type": "object",
         "description": "Actor with presence (§8, §10 /agents).",
@@ -1632,6 +2042,23 @@
               "string",
               "null"
             ]
+          }
+        }
+      },
+      "AuthMethods": {
+        "type": "object",
+        "required": [
+          "sso",
+          "password"
+        ],
+        "properties": {
+          "password": {
+            "type": "boolean",
+            "description": "Local login/password."
+          },
+          "sso": {
+            "type": "boolean",
+            "description": "Sign in with the HelloPro account (account-service)."
           }
         }
       },
@@ -1875,6 +2302,32 @@
           }
         }
       },
+      "EffectiveAccess": {
+        "type": "object",
+        "required": [
+          "permission",
+          "allowed",
+          "source"
+        ],
+        "properties": {
+          "allowed": {
+            "type": "boolean"
+          },
+          "permission": {
+            "type": "string"
+          },
+          "setting": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The individual setting: `allow`, `deny`, or absent (inherit from teams)."
+          },
+          "source": {
+            "$ref": "#/components/schemas/SourceView"
+          }
+        }
+      },
       "ErrorBody": {
         "type": "object",
         "description": "Error body of every REST response (§8).",
@@ -1943,6 +2396,19 @@
           }
         }
       },
+      "LevelInput": {
+        "type": "object",
+        "required": [
+          "level"
+        ],
+        "properties": {
+          "level": {
+            "type": "string",
+            "description": "`admin` or `classic`."
+          }
+        },
+        "additionalProperties": false
+      },
       "LinkInput": {
         "type": "object",
         "required": [
@@ -2004,7 +2470,8 @@
           "id",
           "kind",
           "name",
-          "roles"
+          "roles",
+          "permissions"
         ],
         "properties": {
           "id": {
@@ -2014,6 +2481,13 @@
           "kind": {
             "type": "string"
           },
+          "level": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Humans: `admin` or `classic`."
+          },
           "model": {
             "type": [
               "string",
@@ -2022,6 +2496,13 @@
           },
           "name": {
             "type": "string"
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Humans: permissions allowed right now (see the Accès page)."
           },
           "roles": {
             "type": "array",
@@ -2166,6 +2647,22 @@
           }
         },
         "additionalProperties": false
+      },
+      "PermissionInfo": {
+        "type": "object",
+        "required": [
+          "key",
+          "admin_only"
+        ],
+        "properties": {
+          "admin_only": {
+            "type": "boolean",
+            "description": "Only the Admin level has it; it cannot be set."
+          },
+          "key": {
+            "type": "string"
+          }
+        }
       },
       "ProjectView": {
         "type": "object",
@@ -2363,6 +2860,46 @@
           }
         },
         "additionalProperties": false
+      },
+      "SettingInput": {
+        "type": "object",
+        "properties": {
+          "effect": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`allow`, `deny`, or null to remove the setting."
+          }
+        },
+        "additionalProperties": false
+      },
+      "SourceView": {
+        "type": "object",
+        "required": [
+          "kind",
+          "teams"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "description": "`admin_level`, `admin_only`, `individual`, `teams`, `default`."
+          },
+          "teams": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Teams that decide `teams_outcome`."
+          },
+          "teams_outcome": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "What the teams say: `allowed`, `denied` or `unset` (absent for admin_level/admin_only)."
+          }
+        }
       },
       "SpecDetail": {
         "type": "object",
@@ -2853,6 +3390,111 @@
             "format": "int32"
           }
         }
+      },
+      "TeamAccess": {
+        "type": "object",
+        "required": [
+          "team",
+          "members",
+          "permissions"
+        ],
+        "properties": {
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TeamMember"
+            }
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TeamPermission"
+            }
+          },
+          "team": {
+            "$ref": "#/components/schemas/AccessTeam"
+          }
+        }
+      },
+      "TeamMember": {
+        "type": "object",
+        "required": [
+          "email",
+          "name"
+        ],
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "user_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "The board account, when the member has signed in once."
+          }
+        }
+      },
+      "TeamPermission": {
+        "type": "object",
+        "required": [
+          "permission",
+          "exceptions"
+        ],
+        "properties": {
+          "exceptions": {
+            "type": "integer",
+            "description": "Members with an individual setting for this permission (it overrides the team's).",
+            "minimum": 0
+          },
+          "permission": {
+            "type": "string"
+          },
+          "setting": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The team setting: `allow`, `deny`, or absent (not set)."
+          }
+        }
+      },
+      "TeamRef": {
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "UserAccess": {
+        "type": "object",
+        "required": [
+          "user",
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EffectiveAccess"
+            }
+          },
+          "user": {
+            "$ref": "#/components/schemas/AccessUser"
+          }
+        }
       }
     }
   },
@@ -2874,6 +3516,9 @@
     },
     {
       "name": "actors"
+    },
+    {
+      "name": "access"
     },
     {
       "name": "realtime"

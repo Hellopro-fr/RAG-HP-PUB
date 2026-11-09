@@ -4,7 +4,7 @@ import createClient from 'openapi-fetch';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
-import type { paths } from './schema';
+import type { components, paths } from './schema';
 
 const BACKEND = process.env.BACKEND_INTERNAL_URL ?? 'http://localhost:8621';
 
@@ -28,4 +28,12 @@ export async function load<T>(
     throw new Error(`backend returned HTTP ${response.status}`);
   }
   return data;
+}
+
+/** The signed-in user (level, allowed permissions), or null without a valid session. */
+export async function currentUser(): Promise<components['schemas']['MeView'] | null> {
+  if (!(await cookies()).get('atb_session')) return null;
+  const api = await serverApi();
+  const { data, response } = await api.GET('/api/auth/me');
+  return response.ok && data ? data : null;
 }

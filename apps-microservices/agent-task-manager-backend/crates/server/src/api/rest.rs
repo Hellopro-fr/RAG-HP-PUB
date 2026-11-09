@@ -1,6 +1,7 @@
 //! REST handlers (§8). Humans run the same commands as agents through these endpoints; every
 //! mutation goes through `service::tx::run` (one transaction, optional `Idempotency-Key`).
 
+use atb_core::access::{Level, Permission};
 use atb_core::{ActivityKind, LinkKind, WorkflowConfig};
 use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
@@ -17,11 +18,12 @@ use crate::repository::StoredEvent;
 use crate::repository::reads::{
     self, ActorView, ProjectView, QuestionView, SpecVersionView, SpecView, TaskView,
 };
+use crate::service::access::{AccessOverview, LevelInput, SettingInput, TeamAccess, UserAccess};
 use crate::service::auth::{CreatedActor, NewActorInput};
 use crate::service::commands::{self, CommandResult, NewTaskInput, SpecInput, TaskCmd};
 use crate::service::queries::{self, Board, TaskContext};
 use crate::service::rebuild::{self, RebuildReport};
-use crate::service::{auth as auth_svc, now, tx};
+use crate::service::{access as access_svc, auth as auth_svc, now, tx};
 use crate::state::AppState;
 
 fn header_str(headers: &HeaderMap, name: &str) -> Option<String> {
@@ -95,6 +97,11 @@ pub async fn login(
     State(st): State<AppState>,
     Json(input): Json<LoginInput>,
 ) -> AppResult<Response> {
+    if !st.cfg.password_login {
+        return Err(AppError::Forbidden(
+            "password login is disabled: sign in with the HelloPro account".into(),
+        ));
+    }
     let mut conn = st.pool.acquire().await?;
     let (actor, token, expires_at) = auth_svc::login(
         &mut conn,
@@ -103,17 +110,36 @@ pub async fn login(
         st.cfg.session_ttl_hours,
     )
     .await?;
+    drop(conn);
+    let mut res = Json(me_view(&st, &actor).await?).into_response();
+    res.headers_mut().insert(
+        header::SET_COOKIE,
+        session_set_cookie(&st, &token, expires_at)?,
+    );
+    Ok(res)
+}
+
+/// `Set-Cookie` for a new session.
+pub fn session_set_cookie(
+    st: &AppState,
+    token: &str,
+    expires_at: time::OffsetDateTime,
+) -> AppResult<HeaderValue> {
     let max_age = (expires_at - now()).whole_seconds().max(0);
     let secure = if st.cfg.cookie_secure { "; Secure" } else { "" };
     let cookie = format!(
         "{SESSION_COOKIE}={token}; HttpOnly; SameSite=Lax; Path=/; Max-Age={max_age}{secure}"
     );
-    let mut res = Json(me_view(&actor)).into_response();
-    res.headers_mut().insert(
-        header::SET_COOKIE,
-        HeaderValue::from_str(&cookie).map_err(|e| AppError::Internal(e.into()))?,
-    );
-    Ok(res)
+    HeaderValue::from_str(&cookie).map_err(|e| AppError::Internal(e.into()))
+}
+
+#[utoipa::path(get, path = "/api/auth/methods", tag = "auth",
+    responses((status = 200, body = AuthMethods)))]
+pub async fn auth_methods(State(st): State<AppState>) -> Json<AuthMethods> {
+    Json(AuthMethods {
+        sso: st.cfg.sso_enabled(),
+        password: st.cfg.password_login,
+    })
 }
 
 #[utoipa::path(post, path = "/api/auth/logout", tag = "auth", responses((status = 204)))]
@@ -130,19 +156,28 @@ pub async fn logout(State(st): State<AppState>, headers: HeaderMap) -> AppResult
     Ok(res)
 }
 
-fn me_view(a: &Actor) -> MeView {
-    MeView {
+async fn me_view(st: &AppState, a: &Actor) -> AppResult<MeView> {
+    let (level, permissions) = access_svc::me(st, a).await?;
+    Ok(MeView {
         id: a.id,
         kind: a.kind.as_str().to_string(),
         name: a.name.clone(),
         roles: a.roles.iter().map(|r| r.as_str().to_string()).collect(),
         model: a.model.clone(),
-    }
+        level: level.map(|l| match l {
+            Level::Admin => "admin".to_string(),
+            Level::Classic => "classic".to_string(),
+        }),
+        permissions,
+    })
 }
 
 #[utoipa::path(get, path = "/api/auth/me", tag = "auth", responses((status = 200, body = MeView)))]
-pub async fn me(Extension(actor): Extension<Actor>) -> Json<MeView> {
-    Json(me_view(&actor))
+pub async fn me(
+    State(st): State<AppState>,
+    Extension(actor): Extension<Actor>,
+) -> AppResult<Json<MeView>> {
+    Ok(Json(me_view(&st, &actor).await?))
 }
 
 // --- projects ----------------------------------------------------------------------------------
@@ -162,6 +197,7 @@ pub async fn create_project(
     headers: HeaderMap,
     Json(input): Json<CreateProjectInput>,
 ) -> AppResult<(StatusCode, Json<ProjectView>)> {
+    access_svc::require(&st, &actor, Permission::ProjectsCreate).await?;
     let workflow: Option<WorkflowConfig> = match input.workflow {
         Some(v) => Some(
             serde_json::from_value(v)
@@ -605,6 +641,7 @@ pub async fn answer(
     Path(id): Path<Uuid>,
     Json(input): Json<AnswerInput>,
 ) -> AppResult<Json<CommandResult>> {
+    access_svc::require(&st, &actor, Permission::QuestionsAnswer).await?;
     let st2 = st.clone();
     let a = actor.clone();
     let out = tx::run(&st, &actor, idem(&headers).as_deref(), move |c| {
@@ -630,9 +667,96 @@ pub async fn create_actor(
     Extension(actor): Extension<Actor>,
     Json(input): Json<NewActorInput>,
 ) -> AppResult<(StatusCode, Json<CreatedActor>)> {
+    // Classique users with agents.manage may connect their own agents (never admins or humans).
+    let may_create_agents = !actor.is_admin()
+        && actor.is_human()
+        && auth_svc::is_plain_agent(&input)
+        && access_svc::require(&st, &actor, Permission::AgentsManage)
+            .await
+            .is_ok();
     let mut conn = st.pool.acquire().await?;
     Ok((
         StatusCode::CREATED,
-        Json(auth_svc::create_actor(&mut conn, &actor, input).await?),
+        Json(auth_svc::create_actor(&mut conn, &actor, input, may_create_agents).await?),
     ))
+}
+
+// --- access ("Accès" page, admins only) -----------------------------------------------------
+
+#[utoipa::path(get, path = "/api/access", tag = "access",
+    responses((status = 200, body = AccessOverview), (status = 403, body = ErrorBody)))]
+pub async fn access_overview(
+    State(st): State<AppState>,
+    Extension(actor): Extension<Actor>,
+) -> AppResult<Json<AccessOverview>> {
+    Ok(Json(access_svc::overview(&st, &actor).await?))
+}
+
+#[utoipa::path(get, path = "/api/access/users/{id}", params(("id" = Uuid, Path)), tag = "access",
+    responses((status = 200, body = UserAccess), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody)))]
+pub async fn access_user(
+    State(st): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(id): Path<Uuid>,
+) -> AppResult<Json<UserAccess>> {
+    Ok(Json(access_svc::user_access(&st, &actor, id).await?))
+}
+
+#[utoipa::path(put, path = "/api/access/users/{id}/level", params(("id" = Uuid, Path)), tag = "access",
+    request_body = LevelInput,
+    responses((status = 204), (status = 422, body = ErrorBody), (status = 403, body = ErrorBody)))]
+pub async fn access_set_level(
+    State(st): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(id): Path<Uuid>,
+    Json(input): Json<LevelInput>,
+) -> AppResult<StatusCode> {
+    access_svc::set_level(&st, &actor, id, input).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[utoipa::path(put, path = "/api/access/users/{id}/permissions/{permission}",
+    params(("id" = Uuid, Path), ("permission" = String, Path)), tag = "access",
+    request_body = SettingInput,
+    responses((status = 204), (status = 422, body = ErrorBody), (status = 403, body = ErrorBody)))]
+pub async fn access_set_user_permission(
+    State(st): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path((id, permission)): Path<(Uuid, String)>,
+    Json(input): Json<SettingInput>,
+) -> AppResult<StatusCode> {
+    access_svc::set_setting(
+        &st,
+        &actor,
+        access_svc::USER,
+        &id.to_string(),
+        &permission,
+        input,
+    )
+    .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[utoipa::path(get, path = "/api/access/teams/{id}", params(("id" = String, Path)), tag = "access",
+    responses((status = 200, body = TeamAccess), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody)))]
+pub async fn access_team(
+    State(st): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path(id): Path<String>,
+) -> AppResult<Json<TeamAccess>> {
+    Ok(Json(access_svc::team_access(&st, &actor, &id).await?))
+}
+
+#[utoipa::path(put, path = "/api/access/teams/{id}/permissions/{permission}",
+    params(("id" = String, Path), ("permission" = String, Path)), tag = "access",
+    request_body = SettingInput,
+    responses((status = 204), (status = 422, body = ErrorBody), (status = 403, body = ErrorBody)))]
+pub async fn access_set_team_permission(
+    State(st): State<AppState>,
+    Extension(actor): Extension<Actor>,
+    Path((id, permission)): Path<(String, String)>,
+    Json(input): Json<SettingInput>,
+) -> AppResult<StatusCode> {
+    access_svc::set_setting(&st, &actor, access_svc::TEAM, &id, &permission, input).await?;
+    Ok(StatusCode::NO_CONTENT)
 }

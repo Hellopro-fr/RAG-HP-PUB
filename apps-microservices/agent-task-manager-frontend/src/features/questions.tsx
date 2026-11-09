@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 
 import { Badge, Button, Card, Textarea } from '@/components/ui';
-import { type QuestionView, ApiError, api, keys, unwrap } from '@/lib/api/client';
+import { type QuestionView, api, errorMessage, keys, unwrap } from '@/lib/api/client';
 import { formatDate, fr } from '@/lib/i18n/fr';
 import { useLiveQuestions } from '@/realtime/stream';
 
@@ -30,7 +30,7 @@ export function AnswerForm({ question, onDone }: { question: QuestionView; onDon
       void qc.invalidateQueries({ queryKey: keys.task(question.task_id) });
       onDone?.();
     },
-    onError: (e) => setError(e instanceof ApiError ? e.message : fr.errors.generic),
+    onError: (e) => setError(errorMessage(e, fr.errors.generic, fr.errors.forbidden)),
   });
   return (
     <form

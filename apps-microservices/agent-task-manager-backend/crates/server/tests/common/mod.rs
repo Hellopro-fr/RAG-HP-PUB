@@ -5,6 +5,7 @@
 
 use std::time::Duration;
 
+use atb_server::directory::{Directory, DirectoryClient};
 use atb_server::service::auth::{self, NewActorInput, NewActorKind};
 use atb_server::{AppState, Config, api};
 use reqwest::StatusCode;
@@ -31,6 +32,8 @@ pub struct Agent {
 pub enum As<'a> {
     Admin,
     Agent(&'a Agent),
+    /// A session cookie (`atb_session=…`) of another human.
+    Cookie(&'a str),
 }
 
 pub fn no_gates() -> Value {
@@ -46,9 +49,21 @@ pub async fn spawn(pool: PgPool) -> TestApp {
 }
 
 pub async fn spawn_with(pool: PgPool, tweak: impl FnOnce(&mut Config)) -> TestApp {
+    spawn_full(pool, tweak, None).await
+}
+
+/// `directory`: a fixed account-service directory (users + teams).
+pub async fn spawn_full(
+    pool: PgPool,
+    tweak: impl FnOnce(&mut Config),
+    directory: Option<Directory>,
+) -> TestApp {
     let mut cfg = Config::for_tests(String::new());
     tweak(&mut cfg);
-    let st = AppState::new(pool.clone(), cfg);
+    let mut st = AppState::new(pool.clone(), cfg);
+    if let Some(d) = directory {
+        st = st.with_directory(DirectoryClient::Static(std::sync::Arc::new(d)));
+    }
     tokio::spawn(st.hub.clone().run(pool.clone()));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -120,6 +135,7 @@ impl TestApp {
         match who {
             As::Admin => r.header("cookie", &self.admin_cookie),
             As::Agent(a) => r.bearer_auth(&a.token),
+            As::Cookie(c) => r.header("cookie", c),
         }
     }
 
@@ -131,6 +147,53 @@ impl TestApp {
             .unwrap();
         let status = res.status();
         (status, res.json().await.unwrap_or(Value::Null))
+    }
+
+    pub async fn put(&self, who: As<'_>, path: &str, body: Value) -> (StatusCode, Value) {
+        let res = self
+            .req(who, reqwest::Method::PUT, path)
+            .json(&body)
+            .send()
+            .await
+            .unwrap();
+        let status = res.status();
+        (status, res.json().await.unwrap_or(Value::Null))
+    }
+
+    /// A Classique human with this login (an email for team membership); returns its id and
+    /// session cookie.
+    pub async fn human(&self, login: &str) -> (Uuid, String) {
+        let password = "a-long-enough-password";
+        let created = auth::create_actor_unchecked(
+            &self.st.pool,
+            NewActorInput {
+                kind: NewActorKind::Human,
+                name: login.into(),
+                model: None,
+                roles: vec![],
+                login: Some(login.into()),
+                password: Some(password.into()),
+                gateway_subject: None,
+            },
+        )
+        .await
+        .expect("create human");
+        let res = self
+            .http
+            .post(format!("{}/api/auth/login", self.base))
+            .json(&json!({"login": login, "password": password}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::OK, "human login");
+        let cookie = res.headers()["set-cookie"]
+            .to_str()
+            .unwrap()
+            .split(';')
+            .next()
+            .unwrap()
+            .to_string();
+        (created.id, cookie)
     }
 
     pub async fn post(&self, who: As<'_>, path: &str, body: Value) -> (StatusCode, Value) {

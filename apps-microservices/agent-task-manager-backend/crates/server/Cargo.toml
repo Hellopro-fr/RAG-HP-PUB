@@ -13,10 +13,12 @@ path = "src/main.rs"
 atb-core = { path = "../core" }
 anyhow = "1"
 argon2 = "0.5"
+base64 = "0.22"
 axum = { version = "0.8", features = ["macros"] }
 futures = "0.3"
 hex = "0.4"
 rand = "0.9"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 rmcp = { version = "3.8", features = ["server", "macros", "transport-streamable-http-server"] }
 schemars = { version = "1", features = ["uuid1"] }
 serde.workspace = true
