@@ -196,6 +196,7 @@ class HelloProAPIClient:
         etat: int = 1,
         retour_erreur: str = "",
         temperature: float = 0,
+        cache_hit_token: int = 0,
     ) -> Optional[Any]:
         """Enregistre tokens et couts d'un appel LLM (table de suivi llm_tracking)."""
         data = {
@@ -209,6 +210,7 @@ class HelloProAPIClient:
             "etat": etat,
             "retour_erreur": retour_erreur,
             "temperature": temperature,
+            "cache_hit_token": cache_hit_token,
         }
 
         try:

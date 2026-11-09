@@ -174,7 +174,8 @@ class PrixExtractor:
                 type_ia=3,  # Gemini
                 model=self.GEMINI_MODEL,
                 input_token=usage_metadata.get("prompt_token_count") or 0,
-                output_token=(usage_metadata.get("candidates_token_count") or 0) + (usage_metadata.get("thoughtsTokenCount") or 0),
+                output_token=(usage_metadata.get("candidates_token_count") or 0) + (usage_metadata.get("thoughts_token_count") or 0),
+                cache_hit_token=(usage_metadata.get("cached_content_token_count") or 0),
                 id_process=self.ID_PROCESS,
                 origine="prix-extraction-siteweb",
                 etat=1 if "code" not in result else 2,
@@ -193,15 +194,18 @@ class PrixExtractor:
             response_obj = result.get("response")
             input_tokens = 0
             output_tokens = 0
+            cache_hit_token = 0
             if response_obj and hasattr(response_obj, 'usage'):
                 input_tokens = response_obj.usage.prompt_tokens or 0
                 output_tokens = response_obj.usage.completion_tokens or 0
+                cache_hit_token = getattr(response_obj.usage, "prompt_cache_hit_tokens", 0) or 0
             
             await self.api_client.log_llm_usage(
                 type_ia=2,  # DeepSeek
                 model="deepseek-v4-flash",
                 input_token=input_tokens,
                 output_token=output_tokens,
+                cache_hit_token=cache_hit_token,
                 id_process=self.ID_PROCESS,
                 origine="prix-extraction-siteweb",
                 etat=1,

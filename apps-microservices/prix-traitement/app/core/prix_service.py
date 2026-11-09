@@ -367,12 +367,13 @@ async def run_identification(id_categorie: str, id_prompt: Optional[str] = None,
             llm_result = await gemini.chat(final_prompt)
 
             # Log LLM usage pour Gemini
-            usage_metadata = llm_result.get("api_response", {}).get("usage_metadata", {})
+            usage = llm_result.get("api_response", {}).get("usage", {})
             await api_client.log_llm_usage(
                 type_ia=3,  # Gemini
                 model=settings.GEMINI_MODEL_NAME,
-                input_token=usage_metadata.get("prompt_token_count") or 0,
-                output_token=(usage_metadata.get("candidates_token_count") or 0) + (usage_metadata.get("thoughtsTokenCount") or 0),
+                input_token=usage.get("input_tokens") or 0,
+                output_token=usage.get("output_tokens") or 0,
+                cache_hit_token=usage.get("cache_hit_tokens") or 0,
                 id_process=ID_PROCESS,
                 origine="prix-extraction-devis",
                 etat=1 if "error" not in llm_result else 2,
@@ -737,6 +738,7 @@ async def run_questionnaire(texte_recherche: str, id_categorie: str , nom_catego
             model=actual_model,
             input_token=input_tokens,
             output_token=output_tokens,
+            cache_hit_token=usage.get("cache_hit_tokens") or 0,
             id_process=ID_PROCESS,
             origine="prix-traitement-questionnaire",
             etat=1 if "error" not in llm_result else 2,
@@ -1792,6 +1794,7 @@ async def run_questionnaire_v2(equivalences: List[Dict[str, Any]], id_categorie:
             model=actual_model,
             input_token=input_tokens,
             output_token=output_tokens,
+            cache_hit_token=usage.get("cache_hit_tokens") or 0,
             id_process=ID_PROCESS,
             origine="prix-traitement-questionnaire-v2",
             etat=1 if "error" not in llm_result else 2,

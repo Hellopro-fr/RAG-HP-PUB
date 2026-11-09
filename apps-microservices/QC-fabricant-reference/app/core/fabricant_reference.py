@@ -226,6 +226,7 @@ class FabricantReferenceGenerator:
                 model=deepseek.MODEL,
                 input_token=response_obj.usage.prompt_tokens,
                 output_token=response_obj.usage.completion_tokens,
+                cache_hit_token=getattr(response_obj.usage, "prompt_cache_hit_tokens", 0) or 0,
                 id_process=self.ID_PROCESS,
                 origine=self.ORIGINE,
                 etat=1 if "code" not in result else 2,

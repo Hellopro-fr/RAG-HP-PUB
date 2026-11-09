@@ -306,6 +306,7 @@ class CaracterisationPrixGenerator:
                 model=self.DEEPSEEK_MODEL,
                 input_token=response_obj.usage.prompt_tokens or 0,
                 output_token=response_obj.usage.completion_tokens or 0,
+                cache_hit_token=getattr(response_obj.usage, "prompt_cache_hit_tokens", 0) or 0,
                 id_process=self.ID_PROCESS,
                 origine="prix-caracterisation",
                 etat=2 if is_error else 1,
