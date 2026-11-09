@@ -39,10 +39,17 @@ fn redirect(to: &str) -> Response {
     res
 }
 
-/// Only same-site relative paths (no `//host`, no scheme).
+/// Only same-site relative paths: a leading `/`, no `//host`, no backslash, and no control or
+/// whitespace byte (browsers strip tab/CR/LF from URLs, so `/\t/evil` would become `//evil`).
 fn safe_next(next: Option<&str>) -> String {
     match next {
-        Some(n) if n.starts_with('/') && !n.starts_with("//") && !n.contains('\\') => n.into(),
+        Some(n)
+            if n.starts_with('/')
+                && !n.starts_with("//")
+                && n.bytes().all(|b| b > 0x20 && b != 0x7f && b != b'\\') =>
+        {
+            n.into()
+        }
         _ => "/projects".into(),
     }
 }
@@ -372,6 +379,10 @@ mod tests {
         assert_eq!(safe_next(Some("//evil.example")), "/projects");
         assert_eq!(safe_next(Some("https://evil.example")), "/projects");
         assert_eq!(safe_next(Some("/\\evil.example")), "/projects");
+        assert_eq!(safe_next(Some("/\t/evil.example")), "/projects");
+        assert_eq!(safe_next(Some("/\n/evil.example")), "/projects");
+        assert_eq!(safe_next(Some("/ /evil.example")), "/projects");
+        assert_eq!(safe_next(Some("/a\u{7f}")), "/projects");
         assert_eq!(safe_next(None), "/projects");
     }
 

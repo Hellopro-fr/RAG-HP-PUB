@@ -255,6 +255,17 @@ async fn agents_manage_lets_classique_connect_agents_only(pool: PgPool) {
     assert_eq!(s, StatusCode::CREATED, "{body}");
     assert!(body["token"].is_string());
 
+    // Only implementer agents: no reviewer (would review their own agents' work), no planner.
+    for role in ["reviewer", "planner"] {
+        let (s, _) = app
+            .post(
+                bob_as,
+                "/api/actors",
+                json!({"kind": "agent", "name": "x", "roles": [role]}),
+            )
+            .await;
+        assert_eq!(s, StatusCode::FORBIDDEN, "{role}");
+    }
     // Never an admin agent, never a human.
     let (s, _) = app
         .post(

@@ -9,6 +9,16 @@ import { fr } from '@/lib/i18n/fr';
 
 type Methods = { sso: boolean; password: boolean };
 
+/** Same rule as the server: a local path, no `//host`, no backslash, no control/space byte. */
+function safeNext(next: string | null): string {
+  if (!next || !next.startsWith('/') || next.startsWith('//')) return '/projects';
+  for (let i = 0; i < next.length; i++) {
+    const c = next.charCodeAt(i);
+    if (c <= 0x20 || c === 0x7f || next[i] === '\\') return '/projects';
+  }
+  return next;
+}
+
 function LoginForm() {
   const params = useSearchParams();
   const [login, setLogin] = useState('');
@@ -24,7 +34,7 @@ function LoginForm() {
     });
   }, []);
   const next = params.get('next');
-  const target = next && next.startsWith('/') && !next.startsWith('//') ? next : '/projects';
+  const target = safeNext(next);
   const ssoError = params.get('error');
   return (
     <Card className="mx-auto mt-16 max-w-sm space-y-4 p-6">

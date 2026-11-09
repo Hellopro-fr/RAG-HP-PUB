@@ -105,8 +105,16 @@ pub struct CreatedActor {
 }
 
 /// An agent without the admin role (what a Classique user with `agents.manage` may create).
+/// Roles a Classique user may give the agents they connect. `reviewer` (review leases) and
+/// `planner` stay with Admins: a user must not review their own agents' work.
+pub const SELF_SERVICE_AGENT_ROLES: [&str; 1] = ["implementer"];
+
 pub fn is_plain_agent(input: &NewActorInput) -> bool {
-    input.kind == NewActorKind::Agent && !input.roles.iter().any(|r| r == "admin")
+    input.kind == NewActorKind::Agent
+        && input
+            .roles
+            .iter()
+            .all(|r| SELF_SERVICE_AGENT_ROLES.contains(&r.as_str()))
 }
 
 /// Admins create any actor; `may_create_agents` (checked by the caller against `agents.manage`)
