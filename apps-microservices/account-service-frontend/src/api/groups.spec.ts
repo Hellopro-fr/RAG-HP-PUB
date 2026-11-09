@@ -18,10 +18,13 @@ describe('groups api', () => {
   it('creates a group with name and description', async () => {
     const f = mockFetch(201, { id: 'g1' })
     await groupsApi.create('Data', 'Équipe data')
-    expect(f).toHaveBeenCalledWith('/api/v1/admin/groups', expect.objectContaining({
-      method: 'POST',
-      body: JSON.stringify({ name: 'Data', description: 'Équipe data' }),
-    }))
+    expect(f).toHaveBeenCalledWith(
+      '/api/v1/admin/groups',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ name: 'Data', description: 'Équipe data' }),
+      }),
+    )
   })
 
   it('encodes the member email in the removal path', async () => {

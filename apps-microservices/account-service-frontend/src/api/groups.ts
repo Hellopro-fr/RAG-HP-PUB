@@ -34,14 +34,22 @@ export function create(name: string, description: string) {
   return api<AdminGroup>(base, { method: 'POST', body: { name, description } })
 }
 export function update(id: string, name: string, description: string) {
-  return api<AdminGroup>(`${base}/${encodeURIComponent(id)}`, { method: 'PUT', body: { name, description } })
+  return api<AdminGroup>(`${base}/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    body: { name, description },
+  })
 }
 export function remove(id: string) {
   return api<void>(`${base}/${encodeURIComponent(id)}`, { method: 'DELETE' })
 }
 export function addMember(id: string, email: string) {
-  return api<{ status: string }>(`${base}/${encodeURIComponent(id)}/members`, { method: 'POST', body: { email } })
+  return api<{ status: string }>(`${base}/${encodeURIComponent(id)}/members`, {
+    method: 'POST',
+    body: { email },
+  })
 }
 export function removeMember(id: string, email: string) {
-  return api<void>(`${base}/${encodeURIComponent(id)}/members/${encodeURIComponent(email)}`, { method: 'DELETE' })
+  return api<void>(`${base}/${encodeURIComponent(id)}/members/${encodeURIComponent(email)}`, {
+    method: 'DELETE',
+  })
 }
