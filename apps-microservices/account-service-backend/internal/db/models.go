@@ -86,3 +86,43 @@ type AuditLog struct {
 	Metadata    *string `gorm:"type:json"`
 	CreatedAt   time.Time `gorm:"index:idx_audit_event,priority:2;index:idx_audit_actor,priority:2"`
 }
+
+// Group is a named set of users (a team). Apps that delegate login to the
+// account-service (agent task board, …) read groups through
+// GET /internal/directory and attach their own permissions to them.
+type Group struct {
+	ID          string `gorm:"type:char(36);primaryKey"`
+	Name        string `gorm:"size:120;uniqueIndex;not null"`
+	Description string `gorm:"size:500"`
+	CreatedBy   string `gorm:"size:255"`
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+// TableName avoids `groups`, a reserved word since MySQL 8.0.2.
+func (Group) TableName() string { return "user_groups" }
+
+// GroupMember links a user (by email, like sessions and audit) to a group.
+type GroupMember struct {
+	GroupID   string `gorm:"type:char(36);primaryKey"`
+	UserEmail string `gorm:"size:255;primaryKey;index"`
+	AddedBy   string `gorm:"size:255"`
+	CreatedAt time.Time
+}
+
+func (GroupMember) TableName() string { return "user_group_members" }
+
+// GroupSummary is a group with its member count (list view).
+type GroupSummary struct {
+	Group
+	MemberCount int64
+}
+
+// GroupMemberView is a member joined with its user row.
+type GroupMemberView struct {
+	Email       string
+	DisplayName string
+	IsAllowed   bool
+	AddedBy     string
+	AddedAt     time.Time
+}

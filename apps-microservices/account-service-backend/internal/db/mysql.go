@@ -30,5 +30,7 @@ func AutoMigrate(g *gorm.DB) error {
 		&OAuth2RefreshToken{},
 		&LogoutEvent{},
 		&AuditLog{},
+		&Group{},
+		&GroupMember{},
 	)
 }

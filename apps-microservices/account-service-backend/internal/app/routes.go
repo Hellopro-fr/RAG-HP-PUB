@@ -9,6 +9,7 @@ import (
 	"account-service/internal/authserver"
 	"account-service/internal/config"
 	"account-service/internal/crypto"
+	"account-service/internal/db"
 	"account-service/internal/health"
 	"account-service/internal/logout"
 	"account-service/internal/metrics"
@@ -83,6 +84,12 @@ func registerRoutes(mux *http.ServeMux, d routeDeps) {
 		AdminToken: cfg.InternalAdminToken,
 	}))
 
+	// Internal directory (users + groups) for apps that resolve team permissions.
+	mux.Handle("GET /internal/directory", api.NewInternalDirectoryHandler(api.InternalDirectoryDeps{
+		Repo:       r.Group,
+		AdminToken: cfg.InternalAdminToken,
+	}))
+
 	// Admin-UI session endpoints.
 	loginHandler := auth.NewLoginHandler(auth.Config{
 		AuthURL: cfg.AuthURL, JWTSecret: cfg.JWTSecret, JWTAudience: cfg.JWTAudience,
@@ -132,6 +139,21 @@ func registerRoutes(mux *http.ServeMux, d routeDeps) {
 	sessionsDeps := api.SessionsDeps{Repo: r.Refresh}
 	mux.Handle("GET /api/v1/admin/users/{email}/sessions", requireAdmin(api.NewSessionsHandler(sessionsDeps)))
 	mux.Handle("POST /api/v1/admin/sessions/{sid}/revoke", requireAdmin(api.NewSessionsHandler(sessionsDeps)))
+	// Groups (teams): admin-only.
+	var groupAudit api.GroupAuditFn
+	if r.Audit != nil {
+		groupAudit = func(actor, action, target string) {
+			_ = r.Audit.Insert(&db.AuditLog{Event: action, ActorEmail: actor, TargetEmail: target})
+		}
+	}
+	groups := api.NewAdminGroupHandlers(api.AdminGroupDeps{Repo: r.Group, Audit: groupAudit})
+	mux.Handle("GET /api/v1/admin/groups", requireAdmin(http.HandlerFunc(groups.List)))
+	mux.Handle("POST /api/v1/admin/groups", requireAdmin(http.HandlerFunc(groups.Create)))
+	mux.Handle("GET /api/v1/admin/groups/{id}", requireAdmin(http.HandlerFunc(groups.Get)))
+	mux.Handle("PUT /api/v1/admin/groups/{id}", requireAdmin(http.HandlerFunc(groups.Update)))
+	mux.Handle("DELETE /api/v1/admin/groups/{id}", requireAdmin(http.HandlerFunc(groups.Delete)))
+	mux.Handle("POST /api/v1/admin/groups/{id}/members", requireAdmin(http.HandlerFunc(groups.AddMember)))
+	mux.Handle("DELETE /api/v1/admin/groups/{id}/members/{email}", requireAdmin(http.HandlerFunc(groups.RemoveMember)))
 	mux.Handle("GET /api/v1/admin/audit", requireAdmin(api.NewAuditHandler(api.AuditDeps{Repo: r.Audit})))
 
 	// API Catalog — proxy to api-catalog-service via gRPC.
