@@ -61,6 +61,7 @@ import { writeQmAudit, writeDiezAudit, writeCanonicalDedupAudit } from "./auditS
 import { writeCollapsedSeenBase } from "./collapsedSeenBase.js";
 import { canonicalDedupEnabled } from "./canonicalBase.js";
 import { isFilterParam } from "./filterOnSeen.js";
+import { skipnavCollapseTarget, recordQmCollapsed } from "./qmConsumptionSkip.js";
 import { facetParamsForCms } from "./cmsFacetLists.js";
 import { hasIgnoredExtensionForSeed } from "./seedExtensionFilter.js";
 import { resolveNonHtmlPrefixMode, resolveNonHtmlPrefixParams, createNonHtmlPrefixState } from "./nonHtmlPrefix.js";
@@ -814,9 +815,26 @@ if (QUEUE_PURGE_ENABLED) {
             // Queue-purge #2 decider: the #1 facet counter is empty at startup (in-memory,
             // built only as live pages are handled), so D1 only needs the seen-base check.
             (u: string) => QM_FACET_ENABLED && isFilterParam(u, context.seenBases),
+            // A517 Brief 2 (QUEUE_PURGE_MARK_HANDLED_ENABLED): a variant written handled here is
+            // never dequeued, so the skipNavigation guard (routes.ts:244-254) will not record its
+            // collapse: same call as that guard, made now. The branch depends on the variant: a
+            // #-fragment variant (no query param) collapses through processUrl ->
+            // applyPerClassStrip => 'qm_strip' (audit-only, cap 200); 'filter_on_seen' (the one
+            // the BO reads) needs a query param whose removal yields a seen base
+            // (filterParamCollapseTarget reads searchParams only, filterOnSeen.ts).
+            (u: string) => {
+                const t = skipnavCollapseTarget(u, context.seenBases);
+                if (t.via !== 'none') recordQmCollapsed(u, t.target, t.via, 'dequeue');
+            },
         );
-        if (purged.flagged > 0) {
-            console.warn(`[queue-purge] ${domain}: flagged ${purged.flagged} stale queued variants skipNavigation (kept ${purged.kept}).`);
+        if (purged.flagged > 0 || purged.markedHandled > 0) {
+            const handledPart = purged.markedHandled > 0 ? `, marked handled ${purged.markedHandled}` : "";
+            console.warn(`[queue-purge] ${domain}: flagged ${purged.flagged} stale queued variants skipNavigation (kept ${purged.kept}${handledPart}).`);
+        }
+        // Never dequeued => never counted in purged_skipnav (which success subtracts, see the
+        // final payload). Own counter, added to filtered_stale_variant there.
+        if (purged.markedHandled > 0 && context.statsManager) {
+            await context.statsManager.increment("purged_at_start", purged.markedHandled);
         }
     } catch (e) {
         console.warn(`[queue-purge] skipped for ${domain}: ${(e as Error).message}`);
@@ -1327,7 +1345,10 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
     const success_extracted = await readStat("success");
     const purged_prenav = await readStat("purged_prenav");
     const purged_skipnav = await readStat("purged_skipnav");
-    const filtered_stale_variant = purged_prenav + purged_skipnav;
+    // A517 Brief 2: variants written handled by the startup purge (never dequeued, so not in
+    // requestsFinished: success below is unchanged).
+    const purged_at_start = await readStat("purged_at_start");
+    const filtered_stale_variant = purged_prenav + purged_skipnav + purged_at_start;
 
     // 3. Write Payloads
     const payload = {
