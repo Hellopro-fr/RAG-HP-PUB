@@ -38,6 +38,7 @@ import { trackQmHashStatsForUrl } from "./qmHashTracker.js";
 import { classifyHttpStatus, pdfDatasetName, isPageClosedError } from "./httpStatusPolicy.js";
 import { shouldTripProxyWall, proxyWallConfig, terminalFailureDetectEnabled } from "./terminalFailure.js";
 import { recordUnjudgedUrls } from "./unjudgedUrls.js";
+import { isExcludedHost } from "./excludedHosts.js";
 import { BO_KNOWN_SOURCE } from "./boKnownSeed.js";
 import type { PageTimingEntry } from "./timing/types.js";
 
@@ -317,6 +318,22 @@ router.addDefaultHandler(
         const hostname = urlObj.hostname;
         const isInternal = (targetDomain && hostname.includes(targetDomain))
             || (siteHostname && hostname.includes(siteHostname));
+        // A545 (b) : page chargée (hôte de loadedUrl, donc après redirection) sur un hôte exclu par
+        // le BO ⇒ ni stockée ni jugée. Ni external_redirects, ni disjoncteur, ni domainChanged : le
+        // site n'a pas changé de domaine, c'est le BO qui écarte cet hôte.
+        if (isExcludedHost(hostname, context.config.excludeHosts)) {
+            log.info(`Excluded host: ${url} (excludeHosts)`);
+            if (request.userData.source === BO_KNOWN_SOURCE) {
+                // Convention A312 : une requête connue du BO ne laisse aucune trace native.
+                if (context.updateChecker) await context.updateChecker.recordBoKnownUnjudged();
+            } else {
+                if (context.statsManager) await context.statsManager.increment("excluded_host");
+                if (matchesMainSite(request.url, site)) {
+                    context.crawlErrorMessage = "La page d'accueil est sur un hôte exclu";
+                }
+            }
+            return;
+        }
         if (!isInternal) {
             log.warning(`Blocked external redirect: ${url} (Target: ${targetDomain})`);
             const isHomepageRedirect = matchesMainSite(request.url, site);
@@ -1258,6 +1275,13 @@ router.addDefaultHandler(
                                 return false;
                             }
 
+                            // A545 (a) : hôte exclu par le BO (sous-domaine qui est un autre domaine de
+                            // la base). S'ajoute au contrôle 'external-domain' ci-dessus, sans le remplacer.
+                            if (isExcludedHost(reqHost, context.config.excludeHosts)) {
+                                logBlocked('excluded-host', request.url);
+                                return false;
+                            }
+
                         } catch (e) {
                             console.error(`Invalid URL in transformRequestFunction: ${request.url}`);
                             return false;
@@ -1325,11 +1349,17 @@ router.addDefaultHandler(
                          const newUrlsSet = new Set(newUrls);
                          
                          const loggedLocal = new Set<string>();
+                         // A545 : liens distincts refusés pour hôte exclu (un lien de menu vu sur 280 pages compte 1).
+                         let excludedHostLinks = 0;
                          for(const item of blockedBuffer) {
                              if(newUrlsSet.has(item.url) && !loggedLocal.has(item.url)) {
                                  console.log(`🚫 [${item.reason}] ${item.url}`);
                                  loggedLocal.add(item.url);
+                                 if (item.reason === 'excluded-host') excludedHostLinks++;
                              }
+                         }
+                         if (excludedHostLinks > 0 && context.statsManager) {
+                             await context.statsManager.increment("excluded_host_link", excludedHostLinks);
                          }
                      } catch (e) {
                          console.warn("Failed to log blocked URLs via Redis:", e);

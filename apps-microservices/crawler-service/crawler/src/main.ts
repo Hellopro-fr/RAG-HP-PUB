@@ -68,6 +68,7 @@ import { resolveNonHtmlPrefixMode, resolveNonHtmlPrefixParams, createNonHtmlPref
 import { currentSidecarPath, loadSidecarInto, parseNonHtmlPrefixSidecar, readSidecarFile, resolvePreviousSidecarPath, writeSidecarFile } from "./nonHtmlPrefixSidecar.js";
 import { NonHtmlPrefixGate } from "./nonHtmlPrefixGate.js";
 import { readKnownUrlsFile, seedBoKnown } from "./boKnownSeed.js";
+import { parseExcludedHosts } from "./excludedHosts.js";
 
 const now = new Date().toISOString().replace(/:/g, "-");
 
@@ -119,6 +120,9 @@ let paramPerCrawl = parseNumericArg('percrawl', 'npm_config_percrawl', 0);
 let paramPerMinute = parseNumericArg('perminute', 'npm_config_perminute', 100);
 const toKeep = (getArg('tokeep', 'npm_config_tokeep') || '').split(";").filter(Boolean);
 const toRemove = (getArg('toremove', 'npm_config_toremove') || '').split(";").filter(Boolean);
+// A545 : hôtes à ne pas crawler, envoyés par le BO (« ; »), normalisés (excludedHosts.ts).
+const excludeHosts = parseExcludedHosts(getArg('excludehosts', 'npm_config_excludehosts'));
+if (excludeHosts.length > 0) console.log(`[exclude-hosts] ${excludeHosts.join(', ')}`);
 
 const crawlMode = getArg('crawlMode', 'npm_config_crawlmode') || 'standard';
 const camoufoxEnabled = (getArg('camoufox', 'npm_config_camoufox') || 'true').toLowerCase() !== 'false';
@@ -162,6 +166,7 @@ context.config = {
     bypassDiez: bypassDiez,
     toKeep: toKeep,
     toRemove: toRemove,
+    excludeHosts: excludeHosts,
     cms: cms,
     breakLimit: breakLimit,
     circuitBreaker: {
@@ -1349,6 +1354,11 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
     // requestsFinished: success below is unchanged).
     const purged_at_start = await readStat("purged_at_start");
     const filtered_stale_variant = purged_prenav + purged_skipnav + purged_at_start;
+    // A545 : excluded_host = pages chargées sur un hôte exclu (handler) ; excluded_host_link = liens
+    // distincts refusés à la mise en file. Noms identiques à routes.ts : la parité est épinglée par
+    // tests/routes.excludedHosts.test.ts.
+    const excluded_host = await readStat("excluded_host");
+    const excluded_host_link = await readStat("excluded_host_link");
 
     // 3. Write Payloads
     const payload = {
@@ -1378,6 +1388,8 @@ const gracefulShutdown = async (reason: string, exitCode: number = 0) => {
         timeout_individual,
         success_extracted,
         filtered_stale_variant,
+        // A545 : seulement si le job a une liste d'exclusion (compte rendu inchangé sinon).
+        ...(context.config.excludeHosts.length > 0 ? { excluded_host, excluded_host_link } : {}),
         // Observability — timestamps début/fin pour calculer duration_seconds côté PHP
         date_start: crawlStartTime,
         date_end: crawlEndTime,

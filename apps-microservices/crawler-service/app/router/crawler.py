@@ -265,6 +265,9 @@ async def start_new_crawl(payload: CrawlRequest):
             "perminute": payload.per_minute,
             "camoufox": payload.camoufox, # Pass Camoufox flag
             "cms": payload.cms,
+            # A545 : entrées non vides jointes par « ; ». Liste absente, vide ou faite de chaînes
+            # vides => None => aucun argument sur la ligne de commande (job identique à avant).
+            "excludehosts": ";".join(h.strip() for h in (payload.exclude_hosts or []) if h and h.strip()) or None,
         }
 
         # limitQueue gate désactivé en mode update (TEMPORAIRE — en attendant le fix du
