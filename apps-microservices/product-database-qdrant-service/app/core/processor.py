@@ -289,6 +289,17 @@ def _do_milvus_operations(produits, bdd, collection, base_vectorielle, func, ori
                     else:
                         # SKIP - données identiques
                         # print(f"⏭️  DÉCISION: SKIP - Produit ID {id_produit} inchangé (source {source_to_insert})")
+                        # Correspondance BO-Milvus absente → l'écrire avec les chunks déjà présents
+                        # (sinon le produit reste sans lien côté BO et revient à chaque envoi)
+                        correspondance_manquante = _build_missing_correspondance(
+                            base_vectorielle,
+                            correspondance_produit,
+                            id_produit,
+                            source_to_insert,
+                            origin,
+                        )
+                        if correspondance_manquante:
+                            data_bo_milvus.append(correspondance_manquante)
                         result = data
                         output_message = {
                             "database": bdd,
@@ -349,7 +360,7 @@ def _do_milvus_operations(produits, bdd, collection, base_vectorielle, func, ori
                 "origin": origin,
             }
 
-    # Insérer la correspondance si nécessaire (uniquement pour les insertions, pas les updates)
+    # Insérer la correspondance si nécessaire (insertions et réparation en SKIP, pas les updates)
     # On vérifie également que id_produit_milvus est non vide avant d'insérer
     if len(data_bo_milvus) > 0 and bdd == "milvus":
         # print(f"📝 Préparation insertion correspondance - {len(data_bo_milvus)} entrée(s) à traiter")
@@ -373,3 +384,71 @@ def _do_milvus_operations(produits, bdd, collection, base_vectorielle, func, ori
     # print(f"🏁 FIN TRAITEMENT - Produit ID: {id_produit}")
     # print(f"═══════════════════════════════════════════════════════════")
     return output_message
+
+
+def _query_strong(crud, expr, output_fields):
+    """
+    Lecture directe, en consistance forte, de la collection d'un CRUD Milvus partagé.
+    Une erreur Zilliz remonte (nouvel essai du message) : elle n'est jamais lue comme « absent ».
+    """
+    crud._ensure_connected()
+    if crud.collection is None:
+        raise Exception("Collection Milvus non initialisée.")
+    try:
+        return crud.collection.query(
+            expr=expr, output_fields=output_fields, consistency_level="Strong"
+        )
+    except Exception:
+        crud.collection = None  # Forcer la reconnexion au prochain essai
+        raise
+
+
+def _build_missing_correspondance(
+    base_vectorielle, correspondance_produit, id_produit, source, origin
+):
+    """
+    Branche SKIP : si la correspondance BO-Milvus du produit manque pour cette source, rend
+    l'entrée à écrire, construite avec les clés des chunks déjà présents, triées par
+    chunk_number (aucun nouvel embedding). Rend None si la correspondance existe déjà.
+    """
+    correspondances = _query_strong(
+        correspondance_produit,
+        f'id_produit == "{id_produit}"',
+        ["id", "origin"],
+    )
+    if any(str(c.get("origin", "")).upper() == source for c in correspondances):
+        return None
+
+    list_id_produit = [id_produit]
+    chunks = _query_strong(
+        base_vectorielle,
+        f"id_produit in {list_id_produit}",
+        ["id", "chunk_number", "source"],
+    )
+    chunks = sorted(
+        (c for c in chunks if str(c.get("source", "")).upper() == source),
+        key=lambda c: (c.get("chunk_number", 0), c.get("id", 0)),
+    )
+    if not chunks:
+        logging.warning(
+            f"SKIP id_produit={id_produit} : correspondance absente mais aucun chunk {source} relu → rien écrit"
+        )
+        return None
+
+    chunk_numbers = [c.get("chunk_number") for c in chunks]
+    if len(set(chunk_numbers)) != len(chunk_numbers):
+        logging.warning(
+            f"SKIP id_produit={id_produit} : chunk_number en double ({len(chunks)} chunks {source}) → toutes les clés sont écrites"
+        )
+
+    logging.info(
+        f"SKIP id_produit={id_produit} : correspondance absente (source {source}) → réparation avec {len(chunks)} clé(s)"
+    )
+    return {
+        "embedding": [0.0] * 1024,
+        "id_produit": id_produit,
+        "id_produit_milvus": ",".join(str(c["id"]) for c in chunks),
+        "date_ajout": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "date_maj": "",
+        "origin": origin,
+    }
