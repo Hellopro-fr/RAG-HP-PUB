@@ -79,6 +79,8 @@ class CrawlRequest(BaseModel):
     skip_diez: Optional[bool] = Field(False, description="Process and filter URLs with '#'", alias="skipdiez")
     to_keep: Optional[List[str]] = Field(None, description="List of URL query parameters to keep.", example=["page", "id"], alias="tokeep")
     to_remove: Optional[List[str]] = Field(None, description="List of URL query parameters to remove.", example=["utm_source"], alias="toremove")
+    # A545 : hôtes à ne pas crawler (sous-domaine qui est un autre domaine de la base), sans « www. ».
+    exclude_hosts: Optional[List[str]] = Field(None, description="Hosts NOT to crawl, without 'www.' (e.g. a sub-domain that is another domain of the base). A host is excluded with all its sub-domains (suffix match, never substring).", example=["collectivites.dpc.fr"], alias="excludehosts")
     proxy_apify: Optional[str] = Field(None, description="Apify proxy key.", example="my_apify_proxy_key", alias="proxyapify")
     bypass_question_mark: Optional[bool] = Field(False, description="Bypass filtering of URLs with '?'", alias="bypassquestionmark")
     bypass_diez: Optional[bool] = Field(False, description="Bypass filtering of URLs with '#'", alias="bypassdiez")
