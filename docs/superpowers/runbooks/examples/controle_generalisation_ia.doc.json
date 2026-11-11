@@ -1,0 +1,66 @@
+{
+  "controle_generalisation_ia": {
+    "database_id": 10,
+    "description": "Journal du contrôle de généralisation des sélecteurs CSS synthétisés par l'IA (chantier A411, base HELLOPRO_IA). Grain : 1 ligne = 1 sélecteur candidat proposé par la synthèse pour un (domaine, type de champ, site d'appel V2), testé sur au plus 20 AUTRES fiches du domaine (hors top fiches) : fiches testées, fiches conformes, taux et verdict. Écrivain UNIQUE : controle_generalisation_journaliser() (fonctions_controle_generalisation.php:235-262@afd1cbc1), appelé par le crochet que ComparateurSelecteur::lancer_synthetisation_selecteur() invoque (ComparateurSelecteur.php:740-741@afd1cbc1), posé par script_scrapping_produit_ia_V2.php:1882@afd1cbc1. Un INSERT multi-lignes par appel du crochet : toutes les lignes d'un même (id_domaine, type, site) partagent le même date_controle à la seconde. AUCUN lecteur applicatif : table de mesure, lue seulement par requêtes d'analyse (MCP, plan A411 T08). Données depuis le 2026-11-05 (mode ombre).",
+    "primary_key": "id_controle",
+    "default_order_by": "id_controle DESC",
+    "rows": null,
+    "columns": {
+      "id_controle": {
+        "type": "int",
+        "desc": "Identifiant unique (PK, auto-increment). Ordre d'insertion = ordre chronologique."
+      },
+      "id_domaine": {
+        "type": "int",
+        "desc": "FK logique (non contrainte) vers domaine_scrapping_produit_ia.id_domaine_scrapping_produit_ia (même base HELLOPRO_IA). Indexé avec date_controle (idx_domaine_date) : filtrer par domaine puis trier par date est le chemin rapide. 16 domaines distincts au 2026-11-11."
+      },
+      "type": {
+        "type": "varchar(32)",
+        "desc": "Champ produit dont le sélecteur est contrôlé. Valeurs possibles : 'titre', 'description', 'prix', 'image' (seuls ces 4 types sont contrôlés ; les autres types de synthèse ne produisent aucune ligne). Correspond à la colonne domaine_scrapping_produit_ia.selecteur_{type}_dspi. Règle de conformité par fiche : titre = exactement 1 nœud au texte non vide ; description = au moins 1 nœud au texte non vide ; image = au moins 1 nœud ; prix = au moins 1 nœud, chaque texte porte un montant en euros, et tous les textes sont identiques."
+      },
+      "site": {
+        "type": "varchar(16)",
+        "desc": "Point d'appel de la synthèse dans le script V2. 'PART II' = synthèse principale des sélecteurs ; 'PART III' = synthèse de reprise des contenus vides (getTitreIfContentEmpty ou getOtherIfContentEmpty dans la pile d'appel). Déduit de la pile par controle_generalisation_site(). Observé : 'PART II' très majoritaire, 'PART III' rare (2 lignes au 2026-11-11, type titre)."
+      },
+      "mode": {
+        "type": "varchar(8)",
+        "desc": "Mode du drapeau CONTROLE_GENERALISATION_MODE au moment du contrôle : 'ombre' = verdict journalisé, AUCUN candidat retiré (la liste sauvegardée est inchangée) ; 'actif' = candidats 'rejete' retirés avant sauvegarde. Le mode 'eteint' n'écrit AUCUNE ligne (crochet non posé). Seule valeur observée au 2026-11-11 : 'ombre' — donc aucun verdict de cette table n'a encore modifié un sélecteur stocké."
+      },
+      "candidat": {
+        "type": "text",
+        "desc": "Sélecteur CSS candidat testé, tel que proposé par la synthèse (ex. '.truck-titre h1', '#wa-compimage-xxx img'). Pour le type prix : la clé selecteur de l'item de prix (chaque item est jugé séparément). Chaîne vide possible si le candidat est illisible (verdict non_testable). PIÈGE : un candidat DÉJÀ stocké dans selecteur_{type}_dspi n'est JAMAIS journalisé (il est accepté d'office sans test) ; cette table ne contient donc que des candidats nouveaux."
+      },
+      "libelle_prix": {
+        "type": "varchar(255)",
+        "desc": "Pour type = 'prix' seulement : le libellé type de l'item de prix synthétisé (même vocabulaire que selecteur_prix_dspi : normal, barré, promotionnel, caché, sur-demande). NULL pour titre, description et image. Valeur observée au 2026-11-11 : 'normal' (3 lignes prix sur 3)."
+      },
+      "ids_testes": {
+        "type": "text",
+        "desc": "Tableau JSON d'entiers : ids scrapping_fiche_produit_ia.id_scrapping_fiche_produit_ia des fiches sur lesquelles le candidat a été évalué (copies LISIBLES : contenu non vide et DOM construit). Tirage déterministe sans aléa : fiches du domaine has_content = 1, est_dernier_sfpi = 1, est_supprime_maj_sfpi = 0, hors upload, hors URL de listing (/p, /produit(s), /product(s)...), HORS top fiches (tops_fiches_dspi), triées par md5 de 'id_domaine:id', 20 premières. Même tirage pour tous les types et sites d'un domaine dans un même run (cache par processus). Longueur 0 à 20 ; '[]' si le candidat était vide. Lire avec JSON_LENGTH / JSON_CONTAINS / JSON_TABLE."
+      },
+      "ids_conformes": {
+        "type": "text",
+        "desc": "Tableau JSON d'entiers, sous-ensemble de ids_testes : fiches où le candidat satisfait la règle de conformité de son type (voir type). '[]' = aucune fiche conforme (taux 0). Pour une non_testable, la liste est remplie quand même si les copies lisibles (moins de 3) étaient conformes."
+      },
+      "taux_pct": {
+        "type": "decimal(5,2)",
+        "desc": "Taux de conformité en pour cent = conformes / testées x 100, arrondi au centième le plus proche (0.00 à 100.00). NULL si et seulement si verdict = 'non_testable'. Seuil d'acceptation : 80 (constante CONTROLE_GENERALISATION_SEUIL_PCT)."
+      },
+      "verdict": {
+        "type": "varchar(32)",
+        "desc": "Verdict du candidat. 'accepte' = au moins 3 copies lisibles et taux au moins égal à 80 ; 'rejete' = au moins 3 copies lisibles et taux sous 80 ; 'non_testable' = moins de 3 copies lisibles (ou candidat vide), candidat gardé, taux NULL ; 'garde_faute_de_mieux' = tous les candidats de l'appel étaient rejetés ET la colonne selecteur_{type}_dspi du domaine était vide : le meilleur taux parmi les rejetés est gardé (en mode actif) et ré-étiqueté ainsi dans les deux modes — son taux est donc sous 80. Répartition au 2026-11-11 (175 lignes) : rejete 74, accepte 82, garde_faute_de_mieux 11, non_testable 8."
+      },
+      "date_controle": {
+        "type": "datetime",
+        "desc": "Horodatage d'insertion (DEFAULT CURRENT_TIMESTAMP, jamais fourni par le code). Heure du serveur MySQL = Europe/Paris (CET UTC+1 l'hiver, CEST UTC+2 l'été). Identique à la seconde pour toutes les lignes d'un même appel (id_domaine, type, site) : regrouper sur ces 4 colonnes reconstitue un lot de synthèse."
+      }
+    },
+    "relations": [
+      {"colonne": "id_domaine", "cible": "domaine_scrapping_produit_ia.id_domaine_scrapping_produit_ia", "nature": "FK logique N:1, non contrainte"},
+      {"colonne": "ids_testes / ids_conformes (JSON)", "cible": "scrapping_fiche_produit_ia.id_scrapping_fiche_produit_ia", "nature": "références multiples portées par un tableau JSON"},
+      {"colonne": "type + candidat", "cible": "domaine_scrapping_produit_ia.selecteur_{type}_dspi", "nature": "le candidat est comparé aux sélecteurs déjà stockés ; un candidat déjà présent n'est pas journalisé"},
+      {"colonne": "ids_testes (exclusion)", "cible": "domaine_scrapping_produit_ia.tops_fiches_dspi", "nature": "les top fiches du domaine sont exclues du tirage"}
+    ],
+    "notes": "Pièges pour l'analyse : (1) absence de ligne pour un domaine ne veut PAS dire candidat refusé — mode eteint, candidats tous déjà stockés, type hors des 4, ou échec du crochet (fail-open : exception journalisée en error_log V2 'controle_generalisation: fail-open' et AUCUNE ligne écrite ; un échec de l'INSERT lui-même ne laisse qu'un error_log 'controle_generalisation: journal failed'). (2) En mode ombre, les verdicts sont une SIMULATION : rien n'a été retiré de selecteur_{type}_dspi. (3) Un même candidat peut apparaître sur plusieurs lignes (runs successifs, ou PART II puis PART III). (4) Constantes en vigueur (fonctions_controle_generalisation_pure.php@afd1cbc1) : MODE 'ombre', MAX_COPIES 20, SEUIL_PCT 80, MIN_LISIBLES 3. Création : script_migration_create_controle_generalisation_ia.php (A411), InnoDB utf8mb4. Requête de mesure de référence : SELECT type, verdict, COUNT(*), SUM(ids_conformes = '[]') FROM controle_generalisation_ia WHERE mode = 'ombre' GROUP BY type, verdict."
+  }
+}
