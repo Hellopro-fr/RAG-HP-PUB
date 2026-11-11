@@ -1,0 +1,100 @@
+{
+  "reprise_bloque_site_change": {
+    "database_id": 10,
+    "description": "Suivi de la reprise nocturne A453 des domaines BLOQUÉS pour « site changé » (domaine_scrapping_produit_ia.est_bloque_dspi = 1 ET bloque_reason_dspi = 'site_change'). 1 ligne = 1 domaine (clé unique id_domaine) : d'où vient son blocage, quelle route de reprise a été tentée (MAJ ou recrawl), combien d'échecs, et l'état du suivi. Écrite seulement par le lanceur CLI script/chatgpt/script_reprise_bloques_site_change.php (via fonctions_reprise_bloques.php : INSERT IGNORE + UPDATE, jamais de DELETE) et par le ponctuel de recodage A453 qui a inscrit le stock initial. Lue par le lanceur (chaque nuit) et par l'onglet « Gelés en échec » des files de travail du BO. Table créée le 2026-11-02 ; stockée dans HELLOPRO_IA. Le déblocage effectif du domaine se lit dans DSPI (debloque_domaine()), pas ici.",
+    "primary_key": "id_reprise",
+    "default_order_by": "date_maj DESC",
+    "rows": null,
+    "columns": {
+      "id_reprise": {
+        "type": "int unsigned",
+        "desc": "Identifiant technique auto-incrémenté (PK). Aucun code ne le lit : la clé métier est id_domaine."
+      },
+      "id_domaine": {
+        "type": "int unsigned",
+        "desc": "FK logique → domaine_scrapping_produit_ia.id_domaine_scrapping_produit_ia (pas de contrainte). UNIQUE (uk_id_domaine) : un domaine n'a qu'UNE ligne de suivi, réutilisée d'une nuit à l'autre ; l'inscription est un INSERT IGNORE, une ré-inscription ne crée rien."
+      },
+      "raison_origine": {
+        "type": "varchar(50)",
+        "desc": "Pourquoi le domaine était bloqué À L'ORIGINE. ⚠ PIÈGE : ce n'est PAS la raison actuelle du blocage (qui vaut 'site_change' dans DSPI pour toute la population). Le stock initial vient du recodage A453, qui a basculé bloque_reason_dspi vers 'site_change' en gardant ici l'ancienne raison : valeurs observées le 2026-11-11 (206 lignes) = 'autre' 136 · 'blocage_technique' 60 · 'dataset_sans_produit' 6 · 'selecteur_ko' 2 · 'donnees_mauvaise_qualite' 1 · 'image_non_recuperable' 1 (mêmes codes que domaine_scrapping_produit_ia.bloque_reason_dspi). Valeurs écrites par le code mais non observées : 'site_change' (défaut de la table ; domaine bloqué site_change après le recodage) et 'preuve' (mode --mode=preuve du lanceur, A551 : blocage posé sur preuve de site refait)."
+      },
+      "note_origine": {
+        "type": "varchar(255)",
+        "desc": "Copie de domaine_scrapping_produit_ia.bloque_note_dspi au moment de l'inscription (note libre de l'opérateur, ex. 'Site inaccessible', 'Page error 404'). Non nulle sur toutes les lignes observées. Figée : ne suit pas une modification ultérieure de la note dans DSPI (sauf reconversion en preuve, qui la réécrit)."
+      },
+      "bloque_by_origine": {
+        "type": "varchar(100)",
+        "desc": "Copie de domaine_scrapping_produit_ia.bloque_by_dspi à l'inscription : id de l'utilisateur BO qui a bloqué le domaine (entier stocké en texte, ex. '2433'). FK logique vers l'id admin BO. Figée comme note_origine."
+      },
+      "bloque_at_origine": {
+        "type": "datetime",
+        "desc": "Copie de domaine_scrapping_produit_ia.bloque_at_dspi à l'inscription (date du blocage d'origine, fuseau Europe/Paris). Sert de signature du gel : l'onglet « Gelés en échec » n'affiche la ligne que si DSPI.bloque_at_dspi = bloque_at_origine (un domaine débloqué puis rebloqué pour une autre raison a une date postérieure et sort de l'onglet)."
+      },
+      "route": {
+        "type": "varchar(20)",
+        "desc": "Route de reprise choisie à la dernière tentative : 'maj_v2' (MAJ du domaine, armée dans update_crawling_history) · 'maj_normale' (MAJ, cas du code non observé) · 'recrawl' (re-crawl complet) · 'manuel' (aucune route automatique possible, voir derniere_issue 'route:…'). NULL = domaine jamais choisi par le lanceur (154/206 le 2026-11-11). Observé : recrawl 47 · maj_v2 5. Recalculée à chaque nuit."
+      },
+      "lot": {
+        "type": "varchar(100)",
+        "desc": "Nom du lot (option --lot du lanceur) de la dernière tentative ; toujours préfixé 'reprise_site_change_' (défaut sans option : 'reprise_site_change_AAAAMMJJ', ou 'reprise_site_change_preuve_AAAAMMJJ' en mode preuve). Pour la route MAJ, la même valeur est écrite dans update_crawling_history.trigger_reason, ce qui permet de retrouver les MAJ de la reprise. Observé : reprise_site_change_recrawl3 22 · reprise_site_change_recrawl2 20 · reprise_site_change_pilote 5 · reprise_site_change_recrawl1 5 · NULL 154 (jamais lancé)."
+      },
+      "tentatives": {
+        "type": "tinyint unsigned",
+        "desc": "Nombre d'ÉCHECS de reprise (pas de lancements) : incrémenté seulement par une issue 'echec' ; un refus de lancement ou une issue 'manuel' ne le touche pas. À 3 (REPRISE_TENTATIVES_MAX) la ligne passe à etat_suivi = 'abandonne'. Défaut 0 ; max observé 1 le 2026-11-11."
+      },
+      "dernier_lancement_at": {
+        "type": "datetime",
+        "desc": "Date de la dernière tentative du lanceur (armement OU refus de lancement), heure du serveur PHP (Europe/Paris). Un domaine n'est re-choisi que 7 jours (REPRISE_DELAI_JOURS) après cette date. NULL = jamais choisi (154/206 le 2026-11-11)."
+      },
+      "id_history": {
+        "type": "int unsigned",
+        "desc": "FK logique → update_crawling_history.id_history de la MAJ armée par la reprise (routes maj_v2 / maj_normale seulement). ⚠ Trois formes : un id réel (route MAJ armée) · 0 (route recrawl, ou ligne posée à 'lance' avant l'armement : 47 lignes le 2026-11-11) · NULL (jamais lancé, ou remis à NULL par une reconversion en preuve). Filtrer id_history strictement positif avant toute jointure."
+      },
+      "storage_folder_name": {
+        "type": "varchar(255)",
+        "desc": "Copie de update_crawling_history.storage_folder_name de la MAJ armée, format '{id_previous_crawl}-{id_history}-{timestamp unix}'. '' pour la route recrawl ou avant armement (47 lignes), NULL si jamais lancé (154). ⚠ Le filtre PII du MCP peut masquer une partie des chiffres à l'affichage (ex. rendu '5829-2506 XX XX XX XX76') : ne jamais recopier la valeur affichée dans une requête, joindre par id_history ou en SQL."
+      },
+      "derniere_issue": {
+        "type": "varchar(255)",
+        "desc": "Dernier événement du suivi, au format 'code:raison' (tronqué à 255). Codes écrits par le code : 'succes:…' (reprise réussie, domaine débloqué) · 'echec:…' (ex. 'echec:statut_9_final', 'echec:maj_failed', 'echec:statut_dspi_10') · 'manuel:…' (ex. 'manuel:criteres:taux_erreur:1.9688', 'manuel:garde_sante_refus', 'manuel:statut_dspi_10') · 'refus:{message}' (lancement refusé par une garde, pas une tentative) · 'route:{raison}' (route manuelle, ex. 'route:aucune_fiche_vivante', 'route:recrawl_exclu_preuve') · 'arme' / 'armement_en_cours' (lancé, en attente de relève) · 'debloque_hors_lanceur' (débloqué à la main hors reprise) · 'domaine_retire' (domaine retiré, suivi abandonné) · 'reconverti:{origine}:{etat}' (ligne réutilisée par le mode preuve). Observé le 2026-11-11 : NULL 154 · succes 22 · manuel 22 · echec 6 · domaine_retire 1, plus 1 valeur posée À LA MAIN hors code ('decision_user_2026-11-07:site_vivant_activite_changee') : ne pas supposer que toutes les valeurs viennent du lanceur."
+      },
+      "etat_suivi": {
+        "type": "varchar(20)",
+        "desc": "État du suivi (liste fermée côté code, pas un ENUM SQL ; indexé idx_etat_suivi) : 'en_attente' (à reprendre : jamais lancé, refusé, ou échec avec tentatives restantes) · 'lance' (MAJ ou recrawl armé, issue pas encore relevée) · 'debloque' (TERMINAL : reprise réussie, ou domaine débloqué hors lanceur) · 'manuel' (TERMINAL : revue humaine nécessaire) · 'abandonne' (TERMINAL : 3 échecs ou domaine retiré). Observé le 2026-11-11 : en_attente 160 · debloque 22 · manuel 23 · abandonne 1 · lance 0. Les lignes 'manuel'/'abandonne' encore gelées alimentent l'onglet « Gelés en échec » du BO."
+      },
+      "date_creation": {
+        "type": "datetime",
+        "desc": "Date d'inscription au suivi (NOW() du serveur MySQL, Europe/Paris). Jamais modifiée. Observé : du 2026-11-02 19:15 (pilote) au 2026-11-06 23:10 (stock recodé)."
+      },
+      "date_maj": {
+        "type": "datetime",
+        "desc": "Date de la dernière écriture de la ligne (NOW() à chaque UPDATE, Europe/Paris). Bon champ pour « derniers mouvements ». Le mode preuve la compare à la date du blocage preuve pour décider de réutiliser une ligne terminale."
+      }
+    },
+    "relations": [
+      {
+        "column": "id_domaine",
+        "references": "domaine_scrapping_produit_ia.id_domaine_scrapping_produit_ia",
+        "cardinality": "1:1",
+        "note": "FK logique sans contrainte. L'état réel du blocage (est_bloque_dspi, bloque_reason_dspi, bloque_at_dspi) se lit dans DSPI."
+      },
+      {
+        "column": "id_history",
+        "references": "update_crawling_history.id_history",
+        "cardinality": "N:1",
+        "note": "Seulement si id_history > 0 (route MAJ armée). La relève lit status, date_end et urls_* de cette ligne."
+      },
+      {
+        "column": "lot",
+        "references": "update_crawling_history.trigger_reason",
+        "note": "Même valeur écrite à l'armement d'une MAJ ; préfixe 'reprise_site_change_'."
+      },
+      {
+        "column": "id_domaine",
+        "references": "maj_garde_sante_blocage.id_domaine",
+        "note": "L'onglet « Gelés en échec » compte les blocages EN_ATTENTE de la garde santé MAJ masqués pour chaque domaine suivi."
+      }
+    ],
+    "notes": "Cycle : inscription en_attente → le lanceur choisit (plafond 20 armements par nuit, délai 7 j entre deux tentatives) → route : manuel immédiat, refus (reste en_attente) ou armement (lance) → relève la nuit suivante : succes ⇒ debloque_domaine() puis debloque ; echec ⇒ tentatives+1 puis en_attente ou abandonne à 3 ; manuel ⇒ manuel. Un domaine qui n'est plus bloqué site_change dans DSPI passe à debloque ('debloque_hors_lanceur') ; un domaine retiré passe à abandonne. Pour la population active : etat_suivi IN ('en_attente','lance'). Pour savoir si un domaine est encore bloqué, joindre DSPI : etat_suivi ne le dit pas. Code : fonctions_reprise_bloques.php et fonctions_reprise_bloques_pure.php (BO/admin/repertoire_test/moulinettes_interne/scrapping_produit_ia/fonctions/), lanceur BO/script/chatgpt/script_reprise_bloques_site_change.php, DDL sql/a453_reprise_bloque_site_change.sql du même module."
+  }
+}
