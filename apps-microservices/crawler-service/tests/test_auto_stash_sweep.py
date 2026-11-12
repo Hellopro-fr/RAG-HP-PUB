@@ -60,3 +60,31 @@ async def test_disk_pressure_selects_largest(mgr):
     ids = [j["crawl_id"] for j, _r in selected]
     assert ids == ["9", "8", "7", "6", "5"]  # largest first, capped at 5
     assert all(reason == "disk_pressure" for _j, reason in selected)
+
+
+
+def test_a549_sweep_excludes_previous_of_active_job(mgr):
+    """(i) A crawl that an in-flight job uses as previous_crawl_id is never a
+    sweep candidate — grace, timeout and disk_pressure alike."""
+    pool = [{"crawl_id": "prev", "status": "finished", "downloaded_at": _old_download(), "size_bytes": 9},
+            {"crawl_id": "free", "status": "finished", "downloaded_at": _old_download(), "size_bytes": 1}]
+    available = mgr._stash_sweep_available(pool, active_prev_ids={"prev"})
+    assert [j["crawl_id"] for j in available] == ["free"]
+    with patch.object(mgr, "_disk_used_pct", return_value=99):
+        selected = mgr._select_stash_candidates(available, datetime.utcnow())
+    assert [j["crawl_id"] for j, _r in selected] == ["free"]
+
+
+def test_a549_sweep_still_excludes_inflight(mgr):
+    mgr._auto_stash_inflight.add("busy")
+    pool = [{"crawl_id": "busy"}, {"crawl_id": "free"}]
+    assert [j["crawl_id"] for j in mgr._stash_sweep_available(pool, set())] == ["free"]
+
+
+def test_a549_reconcile_feeds_active_prev_ids_to_the_sweep():
+    """Wiring: _reconcile_locked selects from _stash_sweep_available(…,
+    active_prev_ids), not from the raw pool."""
+    import inspect
+    from app.core import crawler_manager as cm_module
+    src = inspect.getsource(cm_module.CrawlerManager._reconcile_locked)
+    assert "self._stash_sweep_available(auto_stash_pool, active_prev_ids)" in src

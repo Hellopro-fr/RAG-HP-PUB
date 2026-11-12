@@ -30,6 +30,10 @@ logger = logging.getLogger(__name__)
 
 # A prefix for all crawl-related keys in Redis
 CRAWL_JOB_PREFIX = "crawl_job:"
+# A549: stash is an allowlist on status, and a crawl that an in-flight job
+# reads as its previous_crawl_id is never stashed.
+STASHABLE_STATUSES = ("finished", "failed", "stopped")
+IN_FLIGHT_STATUSES = ("starting", "running", "restarting_oom", "stopping")
 # Distributed lock prefix — separate from state document to avoid stale-key deadlocks.
 # Lock keys have a TTL and are refreshed by heartbeat; state keys can persist for observability.
 CRAWL_LOCK_PREFIX = "crawl_lock:"
@@ -3001,15 +3005,15 @@ class CrawlerManager:
         job_status = job_info.get('status')
 
         # --- Pre-condition checks ---
-        if job_status in ("running", "restarting_oom", "stopping"):
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail={"error_code": "CRAWL_IS_ACTIVE", "current_status": job_status}
-            )
         if job_status == "archived":
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={"error_code": "ALREADY_ARCHIVED"}
+            )
+        if job_status not in STASHABLE_STATUSES:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"error_code": "CRAWL_IS_ACTIVE", "current_status": job_status}
             )
         if job_info.get("stashed_at"):
             raise HTTPException(
@@ -3047,13 +3051,6 @@ class CrawlerManager:
                 detail=f"Job '{crawl_id}' vanished from Redis during stash claim."
             )
         fresh_status = fresh_job_info.get("status")
-        if fresh_status in ("running", "restarting_oom", "stopping"):
-            await self._release_ownership_lock(stash_lock_key, lock_value)
-            lock_value = None
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail={"error_code": "CRAWL_IS_ACTIVE", "current_status": fresh_status},
-            )
         if fresh_status == "archived":
             await self._release_ownership_lock(stash_lock_key, lock_value)
             lock_value = None
@@ -3068,6 +3065,18 @@ class CrawlerManager:
                 status_code=status.HTTP_409_CONFLICT,
                 detail={"error_code": "ALREADY_STASHED", "stashed_at": fresh_job_info["stashed_at"]},
             )
+        # A549: status allowlist ('starting' is refused) + no in-flight job
+        # reading this crawl as its previous_crawl_id.
+        try:
+            conflict = await self._stash_in_use_conflict(crawl_id, fresh_job_info)
+        except BaseException:
+            await self._release_ownership_lock(stash_lock_key, lock_value)
+            lock_value = None
+            raise
+        if conflict:
+            await self._release_ownership_lock(stash_lock_key, lock_value)
+            lock_value = None
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=conflict)
         # Use the fresh blob from here on.
         job_info = fresh_job_info
 
@@ -3128,7 +3137,9 @@ class CrawlerManager:
                     )
 
                 # --- Tar via staging dir + atomic move (mirror archive flow) ---
-                def _create_stash_archive():
+                # A549: the move into the daemon's watch dir is split from the
+                # tar so the crawl can be re-validated in between.
+                def _create_staging_archive():
                     staging_dir = os.path.join(stash_dir, ".staging")
                     os.makedirs(staging_dir, exist_ok=True)
                     os.makedirs(stash_dir, exist_ok=True)
@@ -3141,9 +3152,8 @@ class CrawlerManager:
                         # Integrity check
                         with tarfile.open(staging_path, 'r:gz') as t:
                             t.getnames()
-                        os.rename(staging_path, target_tar)
-                        staging_path = None  # transferred ownership
-                        return target_tar, os.path.getsize(target_tar)
+                        ready, staging_path = staging_path, None  # transferred ownership
+                        return ready
                     finally:
                         if staging_path and os.path.exists(staging_path):
                             try:
@@ -3151,8 +3161,54 @@ class CrawlerManager:
                             except OSError:
                                 pass
 
+                def _discard_staging(path):
+                    try:
+                        os.remove(path)
+                    except OSError:
+                        pass
+
+                def _publish_staging(path):
+                    try:
+                        os.rename(path, target_tar)
+                    except BaseException:
+                        _discard_staging(path)
+                        raise
+                    return target_tar, os.path.getsize(target_tar)
+
                 try:
-                    final_path, archive_size = await anyio.to_thread.run_sync(_create_stash_archive)
+                    staging_ready = await anyio.to_thread.run_sync(_create_staging_archive)
+                except Exception as e:
+                    logger.error(f"Failed to create stash archive for '{crawl_id}': {e}", exc_info=True)
+                    try:
+                        post_failure_state = self._get_archives_disk_state(stash_dir)
+                        logger.error(f"Stash disk state at failure for '{crawl_id}': {post_failure_state}")
+                    except Exception:
+                        pass
+                    raise HTTPException(status_code=500, detail=f"Stash archive creation failed: {str(e)}")
+
+                # --- A549: re-validate AFTER the tar, BEFORE the tar reaches the
+                # upload daemon. The crawl may have been relaunched (incident 2519)
+                # or picked as previous_crawl_id by an update crawl while the tar
+                # ran. The blob read here is also the one stashed_at is written on.
+                job_key = f"{CRAWL_JOB_PREFIX}{crawl_id}"
+                try:
+                    fresh_job_info = await cache_service.get_json(job_key)
+                    conflict = (await self._stash_post_tar_conflict(crawl_id, job_info, fresh_job_info)
+                                if fresh_job_info else None)
+                except BaseException:
+                    await anyio.to_thread.run_sync(_discard_staging, staging_ready)
+                    raise
+                if not fresh_job_info:
+                    await anyio.to_thread.run_sync(_discard_staging, staging_ready)
+                    logger.error(f"Cannot mark '{crawl_id}' as stashed: job not found in Redis after stash tar created.")
+                    raise HTTPException(status_code=500, detail="Job vanished from Redis during stash.")
+                if conflict:
+                    await anyio.to_thread.run_sync(_discard_staging, staging_ready)
+                    logger.warning(f"STASH_ABORTED_AFTER_TAR crawl_id={crawl_id} detail={conflict}")
+                    raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=conflict)
+
+                try:
+                    final_path, archive_size = await anyio.to_thread.run_sync(_publish_staging, staging_ready)
                     logger.info(f"Stashed crawl '{crawl_id}' ({archive_size} bytes) -> {final_path}")
                 except Exception as e:
                     logger.error(f"Failed to create stash archive for '{crawl_id}': {e}", exc_info=True)
@@ -3169,11 +3225,6 @@ class CrawlerManager:
                 # fromisoformat() to return a tz-aware datetime on Python 3.11+,
                 # breaking subtraction against naive utcnow() in reconcile_jobs.
                 stashed_at = datetime.utcnow().isoformat()
-                job_key = f"{CRAWL_JOB_PREFIX}{crawl_id}"
-                fresh_job_info = await cache_service.get_json(job_key)
-                if not fresh_job_info:
-                    logger.error(f"Cannot mark '{crawl_id}' as stashed: job not found in Redis after stash tar created.")
-                    raise HTTPException(status_code=500, detail="Job vanished from Redis during stash.")
                 fresh_job_info["stashed_at"] = stashed_at
                 await cache_service.set_json(job_key, fresh_job_info)
                 logger.info(f"Marked crawl '{crawl_id}' as stashed at {stashed_at} in Redis.")
@@ -3686,6 +3737,59 @@ class CrawlerManager:
             logger.warning(f"_disk_used_pct failed: {e}")
             return 0.0
 
+    async def _find_in_flight_dependent(self, crawl_id: str) -> Optional[str]:
+        """crawl_id of an in-flight job whose previous_crawl_id is `crawl_id`,
+        or None. Same SCAN as _reconcile_locked, one MGET round-trip."""
+        keys = await cache_service.scan_keys_by_prefix(CRAWL_JOB_PREFIX)
+        if not keys:
+            return None
+        for raw in await cache_service.redis_client.mget(keys):
+            if not raw:
+                continue
+            try:
+                job = json.loads(raw)
+            except (TypeError, ValueError):
+                continue
+            if job.get("status") in IN_FLIGHT_STATUSES \
+                    and job.get("previous_crawl_id") == crawl_id \
+                    and job.get("crawl_id") != crawl_id:
+                return job.get("crawl_id")
+        return None
+
+    async def _stash_in_use_conflict(self, crawl_id: str, blob: dict) -> Optional[dict]:
+        """409 detail if `crawl_id` must not be stashed now, else None (A549).
+        Allowlist on status, then no in-flight job reading it as previous."""
+        blob_status = blob.get("status")
+        if blob_status not in STASHABLE_STATUSES:
+            return {"error_code": "CRAWL_IS_ACTIVE", "current_status": blob_status}
+        dependent = await self._find_in_flight_dependent(crawl_id)
+        if dependent:
+            return {"error_code": "IN_USE_AS_PREVIOUS", "dependent_crawl_id": dependent}
+        return None
+
+    async def _stash_post_tar_conflict(self, crawl_id: str, claimed: dict, fresh: dict) -> Optional[dict]:
+        """Re-validation after the tar: the claim-time guards again, plus the
+        crawl generation (start_time) the tar was taken from (A549)."""
+        if fresh.get("status") == "archived":
+            return {"error_code": "ALREADY_ARCHIVED"}
+        if fresh.get("stashed_at"):
+            return {"error_code": "ALREADY_STASHED", "stashed_at": fresh["stashed_at"]}
+        conflict = await self._stash_in_use_conflict(crawl_id, fresh)
+        if conflict:
+            return conflict
+        if fresh.get("start_time") != claimed.get("start_time"):
+            return {"error_code": "CRAWL_RESTARTED",
+                    "claimed_start_time": claimed.get("start_time"),
+                    "current_start_time": fresh.get("start_time")}
+        return None
+
+    def _stash_sweep_available(self, pool: List[dict], active_prev_ids: set) -> List[dict]:
+        """Sweep pool minus crawls already being stashed by this leader and
+        crawls an in-flight job uses as previous_crawl_id (A549)."""
+        return [j for j in pool
+                if j.get("crawl_id") not in self._auto_stash_inflight
+                and j.get("crawl_id") not in active_prev_ids]
+
     def _select_stash_candidates(self, jobs: List[dict], now_dt: datetime) -> List[Tuple[dict, str]]:
         """From terminal non-stashed non-archived jobs, pick (job, reason) to stash
         this tick: grace/timeout-eligible, plus largest-by-size under disk pressure.
@@ -4050,9 +4154,9 @@ class CrawlerManager:
         if settings.AUTO_STASH_ENABLED and auto_stash_pool:
             now_dt = datetime.utcnow()
             # Exclude crawls already being stashed by this leader so a slow tar
-            # doesn't consume STASH_MAX_PER_SWEEP slots across ticks.
-            available = [j for j in auto_stash_pool
-                         if j.get("crawl_id") not in self._auto_stash_inflight]
+            # doesn't consume STASH_MAX_PER_SWEEP slots across ticks, and the
+            # previous crawl of an in-flight update (A549 — disk_pressure too).
+            available = self._stash_sweep_available(auto_stash_pool, active_prev_ids)
             for job_data, reason in self._select_stash_candidates(available, now_dt):
                 self._auto_stash_inflight.add(job_data.get("crawl_id"))
                 asyncio.create_task(self._auto_stash_one(job_data, reason))
