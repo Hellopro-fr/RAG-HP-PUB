@@ -26,6 +26,9 @@ def mock_cache_service(monkeypatch):
     mock.redis_client = AsyncMock()
     mock.get_json = AsyncMock(return_value=None)
     mock.set_json = AsyncMock()
+    # A549: stash_crawl scans crawl_job:* for an active job using the crawl as
+    # previous_crawl_id. Default = no other job.
+    mock.scan_keys_by_prefix = AsyncMock(return_value=[])
     monkeypatch.setattr(cm_module, "cache_service", mock)
     return mock
 
@@ -1050,3 +1053,159 @@ async def test_stash_lock_released_on_replica_crash_simulation(
     # Fresh acquire must succeed (real Redis: key expired; mock: always True)
     new_value = await cm_instance._acquire_ownership_lock(lock_key, 1)
     assert new_value is not None
+
+
+
+# ============================================================================
+# A549 — never stash a crawl a live job depends on (before AND after the tar)
+# ============================================================================
+
+def _a549_env(cm_instance, mock_cache_service, monkeypatch, tmp_path, blob, others=None):
+    """Wire a stateful Redis fake: get_json serves a copy of `blob` (mutable by
+    the test), scan_keys_by_prefix + mget serve `others` (crawl_id -> blob)."""
+    stash_dir = tmp_path / "stash"
+    stash_dir.mkdir()
+    monkeypatch.setattr(cm_module.settings, "STASH_SHARED_PATH", str(stash_dir))
+    monkeypatch.setattr(cm_module.settings, "GCS_BUCKET_NAME", "test-bucket")
+    monkeypatch.setattr(
+        cm_instance,
+        "_get_archives_disk_state",
+        lambda d: {"free_bytes": 10**12, "total_bytes": 10**12, "used_pct": 0.0,
+                   "file_count": 0, "oldest_file_age_seconds": None},
+    )
+    others = others if others is not None else {}
+    mock_cache_service.redis_client.exists = AsyncMock(return_value=0)
+    mock_cache_service.redis_client.set = AsyncMock(return_value=True)
+    mock_cache_service.redis_client.eval = AsyncMock(return_value=1)
+    mock_cache_service.get_json = AsyncMock(side_effect=lambda key: dict(blob))
+    mock_cache_service.scan_keys_by_prefix = AsyncMock(
+        side_effect=lambda prefix: [f"crawl_job:{cid}" for cid in others])
+    mock_cache_service.redis_client.mget = AsyncMock(
+        side_effect=lambda keys: [json.dumps(others[k.split(":", 1)[1]]) for k in keys])
+    return stash_dir
+
+
+def _seed_heavy_storage(job_info):
+    heavy = os.path.join(job_info["storage_path"], "storage", "request_queues", "default")
+    os.makedirs(heavy)
+    with open(os.path.join(heavy, "req.json"), "w") as f:
+        f.write("{}")
+    return heavy
+
+
+def _assert_nothing_stashed(stash_dir, mock_cache_service, heavy):
+    """No tar for the upload daemon, no stashed_at written, storage/ intact."""
+    assert not (stash_dir / "test_id.tar.gz").exists()
+    staging = stash_dir / ".staging"
+    if staging.exists():
+        assert list(staging.iterdir()) == []
+    for call in mock_cache_service.set_json.call_args_list:
+        assert "stashed_at" not in call[0][1]
+    assert os.path.isfile(os.path.join(heavy, "req.json"))
+
+
+@pytest.mark.asyncio
+async def test_a549_stash_refuses_starting_blob(cm_instance, base_job_info, mock_cache_service,
+                                                monkeypatch, tmp_path):
+    """(ii) A blob that turned 'starting' after the caller's snapshot is not
+    terminal: the post-lock guard is an allowlist, not a denylist."""
+    blob = dict(base_job_info, status="starting")
+    stash_dir = _a549_env(cm_instance, mock_cache_service, monkeypatch, tmp_path, blob)
+    heavy = _seed_heavy_storage(base_job_info)
+    with pytest.raises(HTTPException) as exc:
+        await cm_instance.stash_crawl(base_job_info)
+    assert exc.value.status_code == 409
+    assert exc.value.detail["error_code"] == "CRAWL_IS_ACTIVE"
+    _assert_nothing_stashed(stash_dir, mock_cache_service, heavy)
+    assert mock_cache_service.redis_client.eval.call_count >= 1  # lock released
+
+
+@pytest.mark.asyncio
+async def test_a549_stash_refuses_when_running_job_uses_it_as_previous(
+        cm_instance, base_job_info, mock_cache_service, monkeypatch, tmp_path):
+    """(iii) An update crawl running with previous_crawl_id = this crawl."""
+    blob = dict(base_job_info, status="finished")
+    others = {"maj_1": {"crawl_id": "maj_1", "status": "running", "previous_crawl_id": "test_id"}}
+    stash_dir = _a549_env(cm_instance, mock_cache_service, monkeypatch, tmp_path, blob, others)
+    heavy = _seed_heavy_storage(base_job_info)
+    with pytest.raises(HTTPException) as exc:
+        await cm_instance.stash_crawl(dict(base_job_info, status="finished"))
+    assert exc.value.status_code == 409
+    assert exc.value.detail["error_code"] == "IN_USE_AS_PREVIOUS"
+    assert exc.value.detail["dependent_crawl_id"] == "maj_1"
+    _assert_nothing_stashed(stash_dir, mock_cache_service, heavy)
+
+
+@pytest.mark.asyncio
+async def test_a549_terminal_dependent_does_not_block(cm_instance, base_job_info, mock_cache_service,
+                                                      monkeypatch, tmp_path):
+    """A FINISHED job referencing the crawl does not hold it: stash proceeds."""
+    blob = dict(base_job_info, status="finished")
+    others = {"maj_1": {"crawl_id": "maj_1", "status": "finished", "previous_crawl_id": "test_id"}}
+    stash_dir = _a549_env(cm_instance, mock_cache_service, monkeypatch, tmp_path, blob, others)
+    result = await cm_instance.stash_crawl(dict(base_job_info, status="finished"))
+    assert result["status"] == "stashing"
+    assert (stash_dir / "test_id.tar.gz").exists()
+
+
+def _mutate_during_tar(monkeypatch, mutate):
+    real = cm_module.shutil.make_archive
+
+    def tar_then_mutate(*a, **k):
+        path = real(*a, **k)
+        mutate()
+        return path
+    monkeypatch.setattr(cm_module.shutil, "make_archive", tar_then_mutate)
+
+
+@pytest.mark.asyncio
+async def test_a549_race_2519_relaunched_during_tar(cm_instance, base_job_info, mock_cache_service,
+                                                    monkeypatch, tmp_path):
+    """(iv) Incident 2519: guards pass on a terminal blob, the crawl is
+    relaunched while the tar runs. The post-tar re-validation must refuse:
+    no tar published, no stashed_at on the live blob, storage/ intact."""
+    blob = dict(base_job_info, status="failed", start_time="2026-11-11T20:00:00")
+    stash_dir = _a549_env(cm_instance, mock_cache_service, monkeypatch, tmp_path, blob)
+    heavy = _seed_heavy_storage(base_job_info)
+    _mutate_during_tar(monkeypatch, lambda: blob.update(
+        status="running", start_time="2026-11-11T23:41:47"))
+    with pytest.raises(HTTPException) as exc:
+        await cm_instance.stash_crawl(dict(base_job_info, status="failed"))
+    assert exc.value.status_code == 409
+    assert exc.value.detail["error_code"] == "CRAWL_IS_ACTIVE"
+    _assert_nothing_stashed(stash_dir, mock_cache_service, heavy)
+    assert mock_cache_service.redis_client.eval.call_count >= 1  # lock released
+
+
+@pytest.mark.asyncio
+async def test_a549_race_restarted_back_to_terminal_during_tar(
+        cm_instance, base_job_info, mock_cache_service, monkeypatch, tmp_path):
+    """A relaunch that already ended during the tar shows a new start_time:
+    the tar describes an older generation, so it must not be published."""
+    blob = dict(base_job_info, status="failed", start_time="2026-11-11T20:00:00")
+    stash_dir = _a549_env(cm_instance, mock_cache_service, monkeypatch, tmp_path, blob)
+    heavy = _seed_heavy_storage(base_job_info)
+    _mutate_during_tar(monkeypatch, lambda: blob.update(start_time="2026-11-11T23:41:47"))
+    with pytest.raises(HTTPException) as exc:
+        await cm_instance.stash_crawl(dict(base_job_info, status="failed"))
+    assert exc.value.status_code == 409
+    assert exc.value.detail["error_code"] == "CRAWL_RESTARTED"
+    _assert_nothing_stashed(stash_dir, mock_cache_service, heavy)
+
+
+@pytest.mark.asyncio
+async def test_a549_race_update_starts_during_tar(cm_instance, base_job_info, mock_cache_service,
+                                                  monkeypatch, tmp_path):
+    """(v) Course B2: an update crawl referencing this crawl as previous starts
+    while the tar runs. Same expectation as 2519."""
+    blob = dict(base_job_info, status="finished")
+    others = {}
+    stash_dir = _a549_env(cm_instance, mock_cache_service, monkeypatch, tmp_path, blob, others)
+    heavy = _seed_heavy_storage(base_job_info)
+    _mutate_during_tar(monkeypatch, lambda: others.update(
+        maj_2={"crawl_id": "maj_2", "status": "starting", "previous_crawl_id": "test_id"}))
+    with pytest.raises(HTTPException) as exc:
+        await cm_instance.stash_crawl(dict(base_job_info, status="finished"))
+    assert exc.value.status_code == 409
+    assert exc.value.detail["error_code"] == "IN_USE_AS_PREVIOUS"
+    _assert_nothing_stashed(stash_dir, mock_cache_service, heavy)

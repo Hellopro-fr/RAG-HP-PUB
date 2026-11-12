@@ -266,11 +266,14 @@ Distinct from archiving. Use stash to **temporarily free local disk** for crawls
 **Status modeling:** No new status enum. A single field `job_data["stashed_at"]` (ISO 8601 UTC) is set when data is in GCS, cleared when restored. This is **orthogonal** to status — a stashed crawl keeps its original terminal status (`failed`/`stopped`/`finished`).
 
 **Conflict matrix (POST /stash):**
-- 409 `CRAWL_IS_ACTIVE` if status is running/restarting_oom/stopping
 - 409 `ALREADY_ARCHIVED` if status is `archived`
+- 409 `CRAWL_IS_ACTIVE` if status is not `finished`/`failed`/`stopped` (**allowlist**, A549: `starting` is refused too)
 - 409 `ALREADY_STASHED` if `stashed_at` already set
+- 409 `IN_USE_AS_PREVIOUS` (+ `dependent_crawl_id`) if a `starting`/`running`/`restarting_oom`/`stopping` job has `previous_crawl_id` = this crawl (SCAN `crawl_job:*` + MGET)
 - 409 `OPERATION_IN_PROGRESS` if `stash_lock:{id}` or `unstash_lock:{id}` held
 - 503 `INSUFFICIENT_DISK_SPACE` if pre-flight fails (mirror archive shape)
+
+**Re-validation after the tar (A549).** The guards are evaluated under the lock, then **again after the tar and before `os.rename` into `/app/stash/`**, on the blob that `stashed_at` is then written to — plus `start_time` unchanged since the claim (`409 CRAWL_RESTARTED`). On a failure the staging tar is deleted, the lock released, nothing is uploaded, no `stashed_at`, no `rmtree`. Incident: crawl 2519 (2026-11-12) — guards passed on a terminal blob, the crawl was relaunched during the 11-min tar, and the post-tar write stashed the live job and deleted its `storage/`. `start_crawl` does **not** read `stash_lock` (deliberately: a 503 there has no verified BO retry).
 
 **Two-phase commit for unstash:** Naïve "delete GCS after download" loses data if extract fails. Instead:
 1. Daemon downloads → writes `.done`
@@ -301,7 +304,7 @@ Folds the (previously operator-only) stash/unstash into the crawl lifecycle auto
 - **grace** — `downloaded_at` set AND `now - downloaded_at ≥ STASH_GRACE_SECONDS`. Grace governs *exclusively* when `downloaded_at` is present (a just-downloaded crawl is protected even if it finished long ago).
 - **timeout** — never downloaded AND `now - finished_at ≥ STASH_SAFETY_TIMEOUT_SECONDS` (this also doubles as the investigation window for failed crawls).
 - **disk pressure** — when `_disk_used_pct() ≥ STASH_DISK_HIGH_WATER_PCT`, the largest terminal crawls are stashed early regardless of grace.
-Capped at `STASH_MAX_PER_SWEEP` per tick; an in-flight set on the leader prevents re-selecting a crawl whose tar is still running.
+Capped at `STASH_MAX_PER_SWEEP` per tick; an in-flight set on the leader prevents re-selecting a crawl whose tar is still running. A crawl that an in-flight job uses as `previous_crawl_id` (`active_prev_ids`) is excluded from all three reasons (`_stash_sweep_available`, A549): the update start restores it with an old `downloaded_at`, so grace had already expired and the sweep re-stashed it 5-7 min into the update, while `UrlConsolidator` was reading its queue (`ENOENT`).
 
 **New `job_data` fields (orthogonal, cached on write):** `finished_at` (stamped at every terminal transition via `_stamp_terminal_fields`), `downloaded_at` (stamped on a successful `GET /results` serve), `size_bytes`. The sweep reads these from Redis — no per-job disk I/O in the leader-held critical section.
 
