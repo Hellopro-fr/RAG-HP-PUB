@@ -238,17 +238,10 @@ We chose to grow a **single unified graph** instead of one standalone graph per 
 
 1. **Update the policy.** Move the service from `not_graphed:` (or add it) to `graphed:` in `graphify-out/services-policy.yml`. Include `added_at` and a one-line rationale.
 
-2. **Merge the service into the graph.** From the repo root:
-
-    ```bash
-    /graphify apps-microservices/<service> --update
-    ```
-
-    The skill's `--update` path:
-    1. Reads the root graph's scope (from `graph.json`), notices the service files aren't in it.
-    2. Re-detects the service subdirectory (37-file crawler-service took ~1 min end-to-end).
-    3. Dispatches one semantic subagent for its docs (`CLAUDE.md`, `README.md`, `requirements.txt`). Few LLM tokens — expect under $0.10 per service.
-    4. Merges new nodes / edges into `graphify-out/graph.json` and adds the files to the manifest.
+2. **Merge the service into the graph** — through the merge procedure of `.claude/commands/graphify-refresh.md` (Step 2, then Step 3 for the labels), never through the generic graphify skill's `--update`: that path rebuilds every community with `cluster(G)`, which this repo forbids.
+    - `/graphify-refresh` will not list a brand-new service on its own: its planner reports absent files only in areas already in the graph (`ScopeIndex.area_of()` in `scripts/graphify_plan_update.py`). Name the service path yourself.
+    - Take only the extraction from the generic skill: AST of the service files, plus one semantic subagent for its docs (`CLAUDE.md`, `README.md`, `requirements.txt`). Few LLM tokens — expect under $0.10 per service; the 37-file crawler-service took ~1 min end-to-end.
+    - Merge into the existing graph (`G.update`) through `_preserve_and_place`, and merge the manifest instead of rewriting it.
 
     Remember to apply the two known gotchas after the subagent finishes (invented cross-link IDs + community labels — assert 0 drift, name the new communities, audit the ones that received nodes; both recipes in the "Gotchas when merging a service" section).
 
@@ -260,7 +253,7 @@ We chose to grow a **single unified graph** instead of one standalone graph per 
 
 They cannot merge it. The CI workflow `.github/workflows/graphify-coverage-check.yml` scans `apps-microservices/*` on every PR that touches that tree or the policy file, and fails the build if any directory is missing from `graphify-out/services-policy.yml`. The PR stays red until the dev picks one of two paths:
 
-- **Graph it** → follow the four-step checklist above (policy + `/graphify --update` + workflow paths + guide tables).
+- **Graph it** → follow the four-step checklist above (policy + preserve-and-place merge + workflow paths + guide tables).
 - **Skip it** → add an entry to `not_graphed:` with a reason code (`too_small`, `frontend`, `debug_variant`, `template_scaffold`, `templated_wrapper`, or `candidate_deferred`) and optional `details`.
 
 Either path unblocks the PR. Coverage-check then passes on re-run.
@@ -331,10 +324,10 @@ Four triggers, in order of coverage:
 
 1. **Any backbone push to `main` or `features/poc`** → **automatic** via the CI workflow at `.github/workflows/graphify-auto-rebuild.yml`. Only these two branches trigger CI — they are the deployed integration branches; other feature branches rely on the local hook so we do not burn CI minutes on exploratory work. GitHub Actions runs the scoped rebuild on an ephemeral runner (graphify installed there, not here) and commits the updated `graph.json` / `graph.html` / `GRAPH_REPORT.md` back to the same branch with `[skip graphify]` in the message to break the loop. Covers the "consume-only server" case — a server agent that commits code but has no graphify install relies entirely on CI for graph freshness. Runtime ~1 min per rebuild. Free on public repos; a few hundred minutes per month on private.
 2. **Code-only changes in scope, locally** → **automatic** via the scoped post-commit hook (if installed with `bash scripts/install-graphify-hook.sh`). Zero LLM cost. Runs in ~5-15s after commit. Redundant with CI but useful so your local `graph.json` is fresh for queries before the next push.
-3. **Doc / CLAUDE.md changes in scope** → the local hook (and CI) can only refresh AST; semantic re-extraction needs the LLM. CI / hook touch `graphify-out/.needs_update` and log a reminder. You then run `/graphify <path> --update` from a Claude Code session when convenient — **always with a path** (see the warning below). Cost is proportional to what you edited thanks to the semantic cache.
+3. **Doc / CLAUDE.md changes in scope** → the local hook (and CI) can only refresh AST; semantic re-extraction needs the LLM. CI / hook touch `graphify-out/.needs_update` and log a reminder. You then run `/graphify-refresh` from a Claude Code session when convenient — it bounds each update by its area's path (see the warning below). Cost is proportional to what you edited thanks to the semantic cache.
 4. **Full rebuild** → `/graphify .` from scratch. Avoid unless the graph is corrupted or the scope changed drastically — re-extracts every file.
 
-**Never re-extract without a path.** The dividing line is *path vs. no path*, not *slash command vs. CLI* — an earlier version of this guide had that wrong. Verified 2026-08-04 in `graphify/detect.py:468`: `detect_incremental(root)` calls `detect(root)` before touching the manifest, so scope comes from the argument alone. A bare `/graphify --update` scans all 99 services exactly like `graphify update .`, and everything the manifest has never seen — the 2 uncovered services, every file created since the manifest was written — counts as new and gets extracted. Pass the service: `/graphify apps-microservices/<service> --update`.
+**Never re-extract without a path.** The dividing line is *path vs. no path*, not *slash command vs. CLI* — an earlier version of this guide had that wrong. Verified 2026-08-04 in `graphify/detect.py:468`: `detect_incremental(root)` calls `detect(root)` before touching the manifest, so scope comes from the argument alone. A bare `/graphify --update` scans all 99 services exactly like `graphify update .`, and everything the manifest has never seen — the 2 uncovered services, every file created since the manifest was written — counts as new and gets extracted. Run `/graphify-refresh`, which passes the path for each area; never hand its printed `/graphify <path> --update` to the generic skill, whose `--update` re-clusters with `cluster(G)`.
 
 Corollary: **do not delete `graphify-out/manifest.json` to "reset" anything.** It is a `file -> mtime` table, not a scope boundary, and `detect_incremental` reads a missing manifest as *everything is new* (`full["new_files"] = full["files"]`). Deleting it makes the next update larger, never smaller.
 
@@ -427,11 +420,11 @@ Exposes tools: `query_graph`, `get_node`, `get_neighbors`, `get_community`, `god
 | Symptom | Fix |
 |---------|-----|
 | `graphify: command not found` | `pip install graphifyy` |
-| Re-extracted without a path and graph exploded (10k+ nodes) | You hit the unscoped-rebuild trap — reachable from `graphify update .` **and** from a bare `/graphify --update`. `git checkout -- graphify-out/` to restore. Then re-run with the service path (`/graphify apps-microservices/<service> --update`) or call `python scripts/graphify_rebuild_scoped.py <files>` directly. |
+| Re-extracted without a path and graph exploded (10k+ nodes) | You hit the unscoped-rebuild trap — reachable from `graphify update .` **and** from a bare `/graphify --update`. `git checkout -- graphify-out/` to restore. Then re-run `/graphify-refresh` or call `python scripts/graphify_rebuild_scoped.py <files>` directly. |
 | Teammate ran `graphify hook install` by mistake | `graphify hook uninstall` then reinstall ours: `bash scripts/install-graphify-hook.sh`. `git checkout -- graphify-out/` if the graph was polluted. |
 | Post-commit hook fired but did nothing | Either no changed files are in the graph scope (expected for `apps-microservices/` commits on non-graphed services), or graphify isn't installed on your Python. Run `python -c "import graphify"` to check. |
-| Hook output mentions `.needs_update` | A doc/CLAUDE.md in scope changed. Semantic re-extraction needs the LLM; run `/graphify --update` in a Claude Code session at your convenience. |
-| Added a new service but its nodes aren't in the graph | You ran `/graphify <service-path>` but not `--update`. Use the update flag so it merges into the root graph instead of creating a standalone one. |
+| Hook output mentions `.needs_update` | A doc/CLAUDE.md in scope changed. Semantic re-extraction needs the LLM; run `/graphify-refresh` in a Claude Code session at your convenience. |
+| Added a new service but its nodes aren't in the graph | `/graphify-refresh` does not list a service whose area is not in the graph yet. Follow step 2 of "Extending — add a service to the unified graph": extraction only, then a preserve-and-place merge. |
 | Merge / rebase conflict on `graphify-out/graph.json` | Do not hand-merge. See § "Pulling updates from the repository" for the accept-theirs + regenerate recipe. Touching the raw JSON corrupts it. |
 | Merge conflict on `graphify-out/labels.json` | Same recipe. Accept one side, re-run the rebuild script, which uses whichever `labels.json` was kept. |
 | Pulled from remote but graph did not refresh | The post-merge hook only fires if the installer has been run. Run `bash scripts/install-graphify-hook.sh` once per clone — installs both post-commit and post-merge. |

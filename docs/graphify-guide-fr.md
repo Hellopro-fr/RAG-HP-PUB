@@ -240,17 +240,10 @@ Nous avons choisi de faire grandir **un seul graphe unifié** plutôt qu'un grap
 
 1. **Mettre à jour la policy.** Déplacer le service depuis `not_graphed:` (ou l'ajouter) vers `graphed:` dans `graphify-out/services-policy.yml`. Inclure `added_at` et une ligne de justification.
 
-2. **Fusionner le service dans le graphe.** Depuis la racine du repo :
-
-    ```bash
-    /graphify apps-microservices/<service> --update
-    ```
-
-    Le chemin `--update` du skill :
-    1. Lit la portée du graphe racine (depuis `graph.json`), remarque que les fichiers du service n'y sont pas.
-    2. Re-détecte le sous-répertoire du service (crawler-service à 37 fichiers a pris ~1 min bout à bout).
-    3. Dispatche un sous-agent sémantique pour ses docs (`CLAUDE.md`, `README.md`, `requirements.txt`). Peu de tokens LLM — compter moins de 0,10 $ par service.
-    4. Fusionne les nouveaux nœuds/arêtes dans `graphify-out/graph.json` et ajoute les fichiers au manifeste.
+2. **Fusionner le service dans le graphe** — par la procédure de fusion de `.claude/commands/graphify-refresh.md` (Step 2, puis Step 3 pour les labels), jamais par le `--update` du skill graphify générique : ce chemin recalcule toutes les communautés avec `cluster(G)`, ce que ce dépôt interdit.
+    - `/graphify-refresh` ne liste pas de lui-même un service neuf : son planificateur ne signale les fichiers absents que dans les zones déjà présentes au graphe (`ScopeIndex.area_of()` dans `scripts/graphify_plan_update.py`). Nommer soi-même le chemin du service.
+    - Ne prendre du skill générique que l'extraction : AST des fichiers du service, plus un sous-agent sémantique pour ses docs (`CLAUDE.md`, `README.md`, `requirements.txt`). Peu de tokens LLM — compter moins de 0,10 $ par service ; crawler-service à 37 fichiers a pris ~1 min bout à bout.
+    - Fusionner dans le graphe existant (`G.update`) via `_preserve_and_place`, et fusionner le manifeste au lieu de le réécrire.
 
     Appliquer ensuite les deux pièges connus après la fin du sous-agent (IDs cross-link inventés + labels des communautés — vérifier une dérive nulle, nommer les communautés neuves, auditer celles qui ont reçu des nœuds ; recettes dans la section « Pièges lors de la fusion d'un service »).
 
@@ -262,7 +255,7 @@ Nous avons choisi de faire grandir **un seul graphe unifié** plutôt qu'un grap
 
 Il ne peut pas merger. Le workflow CI `.github/workflows/graphify-coverage-check.yml` scanne `apps-microservices/*` à chaque PR qui touche cette arborescence ou le fichier de policy, et fait échouer le build si un répertoire est absent de `graphify-out/services-policy.yml`. La PR reste rouge jusqu'à ce que le dev choisisse une des deux voies :
 
-- **Le grapher** → suivre la checklist quatre étapes ci-dessus (policy + `/graphify --update` + paths workflow + tableaux du guide).
+- **Le grapher** → suivre la checklist quatre étapes ci-dessus (policy + fusion preserve-and-place + paths workflow + tableaux du guide).
 - **L'ignorer** → ajouter une entrée dans `not_graphed:` avec un code raison (`too_small`, `frontend`, `debug_variant`, `template_scaffold`, `templated_wrapper`, ou `candidate_deferred`) et un `details` optionnel.
 
 L'une ou l'autre des voies débloque la PR. Le coverage-check passe à la réexécution.
@@ -333,10 +326,10 @@ Quatre déclencheurs, par ordre de couverture :
 
 1. **Tout push backbone vers `main` ou `features/poc`** → **automatique** via le workflow CI à `.github/workflows/graphify-auto-rebuild.yml`. Seules ces deux branches déclenchent la CI — ce sont les branches d'intégration déployées ; les autres branches feature dépendent du hook local pour ne pas brûler des minutes CI sur du travail exploratoire. GitHub Actions lance le rebuild scoppé sur un runner éphémère (graphify installé là, pas chez nous) et commit les `graph.json` / `graph.html` / `GRAPH_REPORT.md` mis à jour sur la même branche avec `[skip graphify]` dans le message pour casser la boucle. Couvre le cas « serveur consume-only » — un agent serveur qui commit du code mais n'a pas graphify installé dépend entièrement de la CI pour la fraîcheur du graphe. Durée ~1 min par rebuild. Gratuit sur repos publics ; quelques centaines de minutes/mois sur privés.
 2. **Changements code-only dans le scope, en local** → **automatique** via le hook post-commit scoppé (si installé avec `bash scripts/install-graphify-hook.sh`). Aucun coût LLM. Tourne en ~5-15s après le commit. Redondant avec la CI mais utile pour avoir le `graph.json` local frais avant le prochain push.
-3. **Changements doc / CLAUDE.md dans le scope** → le hook local (et la CI) ne peuvent rafraîchir que l'AST ; la ré-extraction sémantique a besoin du LLM. CI / hook touchent `graphify-out/.needs_update` et loggent un rappel. Lancer ensuite `/graphify <chemin> --update` depuis une session Claude Code quand pratique — **toujours avec un chemin** (voir l'avertissement plus bas). Coût proportionnel à ce qui a été édité grâce au cache sémantique.
+3. **Changements doc / CLAUDE.md dans le scope** → le hook local (et la CI) ne peuvent rafraîchir que l'AST ; la ré-extraction sémantique a besoin du LLM. CI / hook touchent `graphify-out/.needs_update` et loggent un rappel. Lancer ensuite `/graphify-refresh` depuis une session Claude Code quand pratique — il borne chaque mise à jour au chemin de sa zone (voir l'avertissement plus bas). Coût proportionnel à ce qui a été édité grâce au cache sémantique.
 4. **Reconstruction complète** → `/graphify .` depuis zéro. À éviter sauf si le graphe est corrompu ou si la portée a changé drastiquement — ré-extrait tout.
 
-**Ne jamais ré-extraire sans chemin.** La ligne de partage est *avec chemin vs sans chemin*, pas *slash command vs CLI* — une version précédente de ce guide se trompait là-dessus. Vérifié le 2026-08-04 dans `graphify/detect.py:468` : `detect_incremental(root)` appelle `detect(root)` avant même de lire le manifeste, donc la portée vient du seul argument. Un `/graphify --update` nu scanne les 99 services exactement comme `graphify update .`, et tout ce que le manifeste n'a jamais vu — les 2 services non couverts, chaque fichier créé depuis son écriture — compte comme nouveau et se fait extraire. Passer le service : `/graphify apps-microservices/<service> --update`.
+**Ne jamais ré-extraire sans chemin.** La ligne de partage est *avec chemin vs sans chemin*, pas *slash command vs CLI* — une version précédente de ce guide se trompait là-dessus. Vérifié le 2026-08-04 dans `graphify/detect.py:468` : `detect_incremental(root)` appelle `detect(root)` avant même de lire le manifeste, donc la portée vient du seul argument. Un `/graphify --update` nu scanne les 99 services exactement comme `graphify update .`, et tout ce que le manifeste n'a jamais vu — les 2 services non couverts, chaque fichier créé depuis son écriture — compte comme nouveau et se fait extraire. Lancer `/graphify-refresh`, qui passe le chemin de chaque zone ; ne jamais confier le `/graphify <chemin> --update` qu'il imprime au skill générique, dont le `--update` re-clusterise avec `cluster(G)`.
 
 Corollaire : **ne pas supprimer `graphify-out/manifest.json` pour « remettre à zéro »** quoi que ce soit. C'est une table `fichier -> mtime`, pas une frontière de portée, et `detect_incremental` lit un manifeste absent comme *tout est nouveau* (`full["new_files"] = full["files"]`). Le supprimer agrandit la mise à jour suivante, jamais l'inverse.
 
@@ -426,11 +419,11 @@ Expose les outils : `query_graph`, `get_node`, `get_neighbors`, `get_community`,
 | Symptôme | Correction |
 |----------|-----------|
 | `graphify: command not found` | `pip install graphifyy` |
-| Ré-extraction sans chemin et graphe explosé (10k+ nœuds) | Vous avez déclenché le piège du rebuild non-scoppé — atteignable depuis `graphify update .` **et** depuis un `/graphify --update` nu. `git checkout -- graphify-out/` pour restaurer. Relancer ensuite avec le chemin du service (`/graphify apps-microservices/<service> --update`) ou appeler `python scripts/graphify_rebuild_scoped.py <fichiers>` directement. |
+| Ré-extraction sans chemin et graphe explosé (10k+ nœuds) | Vous avez déclenché le piège du rebuild non-scoppé — atteignable depuis `graphify update .` **et** depuis un `/graphify --update` nu. `git checkout -- graphify-out/` pour restaurer. Relancer ensuite `/graphify-refresh` ou appeler `python scripts/graphify_rebuild_scoped.py <fichiers>` directement. |
 | Équipier a lancé `graphify hook install` par erreur | `graphify hook uninstall` puis réinstaller le nôtre : `bash scripts/install-graphify-hook.sh`. `git checkout -- graphify-out/` si le graphe a été pollué. |
 | Hook post-commit déclenché mais n'a rien fait | Soit aucun fichier modifié n'est dans la portée du graphe (attendu pour les commits `apps-microservices/` sur services non-graphés), soit graphify n'est pas installé sur votre Python. Vérifier avec `python -c "import graphify"`. |
-| Sortie du hook mentionne `.needs_update` | Un doc/CLAUDE.md du scope a changé. La ré-extraction sémantique a besoin du LLM ; lancer `/graphify --update` dans une session Claude Code quand pratique. |
-| Nouveau service ajouté mais ses nœuds ne sont pas dans le graphe | Vous avez lancé `/graphify <service-path>` sans `--update`. Utiliser le flag update pour qu'il fusionne dans le graphe racine au lieu d'en créer un isolé. |
+| Sortie du hook mentionne `.needs_update` | Un doc/CLAUDE.md du scope a changé. La ré-extraction sémantique a besoin du LLM ; lancer `/graphify-refresh` dans une session Claude Code quand pratique. |
+| Nouveau service ajouté mais ses nœuds ne sont pas dans le graphe | `/graphify-refresh` ne liste pas un service dont la zone n'est pas encore au graphe. Suivre l'étape 2 de « Étendre — ajouter un service au graphe unifié » : extraction seule, puis fusion preserve-and-place. |
 | Conflit de merge / rebase sur `graphify-out/graph.json` | Ne pas fusionner à la main. Voir § « Tirer des mises à jour du dépôt » pour la recette accept-theirs + régénération. Toucher au JSON brut le corrompt. |
 | Conflit de merge sur `graphify-out/labels.json` | Même recette. Accepter un côté, relancer le script de rebuild, qui utilise la version de `labels.json` conservée. |
 | Pull depuis le distant mais le graphe ne s'est pas rafraîchi | Le hook post-merge ne se déclenche que si l'installeur a été lancé. Lancer `bash scripts/install-graphify-hook.sh` une fois par clone — installe post-commit et post-merge. |
