@@ -1030,12 +1030,21 @@ bucket is refined by `classifyFailure` (`crawler/src/httpStatusPolicy.ts`).
 | transient | transient/block HTTP status (5xx/429/408/…) or navigation timeout | Yes |
 | unknown | anything else (incl. `NS_ERROR_ABORT`, `browserController.newPage() failed` — ambiguous) | No |
 
-Each permanently-failed request is written to the `error-{domain}` Crawlee dataset
-with a `failure_class` field. On the next launch, `reclaimFailedRequest` runs **before**
-the queue-health early-exit in `main.ts` and re-queues only the recoverable records
-(resets `retryCount`/`handledAt`), then drops the error dataset. Legacy records with no
+Each permanently-failed request is written to the `error-{crawleeStorageName}` Crawlee dataset
+(the domain with its dots replaced by hyphens, `crawleeStorageName` in `main.ts`; e.g.
+`error-cofradis-collectivites-fr`) with a `failure_class` field. On the next launch,
+`reclaimFailedRequest(domain)` runs **before** the queue-health early-exit in `main.ts`, reads
+that hyphenated dataset and re-queues only the recoverable records (resets
+`retryCount`/`handledAt`) into the request queue, which is opened under the **dotted** domain;
+it drops the error dataset only if it re-queued at least one record (otherwise the dataset is
+kept for debugging). Legacy records with no
 `failure_class` (pre-feature crawls) are treated as recoverable so old proxy victims are
 not lost (bounded — permanent ones fail-fast on re-crawl).
+
+A `dropdata` launch empties the hyphenated dataset too (`if (dropData)` block of `main.ts`; the
+`error-{domain}` line kept beside it targets a name no writer has used since 2026-01-29). Until
+A576 (2026-11) the reader also opened `error-{domain}`, so recovery never re-queued a request in
+production. Both names are pinned by `crawler/src/tests/reclaimFailedRequest.storageName.test.ts`.
 
 **Why this exists:** a temporary proxy-gateway outage produced
 `NS_ERROR_PROXY_CONNECTION_REFUSED` on valid URLs; without classification they burned the

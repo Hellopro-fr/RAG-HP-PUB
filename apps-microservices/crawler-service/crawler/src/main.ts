@@ -605,6 +605,7 @@ if (dropData) {
     await requestQueueToDrop.drop();
     await dropDataset(domain);
     await dropDataset(`error-${domain}`);
+    await dropDataset(`error-${context.config.crawleeStorageName}`); // name the failure writers use (dots replaced by hyphens)
     await dropDataset(`nfr-${domain}`);
 
     // Also clean managers
