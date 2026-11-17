@@ -1832,8 +1832,10 @@ const stripAnsi = (str: string) => {
 /**
  * Reclaims failed requests from error dataset for retry processing.
  *
- * @param name - The name of the original request queue and dataset
- *               Error dataset will be prefixed with "error-"
+ * @param name - The name of the original request queue (the domain, with its dots).
+ *               The error dataset is read under the name its writers use:
+ *               "error-" + context.config.crawleeStorageName (dots replaced by
+ *               hyphens), or "error-" + name when crawleeStorageName is empty.
  *
  * @description
  * Process:
@@ -1848,13 +1850,13 @@ const stripAnsi = (str: string) => {
  * @throws {Error} If dataset or queue access fails
  *
  * @example
- * // Reclaim failed requests from 'products' queue
- * await reclaimFailedRequest('products');
- * // Will process requests from 'error-products' dataset
- * // And requeue them in 'products' queue
+ * // Reclaim failed requests of 'shop.example' (crawleeStorageName 'shop-example')
+ * await reclaimFailedRequest('shop.example');
+ * // Will process requests from 'error-shop-example' dataset
+ * // And requeue them in 'shop.example' queue
  */
 export const reclaimFailedRequest = async (name: string) => {
-    const errorDatasetName = `error-${name}`;
+    const errorDatasetName = context.config.crawleeStorageName ? `error-${context.config.crawleeStorageName}` : `error-${name}`;
     const dataset = await Dataset.open(errorDatasetName);
     const info = await dataset.getInfo();
 
