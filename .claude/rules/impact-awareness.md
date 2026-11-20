@@ -23,6 +23,9 @@ Before modifying code, briefly state the **Gain** and **Cost**. If the cost is n
 
 When modifying shared components: list downstream consumers, assess backward compatibility, propose migration if breaking.
 
+- A refusal or guard whose message redirects to another path ("use X instead") → run that path on the same population before merging: two guards on sibling paths can leave no way out.
+- A call added towards a service (API, detector, crawl) → check its worst-case latency and cost (retries, forced refresh) against the caller's budget (timeout, cron window, quota).
+
 ## 4. When to Skip
 
 Typo fixes, comment-only changes, documentation updates, single-service changes with no shared imports.
