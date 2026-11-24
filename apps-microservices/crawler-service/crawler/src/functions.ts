@@ -55,6 +55,7 @@ import { pathBaseKey } from "./urlBase.js";
 import { filterParamCollapseTarget } from "./filterOnSeen.js";
 import { isDeadHost, terminalFailureDetectEnabled } from "./terminalFailure.js";
 import { decideUpdateHealth, updateHealthRates, updateHealthCoverage } from './updateHealthVerdict.js';
+import { waitForGalleryRender } from "./galleryRenderWait.js";
 
 /**
  * Constructs the Apify proxy URL based on the provided password.
@@ -172,6 +173,8 @@ export const processPage = async (
     try {
         // First scroll through all content with safety limits
         await waitAndScroll(page, url, log, maxScrolls, timeoutSecs);
+        // A664: bounded wait for a Fotorama gallery frame (placeholder pages only; never throws)
+        await waitForGalleryRender(page, url, log);
 
         // Return the complete page HTML after scrolling
         // Retry logic: handle race condition where page is mid-navigation

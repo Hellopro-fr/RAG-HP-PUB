@@ -1009,6 +1009,7 @@ default). It must stay there: `errorHandler` runs before Crawlee's retry decisio
 |---|---|---|
 | `NAVIGATION_WAIT_UNTIL` | `domcontentloaded` | `page.goto` wait condition. Allowed: `load`, `domcontentloaded`, `commit`, `networkidle`. Invalid → default. Set `load` to revert. |
 | `TIMEOUT_MAX_RETRIES` | `2` | Max navigation-timeout retries before `noRetry`. |
+| `GALLERY_RENDER_WAIT_MS` | `15000` | A664 — `processPage()` waits up to this many ms for `.fotorama__stage__frame` (state `attached`) after `waitAndScroll()`, only on pages carrying `[data-gallery-role=gallery-placeholder]` (Magento Fotorama initialises after network idle). `0` disables; invalid → default. Timeout swallowed, one `[gallery-wait]` info line. Adds ≤ 15 s to the handler budget on those pages only (`src/galleryRenderWait.ts`). |
 
 Spec: `docs/superpowers/specs/2026-06-09-crawler-http-status-retry-policy-design.md`.
 
