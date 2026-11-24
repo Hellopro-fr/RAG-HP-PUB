@@ -203,6 +203,9 @@ _ENV_WHITELIST_PREFIXES = (
     # STRIP_ACTION_ANCHORS (A347): kill-switch of the action-anchor fragment
     # filter; lets an operator read the raw flag on the VM without a shell. No secret here.
     "STRIP_",
+    # GALLERY_RENDER_WAIT_MS (A664): bound of the Fotorama gallery-frame wait before
+    # capture (0 = disabled); lets an operator read it on the VM without a shell. No secret here.
+    "GALLERY_",
 )
 # Compose env vars deliberately NOT exposed by /admin/config. Add here ONLY
 # with a justification comment; anything diagnostic belongs in the whitelist.
