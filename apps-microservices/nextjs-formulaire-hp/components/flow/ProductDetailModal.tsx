@@ -6,7 +6,7 @@ import DOMPurify from "isomorphic-dompurify";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { trackProductModalView } from "@/lib/analytics";
-import { getProductImageUrl } from "@/lib/utils/image-url";
+import { getProductImageUrl, PRODUCT_PLACEHOLDER_SRC } from "@/lib/utils/image-url";
 import type { ProductSpec, SupplierInfo, MediaItem } from "@/types";
 
 interface ProductDetailProps {
@@ -42,6 +42,37 @@ const getYouTubeThumbnail = (videoId: string): string => {
   return `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
 };
 
+/**
+ * Image produit avec repli (A659) : URL vide ou en erreur ⇒ placeholder ;
+ * placeholder lui-même en erreur ⇒ rien n'est rendu (pas de reboucle).
+ */
+function ProductImageWithFallback({
+  src,
+  alt,
+  className,
+}: {
+  src: string;
+  alt: string;
+  className?: string;
+}) {
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const [placeholderError, setPlaceholderError] = useState(false);
+  const showPlaceholder = !src || failedSrc === src;
+  if (showPlaceholder && placeholderError) return null;
+  return (
+    <img
+      src={showPlaceholder ? PRODUCT_PLACEHOLDER_SRC : src}
+      alt={showPlaceholder ? "" : alt}
+      loading="lazy"
+      className={className}
+      onError={() => {
+        if (showPlaceholder) setPlaceholderError(true);
+        else setFailedSrc(src);
+      }}
+    />
+  );
+}
+
 const ProductDetailModal = ({ product, onClose, onSelect, isSelected, onProceed, onRequestSingleQuote, selectedCount = 0 }: ProductDetailProps) => {
   const [currentMediaIndex, setCurrentMediaIndex] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -50,6 +81,9 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected, onProceed,
   const [isDescriptionTruncated, setIsDescriptionTruncated] = useState(false);
   const [isVendorTruncated, setIsVendorTruncated] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
+  // A659 : image principale (carrousel + lightbox) en erreur, puis placeholder en erreur
+  const [mainImageError, setMainImageError] = useState(false);
+  const [mainPlaceholderError, setMainPlaceholderError] = useState(false);
   const [debugMode, setDebugMode] = useState(false);
   const descriptionRef = useRef<HTMLDivElement>(null);
   const vendorRef = useRef<HTMLDivElement>(null);
@@ -120,6 +154,8 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected, onProceed,
   // Reset image loaded state when media changes
   useEffect(() => {
     setImageLoaded(false);
+    setMainImageError(false);
+    setMainPlaceholderError(false);
   }, [currentMediaIndex]);
 
   // Track modal view on mount + Check if descriptions are truncated
@@ -166,6 +202,14 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected, onProceed,
   const currentMedia = mediaItems[currentMediaIndex];
   const isVideo = currentMedia?.type === "video";
   const youtubeId = isVideo ? getYouTubeId(currentMedia.url) : null;
+  // A659 : URL vide ou en erreur ⇒ placeholder ; placeholder en erreur ⇒ plus d'image, sans reboucle
+  const mainImageUrl = currentMedia?.url ?? "";
+  const mainShowsPlaceholder = !mainImageUrl || mainImageError;
+  const mainImageSrc = mainShowsPlaceholder ? PRODUCT_PLACEHOLDER_SRC : mainImageUrl;
+  const handleMainImageError = () => {
+    if (mainShowsPlaceholder) setMainPlaceholderError(true);
+    else setMainImageError(true);
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-6 lg:p-8">
@@ -209,28 +253,24 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected, onProceed,
                 onClick={() => setLightboxOpen(true)}
                 className="w-full h-full relative group cursor-zoom-in"
               >
-                {!imageLoaded && currentMedia?.url && (
+                {!imageLoaded && !mainPlaceholderError && (
                   <div className="absolute inset-0 flex items-center justify-center z-10">
                     <Loader2 className="h-8 w-8 text-muted-foreground animate-spin" />
                   </div>
                 )}
-                {currentMedia?.url ? (
+                {!mainPlaceholderError ? (
                   <img
-                    src={currentMedia.url}
-                    alt={product.name}
+                    src={mainImageSrc}
+                    alt={mainShowsPlaceholder ? "" : product.name}
                     loading="lazy"
                     className={cn(
                       "w-full h-full object-contain bg-muted transition-opacity duration-300",
                       imageLoaded ? "opacity-100" : "opacity-0"
                     )}
                     onLoad={() => setImageLoaded(true)}
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none';
-                      // TODO: Implement better fallback for missing images
-                    }}
+                    onError={handleMainImageError}
                   />
                 ) : (
-                  // TODO: Implement better fallback for missing images
                   <div className="w-full h-full bg-muted" />
                 )}
                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
@@ -299,10 +339,9 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected, onProceed,
                         : "border-transparent hover:border-primary/50"
                     )}
                   >
-                    <img
+                    <ProductImageWithFallback
                       src={thumbnailUrl}
                       alt=""
-                      loading="lazy"
                       className="h-full w-full object-contain"
                     />
                     {isMediaVideo && (
@@ -717,13 +756,16 @@ const ProductDetailModal = ({ product, onClose, onSelect, isSelected, onProceed,
             </>
           )}
 
-          <img
-            src={currentMedia?.url}
-            alt={product.name}
-            loading="lazy"
-            className="max-w-full max-h-full object-contain"
-            onClick={(e) => e.stopPropagation()}
-          />
+          {!mainPlaceholderError && (
+            <img
+              src={mainImageSrc}
+              alt={mainShowsPlaceholder ? "" : product.name}
+              loading="lazy"
+              className="max-w-full max-h-full object-contain"
+              onClick={(e) => e.stopPropagation()}
+              onError={handleMainImageError}
+            />
+          )}
         </div>
       )}
     </div>

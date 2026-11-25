@@ -5,7 +5,38 @@ import { cn } from "@/lib/utils";
 import { useState, useCallback, useMemo } from "react";
 import type { ProductSpec, Supplier } from "@/types";
 import { useFlowStore } from "@/lib/stores/flow-store";
-import { getProductImageUrl } from "@/lib/utils/image-url";
+import { getProductImageUrl, PRODUCT_PLACEHOLDER_SRC } from "@/lib/utils/image-url";
+
+/**
+ * Image produit avec repli (A659) : URL vide ou en erreur ⇒ placeholder ;
+ * placeholder lui-même en erreur ⇒ rien n'est rendu (pas de reboucle).
+ */
+function ProductImageWithFallback({
+  src,
+  alt,
+  className,
+}: {
+  src: string;
+  alt: string;
+  className?: string;
+}) {
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const [placeholderError, setPlaceholderError] = useState(false);
+  const showPlaceholder = !src || failedSrc === src;
+  if (showPlaceholder && placeholderError) return null;
+  return (
+    <img
+      src={showPlaceholder ? PRODUCT_PLACEHOLDER_SRC : src}
+      alt={showPlaceholder ? "" : alt}
+      loading="lazy"
+      className={className}
+      onError={() => {
+        if (showPlaceholder) setPlaceholderError(true);
+        else setFailedSrc(src);
+      }}
+    />
+  );
+}
 
 interface ProductComparisonModalProps {
   products: Supplier[];
@@ -77,10 +108,9 @@ const ProductComparisonModal = ({
           {product.matchScore >= 80 ? "Idéal" : "À considérer"}
         </span>
         <div className="h-24 w-24 overflow-hidden rounded-lg bg-muted">
-          <img
+          <ProductImageWithFallback
             src={getProductImageUrl(product.image)}
             alt={product.productName}
-            loading="lazy"
             className="h-full w-full object-contain"
           />
         </div>
@@ -264,10 +294,9 @@ const ProductComparisonModal = ({
                     <div className="flex flex-col items-center gap-3">
                       {/* Product image */}
                       <div className="h-20 w-20 overflow-hidden rounded-lg bg-muted">
-                        <img
+                        <ProductImageWithFallback
                           src={getProductImageUrl(product.image)}
                           alt={product.productName}
-                          loading="lazy"
                           className="h-full w-full object-contain"
                         />
                       </div>
