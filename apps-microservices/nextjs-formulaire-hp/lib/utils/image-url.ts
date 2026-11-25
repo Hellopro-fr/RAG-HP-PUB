@@ -5,7 +5,13 @@
  * Le chemin original est encodé en Base64 URL-safe.
  */
 
-import { basePath } from '@/lib/utils';
+import { basePath, getAssetPath } from '@/lib/utils';
+
+/**
+ * Image de repli affichée quand l'image produit manque ou ne se charge pas (A659).
+ * Résolu par getAssetPath comme les autres assets publics (assetBaseUrl en PROD), hors proxy /api/images.
+ */
+export const PRODUCT_PLACEHOLDER_SRC = getAssetPath('/images/product-placeholder.svg');
 
 /**
  * Encode un chemin d'image en Base64 URL-safe

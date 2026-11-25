@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import { Check, CheckCircle, AlertTriangle, ShieldCheck, HelpCircle, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getProductImageUrl } from "@/lib/utils/image-url";
+import { getProductImageUrl, PRODUCT_PLACEHOLDER_SRC } from "@/lib/utils/image-url";
 import type { ProductSpec, PriceInfo } from "@/types";
 
 interface SupplierCardProps {
@@ -67,6 +67,27 @@ const PriceDisplay = ({ price, priceLabel }: { price?: PriceInfo; priceLabel?: s
     <span className="text-sm font-semibold text-foreground">
       {formatPrice(price.amount)}
     </span>
+  );
+};
+
+// Repli d'affichage quand l'image produit manque ou casse (A659).
+// Si le placeholder lui-même échoue, on garde le bloc vide : l'état
+// failed retire l'<img>, aucun onError ne peut reboucler.
+const ProductImageFallback = () => {
+  const [failed, setFailed] = useState(false);
+
+  if (failed) {
+    return <div className="w-full h-full" />;
+  }
+
+  return (
+    <img
+      src={PRODUCT_PLACEHOLDER_SRC}
+      alt=""
+      aria-hidden="true"
+      className="h-full w-full object-contain p-4"
+      onError={() => setFailed(true)}
+    />
   );
 };
 
@@ -153,7 +174,7 @@ const SupplierCard = ({
 
       {/* Image */}
       <div className="relative w-24 h-24 flex-shrink-0 overflow-hidden bg-muted">
-        {!imageLoaded && !imageError && (
+        {!!imageUrl && !imageLoaded && !imageError && (
           <div className="absolute inset-0 flex items-center justify-center">
             <Loader2 className="h-5 w-5 text-muted-foreground animate-spin" />
           </div>
@@ -171,8 +192,7 @@ const SupplierCard = ({
             onError={() => setImageError(true)}
           />
         ) : (
-          // TODO: Implement better fallback for missing images
-          <div className="w-full h-full" />
+          <ProductImageFallback />
         )}
         {matchScore >= 60 && (
           <div className="absolute top-1 left-1">
@@ -238,7 +258,7 @@ const SupplierCard = ({
 
       {/* Product Image - Fixed height */}
       <div className="relative h-32 sm:h-36 w-full overflow-hidden bg-muted flex-shrink-0">
-        {!imageLoaded && !imageError && (
+        {!!imageUrl && !imageLoaded && !imageError && (
           <div className="absolute inset-0 flex items-center justify-center z-10">
             <Loader2 className="h-6 w-6 text-muted-foreground animate-spin" />
           </div>
@@ -256,8 +276,7 @@ const SupplierCard = ({
             onError={() => setImageError(true)}
           />
         ) : (
-          // TODO: Implement better fallback for missing images
-          <div className="w-full h-full" />
+          <ProductImageFallback />
         )}
       </div>
 
