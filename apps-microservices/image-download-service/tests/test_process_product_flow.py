@@ -399,3 +399,114 @@ def test_download_failure_all_fail_preserves_old_manifest(tmp_path, monkeypatch,
     urls_in_manifest = {img["url_source"] for img in manifest_after["products"][0]["images"]}
     assert urls_in_manifest == set(urls_j1), \
         f"Les URLs du manifest doivent rester celles de J1, got: {urls_in_manifest}"
+
+
+# =============================================================================
+# A659 C1 — url_images reçu en CHAÎNE jointe par ", " : coupe sur une virgule suivie d'une URL
+# =============================================================================
+
+# Valeurs copiées de PERIMETRE_27.md § 3 (profroid pk 149032, pautrat pk 182638) et de
+# s22_mesures.md § 2 (miditec pk 1064589) : une URL par élément ; la chaîne = ", ".join(...).
+_PROFROID_URLS = [
+    "https://images.carriercms.com/image/upload/w_1280,q_auto,f_auto/v1616679249/profroid/products/CO2-natural-refrigerant-FR.png",
+    "https://images.carriercms.com/image/upload/w_1280,q_auto,f_auto/v1601575480/profroid/products/racks/profroid-CO2OLtec-Evo-small-capacity-compressor-rack.jpg",
+    "https://images.carriercms.com/image/upload/w_1280,q_auto,f_auto/v1601575709/profroid/products/racks/profroid-CO2OLtec-Evo-compressor-rack.png",
+]
+_PAUTRAT_URLS = [
+    "https://www.pautrat-equipement.com/sites/default/files/activite/02_copie.jpg",
+    "https://www.pautrat-equipement.com/sites/default/files/activite/galerie/01_2.jpg",
+    "https://www.pautrat-equipement.com/sites/default/files/activite/galerie/03_2.jpg",
+]
+_MIDITEC_URLS = [
+    "https://i1.wp.com/cdn.shortpixel.ai/client/q_glossy,ret_img/https://miditec.fr/wp-content/uploads/2018/01/debitmetre-ultrasonX376.jpg",
+    "https://i0.wp.com/cdn.shortpixel.ai/client/q_glossy,ret_img/https://miditec.fr/wp-content/uploads/2018/01/debitmetre-vortex20.png?w=1200&is-pending-load=1#038;ssl=1",
+    "https://i0.wp.com/cdn.shortpixel.ai/client/q_glossy,ret_img/https://miditec.fr/wp-content/uploads/2018/01/debitmetre-massique.png?w=1200&is-pending-load=1#038;ssl=1",
+    "https://i1.wp.com/cdn.shortpixel.ai/client/q_glossy,ret_img/https://miditec.fr/wp-content/uploads/2018/01/debitmetre-magnetique-inoxX200.png",
+]
+
+
+def _urls_telechargees(monkeypatch, tmp_path, create_stub_files, url_images):
+    """Passe url_images à process_product ; rend les URLs reçues par download_and_process, dans l'ordre."""
+    _patch_package_imports(monkeypatch)
+    _setup_storage(monkeypatch, tmp_path)
+    d = _make_downloader(monkeypatch)
+    dl_calls = []
+
+    fake = _fake_dl_factory(str(tmp_path), "fournisseur.com", "proda", "60001", create_stub_files)
+
+    async def wrapper(url, **kwargs):
+        dl_calls.append(url)
+        return await fake(url, **kwargs)
+
+    monkeypatch.setattr(d, "download_and_process", wrapper)
+    asyncio.run(d.process_product({
+        "domaine": "fournisseur.com", "id_produit": "60001", "nom_produit": "prodA",
+        "url_images": url_images,
+    }))
+    return dl_calls
+
+
+def _manifest_url_sources(tmp_path):
+    """url_source de chaque image écrite dans le manifest du produit de test."""
+    manifest_path = tmp_path / "images/fournisseur.com/manifest.json"
+    data = json.loads(manifest_path.read_text())
+    return {img["url_source"] for img in data["products"][0]["images"]}
+
+
+def test_a659_temoins_copies_a_l_octet():
+    """Garde de copie : octets de la valeur brute (URLs jointes par ' <br> ') = mesure en base."""
+    assert len(" <br> ".join(_PROFROID_URLS).encode("utf-8")) == 433
+    assert len(" <br> ".join(_PAUTRAT_URLS).encode("utf-8")) == 248
+    assert len(" <br> ".join(_MIDITEC_URLS).encode("utf-8")) == 619
+    # profroid : 2 virgules par URL (w_1280,q_auto,f_auto) ; miditec : 1 par URL (q_glossy,ret_img)
+    assert [u.count(",") for u in _PROFROID_URLS] == [2, 2, 2]
+    assert [u.count(",") for u in _MIDITEC_URLS] == [1, 1, 1, 1]
+
+
+def test_a659_chain_profroid_virgules_cloudinary(tmp_path, monkeypatch, create_stub_files):
+    """Chaîne jointe de 3 URLs à virgules internes → 3 URLs ENTIÈRES (coupe sur toute virgule : 9 morceaux)."""
+    chaine = ", ".join(_PROFROID_URLS)
+    dl_calls = _urls_telechargees(monkeypatch, tmp_path, create_stub_files, chaine)
+    assert dl_calls == _PROFROID_URLS
+    assert _manifest_url_sources(tmp_path) == set(_PROFROID_URLS)
+
+
+def test_a659_chain_miditec_virgule_et_http_imbrique(tmp_path, monkeypatch, create_stub_files):
+    """Miditec : virgule interne (q_glossy,ret_img) ET https:// imbriqué collé à « / » → 4 URLs entières."""
+    chaine = ", ".join(_MIDITEC_URLS)
+    dl_calls = _urls_telechargees(monkeypatch, tmp_path, create_stub_files, chaine)
+    assert dl_calls == _MIDITEC_URLS
+    assert _manifest_url_sources(tmp_path) == set(_MIDITEC_URLS)
+
+
+def test_a659_chain_pautrat_inchange(tmp_path, monkeypatch, create_stub_files):
+    """Pautrat (sain, sans virgule interne) : 3 URLs, identique à l'ancien comportement."""
+    chaine = ", ".join(_PAUTRAT_URLS)
+    dl_calls = _urls_telechargees(monkeypatch, tmp_path, create_stub_files, chaine)
+    assert dl_calls == _PAUTRAT_URLS
+
+
+def test_a659_chain_une_url_a_virgules(tmp_path, monkeypatch, create_stub_files):
+    """Chaîne d'UNE seule URL à virgules internes : aucune coupe (avant : 3 morceaux)."""
+    dl_calls = _urls_telechargees(monkeypatch, tmp_path, create_stub_files, _PROFROID_URLS[0])
+    assert dl_calls == [_PROFROID_URLS[0]]
+
+
+def test_a659_chain_blancs_et_vides_retires(tmp_path, monkeypatch, create_stub_files):
+    """Blancs autour des URLs et élément vide en tête : trim + vide retiré, 2 URLs."""
+    chaine = "  , https://f.com/a.jpg ,https://f.com/b.jpg  "
+    dl_calls = _urls_telechargees(monkeypatch, tmp_path, create_stub_files, chaine)
+    assert dl_calls == ["https://f.com/a.jpg", "https://f.com/b.jpg"]
+
+
+def test_a659_chain_virgule_finale_retiree(tmp_path, monkeypatch, create_stub_files):
+    """Jonction ", " finale ou vide au milieu (ancien <br> final) : aucune URL ne garde de virgule, 2 URLs."""
+    chaine = "https://f.com/a.jpg, , https://f.com/b.jpg, "
+    dl_calls = _urls_telechargees(monkeypatch, tmp_path, create_stub_files, chaine)
+    assert dl_calls == ["https://f.com/a.jpg", "https://f.com/b.jpg"]
+
+
+def test_a659_liste_inchangee(tmp_path, monkeypatch, create_stub_files):
+    """Branche LISTE inchangée : les éléments passent tels quels, virgules internes comprises."""
+    dl_calls = _urls_telechargees(monkeypatch, tmp_path, create_stub_files, list(_PROFROID_URLS))
+    assert dl_calls == _PROFROID_URLS

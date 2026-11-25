@@ -390,7 +390,9 @@ class Downloader:
 
         # Normaliser urls_raw en liste, supprimer les entrées vides
         if isinstance(urls_raw, str):
-            urls = [u.strip() for u in urls_raw.split(",")] if "," in urls_raw else [urls_raw]
+            # A659 C1 : couper seulement sur une virgule suivie d'une URL (une virgule interne à l'URL reste dedans) ;
+            # une virgule de jonction restée en bout de morceau (", " final, élément vide) est retirée avec les blancs
+            urls = [u.strip(" ,\t\r\n") for u in re.split(r",\s*(?=https?://)", urls_raw)]
         else:
             urls = list(urls_raw)
         urls = [u for u in urls if u]
