@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useFlowStore } from '@/lib/stores/flow-store';
-import { getProductImageUrl } from '@/lib/utils/image-url';
+import { getProductImageUrl, PRODUCT_PLACEHOLDER_SRC } from '@/lib/utils/image-url';
 import { useTableScrollNav } from '@/hooks/useTableScrollNav';
 import { Supplier } from '@/types';
 
@@ -32,7 +32,7 @@ const DESKTOP_COLUMN_WIDTH = 220;
 /**
  * Vignette produit avec lazy-load horizontal (IntersectionObserver scoped au
  * conteneur scrollable passé en `scrollRootRef`) + spinner pendant le chargement
- * + fade-in opacity à l'arrivée + fallback silencieux sur erreur d'URL.
+ * + fade-in opacity à l'arrivée + repli placeholder si l'URL est vide ou en erreur (A659).
  *
  * Se positionne en `absolute inset-0` dans un conteneur parent positionné.
  */
@@ -51,6 +51,9 @@ function LazyThumbnail({
   const [inView, setInView] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
+  const [placeholderError, setPlaceholderError] = useState(false);
+  // A659 : URL vide ou en erreur ⇒ placeholder
+  const showPlaceholder = !src || error;
 
   useEffect(() => {
     if (inView || !wrapperRef.current) return;
@@ -69,20 +72,24 @@ function LazyThumbnail({
 
   return (
     <div ref={wrapperRef} className="absolute inset-0">
-      {inView && !error && (
+      {inView && !placeholderError && (
         <img
-          src={src}
-          alt={alt}
+          src={showPlaceholder ? PRODUCT_PLACEHOLDER_SRC : src}
+          alt={showPlaceholder ? '' : alt}
           className={cn(
             'h-full w-full object-contain transition-opacity duration-300',
             loaded ? 'opacity-100' : 'opacity-0',
             className
           )}
           onLoad={() => setLoaded(true)}
-          onError={() => setError(true)}
+          onError={() => {
+            // A659 : placeholder lui-même en erreur ⇒ plus d'<img>, sans reboucle
+            if (showPlaceholder) setPlaceholderError(true);
+            else setError(true);
+          }}
         />
       )}
-      {(!inView || (inView && !loaded && !error)) && (
+      {(!inView || (inView && !loaded && !placeholderError)) && (
         <div className="absolute inset-0 flex items-center justify-center">
           <Loader2 className="h-5 w-5 text-muted-foreground animate-spin" />
         </div>
