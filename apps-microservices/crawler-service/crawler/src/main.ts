@@ -666,8 +666,8 @@ if (redisCount > 0 && !dropData) {
     await updateUrlsCrawledStreaming(domain, urlIterator);
 
     // Rehydrate '?' and '#' counters from dataset (dedup already in Redis)
-    if (context.config.crawleeStorageName) {
-        for await (const url of rehydrateDedupFromDataset(context.config.crawleeStorageName)) {
+    if (domain) {
+        for await (const url of rehydrateDedupFromDataset(domain)) {
             if (url.includes('?')) context.countQuestionMark++;
             if (url.includes('#')) context.countDiez++;
         }
@@ -683,8 +683,8 @@ if (redisCount > 0 && !dropData) {
 
     // Rehydrate from dataset if we crashed before saving to history file
     // Also count URLs with '?' and '#' to restore postNavigationHooks counters
-    if (context.config.crawleeStorageName) {
-        const rehydrateIter = rehydrateDedupFromDataset(context.config.crawleeStorageName);
+    if (domain) {
+        const rehydrateIter = rehydrateDedupFromDataset(domain);
         let qmCount = 0;
         let diezCount = 0;
         const countingIter = async function*() {
@@ -776,7 +776,7 @@ if (QM_FACET_ENABLED) {
     // Update mode: the previous crawl's dataset is the "already crawled" oracle.
     if (previousCrawlId) await addSeen(loadDatasetUrlsGenerator(previousCrawlId, domain));
     // Initial/resume: the current crawl's own dataset-on-disk.
-    if (context.config.crawleeStorageName) await addSeen(rehydrateDedupFromDataset(context.config.crawleeStorageName));
+    if (domain) await addSeen(rehydrateDedupFromDataset(domain));
     if (context.seenBases.size > 0) {
         console.log(`[qm-facet] seenBases: ${context.seenBases.size} bases loaded from dataset.`);
     }

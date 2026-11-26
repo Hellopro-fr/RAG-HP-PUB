@@ -178,11 +178,12 @@ export const commitSkipDiez = (storagePath: string, meta: DecisionMeta = {}): vo
     // Rewrite already-queued URLs to strip '#'. Lazy require avoids ESM circular dep at load time.
     try {
         const { parseJsonFiles, getAllRequestQueues } = _require("./functions.js");
-        const queueName = context.config.crawleeStorageName;
+        const queueName = context.config.domain; // dotted, as main.ts opens it: RequestQueue.open(domain) (A614)
+        const rewriteStartedAt = Date.now();
         const queues: string[] = getAllRequestQueues(queueName);
         if (Array.isArray(queues) && queues.length > 0) {
             parseJsonFiles(queues, context.config.skipQuestionMark, true, { toKeep: context.config.toKeep, toRemove: context.config.toRemove });
-            console.log(`[diez] Rewrote ${queues.length} queued request file(s) to strip '#'.`);
+            console.log(`[diez] Rewrote ${queues.length} queued request file(s) to strip '#' in ${Date.now() - rewriteStartedAt} ms.`);
         }
     } catch (e) {
         console.warn(`[diez] Queue rewrite skipped: ${(e as Error).message}`);
