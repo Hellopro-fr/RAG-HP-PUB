@@ -182,7 +182,7 @@ export const commitToRemoveParam = (p: string, storagePath: string): void => {
 
     try {
         const { parseJsonFiles, getAllRequestQueues } = _require("./functions.js");
-        const queues: string[] = getAllRequestQueues(context.config.crawleeStorageName);
+        const queues: string[] = getAllRequestQueues(context.config.domain); // dotted, as main.ts opens it (A614)
         if (Array.isArray(queues) && queues.length > 0) {
             parseJsonFiles(queues, context.config.skipQuestionMark, context.config.skipDiez, {
                 toRemove: [p],
